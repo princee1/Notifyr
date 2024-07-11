@@ -1,0 +1,8 @@
+install	:
+	pip install -r requirements_dev.txt
+
+cleandep:
+	pipreqs --clean requirements_dev.txt
+
+getdep: 
+	pipreqs --savepath requirements_dev.txt --force .
