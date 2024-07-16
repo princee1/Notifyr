@@ -8,31 +8,44 @@ from injector import inject
 from configService import ConfigService
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.text import MIMEBase
 
-from __init__ import Service 
+from __init__ import Service
 
+SMTP_NORMAL_PORT = smtp.SMTP_PORT
+SMTP_SSL_PORT = smtp.SMTP_SSL_PORT
+SMTP_TLS_PORT = 587
 
 
 class SMTPHost(Enum):
 
     GMAIL = "smtp.gmail.com"
-    OUTLOOK = "smtp.live.com"
+    OUTLOOK = "smtp-mail.outlook.com"
     YAHOO = "smtp.mail.yahoo.com"
 
-    def setHostPort(host: str):
-        return 25 if host == SMTPHost.YAHOO else 465
-    
-    def setHostAddr(host):
-        match host: 
-            case str(SMTPHost.GMAIL.name):
-                return SMTPHost.GMAIL
-            case str(SMTPHost.YAHOO.name):
-                return SMTPHost.YAHOO
-            case str(SMTPHost.OUTLOOK.name):
-                return SMTPHost.OUTLOOK
+    def setHostPort(connMode: str):
+        match connMode:
+            case "tls":
+                return SMTP_TLS_PORT
+            case "ssl":
+                return SMTP_SSL_PORT
             case _:
-                raise NameError() # BUG
+                return SMTP_NORMAL_PORT
+
+    def setConnFlag(mode: str):
+        if mode.lower() == "tls":
+            return True
+        return False
+
+    def setHostAddr(host: str):
+        match host:
+            case str(SMTPHost.GMAIL.name):
+                return SMTPHost.GMAIL.value
+            case str(SMTPHost.YAHOO.name):
+                return SMTPHost.YAHOO.value
+            case str(SMTPHost.OUTLOOK.name):
+                return SMTPHost.OUTLOOK.value
+            case _:
+                raise NameError()  # BUG
 
 
 class EmailSender(Service):
@@ -41,52 +54,61 @@ class EmailSender(Service):
     def __init__(self, configService: ConfigService):
         self.configService = configService
         self.hostAddr = SMTPHost.setHostAddr(self.configService.EMAIL_HOST)
-        self.hostPort = SMTPHost.setHostPort(self.configService.EMAIL_PORT)
+        self.tlsConn: bool = SMTPHost.setConnFlag(
+            self.configService.EMAIL_CONN_METHOD)
+        self.hostPort = SMTPHost.setHostPort(
+            self.configService.EMAIL_CONN_METHOD) if self.configService.EMAIL_PORT == None else self.configService.EMAIL_PORT
+        print(self.hostPort)
         self.connector = smtp.SMTP(self.hostAddr, self.hostPort)
-        self.connector.set_debuglevel(2)
-        self.fromEmails: dict[str,str] = {}
+        self.connector.set_debuglevel(self.configService.EMAIL_LOG_LEVEL)
+        self.fromEmails: dict[str, str] = {}
         pass
 
     def buildService(self):
-        try: 
-            self.authenticate()  
-        except: 
+        try:
+            self.authenticate()
+        except:
             pass
 
     def authenticate(self):
         try:
-            self.connector.ehlo()
-            self.connector.starttls()
-            self.connector.ehlo()
-            self.connector.login(self.configService.EMAIL,
-                                 self.configService.EMAIL_PASS)
+            if self.tlsConn:
+                self.connector.ehlo()
+                self.connector.starttls()
+                self.connector.ehlo()
+            val = self.connector.login(self.configService.EMAIL,
+                                       self.configService.EMAIL_PASS)
+            print(val)
             self.state = True
-        except smtp.SMTPHeloError | smtp.SMTPNotSupportedError:
+        except smtp.SMTPHeloError | smtp.SMTPNotSupportedError as e:
             self.state = False
+            self.errorReason = e
+
             pass
         except smtp.SMTPAuthenticationError as e:
             self.state = False
+            self.errorReason = e
             pass
 
     def sendMessage(self):
         try:
             self.connector.send_message()
-        except smtp.SMTPHeloError as e: 
-            pass        
+        except smtp.SMTPHeloError as e:
+            pass
         except smtp.SMTPRecipientsRefused as e:
             pass
-        except smtp.SMTPSenderRefused as e: 
+        except smtp.SMTPSenderRefused as e:
             pass
         except smtp.SMTPNotSupportedError as e:
             pass
-        except: 
+        except:
             pass
 
-    def addFromEmail(self,name,email):
+    def addFromEmail(self, name, email):
         self.fromEmails[name] = email
         return self
-        
-    
+
+
 class MessageBuilder():
 
     def __init__(self, subject, sender, ) -> None:
@@ -95,9 +117,7 @@ class MessageBuilder():
 
     def attach(self):
         return self
-    
-    def  build(self):
+
+    def build(self):
         pass
     pass
-    
-   
