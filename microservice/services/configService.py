@@ -1,8 +1,10 @@
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from enum import Enum
-from __init__ import Service
+from __init__ import Module
 
+
+ENV = ".env"
 
 class MODE(Enum):
     DEV_MODE = 'dev'
@@ -20,30 +22,34 @@ class MODE(Enum):
             case _:
                 return MODE.DEV_MODE
             
-class ConfigService(Service):
-    ENV = ".env"
+class ConfigService(Module):
+    
     def __init__(self) -> None:
-        load_dotenv(ConfigService.ENV)
-        self.MODE = MODE.toMode(os.getenv('MODE'))
-        self.PORT = os.getenv("PORT")
-        self.LOG_LEVEL = os.getenv("LOG_LEVEL")
-        self.EMAIL_HOST = os.getenv("EMAIL_HOST").upper()
+        if not load_dotenv(ENV):
+            path = find_dotenv(ENV)
+            load_dotenv(path)
+    
+    def parseToInt(value:str, default:int | None = None): # need to add the build error level
         try:
-            val = int(os.getenv("EMAIL_PORT"))
-            self.EMAIL_PORT = val
-        except:
-
-            self.EMAIL_PORT = None
+            return int(value)
+        except ValueError as e:
             pass
+        except TypeError as e:
+            pass
+        except OverflowError as e:
+            pass
+
+        return default
+
+
+    def build(self):
+        self.MODE = MODE.toMode(os.getenv('MODE'))
+        self.PORT_PUBLIC = ConfigService.parseToInt(os.getenv("PORT_PUBLIC"),3000)
+        self.PORT_PRIVATE = ConfigService.parseToInt(os.getenv("PORT_PRIVATE"),5000)
+        self.LOG_LEVEL = ConfigService.parseToInt(os.getenv("LOG_LEVEL"), 2)
+        self.EMAIL_HOST = os.getenv("EMAIL_HOST").upper()
+        self.EMAIL_PORT = ConfigService.parseToInt(os.getenv("EMAIL_PORT"))
         self.EMAIL = os.getenv("EMAIL")
         self.EMAIL_PASS = os.getenv("EMAIL_PASS")
         self.EMAIL_CONN_METHOD= os.getenv("EMAIL_CONN_METHOD")
-        try: 
-            self.EMAIL_LOG_LEVEL= int(os.getenv("EMAIL_LOG_LEVEL"))
-        except:
-            self.EMAIL_LOG_LEVEL = 0
-            pass
-
-
-    def buildService(self):
-        pass
+        self.EMAIL_LOG_LEVEL= ConfigService.parseToInt(os.getenv("EMAIL_LOG_LEVEL"),0)
