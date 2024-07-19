@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
-from __init__ import Module
+from module import Module
 
 
 ENV = ".env"
@@ -29,7 +29,23 @@ class ConfigService(Module):
             path = find_dotenv(ENV)
             load_dotenv(path)
     
-    def parseToInt(value:str, default:int | None = None): # need to add the build error level
+    
+    def parseToInt(value:str, default:int | None = None): # TODO need to add the build error level
+        """
+        The function `parseToInt` attempts to convert a string to an integer and returns the integer
+        value or a default value if conversion fails.
+        
+        :param value: The `value` parameter is a string that you want to parse into an integer
+        :type value: str
+        :param default: The `default` parameter in the `parseToInt` function is used to specify a
+        default value that will be returned if the conversion of the input `value` to an integer fails.
+        If no `default` value is provided, it defaults to `None`
+        :type default: int | None
+        :return: The `parseToInt` function is returning the integer value of the input `value` after
+        converting it from a string. If the conversion is successful, it returns the integer value. If
+        there is an error during the conversion (ValueError, TypeError, OverflowError), it returns the
+        `default` value provided as a parameter. If no `default` value is provided, it returns `None`.
+        """
         try:
             return int(value)
         except ValueError as e:
@@ -38,7 +54,6 @@ class ConfigService(Module):
             pass
         except OverflowError as e:
             pass
-
         return default
 
 
@@ -53,3 +68,6 @@ class ConfigService(Module):
         self.EMAIL_PASS = os.getenv("EMAIL_PASS")
         self.EMAIL_CONN_METHOD= os.getenv("EMAIL_CONN_METHOD")
         self.EMAIL_LOG_LEVEL= ConfigService.parseToInt(os.getenv("EMAIL_LOG_LEVEL"),0)
+
+    def kill(self):
+        return super().kill()
