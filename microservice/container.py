@@ -6,30 +6,8 @@ class CircularDependencyError(BaseException):
     pass
 
 
-class M:
-    def builder(self):
-        pass
-
-
-class B(M):
-    pass
-
-
-class C(M):
-    pass
-
-
-class E(M):
-    pass
-
-
-class D(M):
-    def __init__(self, b: B, c: C) -> None:
-        pass
-
-
-class A(M):
-    def __init__(self, d: D, e: E, v: str) -> None:
+class M: # class test
+    def __builder(self):
         pass
 
 
@@ -37,7 +15,7 @@ TYPE_KEY = "type"
 DEP_KEY = "dep"
 PARAM_NAMES_KEY = "param_name"
 
-__DEPENDENCY: list[type] = [B, C, E, D, A]
+__DEPENDENCY: list[type] = []
 
 
 def is_subclass_of(cls): return M in getmro(cls)
@@ -91,8 +69,11 @@ class Container():
 
     def buildContainer(self):
         while self.D.__len__() != 0:
-            no_dep = [x for x in self.D if self.DEPENDENCY[x]
-                      [DEP_KEY] not in self.D]
+            no_dep = []
+            for x in self.D: 
+                d:set[str]= self.DEPENDENCY[x][DEP_KEY]
+                if len(d.intersection(self.D))==0:
+                    no_dep.append(x)
             if len(no_dep) == 0:
                 raise CircularDependencyError
             self.D.difference_update(no_dep)
@@ -119,11 +100,10 @@ class Container():
         flag = is_subclass_of(typ)
         obj = typ(**params)
         if flag:
-            obj.builder()
+            obj.__builder()
         else:
             # WARNING raise we cant verify the data provided
             pass
-
         return obj
 
 
