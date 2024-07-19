@@ -5,4 +5,7 @@ cleandep:
 	pipreqs --clean requirements_dev.txt
 
 getdep: 
-	pipreqs --savepath requirements_dev.txt --force .
+	pipreqs --savepath requirements.txt --force .
+
+setenv:
+	cp base.env .env
