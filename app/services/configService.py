@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from module import Module
-
+import socket
 
 ENV = ".env"
 
@@ -21,6 +21,14 @@ class MODE(Enum):
                 return MODE.TEST_MODE.value
             case _:
                 return MODE.DEV_MODE
+    
+    def modeToAddr(mode):
+        match mode:
+            case MODE.TEST_MODE:
+                return "127.0.0.1"
+            case _:
+                return "127.0.0.1"
+
             
 class ConfigService(Module):
     
