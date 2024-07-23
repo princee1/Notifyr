@@ -1,6 +1,6 @@
 import injector
 from inspect import classify_class_attrs, signature, stack, getmro
-
+from dependencies import __DEPENDENCY
 
 class CircularDependencyError(BaseException):
     pass
@@ -15,7 +15,6 @@ TYPE_KEY = "type"
 DEP_KEY = "dep"
 PARAM_NAMES_KEY = "param_name"
 
-__DEPENDENCY: list[type] = []
 
 
 def is_subclass_of(cls): return M in getmro(cls)
