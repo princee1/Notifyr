@@ -31,4 +31,4 @@ def readFileContent(path:str,flag:FDFlag,enc:str = "utf-8"):
     except:
         pass
 
-
+class JSONFile(): pass
