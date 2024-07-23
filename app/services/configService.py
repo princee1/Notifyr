@@ -70,12 +70,19 @@ class ConfigService(Module):
         self.PORT_PUBLIC = ConfigService.parseToInt(os.getenv("PORT_PUBLIC"),3000)
         self.PORT_PRIVATE = ConfigService.parseToInt(os.getenv("PORT_PRIVATE"),5000)
         self.LOG_LEVEL = ConfigService.parseToInt(os.getenv("LOG_LEVEL"), 2)
-        self.EMAIL_HOST = os.getenv("EMAIL_HOST").upper()
-        self.EMAIL_PORT = ConfigService.parseToInt(os.getenv("EMAIL_PORT"))
-        self.EMAIL = os.getenv("EMAIL")
-        self.EMAIL_PASS = os.getenv("EMAIL_PASS")
-        self.EMAIL_CONN_METHOD= os.getenv("EMAIL_CONN_METHOD")
-        self.EMAIL_LOG_LEVEL= ConfigService.parseToInt(os.getenv("EMAIL_LOG_LEVEL"),0)
 
+        self.SMTP_EMAIL_HOST = os.getenv("SMTP_EMAIL_HOST").upper()
+        self.SMTP_EMAIL_PORT = ConfigService.parseToInt(os.getenv("SMTP_EMAIL_PORT"))
+        self.SMTP_EMAIL = os.getenv("SMTP_EMAIL")
+        self.SMTP_EMAIL_PASS = os.getenv("SMTP_EMAIL_PASS")
+        self.SMTP_EMAIL_CONN_METHOD= os.getenv("SMTP_EMAIL_CONN_METHOD")
+        self.SMTP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(os.getenv("SMTP_EMAIL_LOG_LEVEL"),0)
+
+        self.IMAP_EMAIL_HOST = os.getenv("IMAP_EMAIL_HOST").upper()
+        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(os.getenv("IMAP_EMAIL_PORT"))
+        self.IMAP_EMAIL = os.getenv("IMAP_EMAIL")
+        self.IMAP_EMAIL_PASS = os.getenv("IMAP_EMAIL_PASS")
+        self.IMAP_EMAIL_CONN_METHOD= os.getenv("IMAP_EMAIL_CONN_METHOD")
+        
     def kill(self):
         return super().kill()
