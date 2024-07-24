@@ -32,7 +32,7 @@ class Container():
     def bind(self, type, obj, scope=None):
         self.app.binder.bind(type, to=obj, scope=scope)
 
-    def get(self, type, scope=None):
+    def get(self, type, scope=None): 
         return self.app.get(type, scope)
 
     def load_dep(self, D):
