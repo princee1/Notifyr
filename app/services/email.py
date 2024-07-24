@@ -8,7 +8,7 @@ import imaplib as imap
 from enum import Enum
 from injector import inject
 from module import Module
-from configService import ConfigService
+from app.services.config import ConfigService
 
 
 SMTP_NORMAL_PORT = smtp.SMTP_PORT

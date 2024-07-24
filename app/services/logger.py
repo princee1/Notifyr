@@ -1,5 +1,5 @@
 from injector import inject
-from configService import ConfigService
+from app.services.config import ConfigService
 from module import Module
 
 class LoggerService(Module):

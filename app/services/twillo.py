@@ -1,5 +1,5 @@
 from module import Module
-from services.configService import ConfigService
+from app.services.config import ConfigService
 from injector import inject
 
 class TwilioService(Module):
