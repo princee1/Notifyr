@@ -12,3 +12,6 @@ setenv:
 
 clean:
 	rm -f -R */__pycache__ 
+
+test:
+	echo "testing"
