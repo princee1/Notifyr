@@ -1,30 +1,35 @@
 import injector
-from inspect import classify_class_attrs, signature, stack, getmro
-from dependencies import __DEPENDENCY
+from inspect import signature
+# from dependencies import __DEPENDENCY
+from typing import overload, Any
+from app.utils.helper import issubclass_of,reverseDict
 
-class CircularDependencyError(BaseException):
+
+class ContainerError(BaseException): pass
+
+class CircularDependencyError(ContainerError):
     pass
 
+class MultipleParameterSameDependencyError(ContainerError):
+    pass
 
-class M: # class test
-    def __builder(self):
-        pass
+class M:  # class test
+    def _builder(self): pass
+
+    def build(self): pass
 
 
 TYPE_KEY = "type"
 DEP_KEY = "dep"
 PARAM_NAMES_KEY = "param_name"
 
-
-
-def is_subclass_of(cls): return M in getmro(cls)
-
+def issubclass(cls): return issubclass_of(M, cls)
 
 class Container():
 
     def __init__(self, D: list[type]) -> None:
         self.app = injector.Injector()
-        self.DEPENDENCY = {}
+        self.DEPENDENCY_MetaData = {}
         self.D: set[str] = self.load_baseSet(D)
         self.load_dep(D)
         self.buildContainer()
@@ -32,33 +37,36 @@ class Container():
     def bind(self, type, obj, scope=None):
         self.app.binder.bind(type, to=obj, scope=scope)
 
-    def get(self, type, scope=None): 
+    def get(self, type:type, scope=None):
         return self.app.get(type, scope)
+    
+    def getFromClassName(self, classname:str,scope=None):
+        return self.app.get(self.DEPENDENCY_MetaData[classname][TYPE_KEY],scope)
 
     def load_dep(self, D):
         for x in D:
-            if not self.DEPENDENCY.__contains__(x):
+            if not self.DEPENDENCY_MetaData.__contains__(x):
                 dep, p = self.getSignature(x)
-                self.DEPENDENCY[x.__name__] = {
+                self.DEPENDENCY_MetaData[x.__name__] = {
                     TYPE_KEY: x,
                     DEP_KEY: dep,
                     PARAM_NAMES_KEY: p
                 }
 
-    def getSignature(self, t: type):
+    def getSignature(self, t: type | Any):
         params = signature(t).parameters.values()
-        l: set[str] = set()
-        pn: list[str] = []
+        types: set[str] = set()
+        paramNames: list[str] = []
         for p in params:
             repr = p.__str__().split(":")
             temp = repr[1].split(".")
             if temp.__len__() == 1:
-                # a bug or a warning
+                # a BUG or a warning
                 continue
-            l.add(temp[1])
-            pn.append(repr[0].strip())
+            types.add(temp[1])
+            paramNames.append(repr[0].strip())
 
-        return l, pn
+        return types, paramNames
 
     def load_baseSet(self, D: list[type]):
         t: set[str] = set()
@@ -69,9 +77,9 @@ class Container():
     def buildContainer(self):
         while self.D.__len__() != 0:
             no_dep = []
-            for x in self.D: 
-                d:set[str]= self.DEPENDENCY[x][DEP_KEY]
-                if len(d.intersection(self.D))==0:
+            for x in self.D:
+                d: set[str] = self.DEPENDENCY_MetaData[x][DEP_KEY]
+                if len(d.intersection(self.D)) == 0:
                     no_dep.append(x)
             if len(no_dep) == 0:
                 raise CircularDependencyError
@@ -80,31 +88,77 @@ class Container():
                 self.inject(x)
 
     def inject(self, x: str):
-        dep: set[str] = self.DEPENDENCY[x][DEP_KEY]
-        current_type: type = self.DEPENDENCY[x][TYPE_KEY]
-        params_names: list[str] = self.DEPENDENCY[x][PARAM_NAMES_KEY]
+        dep: set[str] = self.DEPENDENCY_MetaData[x][DEP_KEY]
+        current_type: type = self.DEPENDENCY_MetaData[x][TYPE_KEY]
+        params_names: list[str] = self.DEPENDENCY_MetaData[x][PARAM_NAMES_KEY]
         assert len(dep) == len(
-            params_names), "The number of dependency must be same length as the number of params names"
-        params = {}
-        i = 0
-        for d in dep:
-            obj_dep = self.get(self.DEPENDENCY[d][TYPE_KEY])
-            params[params_names[i]] = obj_dep
-            i += 1
+            params_names), "The number of dependency must be same length as the number of params names" # BUG might need to remove the assert
+        params = self.toParams(dep, params_names)
 
         obj = self.createDep(current_type, params)
         self.bind(current_type, obj)
 
+    def toParams(self, dep, params_names):
+        params = {}
+        i = 0
+        for d in dep:
+            obj_dep = self.get(self.DEPENDENCY_MetaData[d][TYPE_KEY])
+            params[params_names[i]] = obj_dep
+            i += 1
+        return params
+
     def createDep(self, typ, params):
-        flag = is_subclass_of(typ)
-        obj = typ(**params)
+        flag = issubclass(typ)
+        obj: M = typ(**params)
         if flag:
-            obj.__builder()
+            obj._builder()
         else:
             # WARNING raise we cant verify the data provided
             pass
         return obj
 
+    @property
+    def dependencies(self) -> list[type]: return [ x[TYPE_KEY] for x in self.DEPENDENCY_MetaData.values()]
 
-CONTAINER: Container = Container(__DEPENDENCY)
-print(CONTAINER.D)
+class A: pass
+class B: pass
+class C: pass
+class D: pass
+class E: pass
+class F: pass
+
+CONTAINER: Container = Container([A, B, C, D, E, F])
+print(CONTAINER.dependencies)
+
+    
+def InjectInFunction(func):
+    """
+    The `InjectInFunction` decorator takes the function and inspect it's signature, if the `CONTAINER` can resolve the 
+    dependency it will inject the values. You must call the function with the position parameter format to call 
+    the `func` with the rest of the parameters.
+
+    If the parameters of the function founds a dependency two times it will return an error
+
+    `example:: `
+
+    @InjectInFunction
+    def test(a: A, b: B, c: C, s:str):
+        print(a)
+        print(b)
+        print(c)
+        print(s)
+
+    >>> test(s="ok")
+    >>> <__main__.C object at 0x000001A76EC36610>
+        <__main__.B object at 0x000001A76EC36810>
+        <__main__.A object at 0x000001A76EC3FB90>
+        ok
+    """
+    types, pNames = CONTAINER.getSignature(func)
+    print(types,pNames)
+    params = CONTAINER.toParams(types,pNames)
+    def wrapper(*args, **kwargs):
+        revparams = reverseDict(params)
+        revparams.update(kwargs)
+        func(**revparams)
+    return wrapper
