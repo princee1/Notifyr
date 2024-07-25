@@ -7,7 +7,7 @@ from app.services.communication import PhoneService, SMSService
 from app.services.training import TrainingService
 from services.notification import SystemService,DiscordService
 from app.services.security import SecurityService
-from app.services.throttling import QueueService,RateLimiterService
+from app.services.throttling import PriorityQueueService,RateLimiterService
 
 
 __DEPENDENCY: list[type] = [AssetService, 
@@ -23,6 +23,6 @@ __DEPENDENCY: list[type] = [AssetService,
                             SystemService,
                             DiscordService,
                             SecurityService,
-                            QueueService,
+                            PriorityQueueService,
                             RateLimiterService ]
 
