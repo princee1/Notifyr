@@ -1,5 +1,7 @@
-class SMSService:
+from module import Module
+
+class SMSService(Module):
     pass
 
-class PhoneService:
+class PhoneService(Module):
     pass

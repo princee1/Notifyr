@@ -1,6 +1,7 @@
-class SupportService:
+from module import Module
+
+class SupportService(Module):
     pass
 
-
-class ChatService:
+class ChatService(Module):
     pass
