@@ -1,4 +1,4 @@
 from module import Module
-from assetsService import AssetService
-from emailService import EmailSender
-from configService import ConfigService
+from app.services.assets import AssetService
+from app.services.email import EmailSender
+from app.services.config import ConfigService

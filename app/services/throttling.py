@@ -1,3 +1,3 @@
 class RateLimiterService: pass
 
-class QueueService:  pass
+class PriorityQueueService:  pass

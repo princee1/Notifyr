@@ -1,6 +1,3 @@
-"""
-https://www.youtube.com/watch?v=W7JIdLU23GI
-"""
 
 from dataclasses import dataclass
 import smtplib as smtp
