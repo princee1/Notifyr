@@ -1,11 +1,14 @@
 from enum import Enum
+from inspect import getmro
+from typing import overload, get_overloads
+from app.utils.helper import issubclass_of, isabstract
+
 
 class BuildErrorLevel(Enum):
     FAILURE = 4
     ABORT = 3
     WARNING = 2
     SKIP = 1
-
 
 class BuildError(BaseException):
     def __init__(self, *args: object) -> None:
@@ -24,6 +27,8 @@ class BuildSkipError(BuildError): pass
 
 class Module():
 
+    AbstractDependency:dict = {}
+
     def build(self):
         pass
 
@@ -33,7 +38,7 @@ class Module():
     def log(self):
         pass
 
-    def __builder(self):
+    def _builder(self):
         try:
             self.build()
         except BuildFailureError as e:
@@ -48,7 +53,7 @@ class Module():
         except BuildSkipError as e:
             pass
 
-    def __killer(self):
+    def _killer(self):
         try:
             self.kill()
             pass
@@ -65,4 +70,17 @@ class Module():
             pass
         pass
 
-    pass
+    
+def InjectWCondition(baseClass: type, resolvedClass: function[type]): 
+
+    def decorator(cls: Module):
+        if not isabstract(bClass=Module,cls=baseClass): pass
+            # ABORT error
+        if not issubclass_of(Module,baseClass): pass
+            # ABORT error
+        if not issubclass_of(Module,cls): pass
+            # ABORT error
+        cls.AbstractDependency[baseClass] = resolvedClass
+        return cls
+
+    return decorator
