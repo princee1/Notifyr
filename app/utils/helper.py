@@ -4,7 +4,7 @@ from abc import ABC
 
 def issubclass_of(bCls, kCls): return bCls in getmro(kCls)
 
-def isabstract(cls: type, bClass:type):
+def is_abstract(cls: type, bClass:type):
     try:
         x = list(getmro(cls))
         x.remove(cls)
@@ -15,7 +15,6 @@ def isabstract(cls: type, bClass:type):
         pass # TODO raise an error, make sure to extends the ABC class last
     except ValueError as e: 
         pass 
-    
     except: 
         pass
 

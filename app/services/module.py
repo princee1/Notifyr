@@ -1,7 +1,7 @@
 from enum import Enum
 from inspect import getmro
 from typing import overload, get_overloads
-from app.utils.helper import issubclass_of, isabstract
+from app.utils.helper import issubclass_of, is_abstract
 
 
 class BuildErrorLevel(Enum):
@@ -10,24 +10,32 @@ class BuildErrorLevel(Enum):
     WARNING = 2
     SKIP = 1
 
+
 class BuildError(BaseException):
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
     pass
 
 
-class BuildFailureError(BuildError): pass
+class BuildFailureError(BuildError):
+    pass
 
-class BuildAbortError(BuildError): pass
 
-class BuildWarningError(BuildError): pass
+class BuildAbortError(BuildError):
+    pass
 
-class BuildSkipError(BuildError): pass
+
+class BuildWarningError(BuildError):
+    pass
+
+
+class BuildSkipError(BuildError):
+    pass
 
 
 class Module():
 
-    AbstractDependency:dict = {}
+    AbstractDependency: dict = {}
 
     def build(self):
         pass
@@ -70,17 +78,24 @@ class Module():
             pass
         pass
 
-    
-def InjectWCondition(baseClass: type, resolvedClass: function[type]): 
+
+RESOLVED_CLASS_KEY = "resolved_class"
+PARAMETER_KEY = "parameter"
+
+def InjectWCondition(baseClass: type, resolvedClass: function[type]):
 
     def decorator(cls: Module):
-        if not isabstract(bClass=Module,cls=baseClass): pass
+        if not is_abstract(bClass=Module, cls=baseClass):
+            pass
             # ABORT error
-        if not issubclass_of(Module,baseClass): pass
+        if not issubclass_of(Module, baseClass):
+            pass
             # ABORT error
-        if not issubclass_of(Module,cls): pass
+        if not issubclass_of(Module, cls):
+            pass
             # ABORT error
-        cls.AbstractDependency[baseClass] = resolvedClass
+        cls.AbstractDependency[baseClass] = {RESOLVED_CLASS_KEY: resolvedClass,
+                                             PARAMETER_KEY: None}
         return cls
 
     return decorator
