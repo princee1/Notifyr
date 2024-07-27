@@ -2,7 +2,7 @@ import injector
 from inspect import signature
 # from dependencies import __DEPENDENCY
 from typing import overload, Any
-from app.services.module import PARAMETER_KEY,RESOLVED_CLASS_KEY
+from app.utils.constant import DEP_KEY, PARAM_NAMES_KEY, PARAMETER_KEY, RESOLVED_CLASS_KEY, TYPE_KEY
 from app.utils.helper import issubclass_of,reverseDict, is_abstract
 
 
@@ -21,9 +21,7 @@ class M:  # class test
     def build(self): pass
 
 
-TYPE_KEY = "type"
-DEP_KEY = "dep"
-PARAM_NAMES_KEY = "param_name"
+
 
 def issubclass(cls): return issubclass_of(M, cls)
 

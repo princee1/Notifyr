@@ -1,6 +1,7 @@
 from enum import Enum
 from inspect import getmro
 from typing import overload, get_overloads
+from app.utils.constant import PARAMETER_KEY, RESOLVED_CLASS_KEY
 from app.utils.helper import issubclass_of, is_abstract
 
 
@@ -78,9 +79,6 @@ class Module():
             pass
         pass
 
-
-RESOLVED_CLASS_KEY = "resolved_class"
-PARAMETER_KEY = "parameter"
 
 def InjectWCondition(baseClass: type, resolvedClass: function[type]):
 
