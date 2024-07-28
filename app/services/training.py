@@ -1,4 +1,4 @@
-from module import Module
+from . import _module
 
-class TrainingService(Module):
+class TrainingService(_module.Module):
     pass

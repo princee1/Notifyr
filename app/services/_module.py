@@ -1,8 +1,8 @@
 from enum import Enum
 from inspect import getmro
-from typing import overload, get_overloads
-from app.utils.constant import RESOLVED_CLASS_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY
-from app.utils.helper import issubclass_of, is_abstract
+from typing import overload, get_overloads, Any
+from utils.constant import RESOLVED_CLASS_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY
+from utils.helper import issubclass_of, is_abstract
 
 
 class BuildErrorLevel(Enum):
@@ -80,7 +80,7 @@ class Module():
         pass
 
 
-def InjectWCondition(baseClass: type, resolvedClass: function[type]):
+def InjectWCondition(baseClass: type, resolvedClass: Any):
 
     def decorator(cls: Module):
         if not is_abstract(bClass=Module, cls=baseClass):

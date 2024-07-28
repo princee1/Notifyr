@@ -1,11 +1,11 @@
 from abc import ABC
-from module import Module
+from . import _module
 
 ## WARNING extends the ABC last
 
-class BaseNotification(Module,ABC): pass # BUG we can specify a kid class if we decide to inject a Notification
+class BaseNotification(_module.Module,ABC): pass # BUG we can specify a kid class if we decide to inject a Notification
 
-class SystemService(BaseNotification): pass
+class SystemNotificationService(BaseNotification): pass
 
 class DiscordService(BaseNotification): pass
 

@@ -1,5 +1,5 @@
-from module import Module
+from . import _module
 
-class RateLimiterService(Module): pass
+class RateLimiterService(_module.Module): pass
 
-class PriorityQueueService(Module):  pass
+class PriorityQueueService(_module.Module):  pass

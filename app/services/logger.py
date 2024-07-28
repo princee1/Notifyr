@@ -1,8 +1,8 @@
 from injector import inject
-from app.services.config import ConfigService
-from module import Module
+from . import _module
+from config import ConfigService
 
-class LoggerService(Module):
+class LoggerService(_module.Module):
 
     @inject
     def __init__(self,configService: ConfigService) -> None:

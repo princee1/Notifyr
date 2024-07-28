@@ -1,5 +1,5 @@
-from module import Module
-class AssetService(Module):
+from . import _module
+class AssetService(_module.Module):
     def __init__(self) -> None:
         self.images = {}
         self.htmls = {}

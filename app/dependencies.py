@@ -1,28 +1,29 @@
-from app.services.assets import AssetService
-from app.services.config import ConfigService
-from app.services.email import EmailReader, EmailSender
-from app.services.twillo import TwilioService
-from app.services.support import SupportService, ChatService
-from app.services.communication import PhoneService, SMSService
-from app.services.training import TrainingService
-from services.notification import SystemService,DiscordService
-from app.services.security import SecurityService
-from app.services.throttling import PriorityQueueService,RateLimiterService
+from services.assets import AssetService
+from services.config import ConfigService
+from services.email import EmailReader, EmailSender
+from services.twillo import TwilioService
+from services.support import SupportService, ChatService
+from services.communication import PhoneService, SMSService
+from services.training import TrainingService
+from services.notification import SystemNotificationService, DiscordService
+from services.security import SecurityService
+from services.throttling import PriorityQueueService, RateLimiterService
+from services.file import FileService
 
 
-__DEPENDENCY: list[type] = [AssetService, 
-                            ConfigService, 
-                            EmailReader, 
+__DEPENDENCY: list[type] = [AssetService,
+                            ConfigService,
+                            EmailReader,
+                            FileService,
                             EmailSender,
-                            TwilioService, 
-                            SupportService, 
-                            ChatService, 
-                            PhoneService, 
-                            TrainingService,  
+                            TwilioService,
+                            SupportService,
+                            ChatService,
+                            PhoneService,
+                            TrainingService,
                             SMSService,
-                            SystemService,
+                            SystemNotificationService,
                             DiscordService,
                             SecurityService,
                             PriorityQueueService,
-                            RateLimiterService ]
-
+                            RateLimiterService]

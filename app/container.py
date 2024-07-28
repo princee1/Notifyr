@@ -1,23 +1,17 @@
 import injector
 from inspect import signature
-# from dependencies import __DEPENDENCY
+from dependencies import __DEPENDENCY
 from typing import overload, Any
-from app.utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY
-from app.utils.helper import issubclass_of, reverseDict, is_abstract
-
+from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY
+from utils.helper import issubclass_of, reverseDict, is_abstract
 
 
 class ContainerError(BaseException):
     pass
-
-
 class CircularDependencyError(ContainerError):
     pass
-
-
 class MultipleParameterSameDependencyError(ContainerError):
     pass
-
 
 class M:  # class test
     AbstractDependency: dict = {}
@@ -39,6 +33,7 @@ class Container():
         self.DEPENDENCY_MetaData = {}
         self.D: set[str] = self.load_baseSet(D)
         self.load_dep(D)
+        # print(self.DEPENDENCY_MetaData)
         self.buildContainer()
 
     def bind(self, type, obj, scope=None):
@@ -90,14 +85,8 @@ class Container():
         types: set[str] = set()
         paramNames: list[str] = []
         for p in params:
-            repr = p.__str__().split(":")
-            temp = repr[1].split(".")
-            if temp.__len__() == 1:
-                # a BUG or a warning
-                continue
-            types.add(temp[1])
-            paramNames.append(repr[0].strip())
-
+            types.add(p.annotation.__name__)
+            paramNames.append(p.name)
         return types, paramNames
 
     def load_baseSet(self, D: list[type]):
@@ -133,8 +122,10 @@ class Container():
         self.bind(current_type, obj)
 
     def switchAbsDep(self, current_type: M, dependencies: set[str]):
+        if len(dependencies) == 0: 
+            return set()
         try:
-            temp = list[dependencies]
+            temp = list(dependencies)
             for absClassname, resolvedClass in current_type.AbstractDependency.items():
                 if resolvedClass[RESOLVED_CLASS_KEY]:
                     index = temp.index(absClassname)
@@ -200,14 +191,7 @@ class Container():
     def dependencies(self) -> list[type]: return [x[TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]
 
-class A: pass
-class B: pass
-class C: pass
-class D: pass
-class E: pass
-class F: pass
-
-CONTAINER: Container = Container([A, B, C, D, E, F])
+CONTAINER: Container = Container(__DEPENDENCY)
 print(CONTAINER.dependencies)
 
 def InjectInFunction(func):

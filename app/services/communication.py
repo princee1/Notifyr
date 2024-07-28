@@ -1,7 +1,13 @@
-from module import Module
+from injector import inject
+from . import _module
 
-class SMSService(Module):
+from .config import ConfigService
+
+
+class SMSService(_module.Module):
+    def __init__(self,configService: ConfigService): pass
     pass
 
-class PhoneService(Module):
+class PhoneService(_module.Module):
+    def __init__(self,configService: ConfigService): pass
     pass

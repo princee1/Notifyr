@@ -1,7 +1,8 @@
 
 from injector import inject
-from module import Module
-from app.services.config import ConfigService
+from .config import ConfigService
+from ._module import Module
+
 
 class SecurityService(Module):
     def __init__(self, configService: ConfigService) -> None:

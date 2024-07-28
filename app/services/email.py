@@ -4,8 +4,8 @@ import smtplib as smtp
 import imaplib as imap
 from enum import Enum
 from injector import inject
-from module import Module
-from app.services.config import ConfigService
+from . import _module
+from .config import ConfigService
 
 
 SMTP_NORMAL_PORT = smtp.SMTP_PORT
@@ -25,7 +25,7 @@ class EmailConnConfig():
     def setHostAddr(host:str): pass
 
 
-class SMTPConfig(Enum,EmailConnConfig):
+class SMTPConfig(EmailConnConfig,Enum):
 
     GMAIL = "smtp.gmail.com"
     OUTLOOK = "smtp-mail.outlook.com"
@@ -56,7 +56,7 @@ class SMTPConfig(Enum,EmailConnConfig):
                 return host
 
 
-class IMAPConfig (Enum,EmailConnConfig):
+class IMAPConfig (EmailConnConfig, Enum):
     """The IMAPHost class is an enumeration of the IMAP host names for the two email providers that I use
     """
     GMAIL = "imap.gmail.com"
@@ -81,11 +81,12 @@ class IMAPConfig (Enum,EmailConnConfig):
 
 
 @dataclass
-class Email(Module):
+class Email(_module.Module):
     hostPort: int
 
     def __init__(self, configService: ConfigService):
         self.configService = configService
+        print(configService)
 
     def build(self):
         self.connect()
