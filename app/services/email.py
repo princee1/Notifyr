@@ -5,7 +5,10 @@ import imaplib as imap
 from enum import Enum
 from injector import inject
 from . import _module
-from .config import ConfigService
+from abc import ABC
+from .security import SecurityService
+from .config import ConfigService,MODE
+from .notification import BaseNotification,SystemNotificationService,DiscordService
 
 
 SMTP_NORMAL_PORT = smtp.SMTP_PORT
@@ -81,12 +84,11 @@ class IMAPConfig (EmailConnConfig, Enum):
 
 
 @dataclass
-class Email(_module.Module):
+class Email(_module.Module,ABC):
     hostPort: int
-
-    def __init__(self, configService: ConfigService):
+    def __init__(self, configService: ConfigService, notification: BaseNotification):
         self.configService = configService
-        print(configService)
+        self.notificationService = notification
 
     def build(self):
         self.connect()
@@ -96,11 +98,10 @@ class Email(_module.Module):
 
     def connect(self): pass
 
-
 class EmailSender(Email):
     @inject
-    def __init__(self, configService: ConfigService):
-        super().__init__(configService)
+    def __init__(self, configService: ConfigService, notification: BaseNotification): # BUG cant resolve an abstract class
+        super().__init__(configService,notification)
         self.fromEmails: set[str] = ()
         self.tlsConn: bool = SMTPConfig.setConnFlag(
             self.configService.SMTP_EMAIL_CONN_METHOD)
@@ -135,8 +136,8 @@ class EmailSender(Email):
                 self.connector.ehlo()
                 self.connector.starttls()
                 self.connector.ehlo()
-            val = self.connector.login(self.configService.EMAIL,
-                                       self.configService.EMAIL_PASS)
+            val = self.connector.login(self.configService.SMTP_EMAIL,
+                                       self.configService.SMTP_PASS)
             print(val)
             self.state = True
         except smtp.SMTPHeloError | smtp.SMTPNotSupportedError as e:
@@ -165,11 +166,10 @@ class EmailSender(Email):
         except:
             pass
 
-
 class EmailReader(Email):
     @inject
-    def __init__(self, configService: ConfigService) -> None:
-        super().__init__(configService)
+    def __init__(self, configService: ConfigService, notification: BaseNotification) -> None:
+        super().__init__(configService,notification)
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 

@@ -3,7 +3,7 @@ from abc import ABC
 
 def issubclass_of(bCls, kCls): return bCls in getmro(kCls)
 
-def is_abstract(cls: type, bClass:type):
+def is_abstract(cls: type, bClass:type): #BUG 
     try:
         x = list(getmro(cls))
         x.remove(cls)
@@ -24,3 +24,6 @@ def reverseDict(value:dict):
     for v,k in zip(val, key):
         temp[k] = v
     return temp
+    
+def getParentClass(cls:type): list(getmro(cls)).pop(0)
+ 
