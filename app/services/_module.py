@@ -1,8 +1,12 @@
 from enum import Enum
 from inspect import getmro
 from typing import overload, get_overloads, Any
-from utils.constant import RESOLVED_CLASS_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY
+from utils.constant import RESOLVED_CLASS_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, RESOLVED_DEPS_KEY
 from utils.helper import issubclass_of, is_abstract
+
+
+AbstractDependency: dict[str, dict] = {}
+AbstractModuleClasses: dict[str, type] = {}
 
 
 class BuildErrorLevel(Enum):
@@ -36,8 +40,6 @@ class BuildSkipError(BuildError):
 
 class Module():
 
-    AbstractDependency: dict = {}
-
     def build(self):
         pass
 
@@ -62,6 +64,9 @@ class Module():
         except BuildSkipError as e:
             pass
 
+        except:
+            pass
+
     def _killer(self):
         try:
             self.kill()
@@ -77,11 +82,11 @@ class Module():
 
         except BuildSkipError as e:
             pass
-        pass
+        except:
+            pass
 
 
 def InjectWCondition(baseClass: type, resolvedClass: Any):
-
     def decorator(cls: Module):
         if not is_abstract(bClass=Module, cls=baseClass):
             pass
@@ -92,9 +97,17 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
         if not issubclass_of(Module, cls):
             pass
             # ABORT error
-        cls.AbstractDependency[baseClass.__name__] = {RESOLVED_FUNC_KEY: resolvedClass,
-                                             RESOLVED_PARAMETER_KEY: None,
-                                             RESOLVED_CLASS_KEY: None}
+        AbstractDependency[cls.__name__] = {baseClass.__name__: {RESOLVED_FUNC_KEY: resolvedClass,
+                                                                 RESOLVED_PARAMETER_KEY: None,
+                                                                 RESOLVED_DEPS_KEY: None,
+                                                                 RESOLVED_CLASS_KEY: None}}
+        return cls
+    return decorator
+
+
+def AbstractModuleClass():
+    def decorator(cls: type):
+        AbstractModuleClasses[cls.__name__] = cls
         return cls
 
     return decorator

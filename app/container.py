@@ -4,15 +4,20 @@ from dependencies import __DEPENDENCY
 from typing import overload, Any
 from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY
 from utils.helper import issubclass_of, reverseDict, is_abstract
-from services._module import Module
+from services._module import Module, AbstractDependency, AbstractModuleClasses
 
 
 class ContainerError(BaseException):
     pass
+
+
 class CircularDependencyError(ContainerError):
     pass
+
+
 class MultipleParameterSameDependencyError(ContainerError):
     pass
+
 
 def issubclass(cls): return issubclass_of(Module, cls)
 
@@ -44,13 +49,18 @@ class Container():
             if not self.DEPENDENCY_MetaData.__contains__(x):
                 dep, p = self.getSignature(x)
                 # ERROR Dependency that is not in the dependency list
-                abstractRes = self.getAbstractResolving(x)
-                for r in abstractRes.keys():
-                    r_dep, r_p = self.getSignature(
-                        abstractRes[r][RESOLVED_FUNC_KEY])
-                    abstractRes[r][RESOLVED_PARAMETER_KEY] = r_p
-                    abstractRes[r][RESOLVED_DEPS_KEY] = r_dep
-                    dep = dep.union(r_dep)
+                try:
+                    abstractRes = self.getAbstractResolving(x)
+                    for r in abstractRes.keys():
+                        r_dep, r_p = self.getSignature(
+                            abstractRes[r][RESOLVED_FUNC_KEY])
+                        abstractRes[r][RESOLVED_PARAMETER_KEY] = r_p
+                        abstractRes[r][RESOLVED_DEPS_KEY] = r_dep
+                        dep = dep.union(r_dep)
+                except KeyError as e:
+                    pass
+                except:
+                    pass  # BUG i got an error for real
 
                 self.DEPENDENCY_MetaData[x.__name__] = {
                     TYPE_KEY: x,
@@ -71,8 +81,8 @@ class Container():
 
         return temp
 
-    def getAbstractResolving(self, typ: Module):
-        return typ.AbstractDependency
+    def getAbstractResolving(self, typ: type):
+        return AbstractDependency[typ.__name__]
 
     def getSignature(self, t: type | Any):
         params = signature(t).parameters.values()
@@ -104,27 +114,33 @@ class Container():
 
     def inject(self, x: str):
         current_type: type = self.DEPENDENCY_MetaData[x][TYPE_KEY]
+        # BUG if abstract class but abstractDependency not empty, we can set for all subclass
         if isabstract(current_type):
             return
         dep: set[str] = self.DEPENDENCY_MetaData[x][DEP_KEY]
         params_names: list[str] = self.DEPENDENCY_MetaData[x][PARAM_NAMES_KEY]
         # VERIFY the number of dependency
-        self.resolvedAbsDep(current_type)
-        self.switchAbsDep(current_type, dep)
+        if AbstractDependency.__contains__(x):
+            self.resolvedAbsDep(current_type)
+            dep = self.switchAbsDep(current_type, dep)
+            print(dep)
         params = self.toParams(dep, params_names)
         obj = self.createDep(current_type, params)
         self.bind(current_type, obj)
 
-    def switchAbsDep(self, current_type: Module, dependencies: set[str]):
-        if len(dependencies) == 0: 
+    def switchAbsDep(self, current_type: type, dependencies: set[str]):
+        if len(dependencies) == 0:
             return set()
         try:
             temp = list(dependencies)
-            for absClassname, resolvedClass in current_type.AbstractDependency.items():
+            print(temp)
+
+            for absClassname, resolvedClass in AbstractDependency[current_type.__name__].items():
                 if resolvedClass[RESOLVED_CLASS_KEY]:
                     index = temp.index(absClassname)
                     del temp[index]
-                    temp.insert(index, RESOLVED_CLASS_KEY)
+                    temp.insert(
+                        index, resolvedClass[RESOLVED_CLASS_KEY].__name__)
             return set(temp)
         except ValueError as e:
             pass
@@ -132,13 +148,12 @@ class Container():
             # BUG: handle the case where the dependency cannot be resolved
             pass
 
-    def resolvedAbsDep(self, current_type):
+    def resolvedAbsDep(self, current_type: type):  # ERROR gerer les erreur des if
         try:
             if issubclass(current_type):
                 pass
-            current_type: Module = current_type
-            for absClassName, absResolving in current_type.AbstractDependency.items():
-                absClass = self.DEPENDENCY_MetaData[absClassName][TYPE_KEY]
+            for absClassName, absResolving in AbstractDependency[current_type.__name__].items():
+                absClass = AbstractModuleClasses[absClassName]
                 if isabstract(absClass):
                     pass
                 absResParams = {}
@@ -154,7 +169,7 @@ class Container():
                     pass
                 if issubclass(resolvedDep):
                     pass
-                current_type.AbstractDependency[RESOLVED_CLASS_KEY] = resolvedDep
+                absResolving[RESOLVED_CLASS_KEY] = resolvedDep
 
         except NameError:
             pass
@@ -185,8 +200,10 @@ class Container():
     def dependencies(self) -> list[type]: return [x[TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]
 
+
 CONTAINER: Container = Container(__DEPENDENCY)
 print(CONTAINER.dependencies)
+
 
 def InjectInFunction(func):
     """
