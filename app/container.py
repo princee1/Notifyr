@@ -34,6 +34,7 @@ class Container():
         self.load_dep(D)
         # print(self.DEPENDENCY_MetaData)
         self.buildContainer()
+        self.hashKeyAbsResolving: dict = {}
 
     def bind(self, type, obj, scope=None):
         self.app.binder.bind(type, to=obj, scope=scope)
@@ -120,13 +121,21 @@ class Container():
         dep: set[str] = self.DEPENDENCY_MetaData[x][DEP_KEY]
         params_names: list[str] = self.DEPENDENCY_MetaData[x][PARAM_NAMES_KEY]
         # VERIFY the number of dependency
-        if AbstractDependency.__contains__(x):
+        if AbstractDependency.__contains__(x) or self.searchParentClassAbstractDependency(current_type):
             self.resolvedAbsDep(current_type)
             dep = self.switchAbsDep(current_type, dep)
-            print(dep)
         params = self.toParams(dep, params_names)
         obj = self.createDep(current_type, params)
         self.bind(current_type, obj)
+
+    def searchParentClassAbstractDependency(self,currentType:type):
+        for x in AbstractDependency:
+            absDepKeyClass = AbstractModuleClasses[x]
+            if issubclass_of( absDepKeyClass,currentType): 
+                self.hashKeyAbsResolving[currentType.__name__] = x
+                return True
+        return False
+        
 
     def switchAbsDep(self, current_type: type, dependencies: set[str]):
         if len(dependencies) == 0:
@@ -135,7 +144,7 @@ class Container():
             temp = list(dependencies)
             print(temp)
 
-            for absClassname, resolvedClass in AbstractDependency[current_type.__name__].items():
+            for absClassname, resolvedClass in AbstractDependency[self.hashAbsDep(current_type.__name__)].items():
                 if resolvedClass[RESOLVED_CLASS_KEY]:
                     index = temp.index(absClassname)
                     del temp[index]
@@ -152,7 +161,7 @@ class Container():
         try:
             if issubclass(current_type):
                 pass
-            for absClassName, absResolving in AbstractDependency[current_type.__name__].items():
+            for absClassName, absResolving in AbstractDependency[self.hashAbsDep(current_type.__name__)].items():
                 absClass = AbstractModuleClasses[absClassName]
                 if isabstract(absClass):
                     pass
@@ -200,6 +209,9 @@ class Container():
     def dependencies(self) -> list[type]: return [x[TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]
 
+    @property
+    def hashAbsDep(self,cls: str):
+        return cls if not self.hashKeyAbsResolving.__contains__(cls) else self.hashKeyAbsResolving[cls]
 
 CONTAINER: Container = Container(__DEPENDENCY)
 print(CONTAINER.dependencies)

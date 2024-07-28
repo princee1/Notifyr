@@ -1,5 +1,5 @@
 from enum import Enum
-from inspect import getmro
+from inspect import getmro,isabstract
 from typing import overload, get_overloads, Any
 from utils.constant import RESOLVED_CLASS_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, RESOLVED_DEPS_KEY
 from utils.helper import issubclass_of, is_abstract
@@ -86,8 +86,10 @@ class Module():
             pass
 
 
-def InjectWCondition(baseClass: type, resolvedClass: Any):
-    def decorator(cls: Module):
+def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot create instance of the base class
+    def decorator(cls: type):
+        if is_abstract(cls,Module): AbstractModuleClasses[cls.__name__] = cls
+
         if not is_abstract(bClass=Module, cls=baseClass):
             pass
             # ABORT error
@@ -101,13 +103,8 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
                                                                  RESOLVED_PARAMETER_KEY: None,
                                                                  RESOLVED_DEPS_KEY: None,
                                                                  RESOLVED_CLASS_KEY: None}}
+        AbstractModuleClasses[baseClass.__name__] = baseClass
+        
         return cls
     return decorator
 
-
-def AbstractModuleClass():
-    def decorator(cls: type):
-        AbstractModuleClasses[cls.__name__] = cls
-        return cls
-
-    return decorator
