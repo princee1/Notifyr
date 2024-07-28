@@ -2,17 +2,22 @@ import injector
 from inspect import signature
 # from dependencies import __DEPENDENCY
 from typing import overload, Any
-from app.utils.constant import DEP_KEY, PARAM_NAMES_KEY, PARAMETER_KEY, RESOLVED_CLASS_KEY, TYPE_KEY
-from app.utils.helper import issubclass_of,reverseDict, is_abstract
+from app.utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY
+from app.utils.helper import issubclass_of, reverseDict, is_abstract
 
 
-class ContainerError(BaseException): pass
+
+class ContainerError(BaseException):
+    pass
+
 
 class CircularDependencyError(ContainerError):
     pass
 
+
 class MultipleParameterSameDependencyError(ContainerError):
     pass
+
 
 class M:  # class test
     AbstractDependency: dict = {}
@@ -21,11 +26,11 @@ class M:  # class test
     def build(self): pass
 
 
-
-
 def issubclass(cls): return issubclass_of(M, cls)
 
-def isabstract(cls): return is_abstract(cls,M)
+
+def isabstract(cls): return is_abstract(cls, M)
+
 
 class Container():
 
@@ -39,21 +44,23 @@ class Container():
     def bind(self, type, obj, scope=None):
         self.app.binder.bind(type, to=obj, scope=scope)
 
-    def get(self, type:type, scope=None):
+    def get(self, type: type, scope=None):
         return self.app.get(type, scope)
-    
-    def getFromClassName(self, classname:str,scope=None):
-        return self.app.get(self.DEPENDENCY_MetaData[classname][TYPE_KEY],scope)
 
-    def load_dep(self, D:list[type]):
+    def getFromClassName(self, classname: str, scope=None):
+        return self.app.get(self.DEPENDENCY_MetaData[classname][TYPE_KEY], scope)
+
+    def load_dep(self, D: list[type]):
         for x in D:
             if not self.DEPENDENCY_MetaData.__contains__(x):
                 dep, p = self.getSignature(x)
                 # ERROR Dependency that is not in the dependency list
                 abstractRes = self.getAbstractResolving(x)
                 for r in abstractRes.keys():
-                    r_dep, r_p = self.getSignature(abstractRes[r][RESOLVED_CLASS_KEY])
-                    abstractRes[r][PARAMETER_KEY] = r_p
+                    r_dep, r_p = self.getSignature(
+                        abstractRes[r][RESOLVED_FUNC_KEY])
+                    abstractRes[r][RESOLVED_PARAMETER_KEY] = r_p
+                    abstractRes[r][RESOLVED_DEPS_KEY] = r_dep
                     dep = dep.union(r_dep)
 
                 self.DEPENDENCY_MetaData[x.__name__] = {
@@ -62,20 +69,21 @@ class Container():
                     PARAM_NAMES_KEY: p
                 }
 
-    def filter(self,D:list[type]):
+    def filter(self, D: list[type]):
         temp: list[type] = []
         for dep in D:
-            try: 
-                if issubclass(dep): temp.append(dep)
-                else: raise TypeError
-            except: # catch certain type of error
+            try:
+                if issubclass(dep):
+                    temp.append(dep)
+                else:
+                    raise TypeError
+            except:  # catch certain type of error
                 pass
 
         return temp
 
-    def getAbstractResolving(self,typ:M):
-        return  typ.AbstractDependency
-
+    def getAbstractResolving(self, typ: M):
+        return typ.AbstractDependency
 
     def getSignature(self, t: type | Any):
         params = signature(t).parameters.values()
@@ -114,17 +122,60 @@ class Container():
     def inject(self, x: str):
         current_type: type = self.DEPENDENCY_MetaData[x][TYPE_KEY]
         if isabstract(current_type):
-            return 
+            return
         dep: set[str] = self.DEPENDENCY_MetaData[x][DEP_KEY]
         params_names: list[str] = self.DEPENDENCY_MetaData[x][PARAM_NAMES_KEY]
-        assert len(dep) == len(
-            params_names), "The number of dependency must be same length as the number of params names" # BUG might need to remove the assert
-        # ERROR need to verify if the dependency a subclass of the abstract class
-        # ERROR need to verify if the key of the abstract resolving is parent class of the resolving class
-        # ERROR need to verify if we can inject all parameter in the function
+        # VERIFY the number of dependency
+        self.resolvedAbsDep(current_type)
+        self.switchAbsDep(current_type, dep)
         params = self.toParams(dep, params_names)
         obj = self.createDep(current_type, params)
         self.bind(current_type, obj)
+
+    def switchAbsDep(self, current_type: M, dependencies: set[str]):
+        try:
+            temp = list[dependencies]
+            for absClassname, resolvedClass in current_type.AbstractDependency.items():
+                if resolvedClass[RESOLVED_CLASS_KEY]:
+                    index = temp.index(absClassname)
+                    del temp[index]
+                    temp.insert(index, RESOLVED_CLASS_KEY)
+            return set(temp)
+        except ValueError as e:
+            pass
+        except KeyError as e:
+            # BUG: handle the case where the dependency cannot be resolved
+            pass
+
+    def resolvedAbsDep(self, current_type):
+        try:
+            if issubclass(current_type):
+                pass
+            current_type: M = current_type
+            for absClassName, absResolving in current_type.AbstractDependency.items():
+                absClass = self.DEPENDENCY_MetaData[absClassName][TYPE_KEY]
+                if isabstract(absClass):
+                    pass
+                absResParams = {}
+                if absResolving[RESOLVED_PARAMETER_KEY] is not None:
+                    absResParams = self.toParams(
+                        absResolving[RESOLVED_DEPS_KEY], absResolving[RESOLVED_PARAMETER_KEY])
+
+                resolvedDep = absResolving[RESOLVED_FUNC_KEY](
+                    **absResParams)
+                if isinstance(resolvedDep, type):
+                    pass
+                if issubclass_of(absClass, resolvedDep):
+                    pass
+                if issubclass(resolvedDep):
+                    pass
+                current_type.AbstractDependency[RESOLVED_CLASS_KEY] = resolvedDep
+
+        except NameError:
+            pass
+        except TypeError:
+            pass
+        return current_type
 
     def toParams(self, dep, params_names):
         params = {}
@@ -146,7 +197,8 @@ class Container():
         return obj
 
     @property
-    def dependencies(self) -> list[type]: return [ x[TYPE_KEY] for x in self.DEPENDENCY_MetaData.values()]
+    def dependencies(self) -> list[type]: return [x[TYPE_KEY]
+                                                  for x in self.DEPENDENCY_MetaData.values()]
 
 class A: pass
 class B: pass
@@ -158,7 +210,6 @@ class F: pass
 CONTAINER: Container = Container([A, B, C, D, E, F])
 print(CONTAINER.dependencies)
 
-    
 def InjectInFunction(func):
     """
     The `InjectInFunction` decorator takes the function and inspect it's signature, if the `CONTAINER` can resolve the 
@@ -183,7 +234,8 @@ def InjectInFunction(func):
         ok
     """
     types, pNames = CONTAINER.getSignature(func)
-    params = CONTAINER.toParams(types,pNames)
+    params = CONTAINER.toParams(types, pNames)
+
     def wrapper(*args, **kwargs):
         revparams = reverseDict(params)
         revparams.update(kwargs)

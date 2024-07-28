@@ -1,7 +1,6 @@
 from inspect import getmro
 from abc import ABC
 
-
 def issubclass_of(bCls, kCls): return bCls in getmro(kCls)
 
 def is_abstract(cls: type, bClass:type):

@@ -1,7 +1,7 @@
 from enum import Enum
 from inspect import getmro
 from typing import overload, get_overloads
-from app.utils.constant import PARAMETER_KEY, RESOLVED_CLASS_KEY
+from app.utils.constant import RESOLVED_CLASS_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY
 from app.utils.helper import issubclass_of, is_abstract
 
 
@@ -92,8 +92,9 @@ def InjectWCondition(baseClass: type, resolvedClass: function[type]):
         if not issubclass_of(Module, cls):
             pass
             # ABORT error
-        cls.AbstractDependency[baseClass] = {RESOLVED_CLASS_KEY: resolvedClass,
-                                             PARAMETER_KEY: None}
+        cls.AbstractDependency[baseClass.__name__] = {RESOLVED_FUNC_KEY: resolvedClass,
+                                             RESOLVED_PARAMETER_KEY: None,
+                                             RESOLVED_CLASS_KEY: None}
         return cls
 
     return decorator
