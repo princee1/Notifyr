@@ -37,7 +37,6 @@ class ConfigService(_module.Module):
             path = find_dotenv(ENV)
             load_dotenv(path)
     
-    
     def parseToInt(value:str, default:int | None = None): # TODO need to add the build error level
         """
         The function `parseToInt` attempts to convert a string to an integer and returns the integer
@@ -64,8 +63,8 @@ class ConfigService(_module.Module):
             pass
         return default
 
-
     def build(self):
+        print("hello")
         self.MODE = MODE.toMode(os.getenv('MODE'))
         self.PORT_PUBLIC = ConfigService.parseToInt(os.getenv("PORT_PUBLIC"),3000)
         self.PORT_PRIVATE = ConfigService.parseToInt(os.getenv("PORT_PRIVATE"),5000)

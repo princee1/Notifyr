@@ -4,6 +4,7 @@ from dependencies import __DEPENDENCY
 from typing import overload, Any
 from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY
 from utils.helper import issubclass_of, reverseDict, is_abstract
+from services._module import Module
 
 
 class ContainerError(BaseException):
@@ -13,17 +14,10 @@ class CircularDependencyError(ContainerError):
 class MultipleParameterSameDependencyError(ContainerError):
     pass
 
-class M:  # class test
-    AbstractDependency: dict = {}
-    def _builder(self): pass
-
-    def build(self): pass
+def issubclass(cls): return issubclass_of(Module, cls)
 
 
-def issubclass(cls): return issubclass_of(M, cls)
-
-
-def isabstract(cls): return is_abstract(cls, M)
+def isabstract(cls): return is_abstract(cls, Module)
 
 
 class Container():
@@ -77,7 +71,7 @@ class Container():
 
         return temp
 
-    def getAbstractResolving(self, typ: M):
+    def getAbstractResolving(self, typ: Module):
         return typ.AbstractDependency
 
     def getSignature(self, t: type | Any):
@@ -121,7 +115,7 @@ class Container():
         obj = self.createDep(current_type, params)
         self.bind(current_type, obj)
 
-    def switchAbsDep(self, current_type: M, dependencies: set[str]):
+    def switchAbsDep(self, current_type: Module, dependencies: set[str]):
         if len(dependencies) == 0: 
             return set()
         try:
@@ -142,7 +136,7 @@ class Container():
         try:
             if issubclass(current_type):
                 pass
-            current_type: M = current_type
+            current_type: Module = current_type
             for absClassName, absResolving in current_type.AbstractDependency.items():
                 absClass = self.DEPENDENCY_MetaData[absClassName][TYPE_KEY]
                 if isabstract(absClass):
@@ -179,7 +173,7 @@ class Container():
 
     def createDep(self, typ, params):
         flag = issubclass(typ)
-        obj: M = typ(**params)
+        obj: Module = typ(**params)
         if flag:
             obj._builder()
         else:
