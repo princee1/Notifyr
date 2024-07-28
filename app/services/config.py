@@ -64,7 +64,6 @@ class ConfigService(_module.Module):
         return default
 
     def build(self):
-        print("hello")
         self.MODE = MODE.toMode(os.getenv('MODE'))
         self.PORT_PUBLIC = ConfigService.parseToInt(os.getenv("PORT_PUBLIC"),3000)
         self.PORT_PRIVATE = ConfigService.parseToInt(os.getenv("PORT_PRIVATE"),5000)
@@ -73,7 +72,7 @@ class ConfigService(_module.Module):
         self.SMTP_EMAIL_HOST = os.getenv("SMTP_EMAIL_HOST").upper()
         self.SMTP_EMAIL_PORT = ConfigService.parseToInt(os.getenv("SMTP_EMAIL_PORT"))
         self.SMTP_EMAIL = os.getenv("SMTP_EMAIL")
-        self.SMTP_EMAIL_PASS = os.getenv("SMTP_EMAIL_PASS")
+        self.SMTP_PASS = os.getenv("SMTP_EMAIL_PASS")
         self.SMTP_EMAIL_CONN_METHOD= os.getenv("SMTP_EMAIL_CONN_METHOD")
         self.SMTP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(os.getenv("SMTP_EMAIL_LOG_LEVEL"),0)
 
