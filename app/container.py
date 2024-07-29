@@ -106,7 +106,8 @@ class Container():
     def load_baseSet(self, D: list[type]):
         t: set[str] = set()
         for d in D:
-            if isabstract(d): raise InvalidDependencyError
+            if isabstract(d.__name__): 
+                raise InvalidDependencyError
             t.add(d.__name__)
         return t
 
