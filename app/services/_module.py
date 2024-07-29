@@ -49,6 +49,12 @@ class Module():
     def log(self):
         pass
 
+    def __repr__(self) -> str:
+        return super().__repr__()
+    
+    # def __str__(self) -> str:
+    #     return f"Module: {self.__class__.__name__} Hash: {self.__hash__()}"
+
     def _builder(self):
         try:
             self.build()
@@ -85,6 +91,9 @@ class Module():
         except:
             pass
 
+def AbstractModuleClass(cls):
+    AbstractModuleClasses[cls.__name__] = cls
+    return cls
 
 def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot create instance of the base class
     def decorator(cls: type):

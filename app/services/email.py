@@ -82,13 +82,13 @@ class IMAPConfig (EmailConnConfig, Enum):
     def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower(
     ) == "ssl" else IMAP_NORMAL_PORT
 
-
-@dataclass
+@_module.AbstractModuleClass
 class Email(_module.Module,ABC):
-    hostPort: int
     def __init__(self, configService: ConfigService, notification: BaseNotification):
         self.configService = configService
         self.notificationService = notification
+        self.hostPort: int
+
 
     def build(self):
         self.connect()
@@ -97,6 +97,7 @@ class Email(_module.Module,ABC):
     def authenticate(self): pass
 
     def connect(self): pass
+
 
 class EmailSender(Email):
     @inject

@@ -6,6 +6,7 @@ from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RES
 from utils.helper import issubclass_of, reverseDict, is_abstract
 from services._module import Module, AbstractDependency, AbstractModuleClasses
 
+print(AbstractModuleClasses)
 
 class ContainerError(BaseException): pass
 
@@ -32,7 +33,6 @@ class Container():
         self.DEPENDENCY_MetaData = {}
         self.D: set[str] = self.load_baseSet(D)
         self.load_dep(D)
-        # print(self.DEPENDENCY_MetaData)
         self.buildContainer()
         self.hashKeyAbsResolving: dict = {}
 
@@ -49,6 +49,7 @@ class Container():
         for x in D:
             if not self.DEPENDENCY_MetaData.__contains__(x):
                 dep, p = self.getSignature(x)
+                dep = set(dep)
                 # ERROR Dependency that is not in the dependency list
                 try:
                     abstractRes = self.getAbstractResolving(x)
@@ -87,10 +88,10 @@ class Container():
 
     def getSignature(self, t: type | Any):
         params = signature(t).parameters.values()
-        types: set[str] = set()
+        types: list[str] = [] ## BUG need to verify if theres is a type that already exists
         paramNames: list[str] = []
         for p in params:
-            types.add(p.annotation.__name__)
+            types.append(p.annotation.__name__)
             paramNames.append(p.name)
         return types, paramNames
 
@@ -205,6 +206,10 @@ class Container():
         return obj
 
     @property
+    def objectDependencies(self):
+        return []
+
+    @property
     def dependencies(self) -> list[type]: return [x[TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]
 
@@ -213,7 +218,6 @@ class Container():
         return cls if not self.hashKeyAbsResolving.__contains__(cls) else self.hashKeyAbsResolving[cls]
 
 CONTAINER: Container = Container(__DEPENDENCY)
-print(CONTAINER.dependencies)
 
 
 def InjectInFunction(func):
@@ -239,11 +243,12 @@ def InjectInFunction(func):
         <__main__.A object at 0x000001A76EC3FB90>
         ok
     """
-    types, pNames = CONTAINER.getSignature(func)
-    params = CONTAINER.toParams(types, pNames)
-
+    types, paramNames = CONTAINER.getSignature(func)
+    paramsToInject = CONTAINER.toParams(types, paramNames)
     def wrapper(*args, **kwargs):
-        revparams = reverseDict(params)
-        revparams.update(kwargs)
-        func(**revparams)
+        # revparams = reverseDict(paramsToInject)
+        paramsToInject.update(kwargs)
+        func(**paramsToInject)
     return wrapper
+
+
