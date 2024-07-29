@@ -81,11 +81,9 @@ class IMAPConfig (EmailConnConfig, Enum):
 
 @_module.AbstractModuleClass
 class Email(_module.Module):
-    def __init__(self, configService: ConfigService, notification: BaseNotification):
+    def __init__(self, configService: ConfigService):
         self.configService = configService
-        self.notificationService = notification
         self.hostPort: int
-
 
     def build(self):
         self.connect()
@@ -98,8 +96,8 @@ class Email(_module.Module):
 
 class EmailSender(Email):
     @inject
-    def __init__(self, configService: ConfigService, notification: BaseNotification): # BUG cant resolve an abstract class
-        super().__init__(configService,notification)
+    def __init__(self, configService: ConfigService): # BUG cant resolve an abstract class
+        super().__init__(configService)
         self.fromEmails: set[str] = ()
         self.tlsConn: bool = SMTPConfig.setConnFlag(
             self.configService.SMTP_EMAIL_CONN_METHOD)
@@ -166,8 +164,8 @@ class EmailSender(Email):
 
 class EmailReader(Email):
     @inject
-    def __init__(self, configService: ConfigService, notification: BaseNotification) -> None:
-        super().__init__(configService,notification)
+    def __init__(self, configService: ConfigService) -> None:
+        super().__init__(configService)
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 

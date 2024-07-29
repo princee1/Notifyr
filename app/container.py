@@ -1,8 +1,8 @@
 import injector
-from inspect import signature, getmro
+from inspect import signature, getmro,Parameter
 from dependencies import __DEPENDENCY
 from typing import overload, Any
-from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY
+from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY, DEP_PARAMS_KEY
 from utils.helper import issubclass_of
 from services._module import Module, AbstractDependency, AbstractModuleClasses
 
@@ -93,8 +93,8 @@ class Container():
                 self.DEPENDENCY_MetaData[x.__name__] = {
                     TYPE_KEY: x,
                     DEP_KEY: dep,
-                    PARAM_NAMES_KEY: p
-                    
+                    PARAM_NAMES_KEY: p,
+                    DEP_PARAMS_KEY: dep_list
                 }
 
     def filter(self, D: list[type]):
@@ -150,7 +150,7 @@ class Container():
         # BUG if abstract class but abstractDependency not empty, we can set for all subclass
         if isabstract(current_type):
             return
-        dep: set[str] = self.DEPENDENCY_MetaData[x][DEP_KEY]
+        dep: list[str] = self.DEPENDENCY_MetaData[x][DEP_PARAMS_KEY]
         params_names: list[str] = self.DEPENDENCY_MetaData[x][PARAM_NAMES_KEY]
         # VERIFY the number of dependency
         if AbstractDependency.__contains__(x) or self.searchParentClassAbstractDependency(current_type):
@@ -175,19 +175,17 @@ class Container():
         #         return True
         # return False
 
-    def switchAbsDep(self, current_type: type, dependencies: set[str]):
+    def switchAbsDep(self, current_type: type, dependencies: list[str]):
         if len(dependencies) == 0:
-            return set()
+            return []
         try:
-            temp = list(dependencies)
-            print(temp)
             for absClassname, resolvedClass in AbstractDependency[self.hashAbsDep(current_type.__name__)].items():
                 if resolvedClass[RESOLVED_CLASS_KEY]:
-                    index = temp.index(absClassname)
-                    del temp[index]
-                    temp.insert(
+                    index = dependencies.index(absClassname)
+                    del dependencies[index]
+                    dependencies.insert(
                         index, resolvedClass[RESOLVED_CLASS_KEY].__name__)
-            return set(temp)
+            return dependencies
         except ValueError as e:
             pass
         except KeyError as e:
@@ -201,7 +199,7 @@ class Container():
             for absClassName, absResolving in AbstractDependency[self.hashAbsDep(current_type.__name__)].items():
                 absClass = AbstractModuleClasses[absClassName]
                 if not isabstract(absClass):
-                    pass
+                    raise NotAbstractDependencyError
                 absResParams = {}
                 if absResolving[RESOLVED_PARAMETER_KEY] is not None:
                     absResParams = self.toParams(
