@@ -5,7 +5,6 @@ from enum import Enum
 from injector import inject
 from . import _module
 from .config import ConfigService
-from .notification import BaseNotification
 
 
 SMTP_NORMAL_PORT = smtp.SMTP_PORT
@@ -118,9 +117,9 @@ class EmailSender(Email):
     def connect(self):
         try:
             self.hostAddr = SMTPConfig.setHostAddr(
-                self.configService.EMAIL_HOST)
+                self.configService.SMTP_EMAIL_HOST)
             self.connector = smtp.SMTP(self.hostAddr, self.hostPort)
-            self.connector.set_debuglevel(self.configService.EMAIL_LOG_LEVEL)
+            self.connector.set_debuglevel(self.configService.SMTP_EMAIL_LOG_LEVEL)
         except NameError as e:
             pass  # BUG need to change the error name and a builder error
         except:
@@ -145,7 +144,7 @@ class EmailSender(Email):
             self.state = False
             self.errorReason = e
             # TODO Throw Error build error
-            pass
+            raise _module.BuildAbortError
 
     def sendMessage(self):
         try:

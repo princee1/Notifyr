@@ -58,6 +58,7 @@ class Container():
         self.D: set[str] = self.load_baseSet(D)
         self.load_dep(D)
         self.buildContainer()
+        # TODO print success  in building the app
 
     def bind(self, type, obj, scope=None):
         self.app.binder.bind(type, to=obj, scope=scope)
@@ -115,13 +116,15 @@ class Container():
 
     def getSignature(self, t: type | Any):
         params = signature(t).parameters.values()
-        # BUG need to verify if theres is a type that already exists
         types: list[str] = []
         paramNames: list[str] = []
         for p in params:
+            if types.count(p.annotation.__name__)  == 1:
+                raise MultipleParameterSameDependencyError
+            
             types.append(p.annotation.__name__)
             paramNames.append(p.name)
-            print(p.name,":",p.annotation.__name__)
+            
         return types, paramNames
 
     def load_baseSet(self, D: list[type]):
@@ -147,7 +150,6 @@ class Container():
 
     def inject(self, x: str):
         current_type: type = self.DEPENDENCY_MetaData[x][TYPE_KEY]
-        # BUG if abstract class but abstractDependency not empty, we can set for all subclass
         if isabstract(current_type):
             return
         dep: list[str] = self.DEPENDENCY_MetaData[x][DEP_PARAMS_KEY]
@@ -192,7 +194,7 @@ class Container():
             # BUG: handle the case where the dependency cannot be resolved
             pass
 
-    def resolvedAbsDep(self, current_type: type):  # ERROR gerer les erreur des if
+    def resolvedAbsDep(self, current_type: type):
         try:
             if issubclass(current_type):
                 pass
@@ -208,10 +210,13 @@ class Container():
                 resolvedDep = absResolving[RESOLVED_FUNC_KEY](
                     **absResParams)
                 if not isinstance(resolvedDep, type):
-                    pass
+                    raise TypeError # suppose to be an instance of type
+                
                 if not issubclass_of(absClass, resolvedDep):
-                    pass
+                    raise NotSubclassOfAbstractDependencyError
+                
                 if not issubclass(resolvedDep):
+                    #WARNING: This might create problem
                     pass
                 absResolving[RESOLVED_CLASS_KEY] = resolvedDep
 
