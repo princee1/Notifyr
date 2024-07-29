@@ -14,11 +14,17 @@ class CircularDependencyError(ContainerError): pass
 
 class MultipleParameterSameDependencyError(ContainerError): pass
 
-class NotSubclassOfAbstractDependencyError(ContainerError): pass
+class NotSubclassOfAbstractDependencyError(ContainerError): pass # The resolved class is not a subclass of the Base Class we wanted to resolve
 
 class PrimitiveTypeError(ContainerError): pass
 
-class NotAbstractDependencyError(ContainerError): pass 
+class NotAbstractDependencyError(ContainerError): pass # Abstract Class not specified
+
+class NoResolvedDependencyError(ContainerError): pass # Cannot resolved a subclass for a parent class
+
+class NotInDependenciesError(ContainerError): pass # SubClass not in the Dependencies list
+
+class InvalidDependencyError(ContainerError): pass # Abstract class in the dependency list
 
 
 def issubclass(cls): return issubclass_of(Module, cls)
@@ -31,10 +37,10 @@ class Container():
     def __init__(self, D: list[type]) -> None:
         self.app = injector.Injector()
         self.DEPENDENCY_MetaData = {}
+        self.hashKeyAbsResolving: dict = {}
         self.D: set[str] = self.load_baseSet(D)
         self.load_dep(D)
         self.buildContainer()
-        self.hashKeyAbsResolving: dict = {}
 
     def bind(self, type, obj, scope=None):
         self.app.binder.bind(type, to=obj, scope=scope)
@@ -50,8 +56,12 @@ class Container():
             if not self.DEPENDENCY_MetaData.__contains__(x):
                 dep, p = self.getSignature(x)
                 dep = set(dep)
-                # ERROR Dependency that is not in the dependency list
+                
                 try:
+                    depNotInjected = dep.difference(self.D)
+                    if len(depNotInjected) != 0:
+                        for y in depNotInjected:
+                            if y not in AbstractModuleClasses: raise NotInDependenciesError
                     abstractRes = self.getAbstractResolving(x)
                     for r in abstractRes.keys():
                         r_dep, r_p = self.getSignature(
@@ -61,8 +71,6 @@ class Container():
                         dep = dep.union(r_dep)
                 except KeyError as e:
                     pass
-                except:
-                    pass  # BUG i got an error for real
 
                 self.DEPENDENCY_MetaData[x.__name__] = {
                     TYPE_KEY: x,
@@ -98,6 +106,7 @@ class Container():
     def load_baseSet(self, D: list[type]):
         t: set[str] = set()
         for d in D:
+            if isabstract(d): raise InvalidDependencyError
             t.add(d.__name__)
         return t
 
@@ -191,17 +200,22 @@ class Container():
             pass
         except TypeError:
             pass
+        except KeyError: 
+            pass
         return current_type
 
     def toParams(self, dep, params_names):
-        params = {}
-        i = 0
-        for d in dep:
-            obj_dep = self.get(self.DEPENDENCY_MetaData[d][TYPE_KEY])
-            params[params_names[i]] = obj_dep
-            i += 1
-        return params
-
+        try:
+            params = {}
+            i = 0
+            for d in dep:
+                obj_dep = self.get(self.DEPENDENCY_MetaData[d][TYPE_KEY])
+                params[params_names[i]] = obj_dep
+                i += 1
+            return params
+        except KeyError:
+            raise NoResolvedDependencyError
+            
     def createDep(self, typ, params):
         flag = issubclass(typ)
         obj: Module = typ(**params)
