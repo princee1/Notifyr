@@ -7,20 +7,20 @@ from utils.helper import issubclass_of, reverseDict, is_abstract
 from services._module import Module, AbstractDependency, AbstractModuleClasses
 
 
-class ContainerError(BaseException):
-    pass
+class ContainerError(BaseException): pass
 
+class CircularDependencyError(ContainerError): pass
 
-class CircularDependencyError(ContainerError):
-    pass
+class MultipleParameterSameDependencyError(ContainerError): pass
 
+class NotSubclassOfAbstractDependencyError(ContainerError): pass
 
-class MultipleParameterSameDependencyError(ContainerError):
-    pass
+class PrimitiveTypeError(ContainerError): pass
+
+class NotAbstractDependencyError(ContainerError): pass 
 
 
 def issubclass(cls): return issubclass_of(Module, cls)
-
 
 def isabstract(cls): return is_abstract(cls, Module)
 
@@ -136,7 +136,6 @@ class Container():
                 return True
         return False
         
-
     def switchAbsDep(self, current_type: type, dependencies: set[str]):
         if len(dependencies) == 0:
             return set()
@@ -156,14 +155,14 @@ class Container():
         except KeyError as e:
             # BUG: handle the case where the dependency cannot be resolved
             pass
-
+ 
     def resolvedAbsDep(self, current_type: type):  # ERROR gerer les erreur des if
         try:
             if issubclass(current_type):
                 pass
             for absClassName, absResolving in AbstractDependency[self.hashAbsDep(current_type.__name__)].items():
                 absClass = AbstractModuleClasses[absClassName]
-                if isabstract(absClass):
+                if not isabstract(absClass):
                     pass
                 absResParams = {}
                 if absResolving[RESOLVED_PARAMETER_KEY] is not None:
@@ -172,11 +171,11 @@ class Container():
 
                 resolvedDep = absResolving[RESOLVED_FUNC_KEY](
                     **absResParams)
-                if isinstance(resolvedDep, type):
+                if not isinstance(resolvedDep, type):
                     pass
-                if issubclass_of(absClass, resolvedDep):
+                if not issubclass_of(absClass, resolvedDep):
                     pass
-                if issubclass(resolvedDep):
+                if not issubclass(resolvedDep):
                     pass
                 absResolving[RESOLVED_CLASS_KEY] = resolvedDep
 
