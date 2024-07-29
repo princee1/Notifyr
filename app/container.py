@@ -1,5 +1,5 @@
 import injector
-from inspect import signature
+from inspect import signature, getmro
 from dependencies import __DEPENDENCY
 from typing import overload, Any
 from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY
@@ -130,12 +130,19 @@ class Container():
         self.bind(current_type, obj)
 
     def searchParentClassAbstractDependency(self,currentType:type):
-        for x in AbstractDependency:
-            absDepKeyClass = AbstractModuleClasses[x]
-            if issubclass_of( absDepKeyClass,currentType): 
+        parentClasses:list[type] = list(getmro(currentType))
+        parentClasses.pop(0)
+        for x in parentClasses:
+            if x.__name__ in AbstractDependency.keys():
                 self.hashKeyAbsResolving[currentType.__name__] = x
                 return True
         return False
+        # for x in AbstractDependency:
+        #     absDepKeyClass = AbstractModuleClasses[x]
+        #     if issubclass_of( absDepKeyClass,currentType): 
+        #         self.hashKeyAbsResolving[currentType.__name__] = x  
+        #         return True
+        # return False
         
     def switchAbsDep(self, current_type: type, dependencies: set[str]):
         if len(dependencies) == 0:
