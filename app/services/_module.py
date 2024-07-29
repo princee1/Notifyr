@@ -1,8 +1,7 @@
 from enum import Enum
-from inspect import getmro,isabstract
-from typing import overload, get_overloads, Any
+from typing import  Any
 from utils.constant import RESOLVED_CLASS_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, RESOLVED_DEPS_KEY
-from utils.helper import issubclass_of, is_abstract
+from utils.helper import issubclass_of
 
 
 AbstractDependency: dict[str, dict] = {}
@@ -96,6 +95,41 @@ def AbstractModuleClass(cls):
     return cls
 
 def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot create instance of the base class
+    """
+    The `InjectWCondition` decorator is used to specify a Dependency that will be resolved instead of its parent class. Thus
+    we need to give to the decorator a function that will resolved base on other services value. At the injection moment the container 
+    will run the function and resolve the class with the function given and inject to any class that has the decorator. 
+
+    Another Parent class can use the decorator and specify for all the subclass by default. A subclass can specify for itself to. So
+    the last one in the family class hierarchy will use the function to resolve its own dependency. Any (Module) class can decorate with multiple 
+    decorator
+
+    `example:: `
+
+    class BaseS:
+        pass
+        
+    class SA(BaseS):pass
+    class SB(BaseS):pass
+    class TestS:
+        def build(self):
+            self.counter = rnd.randint(0,5)
+            pass
+
+    def resolve(t: TestS):
+        return SA if t.counter == 3 else SB
+    
+    @_module.InjectWCondition(BaseS, resolve)
+    class A: pass
+        def __init__(self, s:BaseS):
+            self.s = s
+
+
+    >>> CONTAINER.get(TestS,).counter
+    >>> 3
+    >>> CONTAINER.get(A).s.counter
+    >>> 3
+    """
     def decorator(cls: type):
         if not AbstractModuleClasses.__contains__(baseClass):
             pass
