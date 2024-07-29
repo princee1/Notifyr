@@ -3,31 +3,48 @@ from inspect import signature, getmro
 from dependencies import __DEPENDENCY
 from typing import overload, Any
 from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY
-from utils.helper import issubclass_of, reverseDict, is_abstract
+from utils.helper import issubclass_of
 from services._module import Module, AbstractDependency, AbstractModuleClasses
 
-print(AbstractModuleClasses)
 
-class ContainerError(BaseException): pass
+class ContainerError(BaseException):
+    pass
 
-class CircularDependencyError(ContainerError): pass
 
-class MultipleParameterSameDependencyError(ContainerError): pass
+class CircularDependencyError(ContainerError):
+    pass
 
-class NotSubclassOfAbstractDependencyError(ContainerError): pass # The resolved class is not a subclass of the Base Class we wanted to resolve
 
-class PrimitiveTypeError(ContainerError): pass
+class MultipleParameterSameDependencyError(ContainerError):
+    pass
 
-class NotAbstractDependencyError(ContainerError): pass # Abstract Class not specified
 
-class NoResolvedDependencyError(ContainerError): pass # Cannot resolved a subclass for a parent class
+class NotSubclassOfAbstractDependencyError(ContainerError):
+    pass  # The resolved class is not a subclass of the Base Class we wanted to resolve
 
-class NotInDependenciesError(ContainerError): pass # SubClass not in the Dependencies list
 
-class InvalidDependencyError(ContainerError): pass # Abstract class in the dependency list
+class PrimitiveTypeError(ContainerError):
+    pass
+
+
+class NotAbstractDependencyError(ContainerError):
+    pass  # Abstract Class not specified
+
+
+class NoResolvedDependencyError(ContainerError):
+    pass  # Cannot resolved a subclass for a parent class
+
+
+class NotInDependenciesError(ContainerError):
+    pass  # SubClass not in the Dependencies list
+
+
+class InvalidDependencyError(ContainerError):
+    pass  # Abstract class in the dependency list
 
 
 def issubclass(cls): return issubclass_of(Module, cls)
+
 
 def isabstract(cls): return AbstractModuleClasses.__contains__(cls)
 
@@ -54,14 +71,15 @@ class Container():
     def load_dep(self, D: list[type]):
         for x in D:
             if not self.DEPENDENCY_MetaData.__contains__(x):
-                dep, p = self.getSignature(x)
-                dep = set(dep)
-                
+                dep_list, p = self.getSignature(x)
+                dep = set(dep_list)
+
                 try:
                     depNotInjected = dep.difference(self.D)
                     if len(depNotInjected) != 0:
                         for y in depNotInjected:
-                            if y not in AbstractModuleClasses: raise NotInDependenciesError
+                            if y not in AbstractModuleClasses:
+                                raise NotInDependenciesError
                     abstractRes = self.getAbstractResolving(x)
                     for r in abstractRes.keys():
                         r_dep, r_p = self.getSignature(
@@ -76,6 +94,7 @@ class Container():
                     TYPE_KEY: x,
                     DEP_KEY: dep,
                     PARAM_NAMES_KEY: p
+                    
                 }
 
     def filter(self, D: list[type]):
@@ -96,17 +115,19 @@ class Container():
 
     def getSignature(self, t: type | Any):
         params = signature(t).parameters.values()
-        types: list[str] = [] ## BUG need to verify if theres is a type that already exists
+        # BUG need to verify if theres is a type that already exists
+        types: list[str] = []
         paramNames: list[str] = []
         for p in params:
             types.append(p.annotation.__name__)
             paramNames.append(p.name)
+            print(p.name,":",p.annotation.__name__)
         return types, paramNames
 
     def load_baseSet(self, D: list[type]):
         t: set[str] = set()
         for d in D:
-            if isabstract(d.__name__): 
+            if isabstract(d.__name__):
                 raise InvalidDependencyError
             t.add(d.__name__)
         return t
@@ -139,8 +160,8 @@ class Container():
         obj = self.createDep(current_type, params)
         self.bind(current_type, obj)
 
-    def searchParentClassAbstractDependency(self,currentType:type):
-        parentClasses:list[type] = list(getmro(currentType))
+    def searchParentClassAbstractDependency(self, currentType: type):
+        parentClasses: list[type] = list(getmro(currentType))
         parentClasses.pop(0)
         for x in parentClasses:
             if x.__name__ in AbstractDependency.keys():
@@ -149,18 +170,17 @@ class Container():
         return False
         # for x in AbstractDependency:
         #     absDepKeyClass = AbstractModuleClasses[x]
-        #     if issubclass_of( absDepKeyClass,currentType): 
-        #         self.hashKeyAbsResolving[currentType.__name__] = x  
+        #     if issubclass_of( absDepKeyClass,currentType):
+        #         self.hashKeyAbsResolving[currentType.__name__] = x
         #         return True
         # return False
-        
+
     def switchAbsDep(self, current_type: type, dependencies: set[str]):
         if len(dependencies) == 0:
             return set()
         try:
             temp = list(dependencies)
             print(temp)
-
             for absClassname, resolvedClass in AbstractDependency[self.hashAbsDep(current_type.__name__)].items():
                 if resolvedClass[RESOLVED_CLASS_KEY]:
                     index = temp.index(absClassname)
@@ -173,7 +193,7 @@ class Container():
         except KeyError as e:
             # BUG: handle the case where the dependency cannot be resolved
             pass
- 
+
     def resolvedAbsDep(self, current_type: type):  # ERROR gerer les erreur des if
         try:
             if issubclass(current_type):
@@ -201,7 +221,7 @@ class Container():
             pass
         except TypeError:
             pass
-        except KeyError: 
+        except KeyError:
             pass
         return current_type
 
@@ -216,7 +236,7 @@ class Container():
             return params
         except KeyError:
             raise NoResolvedDependencyError
-            
+
     def createDep(self, typ, params):
         flag = issubclass(typ)
         obj: Module = typ(**params)
@@ -236,8 +256,9 @@ class Container():
                                                   for x in self.DEPENDENCY_MetaData.values()]
 
     @property
-    def hashAbsDep(self,cls: str):
+    def hashAbsDep(self, cls: str):
         return cls if not self.hashKeyAbsResolving.__contains__(cls) else self.hashKeyAbsResolving[cls]
+
 
 CONTAINER: Container = Container(__DEPENDENCY)
 
@@ -267,10 +288,9 @@ def InjectInFunction(func):
     """
     types, paramNames = CONTAINER.getSignature(func)
     paramsToInject = CONTAINER.toParams(types, paramNames)
+
     def wrapper(*args, **kwargs):
         # revparams = reverseDict(paramsToInject)
         paramsToInject.update(kwargs)
         func(**paramsToInject)
     return wrapper
-
-
