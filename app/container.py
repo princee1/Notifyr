@@ -23,7 +23,7 @@ class NotAbstractDependencyError(ContainerError): pass
 
 def issubclass(cls): return issubclass_of(Module, cls)
 
-def isabstract(cls): return is_abstract(cls, Module)
+def isabstract(cls): return AbstractModuleClasses.__contains__(cls)
 
 
 class Container():

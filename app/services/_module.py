@@ -97,9 +97,7 @@ def AbstractModuleClass(cls):
 
 def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot create instance of the base class
     def decorator(cls: type):
-        if is_abstract(cls,Module): AbstractModuleClasses[cls.__name__] = cls
-
-        if not is_abstract(bClass=Module, cls=baseClass):
+        if not AbstractModuleClasses.__contains__(baseClass):
             pass
             # ABORT error
         if not issubclass_of(Module, baseClass):
@@ -112,8 +110,6 @@ def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot crea
                                                                  RESOLVED_PARAMETER_KEY: None,
                                                                  RESOLVED_DEPS_KEY: None,
                                                                  RESOLVED_CLASS_KEY: None}}
-        AbstractModuleClasses[baseClass.__name__] = baseClass
-        
         return cls
     return decorator
 

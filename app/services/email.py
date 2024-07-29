@@ -1,14 +1,11 @@
 
-from dataclasses import dataclass
 import smtplib as smtp
 import imaplib as imap
 from enum import Enum
 from injector import inject
 from . import _module
-from abc import ABC
-from .security import SecurityService
-from .config import ConfigService,MODE
-from .notification import BaseNotification,SystemNotificationService,DiscordService
+from .config import ConfigService
+from .notification import BaseNotification
 
 
 SMTP_NORMAL_PORT = smtp.SMTP_PORT
@@ -83,7 +80,7 @@ class IMAPConfig (EmailConnConfig, Enum):
     ) == "ssl" else IMAP_NORMAL_PORT
 
 @_module.AbstractModuleClass
-class Email(_module.Module,ABC):
+class Email(_module.Module):
     def __init__(self, configService: ConfigService, notification: BaseNotification):
         self.configService = configService
         self.notificationService = notification
