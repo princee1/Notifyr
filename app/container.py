@@ -5,7 +5,7 @@ from typing import overload, Any
 from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY, DEP_PARAMS_KEY
 from utils.helper import issubclass_of
 from services._module import Module, AbstractDependency, AbstractModuleClasses
-
+from utils.prettyprint import printDictJSON
 
 class ContainerError(BaseException):
     pass
@@ -264,6 +264,7 @@ class Container():
 
 
 CONTAINER: Container = Container(__DEPENDENCY)
+printDictJSON(CONTAINER.DEPENDENCY_MetaData,indent=2)
 
 
 def InjectInFunction(func):
