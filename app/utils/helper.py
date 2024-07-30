@@ -1,6 +1,10 @@
 from inspect import getmro
 from abc import ABC
+from random import choice, seed
+from string import hexdigits, digits, ascii_letters 
+import time
 
+alphanumeric = digits + ascii_letters
 
 def issubclass_of(bCls, kCls): return bCls in getmro(kCls)
 
@@ -48,3 +52,15 @@ def getParentClass(cls: type):
     """
     return list(getmro(cls)).pop(0)
    
+
+def generateId(len):
+    seed(time.time())
+    return "".join(choice(alphanumeric) for _ in range(len))
+
+def generateRndNumber(len):
+    seed(time.time())
+    return "".join(choice(digits) for _ in range(len))
+
+def generateRndNumber(len):
+    seed(time.time())
+    return "".join(choice(hexdigits) for _ in range(len))
