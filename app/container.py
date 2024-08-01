@@ -1,5 +1,6 @@
 import injector
 from inspect import signature, getmro, Parameter
+from services.notification import BaseNotification
 from dependencies import __DEPENDENCY
 from typing import Callable, overload, Any
 from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY, DEP_PARAMS_KEY
@@ -70,10 +71,10 @@ class Container():
             raise InvalidDependencyError
 
         if all and isabstract(typ.__name__):
-            provider = ()
+            provider: dict[type, object] ={}
             for d in self.dependencies:
                 if issubclass_of(typ, d):
-                    provider = provider.__add__(d)
+                    provider[d] = self.app.get(d,scope)
             return provider
 
         return self.app.get(typ, scope)
