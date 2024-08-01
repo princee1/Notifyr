@@ -6,7 +6,8 @@ from utils.helper import issubclass_of
 
 AbstractDependency: dict[str, dict] = {}
 AbstractModuleClasses: dict[str, type] = {}
-InjectAndBuildOnlyDependencies: dict = {}
+BuildOnlyIfDependencies: dict = {}
+PossibleDependencies: dict[str, list[type]] = {}
 
 
 class BuildErrorLevel(Enum):
@@ -35,6 +36,10 @@ class BuildWarningError(BuildError):
 
 
 class BuildSkipError(BuildError):
+    pass
+
+
+class BuildFallbackError(BuildError):
     pass
 
 
@@ -96,18 +101,21 @@ def AbstractModuleClass(cls):
     AbstractModuleClasses[cls.__name__] = cls
     return cls
 
+
 def FallbackAbstract(cls):
     # VERIFY if the cls is really the resolved class
     # TODO get the abstract parent of the class
     return cls
+
 
 def FallbackError(cls):
     # VERIFY if the cls is really the resolved class
     # TODO get the abstract parent of the class
     return cls
 
+
 def InjectWCondition(baseClass: type, resolvedClass: Any):
-# NOTE we cannot create instance of the base class
+    # NOTE we cannot create instance of the base class
     """
     The `InjectWCondition` decorator is used to specify a Dependency that will be resolved instead of its parent class. Thus
     we need to give to the decorator a function that will resolved base on other services value. At the injection moment the container 
@@ -160,28 +168,41 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
         return cls
     return decorator
 
+
 @overload
-def InjectAndBuildOnly(builtCls: type, flag: bool):
+def BuildOnlyIf(flag: bool):
     def decorator(cls: type):
-        InjectAndBuildOnlyDependencies[cls.__name__] = {
-            DependencyConstant.INJECT_ONLY_CLASS_KEY: builtCls,
-            DependencyConstant.INJECT_ONLY_DEP_KEY: None,
-            DependencyConstant.INJECT_ONLY_FLAG_KEY: flag,
-            DependencyConstant.INJECT_ONLY_PARAMS_KEY: None,
-            DependencyConstant.INJECT_ONLY_FUNC_KEY: None,
+        BuildOnlyIfDependencies[cls.__name__] = {
+            DependencyConstant.BUILD_ONLY_CLASS_KEY: cls,
+            DependencyConstant.BUILD_ONLY_DEP_KEY: None,
+            DependencyConstant.BUILD_ONLY_FLAG_KEY: flag,
+            DependencyConstant.BUILD_ONLY_PARAMS_KEY: None,
+            DependencyConstant.BUILD_ONLY_FUNC_KEY: None,
         }
         return cls
     return decorator
 
+
 @overload
-def InjectAndBuildOnly(builtCls: type, func: Callable):  
-    def decorator(cls:type):
-        InjectAndBuildOnlyDependencies[cls.__name__] = {
-            DependencyConstant.INJECT_ONLY_CLASS_KEY: builtCls,
-            DependencyConstant.INJECT_ONLY_DEP_KEY: None,
-            DependencyConstant.INJECT_ONLY_FLAG_KEY: None,
-            DependencyConstant.INJECT_ONLY_PARAMS_KEY: None,
-            DependencyConstant.INJECT_ONLY_FUNC_KEY: func,
+def BuildOnlyIf(func: Callable):
+    """ WARNING The builtCls must be in the Dependency list if you want to call this decorator, 
+        since the container cant add it while load all the dependencies,
+        if dont want the built class to call the builder function simply remove from the dependency list
+    """
+    def decorator(cls: type):
+        BuildOnlyIfDependencies[cls.__name__] = {
+            DependencyConstant.BUILD_ONLY_CLASS_KEY: cls,
+            DependencyConstant.BUILD_ONLY_DEP_KEY: None,
+            DependencyConstant.BUILD_ONLY_FLAG_KEY: None,
+            DependencyConstant.BUILD_ONLY_PARAMS_KEY: None,
+            DependencyConstant.BUILD_ONLY_FUNC_KEY: func,
         }
         return
+    return decorator
+
+
+def PossibleDep(dependencies: list[type]):
+    def decorator(cls: type):
+        PossibleDependencies[cls.__name__] = dependencies
+        return cls
     return decorator

@@ -3,8 +3,8 @@ from inspect import signature, getmro
 from dependencies import __DEPENDENCY
 from typing import Callable, Any
 from utils.constant import DependencyConstant
-from utils.helper import issubclass_of
-from services._module import Module, AbstractDependency, AbstractModuleClasses
+from utils.helper import issubclass_of, SkipCode
+from services._module import Module, AbstractDependency, AbstractModuleClasses, BuildOnlyIfDependencies, PossibleDependencies
 from utils.prettyprint import printDictJSON
 
 
@@ -27,6 +27,7 @@ class NotSubclassOfAbstractDependencyError(ContainerError):
 class PrimitiveTypeError(ContainerError):
     pass
 
+class NotBoolBuildOnlyDependencyError(ContainerError): pass
 
 class NotAbstractDependencyError(ContainerError):
     pass  # Abstract Class not specified
@@ -60,6 +61,7 @@ class Container():
         self.D: set[str] = self.load_baseSet(D)
         self.load_dep(D)
         self.buildContainer()
+        self.freeMemory()
         # TODO print success  in building the app
 
     def bind(self, type, obj, scope=None):
@@ -70,10 +72,10 @@ class Container():
             raise InvalidDependencyError
 
         if all and isabstract(typ.__name__):
-            provider: dict[type, object] ={}
+            provider: dict[type, object] = {}
             for d in self.dependencies:
                 if issubclass_of(typ, d):
-                    provider[d] = self.app.get(d,scope)
+                    provider[d] = self.app.get(d, scope)
             return provider
 
         return self.app.get(typ, scope)
@@ -84,8 +86,8 @@ class Container():
     def load_dep(self, D: list[type]):
         for x in D:
             if not self.DEPENDENCY_MetaData.__contains__(x):
-                dep_list, p = self.getSignature(x)
-                dep = set(dep_list)
+                dep_param_list, p = self.getSignature(x)
+                dep = set(dep_param_list)
 
                 try:
                     depNotInjected = dep.difference(self.D)
@@ -103,11 +105,41 @@ class Container():
                 except KeyError as e:
                     pass
 
+                try:
+                    possible_dep = set(PossibleDependencies[x.__name__])
+                    dep = dep.union(possible_dep)
+                except KeyError: #NOTE possible dependencies keys does not exists
+                    pass
+                except:
+                    pass
+
+
+                flag: bool = True
+                try:
+                    injectOnlyData = BuildOnlyIfDependencies[x.__name__]
+                    flag = injectOnlyData[DependencyConstant.BUILD_ONLY_FLAG_KEY]
+                    if flag is not None:
+                        if flag:
+                            dep.add(
+                                injectOnlyData[DependencyConstant.BUILD_ONLY_CLASS_KEY])
+                            raise SkipCode  # NOTE skip further line of code
+
+                    inject_only_dep, inject_only_params = self.getSignature(
+                        injectOnlyData[DependencyConstant.BUILD_ONLY_FUNC_KEY])
+                    injectOnlyData[DependencyConstant.BUILD_ONLY_DEP_KEY] = inject_only_dep
+                    injectOnlyData[DependencyConstant.BUILD_ONLY_PARAMS_KEY] = inject_only_params
+                    dep = dep.union(set(inject_only_dep))
+                except SkipCode as e:
+                    pass
+                except:
+                    pass
+
                 self.DEPENDENCY_MetaData[x.__name__] = {
                     DependencyConstant.TYPE_KEY: x,
                     DependencyConstant.DEP_KEY: dep,
                     DependencyConstant.PARAM_NAMES_KEY: p,
-                    DependencyConstant.DEP_PARAMS_KEY: dep_list
+                    DependencyConstant.DEP_PARAMS_KEY: dep_param_list,
+                    DependencyConstant.FLAG_BUILD_KEY: flag # NOTE the flag might be None, if it is indeed i need to check the func
                 }
 
     def filter(self, D: list[type]):
@@ -170,9 +202,23 @@ class Container():
         if AbstractDependency.__contains__(x) or self.searchParentClassAbstractDependency(current_type):
             self.resolvedAbsDep(current_type)
             dep = self.switchAbsDep(current_type, dep)
+        self.resolve_buildOnly(x) #BUG might need to call before the abstract resolving
         params = self.toParams(dep, params_names)
         obj = self.createDep(current_type, params)
         self.bind(current_type, obj)
+
+    def resolve_buildOnly(self, dep_name:str):
+        if dep_name in BuildOnlyIfDependencies and BuildOnlyIfDependencies[dep_name][DependencyConstant.BUILD_ONLY_FLAG_KEY] is None:
+            func = BuildOnlyIfDependencies[dep_name][DependencyConstant.BUILD_ONLY_FUNC_KEY]
+            bOnlyDep, bOnlyParamNames = self.getSignature(func)
+            BuildOnlyIfDependencies[dep_name][DependencyConstant.BUILD_ONLY_DEP_KEY] = bOnlyDep
+            BuildOnlyIfDependencies[dep_name][DependencyConstant.BUILD_ONLY_PARAMS_KEY]=bOnlyParamNames
+            params = self.toParams(bOnlyDep,bOnlyParamNames)
+            flag = func(**params)
+            if type(flag) != bool:
+                raise NotBoolBuildOnlyDependencyError
+            self.DEPENDENCY_MetaData[dep_name][DependencyConstant.FLAG_BUILD_KEY] = flag
+        
 
     def searchParentClassAbstractDependency(self, currentType: type):
         parentClasses: list[type] = list(getmro(currentType))
@@ -245,22 +291,31 @@ class Container():
             params = {}
             i = 0
             for d in dep:
-                obj_dep = self.get(self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
+                obj_dep = self.get(
+                    self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
                 params[params_names[i]] = obj_dep
                 i += 1
             return params
         except KeyError:
             raise NoResolvedDependencyError
 
-    def createDep(self, typ, params):
+    def createDep(self, typ:type, params):
         flag = issubclass(typ)
         obj: Module = typ(**params)
+
         if flag:
-            obj._builder()
+            willBuild = self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.FLAG_BUILD_KEY]
+            if willBuild: 
+                obj._builder()  # create the dependency but not calling the builder
         else:
             # WARNING raise we cant verify the data provided
             pass
         return obj
+
+    def freeMemory(self):
+        # TODO free up params
+        # TODO free up temp variables
+        pass
 
     @property
     def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]

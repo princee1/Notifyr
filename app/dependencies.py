@@ -8,7 +8,7 @@ from services.training import TrainingService
 from services.notification import SystemNotificationService, DiscordService
 from services.security import SecurityService
 from services.throttling import PriorityQueueService, RateLimiterService
-from services.file import FileService
+from services.file import FileService,FTPService
 
 
 __DEPENDENCY: list[type] = [AssetService,
@@ -26,4 +26,6 @@ __DEPENDENCY: list[type] = [AssetService,
                             DiscordService,
                             SecurityService,
                             PriorityQueueService,
-                            RateLimiterService]
+                            RateLimiterService,
+                            FTPService
+                            ]
