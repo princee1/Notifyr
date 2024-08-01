@@ -1,18 +1,21 @@
+from .config import ConfigService
 from ._module import Module
 from injector import inject
-from utils.fileIO import FDFlag,readFileContent,getFd, JSONFile, writeContent
+from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent
+from ftplib import FTP, FTP_TLS
+
 
 class FileService(Module):
 
     def __init__(self) -> None:
         super().__init__()
-    
+
     def build(self):
         return super().build()
-    
-    def kill(self):
-        return super().kill()
-    
+
+    def destroy(self):
+        return super().destroy()
+
     def loadJSON(self):
         pass
 
@@ -25,4 +28,30 @@ class FileService(Module):
     def listFileExtensions(self):
         pass
 
+    pass
+
+class FTPService(Module):
+    @inject
+    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+        self.configService = configService
+        self.fileService = fileService
+        self.ftpClient: FTP
+        pass
+
+    def authenticate(self):
+        try:
+            self.ftpClient = FTP()
+            self.ftpClient.set_debuglevel()
+            result = self.ftpClient.login()
+        except:
+            pass
+
+    def build(self):
+        self.authenticate()
+
+    def destroy(self):
+        try:
+            self.ftpClient.quit()
+        except:
+            self.ftpClient.close()
     pass

@@ -110,7 +110,7 @@ class EmailSender(Email):
         super().build()
         self.validEmails()
 
-    def kill(self):
+    def destroy(self):
         self.connector.quit()
         self.connector.close()
 
@@ -179,6 +179,6 @@ class EmailReader(Email):
         self.connector.login(self.configService.IMAP_EMAIL,
                              self.configService.IMAP_EMAIL_PASS)
 
-    def kill(self):
+    def destroy(self):
         self.connector.logout()
         self.connector.close()

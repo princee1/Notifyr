@@ -27,7 +27,7 @@ class AssetService(_module.Module):
 
     def build(self): pass
 
-    def kill(self): pass
+    def destroy(self): pass
 
     def readHtml(self): pass
 

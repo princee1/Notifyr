@@ -82,5 +82,5 @@ class ConfigService(_module.Module):
         self.IMAP_EMAIL_PASS = os.getenv("IMAP_EMAIL_PASS")
         self.IMAP_EMAIL_CONN_METHOD= os.getenv("IMAP_EMAIL_CONN_METHOD")
         
-    def kill(self):
-        return super().kill()
+    def destroy(self):
+        return super().destroy()
