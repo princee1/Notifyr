@@ -1,11 +1,12 @@
 from enum import Enum
-from typing import  Any
-from utils.constant import RESOLVED_CLASS_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, RESOLVED_DEPS_KEY
+from typing import Any, overload, Callable
+from utils.constant import ConstantDependency
 from utils.helper import issubclass_of
 
 
 AbstractDependency: dict[str, dict] = {}
 AbstractModuleClasses: dict[str, type] = {}
+InjectAndBuildOnlyDependencies: dict = {}
 
 
 class BuildErrorLevel(Enum):
@@ -42,7 +43,7 @@ class Module():
     def build(self):
         pass
 
-    def kill(self):
+    def destroy(self):
         pass
 
     def log(self):
@@ -50,7 +51,7 @@ class Module():
 
     def __repr__(self) -> str:
         return super().__repr__()
-    
+
     # def __str__(self) -> str:
     #     return f"Module: {self.__class__.__name__} Hash: {self.__hash__()}"
 
@@ -72,9 +73,9 @@ class Module():
         except:
             pass
 
-    def _killer(self):
+    def _destroyer(self):
         try:
-            self.kill()
+            self.destroy()
             pass
         except BuildFailureError as e:
             pass
@@ -90,11 +91,18 @@ class Module():
         except:
             pass
 
+
 def AbstractModuleClass(cls):
     AbstractModuleClasses[cls.__name__] = cls
     return cls
 
-def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot create instance of the base class
+def Fallback(cls):
+    # VERIFY if the cls is really the resolved class
+    # TODO get the abstract parent of the class
+    return cls
+
+def InjectWCondition(baseClass: type, resolvedClass: Any):
+# NOTE we cannot create instance of the base class
     """
     The `InjectWCondition` decorator is used to specify a Dependency that will be resolved instead of its parent class. Thus
     we need to give to the decorator a function that will resolved base on other services value. At the injection moment the container 
@@ -108,7 +116,7 @@ def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot crea
 
     class BaseS:
         pass
-        
+
     class SA(BaseS):pass
     class SB(BaseS):pass
     class TestS:
@@ -118,7 +126,7 @@ def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot crea
 
     def resolve(t: TestS):
         return SA if t.counter == 3 else SB
-    
+
     @_module.InjectWCondition(BaseS, resolve)
     class A: pass
         def __init__(self, s:BaseS):
@@ -140,10 +148,35 @@ def InjectWCondition(baseClass: type, resolvedClass: Any): # NOTE we cannot crea
         if not issubclass_of(Module, cls):
             pass
             # ABORT error
-        AbstractDependency[cls.__name__] = {baseClass.__name__: {RESOLVED_FUNC_KEY: resolvedClass,
-                                                                 RESOLVED_PARAMETER_KEY: None,
-                                                                 RESOLVED_DEPS_KEY: None,
-                                                                 RESOLVED_CLASS_KEY: None}}
+        AbstractDependency[cls.__name__] = {baseClass.__name__: {ConstantDependency.RESOLVED_FUNC_KEY: resolvedClass,
+                                                                 ConstantDependency.RESOLVED_PARAMETER_KEY: None,
+                                                                 ConstantDependency.RESOLVED_DEPS_KEY: None,
+                                                                 ConstantDependency.RESOLVED_CLASS_KEY: None}}
         return cls
     return decorator
 
+@overload
+def InjectAndBuildOnly(builtCls: type, flag: bool):
+    def decorator(cls: type):
+        InjectAndBuildOnlyDependencies[cls.__name__] = {
+            ConstantDependency.INJECT_ONLY_CLASS_KEY: builtCls,
+            ConstantDependency.INJECT_ONLY_DEP_KEY: None,
+            ConstantDependency.INJECT_ONLY_FLAG_KEY: flag,
+            ConstantDependency.INJECT_ONLY_PARAMS_KEY: None,
+            ConstantDependency.INJECT_ONLY_FUNC_KEY: None,
+        }
+        return cls
+    return decorator
+
+@overload
+def InjectAndBuildOnly(builtCls: type, func: Callable):  
+    def decorator(cls:type):
+        InjectAndBuildOnlyDependencies[cls.__name__] = {
+            ConstantDependency.INJECT_ONLY_CLASS_KEY: builtCls,
+            ConstantDependency.INJECT_ONLY_DEP_KEY: None,
+            ConstantDependency.INJECT_ONLY_FLAG_KEY: None,
+            ConstantDependency.INJECT_ONLY_PARAMS_KEY: None,
+            ConstantDependency.INJECT_ONLY_FUNC_KEY: func,
+        }
+        return
+    return decorator
