@@ -1,11 +1,12 @@
 import injector
-from inspect import signature, getmro,Parameter
+from inspect import signature, getmro, Parameter
 from dependencies import __DEPENDENCY
-from typing import overload, Any
+from typing import Callable, overload, Any
 from utils.constant import DEP_KEY, PARAM_NAMES_KEY, RESOLVED_PARAMETER_KEY, RESOLVED_FUNC_KEY, TYPE_KEY, RESOLVED_DEPS_KEY, RESOLVED_CLASS_KEY, DEP_PARAMS_KEY
 from utils.helper import issubclass_of
 from services._module import Module, AbstractDependency, AbstractModuleClasses
 from utils.prettyprint import printDictJSON
+
 
 class ContainerError(BaseException):
     pass
@@ -55,6 +56,7 @@ class Container():
         self.app = injector.Injector()
         self.DEPENDENCY_MetaData = {}
         self.hashKeyAbsResolving: dict = {}
+        # TODO append the dependency needed but might not be in the Dependencies list
         self.D: set[str] = self.load_baseSet(D)
         self.load_dep(D)
         self.buildContainer()
@@ -63,8 +65,18 @@ class Container():
     def bind(self, type, obj, scope=None):
         self.app.binder.bind(type, to=obj, scope=scope)
 
-    def get(self, type: type, scope=None):
-        return self.app.get(type, scope)
+    def get(self, typ: type, scope=None, all=False):
+        if not all and isabstract(typ.__name__):
+            raise InvalidDependencyError
+
+        if all and isabstract(typ.__name__):
+            provider = ()
+            for d in self.dependencies:
+                if issubclass_of(typ, d):
+                    provider = provider.__add__(d)
+            return provider
+
+        return self.app.get(typ, scope)
 
     def getFromClassName(self, classname: str, scope=None):
         return self.app.get(self.DEPENDENCY_MetaData[classname][TYPE_KEY], scope)
@@ -114,17 +126,17 @@ class Container():
     def getAbstractResolving(self, typ: type):
         return AbstractDependency[typ.__name__]
 
-    def getSignature(self, t: type | Any):
+    def getSignature(self, t: type | Callable):
         params = signature(t).parameters.values()
         types: list[str] = []
         paramNames: list[str] = []
         for p in params:
-            if types.count(p.annotation.__name__)  == 1:
+            if types.count(p.annotation.__name__) == 1:
                 raise MultipleParameterSameDependencyError
-            
+
             types.append(p.annotation.__name__)
             paramNames.append(p.name)
-            
+
         return types, paramNames
 
     def load_baseSet(self, D: list[type]):
@@ -210,13 +222,13 @@ class Container():
                 resolvedDep = absResolving[RESOLVED_FUNC_KEY](
                     **absResParams)
                 if not isinstance(resolvedDep, type):
-                    raise TypeError # suppose to be an instance of type
-                
+                    raise TypeError  # suppose to be an instance of type
+
                 if not issubclass_of(absClass, resolvedDep):
                     raise NotSubclassOfAbstractDependencyError
-                
+
                 if not issubclass(resolvedDep):
-                    #WARNING: This might create problem
+                    # WARNING: This might create problem
                     pass
                 absResolving[RESOLVED_CLASS_KEY] = resolvedDep
 
@@ -251,12 +263,12 @@ class Container():
         return obj
 
     @property
-    def objectDependencies(self):
-        return []
+    def dependencies(self) -> list[type]: return [x[TYPE_KEY]
+                                                  for x in self.DEPENDENCY_MetaData.values()]  # TODO avoid to compute this everytime we call this function
 
     @property
-    def dependencies(self) -> list[type]: return [x[TYPE_KEY]
-                                                  for x in self.DEPENDENCY_MetaData.values()]
+    def objectDependencies(self):
+        return [self.get(d) for d in self.dependencies]
 
     @property
     def hashAbsDep(self, cls: str):
@@ -264,10 +276,10 @@ class Container():
 
 
 CONTAINER: Container = Container(__DEPENDENCY)
-printDictJSON(CONTAINER.DEPENDENCY_MetaData,indent=2)
+printDictJSON(CONTAINER.DEPENDENCY_MetaData, indent=2)
 
 
-def InjectInFunction(func):
+def InjectInFunction(func: Callable):
     """
     The `InjectInFunction` decorator takes the function and inspect it's signature, if the `CONTAINER` can resolve the 
     dependency it will inject the values. You must call the function with the position parameter format to call 
@@ -294,7 +306,6 @@ def InjectInFunction(func):
     paramsToInject = CONTAINER.toParams(types, paramNames)
 
     def wrapper(*args, **kwargs):
-        # revparams = reverseDict(paramsToInject)
         paramsToInject.update(kwargs)
         func(**paramsToInject)
     return wrapper
