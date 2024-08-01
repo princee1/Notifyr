@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, overload, Callable
-from utils.constant import ConstantDependency
+from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
 
 
@@ -10,8 +10,8 @@ InjectAndBuildOnlyDependencies: dict = {}
 
 
 class BuildErrorLevel(Enum):
-    FAILURE = 4
-    ABORT = 3
+    ABORT = 4
+    FAILURE = 3
     WARNING = 2
     SKIP = 1
 
@@ -96,7 +96,12 @@ def AbstractModuleClass(cls):
     AbstractModuleClasses[cls.__name__] = cls
     return cls
 
-def Fallback(cls):
+def FallbackAbstract(cls):
+    # VERIFY if the cls is really the resolved class
+    # TODO get the abstract parent of the class
+    return cls
+
+def FallbackError(cls):
     # VERIFY if the cls is really the resolved class
     # TODO get the abstract parent of the class
     return cls
@@ -148,10 +153,10 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
         if not issubclass_of(Module, cls):
             pass
             # ABORT error
-        AbstractDependency[cls.__name__] = {baseClass.__name__: {ConstantDependency.RESOLVED_FUNC_KEY: resolvedClass,
-                                                                 ConstantDependency.RESOLVED_PARAMETER_KEY: None,
-                                                                 ConstantDependency.RESOLVED_DEPS_KEY: None,
-                                                                 ConstantDependency.RESOLVED_CLASS_KEY: None}}
+        AbstractDependency[cls.__name__] = {baseClass.__name__: {DependencyConstant.RESOLVED_FUNC_KEY: resolvedClass,
+                                                                 DependencyConstant.RESOLVED_PARAMETER_KEY: None,
+                                                                 DependencyConstant.RESOLVED_DEPS_KEY: None,
+                                                                 DependencyConstant.RESOLVED_CLASS_KEY: None}}
         return cls
     return decorator
 
@@ -159,11 +164,11 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
 def InjectAndBuildOnly(builtCls: type, flag: bool):
     def decorator(cls: type):
         InjectAndBuildOnlyDependencies[cls.__name__] = {
-            ConstantDependency.INJECT_ONLY_CLASS_KEY: builtCls,
-            ConstantDependency.INJECT_ONLY_DEP_KEY: None,
-            ConstantDependency.INJECT_ONLY_FLAG_KEY: flag,
-            ConstantDependency.INJECT_ONLY_PARAMS_KEY: None,
-            ConstantDependency.INJECT_ONLY_FUNC_KEY: None,
+            DependencyConstant.INJECT_ONLY_CLASS_KEY: builtCls,
+            DependencyConstant.INJECT_ONLY_DEP_KEY: None,
+            DependencyConstant.INJECT_ONLY_FLAG_KEY: flag,
+            DependencyConstant.INJECT_ONLY_PARAMS_KEY: None,
+            DependencyConstant.INJECT_ONLY_FUNC_KEY: None,
         }
         return cls
     return decorator
@@ -172,11 +177,11 @@ def InjectAndBuildOnly(builtCls: type, flag: bool):
 def InjectAndBuildOnly(builtCls: type, func: Callable):  
     def decorator(cls:type):
         InjectAndBuildOnlyDependencies[cls.__name__] = {
-            ConstantDependency.INJECT_ONLY_CLASS_KEY: builtCls,
-            ConstantDependency.INJECT_ONLY_DEP_KEY: None,
-            ConstantDependency.INJECT_ONLY_FLAG_KEY: None,
-            ConstantDependency.INJECT_ONLY_PARAMS_KEY: None,
-            ConstantDependency.INJECT_ONLY_FUNC_KEY: func,
+            DependencyConstant.INJECT_ONLY_CLASS_KEY: builtCls,
+            DependencyConstant.INJECT_ONLY_DEP_KEY: None,
+            DependencyConstant.INJECT_ONLY_FLAG_KEY: None,
+            DependencyConstant.INJECT_ONLY_PARAMS_KEY: None,
+            DependencyConstant.INJECT_ONLY_FUNC_KEY: func,
         }
         return
     return decorator

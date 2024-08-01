@@ -2,7 +2,7 @@ import injector
 from inspect import signature, getmro
 from dependencies import __DEPENDENCY
 from typing import Callable, Any
-from utils.constant import ConstantDependency
+from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
 from services._module import Module, AbstractDependency, AbstractModuleClasses
 from utils.prettyprint import printDictJSON
@@ -79,7 +79,7 @@ class Container():
         return self.app.get(typ, scope)
 
     def getFromClassName(self, classname: str, scope=None):
-        return self.app.get(self.DEPENDENCY_MetaData[classname][ConstantDependency.TYPE_KEY], scope)
+        return self.app.get(self.DEPENDENCY_MetaData[classname][DependencyConstant.TYPE_KEY], scope)
 
     def load_dep(self, D: list[type]):
         for x in D:
@@ -96,18 +96,18 @@ class Container():
                     abstractRes = self.getAbstractResolving(x)
                     for r in abstractRes.keys():
                         r_dep, r_p = self.getSignature(
-                            abstractRes[r][ConstantDependency.RESOLVED_FUNC_KEY])
-                        abstractRes[r][ConstantDependency.RESOLVED_PARAMETER_KEY] = r_p
-                        abstractRes[r][ConstantDependency.RESOLVED_DEPS_KEY] = r_dep
+                            abstractRes[r][DependencyConstant.RESOLVED_FUNC_KEY])
+                        abstractRes[r][DependencyConstant.RESOLVED_PARAMETER_KEY] = r_p
+                        abstractRes[r][DependencyConstant.RESOLVED_DEPS_KEY] = r_dep
                         dep = dep.union(r_dep)
                 except KeyError as e:
                     pass
 
                 self.DEPENDENCY_MetaData[x.__name__] = {
-                    ConstantDependency.TYPE_KEY: x,
-                    ConstantDependency.DEP_KEY: dep,
-                    ConstantDependency.PARAM_NAMES_KEY: p,
-                    ConstantDependency.DEP_PARAMS_KEY: dep_list
+                    DependencyConstant.TYPE_KEY: x,
+                    DependencyConstant.DEP_KEY: dep,
+                    DependencyConstant.PARAM_NAMES_KEY: p,
+                    DependencyConstant.DEP_PARAMS_KEY: dep_list
                 }
 
     def filter(self, D: list[type]):
@@ -151,7 +151,7 @@ class Container():
         while self.D.__len__() != 0:
             no_dep = []
             for x in self.D:
-                d: set[str] = self.DEPENDENCY_MetaData[x][ConstantDependency.DEP_KEY]
+                d: set[str] = self.DEPENDENCY_MetaData[x][DependencyConstant.DEP_KEY]
                 if len(d.intersection(self.D)) == 0:
                     no_dep.append(x)
             if len(no_dep) == 0:
@@ -161,11 +161,11 @@ class Container():
                 self.inject(x)
 
     def inject(self, x: str):
-        current_type: type = self.DEPENDENCY_MetaData[x][ConstantDependency.TYPE_KEY]
+        current_type: type = self.DEPENDENCY_MetaData[x][DependencyConstant.TYPE_KEY]
         if isabstract(current_type):
             return
-        dep: list[str] = self.DEPENDENCY_MetaData[x][ConstantDependency.DEP_PARAMS_KEY]
-        params_names: list[str] = self.DEPENDENCY_MetaData[x][ConstantDependency.PARAM_NAMES_KEY]
+        dep: list[str] = self.DEPENDENCY_MetaData[x][DependencyConstant.DEP_PARAMS_KEY]
+        params_names: list[str] = self.DEPENDENCY_MetaData[x][DependencyConstant.PARAM_NAMES_KEY]
         # VERIFY the number of dependency
         if AbstractDependency.__contains__(x) or self.searchParentClassAbstractDependency(current_type):
             self.resolvedAbsDep(current_type)
@@ -194,11 +194,11 @@ class Container():
             return []
         try:
             for absClassname, resolvedClass in AbstractDependency[self.hashAbsDep(current_type.__name__)].items():
-                if resolvedClass[ConstantDependency.RESOLVED_CLASS_KEY]:
+                if resolvedClass[DependencyConstant.RESOLVED_CLASS_KEY]:
                     index = dependencies.index(absClassname)
                     del dependencies[index]
                     dependencies.insert(
-                        index, resolvedClass[ConstantDependency.RESOLVED_CLASS_KEY].__name__)
+                        index, resolvedClass[DependencyConstant.RESOLVED_CLASS_KEY].__name__)
             return dependencies
         except ValueError as e:
             pass
@@ -215,11 +215,11 @@ class Container():
                 if not isabstract(absClass):
                     raise NotAbstractDependencyError
                 absResParams = {}
-                if absResolving[ConstantDependency.RESOLVED_PARAMETER_KEY] is not None:
+                if absResolving[DependencyConstant.RESOLVED_PARAMETER_KEY] is not None:
                     absResParams = self.toParams(
-                        absResolving[ConstantDependency.RESOLVED_DEPS_KEY], absResolving[ConstantDependency.RESOLVED_PARAMETER_KEY])
+                        absResolving[DependencyConstant.RESOLVED_DEPS_KEY], absResolving[DependencyConstant.RESOLVED_PARAMETER_KEY])
 
-                resolvedDep = absResolving[ConstantDependency.RESOLVED_FUNC_KEY](
+                resolvedDep = absResolving[DependencyConstant.RESOLVED_FUNC_KEY](
                     **absResParams)
                 if not isinstance(resolvedDep, type):
                     raise TypeError  # suppose to be an instance of type
@@ -230,7 +230,7 @@ class Container():
                 if not issubclass(resolvedDep):
                     # WARNING: This might create problem
                     pass
-                absResolving[ConstantDependency.RESOLVED_CLASS_KEY] = resolvedDep
+                absResolving[DependencyConstant.RESOLVED_CLASS_KEY] = resolvedDep
 
         except NameError:
             pass
@@ -245,7 +245,7 @@ class Container():
             params = {}
             i = 0
             for d in dep:
-                obj_dep = self.get(self.DEPENDENCY_MetaData[d][ConstantDependency.TYPE_KEY])
+                obj_dep = self.get(self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
                 params[params_names[i]] = obj_dep
                 i += 1
             return params
@@ -263,7 +263,7 @@ class Container():
         return obj
 
     @property
-    def dependencies(self) -> list[type]: return [x[ConstantDependency.TYPE_KEY]
+    def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]  # TODO avoid to compute this everytime we call this function
 
     @property

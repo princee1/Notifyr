@@ -1,6 +1,6 @@
 ########################  ** Dependencies **   ########################################
 
-class ConstantDependency:
+class DependencyConstant:
     TYPE_KEY = "type"
     DEP_KEY = "dep"
     PARAM_NAMES_KEY = "param_name"
