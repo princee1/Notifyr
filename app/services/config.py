@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
-from . import _module
+from . import _service
 import socket
 
 ENV = ".env"
@@ -30,7 +30,7 @@ class MODE(Enum):
                 return "127.0.0.1"
 
             
-class ConfigService(_module.Module):
+class ConfigService(_service.Service):
     
     def __init__(self) -> None:
         if not load_dotenv(ENV):

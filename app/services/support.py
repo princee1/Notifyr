@@ -1,7 +1,7 @@
-from . import _module
+from . import _service
 
-class SupportService(_module.Module):
+class SupportService(_service.Service):
     pass
 
-class ChatService(_module.Module):
+class ChatService(_service.Service):
     pass

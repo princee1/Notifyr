@@ -1,11 +1,11 @@
 from .config import ConfigService
-from ._module import Module
+from ._service import Service
 from injector import inject
 from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent
 from ftplib import FTP, FTP_TLS
 
 
-class FileService(Module):
+class FileService(Service):
 
     def __init__(self) -> None:
         super().__init__()
@@ -30,7 +30,7 @@ class FileService(Module):
 
     pass
 
-class FTPService(Module):
+class FTPService(Service):
     @inject
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         self.configService = configService

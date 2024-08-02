@@ -1,6 +1,6 @@
 from .security import SecurityService
 from .file import FileService
-from . import _module
+from . import _service
 from injector import inject
 from enum import Enum
 
@@ -14,10 +14,11 @@ class Extension(Enum):
     TXT = ".txt"
 
 
-class AssetService(_module.Module):
+class AssetService(_service.Service):
     @inject
     def __init__(self, fileService: FileService, securityService: SecurityService) -> None:
         self.fileService = fileService
+        self.securityService = securityService
         self.images = {}
         self.htmls = {}
         self.pdf = {}

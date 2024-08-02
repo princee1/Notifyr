@@ -1,7 +1,7 @@
-from . import _module
+from . import _service
 from .config import ConfigService
 from injector import inject
 
-class TwilioService(_module.Module):
+class TwilioService(_service.Service):
     @inject
     def __init__(self,configService: ConfigService): pass

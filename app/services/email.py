@@ -3,7 +3,7 @@ import smtplib as smtp
 import imaplib as imap
 from enum import Enum
 from injector import inject
-from . import _module
+from . import _service
 from .config import ConfigService
 
 
@@ -78,8 +78,8 @@ class IMAPConfig (EmailConnConfig, Enum):
     def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower(
     ) == "ssl" else IMAP_NORMAL_PORT
 
-@_module.AbstractModuleClass
-class Email(_module.Module):
+@_service.AbstractModuleClass
+class Email(_service.Service):
     def __init__(self, configService: ConfigService):
         self.configService = configService
         self.hostPort: int
@@ -144,7 +144,7 @@ class EmailSender(Email):
             self.state = False
             self.errorReason = e
             # TODO Throw Error build error
-            raise _module.BuildAbortError
+            raise _service.BuildAbortError
 
     def sendMessage(self):
         try:

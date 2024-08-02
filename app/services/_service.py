@@ -43,7 +43,7 @@ class BuildFallbackError(BuildError):
     pass
 
 
-class Module():
+class Service():
 
     def build(self):
         pass
@@ -155,10 +155,10 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
         if not AbstractModuleClasses.__contains__(baseClass):
             pass
             # ABORT error
-        if not issubclass_of(Module, baseClass):
+        if not issubclass_of(Service, baseClass):
             pass
             # ABORT error
-        if not issubclass_of(Module, cls):
+        if not issubclass_of(Service, cls):
             pass
             # ABORT error
         AbstractDependency[cls.__name__] = {baseClass.__name__: {DependencyConstant.RESOLVED_FUNC_KEY: resolvedClass,

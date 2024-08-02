@@ -4,7 +4,7 @@ from dependencies import __DEPENDENCY
 from typing import Callable, Any
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of, SkipCode
-from services._module import Module, AbstractDependency, AbstractModuleClasses, BuildOnlyIfDependencies, PossibleDependencies
+from app.services._service import Service, AbstractDependency, AbstractModuleClasses, BuildOnlyIfDependencies, PossibleDependencies
 from utils.prettyprint import printDictJSON
 
 
@@ -45,7 +45,7 @@ class InvalidDependencyError(ContainerError):
     pass  # Abstract class in the dependency list
 
 
-def issubclass(cls): return issubclass_of(Module, cls)
+def issubclass(cls): return issubclass_of(Service, cls)
 
 
 def isabstract(cls): return AbstractModuleClasses.__contains__(cls)
@@ -301,7 +301,7 @@ class Container():
 
     def createDep(self, typ:type, params):
         flag = issubclass(typ)
-        obj: Module = typ(**params)
+        obj: Service = typ(**params)
 
         if flag:
             willBuild = self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.FLAG_BUILD_KEY]

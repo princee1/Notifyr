@@ -1,9 +1,9 @@
-from . import _module
+from . import _service
 
 ## WARNING extends the ABC last
 
-@_module.AbstractModuleClass
-class BaseNotification(_module.Module): pass # BUG we can specify a kid class if we decide to inject a Notification
+@_service.AbstractModuleClass
+class BaseNotification(_service.Service): pass # BUG we can specify a kid class if we decide to inject a Notification
 
 class SystemNotificationService(BaseNotification): pass
 
