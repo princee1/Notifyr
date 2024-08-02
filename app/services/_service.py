@@ -102,18 +102,6 @@ def AbstractModuleClass(cls):
     return cls
 
 
-def FallbackAbstract(cls):
-    # VERIFY if the cls is really the resolved class
-    # TODO get the abstract parent of the class
-    return cls
-
-
-def FallbackError(cls):
-    # VERIFY if the cls is really the resolved class
-    # TODO get the abstract parent of the class
-    return cls
-
-
 def InjectWCondition(baseClass: type, resolvedClass: Any):
     # NOTE we cannot create instance of the base class
     """

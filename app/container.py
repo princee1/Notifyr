@@ -4,7 +4,7 @@ from dependencies import __DEPENDENCY
 from typing import Callable, Any
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of, SkipCode
-from app.services._service import Service, AbstractDependency, AbstractModuleClasses, BuildOnlyIfDependencies, PossibleDependencies
+from services._service import Service, AbstractDependency, AbstractModuleClasses, BuildOnlyIfDependencies, PossibleDependencies
 from utils.prettyprint import printDictJSON
 
 
@@ -314,8 +314,20 @@ class Container():
 
     def freeMemory(self):
         # TODO free up params
-        # TODO free up temp variables
+        for k,v in self.DEPENDENCY_MetaData.items():
+            del v[DependencyConstant.PARAM_NAMES_KEY]
+            
+        # TODO free up temp variable
         pass
+
+    def need(self, typ:type):
+        if not self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY]:
+            dependency: Service = self.get(typ) 
+            try:
+                dependency._builder()
+                return dependency
+            except: pass
+        return self.get(typ)
 
     @property
     def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
