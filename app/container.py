@@ -4,7 +4,7 @@ from dependencies import __DEPENDENCY
 from typing import Callable, Any
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of, SkipCode
-from services._service import Service, AbstractDependency, AbstractModuleClasses, BuildOnlyIfDependencies, PossibleDependencies
+from services._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies
 from utils.prettyprint import printDictJSON
 
 
@@ -48,7 +48,7 @@ class InvalidDependencyError(ContainerError):
 def issubclass(cls): return issubclass_of(Service, cls)
 
 
-def isabstract(cls): return AbstractModuleClasses.__contains__(cls)
+def isabstract(cls): return AbstractServiceClasses.__contains__(cls)
 
 
 class Container():
@@ -57,11 +57,10 @@ class Container():
         self.app = injector.Injector()
         self.DEPENDENCY_MetaData = {}
         self.hashKeyAbsResolving: dict = {}
-        # TODO append the dependency needed but might not be in the Dependencies list
         self.D: set[str] = self.load_baseSet(D)
         self.load_dep(D)
         self.buildContainer()
-        self.freeMemory()
+        self.freeUpMemory()
         # TODO print success  in building the app
 
     def bind(self, type, obj, scope=None):
@@ -93,7 +92,7 @@ class Container():
                     depNotInjected = dep.difference(self.D)
                     if len(depNotInjected) != 0:
                         for y in depNotInjected:
-                            if y not in AbstractModuleClasses:
+                            if y not in AbstractServiceClasses:
                                 raise NotInDependenciesError
                     abstractRes = self.getAbstractResolving(x)
                     for r in abstractRes.keys():
@@ -219,7 +218,6 @@ class Container():
                 raise NotBoolBuildOnlyDependencyError
             self.DEPENDENCY_MetaData[dep_name][DependencyConstant.FLAG_BUILD_KEY] = flag
         
-
     def searchParentClassAbstractDependency(self, currentType: type):
         parentClasses: list[type] = list(getmro(currentType))
         parentClasses.pop(0)
@@ -257,7 +255,7 @@ class Container():
             if issubclass(current_type):
                 pass
             for absClassName, absResolving in AbstractDependency[self.hashAbsDep(current_type.__name__)].items():
-                absClass = AbstractModuleClasses[absClassName]
+                absClass = AbstractServiceClasses[absClassName]
                 if not isabstract(absClass):
                     raise NotAbstractDependencyError
                 absResParams = {}
@@ -312,11 +310,14 @@ class Container():
             pass
         return obj
 
-    def freeMemory(self):
-        # TODO free up params
+    def freeUpMemory(self):
         for k,v in self.DEPENDENCY_MetaData.items():
             del v[DependencyConstant.PARAM_NAMES_KEY]
-            
+        
+        for k,v in BuildOnlyIfDependencies.items():
+            del v[DependencyConstant.BUILD_ONLY_PARAMS_KEY]
+        
+        
         # TODO free up temp variable
         pass
 

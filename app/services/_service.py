@@ -5,7 +5,7 @@ from utils.helper import issubclass_of
 
 
 AbstractDependency: dict[str, dict] = {}
-AbstractModuleClasses: dict[str, type] = {}
+AbstractServiceClasses: dict[str, type] = {}
 BuildOnlyIfDependencies: dict = {}
 PossibleDependencies: dict[str, list[type]] = {}
 
@@ -97,8 +97,8 @@ class Service():
             pass
 
 
-def AbstractModuleClass(cls):
-    AbstractModuleClasses[cls.__name__] = cls
+def AbstractServiceClass(cls):
+    AbstractServiceClasses[cls.__name__] = cls
     return cls
 
 
@@ -140,7 +140,7 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
     >>> 3
     """
     def decorator(cls: type):
-        if not AbstractModuleClasses.__contains__(baseClass):
+        if not AbstractServiceClasses.__contains__(baseClass):
             pass
             # ABORT error
         if not issubclass_of(Service, baseClass):
