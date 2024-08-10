@@ -3,6 +3,11 @@ from abc import ABC
 from random import choice, seed
 from string import hexdigits, digits, ascii_letters 
 import time
+from inspect import currentframe, getargvalues
+from typing import Any
+from namespace import Namespace
+
+class SkipCode(Exception): pass
 
 alphanumeric = digits + ascii_letters
 
@@ -52,7 +57,6 @@ def getParentClass(cls: type):
     """
     return list(getmro(cls)).pop(0)
    
-
 def generateId(len):
     seed(time.time())
     return "".join(choice(alphanumeric) for _ in range(len))

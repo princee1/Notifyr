@@ -191,6 +191,6 @@ def BuildOnlyIf(func: Callable):
 
 def PossibleDep(dependencies: list[type]):
     def decorator(cls: type):
-        PossibleDependencies[cls.__name__] = dependencies
+        PossibleDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls
     return decorator
