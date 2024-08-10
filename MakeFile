@@ -5,13 +5,14 @@ cleandep:
 	pipreqs --clean requirements_dev.txt
 
 getdep: 
-	pipreqs --savepath requirements.txt --force .
+	pipreqs --savepath requirements_dev.txt --force .
 
 setenv:
 	cp base.env .env
 
 clean:
-	rm -f -R */__pycache__ 
+	rm -f -R */__pycache__/* 
+	rm -f -R ./*.pyc
 
 test:
 	echo "testing"
