@@ -1,3 +1,4 @@
+from services.database import SQLiteService
 from services.assets import AssetService
 from services.config import ConfigService
 from services.email import EmailReader, EmailSender
@@ -27,5 +28,6 @@ __DEPENDENCY: list[type] = [AssetService,
                             SecurityService,
                             PriorityQueueService,
                             RateLimiterService,
-                            FTPService
+                            FTPService,
+                            SQLiteService,
                             ]
