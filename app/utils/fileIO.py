@@ -22,13 +22,12 @@ def getFd(path: str, flag: FDFlag, enc: str = "utf-8"):
 def readFileContent(path: str, flag: FDFlag, enc: str = "utf-8"):
     try:
         if flag != FDFlag.READ and flag != FDFlag.READ_BYTES:
-            raise KeyError()  # need a better erro
+            raise KeyError()  # need a better error
         fd = getFd(path, flag, enc)
         file_content = fd.read()
         fd.close()
         return file_content
-    except:
-        pass
+    except: return None
 
 def writeContent(path: str, content, flag: FDFlag, enc: str = "utf-8"):
     try:
@@ -62,14 +61,18 @@ def listFilesExtensionCertainPath(path: str,extension:str):
 
     results = []
     for p in paths:
-        results.extend(listFilesExtension(extension))
+        results.extend(listFilesExtension(extension,p))
 
-    print(results)
+
+    return results
 
 def getFileDir(path: str):
     if not os.path.isfile(path):
         raise OSError
     return os.path.dirname(path)
+
+def getFilenameOnly(path:str):
+    return os.path.split(path)[1]
 
 class JSONFile():
     pass

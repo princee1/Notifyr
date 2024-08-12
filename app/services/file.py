@@ -1,32 +1,34 @@
 from .config import ConfigService
 from ._service import Service
 from injector import inject
-from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent
+from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 
 
 class FileService(Service):
 
-    def __init__(self) -> None:
-        super().__init__()
-
-    def build(self):
-        return super().build()
-
-    def destroy(self):
-        return super().destroy()
-
     def loadJSON(self):
         pass
 
-    def readFile(self):
-        pass
+    def readFileDetail(self, path, flag, enc="utf-8"):
 
+        filename  = getFilenameOnly(path)
+        content = readFileContent(path, flag, enc)
+        dirName = getFileDir(path)
+        return filename,content,dirName
+    
+    def readFile(self, path,flag,enc= "utf-8"):
+        return readFileContent(path, flag, enc)
+    
     def writeFile(self,):
         pass
 
-    def listFileExtensions(self):
-        pass
+    def listExtensionPath(self, path, extension):
+        return listFilesExtensionCertainPath(path,extension)
+
+    def listFileExtensions(self,ext:str,root=None, recursive=False):
+        return listFilesExtension(ext,root,recursive)
+    
 
     pass
 
