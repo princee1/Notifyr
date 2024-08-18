@@ -45,6 +45,10 @@ class BuildFallbackError(BuildError):
 
 class Service():
 
+    def __init__(self) -> None:
+        self.builded: bool= False
+        self.destroyed: bool= False
+
     def build(self):
         pass
 
@@ -63,6 +67,7 @@ class Service():
     def _builder(self):
         try:
             self.build()
+            self.builded = True
         except BuildFailureError as e:
             pass
 
@@ -81,6 +86,8 @@ class Service():
     def _destroyer(self):
         try:
             self.destroy()
+            self.destroyed = True
+            self.builded = False
             pass
         except BuildFailureError as e:
             pass
@@ -172,7 +179,7 @@ def BuildOnlyIf(flag: bool):
 
 
 @overload
-def BuildOnlyIf(func: Callable):
+def BuildOnlyIf(func: Callable[...,bool]):
     """ WARNING The builtCls must be in the Dependency list if you want to call this decorator, 
         since the container cant add it while load all the dependencies,
         if dont want the built class to call the builder function simply remove from the dependency list

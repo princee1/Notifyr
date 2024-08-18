@@ -16,7 +16,7 @@ IMAP_NORMAL_PORT = 143
 IMAP_SSL_TLS_PORT = 993
 
 
-class EmailConnConfig():
+class EmailConnInterface():
     def setHostPort(connMode:str): pass
 
     def setConnFlag(mode:str): pass
@@ -24,14 +24,14 @@ class EmailConnConfig():
     def setHostAddr(host:str): pass
 
 
-class SMTPConfig(EmailConnConfig,Enum):
+class SMTPConfig(EmailConnInterface,Enum):
 
     GMAIL = "smtp.gmail.com"
     OUTLOOK = "smtp-mail.outlook.com"
     YAHOO = "smtp.mail.yahoo.com"
 
     def setHostPort(connMode: str):
-        match connMode:
+        match connMode.lower().strip():
             case "tls":
                 return SMTP_TLS_PORT
             case "ssl":
@@ -44,7 +44,7 @@ class SMTPConfig(EmailConnConfig,Enum):
     def setConnFlag(mode: str): return mode.lower() == "tls"
 
     def setHostAddr(host: str):
-        match host:
+        match host.upper().strip():
             case str(SMTPConfig.GMAIL.name):
                 return SMTPConfig.GMAIL.value
             case str(SMTPConfig.YAHOO.name):
@@ -55,7 +55,7 @@ class SMTPConfig(EmailConnConfig,Enum):
                 return host
 
 
-class IMAPConfig (EmailConnConfig, Enum):
+class IMAPConfig (EmailConnInterface, Enum):
     """The IMAPHost class is an enumeration of the IMAP host names for the two email providers that I use
     """
     GMAIL = "imap.gmail.com"
@@ -63,7 +63,7 @@ class IMAPConfig (EmailConnConfig, Enum):
     OUTLOOK = "outlook.office365.com"  # BUG potentiel : might not work
 
     def setHostAddr(host: str):
-        match host:
+        match host.upper().strip():
             case str(IMAPConfig.GMAIL.name):
                 return IMAPConfig.GMAIL.value
             case str(IMAPConfig.YAHOO.name):
@@ -75,12 +75,12 @@ class IMAPConfig (EmailConnConfig, Enum):
 
     def setConnFlag(mode: str): return mode.lower() == "ssl"
 
-    def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower(
-    ) == "ssl" else IMAP_NORMAL_PORT
+    def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower().strip()== "ssl" else IMAP_NORMAL_PORT
 
 @_service.AbstractServiceClass
-class Email(_service.Service):
+class EmailInterface(_service.Service):
     def __init__(self, configService: ConfigService):
+        super().__init__()
         self.configService = configService
         self.hostPort: int
 
@@ -93,7 +93,7 @@ class Email(_service.Service):
     def connect(self): pass
 
 
-class EmailSender(Email):
+class EmailSender(EmailInterface):
     @inject
     def __init__(self, configService: ConfigService): # BUG cant resolve an abstract class
         super().__init__(configService)
@@ -125,6 +125,8 @@ class EmailSender(Email):
         except:
             pass
 
+    def sendAutomaticMessage(self): pass
+
     def authenticate(self):
         try:
             if self.tlsConn:
@@ -139,10 +141,12 @@ class EmailSender(Email):
             self.state = False
             self.errorReason = e
             # TODO Throw Error build error
+            print(e)
             pass
         except smtp.SMTPAuthenticationError as e:
             self.state = False
             self.errorReason = e
+            print(e)
             # TODO Throw Error build error
             raise _service.BuildAbortError
 
@@ -161,7 +165,7 @@ class EmailSender(Email):
         except:
             pass
 
-class EmailReader(Email):
+class EmailReader(EmailInterface):
     @inject
     def __init__(self, configService: ConfigService) -> None:
         super().__init__(configService)
@@ -182,3 +186,12 @@ class EmailReader(Email):
     def destroy(self):
         self.connector.logout()
         self.connector.close()
+    
+    def readEmail(self):
+        pass
+
+    def recurrenceReading():
+        pass
+
+    def updateReccurenceReading(self):
+        pass

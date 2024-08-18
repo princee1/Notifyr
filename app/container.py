@@ -6,6 +6,9 @@ from utils.constant import DependencyConstant
 from utils.helper import issubclass_of, SkipCode
 from services._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies
 from utils.prettyprint import printDictJSON
+from typing import TypeVar
+
+T = TypeVar('T', bound=Service)
 
 
 class ContainerError(BaseException):
@@ -56,7 +59,7 @@ def isabstract(cls): return AbstractServiceClasses.__contains__(cls)
 
 class Container():
 
-    def __init__(self, D: list[type]) -> None:
+    def __init__(self, D: list[type]) -> None: #TODO add the scope option
         self.__app = injector.Injector()
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
@@ -69,12 +72,12 @@ class Container():
     def __bind(self, type, obj, scope=None):
         self.__app.binder.bind(type, to=obj, scope=scope)
 
-    def get(self, typ: type, scope=None, all=False):
+    def get(self, typ: type, scope=None, all=False) -> dict[type, T] | T:
         if not all and isabstract(typ.__name__):
             raise InvalidDependencyError
 
         if all and isabstract(typ.__name__):
-            provider: dict[type, object] = {}
+            provider: dict[type, T] = {}
             for d in self.dependencies:
                 if issubclass_of(typ, d):
                     provider[d] = self.__app.get(d, scope)
@@ -324,7 +327,7 @@ class Container():
         # TODO free up temp variable
         pass
 
-    def need(self, typ: type):
+    def need(self, typ: type) -> T:
         if not self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY]:
             dependency: Service = self.get(typ)
             try:
@@ -334,6 +337,19 @@ class Container():
                 pass
         return self.get(typ)
 
+    def destroyAllDependency(self,scope = None):
+        raise NotImplementedError
+        for dep in __DEPENDENCY:
+            self.destroyDep(dep,scope)
+            
+    def destroyDep(self,typ: type, scope = None):
+        D = self.__app.get(typ, scope)
+        if issubclass(D): #BUG need to ensure that this a Service type
+            D:Service = D # NOTE access to the intellisense
+            D._destroyer()
+    
+    def reloadDep(self,typ:type, scope=None):pass
+    
     @property
     def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]  # TODO avoid to compute this everytime we call this function
@@ -348,15 +364,15 @@ class Container():
 
 
 CONTAINER: Container = Container(__DEPENDENCY)
-printDictJSON(CONTAINER.DEPENDENCY_MetaData, indent=2)
-print("================================================")
-printDictJSON(AbstractDependency, indent=2)
-print("================================================")
-printDictJSON(AbstractServiceClasses, indent=2)
-print("================================================")
-printDictJSON(BuildOnlyIfDependencies, indent=2)
-print("================================================")
-printDictJSON(PossibleDependencies, indent=2)
+# printDictJSON(CONTAINER.DEPENDENCY_MetaData, indent=2)
+# print("================================================")
+# printDictJSON(AbstractDependency, indent=2)
+# print("================================================")
+# printDictJSON(AbstractServiceClasses, indent=2)
+# print("================================================")
+# printDictJSON(BuildOnlyIfDependencies, indent=2)
+# print("================================================")
+# printDictJSON(PossibleDependencies, indent=2)
 
 
 def InjectInFunction(func: Callable):
