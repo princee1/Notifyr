@@ -54,7 +54,17 @@ class InvalidDependencyError(ContainerError):
 def issubclass(cls): return issubclass_of(Service, cls)
 
 
-def isabstract(cls): return AbstractServiceClasses.__contains__(cls)
+def isabstract(cls): 
+    """
+    The function `isabstract` checks if a class is in the set `AbstractServiceClasses`.
+    
+    :param cls: The `cls` parameter in the `isabstract` function is typically used to represent a class
+    that you want to check for abstractness. The function checks if the provided class is in the
+    `AbstractServiceClasses` collection to determine if it is an abstract service class
+    :return: The function `isabstract(cls)` returns whether the class `cls` is contained within the set
+    `AbstractServiceClasses`.
+    """
+    return AbstractServiceClasses.__contains__(cls)
 
 
 class Container():
@@ -348,7 +358,8 @@ class Container():
             D:Service = D # NOTE access to the intellisense
             D._destroyer()
     
-    def reloadDep(self,typ:type, scope=None):pass
+    def reloadDep(self,typ:type, scope=None):
+        pass
     
     @property
     def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
@@ -364,16 +375,6 @@ class Container():
 
 
 CONTAINER: Container = Container(__DEPENDENCY)
-# printDictJSON(CONTAINER.DEPENDENCY_MetaData, indent=2)
-# print("================================================")
-# printDictJSON(AbstractDependency, indent=2)
-# print("================================================")
-# printDictJSON(AbstractServiceClasses, indent=2)
-# print("================================================")
-# printDictJSON(BuildOnlyIfDependencies, indent=2)
-# print("================================================")
-# printDictJSON(PossibleDependencies, indent=2)
-
 
 def InjectInFunction(func: Callable):
     """
