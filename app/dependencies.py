@@ -1,9 +1,10 @@
+from services.logger import LoggerService
 from services.database import SQLiteService
 from services.assets import AssetService
 from services.config import ConfigService
 from services.email import EmailReader, EmailSender
 from services.support import SupportService, ChatService
-from app.services.twilio_communication import PhoneService, SMSService,TwilioService
+from services.twilio_communication import PhoneService, SMSService,TwilioService
 from services.training import TrainingService
 from services.notification import SystemNotificationService, DiscordService
 from services.security import SecurityService
@@ -15,7 +16,7 @@ __DEPENDENCY: list[type] = [AssetService,
                             ConfigService,
                             EmailReader,
                             FileService,
-                            EmailSender,
+                            #EmailSender,
                             TwilioService,
                             SupportService,
                             ChatService,
@@ -29,4 +30,5 @@ __DEPENDENCY: list[type] = [AssetService,
                             RateLimiterService,
                             FTPService,
                             SQLiteService,
+                            LoggerService
                             ]
