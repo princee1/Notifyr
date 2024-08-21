@@ -46,8 +46,8 @@ class BuildFallbackError(BuildError):
 class Service():
 
     def __init__(self) -> None:
-        self.builded: bool= False
-        self.destroyed: bool= False
+        self.__builded: bool= False
+        self.__destroyed: bool= False
 
     def build(self):
         pass
@@ -67,7 +67,7 @@ class Service():
     def _builder(self):
         try:
             self.build()
-            self.builded = True
+            self.__builded = True
         except BuildFailureError as e:
             pass
 
@@ -86,8 +86,8 @@ class Service():
     def _destroyer(self):
         try:
             self.destroy()
-            self.destroyed = True
-            self.builded = False
+            self.__destroyed = True
+            self.__builded = False
             pass
         except BuildFailureError as e:
             pass
