@@ -3,6 +3,7 @@
 # instance imported from `container`.
 """
 from typing import TypeVar
+from services.assets import AssetService
 from container import CONTAINER, Container
 from app.interface._service import Service
 
@@ -17,3 +18,11 @@ class Ressource():
 
     def need(self, dep: type) -> T:
         return self.container.need(dep)
+
+class AssetRessource(Ressource):
+    """
+    Ressource with a direct reference to the AssetService
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        self.assetService:AssetService = self.container.get(AssetService)
