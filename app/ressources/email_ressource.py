@@ -1,6 +1,6 @@
-from interface.base import BaseRessource
+from interface._ressource import Ressource
 from services.email import EmailSender
-class EmailRessource(BaseRessource):
+class EmailRessource(Ressource):
 
     def __init__(self) -> None:
         super().__init__()

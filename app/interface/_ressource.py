@@ -8,7 +8,7 @@ from app.interface._service import Service
 
 T = TypeVar('T', bound=Service) 
 
-class BaseRessource():
+class Ressource():
     def __init__(self) -> None:
         self.container: Container = CONTAINER
 
