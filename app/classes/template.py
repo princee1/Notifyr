@@ -2,12 +2,14 @@
 from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
-from utils.validation import HtmlSchemaBuilder,CustomValidator
+from utils.validation import HtmlSchemaBuilder, CustomValidator
 import fitz as pdf
+from cerberus import DocumentError, SchemaError
 from googletrans import Translator
 import os
 import re
 from utils.prettyprint import printJSON
+from cerberus import schema_registry
 
 
 class XMLLikeParser(Enum):
@@ -18,7 +20,9 @@ class XMLLikeParser(Enum):
 # ============================================================================================================
 ROUTE_SEP = "-"
 VALIDATION_CSS_SELECTOR = "head > validation"
+VALIDATION_REGISTRY_SELECTOR = "validation-registry"
 def BODY_SELECTOR(select): return f"body {select}"
+# ============================================================================================================
 # ============================================================================================================
 
 
@@ -41,14 +45,15 @@ class Template(Asset):
         super().__init__(filename, content, dirName)
         self.keys: list[str] = []
 
-    def inject(self, data:  dict):
+    def inject(self, data:  dict) -> bool:
         """
-        Inject the data into the template to build 
+        Inject the data into the template to build and return true if its valid
         """
         tempKey = set(self.keys)
         dataKey = set(data.keys())
         if tempKey.difference(dataKey()) != 0:
             raise KeyError
+        return self.validate(data)
 
     def load(self):
         """
@@ -93,20 +98,32 @@ class HTMLTemplate(Template):
 
     def inject(self, data: dict):
         try:
-            super().inject(data)
+            if not super().inject(data):
+                # TODO Raise Error
+                pass
             self.content = self.bs4.prettify(formatter="html5")
-            #TODO inject
+            # TODO inject
             self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
         except KeyError as e:
             pass
         except:
             pass
 
-    def findAllKeys(self):
+    def recursiveInject(self,currKey, data):
         pass
 
-    def recursiveInject():
-        pass
+    def validate(self, document: dict):
+        if self.Validator == None:
+            return True
+        try:
+            flag = self.Validator(document)
+            self.Validator.errors
+            return self.Validator.document
+            valid_documents = [x for x in [self.Validator.validated(y) for y in documents]
+                               if x is not None]
+            return valid_documents
+        except DocumentError as e:
+            pass
 
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
         style = self.bs4.find("head > style")
@@ -120,22 +137,40 @@ class HTMLTemplate(Template):
     def loadImage(self, imageContent: str):
         pass
 
-    def extractValidation(self,):
-        validation = self.bs4.select_one(VALIDATION_CSS_SELECTOR)
-        if validation is None:
+    def extractExtraSchemaRegistry(self):
+
+        if self.validation_balise is None:
             return
-        schema = HtmlSchemaBuilder(validation).schema
-        self.Validator = CustomValidator(schema)
+        for registry in self.validation_balise.find_all(VALIDATION_REGISTRY_SELECTOR, recursive=False):
+            registry: Tag = registry
+            registry_key = registry.attrs["id"]
+            schema = HtmlSchemaBuilder(registry).schema
+            _hash = hash(schema)
+            if _hash not in HtmlSchemaBuilder.CurrentHashRegistry.keys():
+                HtmlSchemaBuilder.CurrentHashRegistry[_hash] = registry_key
+                schema_registry.add(registry_key, schema)
+            else:
+                HtmlSchemaBuilder.HashSchemaRegistry[registry_key] = HtmlSchemaBuilder.CurrentHashRegistry[_hash]
+        
+    def extractValidation(self,):
         try:
-            self.Validator.require_all = validation.attrs['require_all']
-        except KeyError:
-            self.Validator.require_all = True
-        try:
-            self.Validator.allow_unknown = validation.attrs['allow_unknown']
-        except KeyError:
-            self.Validator.allow_unknown = True
-        self.keys = schema.keys()
-        validation.decompose()
+            if self.validation_balise is None:
+                return
+            schema = HtmlSchemaBuilder(self.validation_balise).schema
+            self.Validator = CustomValidator(schema)
+            try:
+                self.Validator.require_all = self.validation_balise.attrs['require_all']
+            except KeyError:
+                self.Validator.require_all = True
+            try:
+                self.Validator.allow_unknown = self.validation_balise.attrs['allow_unknown']
+            except KeyError:
+                self.Validator.allow_unknown = True
+            self.keys = schema.keys()
+            self.validation_balise.decompose()
+        except SchemaError as e:
+            printJSON(e.args[0])
+            pass
 
     def exportText(self):
         pass
@@ -144,6 +179,8 @@ class HTMLTemplate(Template):
         pass
 
     def load(self):
+        self.validation_balise = self.bs4.select_one(VALIDATION_CSS_SELECTOR)
+        self.extractExtraSchemaRegistry()
         self.extractValidation()
 
 

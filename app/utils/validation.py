@@ -77,8 +77,13 @@ def location_validator(latitude, longitude):
 
 class SchemaBuilder:pass
 
+
 class HtmlSchemaBuilder (SchemaBuilder):
     VALIDATION_ITEM_SELECTOR = "validation-item"
+    CurrentHashRegistry = {}
+    HashSchemaRegistry = {}
+
+
 
     def __init__(self, root) -> None:
         self.root: Tag = root
@@ -93,13 +98,24 @@ class HtmlSchemaBuilder (SchemaBuilder):
             if not v.attrs.__contains__("type"):
                 v.attrs["type"] = "string"	
             key = v.attrs["id"]
+            # TODO validates arguments
             schema[key] = {_id: val for _id,val in v.attrs.items() if _id != "id"}
             if has_noSuccessor:
+                # TODO
+                # if schema[key].__contains__("schema"):
+                #     default_schema_registry = schema[key]["schema"]
+                #     if type(default_schema_registry) == str and default_schema_registry in HtmlSchemaBuilder.HashSchemaRegistry.keys():
+                #         default_schema_registry = HtmlSchemaBuilder.HashSchemaRegistry[default_schema_registry]
                 continue
-            # TODO validates arguments
             successor_schema =  self.find(v)
             schema[key]["schema"] = successor_schema
         return schema
+    
+    def parse(self):
+        pass
 
-class CustomValidator(Validator):pass
+
+class CustomValidator(Validator):
+    def __init__(self,schema) -> None:
+        super().__init__(schema)
 
