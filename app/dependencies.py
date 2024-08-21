@@ -2,9 +2,8 @@ from services.database import SQLiteService
 from services.assets import AssetService
 from services.config import ConfigService
 from services.email import EmailReader, EmailSender
-from services.twillo import TwilioService
 from services.support import SupportService, ChatService
-from services.communication import PhoneService, SMSService
+from app.services.twilio_communication import PhoneService, SMSService,TwilioService
 from services.training import TrainingService
 from services.notification import SystemNotificationService, DiscordService
 from services.security import SecurityService
