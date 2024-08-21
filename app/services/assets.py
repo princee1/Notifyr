@@ -34,6 +34,7 @@ class AssetType(Enum):
     IMAGES = "images"
     SMS = "sms"
     PHONE = "phone"
+    HTML = Extension.HTML.value
 
 
 def extension(extension: Extension): return f".{extension.value}"
@@ -57,7 +58,7 @@ class Reader():
         except AttributeError as e:
             pass
 
-    def read(self, ext: Extension, flag: FDFlag, rootFlag: str = None, encoding="utf-8"):
+    def read(self, ext: Extension, flag: FDFlag, rootParam: str = None, encoding="utf-8"):
         """
         This function reads files with a specific extension, processes them, and stores the content in a
         dictionary.
@@ -72,13 +73,10 @@ class Reader():
         to be used when reading the files. In this case, the default encoding is set to "utf-8"
         """
         extension_ = extension(ext)
-        if type(rootFlag) is str:
-            root = path(rootFlag)
-        else:
-            root = path(ext.value) 
+        root = path(rootParam) if type(rootParam) is str  else path(ext.value)
         setTempFile: set[str] = set()
         for file in Reader.fileService.listFileExtensions(extension_, root, recursive=True):
-            relpath = root  + os.path.sep+file
+            relpath = root + os.path.sep+file
             filename, content, dir = Reader.fileService.readFileDetail(
                 relpath, flag, encoding)
             keyName = filename if not setTempFile else file
@@ -142,25 +140,25 @@ class AssetService(_service.Service):
         self.pdf: dict[str, PDFTemplate] = {}
         self.sms: dict[str, SMSTemplate] = {}
         self.phone: dict[str, PhoneTemplate] = {}
-        pass
 
     def build(self):
         self.images = Reader()(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
-        self.css = Reader()(Extension.CSS, FDFlag.READ, Extension.HTML.value)
+        self.css = Reader()(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
 
-        htmlReader:ThreadedReader = ThreadedReader(HTMLTemplate, self.loadData)(
+        htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadData)(
             Extension.HTML, FDFlag.READ)
-        pdfReader:ThreadedReader = ThreadedReader(PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES)
-        smsReader:ThreadedReader = ThreadedReader(SMSTemplate)(
+        pdfReader: ThreadedReader = ThreadedReader(
+            PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES)
+        smsReader: ThreadedReader = ThreadedReader(SMSTemplate)(
             Extension.SMS, FDFlag.READ, AssetType.SMS.value)
-        phoneReader:ThreadedReader = ThreadedReader(PhoneTemplate)(
+        phoneReader: ThreadedReader = ThreadedReader(PhoneTemplate)(
             Extension.PHONE, FDFlag.READ, AssetType.PHONE.value)
 
         self.htmls = htmlReader.join()
         self.pdf = pdfReader.join()
         self.sms = smsReader.join()
         self.phone = phoneReader.join()
-
+        
     def loadData(self, html: HTMLTemplate):
         cssInPath = self.fileService.listExtensionPath(
             html.dirName, Extension.CSS)
@@ -180,8 +178,31 @@ class AssetService(_service.Service):
             except KeyError as e:
                 pass
 
+    def exportRouteName(self,attributeName:str)-> list[str] | None:
+        """
+        images: IMAGE Template Key
+        css: CSS Template Key
+        htmls: HTML Template Key
+        pdf: PDF Template Key
+        sms: SMS Template Key
+        phone: Phone Template Key
+        """
+        try:
+            temp:dict[str,Asset] = self.__getattribute__(attributeName)
+            if type(temp) is not dict:
+                raise TypeError()
+            return [route.name for route in temp.values()]
+        except TypeError as e:
+            return None
+        except KeyError as e:
+            return None
+        
     def destroy(self): pass
 
-    def encryptPdf(self, key): pass
+    def encryptPdf(self, name):
+        KEY=""
+        self.pdf[name].encrypt(KEY)
 
-    def decryptPdf(self, key): pass
+    def decryptPdf(self, name):
+        KEY=""
+        self.pdf[name].decrypt(KEY)

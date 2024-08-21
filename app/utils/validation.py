@@ -1,6 +1,10 @@
 import phonenumbers
 from validators import url as validate_url, ipv4 as IPv4Address, ValidationError, ipv6 as IPv6Address, email, mac_address
 from geopy.geocoders import Nominatim
+from bs4 import Tag
+from cerberus import Validator
+
+
 
 
 def ipv4_validator(ip):
@@ -69,4 +73,33 @@ def location_validator(latitude, longitude):
     geolocator = Nominatim(user_agent="geoapiExercises")
     location = geolocator.reverse((latitude, longitude), exactly_one=True)
     return location is not None
+
+
+class SchemaBuilder:pass
+
+class HtmlSchemaBuilder (SchemaBuilder):
+    VALIDATION_ITEM_SELECTOR = "validation-item"
+
+    def __init__(self, root) -> None:
+        self.root: Tag = root
+        self.schema: dict[str, dict] = self.find(self.root)
+    def find(self, validation_item: Tag):
+        schema: dict[str,dict | str] = {}
+        for validator in validation_item.find_all(HtmlSchemaBuilder.VALIDATION_ITEM_SELECTOR,recursive=False):
+            v: Tag = validator
+            has_noSuccessor = len(v.find_all(HtmlSchemaBuilder.VALIDATION_ITEM_SELECTOR)) == 0
+            if not has_noSuccessor:
+                v.attrs["type"] = "dict"
+            if not v.attrs.__contains__("type"):
+                v.attrs["type"] = "string"	
+            key = v.attrs["id"]
+            schema[key] = {_id: val for _id,val in v.attrs.items() if _id != "id"}
+            if has_noSuccessor:
+                continue
+            # TODO validates arguments
+            successor_schema =  self.find(v)
+            schema[key]["schema"] = successor_schema
+        return schema
+
+class CustomValidator(Validator):pass
 
