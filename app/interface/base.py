@@ -4,7 +4,7 @@
 """
 from typing import TypeVar
 from container import CONTAINER, Container
-from services._service import Service
+from app.interface._service import Service
 
 T = TypeVar('T', bound=Service) 
 

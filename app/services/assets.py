@@ -3,7 +3,7 @@ from utils.fileIO import FDFlag
 from classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
 from .security import SecurityService
 from .file import FileService, FTPService
-from . import _service
+from interface import _service
 from injector import inject
 from enum import Enum
 import os

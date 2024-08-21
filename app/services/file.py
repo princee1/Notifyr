@@ -1,5 +1,5 @@
 from .config import ConfigService
-from ._service import Service
+from interface._service import Service
 from injector import inject
 from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS

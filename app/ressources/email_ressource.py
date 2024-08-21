@@ -1,4 +1,4 @@
-from .base import BaseRessource
+from interface.base import BaseRessource
 from services.email import EmailSender
 class EmailRessource(BaseRessource):
 

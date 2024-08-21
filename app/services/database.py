@@ -1,7 +1,7 @@
 from .config import ConfigService
 from .file import FileService
 from .security import SecurityService
-from ._service import Service,AbstractServiceClass
+from interface._service import Service,AbstractServiceClass
 from injector import inject
 import sqlite3
 

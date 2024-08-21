@@ -4,7 +4,7 @@ from dependencies import __DEPENDENCY
 from typing import Callable, Any
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of, SkipCode
-from services._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies
+from interface._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies
 from utils.prettyprint import printJSON
 from typing import TypeVar
 

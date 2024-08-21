@@ -1,1 +1,1 @@
-from . import _service
+from interface import _service

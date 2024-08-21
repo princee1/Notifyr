@@ -1,4 +1,4 @@
-from . import _service
+from interface import _service
 
 ## WARNING extends the ABC last
 

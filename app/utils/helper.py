@@ -11,6 +11,8 @@ class SkipCode(Exception): pass
 
 alphanumeric = digits + ascii_letters
 
+def parseToBool(): pass
+
 def parseToInt(value:str, default:int | None = None): # TODO need to add the build error level
         """
         The function `parseToInt` attempts to convert a string to an integer and returns the integer
