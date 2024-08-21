@@ -7,6 +7,9 @@ from ftplib import FTP, FTP_TLS
 
 class FileService(Service):
 
+    def __init__(self) -> None:
+        super().__init__()
+        
     def loadJSON(self):
         pass
 

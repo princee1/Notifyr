@@ -11,8 +11,8 @@ class DatabaseService(Service): pass
 class SQLiteService(DatabaseService):
     @inject
     def __init__(self,configService:ConfigService, securityService:SecurityService, fileService:FileService) -> None:
+        super().__init__()
         self.configService= configService
         self.securityService = securityService
         self.fileService = fileService
-        super().__init__()
     pass
