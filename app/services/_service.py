@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Any, overload, Callable
+from utils.prettyprint import PrettyPrinter
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
 
@@ -48,6 +49,7 @@ class Service():
     def __init__(self) -> None:
         self.__builded: bool= False
         self.__destroyed: bool= False
+        self.prettyPrinter = PrettyPrinter()
 
     def build(self):
         pass

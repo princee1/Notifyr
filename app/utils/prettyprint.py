@@ -2,7 +2,6 @@ import rich
 from time import sleep
 import os
 import sys
-
 import colorama
 from colorama import Fore, Back, Style
 from colorama.ansi import clear_line, clear_screen
@@ -12,6 +11,7 @@ import pprint
 # Initialize colorama
 colorama.init(autoreset=True)
 
+prettyprinter = pprint.PrettyPrinter()
 
 def clearline(): clear_line()
 
@@ -55,7 +55,42 @@ def print_success(message):
     print_message(message, color=Fore.GREEN, emoji_code=":white_check_mark:")
 
 
-def printDictJSON(content: dict | Any, indent=1, width=80, depth=None, compact=False,):
+def printJSON(content: dict | Any, indent=1, width=80, depth=None, compact=False,):
     """Pretty-print a Python object to a stream [default is sys.stdout]."""
     pprint.pprint(content, indent=indent, width=width,
                   depth=depth, compact=compact)
+    
+def printBytes(): pass
+
+def printBytesArray(): pass
+
+def printDataClass(): pass
+
+def printTuple(): pass
+
+
+class PrettyPrinter:
+
+    def warning(self, message):
+        print_warning(message)
+
+    def error(self, message):
+        print_error(message)
+
+    def info(self, message):
+        print_info(message)
+
+    def success(self, message):
+        print_success(message)
+
+    def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:"):
+        print_message(message, color, background, emoji_code)
+
+    def json(self, content, indent=1, width=80, depth=None, compact=False):
+        printJSON(content, indent, width, depth, compact)
+    
+    def clearScreen(self):
+        clearscreen()
+    
+    def clearline(self):
+        clearline()

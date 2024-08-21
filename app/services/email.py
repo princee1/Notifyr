@@ -3,6 +3,8 @@ import smtplib as smtp
 import imaplib as imap
 from enum import Enum
 from injector import inject
+
+from .logger import LoggerService
 from . import _service
 from .config import ConfigService
 
@@ -17,14 +19,14 @@ IMAP_SSL_TLS_PORT = 993
 
 
 class EmailConnInterface():
-    def setHostPort(connMode:str): pass
+    def setHostPort(connMode: str): pass
 
-    def setConnFlag(mode:str): pass
+    def setConnFlag(mode: str): pass
 
-    def setHostAddr(host:str): pass
+    def setHostAddr(host: str): pass
 
 
-class SMTPConfig(EmailConnInterface,Enum):
+class SMTPConfig(EmailConnInterface, Enum):
 
     GMAIL = "smtp.gmail.com"
     OUTLOOK = "smtp-mail.outlook.com"
@@ -75,13 +77,16 @@ class IMAPConfig (EmailConnInterface, Enum):
 
     def setConnFlag(mode: str): return mode.lower() == "ssl"
 
-    def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower().strip()== "ssl" else IMAP_NORMAL_PORT
+    def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower(
+    ).strip() == "ssl" else IMAP_NORMAL_PORT
+
 
 @_service.AbstractServiceClass
 class EmailInterface(_service.Service):
-    def __init__(self, configService: ConfigService):
+    def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__()
         self.configService = configService
+        self.loggerService = loggerService
         self.hostPort: int
 
     def build(self):
@@ -95,8 +100,9 @@ class EmailInterface(_service.Service):
 
 class EmailSender(EmailInterface):
     @inject
-    def __init__(self, configService: ConfigService): # BUG cant resolve an abstract class
-        super().__init__(configService)
+    # BUG cant resolve an abstract class
+    def __init__(self, configService: ConfigService, loggerService: LoggerService):
+        super().__init__(configService, loggerService)
         self.fromEmails: set[str] = ()
         self.tlsConn: bool = SMTPConfig.setConnFlag(
             self.configService.SMTP_EMAIL_CONN_METHOD)
@@ -119,7 +125,8 @@ class EmailSender(EmailInterface):
             self.hostAddr = SMTPConfig.setHostAddr(
                 self.configService.SMTP_EMAIL_HOST)
             self.connector = smtp.SMTP(self.hostAddr, self.hostPort)
-            self.connector.set_debuglevel(self.configService.SMTP_EMAIL_LOG_LEVEL)
+            self.connector.set_debuglevel(
+                self.configService.SMTP_EMAIL_LOG_LEVEL)
         except NameError as e:
             pass  # BUG need to change the error name and a builder error
         except:
@@ -165,10 +172,11 @@ class EmailSender(EmailInterface):
         except:
             pass
 
+
 class EmailReader(EmailInterface):
     @inject
-    def __init__(self, configService: ConfigService) -> None:
-        super().__init__(configService)
+    def __init__(self, configService: ConfigService, loggerService: LoggerService) -> None:
+        super().__init__(configService, loggerService)
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 
@@ -186,7 +194,7 @@ class EmailReader(EmailInterface):
     def destroy(self):
         self.connector.logout()
         self.connector.close()
-    
+
     def readEmail(self):
         pass
 
