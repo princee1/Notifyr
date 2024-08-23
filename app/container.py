@@ -7,6 +7,8 @@ from utils.helper import issubclass_of, SkipCode
 from interface._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies
 from utils.prettyprint import printJSON
 from typing import TypeVar
+from deprecated import deprecated
+from ordered_set import OrderedSet
 
 T = TypeVar('T', bound=Service)
 
@@ -74,7 +76,8 @@ class Container():
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
         self.__D: set[str] = self.__load_baseSet(D)
-        self.__load_dep(D)
+        dep_count = self.__load_dep(D)
+        self.__D:OrderedSet[str] = self.__order_dependency(dep_count)
         self.__buildContainer()
         self.__freeUpMemory()
         # TODO print success  in building the app
@@ -99,11 +102,13 @@ class Container():
         return self.__app.get(self.DEPENDENCY_MetaData[classname][DependencyConstant.TYPE_KEY], scope)
 
     def __load_dep(self, D: list[type]):
+        dep_count:dict[str,int] = {}
         for x in D:
             if not self.DEPENDENCY_MetaData.__contains__(x):
                 dep_param_list, p = self.getSignature(x)
                 dep = set(dep_param_list)
-
+                dep_count[x.__name__]= len(dep_param_list)
+                
                 try:
                     depNotInjected = dep.difference(self.__D)
                     if len(depNotInjected) != 0:
@@ -156,6 +161,8 @@ class Container():
                     # NOTE the flag might be None, if it is indeed i need to check the func
                     DependencyConstant.FLAG_BUILD_KEY: flag
                 }
+        
+        return dep_count
 
     def __filter(self, D: list[type]):
         temp: list[type] = []
@@ -222,6 +229,12 @@ class Container():
         params = self.toParams(dep, params_names)
         obj = self.__createDep(current_type, params)
         self.__bind(current_type, obj)
+
+    def __order_dependency(self, dep_count):
+        temp_dep_list = list(self.__D)
+        ordered_dependencies = sorted(temp_dep_list,key=lambda x: dep_count[x])
+        del temp_dep_list
+        return OrderedSet(ordered_dependencies)
 
     def __resolve_buildOnly(self, dep_name: str):
         if dep_name in BuildOnlyIfDependencies and BuildOnlyIfDependencies[dep_name][DependencyConstant.BUILD_ONLY_FLAG_KEY] is None:
@@ -353,12 +366,13 @@ class Container():
             self.destroyDep(dep,scope)
             
     def destroyDep(self,typ: type, scope = None):
+        raise NotImplementedError
         D = self.__app.get(typ, scope)
         if issubclass(D): #BUG need to ensure that this a Service type
             D:Service = D # NOTE access to the intellisense
             D._destroyer()
     
-    def reloadDep(self,typ:type, scope=None):
+    def reloadDep(self,typ:type, scope=None): # TODO
         pass
     
     @property
