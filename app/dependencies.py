@@ -4,7 +4,7 @@ from services.assets import AssetService
 from services.config import ConfigService
 from services.email import EmailReader, EmailSender
 from services.support import SupportService, ChatService
-from services.twilio_communication import PhoneService, SMSService,TwilioService
+from services.twilio_communication import VoiceService, SMSService,TwilioService
 from services.training import TrainingService
 from services.notification import AYCDNotificationService, EmailNotificationService, GoogleNotificationService, SystemNotificationService, DiscordService
 from services.security import SecurityService
@@ -20,7 +20,7 @@ __DEPENDENCY: list[type] = [AssetService,
                             TwilioService,
                             SupportService,
                             ChatService,
-                            PhoneService,
+                            VoiceService,
                             TrainingService,
                             SMSService,
                             SystemNotificationService,

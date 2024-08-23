@@ -115,7 +115,7 @@ def AbstractServiceClass(cls):
 
 
 @overload
-def InjectWCondition(baseClass: type, resolvedClass: Any):
+def InjectWithCondition(baseClass: type, resolvedClass: Any):
     # NOTE we cannot create instance of the base class
     """
     The `InjectWCondition` decorator is used to specify a Dependency that will be resolved instead of its parent class. Thus
@@ -171,12 +171,12 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
 
 
 @overload
-def InjectWCondition(baseClass: type, resolvedClass: Any,
+def InjectWithCondition(baseClass: type, resolvedClass: Any,
                      fallback: list[type]): pass
 
 
 @overload
-def InjectWCondition(baseClass: type, fallback: list[type]): pass
+def InjectWithCondition(baseClass: type, fallback: list[type]): pass
 
 
 @overload
@@ -207,7 +207,7 @@ def BuildOnlyIf(func: Callable[..., bool]):
             DependencyConstant.BUILD_ONLY_PARAMS_KEY: None,
             DependencyConstant.BUILD_ONLY_FUNC_KEY: func,
         }
-        return
+        return cls
     return decorator
 
 

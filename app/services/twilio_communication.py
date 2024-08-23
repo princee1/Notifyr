@@ -21,8 +21,15 @@ class SMSService(BaseTwilioCommunication):
         super().__init__(configService,twilioService)
     pass
 
-class PhoneService(BaseTwilioCommunication):
+class VoiceService(BaseTwilioCommunication):
+    def __init__(self,configService: ConfigService, twilioService: TwilioService):
+        super().__init__(configService,twilioService)
+    pass
+
+class FaxService(BaseTwilioCommunication):
     def __init__(self,configService: ConfigService, twilioService: TwilioService):
         super().__init__(configService,twilioService)
 
-    pass
+class SIPService(BaseTwilioCommunication):
+    def __init__(self,configService: ConfigService, twilioService: TwilioService):
+        super().__init__(configService,twilioService)
