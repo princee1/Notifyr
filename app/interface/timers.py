@@ -1,6 +1,9 @@
-class Interval():
+from implements import Interface
+
+
+class IntervalInterface(Interface):
     pass
 
 
-class Timer():
+class TimerInterface(Interface):
     pass
