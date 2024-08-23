@@ -5,7 +5,7 @@ from enum import Enum
 from injector import inject
 
 from .logger import LoggerService
-from interface import _service
+from definition import _service
 from .config import ConfigService
 
 

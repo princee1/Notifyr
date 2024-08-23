@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
-from interface import _service
+from definition import _service
 import socket
 
 ENV = ".env"

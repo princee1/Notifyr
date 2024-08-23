@@ -1,7 +1,7 @@
 
 from injector import inject
 from .config import ConfigService
-from interface._service import Service
+from definition._service import Service
 class SecurityService(Service):
     @inject
     def __init__(self, configService: ConfigService) -> None:

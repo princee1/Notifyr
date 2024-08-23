@@ -1,6 +1,6 @@
 from .notification import NotificationService
 from .config import ConfigService
-from interface import _service
+from definition import _service
 from injector import inject
 
 class StatsService(_service.Service):

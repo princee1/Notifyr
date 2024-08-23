@@ -5,7 +5,7 @@
 from typing import TypeVar
 from services.assets import AssetService
 from container import CONTAINER, Container
-from app.interface._service import Service
+from app.definition._service import Service
 from fastapi import APIRouter,HTTPException
 from implements import Interface
 

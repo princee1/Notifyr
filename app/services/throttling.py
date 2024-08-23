@@ -1,4 +1,4 @@
-from interface import _service
+from definition import _service
 
 class RateLimiterService(_service.Service): 
     def __init__(self) -> None:

@@ -1,6 +1,6 @@
 from classes.report import Report, SystemReport
 from .config import ConfigService
-from interface import _service
+from definition import _service
 
 ## WARNING extends the ABC last
 

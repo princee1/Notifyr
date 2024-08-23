@@ -1,5 +1,5 @@
 from injector import inject
-from interface import _service
+from definition import _service
 from .config import ConfigService
 
 
