@@ -5,6 +5,8 @@ from validators import url as validate_url, ipv4 as IPv4Address, ValidationError
 from geopy.geocoders import Nominatim
 from bs4 import Tag
 from cerberus import Validator
+
+from .constant import ValidationHTMLConstant
 from .helper import parse_value
 
 
@@ -95,17 +97,19 @@ class HtmlSchemaBuilder (SchemaBuilder):
     def __init__(self, root) -> None:
         self.root: Tag = root
         self.schema: dict[str, dict] = self.find(self.root)
+        print(self.schema)
     
-    def find(self, validation_item: Tag,css_selector:str | None = None):
+    def find(self, validation_item: Tag,css_selector:str | None = None, next_children_css_selector=None):
         schema: dict[str,dict | str] = {}
         for validator in validation_item.find_all(HtmlSchemaBuilder.VALIDATION_ITEM_SELECTOR,recursive=False):
             v: Tag = validator
-            has_noSuccessor = len(v.find_all(HtmlSchemaBuilder.VALIDATION_ITEM_SELECTOR)) == 0
-            # BUG delete 
-            if not has_noSuccessor:
-                v.attrs["type"] = "dict"
+            has_noSuccessor = len(v.find_all(HtmlSchemaBuilder.VALIDATION_ITEM_SELECTOR,recursive=False)) == 0
             if not v.attrs.__contains__("type"):
-                v.attrs["type"] = "string"	
+                #TODO find the error element
+                raise TypeError
+            if not v.attrs.__contains__("id") and v.name == ValidationHTMLConstant.VALIDATION_ITEM_BALISE:
+                #TODO find the error element
+                raise NameError
             key = v.attrs["id"]
             # TODO validates arguments
             schema[key] = self.parse(v.attrs)
@@ -117,7 +121,9 @@ class HtmlSchemaBuilder (SchemaBuilder):
                 #         default_schema_registry = HtmlSchemaBuilder.HashSchemaRegistry[default_schema_registry]
                 continue
             successor_schema =  self.find(v)
-            schema[key]["schema"] = successor_schema
+            print("element: ",v.name)
+            next_key="schema"
+            schema[key][next_key] = successor_schema
         return schema
     
     def parse(self, attrs:dict[str, Any]):
