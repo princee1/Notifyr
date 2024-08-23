@@ -9,7 +9,6 @@ AbstractDependency: dict[str, dict] = {}
 AbstractServiceClasses: dict[str, type] = {}
 BuildOnlyIfDependencies: dict = {}
 PossibleDependencies: dict[str, list[type]] = {}
-SkippingBuildDependencies: set[str]= set() 
 
 
 class BuildErrorLevel(Enum):
@@ -48,8 +47,8 @@ class BuildFallbackError(BuildError):
 class Service():
 
     def __init__(self) -> None:
-        self.__builded: bool= False
-        self.__destroyed: bool= False
+        self.__builded: bool = False
+        self.__destroyed: bool = False
         self.prettyPrinter = PrettyPrinter()
 
     def build(self):
@@ -111,6 +110,7 @@ def AbstractServiceClass(cls):
     AbstractServiceClasses[cls.__name__] = cls
     return cls
 
+
 @overload
 def InjectWCondition(baseClass: type, resolvedClass: Any):
     # NOTE we cannot create instance of the base class
@@ -158,7 +158,7 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
             # TODO ABORT error
         if not issubclass_of(Service, cls):
             pass
-            #TODO  ABORT error
+            # TODO  ABORT error
         AbstractDependency[cls.__name__] = {baseClass.__name__: {DependencyConstant.RESOLVED_FUNC_KEY: resolvedClass,
                                                                  DependencyConstant.RESOLVED_PARAMETER_KEY: None,
                                                                  DependencyConstant.RESOLVED_DEPS_KEY: None,
@@ -166,11 +166,15 @@ def InjectWCondition(baseClass: type, resolvedClass: Any):
         return cls
     return decorator
 
-@overload
-def InjectWCondition(baseClass:type,resolvedClass:Any, fallback:list[type]): pass
 
 @overload
-def InjectWCondition(baseClass:type, fallback:list[type]): pass
+def InjectWCondition(baseClass: type, resolvedClass: Any,
+                     fallback: list[type]): pass
+
+
+@overload
+def InjectWCondition(baseClass: type, fallback: list[type]): pass
+
 
 @overload
 def BuildOnlyIf(flag: bool):
@@ -185,8 +189,9 @@ def BuildOnlyIf(flag: bool):
         return cls
     return decorator
 
+
 @overload
-def BuildOnlyIf(func: Callable[...,bool]):
+def BuildOnlyIf(func: Callable[..., bool]):
     """ WARNING The builtCls must be in the Dependency list if you want to call this decorator, 
         since the container cant add it while load all the dependencies,
         if dont want the built class to call the builder function simply remove from the dependency list
@@ -202,12 +207,14 @@ def BuildOnlyIf(func: Callable[...,bool]):
         return
     return decorator
 
+
+def SkipBuild(cls):
+    decorator = BuildOnlyIf(cls)
+    return decorator(False)
+
+
 def PossibleDep(dependencies: list[type]):
     def decorator(cls: type):
         PossibleDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls
     return decorator
-
-def SkippingBuild(cls):
-    SkippingBuildDependencies.add(cls)
-    return cls
