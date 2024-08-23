@@ -2,8 +2,9 @@
 from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
+from utils.schema import HtmlSchemaBuilder
 from utils.helper import strict_parseToBool
-from utils.validation import HtmlSchemaBuilder, CustomValidator
+from utils.validation import CustomValidator
 import fitz as pdf
 from cerberus import DocumentError, SchemaError
 from googletrans import Translator
@@ -94,7 +95,7 @@ class Template(Asset):
 class HTMLTemplate(Template):
 
     ValidatorConstructorParam = ["require_all","ignore_none_values","allow_unknown","purge_unknown","purge_readonly"]
-    DefaultValidatorConstructorParamValues = {} # TODO if i  need to setup default value
+    DefaultValidatorConstructorParamValues = {} # TODO if i need to setup default value
 
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
@@ -118,16 +119,18 @@ class HTMLTemplate(Template):
         pass
 
     def validate(self, document: dict):
+        # TODO See: https://docs.python-cerberus.org/errors.html
         if self.Validator == None:
             return True
         try:
-            flag = self.Validator(document)
-            self.Validator.errors
+            flag = self.Validator.validate(document)
+            if not flag:
+                raise DocumentError
             return self.Validator.document
-            valid_documents = [x for x in [self.Validator.validated(y) for y in documents]
-                               if x is not None]
-            return valid_documents
+            # return self.Validator.normalized(document)
         except DocumentError as e:
+            #TODO raise a certain error
+            print(self.Validator.errors)
             pass
 
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed

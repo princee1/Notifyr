@@ -8,6 +8,8 @@ from typing import Any
 from namespace import Namespace
 from str2bool import str2bool
 import ast
+from enum import Enum
+
 
 class SkipCode(Exception): pass
 
@@ -134,6 +136,9 @@ def getParentClass(cls: type):
     """
     return list(getmro(cls)).pop(0)
    
+def create_enum(name: str, values: list):
+    return Enum(name, {value.upper(): value for value in values})
+
 def generateId(len):
     seed(time.time())
     return "".join(choice(alphanumeric) for _ in range(len))
