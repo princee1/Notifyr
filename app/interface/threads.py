@@ -1,6 +1,14 @@
 from threading import Thread
-from implements import Interface
+from definition._interface import Interface
 
 
 class ThreadInterface(Interface):
+    pass
+
+
+class InfiniteThreadInterface(Interface):
+    pass
+
+
+class ControlledThreadInterface(Interface):
     pass
