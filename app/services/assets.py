@@ -178,7 +178,7 @@ class AssetService(_service.Service):
             except KeyError as e:
                 pass
 
-    def exportRouteName(self,attributeName:str ="htmls" | "sms" | "phone")-> list[str] | None:
+    def exportRouteName(self,attributeName:str)-> list[str] | None:
         """
         htmls: HTML Template Key
         sms: SMS Template Key

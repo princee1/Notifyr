@@ -3,6 +3,7 @@ from typing import Any, overload, Callable
 from utils.prettyprint import PrettyPrinter
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
+import warnings
 
 
 AbstractDependency: dict[str, dict] = {}
@@ -52,9 +53,11 @@ class Service():
         self.prettyPrinter = PrettyPrinter()
 
     def build(self):
+        warnings.warn(f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning,2)
         pass
 
     def destroy(self):
+        warnings.warn(f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning,2)
         pass
 
     def log(self):
@@ -63,8 +66,8 @@ class Service():
     def __repr__(self) -> str:
         return super().__repr__()
 
-    # def __str__(self) -> str:
-    #     return f"Module: {self.__class__.__name__} Hash: {self.__hash__()}"
+    def __str__(self) -> str:
+        return f"Service: {self.__class__.__name__} Hash: {self.__hash__()}"
 
     def _builder(self):
         try:

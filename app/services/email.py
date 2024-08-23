@@ -4,10 +4,14 @@ import imaplib as imap
 from enum import Enum
 from injector import inject
 
+from interface.threads import ThreadInterface
+from interface.timers import IntervalInterface
+
 from .logger import LoggerService
 from definition import _service
 from .config import ConfigService
 
+from implements import implements
 
 SMTP_NORMAL_PORT = smtp.SMTP_PORT
 SMTP_SSL_PORT = smtp.SMTP_SSL_PORT
@@ -82,7 +86,7 @@ class IMAPConfig (EmailConnInterface, Enum):
 
 
 @_service.AbstractServiceClass
-class EmailInterface(_service.Service):
+class EmailService(_service.Service):
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__()
         self.configService = configService
@@ -98,7 +102,7 @@ class EmailInterface(_service.Service):
     def connect(self): pass
 
 
-class EmailSender(EmailInterface):
+class EmailSender(EmailService):
     @inject
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
@@ -173,7 +177,7 @@ class EmailSender(EmailInterface):
             pass
 
 
-class EmailReader(EmailInterface):
+class EmailReader(EmailService):
     @inject
     def __init__(self, configService: ConfigService, loggerService: LoggerService) -> None:
         super().__init__(configService, loggerService)
