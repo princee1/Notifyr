@@ -2,6 +2,7 @@
 from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
+from utils.helper import strict_parseToBool
 from utils.validation import HtmlSchemaBuilder, CustomValidator
 import fitz as pdf
 from cerberus import DocumentError, SchemaError
@@ -91,6 +92,10 @@ class Template(Asset):
 
 
 class HTMLTemplate(Template):
+
+    ValidatorConstructorParam = ["require_all","ignore_none_values","allow_unknown","purge_unknown","purge_readonly"]
+    DefaultValidatorConstructorParamValues = {} # TODO if i  need to setup default value
+
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
         self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
@@ -158,19 +163,26 @@ class HTMLTemplate(Template):
                 return
             schema = HtmlSchemaBuilder(self.validation_balise).schema
             self.Validator = CustomValidator(schema)
-            try:
-                self.Validator.require_all = self.validation_balise.attrs['require_all']
-            except KeyError:
-                self.Validator.require_all = True
-            try:
-                self.Validator.allow_unknown = self.validation_balise.attrs['allow_unknown']
-            except KeyError:
-                self.Validator.allow_unknown = True
+            for property_ in HTMLTemplate.ValidatorConstructorParam:
+                self.set_ValidatorDefaultBehavior(property_)
             self.keys = schema.keys()
             self.validation_balise.decompose()
+            #TODO success
         except SchemaError as e:
+            #TODO raise another error and print the name of the template so the route will not be available
             printJSON(e.args[0])
             pass
+
+    def set_ValidatorDefaultBehavior(self,validator_property):
+        try:
+            flag = strict_parseToBool(self.validation_balise.attrs[validator_property])
+            if flag is None:
+                raise ValueError
+            self.Validator.__setattr__(validator_property,flag)
+        except KeyError:
+            self.Validator.__setattr__(validator_property,True)
+        except ValueError:
+            self.Validator.__setattr__(validator_property,True)
 
     def exportText(self):
         pass

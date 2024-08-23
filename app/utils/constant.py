@@ -19,3 +19,10 @@ class DependencyConstant:
     BUILD_ONLY_CLASS_KEY= "build_only_class"
 
 ########################                     ########################################
+class ValidationHTMLConstant:
+    VALIDATION_ITEM_BALISE = "validation-item"
+    VALIDATION_REGISTRY_BALISE = "validation-registry"
+    VALIDATION_SCHEMA_BALISE = "validation-schema"
+    VALIDATION_RULES_BALISE = "validation-rules"
+    pass 
+########################                     ########################################

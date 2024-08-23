@@ -145,7 +145,7 @@ class AssetService(_service.Service):
         self.images = Reader()(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
         self.css = Reader()(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
 
-        htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadData)(
+        htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadHTMLData)(
             Extension.HTML, FDFlag.READ)
         pdfReader: ThreadedReader = ThreadedReader(
             PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES)
@@ -159,7 +159,7 @@ class AssetService(_service.Service):
         self.sms = smsReader.join()
         self.phone = phoneReader.join()
         
-    def loadData(self, html: HTMLTemplate):
+    def loadHTMLData(self, html: HTMLTemplate):
         cssInPath = self.fileService.listExtensionPath(
             html.dirName, Extension.CSS)
         for cssPath in cssInPath:
@@ -178,16 +178,15 @@ class AssetService(_service.Service):
             except KeyError as e:
                 pass
 
-    def exportRouteName(self,attributeName:str)-> list[str] | None:
+    def exportRouteName(self,attributeName:str ="htmls" | "sms" | "phone")-> list[str] | None:
         """
-        images: IMAGE Template Key
-        css: CSS Template Key
         htmls: HTML Template Key
-        pdf: PDF Template Key
         sms: SMS Template Key
         phone: Phone Template Key
         """
         try:
+            if attributeName != "htmls" or "sms" or"phone":
+                raise AttributeError
             temp:dict[str,Asset] = self.__getattribute__(attributeName)
             if type(temp) is not dict:
                 raise TypeError()
@@ -196,6 +195,9 @@ class AssetService(_service.Service):
             return None
         except KeyError as e:
             return None
+        
+        except AttributeError as e:
+            pass
         
     def destroy(self): pass
 
