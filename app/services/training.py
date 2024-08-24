@@ -1,7 +1,11 @@
+from app.services.config import ConfigService
+from app.services.file import FileService
 from definition import _service
+from injector import inject
 
 class TrainingService(_service.Service):
-    def __init__(self) -> None:
+    @inject
+    def __init__(self,configService: ConfigService,fileService:FileService) -> None:
         super().__init__()
-
-    pass
+        self.configService = configService
+        self.fileService = fileService

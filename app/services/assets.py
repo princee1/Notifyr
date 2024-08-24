@@ -8,7 +8,7 @@ from injector import inject
 from enum import Enum
 import os
 from threading import Thread
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from utils.helper import issubclass_of
 
 ROOT_PATH = "assets/"
@@ -178,15 +178,15 @@ class AssetService(_service.Service):
             except KeyError as e:
                 pass
 
-    def exportRouteName(self,attributeName:str)-> list[str] | None:
+    def exportRouteName(self,attributeName:Literal["htmls","sms","phone"])-> list[str] | None:
         """
         htmls: HTML Template Key
         sms: SMS Template Key
         phone: Phone Template Key
         """
         try:
-            if attributeName != "htmls" or "sms" or"phone":
-                raise AttributeError
+            # if attributeName != "htmls" or "sms" or"phone":
+            #     raise AttributeError
             temp:dict[str,Asset] = self.__getattribute__(attributeName)
             if type(temp) is not dict:
                 raise TypeError()
