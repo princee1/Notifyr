@@ -70,7 +70,7 @@ class Template(Asset):
         """
         pass
 
-    def translate(self, lang):
+    def translate(self, targetLang:str):
         """
         Translate the text value into another language
         """
@@ -85,6 +85,12 @@ class Template(Asset):
     def exportText(self):
         """
         Only export the text
+        """
+        pass
+
+    def clone(self):
+        """
+        Copy the template in a ready state to be able to translate or add things to it
         """
         pass
 
@@ -198,6 +204,8 @@ class HTMLTemplate(Template):
         self.extractExtraSchemaRegistry()
         self.extractValidation()
 
+    def translate(self):
+        pass
 
 class CustomHTMLTemplate(HTMLTemplate):
     pass
