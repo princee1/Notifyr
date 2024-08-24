@@ -6,7 +6,7 @@ from services.email import EmailReader, EmailSender
 from services.support import SupportService, ChatService
 from services.twilio_communication import VoiceService, SMSService,TwilioService
 from services.training import TrainingService
-from services.notification import AYCDNotificationService, EmailNotificationService, GoogleNotificationService, SystemNotificationService, DiscordService
+from services.notification import EmailNotificationService, GoogleNotificationService, SystemNotificationService, DiscordService
 from services.security import SecurityService
 from services.throttling import PriorityQueueService, RateLimiterService
 from services.file import FileService,FTPService
@@ -32,6 +32,5 @@ __DEPENDENCY: list[type] = [AssetService,
                             SQLiteService,
                             LoggerService,
                             EmailNotificationService,
-                            AYCDNotificationService,
                             GoogleNotificationService,
                             ]
