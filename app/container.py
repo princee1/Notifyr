@@ -56,10 +56,10 @@ class InvalidDependencyError(ContainerError):
 def issubclass(cls): return issubclass_of(Service, cls)
 
 
-def isabstract(cls): 
+def isabstract(cls):
     """
     The function `isabstract` checks if a class is in the set `AbstractServiceClasses`.
-    
+
     :param cls: The `cls` parameter in the `isabstract` function is typically used to represent a class
     that you want to check for abstractness. The function checks if the provided class is in the
     `AbstractServiceClasses` collection to determine if it is an abstract service class
@@ -71,13 +71,13 @@ def isabstract(cls):
 
 class Container():
 
-    def __init__(self, D: list[type]) -> None: #TODO add the scope option
+    def __init__(self, D: list[type]) -> None:  # TODO add the scope option
         self.__app = injector.Injector()
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
         self.__D: set[str] = self.__load_baseSet(D)
         dep_count = self.__load_dep(D)
-        self.__D:OrderedSet[str] = self.__order_dependency(dep_count)
+        self.__D: OrderedSet[str] = self.__order_dependency(dep_count)
         self.__buildContainer()
         self.__freeUpMemory()
         # TODO print success  in building the app
@@ -102,13 +102,13 @@ class Container():
         return self.__app.get(self.DEPENDENCY_MetaData[classname][DependencyConstant.TYPE_KEY], scope)
 
     def __load_dep(self, D: list[type]):
-        dep_count:dict[str,int] = {}
+        dep_count: dict[str, int] = {}
         for x in D:
             if not self.DEPENDENCY_MetaData.__contains__(x):
                 dep_param_list, p = self.getSignature(x)
                 dep = set(dep_param_list)
-                dep_count[x.__name__]= len(dep_param_list)
-                
+                dep_count[x.__name__] = len(dep_param_list)
+
                 try:
                     depNotInjected = dep.difference(self.__D)
                     if len(depNotInjected) != 0:
@@ -161,7 +161,7 @@ class Container():
                     # NOTE the flag might be None, if it is indeed i need to check the func
                     DependencyConstant.FLAG_BUILD_KEY: flag
                 }
-        
+
         return dep_count
 
     def __filter(self, D: list[type]):
@@ -232,7 +232,8 @@ class Container():
 
     def __order_dependency(self, dep_count):
         temp_dep_list = list(self.__D)
-        ordered_dependencies = sorted(temp_dep_list,key=lambda x: dep_count[x])
+        ordered_dependencies = sorted(
+            temp_dep_list, key=lambda x: dep_count[x])
         del temp_dep_list
         return OrderedSet(ordered_dependencies)
 
@@ -360,21 +361,21 @@ class Container():
                 pass
         return self.get(typ)
 
-    def destroyAllDependency(self,scope = None):
+    def destroyAllDependency(self, scope=None):
         raise NotImplementedError
         for dep in __DEPENDENCY:
-            self.destroyDep(dep,scope)
-            
-    def destroyDep(self,typ: type, scope = None):
+            self.destroyDep(dep, scope)
+
+    def destroyDep(self, typ: type, scope=None):
         raise NotImplementedError
         D = self.__app.get(typ, scope)
-        if issubclass(D): #BUG need to ensure that this a Service type
-            D:Service = D # NOTE access to the intellisense
+        if issubclass(D):  # BUG need to ensure that this a Service type
+            D: Service = D  # NOTE access to the intellisense
             D._destroyer()
-    
-    def reloadDep(self,typ:type, scope=None): # TODO
+
+    def reloadDep(self, typ: type, scope=None):  # TODO
         pass
-    
+
     @property
     def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]  # TODO avoid to compute this everytime we call this function
@@ -393,20 +394,29 @@ CONTAINER: Container = Container(__DEPENDENCY)
 def InjectInFunction(func: Callable):
     """
     The `InjectInFunction` decorator takes the function and inspect it's signature, if the `CONTAINER` can resolve the 
-    dependency it will inject the values. You must call the function with the position parameter format to call 
-    the `func` with the rest of the parameters.
+    dependency it will inject the values otherwise it will throw a `NoResolvedDependencyError`. You can call the function with the position parameter 
+    format to call the `func` with the rest of the parameters set to the default value or with a value as needed.It means that you have to define it the __init__
+    function all parameter needed to be resolved by the `CONTAINER` before the other parameter as well
 
     If the parameters of the function founds a dependency two times it will return an error
 
-    `example:: `
+    :param func: The function to decorates
+    
+    :throw NoResolvedDependencyError:
+    :throw MultipleDependenciesError:
+    
+    :return Callable: The function decorated and injected with the value from the `CONTAINER`
+
+    `example::`
 
     @InjectInFunction
-    def test(a: A, b: B, c: C, s:str):
+    \ndef test(a: A, b: B, c: C, s:str):\n
         print(a)
         print(b)
         print(c)
         print(s)
-
+    
+    \n
     >>> test(s="ok")
     >>> <__main__.C object at 0x000001A76EC36610>
         <__main__.B object at 0x000001A76EC36810>
@@ -419,4 +429,58 @@ def InjectInFunction(func: Callable):
     def wrapper(*args, **kwargs):
         paramsToInject.update(kwargs)
         func(**paramsToInject)
+    return wrapper
+
+def InjectInConstructor(func: Callable):
+    """
+    The `InjectInConstructor` decorator takes the __init__ function from a class and inspect it's signature, if the `CONTAINER` can resolve the 
+    dependency it will inject the values otherwise it will throw a `NoResolvedDependencyError`. You must call the function with the position parameter 
+    format to call the `func` with the rest of the parameters set to the default value or with a value as needed. It means that you have to define it the __init__
+    function all parameter needed to be resolved by the `CONTAINER` before the other parameter as well
+
+    If the parameters of the function founds a dependency two times it will return an error
+
+    :param func: The __init__ function from a class
+
+    :throw NoResolvedDependencyError:
+    :throw MultipleDependenciesError:
+
+    :return Callable: The __init__ function decorated and injected with the value from the `CONTAINER`
+    
+    `example::`
+    
+    class Test:
+     
+    @InjectInConstructor\n
+    def __init__(self, configService:ConfigService, securityService:SecurityService,test:str=None):
+        self.configService = configService
+        self.securityService = securityService
+        self.test = test\n
+        print(configService)
+        print(securityService)
+        print(test)
+
+        
+    >>> Test()
+    >>> Service: ConfigService Hash: 124165042117
+        Service: SecurityService Hash: 124166930269
+        None
+
+    >>> Test(test="Hello")
+    >>> Service: ConfigService Hash: 124165042117
+        Service: SecurityService Hash: 124166930269
+        Hello
+
+    >>> Test("Allo")
+    >>> TypeError: Test.__init__() missing 2 required positional arguments: 'securityService' and 'test'
+
+    """
+    types, paramNames = CONTAINER.getSignature(func)
+    del types[0]
+    del paramNames[0]
+    paramsToInject = CONTAINER.toParams(types, paramNames)
+
+    def wrapper(*args, **kwargs):
+        paramsToInject.update(kwargs)
+        func(*args, **paramsToInject)
     return wrapper

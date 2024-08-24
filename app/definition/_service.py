@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, overload, Callable
-from utils.prettyprint import PrettyPrinter
+from utils.prettyprint import PrettyPrinter,PrettyPrinter_
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
 import warnings
@@ -50,7 +50,7 @@ class Service():
     def __init__(self) -> None:
         self.__builded: bool = False
         self.__destroyed: bool = False
-        self.prettyPrinter = PrettyPrinter()
+        self.prettyPrinter = PrettyPrinter_
 
     def build(self):
         warnings.warn(f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning,2)
@@ -115,7 +115,7 @@ def AbstractServiceClass(cls):
 
 
 @overload
-def InjectWithCondition(baseClass: type, resolvedClass: Any):
+def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
     # NOTE we cannot create instance of the base class
     """
     The `InjectWCondition` decorator is used to specify a Dependency that will be resolved instead of its parent class. Thus

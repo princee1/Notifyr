@@ -32,6 +32,9 @@ class FileService(Service):
     def listFileExtensions(self,ext:str,root=None, recursive=False):
         return listFilesExtension(ext,root,recursive)
     
+    def watch(self,path):
+        
+        pass
 
     pass
 

@@ -163,6 +163,7 @@ class EmailSender(EmailService):
 
     def sendMessage(self):
         try:
+            self.connector.verify()
             self.connector.send_message()
 
         except smtp.SMTPHeloError as e:

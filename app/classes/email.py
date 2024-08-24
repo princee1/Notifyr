@@ -8,3 +8,6 @@ class MessageBuilder():
         
         pass
     pass
+
+class FutureMessageBuilder(MessageBuilder):
+    pass

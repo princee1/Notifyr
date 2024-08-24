@@ -5,7 +5,7 @@
 from typing import TypeVar
 from services.assets import AssetService
 from container import CONTAINER, Container
-from app.definition._service import Service
+from definition._service import Service
 from fastapi import APIRouter,HTTPException
 from implements import Interface
 
@@ -30,11 +30,18 @@ class Ressource():
 
     def on_event(self):
         pass
+
+    def on_error(self):
+        pass
+    
+    @property
+    def routeExample(self):
+        pass
     
 class AssetRessource(Ressource):
     """
     Ressource with a direct reference to the AssetService
     """
-    def __init__(self,prefix) -> None:
+    def __init__(self,prefix:str) -> None:
         super().__init__(prefix)
         self.assetService:AssetService = self.container.get(AssetService)

@@ -1,8 +1,11 @@
+from container import InjectInConstructor
 from definition._ressource import Ressource
 from services.email import EmailSender
-class EmailRessource(Ressource):
 
-    def __init__(self) -> None:
+class EmailRessource(Ressource):
+    @InjectInConstructor
+    def __init__(self, emailSender:EmailSender) -> None:
         super().__init__()
-        self.emailService:EmailSender = self.container.get(EmailSender)
-    pass
+        #self.emailService:EmailSender = self.get(EmailSender)
+        self.emailService: EmailSender = emailSender
+

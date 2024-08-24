@@ -1,4 +1,2 @@
-from utils.prettyprint import PrettyPrinter
+from utils.prettyprint import PrettyPrinter_
 from pyfiglet import print_figlet,FigletFont,Figlet, figlet_format
-
-PrettyPrinter_:PrettyPrinter = PrettyPrinter()

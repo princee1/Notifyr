@@ -33,4 +33,5 @@ __DEPENDENCY: list[type] = [AssetService,
                             LoggerService,
                             EmailNotificationService,
                             GoogleNotificationService,
+                            #Stats Service
                             ]

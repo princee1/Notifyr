@@ -1,5 +1,5 @@
-from app.services.config import ConfigService
-from app.services.file import FileService
+from .config import ConfigService
+from .file import FileService
 from definition import _service
 from injector import inject
 
