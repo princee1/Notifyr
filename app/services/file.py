@@ -32,8 +32,10 @@ class FileService(Service):
     def listFileExtensions(self,ext:str,root=None, recursive=False):
         return listFilesExtension(ext,root,recursive)
     
-    def watch(self,path):
-        
+    def _watch(self,path):
+        pass
+
+    def addWatcher(self,path,):
         pass
 
     pass
@@ -62,4 +64,16 @@ class FTPService(Service):
             self.ftpClient.quit()
         except:
             self.ftpClient.close()
+    pass
+
+class GitHubRepoService(Service):
+    def __init__(self,configService:ConfigService) -> None:
+        super().__init__()
+        self.configService = configService
+        
+    def build(self):
+        return super().build()
+    
+    def destroy(self):
+        return super().destroy()
     pass

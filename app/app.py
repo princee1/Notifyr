@@ -33,7 +33,3 @@ class Application():
     def buildRessources(self):
         pass
 
-class Manager():
-    def __init__(self) -> None:
-        self.app = Application()
-    pass

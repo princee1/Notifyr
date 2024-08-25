@@ -1,13 +1,11 @@
 from .email import EmailSender
 from .security import SecurityService
-from classes.report import DiscordReport, Report, SystemReport
+from classes.report import DiscordReport, Report, SystemReport,EmailReport,GoogleReport
 from .config import ConfigService
 from definition import _service
 from time import sleep
-
+from discord_webhook import DiscordWebhook, AsyncDiscordWebhook
 # WARNING extends the ABC last
-
-ReportClass = {}
 
 
 @_service.AbstractServiceClass
@@ -114,7 +112,11 @@ class DiscordService(NotificationService):
 
     def _notify(self, report: DiscordReport):
         # TODO send a discord webhook
-        return super()._notify(report)
+        pass
+
+    def send_webhook(self, report: DiscordReport):
+        webhook = DiscordWebhook()
+        pass
 
 
 class EmailNotificationService(NotificationService):
@@ -125,3 +127,15 @@ class EmailNotificationService(NotificationService):
 
 class GoogleNotificationService(NotificationService):
     pass
+
+ReportClass = {
+    DiscordService.__name__: DiscordReport,
+    SystemNotificationService.__name__: SystemReport,
+    EmailNotificationService.__name__: EmailReport,
+    GoogleNotificationService.__name__: GoogleReport,
+
+}
+
+def ReportBuilder(classname,*args,**kwargs) -> Report: # TODO Make as a decorator
+    reportType = ReportClass[classname]
+    return reportType(*args, **kwargs)
