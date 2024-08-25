@@ -3,11 +3,11 @@ from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from utils.schema import HtmlSchemaBuilder
-from utils.helper import strict_parseToBool
+from utils.helper import strict_parseToBool, flatten_dict
 from utils.validation import CustomValidator
 import fitz as pdf
 from cerberus import DocumentError, SchemaError
-#from googletrans import Translator
+# from googletrans import Translator
 import os
 import re
 from utils.prettyprint import printJSON
@@ -51,11 +51,7 @@ class Template(Asset):
         """
         Inject the data into the template to build and return true if its valid
         """
-        tempKey = set(self.keys)
-        dataKey = set(data.keys())
-        if tempKey.difference(dataKey()) != 0:
-            raise KeyError
-        return self.validate(data)
+        pass
 
     def load(self):
         """
@@ -63,34 +59,30 @@ class Template(Asset):
         """
         pass
 
-    def build(self, lang, data):
+    def build(self, lang, data)-> Any:
         """
         Build a representation of the template with injected, verified and translated value and return 
         a content output
-        """
-        pass
 
-    def translate(self, targetLang:str):
+        Override this function and call the super value
+        """
+        return self.validate(data)
+
+    def translate(self, targetLang: str, text:str)->str:
         """
         Translate the text value into another language
         """
         pass
 
-    def validate(self):
+    def validate(self,value:Any)-> bool | None | Exception:
         """
         Validate the data injected into the template
         """
         pass
 
-    def exportText(self):
+    def exportText(self, content=None)->str:
         """
         Only export the text
-        """
-        pass
-
-    def clone(self):
-        """
-        Copy the template in a ready state to be able to translate or add things to it
         """
         pass
 
@@ -100,29 +92,38 @@ class Template(Asset):
 
 class HTMLTemplate(Template):
 
-    ValidatorConstructorParam = ["require_all","ignore_none_values","allow_unknown","purge_unknown","purge_readonly"]
-    DefaultValidatorConstructorParamValues = {} # TODO if i need to setup default value
+    ValidatorConstructorParam = [
+        "require_all", "ignore_none_values", "allow_unknown", "purge_unknown", "purge_readonly"]
+    DefaultValidatorConstructorParamValues = {
+        "require_all": True,
+        "ignore_none_values": False,
+        "allow_unknown": False,
+        "purge_readonly": False,
+        "purge_unknown": False,
+    }
 
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
-        self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
         self.load()
+        self.content_to_inject = None
 
     def inject(self, data: dict):
         try:
             if not super().inject(data):
                 # TODO Raise Error
                 pass
-            self.content = self.bs4.prettify(formatter="html5")
-            # TODO inject
-            self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
+            content_html = str(self.content_to_inject)
+            flattened_data = flatten_dict()
+            for key in flattened_data:
+                regex = re.compile(rf"{{{{{key}}}}}")
+                content_html = regex.sub(
+                    str(flattened_data[key]), content_html)
+            content_text = self.exportText(data)
+            return content_html, content_text
         except KeyError as e:
             pass
         except:
             pass
-
-    def recursiveInject(self,currKey, data):
-        pass
 
     def validate(self, document: dict):
         # TODO See: https://docs.python-cerberus.org/errors.html
@@ -132,12 +133,12 @@ class HTMLTemplate(Template):
             flag = self.Validator.validate(document)
             if not flag:
                 raise DocumentError
-            return self.Validator.document
+            return True,self.Validator.document
             # return self.Validator.normalized(document)
         except DocumentError as e:
-            #TODO raise a certain error
+            # TODO raise a certain error
             print(self.Validator.errors)
-            pass
+            return False, self.Validator.errors
 
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
         style = self.bs4.find("head > style")
@@ -165,47 +166,67 @@ class HTMLTemplate(Template):
                 schema_registry.add(registry_key, schema)
             else:
                 HtmlSchemaBuilder.HashSchemaRegistry[registry_key] = HtmlSchemaBuilder.CurrentHashRegistry[_hash]
-        
+
     def extractValidation(self,):
         try:
             if self.validation_balise is None:
                 return
             schema = HtmlSchemaBuilder(self.validation_balise).schema
             self.Validator = CustomValidator(schema)
-            for property_ in HTMLTemplate.ValidatorConstructorParam:
-                self.set_ValidatorDefaultBehavior(property_)
+            # for property_ in HTMLTemplate.ValidatorConstructorParam:
+            #     self.set_ValidatorDefaultBehavior(property_)
+            for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues:
+                self.Validator.__setattr__(property_, flag)
             self.keys = schema.keys()
             self.validation_balise.decompose()
-            #TODO success
+            self.content_to_inject = self.bs4.prettify(formatter="html5")
+            # TODO success
         except SchemaError as e:
-            #TODO raise another error and print the name of the template so the route will not be available
+            # TODO raise another error and print the name of the template so the route will not be available
             printJSON(e.args[0])
             pass
 
-    def set_ValidatorDefaultBehavior(self,validator_property):
+    def set_ValidatorDefaultBehavior(self, validator_property):
         try:
-            flag = strict_parseToBool(self.validation_balise.attrs[validator_property])
+            flag = strict_parseToBool(
+                self.validation_balise.attrs[validator_property])
             if flag is None:
                 raise ValueError
-            self.Validator.__setattr__(validator_property,flag)
+            self.Validator.__setattr__(validator_property, flag)
         except KeyError:
-            self.Validator.__setattr__(validator_property,True)
+            self.Validator.__setattr__(
+                validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
         except ValueError:
-            self.Validator.__setattr__(validator_property,True)
+            self.Validator.__setattr__(
+                validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
 
-    def exportText(self):
-        pass
+    def exportText(self, content: str):
+        bs4 = BeautifulSoup(content, XMLLikeParser.LXML.value)
+        title = bs4.find("title", recursive=False)
+        title.decompose()
+        return bs4.get_text("\n", True)
 
     def save(self):
         pass
 
     def load(self):
+        self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
         self.validation_balise = self.bs4.select_one(VALIDATION_CSS_SELECTOR)
         self.extractExtraSchemaRegistry()
         self.extractValidation()
 
-    def translate(self):
+    def translate(self,targetLang:str,text:str):
         pass
+
+    def build(self, target_lang, data):
+        is_valid,data = super().build(target_lang, data)
+        if not is_valid:
+            return False, data
+        content_html,content_text = self.inject(data)
+        content_html =self.translate(target_lang,content_html)
+        content_text = self.translate(target_lang,content_text)
+        return True,(content_html,content_text)
+
 
 class CustomHTMLTemplate(HTMLTemplate):
     pass
@@ -214,6 +235,7 @@ class CustomHTMLTemplate(HTMLTemplate):
 class PDFTemplate(Template):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
+        
 
     def encrypt(self, key: str): pass
 
