@@ -26,7 +26,7 @@ class NotificationService(_service.Service):
         pass
     pass  # BUG we can specify a kid class if we decide to inject a Notification
 
-
+@_service.ServiceClass
 class SystemNotificationService(NotificationService):
     MAX_TO_BE_SHOWED = 8
     DURATION = 10
@@ -105,7 +105,7 @@ class SystemNotificationService(NotificationService):
                 pass
             sleep(WAITING)
 
-
+@_service.ServiceClass
 class DiscordService(NotificationService):
     def __init__(self, configService: ConfigService) -> None:
         super().__init__(configService)
@@ -118,13 +118,13 @@ class DiscordService(NotificationService):
         webhook = DiscordWebhook()
         pass
 
-
+@_service.ServiceClass
 class EmailNotificationService(NotificationService):
     def __init__(self, configService: ConfigService, emailService: EmailSender) -> None:
         super().__init__(configService)
         self.emailService: EmailSender = emailService
 
-
+@_service.ServiceClass
 class GoogleNotificationService(NotificationService):
     pass
 

@@ -101,7 +101,7 @@ class EmailService(_service.Service):
 
     def connect(self): pass
 
-
+@_service.ServiceClass
 class EmailSender(EmailService):
     @inject
     # BUG cant resolve an abstract class
@@ -177,7 +177,7 @@ class EmailSender(EmailService):
         except:
             pass
 
-
+@_service.ServiceClass
 class EmailReader(EmailService):
     @inject
     def __init__(self, configService: ConfigService, loggerService: LoggerService) -> None:

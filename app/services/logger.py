@@ -4,10 +4,12 @@ from .config import ConfigService
 from logging import Logger, LogRecord
 import sqlite3
 
+
+@_service.ServiceClass
 class LoggerService(_service.Service):
 
     @inject
-    def __init__(self,configService: ConfigService) -> None:
+    def __init__(self, configService: ConfigService) -> None:
         super().__init__()
-        self.configService = configService  
+        self.configService = configService
     pass

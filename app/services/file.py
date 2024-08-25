@@ -1,10 +1,10 @@
 from .config import ConfigService
-from definition._service import Service
+from definition._service import Service,ServiceClass
 from injector import inject
 from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 
-
+@ServiceClass
 class FileService(Service):
 
     def __init__(self) -> None:
@@ -40,6 +40,7 @@ class FileService(Service):
 
     pass
 
+@ServiceClass
 class FTPService(Service):
     @inject
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
@@ -66,7 +67,8 @@ class FTPService(Service):
             self.ftpClient.close()
     pass
 
-class GitHubRepoService(Service):
+ServiceClass
+class GitCloneRepoService(Service):
     def __init__(self,configService:ConfigService) -> None:
         super().__init__()
         self.configService = configService

@@ -1,13 +1,14 @@
 from .config import ConfigService
 from .file import FileService
 from .security import SecurityService
-from definition._service import Service,AbstractServiceClass
+from definition._service import Service,AbstractServiceClass,ServiceClass
 from injector import inject
 import sqlite3
 
 @AbstractServiceClass
 class DatabaseService(Service): pass
 
+@ServiceClass
 class SQLiteService(DatabaseService):
     @inject
     def __init__(self,configService:ConfigService, securityService:SecurityService, fileService:FileService) -> None:

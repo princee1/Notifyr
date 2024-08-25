@@ -123,6 +123,7 @@ class ThreadedReader(Reader):
 
 
 @_service.PossibleDep([FTPService])
+@_service.ServiceClass
 class AssetService(_service.Service):
     @inject
     def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService) -> None:

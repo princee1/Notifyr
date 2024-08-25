@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, overload, Callable
-from utils.prettyprint import PrettyPrinter,PrettyPrinter_
+from utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
 import warnings
@@ -10,6 +10,7 @@ AbstractDependency: dict[str, dict] = {}
 AbstractServiceClasses: dict[str, type] = {}
 BuildOnlyIfDependencies: dict = {}
 PossibleDependencies: dict[str, list[type]] = {}
+__DEPENDENCY: list[type] = []
 
 
 class BuildErrorLevel(Enum):
@@ -50,14 +51,16 @@ class Service():
     def __init__(self) -> None:
         self.__builded: bool = False
         self.__destroyed: bool = False
-        self.prettyPrinter = PrettyPrinter_
+        self.prettyPrinter: PrettyPrinter = PrettyPrinter_
 
     def build(self):
-        warnings.warn(f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning,2)
+        warnings.warn(
+            f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
         pass
 
     def destroy(self):
-        warnings.warn(f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning,2)
+        warnings.warn(
+            f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
         pass
 
     def log(self):
@@ -109,8 +112,17 @@ class Service():
             pass
 
 
-def AbstractServiceClass(cls):
+def AbstractServiceClass(cls: type):
+    if cls in __DEPENDENCY:
+        __DEPENDENCY.remove(cls)
     AbstractServiceClasses[cls.__name__] = cls
+
+    return cls
+
+
+def ServiceClass(cls: type):
+    if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
+        __DEPENDENCY.append(cls)
     return cls
 
 
@@ -172,7 +184,7 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
 
 @overload
 def InjectWithCondition(baseClass: type, resolvedClass: Any,
-                     fallback: list[type]): pass
+                        fallback: list[type]): pass
 
 
 @overload

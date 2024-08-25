@@ -29,7 +29,7 @@ class MODE(Enum):
             case _:
                 return "127.0.0.1"
 
-            
+@_service.ServiceClass           
 class ConfigService(_service.Service):
     
     def __init__(self) -> None:
