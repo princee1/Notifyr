@@ -46,6 +46,7 @@ class Template(Asset):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
         self.keys: list[str] = []
+        self.load()
 
     def inject(self, data:  dict) -> bool:
         """
@@ -104,7 +105,6 @@ class HTMLTemplate(Template):
 
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
-        self.load()
         self.content_to_inject = None
 
     def inject(self, data: dict):
@@ -175,7 +175,7 @@ class HTMLTemplate(Template):
             self.Validator = CustomValidator(schema)
             # for property_ in HTMLTemplate.ValidatorConstructorParam:
             #     self.set_ValidatorDefaultBehavior(property_)
-            for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues:
+            for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues.items():
                 self.Validator.__setattr__(property_, flag)
             self.keys = schema.keys()
             self.validation_balise.decompose()

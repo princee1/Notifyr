@@ -46,7 +46,7 @@ class HtmlSchemaBuilder (SchemaBuilder):
 
             is_struct = v.attrs['type'] in ["list", "dict"]
             if has_noSuccessor:
-                if not is_struct:
+                if is_struct:
                     raise TypeError
 
                 if schema[key].__contains__("schema"):
@@ -56,7 +56,10 @@ class HtmlSchemaBuilder (SchemaBuilder):
                 continue
 
             if not is_struct:
+                print(v.attrs["type"])
+                # TODO: find the one element that was supposed to be a dict or a list and that has children
                 raise TypeError
+            
             successor_schema = self.find(v)
             next_key = "schema"  # NOTE might add valuerules
             schema[key][next_key] = successor_schema

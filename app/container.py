@@ -4,7 +4,7 @@ from dependencies import __DEPENDENCY
 from typing import Callable, Any
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of, SkipCode
-from definition._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies
+from definition._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY as ServiceDependency
 from utils.prettyprint import printJSON
 from typing import TypeVar
 from deprecated import deprecated
@@ -452,6 +452,7 @@ def InjectInConstructor(func: Callable):
     class Test:
      
     @InjectInConstructor\n
+    
     def __init__(self, configService:ConfigService, securityService:SecurityService,test:str=None):
         self.configService = configService
         self.securityService = securityService

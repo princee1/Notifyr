@@ -72,10 +72,17 @@ class Service():
     def __str__(self) -> str:
         return f"Service: {self.__class__.__name__} Hash: {self.__hash__()}"
 
+    def buildReport(self):
+        pass
+
+    def destroyReport(self):
+        pass
+
     def _builder(self):
         try:
             self.build()
             self.__builded = True
+            self.__destroyed = False
         except BuildFailureError as e:
             pass
 
@@ -90,6 +97,9 @@ class Service():
 
         except:
             pass
+
+        finally:
+            self.buildReport()
 
     def _destroyer(self):
         try:
@@ -111,6 +121,9 @@ class Service():
         except:
             pass
 
+        finally:
+            self.destroyReport()
+            
 
 def AbstractServiceClass(cls: type):
     if cls in __DEPENDENCY:
