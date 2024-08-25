@@ -130,7 +130,7 @@ class AssetService(_service.Service):
         super().__init__()
         Reader.fileService = fileService
 
-        self.fileService = fileService
+        self.fileService:FileService = fileService
         self.securityService = securityService
         self.configService = configService
 
@@ -175,7 +175,7 @@ class AssetService(_service.Service):
         for imagesPath in imagesInPath:
             try:
                 imageContent = self.images[imagesPath].content
-                html.loadImage(imageContent)
+                html.loadImage(imagesPath,imageContent)
             except KeyError as e:
                 pass
 

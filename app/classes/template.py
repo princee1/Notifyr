@@ -104,8 +104,10 @@ class HTMLTemplate(Template):
     }
 
     def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName)
+        self.images:list[tuple[str,str]] = []
+        self.image_needed:list[str] = []
         self.content_to_inject = None
+        super().__init__(filename, content, dirName)
 
     def inject(self, data: dict):
         try:
@@ -149,8 +151,9 @@ class HTMLTemplate(Template):
             return
         style.replace(style.contents + cssContent)
 
-    def loadImage(self, imageContent: str):
-        pass
+    def loadImage(self, image_path, imageContent: str):
+        if image_path in self.image_needed:
+            self.images.append((image_path, imageContent))
 
     def extractExtraSchemaRegistry(self):
 
@@ -214,6 +217,7 @@ class HTMLTemplate(Template):
         self.validation_balise = self.bs4.select_one(VALIDATION_CSS_SELECTOR)
         self.extractExtraSchemaRegistry()
         self.extractValidation()
+        self.extractImageKey()
 
     def translate(self,targetLang:str,text:str):
         pass
@@ -227,6 +231,14 @@ class HTMLTemplate(Template):
         content_text = self.translate(target_lang,content_text)
         return True,(content_html,content_text)
 
+    def extractImageKey(self,):
+        img_element:set[Tag] = self.bs4.find_all("img")
+        for img in img_element:
+            src = img.attrs["src"]
+            src = src.strip()
+            if src is None or not src.startswith("cid:"):
+                continue
+            self.image_needed.append(src)
 
 class CustomHTMLTemplate(HTMLTemplate):
     pass
