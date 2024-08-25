@@ -1,4 +1,4 @@
-from .email import EmailSender
+from .email import EmailSenderService
 from .security import SecurityService
 from classes.report import DiscordReport, Report, SystemReport,EmailReport,GoogleReport
 from .config import ConfigService
@@ -120,9 +120,9 @@ class DiscordService(NotificationService):
 
 @_service.ServiceClass
 class EmailNotificationService(NotificationService):
-    def __init__(self, configService: ConfigService, emailService: EmailSender) -> None:
+    def __init__(self, configService: ConfigService, emailService: EmailSenderService) -> None:
         super().__init__(configService)
-        self.emailService: EmailSender = emailService
+        self.emailService: EmailSenderService = emailService
 
 @_service.ServiceClass
 class GoogleNotificationService(NotificationService):

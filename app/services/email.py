@@ -102,7 +102,7 @@ class EmailService(_service.Service):
     def connect(self): pass
 
 @_service.ServiceClass
-class EmailSender(EmailService):
+class EmailSenderService(EmailService):
     @inject
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
@@ -178,7 +178,7 @@ class EmailSender(EmailService):
             pass
 
 @_service.ServiceClass
-class EmailReader(EmailService):
+class EmailReaderService(EmailService):
     @inject
     def __init__(self, configService: ConfigService, loggerService: LoggerService) -> None:
         super().__init__(configService, loggerService)
