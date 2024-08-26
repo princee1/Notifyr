@@ -3,6 +3,7 @@ from definition._service import Service,ServiceClass
 from injector import inject
 from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
+import git_clone as git
 
 @ServiceClass
 class FileService(Service):
@@ -67,7 +68,7 @@ class FTPService(Service):
             self.ftpClient.close()
     pass
 
-ServiceClass
+@ServiceClass
 class GitCloneRepoService(Service):
     def __init__(self,configService:ConfigService) -> None:
         super().__init__()

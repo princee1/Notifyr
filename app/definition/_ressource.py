@@ -2,17 +2,18 @@
 # The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 # instance imported from `container`.
 """
-from typing import TypeVar
+from typing import Any, Callable, Iterable, Mapping, TypeVar
 from services.assets import AssetService
 from container import CONTAINER, Container
 from definition._service import Service
-from fastapi import APIRouter,HTTPException
+from fastapi import APIRouter, HTTPException
 from implements import Interface
 
-T = TypeVar('T', bound=Service) 
+T = TypeVar('T', bound=Service)
+
 
 class Ressource():
-    def __init__(self,prefix) -> None:
+    def __init__(self, prefix) -> None:
         self.container: Container = CONTAINER
         self.router = APIRouter(prefix)
 
@@ -21,7 +22,7 @@ class Ressource():
 
     def need(self, dep: type) -> T:
         return self.container.need(dep)
-    
+
     def on_startup(self):
         pass
 
@@ -33,15 +34,26 @@ class Ressource():
 
     def on_error(self):
         pass
-    
+
     @property
     def routeExample(self):
         pass
-    
+
+
 class AssetRessource(Ressource):
     """
     Ressource with a direct reference to the AssetService
     """
-    def __init__(self,prefix:str) -> None:
+
+    def __init__(self, prefix: str) -> None:
         super().__init__(prefix)
-        self.assetService:AssetService = self.container.get(AssetService)
+        self.assetService: AssetService = self.container.get(AssetService)
+
+
+def Handler(handler_function:Callable[[Callable,Iterable[Any],Mapping[str,Any]],Exception | None]):
+    def decorator(func):
+        def wrapper(*args,**kwargs):
+            handler_function(func, *args, **kwargs)
+        return wrapper
+    return decorator
+

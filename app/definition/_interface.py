@@ -1,10 +1,11 @@
-from utils.helper import issubclass_of
+
+from typing import overload
+
 
 class Interface:
-    pass
 
-def implements(interface:type[Interface]):
-    # TODO checks all the 
-    def wrapper(cls:type):
-        return cls
-    return wrapper
+    def __init_subclass__(cls) -> None:
+        if "Interface" in cls.__name__:
+            return
+        # compare attributes and methods
+

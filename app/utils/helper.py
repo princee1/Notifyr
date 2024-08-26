@@ -188,6 +188,10 @@ def is_abstract(cls: type, bClass: type):  # BUG
     except:
         pass
 
+
+def direct_subclass(cls:type):
+    return cls.__subclasses__()
+
 ################################   ** Generate Helper **      #################################
 
 def generateId(len):

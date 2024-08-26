@@ -4,14 +4,17 @@ import imaplib as imap
 from enum import Enum
 from injector import inject
 
+from .training import TrainingService
+from classes.email import EmailBuilder
 from interface.threads import ThreadInterface
-from interface.timers import IntervalInterface
+from interface.timers import SchedulerInterface
 
 from .logger import LoggerService
 from definition import _service
 from .config import ConfigService
 
 from implements import implements
+import ssl
 
 SMTP_NORMAL_PORT = smtp.SMTP_PORT
 SMTP_SSL_PORT = smtp.SMTP_SSL_PORT
@@ -128,6 +131,7 @@ class EmailSenderService(EmailService):
         try:
             self.hostAddr = SMTPConfig.setHostAddr(
                 self.configService.SMTP_EMAIL_HOST)
+            
             self.connector = smtp.SMTP(self.hostAddr, self.hostPort)
             self.connector.set_debuglevel(
                 self.configService.SMTP_EMAIL_LOG_LEVEL)
@@ -141,12 +145,12 @@ class EmailSenderService(EmailService):
     def authenticate(self):
         try:
             if self.tlsConn:
+                context = ssl.create_default_context()
                 self.connector.ehlo()
-                self.connector.starttls()
+                self.connector.starttls(context=context)
                 self.connector.ehlo()
             val = self.connector.login(self.configService.SMTP_EMAIL,
                                        self.configService.SMTP_PASS)
-            print(val)
             self.state = True
         except smtp.SMTPHeloError | smtp.SMTPNotSupportedError as e:
             self.state = False
@@ -161,10 +165,11 @@ class EmailSenderService(EmailService):
             # TODO Throw Error build error
             raise _service.BuildAbortError
 
-    def sendMessage(self):
+    def sendMessage(self, email: EmailBuilder):
         try:
-            self.connector.verify()
-            self.connector.send_message()
+            emailID,message=email.message
+            self.connector.verify(email.emailMetadata)
+            self.connector.sendmail(email.emailMetadata.From, email.emailMetadata.To,message)
 
         except smtp.SMTPHeloError as e:
             pass
@@ -174,13 +179,13 @@ class EmailSenderService(EmailService):
             pass
         except smtp.SMTPNotSupportedError as e:
             pass
-        except:
+        except smtp.SMTPDataError as e:
             pass
 
 @_service.ServiceClass
 class EmailReaderService(EmailService):
     @inject
-    def __init__(self, configService: ConfigService, loggerService: LoggerService) -> None:
+    def __init__(self, configService: ConfigService, loggerService: LoggerService,trainingService:TrainingService,) -> None:
         super().__init__(configService, loggerService)
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT

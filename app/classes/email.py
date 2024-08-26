@@ -45,6 +45,7 @@ class EmailMetadata:
 class EmailBuilder():
     
     def __init__(self,attachments:list[tuple[str,str]],images:list[tuple[str,str]] ,content: tuple[str, str], emailMetaData: EmailMetadata) -> None:
+        self.emailMetadata = emailMetaData
         self.message: MIMEMultipart = MIMEMultipart()
         self.message["From"] = emailMetaData.From
         self.message["Subject"] = emailMetaData.Subject
