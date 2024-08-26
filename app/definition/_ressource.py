@@ -29,9 +29,6 @@ class Ressource():
     def on_shutdown(self):
         pass
 
-    def on_event(self):
-        pass
-
     def on_error(self):
         pass
 
