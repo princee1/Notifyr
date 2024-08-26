@@ -1,4 +1,4 @@
-from .config import ConfigService
+from .config_service import ConfigService
 from definition._service import Service,ServiceClass
 from injector import inject
 from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly

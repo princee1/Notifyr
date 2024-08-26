@@ -1,7 +1,7 @@
-from .email import EmailSenderService
-from .security import SecurityService
+from .email_service import EmailSenderService
+from .security_service import SecurityService
 from classes.report import DiscordReport, Report, SystemReport,EmailReport,GoogleReport
-from .config import ConfigService
+from .config_service import ConfigService
 from definition import _service
 from time import sleep
 from discord_webhook import DiscordWebhook, AsyncDiscordWebhook

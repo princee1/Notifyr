@@ -4,14 +4,14 @@ import imaplib as imap
 from enum import Enum
 from injector import inject
 
-from .training import TrainingService
+from .training_service import TrainingService
 from classes.email import EmailBuilder
 from interface.threads import ThreadInterface
 from interface.timers import SchedulerInterface
 
-from .logger import LoggerService
+from .logger_service import LoggerService
 from definition import _service
-from .config import ConfigService
+from .config_service import ConfigService
 
 from implements import implements
 import ssl

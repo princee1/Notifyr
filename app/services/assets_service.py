@@ -1,8 +1,8 @@
-from .config import ConfigService
+from .config_service import ConfigService
 from utils.fileIO import FDFlag
 from classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
-from .security import SecurityService
-from .file import FileService, FTPService
+from .security_service import SecurityService
+from .file_service import FileService, FTPService
 from definition import _service
 from injector import inject
 from enum import Enum

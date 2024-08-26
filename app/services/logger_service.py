@@ -1,6 +1,6 @@
 from injector import inject
 from definition import _service
-from .config import ConfigService
+from .config_service import ConfigService
 from logging import Logger, LogRecord
 import sqlite3
 

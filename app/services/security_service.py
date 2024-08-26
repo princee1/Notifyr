@@ -1,6 +1,6 @@
 
 from injector import inject
-from .config import ConfigService
+from .config_service import ConfigService
 from definition._service import Service,ServiceClass
 
 @ServiceClass

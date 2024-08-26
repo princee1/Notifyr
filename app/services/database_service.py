@@ -1,6 +1,6 @@
-from .config import ConfigService
-from .file import FileService
-from .security import SecurityService
+from .config_service import ConfigService
+from .file_service import FileService
+from .security_service import SecurityService
 from definition._service import Service,AbstractServiceClass,ServiceClass
 from injector import inject
 import sqlite3

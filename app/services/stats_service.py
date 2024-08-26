@@ -1,5 +1,5 @@
-from .notification import NotificationService
-from .config import ConfigService
+from .notification_service import NotificationService
+from .config_service import ConfigService
 from definition import _service
 from injector import inject
 

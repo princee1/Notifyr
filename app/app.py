@@ -1,7 +1,7 @@
-from services.security import SecurityService
+from app.services.security_service import SecurityService
 from definition._ressource import Ressource
 from container import CONTAINER, InjectInFunction
-from services.config import ConfigService
+from app.services.config_service import ConfigService
 import multiprocessing
 import threading
 from argparse import ArgumentParser
