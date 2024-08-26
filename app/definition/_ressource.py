@@ -32,6 +32,9 @@ class Ressource():
     def on_error(self):
         pass
 
+    def callback(self):
+        pass
+
     @property
     def routeExample(self):
         pass
@@ -54,3 +57,6 @@ def Handler(handler_function:Callable[[Callable,Iterable[Any],Mapping[str,Any]],
         return wrapper
     return decorator
 
+
+def Guards(): 
+    return 

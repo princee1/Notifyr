@@ -12,6 +12,9 @@ def handling_error(callback:Callable,*args,**kwargs):
         pass
     pass
 
+def MiddleWare():
+    pass
+
 class EmailTemplateRessource(AssetRessource):
     @InjectInConstructor
     def __init__(self, emailSender:EmailSenderService,configService:ConfigService) -> None:
@@ -22,7 +25,6 @@ class EmailTemplateRessource(AssetRessource):
 
     @Handler(handler_function=handling_error)
     def sendEmailTemplate(self):
-
         pass
 
     def on_startup(self):
