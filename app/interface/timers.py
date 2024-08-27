@@ -1,10 +1,11 @@
 import sched
 import time
 import asyncio
-from definition._interface import Interface
+from definition._interface import Interface, IsInterface
 from abc import abstractmethod
 
 
+@IsInterface
 class SchedulerInterface(Interface):
     def __init__(self):
         self._scheduler = sched.scheduler(time.time, time.sleep)
@@ -36,6 +37,7 @@ class SchedulerInterface(Interface):
             self.__cancel(event)
 
 
+@IsInterface
 class IntervalInterface(Interface):
     def __init__(self):
         self._task = None
