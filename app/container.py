@@ -1,14 +1,15 @@
 import injector
 from inspect import signature, getmro
-from dependencies import __DEPENDENCY
+#from dependencies import __DEPENDENCY
 from typing import Callable, Any
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of, SkipCode
-from definition._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY as ServiceDependency
 from utils.prettyprint import printJSON
 from typing import TypeVar
 from deprecated import deprecated
 from ordered_set import OrderedSet
+from definition._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+import services
 
 T = TypeVar('T', bound=Service)
 

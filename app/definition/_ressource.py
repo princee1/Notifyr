@@ -3,7 +3,7 @@
 # instance imported from `container`.
 """
 from typing import Any, Callable, Iterable, Mapping, TypeVar
-from app.services.assets_service import AssetService
+from services.assets_service import AssetService
 from container import CONTAINER, Container
 from definition._service import Service
 from fastapi import APIRouter, HTTPException

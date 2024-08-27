@@ -200,8 +200,7 @@ def InjectWithCondition(baseClass: type, resolvedClass: Any,
                         fallback: list[type]): pass
 
 
-@overload
-def InjectWithCondition(baseClass: type, fallback: list[type]): pass
+# def InjectWithCondition(baseClass: type, fallback: list[type[Service]]): pass # FIXME: overload function does not work because theres already another with two variable
 
 
 @overload
