@@ -1,3 +1,4 @@
+from server import FastAPIServer
 from services.security_service import SecurityService
 from definition._ressource import Ressource
 from container import CONTAINER, InjectInFunction
@@ -20,16 +21,11 @@ ALL_APP = ""
 # MODE = parser.parse_args().mode
 
 
-@InjectInFunction
-def SecurityMiddleWare(securityService:SecurityService):
-    pass
-
-
 class Application():
+    
     def __init__(self,ressources:list[type[Ressource]]):
         self.configService: ConfigService = CONTAINER.get(ConfigService)
+        self.server = FastAPIServer(ressources)
     pass
 
-    def buildRessources(self):
-        pass
 

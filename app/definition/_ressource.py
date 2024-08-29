@@ -16,13 +16,14 @@ T = TypeVar('T', bound=Service)
 PATH_SEPARATOR = "/"
 
 
-class Ressource():
+class Ressource:
     def __init__(self, prefix: str) -> None:
         self.prettyPrinter:PrettyPrinter = PrettyPrinter_
         self.container: Container = CONTAINER
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
         self.router = APIRouter(prefix,on_shutdown=self.on_shutdown,on_startup=self.on_startup)
+        self._add_routes()
 
     def get(self, dep: type, scope=None, all=False) -> T:
         return self.container.get(dep, scope, all)
@@ -34,6 +35,9 @@ class Ressource():
         pass
 
     def on_shutdown(self):
+        pass
+
+    def _add_routes(self):
         pass
 
     @property
@@ -69,15 +73,3 @@ def Guards(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bo
             return func(*args, **kwargs)
         return wrapper
     return decorator
-
-
-class MiddleWare():
-    pass
-
-
-async def add_process_time_header(request: Request, call_next: Callable[..., Response]):
-    start_time = time.time()
-    response: Response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    return response
