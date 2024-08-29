@@ -8,6 +8,7 @@ from email.utils import formatdate
 from typing import List, Optional, Literal
 from utils.fileIO import getFilenameOnly
 
+
 class EmailMetadata:
     def __init__(
         self,
@@ -43,8 +44,8 @@ class EmailMetadata:
 
 
 class EmailBuilder():
-    
-    def __init__(self,attachments:list[tuple[str,str]],images:list[tuple[str,str]] ,content: tuple[str, str], emailMetaData: EmailMetadata) -> None:
+
+    def __init__(self, content: tuple[str, str], emailMetaData: EmailMetadata, images: list[tuple[str, str]], attachments: list[tuple[str, str]]=[]) -> None:
         self.emailMetadata = emailMetaData
         self.message: MIMEMultipart = MIMEMultipart()
         self.message["From"] = emailMetaData.From
@@ -58,8 +59,8 @@ class EmailBuilder():
         self.message['Return-Path'] = emailMetaData.Return_Path
         self.message['X-Priority'] = emailMetaData.Priority
 
-        self.init_email_content(attachments,images,content)
-        
+        self.init_email_content(attachments, images, content)
+
     def multiple_dest(self, param, key):
         if type(param) is str:
             self.message[key] = param
@@ -87,26 +88,27 @@ class EmailBuilder():
         self.message.attach(part1)
         self.message.attach(part2)
 
-    def attach_image(self,image_path, image_data,disposition:Literal["inline","attachment"]="inline"):
+    def attach_image(self, image_path, image_data, disposition: Literal["inline", "attachment"] = "inline"):
         img = MIMEImage(image_data)
         img.add_header("Content-ID", f"<{image_path}>")
-        img.add_header("Content-Disposition", disposition, filename=getFilenameOnly(image_path))
+        img.add_header("Content-Disposition", disposition,
+                       filename=getFilenameOnly(image_path))
         self.message.attach(img)
 
-    def init_email_content(self,attachments:list[tuple[str,str]],images:list[tuple[str,str]] ,content: tuple[str, str]):
+    def init_email_content(self, attachments: list[tuple[str, str]], images: list[tuple[str, str]], content: tuple[str, str]):
         self.set_content(content)
         for img in images:
             path, img_data = img
-            self.attach_image(path,img_data)
+            self.attach_image(path, img_data)
         for attachment in attachments:
             path, att_data = attachment
-            self.add_attachements(path,att_data)
+            self.add_attachements(path, att_data)
 
         pass
 
     @property
-    def message(self):
-        return self.id,self.message.as_string()
+    def mail_message(self):
+        return self.id, self.message.as_string()
 
     pass
 

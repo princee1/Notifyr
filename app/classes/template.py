@@ -7,7 +7,7 @@ from utils.helper import strict_parseToBool, flatten_dict
 from utils.validation import CustomValidator
 import fitz as pdf
 from cerberus import DocumentError, SchemaError
-# from googletrans import Translator
+from googletrans import Translator
 import os
 import re
 from utils.prettyprint import printJSON

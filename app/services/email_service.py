@@ -167,8 +167,9 @@ class EmailSenderService(EmailService):
 
     def sendMessage(self, email: EmailBuilder):
         try:
-            emailID,message=email.message
-            self.connector.verify(email.emailMetadata)
+            emailID,message=email.mail_message
+            for to in email.emailMetadata.To:
+                self.connector.verify(to)
             self.connector.sendmail(email.emailMetadata.From, email.emailMetadata.To,message)
 
         except smtp.SMTPHeloError as e:
