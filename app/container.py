@@ -432,7 +432,7 @@ def InjectInFunction(func: Callable):
         func(**paramsToInject)
     return wrapper
 
-def InjectInConstructor(func: Callable):
+def InjectInMethod(func: Callable):
     """
     The `InjectInConstructor` decorator takes the __init__ function from a class and inspect it's signature, if the `CONTAINER` can resolve the 
     dependency it will inject the values otherwise it will throw a `NoResolvedDependencyError`. You must call the function with the position parameter 
@@ -441,12 +441,12 @@ def InjectInConstructor(func: Callable):
 
     If the parameters of the function founds a dependency two times it will return an error
 
-    :param func: The __init__ function from a class
+    :param func: The method function from a class
 
     :throw NoResolvedDependencyError:
     :throw MultipleDependenciesError:
 
-    :return Callable: The __init__ function decorated and injected with the value from the `CONTAINER`
+    :return Callable: The method function decorated and injected with the value from the `CONTAINER`
     
     `example::`
     

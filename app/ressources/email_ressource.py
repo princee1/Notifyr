@@ -4,7 +4,7 @@ from classes.template import HTMLTemplate
 from classes.email import EmailBuilder
 from services.config_service import ConfigService
 from services.security_service import SecurityService
-from container import InjectInConstructor
+from container import InjectInMethod
 from definition._ressource import AssetRessource, Handler
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
@@ -52,7 +52,7 @@ PREFIX = "email"
 
 
 class EmailTemplateRessource(AssetRessource):
-    @InjectInConstructor
+    @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
         super().__init__(PREFIX)
         self.emailService: EmailSenderService = emailSender
