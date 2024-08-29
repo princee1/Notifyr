@@ -3,8 +3,9 @@
 # instance imported from `container`.
 """
 from typing import Any, Callable, Iterable, Mapping, TypeVar
+from interface.middleware import EventInterface
 from services.assets_service import AssetService
-from container import CONTAINER, Container
+from container import Get,Need
 from definition._service import Service
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from implements import Interface
@@ -16,20 +17,19 @@ T = TypeVar('T', bound=Service)
 PATH_SEPARATOR = "/"
 
 
-class Ressource:
+class Ressource(EventInterface):
     def __init__(self, prefix: str) -> None:
         self.prettyPrinter:PrettyPrinter = PrettyPrinter_
-        self.container: Container = CONTAINER
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
         self.router = APIRouter(prefix,on_shutdown=self.on_shutdown,on_startup=self.on_startup)
         self._add_routes()
 
     def get(self, dep: type, scope=None, all=False) -> T:
-        return self.container.get(dep, scope, all)
+        return Get(dep,scope,all)
 
     def need(self, dep: type) -> T:
-        return self.container.need(dep)
+        return Need(dep)
 
     def on_startup(self):
         pass
@@ -52,7 +52,7 @@ class AssetRessource(Ressource):
 
     def __init__(self, prefix: str) -> None:
         super().__init__(prefix)
-        self.assetService: AssetService = self.container.get(AssetService)
+        self.assetService: AssetService = Get(AssetService)
 
 
 def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None]):

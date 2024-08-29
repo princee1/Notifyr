@@ -486,3 +486,30 @@ def InjectInMethod(func: Callable):
         paramsToInject.update(kwargs)
         func(*args, **paramsToInject)
     return wrapper
+
+def Get(typ:type[Service],scope=None,all=False):
+    """
+    The `Get` function retrieves a service from a container based on the specified type, scope, and
+    whether to retrieve all instances if it`s an AbstractService  [or in a multibind context].
+    
+    :param typ: The `typ` parameter is the type of service that you want to retrieve from the container.
+    :type typ: type[Service]
+
+    :param scope: The `scope` parameter in the `Get` function is used to specify the scope within which
+    the service should be retrieved. It allows you to narrow down the search for the service based on a
+    specific scope or context. If no scope is provided, the function may retrieve the service from a
+    broader scope
+
+    :param all: The `all` parameter in the `Get` function is a boolean flag that specifies whether to
+    retrieve all instances of the specified service type or just a single instance. 
+    :return: The function `Get` is returning the service object of calling the `get` method on the `CONTAINER`
+    object with the specified parameters `typ`, `scope`, and `all`.
+    """
+    return CONTAINER.get(typ,scope=scope,all=all)
+    
+def Need(typ:type[Service]):
+    """
+    The function `Need` takes a type parameter `Service` and returns the result of calling the `need`
+    method on the `CONTAINER` object with the specified type.
+    """
+    return CONTAINER.need(typ)

@@ -1,8 +1,9 @@
 
 
-from definition._interface import Interface
+from definition._interface import Interface,IsInterface
 
 
+@IsInterface
 class InjectableMiddlewareInterface(Interface):
 
     def __init__(self) -> None:
@@ -14,3 +15,13 @@ class InjectableMiddlewareInterface(Interface):
         pass
     
     pass
+
+
+@IsInterface
+class EventInterface(Interface):
+
+    def on_startup(self):
+        pass
+
+    def on_shutdown(self):
+        pass
