@@ -6,9 +6,11 @@ from typing import Any, Callable, Iterable, Mapping, TypeVar
 from services.assets_service import AssetService
 from container import CONTAINER, Container
 from definition._service import Service
-from fastapi import APIRouter, HTTPException, Request, Response,status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from implements import Interface
+from utils.prettyprint import PrettyPrinter_,PrettyPrinter
 import time
+
 
 T = TypeVar('T', bound=Service)
 PATH_SEPARATOR = "/"
@@ -16,10 +18,11 @@ PATH_SEPARATOR = "/"
 
 class Ressource():
     def __init__(self, prefix: str) -> None:
+        self.prettyPrinter:PrettyPrinter = PrettyPrinter_
         self.container: Container = CONTAINER
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
-        self.router = APIRouter(prefix)
+        self.router = APIRouter(prefix,on_shutdown=self.on_shutdown,on_startup=self.on_startup)
 
     def get(self, dep: type, scope=None, all=False) -> T:
         return self.container.get(dep, scope, all)
@@ -33,15 +36,10 @@ class Ressource():
     def on_shutdown(self):
         pass
 
-    def on_error(self):
-        pass
-
-    def callback(self):
-        pass
-
     @property
     def routeExample(self):
         pass
+
 
 class AssetRessource(Ressource):
     """
@@ -64,15 +62,18 @@ def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, An
 def Guards(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]]):
     def decorator(func):
         def wrapper(*args, **kwargs):
-            flag,message = guard_function(*args,**kwargs)
+            flag, message = guard_function(*args, **kwargs)
             if not flag:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail=message)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
             return func(*args, **kwargs)
         return wrapper
     return decorator
 
+
 class MiddleWare():
     pass
+
 
 async def add_process_time_header(request: Request, call_next: Callable[..., Response]):
     start_time = time.time()
