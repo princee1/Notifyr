@@ -1,7 +1,9 @@
 
 from typing import overload
+from warnings import warn
 
 INTERFACES_SET = set()
+name = 'Interface'
 
 
 class MethodConflitException(Exception):
@@ -10,16 +12,19 @@ class MethodConflitException(Exception):
 
 class Interface:
 
-    def __init_subclass__(cls:type) -> None:
+    def __init_subclass__(cls: type) -> None:
         if cls in INTERFACES_SET:
+            if name not in cls.__name__:
+                warn(
+                    "You should add 'Interface' at the end of your class name for a better QA", stacklevel=2)
             return
-        # compare attributes and methods
+        #TODO  compare attributes and methods
 
 
-def IsInterface(cls:type):
+def IsInterface(cls: type):
     INTERFACES_SET.add(cls)
     return cls
 
 
-def Implements(cls:type):
+def Implements(cls: type):
     return type(cls.__name__,)

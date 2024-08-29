@@ -1,30 +1,40 @@
 from typing import Callable
-from app.services.config_service import ConfigService
+from services.config_service import ConfigService
+from services.security_service import SecurityService
 from container import InjectInConstructor
 from definition._ressource import AssetRessource,Handler
-from app.services.email_service import EmailSenderService
+from services.email_service import EmailSenderService
+from pydantic import BaseModel
 
 
 def handling_error(callback:Callable,*args,**kwargs):
     try:
-        pass
+        pass 
     except:
         pass
     pass
 
-def MiddleWare():
+def guard_function():
+    pass
+
+
+class EmailModel(BaseModel):
     pass
 
 class EmailTemplateRessource(AssetRessource):
     @InjectInConstructor
-    def __init__(self, emailSender:EmailSenderService,configService:ConfigService) -> None:
+    def __init__(self, emailSender:EmailSenderService,configService:ConfigService,securityService:SecurityService) -> None:
         super().__init__("email-template")
         self.emailService: EmailSenderService = emailSender
         self.configService:ConfigService =  configService
-        
+        self.securityService: SecurityService = securityService
 
     @Handler(handler_function=handling_error)
     def sendEmailTemplate(self):
+        pass
+
+    @Handler(handler_function=handling_error) 
+    def sendSimpleEmail(self):
         pass
 
     def on_startup(self):
@@ -37,10 +47,4 @@ class EmailTemplateRessource(AssetRessource):
         return super().on_shutdown() 
 
     def on_event(self):
-        return super().on_event()
-    
-
-
-
-    
-
+        return 
