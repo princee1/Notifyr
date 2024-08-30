@@ -13,6 +13,20 @@ from typing import Any, Awaitable, Callable, MutableMapping
 import time
 from interface.middleware import EventInterface, InjectableMiddlewareInterface
 import uvicorn
+import multiprocessing
+import threading
+import signal,sys
+
+
+def handle_sigint(signal_num, frame):
+    print(frame)
+    print("Custom SIGINT handler: Cleanup before shutdown...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_sigint)
+
+
+
 
 
 class ProcessTimeMiddleWare(BaseHTTPMiddleware):
@@ -35,33 +49,40 @@ class SecurityMiddleWare(BaseHTTPMiddleware, InjectableMiddlewareInterface):
         InjectableMiddlewareInterface.__init__(self)
 
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
-        pass
+        response: Response = await call_next(request)
+        return response
 
     @InjectInMethod
     def inject_middleware(self, securityService: SecurityService):
         self.securityService = securityService
 
 
-class FastAPIServer(EventInterface):
+class Application(threading.Thread, EventInterface):
 
     def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]]) -> None:
+        threading.Thread.__init__(self, None, None, title, daemon=None)
         self.ressources = ressources
         self.middlewares = middlewares
+        self.configService: ConfigService = Get(ConfigService, None, False)
         self.app = FastAPI(title=title, summary=summary, description=description,
-                           on_shutdown=self.on_shutdown, on_startup=self.on_startup)
+                           on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
         self.add_middlewares()
         self.add_ressources()
         pass
 
-    def start(self):
+    def start_server(self):
         uvicorn.run(self.app,)
 
-    def stop(self):
+    def stop_server(self):
         pass
 
+    def run(self) -> None:
+        self.start_server()
+
     def add_ressources(self):
-        for ressource in self.ressources:
-            self.app.include_router(ressource.router)
+        for ressource_type in self.ressources:
+            res = ressource_type()
+            self.app.include_router(res.router)
         pass
 
     def add_middlewares(self):

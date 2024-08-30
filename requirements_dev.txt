@@ -20,3 +20,5 @@ rich==13.8.0
 str2bool==1.1
 twilio==9.2.4
 validators==0.33.0
+googletrans==3.0.0
+uvicorn==0.30.6

@@ -1,5 +1,5 @@
 from typing import Any, Callable, List, Literal, Optional
-from app.services.assets_service import AssetService
+from services.assets_service import AssetService
 from classes.template import HTMLTemplate
 from classes.email import EmailBuilder
 from services.config_service import ConfigService

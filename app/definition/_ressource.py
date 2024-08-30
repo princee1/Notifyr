@@ -22,7 +22,7 @@ class Ressource(EventInterface):
         self.prettyPrinter:PrettyPrinter = PrettyPrinter_
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
-        self.router = APIRouter(prefix,on_shutdown=self.on_shutdown,on_startup=self.on_startup)
+        self.router = APIRouter(prefix=prefix,on_shutdown=[self.on_shutdown],on_startup=[self.on_startup])
         self._add_routes()
 
     def get(self, dep: type, scope=None, all=False) -> T:
