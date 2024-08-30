@@ -11,8 +11,9 @@ setenv:
 	cp base.env .env
 
 clean:
-	rm -f -R */__pycache__/* 
-	rm -f -R ./*.pyc
+	find . -name "__pycache__" -type d -exec rm -rf {} +
+	find . -name "*.pyc" -type f -delete
+
 
 test:
 	echo "testing"

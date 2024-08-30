@@ -167,3 +167,4 @@ help.md
 *.html
 *.css
 *.scss
+/.VsCodeCounter/
