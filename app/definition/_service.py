@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, overload, Callable,Type,TypeVar
+from typing import Any, overload, Callable, Type, TypeVar
 from utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
@@ -124,7 +124,8 @@ class Service():
         finally:
             self.destroyReport()
 
-S = TypeVar('S',bound=Service)
+
+S = TypeVar('S', bound=Service)
 
 
 def AbstractServiceClass(cls: S) -> S:
@@ -198,8 +199,8 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
 
 
 @overload
-def InjectWithCondition(baseClass: Type[S], resolvedClass: Callable[...,Type[S]],
-                        fallback: list[Type[S]]): pass
+def InjectWithCondition(baseClass: type[Service], resolvedClass: Callable[..., type[Service]],
+                        fallback: list[type[Service]]): pass
 
 
 # def InjectWithCondition(baseClass: type, fallback: list[type[Service]]): pass # FIXME: overload function does not work because theres already another with two variable
@@ -237,12 +238,12 @@ def BuildOnlyIf(func: Callable[..., bool]):
     return decorator
 
 
-def SkipBuild(cls:Type[S]):
+def SkipBuild(cls: Type[S]):
     decorator = BuildOnlyIf(cls)
     return decorator(False)
 
 
-def PossibleDep(dependencies: list[Type[S]]):
+def PossibleDep(dependencies: list[type[Service]]):
     def decorator(cls: Type[S]) -> Type[S]:
         PossibleDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls

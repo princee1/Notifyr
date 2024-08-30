@@ -2,15 +2,16 @@
 # The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 # instance imported from `container`.
 """
-from typing import Any, Callable, Iterable, Mapping, TypeVar,Type
+from typing import Any, Callable, Iterable, Mapping, TypeVar, Type
 from interface.middleware import EventInterface
 from services.assets_service import AssetService
-from container import Get,Need
+from container import Get, Need
 from definition._service import S, Service
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from implements import Interface
-from utils.prettyprint import PrettyPrinter_,PrettyPrinter
+from utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import time
+import functools
 
 
 PATH_SEPARATOR = "/"
@@ -18,14 +19,15 @@ PATH_SEPARATOR = "/"
 
 class Ressource(EventInterface):
     def __init__(self, prefix: str) -> None:
-        self.prettyPrinter:PrettyPrinter = PrettyPrinter_
+        self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
-        self.router = APIRouter(prefix=prefix,on_shutdown=[self.on_shutdown],on_startup=[self.on_startup])
+        self.router = APIRouter(prefix=prefix, on_shutdown=[
+                                self.on_shutdown], on_startup=[self.on_startup])
         self._add_routes()
 
     def get(self, dep: Type[S], scope=None, all=False) -> Type[S]:
-        return Get(dep,scope,all)
+        return Get(dep, scope, all)
 
     def need(self, dep: Type[S]) -> Type[S]:
         return Need(dep)
@@ -56,6 +58,7 @@ class AssetRessource(Ressource):
 
 def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None]):
     def decorator(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             return handler_function(func, *args, **kwargs)
         return wrapper
@@ -64,6 +67,7 @@ def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, An
 
 def Guards(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]]):
     def decorator(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             flag, message = guard_function(*args, **kwargs)
             if not flag:
