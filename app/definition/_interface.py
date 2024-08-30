@@ -24,9 +24,9 @@ class Interface:
         #TODO  compare attributes and methods
 
 
-I = TypeVar('I',Interface,bound=Type)
+I = TypeVar('I',bound=Interface)
 
-def IsInterface(cls: I) -> I:
+def IsInterface(cls: Type[I]) -> Type[I]:
     INTERFACES_SET.add(cls)
     return cls
 

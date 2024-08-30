@@ -85,12 +85,12 @@ class Container():
     def __bind(self, type, obj, scope=None):
         self.__app.binder.bind(type, to=obj, scope=scope)
 
-    def get(self, typ: S, scope=None, all=False) -> dict[type, S] | S:
+    def get(self, typ: Type[S], scope=None, all=False) -> dict[type, Type[S]] | Type[S]:
         if not all and isabstract(typ.__name__):
             raise InvalidDependencyError
 
         if all and isabstract(typ.__name__):
-            provider: dict[type, S] = {}
+            provider: dict[type, Type[S]] = {}
             for d in self.dependencies:
                 if issubclass_of(typ, d):
                     provider[d] = self.__app.get(d, scope)
@@ -351,9 +351,9 @@ class Container():
         # TODO free up temp variable
         pass
 
-    def need(self, typ: S) -> S:
+    def need(self, typ: Type[S]) -> Type[S]:
         if not self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY]:
-            dependency: S = self.get(typ)
+            dependency: Type[S] = self.get(typ)
             try:
                 dependency._builder()
                 return dependency
@@ -491,7 +491,7 @@ def InjectInMethod(func: Callable):
     return wrapper
 
 
-def Get(typ: S, scope=None, all=False) -> dict[str, S] | S:
+def Get(typ: Type[S], scope=None, all=False) -> dict[str, Type[S]] | Type[S]:
     """
     The `Get` function retrieves a service from a container based on the specified type, scope, and
     whether to retrieve all instances if it`s an AbstractService  [or in a multibind context].
@@ -512,7 +512,7 @@ def Get(typ: S, scope=None, all=False) -> dict[str, S] | S:
     return CONTAINER.get(typ, scope=scope, all=all)
 
 
-def Need(typ: S) -> S:
+def Need(typ: Type[S]) -> Type[S]:
     """
     The function `Need` takes a type parameter `Service` and returns the result of calling the `need`
     method on the `CONTAINER` object with the specified type.

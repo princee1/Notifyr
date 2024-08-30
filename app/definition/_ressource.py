@@ -24,10 +24,10 @@ class Ressource(EventInterface):
         self.router = APIRouter(prefix=prefix,on_shutdown=[self.on_shutdown],on_startup=[self.on_startup])
         self._add_routes()
 
-    def get(self, dep: S, scope=None, all=False) -> S:
+    def get(self, dep: Type[S], scope=None, all=False) -> Type[S]:
         return Get(dep,scope,all)
 
-    def need(self, dep: S) -> S:
+    def need(self, dep: Type[S]) -> Type[S]:
         return Need(dep)
 
     def on_startup(self):

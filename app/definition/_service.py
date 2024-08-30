@@ -124,7 +124,7 @@ class Service():
         finally:
             self.destroyReport()
 
-S = TypeVar('S',Service ,bound=TypeVar)
+S = TypeVar('S',bound=Service)
 
 
 def AbstractServiceClass(cls: S) -> S:
@@ -179,7 +179,7 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
     >>> CONTAINER.get(A).s.counter
     >>> 3
     """
-    def decorator(cls: type):
+    def decorator(cls: Type[S]) -> Type[S]:
         if not AbstractServiceClasses.__contains__(baseClass):
             pass
             # TODO ABORT error
@@ -198,8 +198,8 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
 
 
 @overload
-def InjectWithCondition(baseClass: S, resolvedClass: Callable[...,S],
-                        fallback: list[S]): pass
+def InjectWithCondition(baseClass: Type[S], resolvedClass: Callable[...,Type[S]],
+                        fallback: list[Type[S]]): pass
 
 
 # def InjectWithCondition(baseClass: type, fallback: list[type[Service]]): pass # FIXME: overload function does not work because theres already another with two variable
@@ -207,7 +207,7 @@ def InjectWithCondition(baseClass: S, resolvedClass: Callable[...,S],
 
 @overload
 def BuildOnlyIf(flag: bool):
-    def decorator(cls: S):
+    def decorator(cls: Type[S]) -> Type[S]:
         BuildOnlyIfDependencies[cls.__name__] = {
             DependencyConstant.BUILD_ONLY_CLASS_KEY: cls,
             DependencyConstant.BUILD_ONLY_DEP_KEY: None,
@@ -215,7 +215,7 @@ def BuildOnlyIf(flag: bool):
             DependencyConstant.BUILD_ONLY_PARAMS_KEY: None,
             DependencyConstant.BUILD_ONLY_FUNC_KEY: None,
         }
-        return S
+        return cls
     return decorator
 
 
@@ -225,7 +225,7 @@ def BuildOnlyIf(func: Callable[..., bool]):
         since the container cant add it while load all the dependencies,
         if dont want the built class to call the builder function simply remove from the dependency list
     """
-    def decorator(cls: S) -> S:
+    def decorator(cls: Type[S]) -> Type[S]:
         BuildOnlyIfDependencies[cls.__name__] = {
             DependencyConstant.BUILD_ONLY_CLASS_KEY: cls,
             DependencyConstant.BUILD_ONLY_DEP_KEY: None,
@@ -237,13 +237,13 @@ def BuildOnlyIf(func: Callable[..., bool]):
     return decorator
 
 
-def SkipBuild(cls:S):
+def SkipBuild(cls:Type[S]):
     decorator = BuildOnlyIf(cls)
     return decorator(False)
 
 
-def PossibleDep(dependencies: list[S]):
-    def decorator(cls: S) -> S:
+def PossibleDep(dependencies: list[Type[S]]):
+    def decorator(cls: Type[S]) -> Type[S]:
         PossibleDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls
     return decorator
