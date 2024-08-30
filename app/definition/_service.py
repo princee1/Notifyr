@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, overload, Callable
+from typing import Any, overload, Callable,Type,TypeVar
 from utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
@@ -123,9 +123,11 @@ class Service():
 
         finally:
             self.destroyReport()
-            
 
-def AbstractServiceClass(cls: type):
+S = TypeVar('S',Service ,bound=TypeVar)
+
+
+def AbstractServiceClass(cls: S) -> S:
     if cls in __DEPENDENCY:
         __DEPENDENCY.remove(cls)
     AbstractServiceClasses[cls.__name__] = cls
@@ -133,7 +135,7 @@ def AbstractServiceClass(cls: type):
     return cls
 
 
-def ServiceClass(cls: type):
+def ServiceClass(cls: S) -> S:
     if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
         __DEPENDENCY.append(cls)
     return cls
@@ -196,8 +198,8 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
 
 
 @overload
-def InjectWithCondition(baseClass: type, resolvedClass: Any,
-                        fallback: list[type]): pass
+def InjectWithCondition(baseClass: S, resolvedClass: Callable[...,S],
+                        fallback: list[S]): pass
 
 
 # def InjectWithCondition(baseClass: type, fallback: list[type[Service]]): pass # FIXME: overload function does not work because theres already another with two variable
@@ -205,7 +207,7 @@ def InjectWithCondition(baseClass: type, resolvedClass: Any,
 
 @overload
 def BuildOnlyIf(flag: bool):
-    def decorator(cls: type):
+    def decorator(cls: S):
         BuildOnlyIfDependencies[cls.__name__] = {
             DependencyConstant.BUILD_ONLY_CLASS_KEY: cls,
             DependencyConstant.BUILD_ONLY_DEP_KEY: None,
@@ -213,7 +215,7 @@ def BuildOnlyIf(flag: bool):
             DependencyConstant.BUILD_ONLY_PARAMS_KEY: None,
             DependencyConstant.BUILD_ONLY_FUNC_KEY: None,
         }
-        return cls
+        return S
     return decorator
 
 
@@ -223,7 +225,7 @@ def BuildOnlyIf(func: Callable[..., bool]):
         since the container cant add it while load all the dependencies,
         if dont want the built class to call the builder function simply remove from the dependency list
     """
-    def decorator(cls: type):
+    def decorator(cls: S) -> S:
         BuildOnlyIfDependencies[cls.__name__] = {
             DependencyConstant.BUILD_ONLY_CLASS_KEY: cls,
             DependencyConstant.BUILD_ONLY_DEP_KEY: None,
@@ -235,13 +237,13 @@ def BuildOnlyIf(func: Callable[..., bool]):
     return decorator
 
 
-def SkipBuild(cls):
+def SkipBuild(cls:S):
     decorator = BuildOnlyIf(cls)
     return decorator(False)
 
 
-def PossibleDep(dependencies: list[type]):
-    def decorator(cls: type):
+def PossibleDep(dependencies: list[S]):
+    def decorator(cls: S) -> S:
         PossibleDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls
     return decorator

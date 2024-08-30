@@ -1,18 +1,18 @@
 import injector
 from inspect import signature, getmro
-#from dependencies import __DEPENDENCY
+# from dependencies import __DEPENDENCY
 from typing import Callable, Any
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of, SkipCode
 from utils.prettyprint import printJSON
-from typing import TypeVar
+from typing import TypeVar, Type
 from deprecated import deprecated
 from ordered_set import OrderedSet
-from definition._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from definition._service import S, Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import services
 import functools
 
-T = TypeVar('T', bound=Service)
+
 
 
 class ContainerError(BaseException):
@@ -87,12 +87,12 @@ class Container():
     def __bind(self, type, obj, scope=None):
         self.__app.binder.bind(type, to=obj, scope=scope)
 
-    def get(self, typ: type, scope=None, all=False) -> dict[type, T] | T:
+    def get(self, typ: S, scope=None, all=False) -> dict[type, S] | S:
         if not all and isabstract(typ.__name__):
             raise InvalidDependencyError
 
         if all and isabstract(typ.__name__):
-            provider: dict[type, T] = {}
+            provider: dict[type, S] = {}
             for d in self.dependencies:
                 if issubclass_of(typ, d):
                     provider[d] = self.__app.get(d, scope)
@@ -353,9 +353,9 @@ class Container():
         # TODO free up temp variable
         pass
 
-    def need(self, typ: type) -> T:
+    def need(self, typ: S) -> S:
         if not self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY]:
-            dependency: Service = self.get(typ)
+            dependency: S = self.get(typ)
             try:
                 dependency._builder()
                 return dependency
@@ -393,6 +393,7 @@ class Container():
 
 CONTAINER: Container = Container(__DEPENDENCY)
 
+
 def InjectInFunction(func: Callable):
     """
     The `InjectInFunction` decorator takes the function and inspect it's signature, if the `CONTAINER` can resolve the 
@@ -403,10 +404,10 @@ def InjectInFunction(func: Callable):
     If the parameters of the function founds a dependency two times it will return an error
 
     :param func: The function to decorates
-    
+
     :throw NoResolvedDependencyError:
     :throw MultipleDependenciesError:
-    
+
     :return Callable: The function decorated and injected with the value from the `CONTAINER`
 
     `example::`
@@ -417,7 +418,7 @@ def InjectInFunction(func: Callable):
         print(b)
         print(c)
         print(s)
-    
+
     \n
     >>> test(s="ok")
     >>> <__main__.C object at 0x000001A76EC36610>
@@ -434,6 +435,7 @@ def InjectInFunction(func: Callable):
         func(**paramsToInject)
     return wrapper
 
+
 def InjectInMethod(func: Callable):
     """
     The `InjectInConstructor` decorator takes the __init__ function from a class and inspect it's signature, if the `CONTAINER` can resolve the 
@@ -449,13 +451,13 @@ def InjectInMethod(func: Callable):
     :throw MultipleDependenciesError:
 
     :return Callable: The method function decorated and injected with the value from the `CONTAINER`
-    
+
     `example::`
-    
+
     class Test:
-     
+
     @InjectInConstructor\n
-    
+
     def __init__(self, configService:ConfigService, securityService:SecurityService,test:str=None):
         self.configService = configService
         self.securityService = securityService
@@ -464,7 +466,7 @@ def InjectInMethod(func: Callable):
         print(securityService)
         print(test)
 
-        
+
     >>> Test()
     >>> Service: ConfigService Hash: 124165042117
         Service: SecurityService Hash: 124166930269
@@ -490,11 +492,12 @@ def InjectInMethod(func: Callable):
         func(*args, **paramsToInject)
     return wrapper
 
-def Get(typ:type[Service],scope=None,all=False):
+
+def Get(typ: S, scope=None, all=False) -> dict[str, S] | S:
     """
     The `Get` function retrieves a service from a container based on the specified type, scope, and
     whether to retrieve all instances if it`s an AbstractService  [or in a multibind context].
-    
+
     :param typ: The `typ` parameter is the type of service that you want to retrieve from the container.
     :type typ: type[Service]
 
@@ -508,9 +511,10 @@ def Get(typ:type[Service],scope=None,all=False):
     :return: The function `Get` is returning the service object of calling the `get` method on the `CONTAINER`
     object with the specified parameters `typ`, `scope`, and `all`.
     """
-    return CONTAINER.get(typ,scope=scope,all=all)
-    
-def Need(typ:type[Service]):
+    return CONTAINER.get(typ, scope=scope, all=all)
+
+
+def Need(typ: S) -> S:
     """
     The function `Need` takes a type parameter `Service` and returns the result of calling the `need`
     method on the `CONTAINER` object with the specified type.

@@ -1,6 +1,9 @@
 
-from typing import overload
+from typing import overload,Type,TypeVar
 from warnings import warn
+
+
+
 
 INTERFACES_SET = set()
 name = 'Interface'
@@ -21,10 +24,9 @@ class Interface:
         #TODO  compare attributes and methods
 
 
-def IsInterface(cls: type):
+I = TypeVar('I',Interface,bound=Type)
+
+def IsInterface(cls: I) -> I:
     INTERFACES_SET.add(cls)
     return cls
 
-
-def Implements(cls: type):
-    return type(cls.__name__,)
