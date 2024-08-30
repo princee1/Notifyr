@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup, PageElement, Tag, element
 from utils.schema import HtmlSchemaBuilder
 from utils.helper import strict_parseToBool, flatten_dict
 from utils.validation import CustomValidator
-# import fitz as pdf
+import fitz as pdf
 from cerberus import DocumentError, SchemaError
 from googletrans import Translator
 import os
@@ -46,6 +46,8 @@ class Template(Asset):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
         self.keys: list[str] = []
+        self.translator = Translator(
+            ['translate.google.com', 'translate.google.com'])
         self.load()
 
     def inject(self, data:  dict) -> bool:
@@ -60,7 +62,7 @@ class Template(Asset):
         """
         pass
 
-    def build(self, lang, data)-> Any:
+    def build(self, lang, data) -> Any:
         """
         Build a representation of the template with injected, verified and translated value and return 
         a content output
@@ -69,19 +71,19 @@ class Template(Asset):
         """
         return self.validate(data)
 
-    def translate(self, targetLang: str, text:str)->str:
+    def translate(self, targetLang: str, text: str) -> str:
         """
         Translate the text value into another language
         """
         pass
 
-    def validate(self,value:Any)-> bool | None | Exception:
+    def validate(self, value: Any) -> bool | None | Exception:
         """
         Validate the data injected into the template
         """
         pass
 
-    def exportText(self, content=None)->str:
+    def exportText(self, content=None) -> str:
         """
         Only export the text
         """
@@ -104,8 +106,8 @@ class HTMLTemplate(Template):
     }
 
     def __init__(self, filename: str, content: str, dirName: str) -> None:
-        self.images:list[tuple[str,str]] = []
-        self.image_needed:list[str] = []
+        self.images: list[tuple[str, str]] = []
+        self.image_needed: list[str] = []
         self.content_to_inject = None
         super().__init__(filename, content, dirName)
 
@@ -135,7 +137,7 @@ class HTMLTemplate(Template):
             flag = self.Validator.validate(document)
             if not flag:
                 raise DocumentError
-            return True,self.Validator.document
+            return True, self.Validator.document
             # return self.Validator.normalized(document)
         except DocumentError as e:
             # TODO raise a certain error
@@ -219,26 +221,31 @@ class HTMLTemplate(Template):
         self.extractValidation()
         self.extractImageKey()
 
-    def translate(self,targetLang:str,text:str):
-        pass
+    def translate(self, targetLang: str, text: str):
+        if targetLang == Template.LANG:
+            return text
+        src = 'auto' if Template.LANG is None else Template.LANG
+        translated = self.translator.translate(text, dest=targetLang, src=src)
+        return translated.text
 
     def build(self, target_lang, data):
-        is_valid,data = super().build(target_lang, data)
+        is_valid, data = super().build(target_lang, data)
         if not is_valid:
             return False, data
-        content_html,content_text = self.inject(data)
-        content_html =self.translate(target_lang,content_html)
-        content_text = self.translate(target_lang,content_text)
-        return True,(content_html,content_text)
+        content_html, content_text = self.inject(data)
+        content_html = self.translate(target_lang, content_html)
+        content_text = self.translate(target_lang, content_text)
+        return True, (content_html, content_text)
 
     def extractImageKey(self,):
-        img_element:set[Tag] = self.bs4.find_all("img")
+        img_element: set[Tag] = self.bs4.find_all("img")
         for img in img_element:
             src = img.attrs["src"]
             src = src.strip()
             if src is None or not src.startswith("cid:"):
                 continue
             self.image_needed.append(src)
+
 
 class CustomHTMLTemplate(HTMLTemplate):
     pass
@@ -247,7 +254,6 @@ class CustomHTMLTemplate(HTMLTemplate):
 class PDFTemplate(Template):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
-        
 
     def encrypt(self, key: str): pass
 

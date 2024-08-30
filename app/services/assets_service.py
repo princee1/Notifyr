@@ -129,6 +129,7 @@ class AssetService(_service.Service):
     def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService) -> None:
         super().__init__()
         Reader.fileService = fileService
+        Template.LANG = configService.ASSET_LANG
 
         self.fileService:FileService = fileService
         self.securityService = securityService

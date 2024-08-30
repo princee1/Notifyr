@@ -82,6 +82,8 @@ class ConfigService(_service.Service):
         self.IMAP_EMAIL = os.getenv("IMAP_EMAIL")
         self.IMAP_EMAIL_PASS = os.getenv("IMAP_EMAIL_PASS")
         self.IMAP_EMAIL_CONN_METHOD= os.getenv("IMAP_EMAIL_CONN_METHOD")
+
+        self.ASSET_LANG = os.getenv("ASSET_LANG")
         
     def destroy(self):
         return super().destroy()
