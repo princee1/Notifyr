@@ -10,6 +10,7 @@ from deprecated import deprecated
 from ordered_set import OrderedSet
 from definition._service import Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import services
+import functools
 
 T = TypeVar('T', bound=Service)
 
@@ -427,6 +428,7 @@ def InjectInFunction(func: Callable):
     types, paramNames = CONTAINER.getSignature(func)
     paramsToInject = CONTAINER.toParams(types, paramNames)
 
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         paramsToInject.update(kwargs)
         func(**paramsToInject)
@@ -482,6 +484,7 @@ def InjectInMethod(func: Callable):
     del paramNames[0]
     paramsToInject = CONTAINER.toParams(types, paramNames)
 
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         paramsToInject.update(kwargs)
         func(*args, **paramsToInject)
