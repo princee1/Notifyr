@@ -59,7 +59,6 @@ class EmailTemplateRessource(Ressource):
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
 
-
     def on_startup(self):
         super().on_startup()
 
@@ -70,13 +69,13 @@ class EmailTemplateRessource(Ressource):
     def send_emailTemplate(self, template_name: str, email: EmailTemplateModel):
         meta = email.meta
         data = email.data
-        template:HTMLTemplate = self.assetService.htmls[template_name]
-        flag,data = template.build()
+        template: HTMLTemplate = self.assetService.htmls[template_name]
+        flag, data = template.build()
         if not flag:
             # raise ValidationError
-            return 
+            return
         images = template.images
-        message = EmailBuilder(data,meta,images)
+        message = EmailBuilder(data, meta, images)
         self.emailService.send_message(message)
         pass
 
@@ -86,12 +85,12 @@ class EmailTemplateRessource(Ressource):
         content = customEmail.content
         attachment = customEmail.attachments
         images = customEmail.images
-        mess_id,message = EmailBuilder(attachment,images,content,meta).mail_message
-        
+        mess_id, message = EmailBuilder(
+            attachment, images, content, meta).mail_message
         pass
 
     def _add_routes(self):
         self.router.add_api_route(
-            "/template/{template_name}", self.send_emailTemplate, methods=['POST'])
+            "/template/{template_name}", self.send_emailTemplate, methods=['POST'], description=self.send_emailTemplate.__doc__)
         self.router.add_api_route(
-            "/custom/", self.send_emailTemplate, methods=['POST'])
+            "/custom/", self.send_customEmail, methods=['POST'], description=self.send_customEmail.__doc__)

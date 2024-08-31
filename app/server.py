@@ -15,15 +15,6 @@ from interface.middleware import EventInterface, InjectableMiddlewareInterface
 import uvicorn
 import multiprocessing
 import threading
-import signal,sys
-
-
-def handle_sigint(signal_num, frame):
-    print(frame)
-    print("Custom SIGINT handler: Cleanup before shutdown...")
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, handle_sigint)
 
 
 
@@ -63,7 +54,7 @@ class Application(EventInterface):
         self.thread = threading.Thread(self, None, self.run, title, daemon=None)
         self.ressources = ressources
         self.middlewares = middlewares
-        self.configService: ConfigService = Get(ConfigService, None, False)
+        self.configService: ConfigService = Get(ConfigService)
         self.app = FastAPI(title=title, summary=summary, description=description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
         self.add_middlewares()
@@ -85,7 +76,7 @@ class Application(EventInterface):
     def add_ressources(self):
         for ressource_type in self.ressources:
             res = ressource_type()
-            self.app.include_router(res.router)
+            self.app.include_router(res.router,responses=res.default_response)
         pass
 
     def add_middlewares(self):

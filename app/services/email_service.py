@@ -165,7 +165,7 @@ class EmailSenderService(EmailService):
             # TODO Throw Error build error
             raise _service.BuildAbortError
 
-    def sendMessage(self, email: EmailBuilder):
+    def send_message(self, email: EmailBuilder):
         try:
             emailID,message=email.mail_message
             for to in email.emailMetadata.To:

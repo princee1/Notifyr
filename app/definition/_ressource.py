@@ -2,7 +2,7 @@
 # The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 # instance imported from `container`.
 """
-from typing import Any, Callable, Iterable, Mapping, TypeVar, Type
+from typing import Any, Callable, Dict, Iterable, Mapping, TypeVar, Type
 from interface.middleware import EventInterface
 from services.assets_service import AssetService
 from container import Get, Need
@@ -32,6 +32,8 @@ class Ressource(EventInterface):
         self.router = APIRouter(prefix=prefix, on_shutdown=[
                                 self.on_shutdown], on_startup=[self.on_startup])
         self._add_routes()
+
+        self.default_response: Dict[int | str, Dict[str, Any]] | None = None
 
     def get(self, dep: Type[S], scope=None, all=False) -> Type[S]:
         return Get(dep, scope, all)
