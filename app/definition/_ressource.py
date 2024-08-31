@@ -12,13 +12,20 @@ from implements import Interface
 from utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import time
 import functools
+from utils.helper import getParentClass
 
 
 PATH_SEPARATOR = "/"
 
+RESSOURCES:dict[str,type] = {}
 
 class Ressource(EventInterface):
+
+    def __init_subclass__(cls: Type) -> None:
+        RESSOURCES[cls.__name__] = cls
+
     def __init__(self, prefix: str) -> None:
+        self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
@@ -46,16 +53,6 @@ class Ressource(EventInterface):
         pass
 
 
-class AssetRessource(Ressource):
-    """
-    Ressource with a direct reference to the AssetService
-    """
-
-    def __init__(self, prefix: str) -> None:
-        super().__init__(prefix)
-        self.assetService: AssetService = Get(AssetService)
-
-
 def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None]):
     def decorator(func):
         @functools.wraps(func)
@@ -76,3 +73,4 @@ def Guards(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bo
             return func(*args, **kwargs)
         return wrapper
     return decorator
+

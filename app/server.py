@@ -57,10 +57,10 @@ class SecurityMiddleWare(BaseHTTPMiddleware, InjectableMiddlewareInterface):
         self.securityService = securityService
 
 
-class Application(threading.Thread, EventInterface):
+class Application(EventInterface):
 
     def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]]) -> None:
-        threading.Thread.__init__(self, None, None, title, daemon=None)
+        self.thread = threading.Thread(self, None, self.run, title, daemon=None)
         self.ressources = ressources
         self.middlewares = middlewares
         self.configService: ConfigService = Get(ConfigService, None, False)
@@ -70,6 +70,9 @@ class Application(threading.Thread, EventInterface):
         self.add_ressources()
         pass
 
+    def start(self):
+        self.thread.start()
+    
     def start_server(self):
         uvicorn.run(self.app,)
 

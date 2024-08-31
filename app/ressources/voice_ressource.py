@@ -1,5 +1,5 @@
 from services.twilio_service import VoiceService
-from definition._ressource import AssetRessource, Ressource
+from definition._ressource import Ressource, Ressource
 from container import InjectInMethod, InjectInFunction
 
 
