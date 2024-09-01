@@ -38,14 +38,14 @@ class EmailMetaModel(BaseModel):
 class EmailTemplateModel(BaseModel):
     meta: EmailMetaModel
     data: dict[str, Any]
-    attachment: Optional[dict[str, Any]]
+    attachment: Optional[dict[str, Any]] = {}
 
 
 class CustomEmailModel(BaseModel):
     meta: EmailMetaModel
     content: str
-    attachments: Optional[List[tuple[str, str]]]
-    images: Optional[List[tuple[str, str]]]
+    attachments: Optional[List[tuple[str, str]]]=[]
+    images: Optional[List[tuple[str, str]]]=[]
 
 
 PREFIX = "email"
@@ -66,17 +66,16 @@ class EmailTemplateRessource(Ressource):
         super().on_shutdown()
 
     @Handler(handler_function=handling_error)
-    def send_emailTemplate(self, template_name: str, email: EmailTemplateModel):
+    def send_emailTemplate(self, template: str, email: EmailTemplateModel):
         meta = email.meta
         data = email.data
-        template: HTMLTemplate = self.assetService.htmls[template_name]
+        template: HTMLTemplate = self.assetService.htmls[template]
         flag, data = template.build(data)
         if not flag:
             # raise ValidationError
             return
         images = template.images
-        id,message = EmailBuilder(data, meta, images).mail_message
-        self.emailService.send_message(message)
+        self.emailService.send_message(EmailBuilder(data, meta, images))
         pass
 
     @Handler(handler_function=handling_error)
@@ -85,13 +84,12 @@ class EmailTemplateRessource(Ressource):
         content = customEmail.content
         attachment = customEmail.attachments
         images = customEmail.images
-        mess_id, message = EmailBuilder(
-            attachment, images, content, meta).mail_message
-        self.emailService.send_message(message)
+        self.emailService.send_message(EmailBuilder(
+            attachment, images, content, meta))
         pass
 
     def _add_routes(self):
         self.router.add_api_route(
-            "/template/{template_name}", self.send_emailTemplate, methods=['POST'], description=self.send_emailTemplate.__doc__)
+            "/template/{template}", self.send_emailTemplate, methods=['POST'], description=self.send_emailTemplate.__doc__)
         self.router.add_api_route(
             "/custom/", self.send_customEmail, methods=['POST'], description=self.send_customEmail.__doc__)

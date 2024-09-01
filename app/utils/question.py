@@ -10,7 +10,7 @@ from InquirerPy.prompts.expand import ExpandChoice
 import pprint as pp
 from InquirerPy.validator import *
 from prompt_toolkit.styles import Style
-from prettyprint import printJSON
+from utils.prettyprint import printJSON
 
 
 class InputKeyAlreadyExistsError(BaseException):

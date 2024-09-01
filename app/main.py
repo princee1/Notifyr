@@ -19,10 +19,10 @@ if justify == 'center':
 elif justify == 'right':
     ascii_art = '\n'.join(line.rjust(80) for line in ascii_art.splitlines())
 
-
+clearscreen()
+settitle('Communication - Service')
 print(ascii_art)
 time.sleep(10)
-settitle('Communication - Service')
 clearscreen()
 
 ########################################################################
