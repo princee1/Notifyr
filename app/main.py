@@ -1,21 +1,22 @@
 ########################################################################
 from argparse import ArgumentParser
-from utils.fileIO import ConfigFile,JSONFile
+from utils.fileIO import ConfigFile,JSONFile, exist
 import pyfiglet
 import time
 from enum import Enum
-from utils.prettyprint import PrettyPrinter_,clearscreen
+from utils.prettyprint import PrettyPrinter_,clearscreen,printJSON
+from utils.question import ask_question,SimpleInputHandler,NumberInputHandler,ConfirmInputHandler,CheckboxInputHandler
 ########################################################################
 
 class RunType(Enum):
     DEFAULT = "default"
     CUSTOM = "custom"
-    ALL = "all"
+    RECOMMENDED = "recommended"
 
 
 parser = ArgumentParser(description="", epilog="")
 parser.add_argument("--mode", type=str, default=RunType.DEFAULT.value,
-                    choices=[RunType.DEFAULT.value, RunType.CUSTOM.value, RunType.ALL.value], help="")
+                    choices=[RunType.DEFAULT.value, RunType.CUSTOM.value, RunType.RECOMMENDED.value], help="")
 parser.add_argument("--set-default", type=bool, default=True, help="")
 args = parser.parse_args()
 
@@ -53,6 +54,29 @@ from ressources.fax_ressource import IngoingFaxRessource,OutgoingFaxRessource
 
 APPLICATION_LIST: list[Application]= []
 
+def createApplication(index: int):
+    questions = [   
+        SimpleInputHandler('Give a title to your application: ',f'Application {(index + 1)}','title'),
+        SimpleInputHandler('Give a summary to your application: ','','summary'),
+        SimpleInputHandler('Give a description to your application: ','','description'),
+
+    ]
+
+    answer = ask_question()
+
+    
+    pass 
+
+if MODE == RunType.DEFAULT and exist("app.json"):
+
+    answer= ask_question([ConfirmInputHandler()])['confirm']
+    pass
+
+elif MODE == RunType.DEFAULT and not exist("app.json"):
+    ...
+
+
+
 match MODE:
     case RunType.DEFAULT:
         # TODO: load from the properties
@@ -60,8 +84,8 @@ match MODE:
     case RunType.CUSTOM:
         # TODO: run the interactive mode
         ...
-    case RunType.ALL:
-        # TODO: put all ressource into a single application
+    case RunType.RECOMMENDED:
+        # TODO: use the the settings recommend by me
         ...
         
     case _:
