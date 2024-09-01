@@ -16,16 +16,20 @@ from prettyprint import printJSON
 class InputKeyAlreadyExistsError(BaseException):
     pass
 
+
 class InputHandler:
-    def __init__(self, inputType: str, message: str, default, name: str, qMark, when, validate, filter=None) -> None:
+    def __init__(self, inputType: str, message: str, default, name: str, when, validate, filter=None) -> None:
         self.inputType = inputType
         self.message = message
         self.default = default
         self.name = name
-        self.qMark = qMark
         self.when = when
         self.validate = validate
         self.filter = filter
+
+    def  clone(self,message):
+        return 
+        
 
     @property
     def question(self) -> dict:
@@ -35,7 +39,7 @@ class InputHandler:
             "message": self.message,
             "default": self.default,
             "name": self.name,
-            #"qmark": self.qMark,
+            # "qmark": self.qMark,
             "when": self.when,
             "validate": self.validate,
             "filter": self.filter,
@@ -67,7 +71,7 @@ class ChoiceInterface:
 class CheckboxInputHandler(InputHandler, ChoiceInterface):
     def __init__(self, message, name, choices=[], qMark=None, validate=None, filter=None, when=None) -> None:
         InputHandler.__init__(self, "checkbox",
-                          message, None, name, qMark, when, validate, filter)
+                              message, None, name, qMark, when, validate, filter)
         ChoiceInterface.__init__(self, choices)
 
     def addChoices(self, value, name, checked=False, disabled=None):
@@ -82,8 +86,8 @@ class CheckboxInputHandler(InputHandler, ChoiceInterface):
 
 
 class SimpleInputHandler(InputHandler):
-    def __init__(self, message: str, default, name: str, qMark=None, validate=None, filter=None, when=None, completer=None, transformer=None) -> None:
-        super().__init__("input", message, default, name, qMark, when, validate, filter)
+    def __init__(self, message: str, default, name: str, validate=None, filter=None, when=None, completer=None, transformer=None) -> None:
+        super().__init__("input", message, default, name, when, validate, filter)
         self.completer = completer
         self.transformer = transformer
         # NOTE multicolumn_completer = True
@@ -92,22 +96,22 @@ class SimpleInputHandler(InputHandler):
 
 
 class NumberInputHandler(InputHandler):
-    def __init__(self, inputType: str, message: str, default: int, name: str, min_allowed, max_allowed, float_allowed=False, qMark=None, when=None, filter=None) -> None:
-        super().__init__(inputType, message, default, name,
-                         qMark, when, EmptyInputValidator(), filter)
+    def __init__(self, message: str, default: int, name: str, min_allowed, max_allowed, float_allowed=False,  when=None, filter=None) -> None:
+        super().__init__("number", message, default, name,
+                         when, EmptyInputValidator(), filter)
         self.min_allowed = min_allowed
         self.max_allowed = max_allowed
         self.float_allowed = float_allowed
 
 
 class ConfirmInputHandler(InputHandler):
-    def __init__(self, message: str, name: str, default: bool, qMark=None, validate=None, filter=None, when=None) -> None:
-        super().__init__("confirm", message, default, name, qMark, when, validate, filter)
+    def __init__(self, message: str, name: str, default: bool, validate=None, filter=None, when=None) -> None:
+        super().__init__("confirm", message, default, name, when, validate, filter)
 
 
 class PasswordInputHandler(InputHandler):
-    def __init__(self, message: str, name: str, instruction:str, invalidMessage=None, qMark=None, validate=None, filter=None, when=None, transformer=None) -> None:
-        super().__init__("password", message, None, name, qMark, when, validate, filter)
+    def __init__(self, message: str, name: str, instruction: str, invalidMessage=None, validate=None, filter=None, when=None, transformer=None) -> None:
+        super().__init__("password", message, None, name, when, validate, filter)
         self.transformer = transformer
         self.long_instruction = instruction
         self.invalid_message = invalidMessage
@@ -119,9 +123,9 @@ class ListInputHandler(InputHandler, ChoiceInterface):
         LIST = "list"
         pass
 
-    def __init__(self, inputType: ListTypeQuestion, message: str, default: int, name: str, choices=[], multiselect=False, qMark=None, validate=None, filter=None, when=None, transformer=None) -> None:
+    def __init__(self, inputType: ListTypeQuestion, message: str, default: int, name: str, choices=[], multiselect=False, validate=None, filter=None, when=None, transformer=None) -> None:
         super().__init__(
-            inputType, message, default, name, qMark, when, validate, filter)
+            inputType, message, default, name, when, validate, filter)
         ChoiceInterface.__init__(self, choices)
         self.multiselect = multiselect
         self.transformer = transformer
@@ -157,8 +161,8 @@ class ExpandInputHandler(InputHandler, ChoiceInterface):
 
 
 class FileInputHandler(InputHandler):
-    def __init__(self, message: str, name: str, errorMessage: str, qMark=None, filter=None, when=None, isDir=False) -> None:
-        super().__init__("filepath", message, None, name, qMark, when, PathValidator(
+    def __init__(self, message: str, name: str, errorMessage: str, filter=None, when=None, isDir=False) -> None:
+        super().__init__("filepath", message, None, name, when, PathValidator(
             message=errorMessage, is_dir=isDir, is_file=not isDir), filter)
         self.onlyFiles = not isDir
         self.onlyDir = isDir
@@ -187,4 +191,3 @@ def ask_question(questions: list[InputHandler], style=None):
         names_error[q.name] = True
     answers = prompt(questions_list, style)
     return answers
-

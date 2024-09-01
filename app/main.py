@@ -1,21 +1,14 @@
 from argparse import ArgumentParser
-from utils.fileIO import ConfigFile
-from utils.prettyprint import PrettyPrinter_
-from pyfiglet import print_figlet, FigletFont, Figlet, figlet_format
+from utils.fileIO import ConfigFile,JSONFile
+import pyfiglet
 from enum import Enum
-import container
-from definition._ressource import RESSOURCES
-from server import Application
-from ressources.email_ressource import EmailTemplateRessource
-
+from utils.prettyprint import PrettyPrinter_
 
 class RunType(Enum):
     DEFAULT = "default"
     CUSTOM = "custom"
     ALL = "all"
 
-
-########################################################################
 
 parser = ArgumentParser(description="", epilog="")
 parser.add_argument("--mode", type=str, default=RunType.DEFAULT.value,
@@ -26,19 +19,31 @@ args = parser.parse_args()
 MODE = RunType(args.mode.lower())
 SET_DEFAULT: bool = args.set_default
 
+def print_pyfiglet(text, font='standard', justify='left'):
+    figlet = pyfiglet.Figlet(font=font)
+    ascii_art = figlet.renderText(text)
+    
+    if justify == 'center':
+        ascii_art = '\n'.join(line.center(80) for line in ascii_art.splitlines())
+    elif justify == 'right':
+        ascii_art = '\n'.join(line.rjust(80) for line in ascii_art.splitlines())
+    
+    print(ascii_art)
+
+########################################################################
+
+import container
+from definition._ressource import RESSOURCES
+from server import Application
+from ressources.email_ressource import EmailTemplateRessource
+from ressources.sms_ressource import IncomingSMSRessource,OnGoingSMSRessource
+from ressources.voice_ressource import IncomingCallRessources,OnGoingCallRessources
+from ressources.fax_ressource import IngoingFaxRessource,OutgoingFaxRessource
+
+
+########################################################################
+
 #APPLICATION_LIST: list[Application]= []
-
-########################################################################
-# TODO print the Python figlet
-
-
-
-
-########################################################################
-
-
-
-
 
 match MODE:
     case RunType.DEFAULT:
@@ -63,4 +68,3 @@ match MODE:
 
 ########################################################################
 
-Application("adsd","adsad","fsd",ressources=[EmailTemplateRessource],middlewares=[]).start()
