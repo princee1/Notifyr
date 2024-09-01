@@ -1,8 +1,11 @@
+########################################################################
 from argparse import ArgumentParser
 from utils.fileIO import ConfigFile,JSONFile
 import pyfiglet
+import time
 from enum import Enum
-from utils.prettyprint import PrettyPrinter_
+from utils.prettyprint import PrettyPrinter_,clearscreen
+########################################################################
 
 class RunType(Enum):
     DEFAULT = "default"
@@ -19,16 +22,21 @@ args = parser.parse_args()
 MODE = RunType(args.mode.lower())
 SET_DEFAULT: bool = args.set_default
 
-def print_pyfiglet(text, font='standard', justify='left'):
-    figlet = pyfiglet.Figlet(font=font)
-    ascii_art = figlet.renderText(text)
-    
-    if justify == 'center':
-        ascii_art = '\n'.join(line.center(80) for line in ascii_art.splitlines())
-    elif justify == 'right':
-        ascii_art = '\n'.join(line.rjust(80) for line in ascii_art.splitlines())
-    
-    print(ascii_art)
+
+text='Communication - Service'
+justify='left'
+
+figlet = pyfiglet.Figlet(font='standard')
+ascii_art = figlet.renderText(text)
+
+if justify == 'center':
+    ascii_art = '\n'.join(line.center(80) for line in ascii_art.splitlines())
+elif justify == 'right':
+    ascii_art = '\n'.join(line.rjust(80) for line in ascii_art.splitlines())
+
+print(ascii_art)
+time.sleep(10)
+clearscreen()
 
 ########################################################################
 
@@ -43,7 +51,7 @@ from ressources.fax_ressource import IngoingFaxRessource,OutgoingFaxRessource
 
 ########################################################################
 
-#APPLICATION_LIST: list[Application]= []
+APPLICATION_LIST: list[Application]= []
 
 match MODE:
     case RunType.DEFAULT:
@@ -60,11 +68,3 @@ match MODE:
         pass
 
 ########################################################################
-
-
-########################################################################
-
-#for app in APPLICATION_LIST: app.start()
-
-########################################################################
-
