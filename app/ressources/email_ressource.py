@@ -70,12 +70,12 @@ class EmailTemplateRessource(Ressource):
         meta = email.meta
         data = email.data
         template: HTMLTemplate = self.assetService.htmls[template_name]
-        flag, data = template.build()
+        flag, data = template.build(data)
         if not flag:
             # raise ValidationError
             return
         images = template.images
-        message = EmailBuilder(data, meta, images)
+        id,message = EmailBuilder(data, meta, images).mail_message
         self.emailService.send_message(message)
         pass
 
@@ -87,6 +87,7 @@ class EmailTemplateRessource(Ressource):
         images = customEmail.images
         mess_id, message = EmailBuilder(
             attachment, images, content, meta).mail_message
+        self.emailService.send_message(message)
         pass
 
     def _add_routes(self):

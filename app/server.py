@@ -18,7 +18,17 @@ import threading
 from json import JSONDecoder
 
 
-class ProcessTimeMiddleWare(BaseHTTPMiddleware):
+MIDDLEWARE: dict[str, type] = {
+
+}
+
+
+class MiddleWare(BaseHTTPMiddleware):
+    def __init_subclass__(cls: type) -> None:
+        MIDDLEWARE[cls.__name__] = cls
+
+
+class ProcessTimeMiddleWare(MiddleWare):
 
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(self, app, dispatch)
@@ -31,10 +41,10 @@ class ProcessTimeMiddleWare(BaseHTTPMiddleware):
         return response
 
 
-class SecurityMiddleWare(BaseHTTPMiddleware, InjectableMiddlewareInterface):
+class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
 
     def __init__(self, app, dispatch=None) -> None:
-        BaseHTTPMiddleware.__init__(self, app, dispatch)
+        MiddleWare.__init__(self, app, dispatch)
         InjectableMiddlewareInterface.__init__(self)
 
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):

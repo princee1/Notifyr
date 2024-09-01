@@ -5,6 +5,7 @@ import sys
 import json
 import pickle
 import glob
+from typing import Any, overload
 
 # BUG file name must be a non null string
 
@@ -23,6 +24,10 @@ def getFd(path: str, flag: FDFlag, enc: str = "utf-8"):
         return open(path, flag.value, encoding=enc)
     except:
         return None
+
+
+def exist(path):
+    return getFd(path, FDFlag.READ) != None
 
 
 def readFileContent(path: str, flag: FDFlag, enc: str = "utf-8"):
@@ -88,11 +93,20 @@ def getFilenameOnly(path: str):
 
 class File:
 
-    def __init__(self, file):
+    def __init__(self, file: str):
         self.file = file
         self.loaded = False
         self.load()
 
+    def __init__(self, file: str, from_data: Any):
+        self.file = file
+        self.load(from_data)
+
+    @overload
+    def load(self, from_data: Any):
+        ...
+
+    @overload
     def load(self,):
         ...
 
@@ -102,20 +116,33 @@ class File:
 
 class JSONFile(File):
 
+    @overload
     def __init__(self, jsonFile):
         super().__init__(jsonFile)
 
+    @overload
+    def __init__(self, jsonFilename, from_data):
+        super().__init__(jsonFilename, from_data)
+
+    @overload
     def load(self):
         fd = getFd(self.file, FDFlag.READ)
         if fd is not None:
             self.loaded = True
             self.data = json.load(fd)
 
+    @overload
+    def load(self, from_data):
+        self.data = from_data
+        self.loaded = True
+        self.save()
+        pass
+
     def save(self):
         if not self.loaded:
             return
         fd = getFd(self.file, FDFlag.READ)
-        json.dump(fd)
+        json.dump(self.data, fd)
         pass
 
 
