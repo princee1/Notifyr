@@ -1,8 +1,8 @@
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from enum import Enum
 import os
-import json
 import sys
+import json
 import pickle
 import glob
 
@@ -86,19 +86,51 @@ def getFilenameOnly(path: str):
     return os.path.split(path)[1]
 
 
-class JSONFile():
-    pass
+class File:
+
+    def __init__(self, file):
+        self.file = file
+        self.loaded = False
+        self.load()
+
+    def load(self,):
+        ...
+
+    def save(self):
+        ...
 
 
-class ConfigFile():
+class JSONFile(File):
+
+    def __init__(self, jsonFile):
+        super().__init__(jsonFile)
+
+    def load(self):
+        fd = getFd(self.file, FDFlag.READ)
+        if fd is not None:
+            self.loaded = True
+            self.data = json.load(fd)
+
+    def save(self):
+        if not self.loaded:
+            return
+        fd = getFd(self.file, FDFlag.READ)
+        json.dump(fd)
+        pass
+
+
+class ConfigFile(File):
     """
     ConfigParser for properties files
     """
 
     def __init__(self, propertiesFile: str) -> None:
-        self.properties = propertiesFile
+        super().__init__(propertiesFile)
+
+    def load(self):
         self.config = ConfigParser(comment_prefixes='#', delimiters="=")
-        self.config.read(self.properties)
+        self.config.read(self.file)
+        pass
 
     def getValue(self, option, section):
         try:
@@ -143,6 +175,5 @@ class ConfigFile():
         file_descriptor = getFd(self.properties, FDFlag.WRITE)
         if file_descriptor is not None:
             self.config.write(file_descriptor)
-
 
     pass

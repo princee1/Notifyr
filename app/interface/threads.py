@@ -44,10 +44,6 @@ class InfiniteThreadInterface(ThreadInterface):
         pass
 
     def _run(self):
-        """
-        It waits for a timeout period, then checks if there are any notifications to be shown, and if there
-        are, it shows them.
-        """
         while self.active:
             try:
                 self.event.wait(self.waitTime)

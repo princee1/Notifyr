@@ -15,9 +15,7 @@ from interface.middleware import EventInterface, InjectableMiddlewareInterface
 import uvicorn
 import multiprocessing
 import threading
-
-
-
+from json import JSONDecoder
 
 
 class ProcessTimeMiddleWare(BaseHTTPMiddleware):
@@ -50,8 +48,10 @@ class SecurityMiddleWare(BaseHTTPMiddleware, InjectableMiddlewareInterface):
 
 class Application(EventInterface):
 
-    def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]]) -> None:
-        self.thread = threading.Thread(self, None, self.run, title, daemon=None)
+    def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]] = [], log_level='warning', log_config=None):
+        self.thread = threading.Thread(None, self.run, title, daemon=None)
+        self.log_level = log_level
+        self.log_config = log_config
         self.ressources = ressources
         self.middlewares = middlewares
         self.configService: ConfigService = Get(ConfigService)
@@ -63,9 +63,10 @@ class Application(EventInterface):
 
     def start(self):
         self.thread.start()
-    
+
     def start_server(self):
-        uvicorn.run(self.app,)
+        uvicorn.run(self.app, log_level=self.log_level,
+                    log_config=self.log_config)
 
     def stop_server(self):
         pass
@@ -76,7 +77,7 @@ class Application(EventInterface):
     def add_ressources(self):
         for ressource_type in self.ressources:
             res = ressource_type()
-            self.app.include_router(res.router,responses=res.default_response)
+            self.app.include_router(res.router, responses=res.default_response)
         pass
 
     def add_middlewares(self):

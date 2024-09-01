@@ -6,6 +6,7 @@ from definition import _service
 from time import sleep
 from discord_webhook import DiscordWebhook, AsyncDiscordWebhook
 # WARNING extends the ABC last
+from interface.threads import InfiniteThreadInterface
 
 
 @_service.AbstractServiceClass
@@ -27,7 +28,7 @@ class NotificationService(_service.Service):
     pass  # BUG we can specify a kid class if we decide to inject a Notification
 
 @_service.ServiceClass
-class SystemNotificationService(NotificationService):
+class SystemNotificationService(NotificationService,InfiniteThreadInterface):
     MAX_TO_BE_SHOWED = 8
     DURATION = 10
 
