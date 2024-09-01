@@ -1,86 +1,190 @@
 """
-Generated from chat GPT, cause im too lazy
+https://inquirerpy.readthedocs.io/en/latest/
 """
-from typing import Any
+from enum import Enum
+from typing import overload  # TODO add multiple definition
 from InquirerPy import prompt
-from InquirerPy.validator import NumberValidator
+from InquirerPy.separator import Separator
+from InquirerPy.base import Choice
+from InquirerPy.prompts.expand import ExpandChoice
+import pprint as pp
+from InquirerPy.validator import *
+from prompt_toolkit.styles import Style
+from prettyprint import printJSON
 
 
-class InputHandler():
-
-    def prompt(self,message:str):
-        pass
+class InputKeyAlreadyExistsError(BaseException):
     pass
 
-class ChoiceHandler(InputHandler):
-    def __init__(self,message,name,baseChoice=[]) -> None:
-        super().__init__(message,name)
-        self.choices:list[Any] = baseChoice
+class InputHandler:
+    def __init__(self, inputType: str, message: str, default, name: str, qMark, when, validate, filter=None) -> None:
+        self.inputType = inputType
+        self.message = message
+        self.default = default
+        self.name = name
+        self.qMark = qMark
+        self.when = when
+        self.validate = validate
+        self.filter = filter
 
-    def addChoice(self,value:Any | list[Any]):
-        if type(value) is Any:
-            self.choices.append(value)
-        else: 
-            self.choices.extend(value)
+    @property
+    def question(self) -> dict:
+        # TODO check all valid attributes and add them in the dict
+        return {
+            "type": self.inputType,
+            "message": self.message,
+            "default": self.default,
+            "name": self.name,
+            #"qmark": self.qMark,
+            "when": self.when,
+            "validate": self.validate,
+            "filter": self.filter,
+        }
+
+
+class ChoiceInterface:
+    def __init__(self, choices) -> None:
+        self.choices: list = choices
+        pass
+
+    def addChoices(self):
         return self
 
+    def addValue(self, value):
+        self.choices.append(value)
+        return self
+
+    def addSeparator(self, title=None):
+        self.choices.append(Separator(title))
+        return self
+
+    def toDict(self) -> dict:
+        return {
+            "choices": self.choices
+        }
+
+
+class CheckboxInputHandler(InputHandler, ChoiceInterface):
+    def __init__(self, message, name, choices=[], qMark=None, validate=None, filter=None, when=None) -> None:
+        InputHandler.__init__(self, "checkbox",
+                          message, None, name, qMark, when, validate, filter)
+        ChoiceInterface.__init__(self, choices)
+
+    def addChoices(self, value, name, checked=False, disabled=None):
+        self.choices.append(Choice(value, name, checked))
+        return super().addChoices()
+
+    @property
+    def question(self) -> dict:
+        value = super().question
+        value.update(ChoiceInterface.toDict(self))
+        return value
+
+
+class SimpleInputHandler(InputHandler):
+    def __init__(self, message: str, default, name: str, qMark=None, validate=None, filter=None, when=None, completer=None, transformer=None) -> None:
+        super().__init__("input", message, default, name, qMark, when, validate, filter)
+        self.completer = completer
+        self.transformer = transformer
+        # NOTE multicolumn_completer = True
+
+    pass
+
+
 class NumberInputHandler(InputHandler):
-    def __init__(self, default=0, min_val=None, max_val=None):
-        super().__init__()
-        self.result = None
-        self.default = default
-        self.min_val = min_val
-        self.max_val = max_val
+    def __init__(self, inputType: str, message: str, default: int, name: str, min_allowed, max_allowed, float_allowed=False, qMark=None, when=None, filter=None) -> None:
+        super().__init__(inputType, message, default, name,
+                         qMark, when, EmptyInputValidator(), filter)
+        self.min_allowed = min_allowed
+        self.max_allowed = max_allowed
+        self.float_allowed = float_allowed
 
-    def number_input(self, message="Enter a number",):
-        question = {
-            "type": "input",
-            "name": "number",
-            "message": message,
-            "default": str(self.default),
-            "validate": NumberValidator(),
-            "filter": lambda val: int(val)
-        }
-        if self.min_val is not None or self.max_val is not None:
-            question["validate"] = NumberValidator(
-                min_value=self.min_val, max_value=self.max_val)
 
-        answer = prompt(question)
-        self.result = answer["number"]
-        return self.result
+class ConfirmInputHandler(InputHandler):
+    def __init__(self, message: str, name: str, default: bool, qMark=None, validate=None, filter=None, when=None) -> None:
+        super().__init__("confirm", message, default, name, qMark, when, validate, filter)
 
-    def prompt(self, message: str = "Enter a number"):
-        return self.number_input(message)
 
-class ChoiceInputHandler(ChoiceHandler):
-    def __init__(self,choices=[],default=None):
-        super().__init__()
-        self.result = None
-        self.choices = choices
-        if default is not None and default not in self.choices:
-            raise ValueError
-        
-        self.default = default
+class PasswordInputHandler(InputHandler):
+    def __init__(self, message: str, name: str, instruction:str, invalidMessage=None, qMark=None, validate=None, filter=None, when=None, transformer=None) -> None:
+        super().__init__("password", message, None, name, qMark, when, validate, filter)
+        self.transformer = transformer
+        self.long_instruction = instruction
+        self.invalid_message = invalidMessage
 
-    def choice_input(self, message="Choose an option"):
-        
-        question = {
-            "type": "list",
-            "name": "choice",
-            "message": message,
-            "choices": self.choices,
-            "default": self.default
-        }
 
-        answer = prompt(question)
-        self.result = answer["choice"]
-        return self.result
-    
-    def prompt(self, message: str = "Enter a number"):
-        return self.choice_input(message)
+class ListInputHandler(InputHandler, ChoiceInterface):
+    class ListTypeQuestion(Enum):
+        RAW_LIST = "rawlist"
+        LIST = "list"
+        pass
 
-class SimpleInputHandler(InputHandler):pass
+    def __init__(self, inputType: ListTypeQuestion, message: str, default: int, name: str, choices=[], multiselect=False, qMark=None, validate=None, filter=None, when=None, transformer=None) -> None:
+        super().__init__(
+            inputType, message, default, name, qMark, when, validate, filter)
+        ChoiceInterface.__init__(self, choices)
+        self.multiselect = multiselect
+        self.transformer = transformer
 
-class ConfirmInputHandler(InputHandler):pass
+    def addChoices(self, name, value):
+        self.choices.append(Choice(value, name))
+        return super().addChoices()
 
-class PasswordInputHandler(InputHandler): pass
+    @property
+    def question(self) -> dict:
+        value = super().question
+        value.update(ChoiceInterface.toDict(self))
+        return value
+
+
+class ExpandInputHandler(InputHandler, ChoiceInterface):
+    def __init__(self, message: str, default: str, name: str, choices=[], qMark=None, when=None, validate=None, filter=None) -> None:
+        super().__init__("expand", message, default, name, qMark, when, validate, filter)
+        ChoiceInterface.__init__(self, choices)
+
+    def addChoices(self, key, name, value, checked=False):
+        self.choices.append(ExpandChoice(value, name, checked, key))
+        return super().addChoices()
+
+    @property
+    def question(self) -> dict:
+        value = super().question()
+        value.update(ChoiceInterface.toDict(self))
+        return value
+
+    def addValue(self):
+        raise NotImplementedError("Should be used in this context")
+
+
+class FileInputHandler(InputHandler):
+    def __init__(self, message: str, name: str, errorMessage: str, qMark=None, filter=None, when=None, isDir=False) -> None:
+        super().__init__("filepath", message, None, name, qMark, when, PathValidator(
+            message=errorMessage, is_dir=isDir, is_file=not isDir), filter)
+        self.onlyFiles = not isDir
+        self.onlyDir = isDir
+
+
+custom_style = Style.from_dict({
+    "question": "bold #ansiblue",        # Question text
+    "answer": "#ffcc00",                 # Answer text
+    "pointer": "fg:#ansiyellow bold",    # Pointer (arrow)
+    "checkbox": "fg:#ffcc00 bold",       # Checkbox selection
+    "separator": "fg:#cc0000",           # Separator line
+    # Instruction (e.g., "(use arrow keys)")
+    "instruction": "fg:#ansigreen italic",
+    "text": "#ffffff",                   # General text
+    "selected": "fg:#000000 bg:#ffcc00",  # Selected item
+    "pointer-marker": "fg:#ffcc00",      # Pointer marker for list options
+})
+
+
+def ask_question(questions: list[InputHandler], style=None):
+    names_error = {}
+    questions_list = []
+    for q in questions:
+        if names_error is not None:
+            raise InputKeyAlreadyExistsError()
+        names_error[q.name] = True
+    answers = prompt(questions_list, style)
+    return answers
+
