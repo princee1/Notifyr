@@ -4,7 +4,7 @@ import os
 import sys
 import colorama
 from colorama import Fore, Back, Style
-from colorama.ansi import clear_line, clear_screen
+from colorama.ansi import clear_line, clear_screen,set_title
 import emoji
 from typing import Any
 import pprint
@@ -14,6 +14,9 @@ colorama.init(autoreset=True)
 
 pprinter = pprint.PrettyPrinter()
 
+
+def settitle(tilte:str):
+    set_title(tilte)
 
 def clearline(): clear_line()
 

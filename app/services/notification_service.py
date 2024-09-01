@@ -5,7 +5,6 @@ from .config_service import ConfigService
 from definition import _service
 from time import sleep
 from discord_webhook import DiscordWebhook, AsyncDiscordWebhook
-# WARNING extends the ABC last
 from interface.threads import InfiniteThreadInterface
 
 
