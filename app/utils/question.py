@@ -24,7 +24,6 @@ class ChoiceHandler(InputHandler):
             self.choices.extend(value)
         return self
 
-
 class NumberInputHandler(InputHandler):
     def __init__(self, default=0, min_val=None, max_val=None):
         super().__init__()
@@ -53,7 +52,6 @@ class NumberInputHandler(InputHandler):
     def prompt(self, message: str = "Enter a number"):
         return self.number_input(message)
 
-
 class ChoiceInputHandler(ChoiceHandler):
     def __init__(self,choices=[],default=None):
         super().__init__()
@@ -64,7 +62,7 @@ class ChoiceInputHandler(ChoiceHandler):
         
         self.default = default
 
-    def choice_input(self, message="Choose an option",show_detail=False):
+    def choice_input(self, message="Choose an option"):
         
         question = {
             "type": "list",
@@ -81,8 +79,8 @@ class ChoiceInputHandler(ChoiceHandler):
     def prompt(self, message: str = "Enter a number"):
         return self.choice_input(message)
 
+class SimpleInputHandler(InputHandler):pass
 
+class ConfirmInputHandler(InputHandler):pass
 
-# Example usage
-number_handler = NumberInputHandler()
-choice_handler = ChoiceInputHandler()
+class PasswordInputHandler(InputHandler): pass
