@@ -84,6 +84,10 @@ class ConfigService(_service.Service):
         self.IMAP_EMAIL_CONN_METHOD= os.getenv("IMAP_EMAIL_CONN_METHOD")
 
         self.ASSET_LANG = os.getenv("ASSET_LANG")
+
+        self.TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+        self.TWILIO_AUTH_TOKEN= os.getenv("TWILIO_AUTH_TOKEN")
+        self.TWILIO_NUMBER= os.getenv("TWILIO_NUMBER")
         
     def destroy(self):
         return super().destroy()
