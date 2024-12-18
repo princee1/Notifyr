@@ -107,6 +107,7 @@ class Service():
             self.__destroyed = True
             self.__builded = False
             pass
+        
         except BuildFailureError as e:
             pass
 
@@ -224,7 +225,7 @@ def BuildOnlyIf(flag: bool):
 def BuildOnlyIf(func: Callable[..., bool]):
     """ WARNING The builtCls must be in the Dependency list if you want to call this decorator, 
         since the container cant add it while load all the dependencies,
-        if dont want the built class to call the builder function simply remove from the dependency list
+        if you dont want the built class to call the builder function simply remove from the dependency list
     """
     def decorator(cls: Type[S]) -> Type[S]:
         BuildOnlyIfDependencies[cls.__name__] = {

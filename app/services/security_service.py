@@ -16,7 +16,7 @@ class KeyExchange:
 
 @ServiceClass
 class SecurityService(Service):
-    @inject
+    
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__()
         self.configService = configService

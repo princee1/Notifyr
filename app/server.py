@@ -15,6 +15,7 @@ from interface.middleware import EventInterface, InjectableMiddlewareInterface
 import uvicorn
 import multiprocessing
 import threading
+from utils.fileIO import FDFlag, getFd
 from json import JSONDecoder
 
 
@@ -58,10 +59,11 @@ class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
 
 class Application(EventInterface):
 
-    def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]] = [], log_level='warning', log_config=None):
-        self.thread = threading.Thread(None, self.run, title, daemon=None)
+    def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug', log_config=None):
+        self.thread = threading.Thread(None, self.run, title, daemon=False)
         self.log_level = log_level
         self.log_config = log_config
+        self.port = port
         self.ressources = ressources
         self.middlewares = middlewares
         self.configService: ConfigService = Get(ConfigService)
@@ -75,8 +77,8 @@ class Application(EventInterface):
         self.thread.start()
 
     def start_server(self):
-        uvicorn.run(self.app, log_level=self.log_level,
-                    log_config=self.log_config)
+        uvicorn.run(self.app, port=self.port, loop="asyncio")
+        print('Starting')
 
     def stop_server(self):
         pass

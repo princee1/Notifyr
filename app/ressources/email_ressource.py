@@ -8,16 +8,16 @@ from container import InjectInMethod
 from definition._ressource import Ressource, Handler
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
-from fastapi import Request, Response
+from fastapi import Request, Response, HTTPException, status
 
 
 def handling_error(callback: Callable, *args, **kwargs):
     try:
         return callback(*args, **kwargs)
+    except KeyError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,)
     except:
-        pass
-    pass
-
+        raise HTTPException
 
 def guard_function(request: Request, **kwargs):
 
@@ -44,8 +44,8 @@ class EmailTemplateModel(BaseModel):
 class CustomEmailModel(BaseModel):
     meta: EmailMetaModel
     content: str
-    attachments: Optional[List[tuple[str, str]]]=[]
-    images: Optional[List[tuple[str, str]]]=[]
+    attachments: Optional[List[tuple[str, str]]] = []
+    images: Optional[List[tuple[str, str]]] = []
 
 
 PREFIX = "email"
@@ -65,14 +65,15 @@ class EmailTemplateRessource(Ressource):
     def on_shutdown(self):
         super().on_shutdown()
 
-    @Handler(handler_function=handling_error)
+    @Handler(handling_error)
     def send_emailTemplate(self, template: str, email: EmailTemplateModel):
         meta = email.meta
         data = email.data
         template: HTMLTemplate = self.assetService.htmls[template]
+
         flag, data = template.build(data)
         if not flag:
-            # raise ValidationError
+
             return
         images = template.images
         self.emailService.send_message(EmailBuilder(data, meta, images))

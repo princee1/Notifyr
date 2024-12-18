@@ -8,7 +8,7 @@ from injector import inject
 from enum import Enum
 import os
 from threading import Thread
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Dict
 from utils.helper import issubclass_of
 
 ROOT_PATH = "assets/"
@@ -45,7 +45,7 @@ class Reader():
 
     def __init__(self, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         self.asset = asset
-        self.values: dict[str, asset] = {}
+        self.values: Dict[str, Asset] = {}
         self.func = additionalCode
 
     def safeReader(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
@@ -75,9 +75,9 @@ class Reader():
         extension_ = extension(ext)
         root = path(rootParam) if type(rootParam) is str  else path(ext.value)
         setTempFile: set[str] = set()
-        for file in Reader.fileService.listFileExtensions(extension_, root, recursive=True):
+        for file in self.fileService.listFileExtensions(extension_, root, recursive=True):
             relpath = root + os.path.sep+file
-            filename, content, dir = Reader.fileService.readFileDetail(
+            filename, content, dir = self.fileService.readFileDetail(
                 relpath, flag, encoding)
             keyName = filename if not setTempFile else file
             setTempFile.add(keyName)
@@ -128,7 +128,7 @@ class AssetService(_service.Service):
     @inject
     def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService) -> None:
         super().__init__()
-        Reader.fileService = fileService
+        self.fileService = fileService
         Template.LANG = configService.ASSET_LANG
 
         self.fileService:FileService = fileService

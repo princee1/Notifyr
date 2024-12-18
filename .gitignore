@@ -168,3 +168,4 @@ help.md
 *.css
 *.scss
 /.VsCodeCounter/
+*.pem

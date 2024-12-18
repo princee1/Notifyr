@@ -342,6 +342,7 @@ class Container():
         return obj
 
     def __freeUpMemory(self):
+        return
         for k, v in self.DEPENDENCY_MetaData.items():
             del v[DependencyConstant.PARAM_NAMES_KEY]
 
@@ -356,6 +357,7 @@ class Container():
             dependency: Type[S] = self.get(typ)
             try:
                 dependency._builder()
+                self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY] = True
                 return dependency
             except:
                 pass
