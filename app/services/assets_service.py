@@ -144,6 +144,7 @@ class AssetService(_service.Service):
         self.phone: dict[str, PhoneTemplate] = {}
 
     def build(self):
+        Reader.fileService = self.fileService
         self.images = Reader()(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
         self.css = Reader()(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
 

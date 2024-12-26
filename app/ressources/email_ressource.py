@@ -6,6 +6,7 @@ from services.config_service import ConfigService
 from services.security_service import SecurityService
 from container import InjectInMethod
 from definition._ressource import Ressource, Handler
+from definition._service import ServiceNotAvailableError
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
 from fastapi import Request, Response, HTTPException, status
@@ -16,8 +17,13 @@ def handling_error(callback: Callable, *args, **kwargs):
         return callback(*args, **kwargs)
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND,)
+    
+    except ServiceNotAvailableError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE)
+
     except:
         raise HTTPException
+
 
 def guard_function(request: Request, **kwargs):
 

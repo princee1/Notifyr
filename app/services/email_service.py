@@ -166,12 +166,15 @@ class EmailSenderService(EmailService):
             raise _service.BuildAbortError
 
     def send_message(self, email: EmailBuilder):
+
         try:
+            if not self.__builded :
+                raise _service.ServiceNotAvailableError
             emailID,message=email.mail_message
             for to in email.emailMetadata.To:
                 self.connector.verify(to)
             self.connector.sendmail(email.emailMetadata.From, email.emailMetadata.To,message)
-
+            
         except smtp.SMTPHeloError as e:
             pass
         except smtp.SMTPRecipientsRefused as e:
