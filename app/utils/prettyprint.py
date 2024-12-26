@@ -21,7 +21,7 @@ def settitle(tilte:str):
 def clearline(): clear_line()
 
 
-def clearscreen(): clear_screen()
+def clearscreen():os.system('cls') #clear_screen()
 
 
 def print_message(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:"):

@@ -18,7 +18,7 @@ class InputKeyAlreadyExistsError(BaseException):
 
 
 class InputHandler:
-    def __init__(self, inputType: str, message: str, default, name: str, when, validate, filter=None) -> None:
+    def __init__(self, inputType: str, message: str, default, name: str, when, validate, filter=None,invalid_message=None,instruction=None) -> None:
         self.inputType = inputType
         self.message = message
         self.default = default
@@ -26,10 +26,11 @@ class InputHandler:
         self.when = when
         self.validate = validate
         self.filter = filter
+        self.invalid_message = invalid_message
+        self.instruction = instruction
 
-    def  clone(self,message):
-        return 
-        
+    def clone(self, message):
+        return
 
     @property
     def question(self) -> dict:
@@ -43,6 +44,8 @@ class InputHandler:
             "when": self.when,
             "validate": self.validate,
             "filter": self.filter,
+            "invalid_message": self.invalid_message,
+            "instruction": self.instruction
         }
 
 
@@ -69,9 +72,9 @@ class ChoiceInterface:
 
 
 class CheckboxInputHandler(InputHandler, ChoiceInterface):
-    def __init__(self, message, name, choices=[], qMark=None, validate=None, filter=None, when=None) -> None:
+    def __init__(self, message, name, choices=[], qMark=None, validate=None, filter=None, when=None,invalid_message=None,instruction=None) -> None:
         InputHandler.__init__(self, "checkbox",
-                              message, None, name, qMark, when, validate, filter)
+                              message, None, name, when, validate, filter,invalid_message,instruction)
         ChoiceInterface.__init__(self, choices)
 
     def addChoices(self, value, name, checked=False, disabled=None):
@@ -86,8 +89,8 @@ class CheckboxInputHandler(InputHandler, ChoiceInterface):
 
 
 class SimpleInputHandler(InputHandler):
-    def __init__(self, message: str, default, name: str, validate=None, filter=None, when=None, completer=None, transformer=None) -> None:
-        super().__init__("input", message, default, name, when, validate, filter)
+    def __init__(self, message: str, default, name: str, validate=None, filter=None, when=None, completer=None, transformer=None,invalid_message=None,instruction=None) -> None:
+        super().__init__("input", message, default, name, when, validate, filter,invalid_message,instruction)
         self.completer = completer
         self.transformer = transformer
         # NOTE multicolumn_completer = True
@@ -96,25 +99,24 @@ class SimpleInputHandler(InputHandler):
 
 
 class NumberInputHandler(InputHandler):
-    def __init__(self, message: str, default: int, name: str, min_allowed, max_allowed, float_allowed=False,  when=None, filter=None) -> None:
+    def __init__(self, message: str, default: int, name: str, min_allowed, max_allowed, float_allowed=False,  when=None, filter=None,invalid_message=None,instruction=None) -> None:
         super().__init__("number", message, default, name,
-                         when, EmptyInputValidator(), filter)
+                         when, EmptyInputValidator(), filter,invalid_message,instruction)
         self.min_allowed = min_allowed
         self.max_allowed = max_allowed
         self.float_allowed = float_allowed
 
 
 class ConfirmInputHandler(InputHandler):
-    def __init__(self, message: str, name: str, default: bool, validate=None, filter=None, when=None) -> None:
-        super().__init__("confirm", message, default, name, when, validate, filter)
+    def __init__(self, message: str, name: str, default: bool, validate=None, filter=None, when=None,invalid_message=None,instruction=None) -> None:
+        super().__init__("confirm", message, default, name, when, validate, filter,invalid_message,instruction)
 
 
 class PasswordInputHandler(InputHandler):
     def __init__(self, message: str, name: str, instruction: str, invalidMessage=None, validate=None, filter=None, when=None, transformer=None) -> None:
-        super().__init__("password", message, None, name, when, validate, filter)
+        super().__init__("password", message, None, name, when, validate, filter,invalidMessage,instruction)
         self.transformer = transformer
         self.long_instruction = instruction
-        self.invalid_message = invalidMessage
 
 
 class ListInputHandler(InputHandler, ChoiceInterface):
@@ -123,9 +125,9 @@ class ListInputHandler(InputHandler, ChoiceInterface):
         LIST = "list"
         pass
 
-    def __init__(self, inputType: ListTypeQuestion, message: str, default: int, name: str, choices=[], multiselect=False, validate=None, filter=None, when=None, transformer=None) -> None:
+    def __init__(self, inputType: ListTypeQuestion, message: str, default: int, name: str, choices=[], multiselect=False, validate=None, filter=None, when=None, transformer=None,invalid_message=None,instruction=None) -> None:
         super().__init__(
-            inputType, message, default, name, when, validate, filter)
+            inputType.value, message, default, name, when, validate, filter,invalid_message,instruction)
         ChoiceInterface.__init__(self, choices)
         self.multiselect = multiselect
         self.transformer = transformer
@@ -138,12 +140,15 @@ class ListInputHandler(InputHandler, ChoiceInterface):
     def question(self) -> dict:
         value = super().question
         value.update(ChoiceInterface.toDict(self))
+        value["multiselect"] = self.multiselect
+        value["transformer"] = self.transformer
+        #value['required'] = True
         return value
 
 
 class ExpandInputHandler(InputHandler, ChoiceInterface):
-    def __init__(self, message: str, default: str, name: str, choices=[], qMark=None, when=None, validate=None, filter=None) -> None:
-        super().__init__("expand", message, default, name, qMark, when, validate, filter)
+    def __init__(self, message: str, default: str, name: str, choices=[], qMark=None, when=None, validate=None, filter=None,invalid_message=None,instruction=None) -> None:
+        super().__init__("expand", message, default, name, qMark, when, validate, filter,invalid_message,instruction)
         ChoiceInterface.__init__(self, choices)
 
     def addChoices(self, key, name, value, checked=False):
@@ -152,7 +157,7 @@ class ExpandInputHandler(InputHandler, ChoiceInterface):
 
     @property
     def question(self) -> dict:
-        value = super().question()
+        value = super().question
         value.update(ChoiceInterface.toDict(self))
         return value
 
@@ -161,9 +166,9 @@ class ExpandInputHandler(InputHandler, ChoiceInterface):
 
 
 class FileInputHandler(InputHandler):
-    def __init__(self, message: str, name: str, errorMessage: str, filter=None, when=None, isDir=False) -> None:
+    def __init__(self, message: str, name: str, errorMessage: str, filter=None, when=None, isDir=False,invalid_message=None,instruction=None) -> None:
         super().__init__("filepath", message, None, name, when, PathValidator(
-            message=errorMessage, is_dir=isDir, is_file=not isDir), filter)
+            message=errorMessage, is_dir=isDir, is_file=not isDir), filter,invalid_message,instruction)
         self.onlyFiles = not isDir
         self.onlyDir = isDir
 
@@ -183,11 +188,12 @@ custom_style = Style.from_dict({
 
 
 def ask_question(questions: list[InputHandler], style=None):
-    names_error = {}
-    questions_list = []
+    names_error:set = set()
+    questions_list = [q.question for q in questions]
     for q in questions:
-        if names_error is not None:
+        if q.name in names_error:
             raise InputKeyAlreadyExistsError()
-        names_error[q.name] = True
+        names_error.add(q.name)
+        
     answers = prompt(questions_list, style)
     return answers
