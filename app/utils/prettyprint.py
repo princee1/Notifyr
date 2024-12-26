@@ -8,6 +8,9 @@ from colorama.ansi import clear_line, clear_screen,set_title
 import emoji
 from typing import Any
 import pprint
+import pyfiglet
+import time
+import sys
 
 # Initialize colorama
 colorama.init(autoreset=True)
@@ -105,3 +108,26 @@ class PrettyPrinter:
         clearline()
 
 PrettyPrinter_:PrettyPrinter = PrettyPrinter()
+
+########################################################################
+
+text = 'Communication - Service'
+justify = 'left'
+
+figlet = pyfiglet.Figlet(font='standard')
+ascii_art = figlet.renderText(text)
+
+if justify == 'center':
+    ascii_art = '\n'.join(line.center(80) for line in ascii_art.splitlines())
+elif justify == 'right':
+    ascii_art = '\n'.join(line.rjust(80) for line in ascii_art.splitlines())
+
+
+def show(t=10, title='Communication - Service', t1=0):
+    time.sleep(t1)
+    clearscreen()
+    settitle(title)
+    print(ascii_art)
+    time.sleep(t)
+    # clearscreen()
+

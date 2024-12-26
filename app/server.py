@@ -2,26 +2,41 @@
 Contains the FastAPI app
 """
 
+from dataclasses import dataclass
+from container import InjectInMethod, Get, Need
+from ressources import *
 from starlette.types import ASGIApp
 from services.config_service import ConfigService
 from services.security_service import SecurityService
-from definition._ressource import Ressource
-from container import InjectInMethod, Get, Need
+from utils.prettyprint import printJSON, show
 from fastapi import Request, Response, FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
-from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping
-import time
+from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload
 from interface.middleware import EventInterface, InjectableMiddlewareInterface
-import uvicorn
-import multiprocessing
-import threading
-from utils.fileIO import FDFlag, getFd
-from json import JSONDecoder
-import sys
+import uvicorn,multiprocessing,threading,sys
+from middleware import MIDDLEWARE
+from definition._ressource import RESSOURCES,Ressource
+from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler
 
 AppParameterKey = Literal['title', 'summary', 'description', 'ressources', 'middlewares', 'port', 'log_level', 'log_config']
 
+@dataclass
 class AppParameter:
+    title: str
+    summary: str
+    description: str
+    ressources: list[type[Ressource]]
+    middlewares: list[type[BaseHTTPMiddleware]]
+    port: int = 8000
+    log_level: str = 'debug'
+    log_config: Any = None
+
+
+    @overload
+    def __init__(self):
+        ...
+    
+    @overload
     def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug', log_config=None):
         self.title:str = title
         self.summary:str = summary
@@ -45,17 +60,22 @@ class AppParameter:
         }
     
     def fromJSON(self, json:Dict[AppParameterKey,Any], RESSOURCES, MIDDLEWARE):
-        self.title = json['title']
-        self.summary = json['summary']
-        self.description = json['description']
-        self.ressources = [RESSOURCES[ressource] for ressource in json['ressources']]
-        self.middlewares = [MIDDLEWARE[middleware] for middleware in json['middlewares']]
-        self.port = json['port']
-        self.log_level = json['log_level']
-        self.log_config = json['log_config']
+        clone = AppParameter.fromJSON(json, RESSOURCES, MIDDLEWARE)
+        self.__dict__ = clone.__dict__
         return self
     
-
+    @staticmethod
+    def fromJSON(json: Dict[AppParameterKey,Any], RESSOURCES, MIDDLEWARE):
+        title = json['title']
+        summary = json['summary']
+        description = json['description']
+        ressources = [RESSOURCES[ressource] for ressource in json['ressources']]
+        middlewares = [MIDDLEWARE[middleware] for middleware in json['middlewares']]
+        port = json['port']
+        slog_level = json['log_level']
+        log_config = json['log_config']
+        return AppParameter(title, summary, description, ressources, middlewares, port, slog_level, log_config)
+    
 
 class Application(EventInterface):
 
@@ -78,10 +98,6 @@ class Application(EventInterface):
         self.thread.start()
 
     def start_server(self):
-        # with open('output.txt', 'w') as file:
-        #     # Redirect stdout to the file
-        #     sys.stdout = file
-        #     print("This will be written to the file.")
         uvicorn.run(self.app, port=self.port, loop="asyncio")
         print('Starting')
 
@@ -109,3 +125,53 @@ class Application(EventInterface):
         pass
 
     pass
+
+#######################################################                          #####################################################
+
+ressources_key: set = set(RESSOURCES.keys())
+middlewares_key = list(MIDDLEWARE.keys())
+
+app_titles = []
+available_ports = []
+show(2)
+
+def more_than_one(result): return len(result) >= 1
+def existing_port(port): return port not in available_ports
+
+def existing_title(title): return title not in app_titles
+
+invalid_message = 'Should be at least 1 selection'
+instruction = '(Press space to select, enter to continue)'
+
+def createApps() -> list[AppParameter]:
+
+    _results = []
+
+    apps_counts = ask_question([NumberInputHandler('Enter the number of applications: ',
+                               name='apps_counts', default=1, min_allowed=1, max_allowed=10)])['apps_counts']
+    show(1)
+    print(f'Creating {apps_counts} applications')
+    print()
+    for i in range(int(apps_counts)):
+
+        result = ask_question([SimpleInputHandler(f'Enter the title of application {i+1} : ', name='title', default='', validate=existing_title, invalid_message='Title already exists'),
+                               SimpleInputHandler(
+            f'Enter the summary of application {i+1} : ', name='summary', default=''),
+            SimpleInputHandler(
+            f'Enter the description of application {i+1} : ', name='description', default=''),
+            CheckboxInputHandler(
+            f'Select the ressources of application {i+1} that will be used once per application: ', choices=ressources_key, name='ressources', validate=more_than_one, invalid_message=invalid_message, instruction=instruction
+        ),
+            CheckboxInputHandler(
+            f'Select the middlewares of application {i+1} : ', choices=middlewares_key, name='middlewares', validate=more_than_one, invalid_message=invalid_message, instruction=instruction),
+            NumberInputHandler(
+            f'Enter the port of application {i+1} : ', name='port', default=8080, min_allowed=4000, max_allowed=65535),
+            SimpleInputHandler(
+            f'Enter the log level of application {i+1} : ', name='log_level', default='debug'),
+        ],)
+        ressources_key.difference_update(result['ressources'])
+        _results.append(AppParameter.fromJSON(result, RESSOURCES, MIDDLEWARE))
+        show(1)
+        printJSON(_results)
+    
+    return _results
