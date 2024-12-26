@@ -1,8 +1,7 @@
 
 from typing import overload,Type,TypeVar
 from warnings import warn
-
-
+from inspect import getmro
 
 
 INTERFACES_SET = set()
@@ -13,6 +12,8 @@ class MethodConflitException(Exception):
     pass
 
 
+
+
 class Interface:
 
     def __init_subclass__(cls: type) -> None:
@@ -21,6 +22,8 @@ class Interface:
                 warn(
                     "You should add 'Interface' at the end of your class name for a better QA", stacklevel=2)
             return
+        exetended_class = cls.mro()
+
         #TODO  compare attributes and methods
 
 
