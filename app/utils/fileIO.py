@@ -1,11 +1,12 @@
 from configparser import ConfigParser, NoOptionError, NoSectionError
+from dataclasses import dataclass
 from enum import Enum
 import os
 import sys
 import json
 import pickle
 import glob
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 # BUG file name must be a non null string
 
@@ -90,14 +91,19 @@ def getFileDir(path: str):
 def getFilenameOnly(path: str):
     return os.path.split(path)[1]
 
-
+@dataclass
 class File:
+    file:str
+    data: Any = None
+    loaded: bool = False
 
+
+    @overload
     def __init__(self, file: str):
         self.file = file
-        self.loaded = False
         self.load()
 
+    @overload
     def __init__(self, file: str, from_data: Any):
         self.file = file
         self.load(from_data)
@@ -113,6 +119,13 @@ class File:
     def save(self):
         ...
 
+    def clear(self):
+        ...
+
+    def write_raw(self,content, flag:Literal[FDFlag.WRITE,FDFlag.WRITE_BYTES]=FDFlag.WRITE):
+        writeContent(self.file,content,flag)
+
+    
 
 class JSONFile(File):
 
@@ -130,20 +143,23 @@ class JSONFile(File):
         if fd is not None:
             self.loaded = True
             self.data = json.load(fd)
-
+            return
+            
     @overload
     def load(self, from_data):
         self.data = from_data
         self.loaded = True
         self.save()
-        pass
 
     def save(self):
         if not self.loaded:
             return
-        fd = getFd(self.file, FDFlag.READ)
+        fd = getFd(self.file, FDFlag.WRITE)
         json.dump(self.data, fd)
-        pass
+
+    def clear(self):
+        self.data = {}
+        self.save()
 
 
 class ConfigFile(File):
