@@ -1,3 +1,5 @@
+src_dir = app
+
 install	:
 	pip install -r requirements_dev.txt
 
@@ -30,3 +32,6 @@ activate:
 
 deactivate:
 	deactivate
+
+run:
+	python ${src_dir}/main.py
