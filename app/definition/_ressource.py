@@ -2,6 +2,7 @@
 # The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 # instance imported from `container`.
 """
+from inspect import isclass
 from typing import Any, Callable, Dict, Iterable, Mapping, TypeVar, Type
 from interface.middleware import EventInterface
 from services.assets_service import AssetService
@@ -16,6 +17,10 @@ from utils.helper import getParentClass
 
 
 PATH_SEPARATOR = "/"
+
+
+class MethodStartsWithError(Exception):
+    ...
 
 RESSOURCES:dict[str,type] = {}
 
@@ -54,9 +59,27 @@ class Ressource(EventInterface):
     def routeExample(self):
         pass
 
+R = TypeVar('R', bound=Ressource)
 
-def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None]):
-    def decorator(func):
+
+def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func:Callable,start_with:str = None)->Type[R]|Callable:
+    if type(cls) == type and isclass(cls):
+            if start_with is None:
+                raise MethodStartsWithError("start_with is required for class")
+            for attr in dir(cls):
+                if callable(getattr(cls, attr)) and attr.startswith(start_with):
+                    handler = getattr(cls,attr)
+                    setattr(cls,attr,decorator(handling_func)(handler))
+            return cls
+    return None
+
+
+
+def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None],start_with:str = None):
+    def decorator(func:Type[R]| Callable) -> Type[R]| Callable:
+        data = common_class_decorator(func,Handler,handler_function,start_with)
+        if data != None:
+            return data
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             return handler_function(func, *args, **kwargs)
@@ -64,8 +87,12 @@ def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, An
     return decorator
 
 
-def Guards(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]]):
-    def decorator(func):
+def Guard(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]],start_with:str = None):
+    def decorator(func: Callable| Type[R])-> Callable| Type[R]:
+        data = common_class_decorator(func,Guard,guard_function,start_with)
+        if data != None:
+            return data
+        
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             flag, message = guard_function(*args, **kwargs)
@@ -76,3 +103,31 @@ def Guards(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bo
         return wrapper
     return decorator
 
+
+def Pipe(pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]],before:bool = True, start_with:str = None):
+    def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
+        data = common_class_decorator(func,Pipe,pipe_function,start_with)
+        if data != None:
+            return data
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            if before:
+                args,kwargs = pipe_function(*args, **kwargs)
+                return func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+                return pipe_function(result)
+        return wrapper
+    return decorator
+
+
+def Interceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R]|Callable],start_with:str = None):
+    def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
+        data = common_class_decorator(func,Interceptor,interceptor_function,start_with)
+        if data != None:
+            return data
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            return interceptor_function(func,*args, **kwargs)
+        return wrapper
+    return decorator
