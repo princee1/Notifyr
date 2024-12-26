@@ -1,15 +1,16 @@
 from enum import Enum
-from typing import Any, overload, Callable, Type, TypeVar
+from typing import Any, overload, Callable, Type, TypeVar, Dict
 from utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
 import warnings
 
 
-AbstractDependency: dict[str, dict] = {}
-AbstractServiceClasses: dict[str, type] = {}
-BuildOnlyIfDependencies: dict = {}
-PossibleDependencies: dict[str, list[type]] = {}
+AbstractDependency: Dict[str, dict] = {}
+AbstractServiceClasses: Dict[str, type] = {}
+BuildOnlyIfDependencies: Dict = {}
+PossibleDependencies: Dict[str, list[type]] = {}
+OptionalDependencies: Dict[str, list[type]] = {}
 __DEPENDENCY: list[type] = []
 
 
@@ -46,6 +47,14 @@ class BuildFallbackError(BuildError):
     pass
 
 
+class ServiceNotAvailableError(BuildError):
+    pass
+
+class MethodServiceNotAvailableError(BuildError):
+    pass
+
+
+
 class Service():
 
     def __init__(self) -> None:
@@ -54,8 +63,8 @@ class Service():
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
 
     def build(self):
-        warnings.warn(
-            f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
+        # warnings.warn(
+        #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
         pass
 
     def destroy(self):
@@ -247,5 +256,12 @@ def SkipBuild(cls: Type[S]):
 def PossibleDep(dependencies: list[type[Service]]):
     def decorator(cls: Type[S]) -> Type[S]:
         PossibleDependencies[cls.__name__] = [d.__name__ for d in dependencies]
+        return cls
+    return decorator
+
+
+def OptionalDep(dependencies: list[type[Service]]):
+    def decorator(cls: Type[S]) -> Type[S]:
+        OptionalDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls
     return decorator
