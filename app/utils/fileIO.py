@@ -91,29 +91,18 @@ def getFileDir(path: str):
 def getFilenameOnly(path: str):
     return os.path.split(path)[1]
 
+
 @dataclass
 class File:
-    file:str
+    file: str
     data: Any = None
     loaded: bool = False
 
-
-    @overload
-    def __init__(self, file: str):
-        self.file = file
-        self.load()
-
-    @overload
-    def __init__(self, file: str, from_data: Any):
+    def __init__(self, file: str, from_data: Any=None):
         self.file = file
         self.load(from_data)
 
-    @overload
     def load(self, from_data: Any):
-        ...
-
-    @overload
-    def load(self,):
         ...
 
     def save(self):
@@ -122,34 +111,27 @@ class File:
     def clear(self):
         ...
 
-    def write_raw(self,content, flag:Literal[FDFlag.WRITE,FDFlag.WRITE_BYTES]=FDFlag.WRITE):
-        writeContent(self.file,content,flag)
+    def write_raw(self, content, flag: Literal[FDFlag.WRITE, FDFlag.WRITE_BYTES] = FDFlag.WRITE):
+        writeContent(self.file, content, flag)
 
-    
 
 class JSONFile(File):
 
-    @overload
-    def __init__(self, jsonFile):
-        super().__init__(jsonFile)
-
-    @overload
-    def __init__(self, jsonFilename, from_data):
+    def __init__(self, jsonFilename, from_data=None):
         super().__init__(jsonFilename, from_data)
 
-    @overload
-    def load(self):
+    def load(self, from_data=None):
+
+        if from_data == None:
+            self.data = from_data
+            self.loaded = True
+            self.save()
+
         fd = getFd(self.file, FDFlag.READ)
         if fd is not None:
             self.loaded = True
             self.data = json.load(fd)
             return
-            
-    @overload
-    def load(self, from_data):
-        self.data = from_data
-        self.loaded = True
-        self.save()
 
     def save(self):
         if not self.loaded:
