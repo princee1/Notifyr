@@ -13,13 +13,20 @@ from prompt_toolkit.styles import Style
 from utils.prettyprint import printJSON
 
 
+
+def more_than_one(result): return len(result) >= 1
+
+
+def exactly_one(result): return len(result) == 1
+
+
 class InputKeyAlreadyExistsError(BaseException):
     pass
 
 
 class InputHandler:
     def __init__(self, inputType: str, message: str, default, name: str, when, validate, filter=None,invalid_message=None,instruction=None) -> None:
-        self.inputType = inputType
+        self.type = inputType
         self.message = message
         self.default = default
         self.name = name
@@ -36,7 +43,7 @@ class InputHandler:
     def question(self) -> dict:
         # TODO check all valid attributes and add them in the dict
         return {
-            "type": self.inputType,
+            "type": self.type,
             "message": self.message,
             "default": self.default,
             "name": self.name,
@@ -47,6 +54,10 @@ class InputHandler:
             "invalid_message": self.invalid_message,
             "instruction": self.instruction
         }
+
+        return self.__dict__
+    
+    
 
 
 class ChoiceInterface:
@@ -167,10 +178,10 @@ class ExpandInputHandler(InputHandler, ChoiceInterface):
 
 class FileInputHandler(InputHandler):
     def __init__(self, message: str, name: str, errorMessage: str, filter=None, when=None, isDir=False,invalid_message=None,instruction=None) -> None:
-        super().__init__("filepath", message, None, name, when, PathValidator(
+        super().__init__("filepath", message, './', name, when, PathValidator(
             message=errorMessage, is_dir=isDir, is_file=not isDir), filter,invalid_message,instruction)
-        self.onlyFiles = not isDir
-        self.onlyDir = isDir
+        self.only_files = not isDir
+        self.only_directories = isDir
 
 
 custom_style = Style.from_dict({

@@ -8,7 +8,7 @@ from ressources import *
 from starlette.types import ASGIApp
 from services.config_service import ConfigService
 from services.security_service import SecurityService
-from utils.prettyprint import printJSON, show
+from utils.prettyprint import printJSON, show, PrettyPrinter_
 from fastapi import Request, Response, FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload
@@ -19,7 +19,7 @@ import threading
 import sys
 from middleware import MIDDLEWARE
 from definition._ressource import RESSOURCES, Ressource
-from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler
+from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler,exactly_one,more_than_one
 
 AppParameterKey = Literal['title', 'summary', 'description',
                           'ressources', 'middlewares', 'port', 'log_level', 'log_config']
@@ -143,13 +143,6 @@ app_titles = []
 available_ports = []
 show(2)
 
-
-def more_than_one(result): return len(result) >= 1
-
-
-def exactly_one(result): return len(result) == 1
-
-
 def existing_port(port): return port not in available_ports
 
 
@@ -167,7 +160,7 @@ def createApps() -> list[AppParameter]:
     apps_counts = ask_question([NumberInputHandler('Enter the number of applications: ',
                                name='apps_counts', default=1, min_allowed=1, max_allowed=10)])['apps_counts']
     show(1)
-    print(f'Creating {apps_counts} applications')
+    PrettyPrinter_.info(f'Creating {apps_counts} applications')
     print()
     for i in range(int(apps_counts)):
 
@@ -194,7 +187,7 @@ def createApps() -> list[AppParameter]:
     return _results
 
 
-def editApps(json_file_app_data: list[dict]) -> Dict[AppParameterKey, Any]:
+def editApps(json_file_app_data: list[dict]) -> list[AppParameter]:
     
     titles = [json_file_app_data[i]['title']
               for i in range(len(json_file_app_data))]
@@ -205,7 +198,7 @@ def editApps(json_file_app_data: list[dict]) -> Dict[AppParameterKey, Any]:
                             for i in range(len(json_file_app_data))])
 
     show(1)
-    print('Editing Applications')
+    PrettyPrinter_.info('Editing Applications')
     print()
     selected_title = ask_question([ListInputHandler('Select the application to edit: ', choices=titles, name='selected_app',
                                   validate=exactly_one, invalid_message='Should be exactly one selection', instruction=instruction)])['selected_app']
@@ -229,5 +222,10 @@ def editApps(json_file_app_data: list[dict]) -> Dict[AppParameterKey, Any]:
         f'Enter the log level of application {index+1} : ', name='log_level', default=json_file_app_data[index]['log_level']),
     ],)
 
-    return result
+    json_file_app_data[index] = result
+    return [AppParameter.fromJSON(data) for data in json_file_app_data]
 
+
+def start_applications(applications:list[AppParameter]):
+    for app in applications:
+        Application(app).start()

@@ -7,7 +7,7 @@ import json
 import pickle
 import glob
 from typing import Any, Literal, overload
-
+from utils.question import ask_question, FileInputHandler
 # BUG file name must be a non null string
 
 
@@ -19,6 +19,9 @@ class FDFlag(Enum):
     WRITE = "w"
     WRITE_BYTES = "wb"
 
+
+def inputFilePath(message:str,instruction ="(Press CTRL-C to quit)",isDirectory=False):
+    return ask_question([FileInputHandler(message,'location',isDir=isDirectory)])['location']
 
 def getFd(path: str, flag: FDFlag, enc: str = "utf-8"):
     try:
@@ -34,7 +37,7 @@ def exist(path):
 def readFileContent(path: str, flag: FDFlag, enc: str = "utf-8"):
     try:
         if flag != FDFlag.READ and flag != FDFlag.READ_BYTES:
-            raise KeyError()  # need a better error
+            raise KeyError()  #NOTE need a better error
         fd = getFd(path, flag, enc)
         file_content = fd.read()
         fd.close()
@@ -97,13 +100,17 @@ class File:
     file: str
     data: Any = None
     loaded: bool = False
+    exists: bool = False
 
     def __init__(self, file: str, from_data: Any=None):
         self.file = file
         self.load(from_data)
 
-    def load(self, from_data: Any):
-        ...
+    def load(self, from_data: Any=None):
+        self.exists = exist(self.file)
+        if not  self.exists:
+            print(f"File {self.file} does not exist")
+
 
     def save(self):
         ...
@@ -121,17 +128,22 @@ class JSONFile(File):
         super().__init__(jsonFilename, from_data)
 
     def load(self, from_data=None):
+        super().load(from_data)
+        if not self.exists:
+            return 
 
-        if from_data == None:
+        if from_data != None:
             self.data = from_data
             self.loaded = True
             self.save()
+            return 
 
         fd = getFd(self.file, FDFlag.READ)
         if fd is not None:
             self.loaded = True
             self.data = json.load(fd)
-            return
+        
+        return
 
     def save(self):
         if not self.loaded:

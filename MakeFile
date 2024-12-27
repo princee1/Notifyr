@@ -1,5 +1,5 @@
 src_dir = app
-
+config_dir = config.app.json
 install	:
 	pip install -r requirements_dev.txt
 
@@ -34,4 +34,4 @@ deactivate:
 	deactivate
 
 run:
-	python ${src_dir}/main.py
+	python ${src_dir}/main.py --config=${config_dir}
