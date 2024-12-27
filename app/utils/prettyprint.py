@@ -117,7 +117,10 @@ class PrettyPrinter:
     def cache(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
-            saveable =kwargs['saveable']
+            if 'saveable' not in kwargs:
+                saveable = True
+            else:
+                saveable =kwargs['saveable']
             self:PrettyPrinter = args[0]
             if saveable:
                 kwargs['saveable'] = False
@@ -130,6 +133,7 @@ class PrettyPrinter:
 
     @cache
     def warning(self, message,saveable =True,emoji_position:EmojiPosition='both'):
+
         print_warning(message,emoji_position)
 
     @cache
