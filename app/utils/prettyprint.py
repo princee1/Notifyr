@@ -18,6 +18,29 @@ colorama.init(autoreset=True)
 
 pprinter = pprint.PrettyPrinter()
 
+########################################################################
+
+text = 'Communication - Service'
+justify = 'left'
+
+figlet = pyfiglet.Figlet(font='standard')
+ascii_art = figlet.renderText(text)
+
+if justify == 'center':
+    ascii_art = '\n'.join(line.center(80) for line in ascii_art.splitlines())
+elif justify == 'right':
+    ascii_art = '\n'.join(line.rjust(80) for line in ascii_art.splitlines())
+
+
+def show(t=10, title='Communication - Service', t1=0, color=Fore.WHITE):
+    time.sleep(t1)
+    clearscreen()
+    settitle(title)
+    print_message(ascii_art, color=color, emoji_code='')
+    time.sleep(t)
+    # clearscreen()
+
+########################################################################
 
 def settitle(tilte: str):
     set_title(tilte)
@@ -64,6 +87,8 @@ def print_success(message,emoji_position:EmojiPosition='both'):
     """
     print_message(message, color=Fore.GREEN, emoji_code=":white_check_mark:",emoji_position=emoji_position)
 
+########################################################################
+
 
 def printJSON(content: dict | Any, indent=1, width=80, depth=None, compact=False,):
     """Pretty-print a Python object to a stream [default is sys.stdout]."""
@@ -83,6 +108,9 @@ def printDataClass(): pass
 def printTuple(): pass
 
 
+########################################################################
+
+
 class PrettyPrinter:
 
     @staticmethod
@@ -90,7 +118,7 @@ class PrettyPrinter:
         @wraps(func)
         def wrapper(*args, **kwargs):
             saveable =kwargs['saveable']
-            self = args[0]
+            self:PrettyPrinter = args[0]
             if saveable:
                 kwargs['saveable'] = False
                 self.buffer.append({'func': func, 'args': args, 'kwargs': kwargs})
@@ -101,27 +129,27 @@ class PrettyPrinter:
         self.buffer: list[Callable] = []
 
     @cache
-    def warning(self, message,saveable =False,emoji_position:EmojiPosition='both'):
+    def warning(self, message,saveable =True,emoji_position:EmojiPosition='both'):
         print_warning(message,emoji_position)
 
     @cache
-    def error(self, message,saveable =False,emoji_position:EmojiPosition='both'):
+    def error(self, message,saveable =True,emoji_position:EmojiPosition='both'):
         print_error(message,emoji_position)
 
     @cache
-    def info(self, message,saveable =False,emoji_position:EmojiPosition='both'):
+    def info(self, message,saveable =True,emoji_position:EmojiPosition='both'):
         print_info(message,emoji_position)
 
     @cache
-    def success(self, message,saveable =False,emoji_position:EmojiPosition='both'):
+    def success(self, message,saveable =True,emoji_position:EmojiPosition='both'):
         print_success(message,emoji_position)
 
     @cache
-    def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:",saveable =False, emoji_position: EmojiPosition = 'both'):
+    def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:",saveable =True, emoji_position: EmojiPosition = 'both'):
         print_message(message, color, background, emoji_code, emoji_position)
 
     @cache
-    def json(self, content, indent=1, width=80, depth=None, compact=False,saveable =False,):
+    def json(self, content, indent=1, width=80, depth=None, compact=False,saveable =True,):
         printJSON(content, indent, width, depth, compact)
 
     def clearScreen(self):
@@ -130,8 +158,19 @@ class PrettyPrinter:
     def clearline(self):
         clearline()
 
-    def show(self):
-        ...
+    def show(self,pause_after=1, title='Communication - Service', pause_before=0, color=Fore.WHITE,clear_screen_after=False,print_stack=True,clear_stack=False):
+        time.sleep(pause_before)
+        self.clearScreen()
+        settitle(title)
+        print_message(ascii_art, color=color, emoji_code='')
+        if clear_stack:
+            self.clear_buffer()
+        if print_stack:
+            self.print_stack_buffer()
+        time.sleep(pause_after)
+        if clear_screen_after:
+            self.clearScreen()
+        
 
     def print_stack_buffer(self):
         for item in self.buffer:
@@ -140,27 +179,12 @@ class PrettyPrinter:
     def clear_buffer(self):
         self.buffer = []
 
+    def setLayout(self):
+        ...
+
 
 PrettyPrinter_: PrettyPrinter = PrettyPrinter()
 
 ########################################################################
 
-text = 'Communication - Service'
-justify = 'left'
 
-figlet = pyfiglet.Figlet(font='standard')
-ascii_art = figlet.renderText(text)
-
-if justify == 'center':
-    ascii_art = '\n'.join(line.center(80) for line in ascii_art.splitlines())
-elif justify == 'right':
-    ascii_art = '\n'.join(line.rjust(80) for line in ascii_art.splitlines())
-
-
-def show(t=10, title='Communication - Service', t1=0, color=Fore.WHITE):
-    time.sleep(t1)
-    clearscreen()
-    settitle(title)
-    print_message(ascii_art, color=color, emoji_code='')
-    time.sleep(t)
-    # clearscreen()
