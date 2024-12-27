@@ -268,3 +268,7 @@ class SMSTemplate(Template):
 class PhoneTemplate(Template):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
+####################### ########################
+
+class TemplateNotFoundError(Exception):
+    ...

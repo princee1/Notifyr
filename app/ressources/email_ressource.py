@@ -1,6 +1,6 @@
 from typing import Any, Callable, List, Literal, Optional
 from services.assets_service import AssetService
-from classes.template import HTMLTemplate
+from classes.template import HTMLTemplate, TemplateNotFoundError
 from classes.email import EmailBuilder
 from services.config_service import ConfigService
 from services.security_service import SecurityService
@@ -15,7 +15,7 @@ from fastapi import Request, Response, HTTPException, status
 def handling_error(callback: Callable, *args, **kwargs):
     try:
         return callback(*args, **kwargs)
-    except KeyError as e:
+    except TemplateNotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND,)
     
     except ServiceNotAvailableError as e:
@@ -75,6 +75,9 @@ class EmailTemplateRessource(Ressource):
     def send_emailTemplate(self, template: str, email: EmailTemplateModel):
         meta = email.meta
         data = email.data
+        if template not in self.assetService.htmls:
+            raise TemplateNotFoundError
+        
         template: HTMLTemplate = self.assetService.htmls[template]
 
         flag, data = template.build(data)
