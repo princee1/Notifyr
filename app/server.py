@@ -13,12 +13,17 @@ from fastapi import Request, Response, FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload
 from interface.middleware import EventInterface, InjectableMiddlewareInterface
-import uvicorn,multiprocessing,threading,sys
+import uvicorn
+import multiprocessing
+import threading
+import sys
 from middleware import MIDDLEWARE
-from definition._ressource import RESSOURCES,Ressource
-from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler
+from definition._ressource import RESSOURCES, Ressource
+from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler
 
-AppParameterKey = Literal['title', 'summary', 'description', 'ressources', 'middlewares', 'port', 'log_level', 'log_config']
+AppParameterKey = Literal['title', 'summary', 'description',
+                          'ressources', 'middlewares', 'port', 'log_level', 'log_config']
+
 
 @dataclass
 class AppParameter:
@@ -31,22 +36,21 @@ class AppParameter:
     log_level: str = 'debug'
     log_config: Any = None
 
-
     @overload
     def __init__(self):
         ...
-    
+
     @overload
     def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug', log_config=None):
-        self.title:str = title
-        self.summary:str = summary
-        self.description:str = description
+        self.title: str = title
+        self.summary: str = summary
+        self.description: str = description
         self.ressources = ressources
         self.middlewares = middlewares
         self.port = port
         self.log_level = log_level
         self.log_config = log_config
-    
+
     def toJSON(self) -> Dict[AppParameterKey, Any]:
         return {
             'title': self.title,
@@ -58,30 +62,33 @@ class AppParameter:
             'log_level': self.log_level,
             'log_config': self.log_config
         }
-    
-    def fromJSON(self, json:Dict[AppParameterKey,Any], RESSOURCES, MIDDLEWARE):
+
+    def fromJSON(self, json: Dict[AppParameterKey, Any], RESSOURCES, MIDDLEWARE):
         clone = AppParameter.fromJSON(json, RESSOURCES, MIDDLEWARE)
         self.__dict__ = clone.__dict__
         return self
-    
+
     @staticmethod
-    def fromJSON(json: Dict[AppParameterKey,Any], RESSOURCES, MIDDLEWARE):
+    def fromJSON(json: Dict[AppParameterKey, Any], RESSOURCES, MIDDLEWARE):
         title = json['title']
         summary = json['summary']
         description = json['description']
-        ressources = [RESSOURCES[ressource] for ressource in json['ressources']]
-        middlewares = [MIDDLEWARE[middleware] for middleware in json['middlewares']]
+        ressources = [RESSOURCES[ressource]
+                      for ressource in json['ressources']]
+        middlewares = [MIDDLEWARE[middleware]
+                       for middleware in json['middlewares']]
         port = json['port']
         slog_level = json['log_level']
         log_config = json['log_config']
         return AppParameter(title, summary, description, ressources, middlewares, port, slog_level, log_config)
-    
+
 
 class Application(EventInterface):
 
     def __init__(self, appParameter: AppParameter):
-        
-        self.thread = threading.Thread(None, self.run, appParameter.title, daemon=False)
+
+        self.thread = threading.Thread(
+            None, self.run, appParameter.title, daemon=False)
         self.log_level = appParameter.log_level
         self.log_config = appParameter.log_config
         self.port = appParameter.port
@@ -128,6 +135,7 @@ class Application(EventInterface):
 
 #######################################################                          #####################################################
 
+
 ressources_key: set = set(RESSOURCES.keys())
 middlewares_key = list(MIDDLEWARE.keys())
 
@@ -135,13 +143,22 @@ app_titles = []
 available_ports = []
 show(2)
 
+
 def more_than_one(result): return len(result) >= 1
+
+
+def exactly_one(result): return len(result) == 1
+
+
 def existing_port(port): return port not in available_ports
+
 
 def existing_title(title): return title not in app_titles
 
+
 invalid_message = 'Should be at least 1 selection'
 instruction = '(Press space to select, enter to continue)'
+
 
 def createApps() -> list[AppParameter]:
 
@@ -173,5 +190,44 @@ def createApps() -> list[AppParameter]:
         _results.append(AppParameter.fromJSON(result, RESSOURCES, MIDDLEWARE))
         show(1)
         printJSON(_results)
-    
+
     return _results
+
+
+def editApps(json_file_app_data: list[dict]) -> Dict[AppParameterKey, Any]:
+    
+    titles = [json_file_app_data[i]['title']
+              for i in range(len(json_file_app_data))]
+    app_titles.clear()
+    app_titles.extend(titles)
+    available_ports.clear()
+    available_ports.extend([json_file_app_data[i]['port']
+                            for i in range(len(json_file_app_data))])
+
+    show(1)
+    print('Editing Applications')
+    print()
+    selected_title = ask_question([ListInputHandler('Select the application to edit: ', choices=titles, name='selected_app',
+                                  validate=exactly_one, invalid_message='Should be exactly one selection', instruction=instruction)])['selected_app']
+    index = titles.index(selected_title)
+    title = titles[index]
+    show(1, f'Editing {title}')
+    print()
+    result = ask_question([SimpleInputHandler(f'Enter the title of application {index+1} : ', name='title', default=title, validate=existing_title, invalid_message='Title already exists'),
+                           SimpleInputHandler(
+        f'Enter the summary of application {index+1} : ', name='summary', default=json_file_app_data[index]['summary']),
+        SimpleInputHandler(
+        f'Enter the description of application {index+1} : ', name='description', default=json_file_app_data[index]['description']),
+        CheckboxInputHandler(
+        f'Select the ressources of application {index+1} that will be used once per application: ', choices=ressources_key, name='ressources', validate=more_than_one, invalid_message=invalid_message, instruction=instruction
+    ),
+        CheckboxInputHandler(
+        f'Select the middlewares of application {index+1} : ', choices=middlewares_key, name='middlewares', validate=more_than_one, invalid_message=invalid_message, instruction=instruction),
+        NumberInputHandler(
+        f'Enter the port of application {index+1} : ', name='port', default=json_file_app_data[index]['port'], min_allowed=4000, max_allowed=65535),
+        SimpleInputHandler(
+        f'Enter the log level of application {index+1} : ', name='log_level', default=json_file_app_data[index]['log_level']),
+    ],)
+
+    return result
+

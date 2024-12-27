@@ -125,7 +125,7 @@ class ListInputHandler(InputHandler, ChoiceInterface):
         LIST = "list"
         pass
 
-    def __init__(self, inputType: ListTypeQuestion, message: str, default: int, name: str, choices=[], multiselect=False, validate=None, filter=None, when=None, transformer=None,invalid_message=None,instruction=None) -> None:
+    def __init__(self, message: str, default: int, name: str, choices=[], inputType: ListTypeQuestion = ListTypeQuestion.LIST ,multiselect=False, validate=None, filter=None, when=None, transformer=None,invalid_message=None,instruction=None) -> None:
         super().__init__(
             inputType.value, message, default, name, when, validate, filter,invalid_message,instruction)
         ChoiceInterface.__init__(self, choices)
