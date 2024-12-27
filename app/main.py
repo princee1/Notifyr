@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-from app.server import AppParameter
 from utils.prettyprint import printJSON, show,PrettyPrinter_
 from enum import Enum
 
@@ -44,16 +43,26 @@ apps_data = config_json_app.data
 #     else:
 #         c_flag = False
 
+def app_params_to_json(params:list[AppParameter]): return [p.toJSON() for p in params]
+
+
+
 if  not apps_data or APPS_KEY not in apps_data or not apps_data[APPS_KEY] :
     mode = RunMode.CREATE
     PrettyPrinter_.warning(f"Invalid config file: {config_file} - No apps data found")
+    PrettyPrinter_.info(f"Running on CREATING mode")
+
+
 
 match mode:
     case RunMode.CREATE:
         apps_data = createApps()
-        PrettyPrinter_.success(f"Apps successfully load")
+        config_json_app.load(app_params_to_json(apps_data))
+        PrettyPrinter_.success(f"Apps successfully created")
+        
     case RunMode.EDIT:
         apps_data = editApps(apps_data)
+        config_json_app.load(app_params_to_json(apps_data))
         PrettyPrinter_.success(f"Apps successfully edited")
     case RunMode.FILE:
         apps_data = [AppParameter.fromJSON(app) for app in apps_data[APPS_KEY]]

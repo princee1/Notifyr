@@ -20,6 +20,7 @@ import sys
 from middleware import MIDDLEWARE
 from definition._ressource import RESSOURCES, Ressource
 from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler,exactly_one,more_than_one
+from uvicorn_config import config
 
 AppParameterKey = Literal['title', 'summary', 'description',
                           'ressources', 'middlewares', 'port', 'log_level', 'log_config']
@@ -36,12 +37,7 @@ class AppParameter:
     log_level: str = 'debug'
     log_config: Any = None
 
-    @overload
-    def __init__(self):
-        ...
-
-    @overload
-    def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug', log_config=None):
+    def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug',):
         self.title: str = title
         self.summary: str = summary
         self.description: str = description
@@ -49,7 +45,6 @@ class AppParameter:
         self.middlewares = middlewares
         self.port = port
         self.log_level = log_level
-        self.log_config = log_config
 
     def toJSON(self) -> Dict[AppParameterKey, Any]:
         return {
@@ -60,10 +55,9 @@ class AppParameter:
             'middlewares': [middleware.__name__ for middleware in self.middlewares],
             'port': self.port,
             'log_level': self.log_level,
-            'log_config': self.log_config
         }
 
-    def fromJSON(self, json: Dict[AppParameterKey, Any], RESSOURCES, MIDDLEWARE):
+    def set_fromJSON(self, json: Dict[AppParameterKey, Any], RESSOURCES, MIDDLEWARE):
         clone = AppParameter.fromJSON(json, RESSOURCES, MIDDLEWARE)
         self.__dict__ = clone.__dict__
         return self
@@ -79,8 +73,7 @@ class AppParameter:
                        for middleware in json['middlewares']]
         port = json['port']
         slog_level = json['log_level']
-        log_config = json['log_config']
-        return AppParameter(title, summary, description, ressources, middlewares, port, slog_level, log_config)
+        return AppParameter(title, summary, description, ressources, middlewares, port, slog_level,)
 
 
 class Application(EventInterface):
@@ -105,7 +98,7 @@ class Application(EventInterface):
         self.thread.start()
 
     def start_server(self):
-        uvicorn.run(self.app, port=self.port, loop="asyncio")
+        uvicorn.run(self.app, port=self.port, loop="asyncio",**config)
         print('Starting')
 
     def stop_server(self):
