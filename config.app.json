@@ -1,8 +1,1 @@
-{
-    "meta":{
-
-    },
-    "apps":[
-        
-    ]
-}
+[{"title": ",", "summary": "k", "description": "k", "ressources": ["EmailTemplateRessource"], "middlewares": ["ProcessTimeMiddleWare"], "port": "8080", "log_level": "debug"}]
