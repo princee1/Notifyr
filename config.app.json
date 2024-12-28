@@ -1,1 +1,18 @@
-[{"title": ",", "summary": "k", "description": "k", "ressources": ["EmailTemplateRessource"], "middlewares": ["ProcessTimeMiddleWare"], "port": "8080", "log_level": "debug"}]
+{
+    "meta": {},
+    "apps": [
+        {
+            "title": "Email Testing",
+            "summary": "email",
+            "description": "...",
+            "ressources": [
+                "EmailTemplateRessource"
+            ],
+            "middlewares": [
+                "ProcessTimeMiddleWare"
+            ],
+            "port": 8080,
+            "log_level": "debug"
+        }
+    ]
+}
