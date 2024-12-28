@@ -1,4 +1,4 @@
-from server import AppParameter, start_applications, createApps, editApps, RESSOURCES, MIDDLEWARE
+from app.server.application import AppParameter, start_applications, createApps, editApps, RESSOURCES, MIDDLEWARE
 from utils.fileIO import ConfigFile, JSONFile, exist, inputFilePath
 from argparse import ArgumentParser
 from utils.prettyprint import printJSON, show, PrettyPrinter_

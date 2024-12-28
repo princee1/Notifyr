@@ -14,6 +14,7 @@ from utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import time
 import functools
 from utils.helper import getParentClass
+from fastapi import BackgroundTasks
 
 
 PATH_SEPARATOR = "/"
@@ -54,6 +55,11 @@ class Ressource(EventInterface):
 
     def _add_routes(self):
         pass
+
+    def _add_event(self):
+        ...
+
+    
 
     @property
     def routeExample(self):
