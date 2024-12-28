@@ -7,13 +7,13 @@ import time
 from interface.middleware import EventInterface, InjectableMiddlewareInterface
 
 
-
 MIDDLEWARE: dict[str, type] = {
 
 }
 
 
 class MiddleWare(BaseHTTPMiddleware):
+
     def __init_subclass__(cls: type) -> None:
         MIDDLEWARE[cls.__name__] = cls
 
@@ -21,13 +21,13 @@ class MiddleWare(BaseHTTPMiddleware):
 class ProcessTimeMiddleWare(MiddleWare):
 
     def __init__(self, app, dispatch=None) -> None:
-        super().__init__(self, app, dispatch)
+        super().__init__(app, dispatch)
 
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
         response: Response = await call_next(request)
         process_time = time.time() - start_time
-        response.headers["X-Process-Time"] = str(process_time)
+        response.headers["X-Process-Time"] = str(process_time) + ' (s)'
         return response
 
 

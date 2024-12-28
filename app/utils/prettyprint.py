@@ -42,6 +42,7 @@ def show(t=10, title='Communication - Service', t1=0, color=Fore.WHITE):
 
 ########################################################################
 
+
 def settitle(tilte: str):
     set_title(tilte)
 
@@ -60,32 +61,36 @@ def print_message(message, color=Fore.WHITE, background=Back.RESET, emoji_code="
           message + "  " + (emoji.emojize(emoji_code) if emoji_position == "after" or emoji_position == "both" else "") + Style.RESET_ALL)
 
 
-def print_info(message,emoji_position:EmojiPosition='both'):
+def print_info(message, emoji_position: EmojiPosition = 'both'):
     """
     Print an info message.
     """
-    print_message(message, color=Fore.BLUE, emoji_code=":information:",emoji_position=emoji_position)
+    print_message(message, color=Fore.BLUE,
+                  emoji_code=":information:", emoji_position=emoji_position)
 
 
-def print_error(message,emoji_position:EmojiPosition='both'):
+def print_error(message, emoji_position: EmojiPosition = 'both'):
     """
     Print an error message.
     """
-    print_message(message, color=Fore.RED, emoji_code=":x:",emoji_position=emoji_position)
+    print_message(message, color=Fore.RED, emoji_code=":x:",
+                  emoji_position=emoji_position)
 
 
-def print_warning(message,emoji_position:EmojiPosition='both'):
+def print_warning(message, emoji_position: EmojiPosition = 'both'):
     """
     Print a warning message.
     """
-    print_message(message, color=Fore.YELLOW, emoji_code=":warning:",emoji_position=emoji_position)
+    print_message(message, color=Fore.YELLOW,
+                  emoji_code=":warning:", emoji_position=emoji_position)
 
 
-def print_success(message,emoji_position:EmojiPosition='both'):
+def print_success(message, emoji_position: EmojiPosition = 'both'):
     """
     Print a success message.
     """
-    print_message(message, color=Fore.GREEN, emoji_code=":white_check_mark:",emoji_position=emoji_position)
+    print_message(message, color=Fore.GREEN,
+                  emoji_code=":white_check_mark:", emoji_position=emoji_position)
 
 ########################################################################
 
@@ -120,11 +125,12 @@ class PrettyPrinter:
             if 'saveable' not in kwargs:
                 saveable = True
             else:
-                saveable =kwargs['saveable']
-            self:PrettyPrinter = args[0]
+                saveable = kwargs['saveable']
+            self: PrettyPrinter = args[0]
             if saveable:
                 kwargs['saveable'] = False
-                self.buffer.append({'func': func, 'args': args, 'kwargs': kwargs})
+                self.buffer.append(
+                    {'func': func, 'args': args, 'kwargs': kwargs})
             func(*args, **kwargs)
         return wrapper
 
@@ -132,29 +138,33 @@ class PrettyPrinter:
         self.buffer: list[Callable] = []
 
     @cache
-    def warning(self, message,saveable =True,emoji_position:EmojiPosition='both'):
+    def warning(self, message, saveable=True, emoji_position: EmojiPosition = 'both'):
 
-        print_warning(message,emoji_position)
-
-    @cache
-    def error(self, message,saveable =True,emoji_position:EmojiPosition='both'):
-        print_error(message,emoji_position)
+        print_warning(message, emoji_position)
 
     @cache
-    def info(self, message,saveable =True,emoji_position:EmojiPosition='both'):
-        print_info(message,emoji_position)
+    def error(self, message, saveable=True, emoji_position: EmojiPosition = 'both'):
+        print_error(message, emoji_position)
 
     @cache
-    def success(self, message,saveable =True,emoji_position:EmojiPosition='both'):
-        print_success(message,emoji_position)
+    def info(self, message, saveable=True, emoji_position: EmojiPosition = 'both'):
+        print_info(message, emoji_position)
 
     @cache
-    def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:",saveable =True, emoji_position: EmojiPosition = 'both'):
+    def success(self, message, saveable=True, emoji_position: EmojiPosition = 'both'):
+        print_success(message, emoji_position)
+
+    @cache
+    def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", saveable=True, emoji_position: EmojiPosition = 'both'):
         print_message(message, color, background, emoji_code, emoji_position)
 
     @cache
-    def json(self, content, indent=1, width=80, depth=None, compact=False,saveable =True,):
+    def json(self, content, indent=1, width=80, depth=None, compact=False, saveable=True,):
         printJSON(content, indent, width, depth, compact)
+
+    @cache
+    def space_line(self,saveable=True):
+        print()
 
     def clearScreen(self):
         clearscreen()
@@ -162,7 +172,7 @@ class PrettyPrinter:
     def clearline(self):
         clearline()
 
-    def show(self,pause_after=1, title='Communication - Service', pause_before=0, color=Fore.WHITE,clear_screen_after=False,print_stack=True,clear_stack=False):
+    def show(self, pause_after=1, title='Communication - Service', pause_before=0, color=Fore.WHITE, clear_screen_after=False, print_stack=True, clear_stack=False,space_line=False):
         time.sleep(pause_before)
         self.clearScreen()
         settitle(title)
@@ -171,10 +181,11 @@ class PrettyPrinter:
             self.clear_buffer()
         if print_stack:
             self.print_stack_buffer()
+        if space_line:
+            self.space_line()
         time.sleep(pause_after)
         if clear_screen_after:
             self.clearScreen()
-        
 
     def print_stack_buffer(self):
         for item in self.buffer:
@@ -190,5 +201,3 @@ class PrettyPrinter:
 PrettyPrinter_: PrettyPrinter = PrettyPrinter()
 
 ########################################################################
-
-

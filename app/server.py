@@ -20,7 +20,6 @@ import sys
 from middleware import MIDDLEWARE
 from definition._ressource import RESSOURCES, Ressource
 from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler,exactly_one,more_than_one
-from uvicorn_config import config
 
 AppParameterKey = Literal['title', 'summary', 'description',
                           'ressources', 'middlewares', 'port', 'log_level', 'log_config']
@@ -98,7 +97,7 @@ class Application(EventInterface):
         self.thread.start()
 
     def start_server(self):
-        uvicorn.run(self.app, port=self.port, loop="asyncio",**config)
+        uvicorn.run(self.app, port=self.port, loop="asyncio")
         print('Starting')
 
     def stop_server(self):
@@ -173,6 +172,7 @@ def createApps() -> list[AppParameter]:
             f'Enter the log level of application {i+1} : ', name='log_level', default='debug'),
         ],)
         ressources_key.difference_update(result['ressources'])
+        result['port'] = int(result['port'])
         _results.append(AppParameter.fromJSON(result, RESSOURCES, MIDDLEWARE))
         show(1)
         printJSON(_results)
@@ -214,7 +214,7 @@ def editApps(json_file_app_data: list[dict]) -> list[AppParameter]:
         SimpleInputHandler(
         f'Enter the log level of application {index+1} : ', name='log_level', default=json_file_app_data[index]['log_level']),
     ],)
-
+    result['port'] = int(result['port'])
     json_file_app_data[index] = result
     return [AppParameter.fromJSON(data) for data in json_file_app_data]
 
