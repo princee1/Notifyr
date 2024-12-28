@@ -17,7 +17,7 @@ import uvicorn
 import multiprocessing
 import threading
 import sys
-from middleware import MIDDLEWARE
+from .middleware import MIDDLEWARE
 from definition._ressource import RESSOURCES, Ressource
 from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler,exactly_one,more_than_one
 
