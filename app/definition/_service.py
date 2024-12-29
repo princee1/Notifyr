@@ -58,6 +58,7 @@ class MethodServiceNotAvailableError(BuildError):
 class Service():
 
     def __init__(self) -> None:
+        self.__status:BuildErrorLevel = None
         self.__builded: bool = False
         self.__destroyed: bool = False
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_

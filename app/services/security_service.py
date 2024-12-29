@@ -1,18 +1,9 @@
 
 from .config_service import ConfigService
 from dataclasses import dataclass
-from injector import inject
 from .file_service import FileService
 from definition._service import Service, ServiceClass
-
-
-class KeyExchange:
-    private_key: str
-    public_key: str
-
-    def __init__(self) -> None:
-        pass
-
+import jwt
 
 @ServiceClass
 class SecurityService(Service):
@@ -20,6 +11,12 @@ class SecurityService(Service):
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__()
         self.configService = configService
+
+    def decode(self,):
+        ...
+    
+    def _verify(self):
+        ...
 
     def build(self):
         return super().build()

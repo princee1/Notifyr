@@ -81,6 +81,9 @@ def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func
 
 
 
+def Permission():
+    ...
+
 def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None],start_with:str = None):
     def decorator(func:Type[R]| Callable) -> Type[R]| Callable:
         data = common_class_decorator(func,Handler,handler_function,start_with)
