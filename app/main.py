@@ -1,9 +1,7 @@
-from server.application import AppParameter, start_applications, createApps, editApps, RESSOURCES, MIDDLEWARE
 from utils.fileIO import ConfigFile, JSONFile, exist, inputFilePath
 from argparse import ArgumentParser
 from utils.prettyprint import printJSON, show, PrettyPrinter_
 from enum import Enum
-
 
 class RunMode(Enum):
     FILE = "file"
@@ -23,7 +21,7 @@ config_file = args.config
 
 PrettyPrinter_.show(1, print_stack=False)
 ########################################################################
-
+from server.application import AppParameter, start_applications, createApps, editApps, RESSOURCES, MIDDLEWARE
 ########################################################################
 
 META_KEY = 'meta'
@@ -64,7 +62,7 @@ match mode:
         PrettyPrinter_.success(f"Apps successfully created")
 
     case RunMode.EDIT:
-        apps_data = editApps(apps_data)
+        apps_data = editApps(apps_data[APPS_KEY])
         config_json_app.load(app_params_to_json(apps_data))
         PrettyPrinter_.success(f"Apps successfully edited")
     case RunMode.FILE:

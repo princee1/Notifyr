@@ -1,5 +1,6 @@
 src_dir = app
 config_dir = config.app.json
+
 install	:
 	pip install -r requirements_dev.txt
 
@@ -15,10 +16,6 @@ setenv:
 clean:
 	find . -name "__pycache__" -type d -exec rm -rf {} +
 	find . -name "*.pyc" -type f -delete
-
-
-test:
-	echo "testing"
 
 venv:
 	python -m venv .venv
