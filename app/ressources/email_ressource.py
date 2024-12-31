@@ -21,8 +21,8 @@ def handling_error(callback: Callable, *args, **kwargs):
     except ServiceNotAvailableError as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    except:
-        raise HTTPException
+    except Exception as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 def guard_function(request: Request, **kwargs):
@@ -54,13 +54,13 @@ class CustomEmailModel(BaseModel):
     images: Optional[List[tuple[str, str]]] = []
 
 
-PREFIX = "email"
+EMAIL_PREFIX = "email"
 
 
 class EmailTemplateRessource(Ressource):
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
-        super().__init__(PREFIX)
+        super().__init__(EMAIL_PREFIX)
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService

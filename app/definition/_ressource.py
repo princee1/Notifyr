@@ -18,6 +18,7 @@ from fastapi import BackgroundTasks
 
 
 PATH_SEPARATOR = "/"
+DEFAULT_STARTS_WITH = '_api_'
 
 
 class MethodStartsWithError(Exception):
@@ -68,7 +69,7 @@ class Ressource(EventInterface):
 R = TypeVar('R', bound=Ressource)
 
 
-def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func:Callable,start_with:str = None)->Type[R]|Callable:
+def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func:Callable,start_with:str = DEFAULT_STARTS_WITH)->Type[R]|Callable:
     if type(cls) == type and isclass(cls):
             if start_with is None:
                 raise MethodStartsWithError("start_with is required for class")
@@ -81,10 +82,11 @@ def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func
 
 
 
-def Permission():
-    ...
+def Permission( permission: Callable[...,str] | str  ,start_with:str  = DEFAULT_STARTS_WITH): # TODO Need to specify the class permission instead of a str
+    ... 
 
-def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None],start_with:str = None):
+
+def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None],start_with:str = DEFAULT_STARTS_WITH):
     def decorator(func:Type[R]| Callable) -> Type[R]| Callable:
         data = common_class_decorator(func,Handler,handler_function,start_with)
         if data != None:
@@ -96,7 +98,7 @@ def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, An
     return decorator
 
 
-def Guard(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]],start_with:str = None):
+def Guard(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]],start_with:str = DEFAULT_STARTS_WITH):
     def decorator(func: Callable| Type[R])-> Callable| Type[R]:
         data = common_class_decorator(func,Guard,guard_function,start_with)
         if data != None:
@@ -113,7 +115,7 @@ def Guard(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[boo
     return decorator
 
 
-def Pipe(pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]],before:bool = True, start_with:str = None):
+def Pipe(pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]],before:bool = True, start_with:str = DEFAULT_STARTS_WITH):
     def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
         data = common_class_decorator(func,Pipe,pipe_function,start_with)
         if data != None:
@@ -130,7 +132,7 @@ def Pipe(pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Itera
     return decorator
 
 
-def Interceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R]|Callable],start_with:str = None):
+def Interceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R]|Callable],start_with:str = DEFAULT_STARTS_WITH):
     def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
         data = common_class_decorator(func,Interceptor,interceptor_function,start_with)
         if data != None:
