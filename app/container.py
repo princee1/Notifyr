@@ -391,9 +391,15 @@ class Container():
     def hashAbsDep(self, cls: str):
         return cls if not self.__hashKeyAbsResolving.__contains__(cls) else self.__hashKeyAbsResolving[cls]
 
+    @property
+    def seek_bindings(self):
+        return self.__app.binder._bindings
 
 CONTAINER: Container = Container(__DEPENDENCY)
 
+def build_container():
+    global CONTAINER
+    CONTAINER = Container(__DEPENDENCY)
 
 def InjectInFunction(func: Callable):
     """

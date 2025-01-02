@@ -2,7 +2,6 @@
 import smtplib as smtp
 import imaplib as imap
 from enum import Enum
-from injector import inject
 
 from .training_service import TrainingService
 from classes.email import EmailBuilder
@@ -106,7 +105,6 @@ class EmailService(_service.Service):
 
 @_service.ServiceClass
 class EmailSenderService(EmailService):
-    @inject
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__(configService, loggerService)
@@ -188,7 +186,6 @@ class EmailSenderService(EmailService):
 
 @_service.ServiceClass
 class EmailReaderService(EmailService):
-    @inject
     def __init__(self, configService: ConfigService, loggerService: LoggerService,trainingService:TrainingService,) -> None:
         super().__init__(configService, loggerService)
         self.hostPort = IMAPConfig.setHostPort(
