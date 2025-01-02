@@ -38,6 +38,7 @@ class ConfigService(_service.Service):
             path = find_dotenv(ENV)
             load_dotenv(path)
     
+    @staticmethod
     def parseToInt(value:str, default:int | None = None): # TODO need to add the build error level
         """
         The function `parseToInt` attempts to convert a string to an integer and returns the integer
@@ -89,5 +90,19 @@ class ConfigService(_service.Service):
         self.TWILIO_AUTH_TOKEN= os.getenv("TWILIO_AUTH_TOKEN")
         self.TWILIO_NUMBER= os.getenv("TWILIO_NUMBER")
         
+        self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+        self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM")
+        self.API_KEY = os.getenv("API_KEY")
+        self.ON_TOP_SECRET_KEY = os.getenv("ON_TOP_SECRET_KEY")
+        self.API_ENCRYPT_TOKEN = os.getenv("API_ENCRYPT_TOKEN")
+        self.API_EXPIRATION = ConfigService.parseToInt(os.getenv("API_EXPIRATION"), 3600000000000)
+        self.AUTH_EXPIRATION = ConfigService.parseToInt(os.getenv("AUTH_EXPIRATION"), 3600000000000)
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+    
+    def get(self, key):
+        return os.getenv(key)
+
     def destroy(self):
         return super().destroy()
