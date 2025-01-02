@@ -2,14 +2,15 @@
     "meta": {},
     "apps": [
         {
-            "title": "Email Testing",
-            "summary": "email",
-            "description": "...",
+            "title": "test",
+            "summary": "tes",
+            "description": "fsdfsdf",
             "ressources": [
                 "EmailTemplateRessource"
             ],
             "middlewares": [
-                "ProcessTimeMiddleWare"
+                "ProcessTimeMiddleWare",
+                "SecurityMiddleWare"
             ],
             "port": 8080,
             "log_level": "debug"

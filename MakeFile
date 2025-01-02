@@ -19,16 +19,23 @@ clean:
 
 venv:
 	python -m venv .venv
-	source .venv/Scripts/activate
-	which python
 	python -m pip install --upgrade pip
 	pip install -r requirements_dev.txt
 
 activate:
-	source .venv/Scripts/activate
+	.\.venv\Scripts\Activate
 
 deactivate:
 	deactivate
 
+del_venv:
+	echo testing
+
 run:
 	python ${src_dir}/main.py --config=${config_dir}
+
+create :
+	python ${src_dir}/main.py --config=${config_dir} --mode=create
+
+edit:
+	python ${src_dir}/main.py --config=${config_dir} --mode=edit

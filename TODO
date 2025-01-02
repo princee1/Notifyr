@@ -1,7 +1,7 @@
 1. Permission Management with JWT authentication or other method
 2. Permission decorator for each router or ressource
 3. Script to generate JWT
-4. Manage Error
+4. Manage Error w/ error code
 5. Code Interface Method Conflicts checking
 6. Look into how to have access to signal with unicorn
-q
+7. Change to multi process instead of multi thread
