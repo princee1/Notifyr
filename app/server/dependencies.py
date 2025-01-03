@@ -2,8 +2,9 @@
 Module to easily manage retrieving user information from the request object.
 """
 
-from fastapi import Request
-from fastapi.security import APIKeyHeader
+from typing import Annotated
+from fastapi import Depends, Request
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 
 API_KEY_HEADER = 'X-API-KEY'
 
@@ -39,3 +40,6 @@ def get_api_key(request: Request=None) -> str:
     if request:
         return request.headers.get(API_KEY_HEADER)
     return APIKeyHeader(name=API_KEY_HEADER)
+
+def get_bearer_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]) -> str:
+    return credentials.credentials

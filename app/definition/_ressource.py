@@ -4,8 +4,8 @@
 """
 from inspect import isclass
 from typing import Any, Callable, Dict, Iterable, Mapping, TypeVar, Type
-from interface.middleware import EventInterface
 from services.assets_service import AssetService
+from services.security_service import JWTAuthService
 from container import Get, Need
 from definition._service import S, Service
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -15,6 +15,8 @@ import time
 import functools
 from utils.helper import getParentClass
 from fastapi import BackgroundTasks
+from classes.permission import PermissionAuth,RoutePermissionScope
+from interface.events import EventInterface
 
 
 PATH_SEPARATOR = "/"
@@ -25,6 +27,7 @@ class MethodStartsWithError(Exception):
     ...
 
 RESSOURCES:dict[str,type] = {}
+
 
 class Ressource(EventInterface):
 
@@ -69,7 +72,7 @@ class Ressource(EventInterface):
 R = TypeVar('R', bound=Ressource)
 
 
-def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func:Callable,start_with:str = DEFAULT_STARTS_WITH)->Type[R]|Callable:
+def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func:Callable,start_with:str = DEFAULT_STARTS_WITH)->Type[R] | None:
     if type(cls) == type and isclass(cls):
             if start_with is None:
                 raise MethodStartsWithError("start_with is required for class")
@@ -81,9 +84,35 @@ def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func
     return None
 
 
+TOKEN_NAME_PARAMETER = 'token_'
+CLIENT_IP_PARAMETER = 'client_ip_'
 
-def Permission( permission: Callable[...,str] | str  ,start_with:str  = DEFAULT_STARTS_WITH): # TODO Need to specify the class permission instead of a str
-    ... 
+def Permission(start_with:str  = DEFAULT_STARTS_WITH): # TODO Need to specify the class permission instead of a str
+    def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
+        data = common_class_decorator(func,Permission,start_with)
+        if data != None:
+            return data
+        
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            list_args = list(args)
+            if len(list_args) < 2:
+                raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+            try:
+                token_index = list_args.index(TOKEN_NAME_PARAMETER)
+                token = list_args[token_index]
+                issued_for_index = list_args.index(CLIENT_IP_PARAMETER)
+                issued_for = list_args[issued_for_index]
+            except Exception:
+                raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+            
+            class_name = args[0].__class__.__name__
+            func_name = func.__name__
+            jwtService:JWTAuthService = Get(JWTAuthService)
+            if jwtService.verify_permission(token, class_name, func_name,issued_for):
+                return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None],start_with:str = DEFAULT_STARTS_WITH):

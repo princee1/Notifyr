@@ -7,9 +7,10 @@ import git_clone as git
 
 @ServiceClass
 class FileService(Service):
-
-    def __init__(self) -> None:
+    # TODO add security layer on some file: encription,decryption
+    def __init__(self,configService:ConfigService) -> None:
         super().__init__()
+        self.configService = configService
         
     def loadJSON(self):
         pass
