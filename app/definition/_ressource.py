@@ -95,15 +95,14 @@ def Permission(start_with:str  = DEFAULT_STARTS_WITH): # TODO Need to specify th
         
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            list_args = list(args)
-            if len(list_args) < 2:
+         
+            if len(kwargs) < 2:
                 raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
             try:
-                token_index = list_args.index(TOKEN_NAME_PARAMETER)
-                token = list_args[token_index]
-                issued_for_index = list_args.index(CLIENT_IP_PARAMETER)
-                issued_for = list_args[issued_for_index]
-            except Exception:
+                token = kwargs[TOKEN_NAME_PARAMETER]
+                issued_for = kwargs[CLIENT_IP_PARAMETER]
+            except Exception as e:
+                print(e)
                 raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
             
             class_name = args[0].__class__.__name__

@@ -5,11 +5,12 @@ from classes.email import EmailBuilder
 from services.config_service import ConfigService
 from services.security_service import SecurityService
 from container import InjectInMethod
-from definition._ressource import Ressource, Handler
+from definition._ressource import Permission, Ressource, Handler
 from definition._service import ServiceNotAvailableError
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
 from fastapi import Request, Response, HTTPException, status
+from utils.dependencies import get_api_key, get_client_ip, Depends, get_bearer_token
 
 
 def handling_error(callback: Callable, *args, **kwargs):
@@ -17,7 +18,7 @@ def handling_error(callback: Callable, *args, **kwargs):
         return callback(*args, **kwargs)
     except TemplateNotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND,)
-    
+
     except ServiceNotAvailableError as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE)
 
@@ -57,6 +58,7 @@ class CustomEmailModel(BaseModel):
 EMAIL_PREFIX = "email"
 
 
+
 class EmailTemplateRessource(Ressource):
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
@@ -71,13 +73,14 @@ class EmailTemplateRessource(Ressource):
     def on_shutdown(self):
         super().on_shutdown()
 
+    @Permission()
     @Handler(handling_error)
-    def send_emailTemplate(self, template: str, email: EmailTemplateModel):
+    def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel,token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip) ):
         meta = email.meta
         data = email.data
         if template not in self.assetService.htmls:
             raise TemplateNotFoundError
-        
+
         template: HTMLTemplate = self.assetService.htmls[template]
 
         flag, data = template.build(data)
@@ -88,8 +91,9 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(data, meta, images))
         pass
 
+    @Permission()
     @Handler(handler_function=handling_error)
-    def send_customEmail(self, customEmail: CustomEmailModel):
+    def _api_send_customEmail(self, customEmail: CustomEmailModel, token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip)):
         meta = customEmail.meta
         content = customEmail.content
         attachment = customEmail.attachments
@@ -100,6 +104,6 @@ class EmailTemplateRessource(Ressource):
 
     def _add_routes(self):
         self.router.add_api_route(
-            "/template/{template}", self.send_emailTemplate, methods=['POST'], description=self.send_emailTemplate.__doc__)
+            "/template/{template}", self._api_send_emailTemplate, methods=['POST'], description=self._api_send_emailTemplate.__doc__)
         self.router.add_api_route(
-            "/custom/", self.send_customEmail, methods=['POST'], description=self.send_customEmail.__doc__)
+            "/custom/", self._api_send_customEmail, methods=['POST'], description=self._api_send_customEmail.__doc__)
