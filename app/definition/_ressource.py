@@ -22,14 +22,43 @@ from interface.events import EventInterface
 PATH_SEPARATOR = "/"
 DEFAULT_STARTS_WITH = '_api_'
 
+def get_class_name_from_method(func: Callable) -> str:
+    return func.__qualname__.split('.')[0]
 
 class MethodStartsWithError(Exception):
     ...
 
 RESSOURCES:dict[str,type] = {}
+PROTECTED_ROUTES:dict[str,list[str]] = {}
+METADATA_ROUTES:dict[str,str] = {}
 
+def add_protected_route_metadata(class_name:str,method_name:str,):
+    if class_name in PROTECTED_ROUTES:
+        PROTECTED_ROUTES[class_name].append(method_name)
+    else:
+        PROTECTED_ROUTES[class_name] = [method_name]
 
 class Ressource(EventInterface):
+
+    @staticmethod
+    def _build_operation_id(route_name:str,method_name:str,operation_id)->str:
+        return f"{route_name}_{method_name}"
+
+    @staticmethod
+    def AddRoute(path:str,methods:Iterable[str] = ['POST'],operation_id:str = None,response_model:Any = None):
+        def decorator(func:Callable):
+            
+            operation_id = Ressource._build_operation_id(operation_id)
+            METADATA_ROUTES[func.__qualname__] = operation_id
+
+            @functools.wraps(func)
+            def wrapper(*args,**kwargs):
+                self: Ressource = args[0]
+                api_router: APIRouter = self.router
+                api_router.add_api_route(path,func,methods=methods,operation_id=operation_id,summary=func.__doc__,response_model= response_model)
+                return func(*args,**kwargs)
+            return  wrapper
+        return decorator
 
     def __init_subclass__(cls: Type) -> None:
         RESSOURCES[cls.__name__] = cls
@@ -62,9 +91,7 @@ class Ressource(EventInterface):
 
     def _add_event(self):
         ...
-
     
-
     @property
     def routeExample(self):
         pass
@@ -72,14 +99,17 @@ class Ressource(EventInterface):
 R = TypeVar('R', bound=Ressource)
 
 
-def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func:Callable,start_with:str = DEFAULT_STARTS_WITH)->Type[R] | None:
+def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func:Callable,start_with:str,**kwargs)->Type[R] | None:
     if type(cls) == type and isclass(cls):
             if start_with is None:
                 raise MethodStartsWithError("start_with is required for class")
             for attr in dir(cls):
                 if callable(getattr(cls, attr)) and attr.startswith(start_with):
                     handler = getattr(cls,attr)
-                    setattr(cls,attr,decorator(handling_func)(handler))
+                    if handling_func == None:
+                        setattr(cls,attr,decorator(**kwargs)(handler))
+                    else:
+                        setattr(cls,attr,decorator(handling_func,**kwargs)(handler))
             return cls
     return None
 
@@ -88,11 +118,16 @@ TOKEN_NAME_PARAMETER = 'token_'
 CLIENT_IP_PARAMETER = 'client_ip_'
 
 def Permission(start_with:str  = DEFAULT_STARTS_WITH): # TODO Need to specify the class permission instead of a str
+   
     def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
-        data = common_class_decorator(func,Permission,start_with)
+        data = common_class_decorator(func,Permission,None,start_with)
         if data != None:
             return data
         
+        func_name = func.__name__
+        class_name = get_class_name_from_method(func)
+        add_protected_route_metadata(class_name,func_name)
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
          
@@ -102,13 +137,10 @@ def Permission(start_with:str  = DEFAULT_STARTS_WITH): # TODO Need to specify th
                 token = kwargs[TOKEN_NAME_PARAMETER]
                 issued_for = kwargs[CLIENT_IP_PARAMETER]
             except Exception as e:
-                print(e)
                 raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
-            
-            class_name = args[0].__class__.__name__
-            func_name = func.__name__
+        
             jwtService:JWTAuthService = Get(JWTAuthService)
-            if jwtService.verify_permission(token, class_name, func_name,issued_for):
+            if jwtService.verify_permission(token, class_name, func_name,issued_for): # TODO Need to replace the function name with the metadata mapping
                 return func(*args, **kwargs)
         return wrapper
     return decorator
@@ -145,7 +177,7 @@ def Guard(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[boo
 
 def Pipe(pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]],before:bool = True, start_with:str = DEFAULT_STARTS_WITH):
     def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
-        data = common_class_decorator(func,Pipe,pipe_function,start_with)
+        data = common_class_decorator(func,Pipe,pipe_function,start_with,before=before)
         if data != None:
             return data
         @functools.wraps(func)

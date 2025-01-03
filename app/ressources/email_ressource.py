@@ -58,7 +58,7 @@ class CustomEmailModel(BaseModel):
 EMAIL_PREFIX = "email"
 
 
-
+@Permission()
 class EmailTemplateRessource(Ressource):
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
@@ -73,8 +73,8 @@ class EmailTemplateRessource(Ressource):
     def on_shutdown(self):
         super().on_shutdown()
 
-    @Permission()
     @Handler(handling_error)
+    @Ressource.AddRoute("/template/{template}",)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel,token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip) ):
         meta = email.meta
         data = email.data
@@ -91,8 +91,8 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(data, meta, images))
         pass
 
-    @Permission()
     @Handler(handler_function=handling_error)
+    @Ressource.AddRoute("/custom/",)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip)):
         meta = customEmail.meta
         content = customEmail.content
@@ -101,9 +101,3 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(
             attachment, images, content, meta))
         pass
-
-    def _add_routes(self):
-        self.router.add_api_route(
-            "/template/{template}", self._api_send_emailTemplate, methods=['POST'], description=self._api_send_emailTemplate.__doc__)
-        self.router.add_api_route(
-            "/custom/", self._api_send_customEmail, methods=['POST'], description=self._api_send_customEmail.__doc__)

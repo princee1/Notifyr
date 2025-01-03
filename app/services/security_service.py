@@ -39,7 +39,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         self.configService = configService
         self.fileService = fileService
 
-    def encode_auth_token(self, data: Dict[str, RoutePermission], issue_for: str) -> str:
+    def encode_auth_token(self, data: Dict[str, RoutePermission], issue_for: str,) -> str:
         try:
             permission = PermissionAuth(issued_for=issue_for, created_at=time.time(
             ), expired_at=time.time() + self.configService.AUTH_EXPIRATION, allowed_routes=data)
@@ -72,11 +72,12 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             ...
         except Exception as e:
             ...
-        
+        print("Error decoding token")
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
 
-    def verify_permission(self, token: str, class_name: str, func_name: str, issued_for: str) -> bool:
+    def verify_permission(self, token: str, class_name: str, operation_id: str, issued_for: str) -> bool:
 
         token = self._decode_auth_token(token)
         permission = PermissionAuth(**token)
@@ -97,7 +98,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         if routePermission["scope"] == "all":
             return True
 
-        if func_name not in permission.allowed_routes[class_name]:
+        if operation_id not in permission.allowed_routes[class_name]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Route not allowed")
 

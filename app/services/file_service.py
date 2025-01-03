@@ -8,6 +8,7 @@ import git_clone as git
 @ServiceClass
 class FileService(Service):
     # TODO add security layer on some file: encription,decryption
+    # TODO add file watcher
     def __init__(self,configService:ConfigService) -> None:
         super().__init__()
         self.configService = configService
