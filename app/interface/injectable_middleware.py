@@ -1,7 +1,4 @@
-
-
 from definition._interface import Interface,IsInterface
-
 
 @IsInterface
 class InjectableMiddlewareInterface(Interface):
@@ -15,13 +12,3 @@ class InjectableMiddlewareInterface(Interface):
         pass
     
     pass
-
-
-@IsInterface
-class EventInterface(Interface):
-
-    def on_startup(self):
-        pass
-
-    def on_shutdown(self):
-        pass

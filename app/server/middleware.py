@@ -4,7 +4,7 @@ from fastapi import HTTPException, Request, Response, FastAPI,status
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
-from interface.middleware import EventInterface, InjectableMiddlewareInterface
+from interface.injectable_middleware import InjectableMiddlewareInterface
 from .dependencies import get_api_key, get_client_ip
 
 MIDDLEWARE: dict[str, type] = {}
