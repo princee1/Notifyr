@@ -1,6 +1,6 @@
 """
-# The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
-# instance imported from `container`.
+The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
+instance imported from `container`.
 """
 from inspect import isclass
 from typing import Any, Callable, Dict, Iterable, Mapping, TypeVar, Type
@@ -41,21 +41,23 @@ def add_protected_route_metadata(class_name:str,method_name:str,):
 class Ressource(EventInterface):
 
     @staticmethod
-    def _build_operation_id(route_name:str,method_name:str,operation_id)->str:
-        return f"{route_name}_{method_name}"
+    def _build_operation_id(route_name:str,method_name:str,operation_id:str)->str:
+        if operation_id != None:
+            return operation_id
+
+        return route_name.replace(PATH_SEPARATOR, "_")
 
     @staticmethod
     def AddRoute(path:str,methods:Iterable[str] = ['POST'],operation_id:str = None,response_model:Any = None):
         def decorator(func:Callable):
-            
-            operation_id = Ressource._build_operation_id(operation_id)
-            METADATA_ROUTES[func.__qualname__] = operation_id
+            computed_operation_id = Ressource._build_operation_id(path,func.__qualname__,operation_id)
+            METADATA_ROUTES[func.__qualname__] = computed_operation_id
 
             @functools.wraps(func)
             def wrapper(*args,**kwargs):
                 self: Ressource = args[0]
                 api_router: APIRouter = self.router
-                api_router.add_api_route(path,func,methods=methods,operation_id=operation_id,summary=func.__doc__,response_model= response_model)
+                api_router.add_api_route(path,func,methods=methods,operation_id=computed_operation_id,summary=func.__doc__,response_model= response_model)
                 return func(*args,**kwargs)
             return  wrapper
         return decorator
@@ -71,7 +73,6 @@ class Ressource(EventInterface):
         self.router = APIRouter(prefix=prefix, on_shutdown=[
                                 self.on_shutdown], on_startup=[self.on_startup])
         self._add_routes()
-
         self.default_response: Dict[int | str, Dict[str, Any]] | None = None
 
     def get(self, dep: Type[S], scope=None, all=False) -> Type[S]:
@@ -81,6 +82,7 @@ class Ressource(EventInterface):
         return Need(dep)
 
     def on_startup(self):
+        
         pass
 
     def on_shutdown(self):
@@ -117,7 +119,7 @@ def common_class_decorator(cls:Type[R]|Callable,decorator:Callable,handling_func
 TOKEN_NAME_PARAMETER = 'token_'
 CLIENT_IP_PARAMETER = 'client_ip_'
 
-def Permission(start_with:str  = DEFAULT_STARTS_WITH): # TODO Need to specify the class permission instead of a str
+def Permission(start_with:str  = DEFAULT_STARTS_WITH):
    
     def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
         data = common_class_decorator(func,Permission,None,start_with)

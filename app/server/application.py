@@ -7,19 +7,21 @@ from container import InjectInMethod, Get, Need
 from ressources import *
 from starlette.types import ASGIApp
 from services.config_service import ConfigService
-from services.security_service import SecurityService
+from services.security_service import JWTAuthService, SecurityService
 from utils.prettyprint import printJSON, show, PrettyPrinter_
 from fastapi import Request, Response, FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
-from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload
-from interface.middleware import EventInterface, InjectableMiddlewareInterface
+from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload,TypedDict
+from interface.injectable_middleware import  InjectableMiddlewareInterface
 import uvicorn
 import multiprocessing
 import threading
 import sys
 from .middleware import MIDDLEWARE
 from definition._ressource import RESSOURCES, Ressource
-from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler,exactly_one,more_than_one
+from utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler,exactly_one,one_or_more,one_or_more_invalid_message,instruction
+from interface.events import EventInterface
+
 
 AppParameterKey = Literal['title', 'summary', 'description',
                           'ressources', 'middlewares', 'port', 'log_level', 'log_config']
@@ -77,7 +79,7 @@ class AppParameter:
 
 class Application(EventInterface):
 
-    def __init__(self, appParameter: AppParameter):
+    def __init__(self,appParameter:AppParameter): # TODO if it important add other on_start_up and on_shutdown hooks
 
         self.thread = threading.Thread(
             None, self.run, appParameter.title, daemon=False)
@@ -86,7 +88,7 @@ class Application(EventInterface):
         self.port = appParameter.port
         self.ressources = appParameter.ressources
         self.middlewares = appParameter.middlewares
-        self.configService: ConfigService = Get(ConfigService)
+        self.configService  = Get(ConfigService)
         self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
         self.add_middlewares()
@@ -94,11 +96,11 @@ class Application(EventInterface):
         pass
 
     def start(self):
-        self.thread.start()
+        #self.thread.start()
+        self.run()
 
     def start_server(self):
         uvicorn.run(self.app, port=self.port, loop="asyncio")
-        print('Starting')
 
     def stop_server(self):
         pass
@@ -114,11 +116,11 @@ class Application(EventInterface):
 
     def add_middlewares(self):
         for middleware in self.middlewares:
-
             self.app.add_middleware(middleware)
 
     def on_startup(self):
-        pass
+        jwtService = Get(JWTAuthService)
+        jwtService.set_generation_id(False)
 
     def on_shutdown(self):
         pass
@@ -133,7 +135,6 @@ middlewares_key = list(MIDDLEWARE.keys())
 
 app_titles = []
 available_ports = []
-show(2)
 
 def existing_port(port): return port not in available_ports
 
@@ -141,16 +142,13 @@ def existing_port(port): return port not in available_ports
 def existing_title(title): return title not in app_titles
 
 
-invalid_message = 'Should be at least 1 selection'
-instruction = '(Press space to select, enter to continue)'
-
 
 def createApps() -> list[AppParameter]:
 
     _results = []
 
     apps_counts = ask_question([NumberInputHandler('Enter the number of applications: ',
-                               name='apps_counts', default=1, min_allowed=1, max_allowed=10)])['apps_counts']
+                               name='apps_counts', default=1, min_allowed=1, max_allowed=1)])['apps_counts']
     show(1)
     PrettyPrinter_.info(f'Creating {apps_counts} applications')
     print()
@@ -162,10 +160,10 @@ def createApps() -> list[AppParameter]:
             SimpleInputHandler(
             f'Enter the description of application {i+1} : ', name='description', default=''),
             CheckboxInputHandler(
-            f'Select the ressources of application {i+1} that will be used once per application: ', choices=ressources_key, name='ressources', validate=more_than_one, invalid_message=invalid_message, instruction=instruction
+            f'Select the ressources of application {i+1} that will be used once per application: ', choices=ressources_key, name='ressources', validate=one_or_more, invalid_message=one_or_more_invalid_message, instruction=instruction
         ),
             CheckboxInputHandler(
-            f'Select the middlewares of application {i+1} : ', choices=middlewares_key, name='middlewares', validate=more_than_one, invalid_message=invalid_message, instruction=instruction),
+            f'Select the middlewares of application {i+1} : ', choices=middlewares_key, name='middlewares', validate=one_or_more, invalid_message=one_or_more_invalid_message, instruction=instruction),
             NumberInputHandler(
             f'Enter the port of application {i+1} : ', name='port', default=8080, min_allowed=4000, max_allowed=65535),
             SimpleInputHandler(
@@ -193,7 +191,7 @@ def editApps(json_file_app_data: list[dict]) -> list[AppParameter]:
     show(1)
     PrettyPrinter_.info('Editing Applications')
     print()
-    selected_title = ask_question([ListInputHandler('Select the application to edit: ', choices=titles, name='selected_app',
+    selected_title = ask_question([ListInputHandler('Select the application to edit: ', default=titles[0],choices=titles, name='selected_app',
                                   validate=exactly_one, invalid_message='Should be exactly one selection', instruction=instruction)])['selected_app']
     index = titles.index(selected_title)
     title = titles[index]
@@ -205,10 +203,10 @@ def editApps(json_file_app_data: list[dict]) -> list[AppParameter]:
         SimpleInputHandler(
         f'Enter the description of application {index+1} : ', name='description', default=json_file_app_data[index]['description']),
         CheckboxInputHandler(
-        f'Select the ressources of application {index+1} that will be used once per application: ', choices=ressources_key, name='ressources', validate=more_than_one, invalid_message=invalid_message, instruction=instruction
+        f'Select the ressources of application {index+1} that will be used once per application: ', choices=ressources_key, name='ressources', validate=one_or_more, invalid_message=one_or_more_invalid_message, instruction=instruction
     ),
         CheckboxInputHandler(
-        f'Select the middlewares of application {index+1} : ', choices=middlewares_key, name='middlewares', validate=more_than_one, invalid_message=invalid_message, instruction=instruction),
+        f'Select the middlewares of application {index+1} : ', choices=middlewares_key, name='middlewares', validate=one_or_more, invalid_message=one_or_more_invalid_message, instruction=instruction),
         NumberInputHandler(
         f'Enter the port of application {index+1} : ', name='port', default=json_file_app_data[index]['port'], min_allowed=4000, max_allowed=65535),
         SimpleInputHandler(
@@ -221,4 +219,4 @@ def editApps(json_file_app_data: list[dict]) -> list[AppParameter]:
 
 def start_applications(applications:list[AppParameter]):
     for app in applications:
-        Application(app).start()
+        Application(appParameter=app).start()
