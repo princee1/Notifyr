@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
+from utils.fileIO import JSONFile
 from definition import _service
 import socket
 
@@ -37,6 +38,7 @@ class ConfigService(_service.Service):
         if not load_dotenv(ENV):
             path = find_dotenv(ENV)
             load_dotenv(path)
+        self.config_json_app:JSONFile = None
     
     @staticmethod
     def parseToInt(value:str, default:int | None = None): # TODO need to add the build error level
@@ -103,6 +105,13 @@ class ConfigService(_service.Service):
     
     def get(self, key):
         return os.getenv(key)
+    
+    def load_configApp(self,config_file: str):
+        config_json_app = JSONFile(config_file)
+        config_file = config_file if config_json_app.exists else None
+        #apps_data = config_json_app.data
+        self.config_json_app = config_json_app
+    
 
     def destroy(self):
         return super().destroy()

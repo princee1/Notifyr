@@ -7,6 +7,10 @@ class RoutePermission(TypedDict):
     custom_routes: NotRequired[list[str]]
 
 class PermissionAuth(TypedDict):
+    generation_id: str
+    #domain_name:str
+    #client_id: str
+    #app_id: str
     issued_for: str
     created_at: float
     expired_at: float
