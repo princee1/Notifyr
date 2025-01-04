@@ -171,4 +171,4 @@ help.md
 *.pem
 *secrets.json
 test.ipynb
-client.app.json
+config.app.json

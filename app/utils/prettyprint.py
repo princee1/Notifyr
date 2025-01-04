@@ -62,7 +62,7 @@ def print_message(message, color=Fore.WHITE, background=Back.RESET, emoji_code="
     Base function to print a personalized message with color and emoji.
     """
     is_emojized = emoji_code.startswith(':')
-    print(color + background + ((emoji.emojize(emoji_code) if is_emojized else emoji_code)if position == "before" or position == "both" else "") + "  " +
+    print(color + background + ((emoji.emojize(emoji_code) if is_emojized else emoji_code) if position == "before" or position == "both" else "") + "  " +
           message + "  " + ((emoji.emojize(emoji_code) if is_emojized else emoji_code) if position == "after" or position == "both" else "") + Style.RESET_ALL)
 
 
