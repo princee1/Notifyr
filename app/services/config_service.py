@@ -5,6 +5,7 @@ from utils.fileIO import JSONFile
 from definition import _service
 import socket
 
+
 ENV = ".env"
 
 class MODE(Enum):
@@ -41,7 +42,7 @@ class ConfigService(_service.Service):
         self.config_json_app:JSONFile = None
     
     @staticmethod
-    def parseToInt(value:str, default:int | None = None): # TODO need to add the build error level
+    def parseToInt(value:str, default:int | None = None,positive = True): # TODO need to add the build error level
         """
         The function `parseToInt` attempts to convert a string to an integer and returns the integer
         value or a default value if conversion fails.
@@ -58,7 +59,11 @@ class ConfigService(_service.Service):
         `default` value provided as a parameter. If no `default` value is provided, it returns `None`.
         """
         try:
-            return int(value)
+            value = int(value)
+            if positive:
+                if value < 0:
+                    raise ValueError
+            return value
         except ValueError as e:
             pass
         except TypeError as e:
@@ -68,6 +73,10 @@ class ConfigService(_service.Service):
         return default
 
     def build(self):
+        self.set_config_value()
+        self.verify()
+
+    def set_config_value(self):
         self.MODE = MODE.toMode(os.getenv('MODE'))
         self.PORT_PUBLIC = ConfigService.parseToInt(os.getenv("PORT_PUBLIC"),3000)
         self.PORT_PRIVATE = ConfigService.parseToInt(os.getenv("PORT_PRIVATE"),5000)
@@ -100,6 +109,12 @@ class ConfigService(_service.Service):
         self.API_EXPIRATION = ConfigService.parseToInt(os.getenv("API_EXPIRATION"), 3600000000000)
         self.AUTH_EXPIRATION = ConfigService.parseToInt(os.getenv("AUTH_EXPIRATION"), 3600000000000)
 
+    def verify(self):
+        if self.API_EXPIRATION < self.AUTH_EXPIRATION:
+            # self.API_EXPIRATION = self.AUTH_EXPIRATION
+            # raise _service.BuildWarningError("API_EXPIRATION cannot be less than AUTH_EXPIRATION")
+            ...
+
     def __getitem__(self, key):
         return getattr(self, key)
     
@@ -112,6 +127,5 @@ class ConfigService(_service.Service):
         #apps_data = config_json_app.data
         self.config_json_app = config_json_app
     
-
     def destroy(self):
         return super().destroy()

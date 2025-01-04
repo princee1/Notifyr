@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from .file_service import FileService
 from definition._service import AbstractServiceClass, Service, ServiceClass
 import jwt
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
 from classes.permission import PermissionAuth, RoutePermission
-from random import randint,random
+from random import randint, random
 from utils.helper import generateId
 from utils.constant import ConfigAppConstant
 from datetime import datetime, timezone
@@ -46,9 +46,11 @@ class JWTAuthService(Service, EncryptDecryptInterface):
     def set_generation_id(self, gen=False) -> None:
         if gen:
             self.generation_id = generateId(ID_LENGTH)
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY] = self.generation_id
+            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][
+                ConfigAppConstant.GENERATION_ID_KEY] = self.generation_id
             current_utc = datetime.now(timezone.utc)
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.CREATION_DATE_KEY] = current_utc.strftime("%Y-%m-%d %H:%M:%S")
+            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.CREATION_DATE_KEY] = current_utc.strftime(
+                "%Y-%m-%d %H:%M:%S")
             self.configService.config_json_app.save()
 
         else:
@@ -57,8 +59,9 @@ class JWTAuthService(Service, EncryptDecryptInterface):
 
     def encode_auth_token(self, data: Dict[str, RoutePermission], issue_for: str,) -> str:
         try:
-            permission = PermissionAuth(generation_id=self.generation_id,issued_for=issue_for, created_at=time.time(
-            ), expired_at=time.time() + self.configService.AUTH_EXPIRATION, allowed_routes=data)
+            created_time = time.time()
+            permission = PermissionAuth(generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
+                                        expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data)
             encoded = jwt.encode(permission, self.configService.JWT_SECRET_KEY,
                                  algorithm=self.configService.JWT_ALGORITHM)
             return self._encode_value(encoded, self.configService.ON_TOP_SECRET_KEY)
@@ -70,55 +73,60 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         try:
             token = self._decode_value(
                 token, self.configService.ON_TOP_SECRET_KEY)
-            decoded = jwt.decode(token, self.configService,
+            decoded = jwt.decode(token, self.configService.JWT_SECRET_KEY,
                                  algorithms=self.configService.JWT_ALGORITHM)
             return decoded
 
         # TODO: For each exception, we should return a specific error message
 
+        except InvalidToken as e:
+            ...
+
         except jwt.InvalidSignatureError as e:
             ...
         except jwt.InvalidAlgorithmError as e:
+
             ...
         except jwt.InvalidKeyError as e:
+
             ...
         except jwt.ExpiredSignatureError as e:
+
             ...
         except jwt.InvalidTokenError as e:
             ...
         except Exception as e:
             ...
-        print("Error decoding token")
-        print(e)
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
 
     def verify_permission(self, token: str, class_name: str, operation_id: str, issued_for: str) -> bool:
 
         token = self._decode_auth_token(token)
-        permission = PermissionAuth(**token)
+        permission: PermissionAuth = PermissionAuth(**token)
 
-        if issued_for != permission.issued_for:
+        if issued_for != permission["issued_for"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
 
-        if permission.expired_at < time.time():
+        if permission["expired_at"] < time.time():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
-        
-        if permission.generation_id != self.generation_id:
+
+        if permission["generation_id"] != self.generation_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
 
-        if class_name not in permission.allowed_routes:
+        if class_name not in permission["allowed_routes"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Ressource not allowed")
 
-        routePermission: RoutePermission = permission.allowed_routes[class_name]
+        routePermission: RoutePermission = permission["allowed_routes"][class_name]
         if routePermission["scope"] == "all":
             return True
 
-        if operation_id not in permission.allowed_routes[class_name]:
+        if operation_id not in routePermission['custom_routes']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Route not allowed")
 
@@ -135,14 +143,16 @@ class SecurityService(Service, EncryptDecryptInterface):
     def verify_server_access(self, token: str, sent_ip_addr) -> bool:
         token = self._decode_value(token, self.configService.API_ENCRYPT_TOKEN)
         token = token.split("|")
-        if len(token) != 4:
+        # TODO invalidate with generation id
+
+        if len(token) != 3:
             return False
         ip_addr = token[0]
 
         if ip_addr != sent_ip_addr:
             return False
 
-        if time.time() - token[1] > self.configService.API_EXPIRATION:
+        if time.time() - float(token[1]) > self.configService.API_EXPIRATION:
             return False
 
         if token[2] != self.configService.API_KEY:
