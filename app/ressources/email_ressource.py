@@ -76,6 +76,7 @@ class EmailTemplateRessource(Ressource):
     @Handler(handling_error)
     @Ressource.AddRoute("/template/{template}",)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel,token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip) ):
+
         meta = email.meta
         data = email.data
         if template not in self.assetService.htmls:
@@ -101,3 +102,10 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(
             attachment, images, content, meta))
         pass
+
+    def _add_handcrafted_routes(self):
+        # self.router.add_api_route(
+        #     "/template/{template}", self._api_send_emailTemplate, methods=["POST"],description=self._api_send_emailTemplate.__doc__)
+        # self.router.add_api_route(
+        #     "/custom/", self._api_send_customEmail, methods=["POST"],description=self._api_send_customEmail.__doc__)
+        ...

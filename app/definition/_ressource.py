@@ -30,6 +30,7 @@ class MethodStartsWithError(Exception):
 
 RESSOURCES:dict[str,type] = {}
 PROTECTED_ROUTES:dict[str,list[str]] = {}
+ROUTES:dict[str,list[dict]] = {  }
 METADATA_ROUTES:dict[str,str] = {}
 
 def add_protected_route_metadata(class_name:str,method_name:str,):
@@ -50,20 +51,34 @@ class Ressource(EventInterface):
     @staticmethod
     def AddRoute(path:str,methods:Iterable[str] = ['POST'],operation_id:str = None,response_model:Any = None):
         def decorator(func:Callable):
-            computed_operation_id = Ressource._build_operation_id(path,func.__qualname__,operation_id)
+            computed_operation_id = Ressource._build_operation_id(path,func.__qualname__,operation_id) 
             METADATA_ROUTES[func.__qualname__] = computed_operation_id
+            # TODO put the add route logic on the static scope
+            class_name = get_class_name_from_method(func)
+            kwargs = {
+                'path':path,
+                'endpoint':func.__name__,
+                'operation_id':operation_id,
+                'summary':func.__doc__,
+                'response_model':response_model,
+                'methods':methods,
+
+            }
+            if class_name not in ROUTES:
+                ROUTES[class_name] = []
+
+            ROUTES[class_name].append(kwargs)
 
             @functools.wraps(func)
             def wrapper(*args,**kwargs):
-                self: Ressource = args[0]
-                api_router: APIRouter = self.router
-                api_router.add_api_route(path,func,methods=methods,operation_id=computed_operation_id,summary=func.__doc__,response_model= response_model)
                 return func(*args,**kwargs)
             return  wrapper
         return decorator
 
     def __init_subclass__(cls: Type) -> None:
         RESSOURCES[cls.__name__] = cls
+        #ROUTES[cls.__name__] = []
+
 
     def __init__(self, prefix: str) -> None:
         self.assetService: AssetService = Get(AssetService)
@@ -73,6 +88,7 @@ class Ressource(EventInterface):
         self.router = APIRouter(prefix=prefix, on_shutdown=[
                                 self.on_shutdown], on_startup=[self.on_startup])
         self._add_routes()
+        self._add_handcrafted_routes()
         self.default_response: Dict[int | str, Dict[str, Any]] | None = None
 
     def get(self, dep: Type[S], scope=None, all=False) -> Type[S]:
@@ -89,7 +105,14 @@ class Ressource(EventInterface):
         pass
 
     def _add_routes(self):
-        pass
+        routes_metadata = ROUTES[self.__class__.__name__]
+        for route in routes_metadata:
+            kwargs = route.copy()
+            kwargs['endpoint'] = getattr(self, kwargs['endpoint'],)
+            self.router.add_api_route(**kwargs)
+
+    def _add_handcrafted_routes(self):
+        ...
 
     def _add_event(self):
         ...
@@ -132,7 +155,7 @@ def Permission(start_with:str  = DEFAULT_STARTS_WITH):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-         
+            print(func_name)
             if len(kwargs) < 2:
                 raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
             try:

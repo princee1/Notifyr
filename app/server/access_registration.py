@@ -47,7 +47,7 @@ def register_client_services(securityService: SecurityService, jwtAuthService: J
     clients_secrets = {}
 
     for i in range(client_number):
-        PrettyPrinter_.show(0)
+        PrettyPrinter_.show(0,clear_stack=True)
         PrettyPrinter_.info(
             f"Registering client {i+1} of {client_number}", saveable=False)
         if i > 0:
@@ -102,7 +102,7 @@ def parse_access_routes(access_routes: dict, current_ressources: list[str]):
 def prompt_client_registration():
 
     client_secrets = register_client_services()
-    PrettyPrinter_.show(0, print_stack=False)
+    PrettyPrinter_.show(2, clear_stack=True)
 
     PrettyPrinter_.space_line()
     answers = ask_question([ConfirmInputHandler('Do you want to save the client secrets?', default=False, name='save_secrets'), SimpleInputHandler(
