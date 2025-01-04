@@ -39,3 +39,6 @@ create :
 
 edit:
 	python ${src_dir}/main.py --config=${config_dir} --mode=edit
+
+register:
+	python ${src_dir}/main.py --config=${config_dir} --mode=register

@@ -83,8 +83,13 @@ class Container():
         self.__freeUpMemory()
         # TODO print success  in building the app
 
-    def __bind(self, type, obj, scope=None):
-        self.__app.binder.bind(type, to=obj, scope=scope)
+    def __bind(self, type_:type, obj:Any, scope=None):
+        self.__app.binder.bind(type_, to=obj, scope=scope)
+
+    def bind(self, type_:type, obj:Any, scope=None):
+        # self.__bind(type_, obj, scope)
+        # TODO bind other dependency that are not in the dependency list
+        ...
 
     def get(self, typ: Type[S], scope=None, all=False) -> dict[type, Type[S]] | Type[S]:
         if not all and isabstract(typ.__name__):
@@ -433,13 +438,13 @@ def InjectInFunction(func: Callable):
         <__main__.A object at 0x000001A76EC3FB90>
         ok
     """
-    types, paramNames = CONTAINER.getSignature(func)
+    types, paramNames = CONTAINER.getSignature(func)  # ERROR if theres is other parameter that is not in dependencies
     paramsToInject = CONTAINER.toParams(types, paramNames)
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         paramsToInject.update(kwargs)
-        func(**paramsToInject)
+        return func(**paramsToInject)
     return wrapper
 
 
@@ -488,7 +493,7 @@ def InjectInMethod(func: Callable):
     >>> TypeError: Test.__init__() missing 2 required positional arguments: 'securityService' and 'test'
 
     """
-    types, paramNames = CONTAINER.getSignature(func)
+    types, paramNames = CONTAINER.getSignature(func) # ERROR if the function is not a method and if theres is other parameter that is not in depencies
     del types[0]
     del paramNames[0]
     paramsToInject = CONTAINER.toParams(types, paramNames)
