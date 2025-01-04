@@ -26,3 +26,9 @@ class ValidationHTMLConstant:
     VALIDATION_VALUES_RULES_BALISE = "validation-valuesrules"
 
 ########################                     ########################################
+
+class ConfigAppConstant:
+    META_KEY = 'meta'
+    APPS_KEY = 'apps'
+    GENERATION_ID_KEY = 'generation_id'
+    CREATION_DATE_KEY = 'creation_date'

@@ -50,11 +50,13 @@ def writeContent(path: str, content, flag: FDFlag, enc: str = "utf-8"):
     try:
         fd = getFd(path, flag, enc)
         if fd.writable():
+            if isinstance(content,(dict,list)):
+                content = json.dumps(content)
             fd.write(content)
-            pass
         fd.close()
 
-    except:
+    except Exception as e:
+        print(e)
         pass
 
 
