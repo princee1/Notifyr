@@ -169,3 +169,6 @@ help.md
 *.scss
 /.VsCodeCounter/
 *.pem
+*secrets.json
+test.ipynb
+client.app.json
