@@ -78,7 +78,7 @@ def print_error(message, position: EmojiPosition = 'both'):
     """
     Print an error message.
     """
-    print_message(message, color=Fore.RED, emoji_code=":x:",
+    print_message(message, color=Fore.RED, emoji_code="\u274C",
                   position=position)
 
 
@@ -204,7 +204,7 @@ class PrettyPrinter:
     def wait(self, timeout:float,press_to_continue:bool = True):
         time.sleep(timeout)
         if press_to_continue:
-            self.warning('Press to continue',saveable=False,position ='left')
+            self.warning('Press to continue',saveable=False,position ='both')
             input('')
         clear_line()
 

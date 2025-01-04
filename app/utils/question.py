@@ -12,9 +12,10 @@ from InquirerPy.validator import *
 from prompt_toolkit.styles import Style
 from utils.prettyprint import printJSON
 
+one_or_more_invalid_message = 'Should be at least 1 selection'
+instruction = '(Press space to select, enter to continue)'
 
-
-def more_than_one(result): return len(result) >= 1
+def one_or_more(result): return len(result) >= 1
 
 
 def exactly_one(result): return len(result) == 1
@@ -83,7 +84,7 @@ class ChoiceInterface:
 
 
 class CheckboxInputHandler(InputHandler, ChoiceInterface):
-    def __init__(self, message, name, choices=[], qMark=None, validate=None, filter=None, when=None,invalid_message=None,instruction=None) -> None:
+    def __init__(self, message, name, choices=[], qMark=None, validate=None, filter=None, when=None,invalid_message=None,instruction=instruction) -> None:
         InputHandler.__init__(self, "checkbox",
                               message, None, name, when, validate, filter,invalid_message,instruction)
         ChoiceInterface.__init__(self, choices)
@@ -122,6 +123,13 @@ class ConfirmInputHandler(InputHandler):
     def __init__(self, message: str, name: str, default: bool, validate=None, filter=None, when=None,invalid_message=None,instruction=None) -> None:
         super().__init__("confirm", message, default, name, when, validate, filter,invalid_message,instruction)
 
+    @property
+    def question(self):
+        value = super().question
+        value.pop('validate')
+        value.pop('invalid_message')
+        value.pop('instruction')
+        return value
 
 class PasswordInputHandler(InputHandler):
     def __init__(self, message: str, name: str, instruction: str, invalidMessage=None, validate=None, filter=None, when=None, transformer=None) -> None:
@@ -198,7 +206,7 @@ custom_style = Style.from_dict({
 })
 
 
-def ask_question(questions: list[InputHandler], style=None):
+def ask_question(questions: list[InputHandler], style=None,vi_mode=False,key_bindings=None) -> dict:
     names_error:set = set()
     questions_list = [q.question for q in questions]
     for q in questions:
@@ -206,5 +214,5 @@ def ask_question(questions: list[InputHandler], style=None):
             raise InputKeyAlreadyExistsError()
         names_error.add(q.name)
         
-    answers = prompt(questions_list, style)
+    answers = prompt(questions_list, style, vi_mode=vi_mode, keybindings=key_bindings)
     return answers
