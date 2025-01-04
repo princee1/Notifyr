@@ -102,17 +102,13 @@ class File:
     file: str
     data: Any = None
     loaded: bool = False
-    exists: bool = False
-
+    
     def __init__(self, file: str, from_data: Any=None):
         self.file = file
         self.load(from_data)
 
     def load(self, from_data: Any=None):
-        self.exists = exist(self.file)
-        if not  self.exists:
-            print(f"File {self.file} does not exist")
-
+        ...
 
     def save(self):
         ...
@@ -123,6 +119,11 @@ class File:
     def write_raw(self, content, flag: Literal[FDFlag.WRITE, FDFlag.WRITE_BYTES] = FDFlag.WRITE):
         writeContent(self.file, content, flag)
 
+    @property
+    def exists(self):
+        return exist(self.file)
+    
+
 
 class JSONFile(File):
 
@@ -131,7 +132,7 @@ class JSONFile(File):
 
     def load(self, from_data=None):
         super().load(from_data)
-        if not self.exists:
+        if not self.exists and from_data is None:
             return 
 
         if from_data != None:
@@ -141,9 +142,16 @@ class JSONFile(File):
             return 
 
         fd = getFd(self.file, FDFlag.READ)
+
         if fd is not None:
-            self.loaded = True
-            self.data = json.load(fd)
+            try:
+                self.data = json.load(fd)
+                self.loaded = True
+            except:
+                # BUG might be better : self.data = None
+                self.data = {}
+                self.loaded = False
+                ...
         
         return
 
