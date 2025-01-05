@@ -5,3 +5,6 @@
 5. Code Interface Method Conflicts checking
 6. Look into how to have access to signal with unicorn
 7. Change to multi process instead of multi thread
+8. Add Port to the auth issued_for
+9. Change encrypyt decrptyion alorithm
+10. invalidate each access token when recreate the apps
