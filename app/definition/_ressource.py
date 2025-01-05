@@ -26,6 +26,9 @@ def get_class_name_from_method(func: Callable) -> str:
 class MethodStartsWithError(Exception):
     ...
 
+class NextHandlerException(Exception):
+    ...
+
 RESSOURCES:dict[str,type] = {}
 PROTECTED_ROUTES:dict[str,list[str]] = {}
 ROUTES:dict[str,list[dict]] = {  }
@@ -168,36 +171,56 @@ def Permission(start_with:str  = DEFAULT_STARTS_WITH):
     return decorator
 
 
-def Handler(handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None],start_with:str = DEFAULT_STARTS_WITH):
+def Handler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None],start_with:str = DEFAULT_STARTS_WITH):
     def decorator(func:Type[R]| Callable) -> Type[R]| Callable:
         data = common_class_decorator(func,Handler,handler_function,start_with)
         if data != None:
             return data
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            return handler_function(func, *args, **kwargs)
+            if len(handler_function) == 0:
+                # BUG print a warning
+                return func(*args,**kwargs)
+            try:
+                for handler in handler_function:
+                    try:
+                        return handler(func, *args, **kwargs)
+                    except NextHandlerException:
+                        continue
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) # TODO add custom exception
+                
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) # TODO add custom exception
+            
         return wrapper
     return decorator
 
 
-def Guard(guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]],start_with:str = DEFAULT_STARTS_WITH):
+def Guard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]],start_with:str = DEFAULT_STARTS_WITH):
+    # INFO guards only purpose is to validate the request
+
+    #BUG notify the developper if theres no guard_function mentioned
     def decorator(func: Callable| Type[R])-> Callable| Type[R]:
         data = common_class_decorator(func,Guard,guard_function,start_with)
         if data != None:
-            return data
-        
+            return data 
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            flag, message = guard_function(*args, **kwargs)
-            if not flag:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
+
+            for guard in guard_function:
+                flag, message = guard(*args, **kwargs)
+                if not flag:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
             return func(*args, **kwargs)
         return wrapper
     return decorator
 
 
-def Pipe(pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]],before:bool = True, start_with:str = DEFAULT_STARTS_WITH):
+def Pipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]],before:bool = True, start_with:str = DEFAULT_STARTS_WITH):
+    # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value 
+
     def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
         data = common_class_decorator(func,Pipe,pipe_function,start_with,before=before)
         if data != None:
@@ -205,11 +228,15 @@ def Pipe(pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Itera
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             if before:
-                args,kwargs = pipe_function(*args, **kwargs)
+                for pipe in pipe_function:
+                    args,kwargs = pipe(*args, **kwargs)
                 return func(*args, **kwargs)
             else:
                 result = func(*args, **kwargs)
-                return pipe_function(result)
+                for pipe in pipe_function:
+                    result = pipe(result)
+
+                return result
         return wrapper
     return decorator
 

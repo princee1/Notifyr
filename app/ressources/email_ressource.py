@@ -5,7 +5,7 @@ from classes.email import EmailBuilder
 from services.config_service import ConfigService
 from services.security_service import SecurityService
 from container import InjectInMethod
-from definition._ressource import Permission, Ressource, Handler
+from definition._ressource import Permission, Ressource, Handler,NextHandlerException
 from definition._service import ServiceNotAvailableError
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
@@ -23,7 +23,8 @@ def handling_error(callback: Callable, *args, **kwargs):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE)
 
     except Exception as e:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+        #raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+        raise NextHandlerException
 
 
 def guard_function(request: Request, **kwargs):
@@ -92,7 +93,7 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(data, meta, images))
         pass
 
-    @Handler(handler_function=handling_error)
+    @Handler(handling_error)
     @Ressource.AddRoute("/custom/",)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip)):
         meta = customEmail.meta
