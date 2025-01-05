@@ -54,7 +54,7 @@ class Ressource(EventInterface):
         def decorator(func:Callable):
             computed_operation_id = Ressource._build_operation_id(path,func.__qualname__,operation_id) 
             METADATA_ROUTES[func.__qualname__] = computed_operation_id
-            # TODO put the add route logic on the static scope
+            
             class_name = get_class_name_from_method(func)
             kwargs = {
                 'path':path,
@@ -155,7 +155,6 @@ def Permission(start_with:str  = DEFAULT_STARTS_WITH):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            print(func_name)
             if len(kwargs) < 2:
                 raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
             try:
@@ -180,17 +179,13 @@ def Handler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, A
         def wrapper(*args, **kwargs):
             if len(handler_function) == 0:
                 # BUG print a warning
-                return func(*args,**kwargs)
-            try:
-                for handler in handler_function:
-                    try:
-                        return handler(func, *args, **kwargs)
-                    except NextHandlerException:
-                        continue
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) # TODO add custom exception
-                
-            except Exception as e:
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) # TODO add custom exception
+                return func(*args,**kwargs)          
+            for handler in handler_function:
+                try:
+                    return handler(func, *args, **kwargs)
+                except NextHandlerException:
+                    continue
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) # TODO add custom exception
             
         return wrapper
     return decorator
@@ -209,7 +204,7 @@ def Guard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bo
         def wrapper(*args, **kwargs):
 
             for guard in guard_function:
-                flag, message = guard(*args, **kwargs)
+                flag, message = guard(*args, **kwargs) # BUG check annotations of the guard function
                 if not flag:
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED, detail=message)

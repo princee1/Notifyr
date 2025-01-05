@@ -81,7 +81,7 @@ class EmailTemplateRessource(Ressource):
         meta = email.meta
         data = email.data
         if template not in self.assetService.htmls:
-            raise TemplateNotFoundError
+            raise TemplateNotFoundError 
 
         template: HTMLTemplate = self.assetService.htmls[template]
 

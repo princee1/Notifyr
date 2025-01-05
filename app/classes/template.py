@@ -2,6 +2,7 @@
 from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
+from definition._error import BaseError
 from utils.schema import HtmlSchemaBuilder
 from utils.helper import strict_parseToBool, flatten_dict
 from utils.validation import CustomValidator
@@ -270,5 +271,5 @@ class PhoneTemplate(Template):
         super().__init__(filename, content, dirName)
 ####################### ########################
 
-class TemplateNotFoundError(Exception):
+class TemplateNotFoundError(BaseError):
     ...
