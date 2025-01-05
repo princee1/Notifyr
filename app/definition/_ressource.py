@@ -15,13 +15,22 @@ import functools
 from utils.helper import getParentClass
 from fastapi import BackgroundTasks
 from interface.events import EventInterface
+from enum import Enum
 
+
+class DecoratorPriority(Enum):
+    PERMISSION = 1
+    GUARD = 2
+    PIPE =3
+    HANDLER = 4
+    
 
 PATH_SEPARATOR = "/"
 DEFAULT_STARTS_WITH = '_api_'
 
 def get_class_name_from_method(func: Callable) -> str:
     return func.__qualname__.split('.')[0]
+
 
 class MethodStartsWithError(Exception):
     ...
@@ -33,12 +42,25 @@ RESSOURCES:dict[str,type] = {}
 PROTECTED_ROUTES:dict[str,list[str]] = {}
 ROUTES:dict[str,list[dict]] = {  }
 METADATA_ROUTES:dict[str,str] = {}
+DECORATOR_METADATA: dict[str, dict[str, list[tuple[Callable, float]]]] = {}
+
 
 def add_protected_route_metadata(class_name:str,method_name:str,):
     if class_name in PROTECTED_ROUTES:
         PROTECTED_ROUTES[class_name].append(method_name)
     else:
         PROTECTED_ROUTES[class_name] = [method_name]
+
+
+def appends_funcs_callback(func: Callable, wrapper:Callable, priority:DecoratorPriority,touch:float=0):
+    class_name = get_class_name_from_method(func)
+    if class_name not in DECORATOR_METADATA:
+        DECORATOR_METADATA[class_name] = {}
+
+    if func.__name__ not in DECORATOR_METADATA[class_name]:
+        DECORATOR_METADATA[class_name][func.__name__] = []
+
+    DECORATOR_METADATA[class_name][func.__name__].append((wrapper, priority.value + touch))
 
 class Ressource(EventInterface):
 
@@ -54,7 +76,7 @@ class Ressource(EventInterface):
         def decorator(func:Callable):
             computed_operation_id = Ressource._build_operation_id(path,func.__qualname__,operation_id) 
             METADATA_ROUTES[func.__qualname__] = computed_operation_id
-            
+
             class_name = get_class_name_from_method(func)
             kwargs = {
                 'path':path,
@@ -75,6 +97,19 @@ class Ressource(EventInterface):
                 return func(*args,**kwargs)
             return  wrapper
         return decorator
+    
+    def init_stacked_callback(self):
+        if self.__class__.__name__ not in DECORATOR_METADATA:
+            return 
+        M = DECORATOR_METADATA[self.__class__.__name__]
+        for f in M:
+            if hasattr(self, f):
+                stacked_callback = M[f].copy()
+                c = getattr(self,f)
+                for sc in sorted(stacked_callback, key=lambda x: x[1], reverse=True): # BUG watch the reverse
+                    sc_ =sc[0]
+                    c = sc_(c)
+                setattr(self,f,c)
 
     def __init_subclass__(cls: Type) -> None:
         RESSOURCES[cls.__name__] = cls
@@ -87,7 +122,9 @@ class Ressource(EventInterface):
             prefix = PATH_SEPARATOR + prefix
         self.router = APIRouter(prefix=prefix, on_shutdown=[
                                 self.on_shutdown], on_startup=[self.on_startup])
+        
         self._add_routes()
+        self.init_stacked_callback()
         self._add_handcrafted_routes()
         self.default_response: Dict[int | str, Dict[str, Any]] | None = None
 
@@ -98,7 +135,6 @@ class Ressource(EventInterface):
         return Need(dep)
 
     def on_startup(self):
-        
         pass
 
     def on_shutdown(self):
@@ -153,20 +189,24 @@ def Permission(start_with:str  = DEFAULT_STARTS_WITH):
         class_name = get_class_name_from_method(func)
         add_protected_route_metadata(class_name,func_name)
 
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            if len(kwargs) < 2:
-                raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
-            try:
-                token = kwargs[TOKEN_NAME_PARAMETER]
-                issued_for = kwargs[CLIENT_IP_PARAMETER]
-            except Exception as e:
-                raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
-        
-            jwtService:JWTAuthService = Get(JWTAuthService)
-            if jwtService.verify_permission(token, class_name, func_name,issued_for): # TODO Need to replace the function name with the metadata mapping
-                return func(*args, **kwargs)
-        return wrapper
+        def wrapper(function:Callable):
+            @functools.wraps(func)
+            def callback(*args, **kwargs):
+                if len(kwargs) < 2:
+                    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+                try:
+                    token = kwargs[TOKEN_NAME_PARAMETER]
+                    issued_for = kwargs[CLIENT_IP_PARAMETER]
+                except Exception as e:
+                    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+            
+                jwtService:JWTAuthService = Get(JWTAuthService)
+                if jwtService.verify_permission(token, class_name, func_name,issued_for): # TODO Need to replace the function name with the metadata mapping
+                    return function(*args, **kwargs)
+            
+            return callback
+        appends_funcs_callback(func, wrapper, DecoratorPriority.PERMISSION)
+        return func
     return decorator
 
 
@@ -175,19 +215,21 @@ def Handler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, A
         data = common_class_decorator(func,Handler,handler_function,start_with)
         if data != None:
             return data
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            if len(handler_function) == 0:
-                # BUG print a warning
-                return func(*args,**kwargs)          
-            for handler in handler_function:
-                try:
-                    return handler(func, *args, **kwargs)
-                except NextHandlerException:
-                    continue
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) # TODO add custom exception
-            
-        return wrapper
+        def wrapper(function:Callable):
+            @functools.wraps(func)
+            def callback(*args, **kwargs):
+                if len(handler_function) == 0:
+                    # BUG print a warning
+                    return function(*args,**kwargs)          
+                for handler in handler_function:
+                    try:
+                        return handler(function, *args, **kwargs)
+                    except NextHandlerException:
+                        continue
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) # TODO add custom exception
+            return callback
+        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER)  
+        return func
     return decorator
 
 
@@ -199,17 +241,21 @@ def Guard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bo
         data = common_class_decorator(func,Guard,guard_function,start_with)
         if data != None:
             return data 
+        
+        def wrapper(function: Callable):
+            @functools.wraps(func)
+            def callback(*args, **kwargs):
 
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-
-            for guard in guard_function:
-                flag, message = guard(*args, **kwargs) # BUG check annotations of the guard function
-                if not flag:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
-            return func(*args, **kwargs)
-        return wrapper
+                for guard in guard_function:
+                    flag, message = guard(*args, **kwargs) # BUG check annotations of the guard function
+                    if not flag:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
+                return function(*args, **kwargs)
+            return callback
+        
+        appends_funcs_callback(func, wrapper, DecoratorPriority.GUARD)
+        return func
     return decorator
 
 
@@ -220,29 +266,40 @@ def Pipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iter
         data = common_class_decorator(func,Pipe,pipe_function,start_with,before=before)
         if data != None:
             return data
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            if before:
-                for pipe in pipe_function:
-                    args,kwargs = pipe(*args, **kwargs)
-                return func(*args, **kwargs)
-            else:
-                result = func(*args, **kwargs)
-                for pipe in pipe_function:
-                    result = pipe(result)
+        
+        def wrapper(function:Callable):
 
-                return result
-        return wrapper
+            @functools.wraps(func)
+            def callback(*args, **kwargs):
+                if before:
+                    for pipe in pipe_function: #  verify annotation
+                        args,kwargs = pipe(*args, **kwargs)
+                    return function(*args, **kwargs)
+                else:
+                    result = function(*args, **kwargs)
+                    for pipe in pipe_function:
+                        result = pipe(result)
+
+                    return result
+            return callback
+        
+        appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE,touch=0 if before else 0.5) # TODO 3 or 3.5 if before
+        return func
     return decorator
 
 
 def Interceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R]|Callable],start_with:str = DEFAULT_STARTS_WITH):
+    raise NotImplementedError
     def decorator(func: Type[R]|Callable) -> Type[R]|Callable:
         data = common_class_decorator(func,Interceptor,interceptor_function,start_with)
         if data != None:
             return data
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            return interceptor_function(func,*args, **kwargs)
-        return wrapper
+        def wrapper(function:Callable):
+            @functools.wraps(func)
+            def callback(*args, **kwargs):
+                return interceptor_function(function,*args, **kwargs)
+            return callback
+
+        appends_funcs_callback(func, wrapper, 3)
+        return func
     return decorator
