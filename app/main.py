@@ -23,8 +23,10 @@ config_file = args.config
 
 PrettyPrinter_.show(1, print_stack=False)
 ########################################################################
-from server.application import AppParameter, start_applications, createApps, editApps, RESSOURCES, MIDDLEWARE
+from server.application import AppParameter, RESSOURCES
+from server.apps_registration import createApps, editApps,start_applications
 from server.access_registration import prompt_client_registration
+from server.middleware import MIDDLEWARE
 from utils.constant import ConfigAppConstant
 from services.config_service import ConfigService
 from container import build_container, Get

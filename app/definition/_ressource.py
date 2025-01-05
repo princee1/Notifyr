@@ -9,13 +9,11 @@ from services.security_service import JWTAuthService
 from container import Get, Need
 from definition._service import S, Service
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from implements import Interface
 from utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import time
 import functools
 from utils.helper import getParentClass
 from fastapi import BackgroundTasks
-from classes.permission import PermissionAuth,RoutePermissionScope
 from interface.events import EventInterface
 
 
@@ -78,7 +76,6 @@ class Ressource(EventInterface):
     def __init_subclass__(cls: Type) -> None:
         RESSOURCES[cls.__name__] = cls
         #ROUTES[cls.__name__] = []
-
 
     def __init__(self, prefix: str) -> None:
         self.assetService: AssetService = Get(AssetService)
