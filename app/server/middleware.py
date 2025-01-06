@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, MutableMapping
 import time
 from interface.injectable_middleware import InjectableMiddlewareInterface
 from utils.dependencies import get_api_key, get_client_ip
+from cryptography.fernet import InvalidToken
 
 MIDDLEWARE: dict[str, type] = {}
 
@@ -33,14 +34,17 @@ class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
         InjectableMiddlewareInterface.__init__(self)
 
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
-        request_api_key = get_api_key(request)
-        if request_api_key is None:
-            return Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Unauthorized")
-        client_ip = get_client_ip(request)
-        if not self.securityService.verify_server_access(request_api_key,client_ip):
-            return Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Unauthorized")
-        response: Response = await call_next(request)
-        return response
+        try:
+            request_api_key = get_api_key(request)
+            if request_api_key is None:
+                return Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Unauthorized")
+            client_ip = get_client_ip(request)
+            if not self.securityService.verify_server_access(request_api_key,client_ip):
+                return Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Unauthorized")
+            response: Response = await call_next(request)
+            return response
+        except InvalidToken:
+            return Response(status_code=status.HTTP_401_UNAUTHORIZED,content='Unauthorized')
 
     @InjectInMethod
     def inject_middleware(self, securityService: SecurityService):
