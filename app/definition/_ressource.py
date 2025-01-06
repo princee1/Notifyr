@@ -72,7 +72,9 @@ class Ressource(EventInterface):
         return route_name.replace(PATH_SEPARATOR, "_")
 
     @staticmethod
-    def AddRoute(path:str,methods:Iterable[str] = ['POST'],operation_id:str = None,response_model:Any = None):
+    def AddRoute(path:str,methods:Iterable[str] = ['POST'],operation_id:str = None,response_model:Any = None,response_description: str = "Successful Response",
+    responses: Dict[int | str, Dict[str, Any]] | None = None,
+    deprecated: bool | None = None):
         def decorator(func:Callable):
             computed_operation_id = Ressource._build_operation_id(path,func.__qualname__,operation_id) 
             METADATA_ROUTES[func.__qualname__] = computed_operation_id
@@ -85,6 +87,9 @@ class Ressource(EventInterface):
                 'summary':func.__doc__,
                 'response_model':response_model,
                 'methods':methods,
+                'response_description':response_description,
+                'responses':responses,
+                'deprecated':deprecated,
 
             }
             if class_name not in ROUTES:

@@ -72,10 +72,11 @@ class FTPService(Service):
 
 @ServiceClass
 class GitCloneRepoService(Service):
-    def __init__(self,configService:ConfigService) -> None:
+    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
         super().__init__()
         self.configService = configService
-        
+        self.fileService = fileService
+
     def build(self):
         return super().build()
     
