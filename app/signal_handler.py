@@ -17,7 +17,6 @@ class SignalHandler:
 
     def __init__(self):
         # self.signal:dict[str, Callable] = {}
-        PrettyPrinter_.info('Test',saveable=False,position ='left')
 
         self.register_signal(signal.SIGINT,default_term_handler)
         self.register_signal(signal.SIGTERM,default_term_handler)

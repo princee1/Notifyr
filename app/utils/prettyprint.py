@@ -36,7 +36,7 @@ def show(t=10, title='Communication - Service', t1=0, color=Fore.WHITE):
     time.sleep(t1)
     clearscreen()
     settitle(title)
-    print_message(ascii_art, color=color, emoji_code='')
+    base_print(ascii_art, color=color, emoji_code='')
     time.sleep(t)
 
 
@@ -57,7 +57,7 @@ def clearscreen():
         os.system('clear')
 
 
-def print_message(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", position: EmojiPosition = 'both'):
+def base_print(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", position: EmojiPosition = 'both'):
     """
     Base function to print a personalized message with color and emoji.
     """
@@ -70,23 +70,24 @@ def print_info(message, position: EmojiPosition = 'both'):
     """
     Print an info message.
     """
-    print_message(message, color=Fore.BLUE,
+    base_print(message, color=Fore.BLUE,
                   emoji_code=":information:", position=position)
 
+def print_message(message,position: EmojiPosition = 'both'):
+    base_print(message, color=Fore.WHITE,emoji_code='\U0001F4AC',position=position)
 
 def print_error(message, position: EmojiPosition = 'both'):
     """
     Print an error message.
     """
-    print_message(message, color=Fore.RED, emoji_code="\u274C",
+    base_print(message, color=Fore.RED, emoji_code="\u274C",
                   position=position)
-
 
 def print_warning(message, position: EmojiPosition = 'both'):
     """
     Print a warning message.
     """
-    print_message(message, color=Fore.YELLOW,
+    base_print(message, color=Fore.YELLOW,
                   emoji_code=":warning:", position=position)
 
 
@@ -94,7 +95,7 @@ def print_success(message, position: EmojiPosition = 'both'):
     """
     Print a success message.
     """
-    print_message(message, color=Fore.GREEN, emoji_code="\u2705",
+    base_print(message, color=Fore.GREEN, emoji_code="\u2705",
                   position=position)
 
 ########################################################################
@@ -151,6 +152,10 @@ class PrettyPrinter:
         print_error(message, position)
 
     @cache
+    def message(self, message, saveable=True, position: EmojiPosition = 'both'):
+        print_message(message, position)
+
+    @cache
     def info(self, message, saveable=True, position: EmojiPosition = 'both'):
         print_info(message, position)
 
@@ -160,7 +165,7 @@ class PrettyPrinter:
 
     @cache
     def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", saveable=True, position: EmojiPosition = 'both'):
-        print_message(message, color, background, emoji_code, position)
+        base_print(message, color, background, emoji_code, position)
 
     @cache
     def json(self, content, indent=1, width=80, depth=None, compact=False, saveable=True,):
@@ -180,7 +185,7 @@ class PrettyPrinter:
         time.sleep(pause_before)
         self.clearScreen()
         settitle(title)
-        print_message(ascii_art, color=color, emoji_code='')
+        base_print(ascii_art, color=color, emoji_code='')
         if clear_stack:
             self.clear_buffer()
         if print_stack:
