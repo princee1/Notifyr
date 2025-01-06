@@ -1,10 +1,9 @@
-1. Permission Management with JWT authentication or other method
-2. Permission decorator for each router or ressource
-3. Script to generate JWT
-4. Manage Error w/ error code
-5. Code Interface Method Conflicts checking
-6. Look into how to have access to signal with unicorn
-7. Change to multi process instead of multi thread
-8. Add Port to the auth issued_for
-9. Change encrypyt decrptyion alorithm
-10. invalidate each access token when recreate the apps
+1. Manage Error w/ error code
+2. Code Interface Method Conflicts checking
+3. Look into how to have access to signal with unicorn
+4. Change to multi process instead of multi thread
+5. Add Port to the auth issued_for
+6. Change encryption decryption algorithm
+7. invalidate each access token when recreate the apps
+8. Manage Event handler on both Application and Ressource
+9. Change to operation_id instead of function_name

@@ -122,9 +122,8 @@ class Ressource(EventInterface):
             prefix = PATH_SEPARATOR + prefix
         self.router = APIRouter(prefix=prefix, on_shutdown=[
                                 self.on_shutdown], on_startup=[self.on_startup])
-        
-        self._add_routes()
         self.init_stacked_callback()
+        self._add_routes()
         self._add_handcrafted_routes()
         self.default_response: Dict[int | str, Dict[str, Any]] | None = None
 
@@ -190,7 +189,8 @@ def Permission(start_with:str  = DEFAULT_STARTS_WITH):
         add_protected_route_metadata(class_name,func_name)
 
         def wrapper(function:Callable):
-            @functools.wraps(func)
+
+            @functools.wraps(function)
             def callback(*args, **kwargs):
                 if len(kwargs) < 2:
                     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
@@ -211,12 +211,15 @@ def Permission(start_with:str  = DEFAULT_STARTS_WITH):
 
 
 def Handler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None],start_with:str = DEFAULT_STARTS_WITH):
+    # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
+    
     def decorator(func:Type[R]| Callable) -> Type[R]| Callable:
         data = common_class_decorator(func,Handler,handler_function,start_with)
         if data != None:
             return data
         def wrapper(function:Callable):
-            @functools.wraps(func)
+           
+            @functools.wraps(function)
             def callback(*args, **kwargs):
                 if len(handler_function) == 0:
                     # BUG print a warning
@@ -235,6 +238,7 @@ def Handler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, A
 
 def Guard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]],start_with:str = DEFAULT_STARTS_WITH):
     # INFO guards only purpose is to validate the request
+    # NOTE:  be mindful of the order
 
     #BUG notify the developper if theres no guard_function mentioned
     def decorator(func: Callable| Type[R])-> Callable| Type[R]:
@@ -243,9 +247,9 @@ def Guard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bo
             return data 
         
         def wrapper(function: Callable):
-            @functools.wraps(func)
-            def callback(*args, **kwargs):
 
+            @functools.wraps(function)
+            def callback(*args, **kwargs):
                 for guard in guard_function:
                     flag, message = guard(*args, **kwargs) # BUG check annotations of the guard function
                     if not flag:
@@ -269,7 +273,7 @@ def Pipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iter
         
         def wrapper(function:Callable):
 
-            @functools.wraps(func)
+            @functools.wraps(function)
             def callback(*args, **kwargs):
                 if before:
                     for pipe in pipe_function: #  verify annotation
@@ -295,7 +299,7 @@ def Interceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]
         if data != None:
             return data
         def wrapper(function:Callable):
-            @functools.wraps(func)
+            @functools.wraps(function)
             def callback(*args, **kwargs):
                 return interceptor_function(function,*args, **kwargs)
             return callback
