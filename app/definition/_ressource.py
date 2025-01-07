@@ -210,12 +210,13 @@ def Permission(start_with: str = DEFAULT_STARTS_WITH):
                     raise HTTPException(
                         status_code=status.HTTP_501_NOT_IMPLEMENTED)
                 try:
-                    token = kwargs[TOKEN_NAME_PARAMETER]
-                    issued_for = kwargs[CLIENT_IP_PARAMETER]
+                    token = kwargs[TOKEN_NAME_PARAMETER] # TODO defined in the decorator parameter
+                    issued_for = kwargs[CLIENT_IP_PARAMETER] # TODO defined in the decorator parameter
                 except Exception as e:
                     raise HTTPException(
                         status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
+                # TODO permission callback
                 jwtService: JWTAuthService = Get(JWTAuthService)
                 # TODO Need to replace the function name with the metadata mapping
                 if jwtService.verify_permission(token, class_name, func_name, issued_for):

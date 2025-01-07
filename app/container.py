@@ -501,7 +501,7 @@ def InjectInMethod(func: Callable):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         paramsToInject.update(kwargs)
-        func(*args, **paramsToInject)
+        return func(*args, **paramsToInject)
     return wrapper
 
 
