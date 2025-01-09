@@ -2,6 +2,7 @@
 import smtplib as smtp
 import imaplib as imap
 from enum import Enum
+from typing import Literal
 
 from .training_service import TrainingService
 from classes.email import EmailBuilder
@@ -11,6 +12,7 @@ from interface.timers import SchedulerInterface
 from .logger_service import LoggerService
 from definition import _service
 from .config_service import ConfigService
+from msal import ConfidentialClientApplication
 
 from implements import implements
 import ssl
@@ -23,6 +25,7 @@ SMTP_TLS_PORT = 587
 IMAP_NORMAL_PORT = 143
 IMAP_SSL_TLS_PORT = 993
 
+ConnMode = Literal['tls','ssl','normal']
 
 class EmailConnInterface():
     def setHostPort(connMode: str): pass
@@ -34,11 +37,12 @@ class EmailConnInterface():
 
 class SMTPConfig(EmailConnInterface, Enum):
 
+    GMAIL_RELAY = "smtp-relay.gmail.com"
     GMAIL = "smtp.gmail.com"
-    OUTLOOK = "smtp-mail.outlook.com"
+    OUTLOOK = "smtp.office365.com"
     YAHOO = "smtp.mail.yahoo.com"
 
-    def setHostPort(connMode: str):
+    def setHostPort(connMode: ConnMode | str):
         match connMode.lower().strip():
             case "tls":
                 return SMTP_TLS_PORT
@@ -212,5 +216,5 @@ class EmailReaderService(EmailService):
     def recurrenceReading():
         pass
 
-    def updateReccurenceReading(self):
+    def updateRecurrenceReading(self):
         pass

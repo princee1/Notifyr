@@ -102,7 +102,10 @@ while True:
             PrettyPrinter_.error("{EDIT} mode disabled for now")
             exit(0) # BUG DISABLED FOR NOW
             prompt_client_registration()
-            break
+            if valid:
+                mode = RunMode.File
+                continue
+            exit(0)
 
         case _:
             PrettyPrinter_.error(f"Errors while load apps")
