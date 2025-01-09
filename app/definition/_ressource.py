@@ -65,6 +65,27 @@ class NextHandlerException(Exception):
     ...
 
 
+class GuardBuilder:
+
+    def guard(self):
+        ...
+
+    def _guard(self,):
+        ...
+
+class HandlerBuilder:
+    def handle(self):
+        ...
+
+class PipeBuilder:
+    def pipe(self):
+        ...
+
+class PermissionBuilder:
+    def permission(self):
+        ...
+
+
 RESSOURCES: dict[str, type] = {}
 PROTECTED_ROUTES: dict[str, list[str]] = {}
 ROUTES: dict[str, list[dict]] = {}
@@ -132,6 +153,18 @@ class Ressource(EventInterface):
                 return func(*args, **kwargs)
             return wrapper
         return decorator
+    
+    @staticmethod
+    def Get(path:str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
+                  responses: Dict[int | str, Dict[str, Any]] | None = None,
+                  deprecated: bool | None = None):
+        return Ressource.HTTPRoute(path,HTTPMethod.GET,operation_id,response_model,response_description,responses,deprecated)
+    
+    @staticmethod
+    def Post(path:str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
+                  responses: Dict[int | str, Dict[str, Any]] | None = None,
+                  deprecated: bool | None = None):
+        return Ressource.HTTPRoute(path,HTTPMethod.POST,operation_id,response_model,response_description,responses,deprecated)
 
     def init_stacked_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
@@ -195,7 +228,7 @@ class Ressource(EventInterface):
 R = TypeVar('R', bound=Ressource)
 
 
-def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handling_func: Callable, start_with: str, **kwargs) -> Type[R] | None:
+def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handling_func: Callable |tuple[Callable,...], start_with: str, **kwargs) -> Type[R] | None:
     if type(cls) == type and isclass(cls):
         if start_with is None:
             raise MethodStartsWithError("start_with is required for class")
@@ -206,7 +239,7 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
                     setattr(cls, attr, decorator(**kwargs)(handler))
                 else:
                     setattr(cls, attr, decorator(
-                        handling_func, **kwargs)(handler))
+                        *handling_func, **kwargs)(handler)) # BUG can be an source of error if not a tuple
         return cls
     return None
 
@@ -264,6 +297,7 @@ def Handler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, A
                 if len(handler_function) == 0:
                     # BUG print a warning
                     return function(*args, **kwargs)
+                
                 for handler in handler_function:
                     try:
                         return handler(function, *args, **kwargs)
