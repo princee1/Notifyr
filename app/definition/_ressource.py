@@ -4,6 +4,7 @@ instance imported from `container`.
 """
 from inspect import isclass
 from typing import Any, Callable, Dict, Iterable, Mapping, TypeVar, Type
+from utils.constant import HTTPHeaderConstant
 from services.assets_service import AssetService
 from services.security_service import JWTAuthService
 from container import Get, Need
@@ -25,13 +26,36 @@ class DecoratorPriority(Enum):
     HANDLER = 4
 
 
+class Role(Enum):
+    PUBLIC = 1
+    SERVICE = 2
+    ADMIN = 3
+
+class HTTPMethod(Enum):
+    POST = 'POST'
+    GET = 'GET'
+    UPDATE = 'UPDATE'
+    DELETE = 'DELETE'
+    PUT = 'PUT'
+    PATCH = 'PATCH'
+    OPTIONS = 'OPTIONS'
+    ALL = 'ALL'
+
+    @staticmethod
+    def to_strs(methods:list[Any] | Any):
+        if isinstance(methods,HTTPMethod):
+            return [methods.value] 
+        methods:list[HTTPMethod] = methods
+        return [method.value for method in methods]
+
+
+
 PATH_SEPARATOR = "/"
 DEFAULT_STARTS_WITH = '_api_'
 
 
 def get_class_name_from_method(func: Callable) -> str:
     return func.__qualname__.split('.')[0]
-
 
 class MethodStartsWithError(Exception):
     ...
@@ -77,7 +101,7 @@ class Ressource(EventInterface):
         return route_name.replace(PATH_SEPARATOR, "_")
 
     @staticmethod
-    def HTTPRoute(path: str, methods: Iterable[str] = ['POST'], operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
+    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST], operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
                   deprecated: bool | None = None):
         def decorator(func: Callable):
@@ -92,7 +116,7 @@ class Ressource(EventInterface):
                 'operation_id': operation_id,
                 'summary': func.__doc__,
                 'response_model': response_model,
-                'methods': methods,
+                'methods': HTTPMethod.to_strs(methods),
                 'response_description': response_description,
                 'responses': responses,
                 'deprecated': deprecated,
@@ -187,10 +211,6 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
     return None
 
 
-TOKEN_NAME_PARAMETER = 'token_'
-CLIENT_IP_PARAMETER = 'client_ip_'
-
-
 def Permission(start_with: str = DEFAULT_STARTS_WITH):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -210,8 +230,8 @@ def Permission(start_with: str = DEFAULT_STARTS_WITH):
                     raise HTTPException(
                         status_code=status.HTTP_501_NOT_IMPLEMENTED)
                 try:
-                    token = kwargs[TOKEN_NAME_PARAMETER] # TODO defined in the decorator parameter
-                    issued_for = kwargs[CLIENT_IP_PARAMETER] # TODO defined in the decorator parameter
+                    token = kwargs[HTTPHeaderConstant.TOKEN_NAME_PARAMETER] # TODO defined in the decorator parameter
+                    issued_for = kwargs[HTTPHeaderConstant.CLIENT_IP_PARAMETER] # TODO defined in the decorator parameter
                 except Exception as e:
                     raise HTTPException(
                         status_code=status.HTTP_501_NOT_IMPLEMENTED)
@@ -272,6 +292,7 @@ def Guard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bo
 
             @functools.wraps(function)
             def callback(*args, **kwargs):
+                print(guard_function)
                 for guard in guard_function:
                     # BUG check annotations of the guard function
                     flag, message = guard(*args, **kwargs)
@@ -335,3 +356,6 @@ def Interceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]
         appends_funcs_callback(func, wrapper, 3)
         return func
     return decorator
+
+def Role(*roles):
+    ...
