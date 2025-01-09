@@ -2,11 +2,12 @@
 Module to easily manage retrieving user information from the request object.
 """
 
-from typing import Annotated, Any, Callable
+from typing import Annotated, Any, Callable, TypeVar
 from fastapi import Depends, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from utils.constant import HTTPHeaderConstant
 
+D = TypeVar('D',bound=type)
 
 def APIFilterInject(func:Callable):
 
@@ -21,6 +22,13 @@ def APIFilterInject(func:Callable):
         }
         return func(*args, **filtered_kwargs)
     return wrapper
+
+def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None):
+    if key == None and cls == None:
+        raise KeyError
+    # if cls:
+    #     for 
+    return 
 
 # TODO: Check if we can raise exception if some header value are not present
 
