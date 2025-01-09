@@ -16,6 +16,8 @@ class SkipCode(Exception):
 
 
 DICT_SEP = "->"
+
+
 def key_builder(key): return key+DICT_SEP
 
 
@@ -192,6 +194,26 @@ def is_abstract(cls: type, bClass: type):  # BUG
 def direct_subclass(cls:type):
     return cls.__subclasses__()
 
+primitive_classes = [
+    int,         # Integer numbers
+    float,       # Floating-point numbers
+    complex,     # Complex numbers
+    bool,        # Boolean values
+    str,         # Strings
+    bytes,       # Immutable sequence of bytes
+    bytearray,   # Mutable sequence of bytes
+    type(None),  # NoneType (the type of `None`)
+    type(...),   # Ellipsis (the type of `...`)
+    dict,
+    list, 
+    set,
+    frozenset
+]
+
+
+def isprimitive_type(typ:type):
+    return typ in primitive_classes
+
 ################################   ** Generate Helper **      #################################
 
 def generateId(len):
@@ -207,4 +229,3 @@ def generateRndNumber(len):
 def generateRndNumber(len):
     seed(time.time())
     return "".join(choice(hexdigits) for _ in range(len))
-
