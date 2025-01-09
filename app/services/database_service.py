@@ -16,7 +16,7 @@ class DatabaseService(Service):
 @ServiceClass
 class SQLiteService(DatabaseService):
     def __init__(self,configService:ConfigService, securityService:SecurityService, fileService:FileService) -> None:
-        super().__init__()
+        super().__init__(configService,fileService)
         self.securityService = securityService
     
 
@@ -24,17 +24,17 @@ class SQLiteService(DatabaseService):
 class CSVService(DatabaseService):
 
     def __init__(self,configService:ConfigService,fileService:FileService):
-        super.__init__(configService,fileService)
+        super().__init__(configService,fileService)
     ...
 
 @ServiceClass
 class MongooseService(DatabaseService):
     def __init__(self,configService:ConfigService,fileService:FileService):
-        super.__init__(configService,fileService)
+        super().__init__(configService,fileService)
     
 
 @ServiceClass
 class SQLService(DatabaseService):
     def __init__(self,configService:ConfigService,fileService:FileService):
-        super.__init__(configService,fileService)
+        super().__init__(configService,fileService)
 
