@@ -26,7 +26,7 @@ class DecoratorPriority(Enum):
     HANDLER = 4
 
 
-class Role(Enum):
+class UseRole(Enum):
     PUBLIC = 1
     SERVICE = 2
     ADMIN = 3
@@ -63,6 +63,7 @@ class MethodStartsWithError(Exception):
 
 class NextHandlerException(Exception):
     ...
+
 
 
 class GuardBuilder:
@@ -115,7 +116,7 @@ def appends_funcs_callback(func: Callable, wrapper: Callable, priority: Decorato
 class Ressource(EventInterface):
 
     @staticmethod
-    def _build_operation_id(route_name: str, method_name: str, operation_id: str) -> str:
+    def _build_operation_id(route_name: str, prefix:str,method_name: list[HTTPMethod] |HTTPMethod, operation_id: str) -> str:
         if operation_id != None:
             return operation_id
 
@@ -127,7 +128,7 @@ class Ressource(EventInterface):
                   deprecated: bool | None = None):
         def decorator(func: Callable):
             computed_operation_id = Ressource._build_operation_id(
-                path, func.__qualname__, operation_id)
+                path, None,func.__qualname__, operation_id)
             METADATA_ROUTES[func.__qualname__] = computed_operation_id
 
             class_name = get_class_name_from_method(func)
@@ -281,12 +282,12 @@ def Permission(start_with: str = DEFAULT_STARTS_WITH):
     return decorator
 
 
-def Handler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None], start_with: str = DEFAULT_STARTS_WITH):
+def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None], start_with: str = DEFAULT_STARTS_WITH):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         data = common_class_decorator(
-            func, Handler, handler_function, start_with)
+            func, UseHandler, handler_function, start_with)
         if data != None:
             return data
 
@@ -312,13 +313,13 @@ def Handler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, A
     return decorator
 
 
-def Guard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]], start_with: str = DEFAULT_STARTS_WITH):
+def UseGuard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]], start_with: str = DEFAULT_STARTS_WITH):
     # INFO guards only purpose is to validate the request
     # NOTE:  be mindful of the order
 
     # BUG notify the developper if theres no guard_function mentioned
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
-        data = common_class_decorator(func, Guard, guard_function, start_with)
+        data = common_class_decorator(func, UseGuard, guard_function, start_with)
         if data != None:
             return data
 
@@ -341,12 +342,12 @@ def Guard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bo
     return decorator
 
 
-def Pipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]], before: bool = True, start_with: str = DEFAULT_STARTS_WITH):
+def UsePipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]], before: bool = True, start_with: str = DEFAULT_STARTS_WITH):
     # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         data = common_class_decorator(
-            func, Pipe, pipe_function, start_with, before=before)
+            func, UsePipe, pipe_function, start_with, before=before)
         if data != None:
             return data
 
@@ -372,12 +373,12 @@ def Pipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iter
     return decorator
 
 
-def Interceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], start_with: str = DEFAULT_STARTS_WITH):
+def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], start_with: str = DEFAULT_STARTS_WITH):
     raise NotImplementedError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         data = common_class_decorator(
-            func, Interceptor, interceptor_function, start_with)
+            func, UseInterceptor, interceptor_function, start_with)
         if data != None:
             return data
 
@@ -391,5 +392,5 @@ def Interceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]
         return func
     return decorator
 
-def Role(*roles):
+def UseRole(*roles):
     ...

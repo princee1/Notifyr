@@ -1,4 +1,4 @@
-from definition._ressource import Permission, Ressource, Handler
+from definition._ressource import Permission, Ressource, UseHandler
 from container import InjectInMethod, InjectInFunction
 from services.twilio_service import SMSService
 
