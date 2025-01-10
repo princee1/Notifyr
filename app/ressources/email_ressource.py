@@ -5,7 +5,7 @@ from classes.email import EmailBuilder
 from services.config_service import ConfigService
 from services.security_service import SecurityService
 from container import InjectInMethod
-from definition._ressource import Permission, Ressource, Handler,NextHandlerException
+from definition._ressource import Permission, Ressource, UseHandler,NextHandlerException
 from definition._service import ServiceNotAvailableError
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
@@ -59,7 +59,6 @@ class CustomEmailModel(BaseModel):
 EMAIL_PREFIX = "email"
 
 
-@Permission()
 class EmailTemplateRessource(Ressource):
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
@@ -74,8 +73,9 @@ class EmailTemplateRessource(Ressource):
     def on_shutdown(self):
         super().on_shutdown()
 
-    @Handler(handling_error)
-    @Ressource.AddRoute("/template/{template}",)
+    @Permission()
+    @UseHandler(handling_error)
+    @Ressource.HTTPRoute("/template/{template}",)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel,token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip) ):
 
         meta = email.meta
@@ -93,8 +93,9 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(data, meta, images))
         pass
 
-    @Handler(handling_error)
-    @Ressource.AddRoute("/custom/",)
+    @Permission()
+    @UseHandler(handling_error)
+    @Ressource.HTTPRoute("/custom/",)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip)):
         meta = customEmail.meta
         content = customEmail.content

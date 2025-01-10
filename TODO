@@ -7,3 +7,7 @@
 7. invalidate each access token when recreate the apps
 8. Manage Event handler on both Application and Ressource
 9. Change to operation_id instead of function_name
+10. Export the Container and the decorator as a python library
+11. Fix common decorator
+12. Add class for each Guard, Permission, etc for easier managing
+13. Add permission to ressource to

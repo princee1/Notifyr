@@ -501,9 +501,13 @@ def InjectInMethod(func: Callable):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         paramsToInject.update(kwargs)
-        func(*args, **paramsToInject)
+        return func(*args, **paramsToInject)
     return wrapper
 
+def Injectable(scope: Any |None = None ):
+    def class_decorator(cls:type) -> type:
+        return cls
+    return class_decorator
 
 def Get(typ: Type[S], scope=None, all=False) -> dict[str, Type[S]] | Type[S]:
     """

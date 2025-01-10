@@ -32,3 +32,11 @@ class ConfigAppConstant:
     APPS_KEY = 'apps'
     GENERATION_ID_KEY = 'generation_id'
     CREATION_DATE_KEY = 'creation_date'
+
+
+class HTTPHeaderConstant:
+    API_KEY_HEADER = 'X-API-KEY'
+    TOKEN_NAME_PARAMETER = 'token_'
+    CLIENT_IP_PARAMETER = 'client_ip_'
+    ADMIN_KEY_PARAMETER = 'admin_'
+    ADMIN_KEY = 'X-Admin-Key'
