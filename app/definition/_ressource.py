@@ -13,10 +13,10 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import time
 import functools
-from utils.helper import getParentClass
 from fastapi import BackgroundTasks
 from interface.events import EventInterface
 from enum import Enum
+from utils.dependencies import APIFilterInject
 
 
 class DecoratorPriority(Enum):
@@ -65,26 +65,45 @@ class NextHandlerException(Exception):
     ...
 
 
+class DecoratorObj:
 
-class GuardBuilder:
+    def __init__(self,ref_callback:Callable,filter=True):
+        self.ref =ref_callback
+        self.filter = filter
+    
+    def do(self,*args,**kwargs):
+        if self.filter:
+            return APIFilterInject(self.ref)(*args,**kwargs)
+        return self.ref(*args,**kwargs)
+    
+    
 
-    def guard(self):
+class Guard(DecoratorObj):
+
+    def __init__(self):
+        super().__init__(self.guard,True)
+
+    def guard(self)->tuple[tuple,dict]:
         ...
 
-    def _guard(self,):
+
+class Handler(DecoratorObj):
+    def __init__(self):
+        super().__init__(self.handle,False)
+
+    def handle(self,function:Callable,*args,**kwargs):
         ...
 
-class HandlerBuilder:
-    def handle(self):
-        ...
-
-class PipeBuilder:
+class Pipe(DecoratorObj):
+    def __init__(self, before:bool):
+        self.before = before
+        super().__init__(self.pipe,filter=before)
     def pipe(self):
         ...
 
-class PermissionBuilder:
-    def permission(self):
-        ...
+# class Permission(DecoratorObj):
+#     def permission(self):
+#         ...
 
 
 RESSOURCES: dict[str, type] = {}
@@ -209,6 +228,9 @@ class Ressource(EventInterface):
         pass
 
     def _add_routes(self):
+        if self.__class__.__name__ not in ROUTES:
+            return 
+        
         routes_metadata = ROUTES[self.__class__.__name__]
         for route in routes_metadata:
             kwargs = route.copy()
@@ -282,7 +304,7 @@ def Permission(start_with: str = DEFAULT_STARTS_WITH):
     return decorator
 
 
-def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None], start_with: str = DEFAULT_STARTS_WITH):
+def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None] | Type[Handler] | Handler, start_with: str = DEFAULT_STARTS_WITH):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -301,7 +323,12 @@ def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str
                 
                 for handler in handler_function:
                     try:
-                        return handler(function, *args, **kwargs)
+                        if type(handler) == type:
+                            return handler().do(function,args, **kwargs)
+                        elif isinstance(handler, Handler):
+                            return handler.do(function,args, **kwargs)
+                        else:
+                            return handler(function, *args, **kwargs)
                     except NextHandlerException:
                         continue
                 # TODO add custom exception
@@ -313,7 +340,7 @@ def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str
     return decorator
 
 
-def UseGuard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]], start_with: str = DEFAULT_STARTS_WITH):
+def UseGuard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]] | Type[Guard] | Guard, start_with: str = DEFAULT_STARTS_WITH):
     # INFO guards only purpose is to validate the request
     # NOTE:  be mindful of the order
 
@@ -323,18 +350,26 @@ def UseGuard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple
         if data != None:
             return data
 
-        def wrapper(function: Callable):
+        def wrapper(target_function: Callable):
 
-            @functools.wraps(function)
+            @functools.wraps(target_function)
             def callback(*args, **kwargs):
-                print(guard_function)
+                
                 for guard in guard_function:
                     # BUG check annotations of the guard function
-                    flag, message = guard(*args, **kwargs)
+                    if type(guard) == type:
+                        flag, message = guard().do(*args, **kwargs)
+                        
+                    elif isinstance(guard,Guard):
+                        flag, message = guard.do(*args, **kwargs)
+                    else:
+                        flag, message = guard(*args, **kwargs)
+
                     if not flag:
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
-                return function(*args, **kwargs)
+
+                return target_function(*args, **kwargs)
             return callback
 
         appends_funcs_callback(func, wrapper, DecoratorPriority.GUARD)
@@ -342,7 +377,7 @@ def UseGuard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple
     return decorator
 
 
-def UsePipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]], before: bool = True, start_with: str = DEFAULT_STARTS_WITH):
+def UsePipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]] | Type[Pipe] | Pipe, before: bool = True, start_with: str = DEFAULT_STARTS_WITH):
     # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -357,12 +392,22 @@ def UsePipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[I
             def callback(*args, **kwargs):
                 if before:
                     for pipe in pipe_function:  # verify annotation
-                        args, kwargs = pipe(*args, **kwargs)
+                        if type(pipe) == type:
+                            args,kwargs = pipe(before=True).do(*args,kwargs)
+                        elif isinstance(pipe,Pipe):
+                            args,kwargs = pipe.do(*args,kwargs)
+                        else:
+                            args, kwargs = pipe(*args, **kwargs)
                     return function(*args, **kwargs)
                 else:
                     result = function(*args, **kwargs)
                     for pipe in pipe_function:
-                        result = pipe(result)
+                        if type(pipe) == type:
+                            result = pipe(before=False).do(result)
+                        elif isinstance(pipe,Pipe):
+                            result= pipe.do(result)
+                        else:
+                            result = pipe(result)
 
                     return result
             return callback
