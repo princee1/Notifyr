@@ -10,3 +10,4 @@
 10. Export the Container and the decorator as a python library
 11. Fix common decorator
 12. Add class for each Guard, Permission, etc for easier managing
+13. Add permission to ressource to

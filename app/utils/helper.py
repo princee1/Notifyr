@@ -175,6 +175,9 @@ def create_enum(name: str, values: list):
 def issubclass_of(bCls, kCls):
     return bCls in getmro(kCls)
 
+def isextends_of(obj,bCls):
+    return issubclass_of(bCls,type(obj))
+    
 
 def is_abstract(cls: type, bClass: type):  # BUG
     try:
