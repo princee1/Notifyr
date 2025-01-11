@@ -51,25 +51,31 @@ class EmailBuilder():
         self.message["From"] = emailMetaData.From
         self.message["Subject"] = emailMetaData.Subject
         self.multiple_dest(emailMetaData.To, "To")
-        self.multiple_dest(emailMetaData.CC, "Cc")
+        self.multiple_dest(emailMetaData.CC, "Cc",False)
         self.id = make_msgid()
         self.message['Message-ID'] = self.id
         self.message['Date'] = formatdate(localtime=True)
         self.message['Reply-To'] = emailMetaData.replyTo
         self.message['Return-Path'] = emailMetaData.Return_Path
         self.message['X-Priority'] = emailMetaData.Priority
-
         self.init_email_content(attachments, images, content)
 
-    def multiple_dest(self, param, key):
-        if type(param) is str:
+    def __str__(self):
+        return self.emailMetadata.__str__()
+    
+    def __repr__(self):
+        return self.emailMetadata.__str__()
+
+    def multiple_dest(self, param, key,required =True):
+        if type(param) == str:
             self.message[key] = param
-        elif type(param) is list[str]:
+        elif type(param) == list[str]:
             temp = ",".join(param)
             self.message[key] = temp
             pass
         else:
-            raise TypeError
+            if required:
+                raise TypeError
 
     def add_attachements(self, attachement_name, attachment_data):
         part = MIMEBase("application", "octet-stream")
