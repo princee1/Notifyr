@@ -1,6 +1,8 @@
 
 import smtplib as smtp
 import imaplib as imap
+import poplib as pop
+
 from enum import Enum
 from typing import Literal
 
@@ -12,9 +14,6 @@ from interface.timers import SchedulerInterface
 from .logger_service import LoggerService
 from definition import _service
 from .config_service import ConfigService
-from msal import ConfidentialClientApplication
-
-from implements import implements
 import ssl
 
 SMTP_NORMAL_PORT = smtp.SMTP_PORT
@@ -87,8 +86,7 @@ class IMAPConfig (EmailConnInterface, Enum):
 
     def setConnFlag(mode: str): return mode.lower() == "ssl"
 
-    def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower(
-    ).strip() == "ssl" else IMAP_NORMAL_PORT
+    def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower().strip() == "ssl" else IMAP_NORMAL_PORT
 
 
 @_service.AbstractServiceClass
@@ -107,16 +105,21 @@ class EmailService(_service.Service):
 
     def connect(self): pass
 
+    def logout(self):...
+
+    def resetConnection(self): ...
+
+    def help(self):
+        ...
+
 @_service.ServiceClass
 class EmailSenderService(EmailService):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__(configService, loggerService)
         self.fromEmails: set[str] = ()
-        self.tlsConn: bool = SMTPConfig.setConnFlag(
-            self.configService.SMTP_EMAIL_CONN_METHOD)
-        self.hostPort = SMTPConfig.setHostPort(
-            self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
+        self.tlsConn: bool = SMTPConfig.setConnFlag(self.configService.SMTP_EMAIL_CONN_METHOD)
+        self.hostPort = SMTPConfig.setHostPort(self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
 
     def validEmails(self):
         pass
@@ -129,14 +132,14 @@ class EmailSenderService(EmailService):
         self.connector.quit()
         self.connector.close()
 
+    def expn(self,addresses:str):
+        return self.connector.expn(addresses)
+
     def connect(self):
         try:
-            self.hostAddr = SMTPConfig.setHostAddr(
-                self.configService.SMTP_EMAIL_HOST)
-            
+            self.hostAddr = SMTPConfig.setHostAddr(self.configService.SMTP_EMAIL_HOST)
             self.connector = smtp.SMTP(self.hostAddr, self.hostPort)
-            self.connector.set_debuglevel(
-                self.configService.SMTP_EMAIL_LOG_LEVEL)
+            self.connector.set_debuglevel(self.configService.SMTP_EMAIL_LOG_LEVEL)
         except NameError as e:
             pass  # BUG need to change the error name and a builder error
         except:
@@ -151,32 +154,34 @@ class EmailSenderService(EmailService):
                 self.connector.ehlo()
                 self.connector.starttls(context=context)
                 self.connector.ehlo()
-            val = self.connector.login(self.configService.SMTP_EMAIL,
-                                       self.configService.SMTP_PASS)
+            
+            #val = self.connector.login(self.configService.SMTP_EMAIL,self.configService.SMTP_PASS)
+
+            self.connector.docmd("AUTH",f'XOAUTH2 {...}')
             self.state = True
-        except smtp.SMTPHeloError | smtp.SMTPNotSupportedError as e:
-            self.state = False
-            self.errorReason = e
-            # TODO Throw Error build error
-            print(e)
-            pass
+            self._builded = True # BUG
+        except smtp.SMTPHeloError as e:
+            pass 
+        except smtp.SMTPNotSupportedError as e:
+            ...
         except smtp.SMTPAuthenticationError as e:
-            self.state = False
-            self.errorReason = e
-            print(e)
-            # TODO Throw Error build error
-            raise _service.BuildAbortError
+            ...
+        except smtp.SMTPServerDisconnected as e:
+            ...
+        
+            
 
     def send_message(self, email: EmailBuilder):
 
         try:
-            if not self.__builded :
+            self._builded = True # BUG 
+            if not self._builded :
                 raise _service.ServiceNotAvailableError
             emailID,message=email.mail_message
             for to in email.emailMetadata.To:
                 self.connector.verify(to)
             self.connector.sendmail(email.emailMetadata.From, email.emailMetadata.To,message)
-            
+            self.prettyPrinter.success('Mail sent successfully',saveable =False)
         except smtp.SMTPHeloError as e:
             pass
         except smtp.SMTPRecipientsRefused as e:
@@ -187,6 +192,8 @@ class EmailSenderService(EmailService):
             pass
         except smtp.SMTPDataError as e:
             pass
+        except smtp.SMTPServerDisconnected as e:
+            ...
 
 @_service.ServiceClass
 class EmailReaderService(EmailService):
@@ -196,7 +203,9 @@ class EmailReaderService(EmailService):
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 
     def build(self):
-        super().build()
+        # super().build()
+        # TODO IMAP connection
+        ...
 
     def connect(self):
         self.connector = imap.IMAP4_SSL(

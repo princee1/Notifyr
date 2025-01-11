@@ -58,9 +58,9 @@ class MethodServiceNotAvailableError(BuildError):
 class Service():
 
     def __init__(self) -> None:
-        self.__status:BuildErrorLevel = None
-        self.__builded: bool = False
-        self.__destroyed: bool = False
+        self._status:BuildErrorLevel = None
+        self._builded: bool = False
+        self._destroyed: bool = False
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
 
     def build(self):
@@ -91,8 +91,8 @@ class Service():
     def _builder(self):
         try:
             self.build()
-            self.__builded = True
-            self.__destroyed = False
+            self._builded = True
+            self._destroyed = False
         except BuildFailureError as e:
             pass
 
@@ -105,17 +105,14 @@ class Service():
         except BuildSkipError as e:
             pass
 
-        except:
-            pass
-
         finally:
             self.buildReport()
 
     def _destroyer(self):
         try:
             self.destroy()
-            self.__destroyed = True
-            self.__builded = False
+            self._destroyed = True
+            self._builded = False
             pass
         
         except BuildFailureError as e:
@@ -128,8 +125,6 @@ class Service():
             pass
 
         except BuildSkipError as e:
-            pass
-        except:
             pass
 
         finally:
