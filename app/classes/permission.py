@@ -6,7 +6,7 @@ class RoutePermission(TypedDict):
     scope: RoutePermissionScope
     custom_routes: NotRequired[list[str]]
 
-class PermissionAuth(TypedDict):
+class AuthPermission(TypedDict):
     generation_id: str
     #domain_name:str
     #client_id: str

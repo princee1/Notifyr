@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from classes.permission import PermissionAuth, RoutePermission
+from classes.permission import AuthPermission, RoutePermission
 from random import randint, random
 from utils.helper import generateId
 from utils.constant import ConfigAppConstant
@@ -60,7 +60,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
     def encode_auth_token(self, data: Dict[str, RoutePermission], issue_for: str,) -> str:
         try:
             created_time = time.time()
-            permission = PermissionAuth(generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
+            permission = AuthPermission(generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
                                         expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data)
             encoded = jwt.encode(permission, self.configService.JWT_SECRET_KEY,
                                  algorithm=self.configService.JWT_ALGORITHM)
@@ -104,7 +104,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
     def verify_permission(self, token: str, class_name: str, operation_id: str, issued_for: str) -> bool:
 
         token = self._decode_auth_token(token)
-        permission: PermissionAuth = PermissionAuth(**token)
+        permission: AuthPermission = AuthPermission(**token)
 
         if issued_for != permission["issued_for"]:
             raise HTTPException(
