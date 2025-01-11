@@ -8,23 +8,14 @@ from utils.constant import HTTPHeaderConstant
 from services.assets_service import AssetService
 from services.security_service import JWTAuthService
 from container import Get, Need
-from definition._service import S, Service
+from definition._service import S
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from utils.prettyprint import PrettyPrinter_, PrettyPrinter
-import time
 import functools
 from fastapi import BackgroundTasks
 from interface.events import EventInterface
 from enum import Enum
-from utils.dependencies import APIFilterInject
-
-
-class DecoratorPriority(Enum):
-    PERMISSION = 1
-    GUARD = 2
-    PIPE = 3
-    HANDLER = 4
-
+from ._utils_decorator import *
 
 class UseRole(Enum):
     PUBLIC = 1
@@ -43,82 +34,6 @@ def get_class_name_from_method(func: Callable) -> str:
 class MethodStartsWithError(Exception):
     ...
 
-
-class NextHandlerException(Exception):
-    ...
-
-
-class DecoratorObj:
-
-    def __init__(self, ref_callback: Callable, filter=True):
-        self.ref = ref_callback
-        self.filter = filter
-
-    def do(self, *args, **kwargs):
-        if self.filter:
-            return APIFilterInject(self.ref)(*args, **kwargs)
-        return self.ref(*args, **kwargs)
-
-
-class Guard(DecoratorObj):
-
-    def __init__(self):
-        super().__init__(self.guard, True)
-
-    def guard(self) -> tuple[tuple, dict]:
-        ...
-
-
-class GuardDefaultException(Exception):
-    ...
-
-class Handler(DecoratorObj):
-    def __init__(self):
-        super().__init__(self.handle, False)
-
-    def handle(self, function: Callable, *args, **kwargs):
-        ...
-
-
-class HandlerDefaultException(Exception):
-    ...
-
-
-class Pipe(DecoratorObj):
-    def __init__(self, before: bool):
-        self.before = before
-        super().__init__(self.pipe, filter=before)
-
-    def pipe(self):
-        ...
-
-
-class PipeDefaultException(Exception):
-    ...
-
-
-class Permission(DecoratorObj):
-
-    def __init__(self,):
-        super().__init__(self.permission, True)
-
-    def permission(self):
-        ...
-
-
-class PermissionDefaultException(Exception):
-    ...
-
-class Interceptor(DecoratorObj):
-
-    def __init__(self,):
-        super().__init__(self.intercept, True)
-
-    def intercept(self):
-        ...
-
-class InterceptorDefaultException(Exception):
-    ...
 
 
 RESSOURCES: dict[str, type] = {}
