@@ -81,6 +81,9 @@ class ConfigService(_service.Service):
         self.PORT_PUBLIC = ConfigService.parseToInt(os.getenv("PORT_PUBLIC"),3000)
         self.PORT_PRIVATE = ConfigService.parseToInt(os.getenv("PORT_PRIVATE"),5000)
         self.LOG_LEVEL = ConfigService.parseToInt(os.getenv("LOG_LEVEL"), 2)
+        self.HTTPS_CERTIFICATE=os.getenv("HTTPS_CERTIFICATE")
+        self.HTTPS_KEY =os.getenv("HTTPS_KEY")
+
 
         self.SMTP_EMAIL_HOST = os.getenv("SMTP_EMAIL_HOST").upper()
         self.SMTP_EMAIL_PORT = ConfigService.parseToInt(os.getenv("SMTP_EMAIL_PORT"))

@@ -10,7 +10,7 @@ from services.config_service import ConfigService
 from services.security_service import JWTAuthService, SecurityService
 from fastapi import Request, Response, FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
-from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload,TypedDict
+from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload, TypedDict
 import uvicorn
 import multiprocessing
 import threading
@@ -75,7 +75,8 @@ class AppParameter:
 
 class Application(EventInterface):
 
-    def __init__(self,appParameter:AppParameter): # TODO if it important add other on_start_up and on_shutdown hooks
+    # TODO if it important add other on_start_up and on_shutdown hooks
+    def __init__(self, appParameter: AppParameter):
 
         self.thread = threading.Thread(
             None, self.run, appParameter.title, daemon=False)
@@ -84,7 +85,7 @@ class Application(EventInterface):
         self.port = appParameter.port
         self.ressources = appParameter.ressources
         self.middlewares = appParameter.middlewares
-        self.configService  = Get(ConfigService)
+        self.configService: ConfigService = Get(ConfigService)
         self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
         self.add_middlewares()
@@ -92,11 +93,12 @@ class Application(EventInterface):
         pass
 
     def start(self):
-        #self.thread.start()
+        # self.thread.start()
         self.run()
 
     def start_server(self):
-        uvicorn.run(self.app, port=self.port, loop="asyncio")
+        uvicorn.run(self.app, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
+                    ssl_certfile=self.configService.HTTPS_CERTIFICATE)
 
     def stop_server(self):
         pass
