@@ -10,8 +10,8 @@ class JWTAuthPermission(Permission):
         super().__init__()
         self.jwtAuthService = jwtAuthService
     
-    def permission(self, token_, issued_for, class_name, func_name):
-        return self.jwtAuthService.verify_permission(token_, class_name, func_name,issued_for)
+    def permission(self, token_:str, client_ip_:str, class_name:str, func_name:str):
+        return self.jwtAuthService.verify_permission(token_, class_name, func_name,client_ip_)
     
 
 class JWTRessourcePermission(Permission):

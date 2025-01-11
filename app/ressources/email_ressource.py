@@ -24,6 +24,7 @@ def handling_error(callback: Callable, *args, **kwargs):
 
     except Exception as e:
         #raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(e)
         raise NextHandlerException
 
 

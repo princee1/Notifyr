@@ -4,6 +4,7 @@ instance imported from `container`.
 """
 from inspect import isclass
 from typing import Any, Callable, Dict, Iterable, Mapping, TypeVar, Type, TypedDict
+from utils.helper import issubclass_of
 from utils.constant import HTTPHeaderConstant
 from services.assets_service import AssetService
 from services.security_service import JWTAuthService
@@ -242,18 +243,18 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
                 if HTTPHeaderConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER in kwargs or HTTPHeaderConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER in kwargs:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'special key used'})
-
-                kwargs[HTTPHeaderConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER] = func_name
-                kwargs[HTTPHeaderConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
-
+                kwargs_prime = kwargs.copy()
+                kwargs_prime[HTTPHeaderConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER] = func_name
+                kwargs_prime[HTTPHeaderConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
                 for permission in permission_function:
                     try:
-                        if type(permission) == type and issubclass(type(permission),Permission):
-                            flag = permission().do(args, **kwargs)
+                        if type(permission) == type or issubclass_of(Permission,type(permission)):
+                           
+                            flag = permission().do(*args, **kwargs_prime)
                         elif isinstance(permission, Permission):
-                            flag = permission.do(*args, **kwargs)
+                            flag = permission.do(*args, **kwargs_prime)
                         else:
-                            flag = permission(*args, **kwargs)
+                            flag = permission(*args, **kwargs_prime)
                         
                         if flag:
                             continue
@@ -289,7 +290,7 @@ def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str
 
                 for handler in handler_function:
                     try:
-                        if type(handler) == type and issubclass(type(handler),Handler):
+                        if type(handler) == type or issubclass_of(Handler,type(handler)):
                             return handler().do(function, *args, **kwargs)
                         elif isinstance(handler, Handler):
                             return handler.do(function, *args, **kwargs)
@@ -328,7 +329,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
                 for guard in guard_function:
                     # BUG check annotations of the guard function
-                    if type(guard) == type and issubclass(type(guard), Guard):
+                    if type(guard) == type or issubclass_of(Guard,type(guard)):
                         flag, message = guard().do(*args, **kwargs)
                     elif isinstance(guard, Guard):
                         flag, message = guard.do(*args, **kwargs)
@@ -365,7 +366,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                 try:
                     if before:
                         for pipe in pipe_function:  # verify annotation
-                            if type(pipe) == type and issubclass(type(pipe),Pipe):
+                            if type(pipe) == type or issubclass_of(Pipe,type(pipe)):
                                 args, kwargs = pipe(before=True).do(*args, kwargs)
                             elif isinstance(pipe, Pipe):
                                 args, kwargs = pipe.do(*args, kwargs)
@@ -390,8 +391,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                     raise HTTPException(**default_error)
             return callback
 
-        appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE,
-                               touch=0 if before else 0.5)  # TODO 3 or 3.5 if before
+        appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE,touch=0 if before else 0.5)  # TODO 3 or 3.5 if before
         return func
     return decorator
 
