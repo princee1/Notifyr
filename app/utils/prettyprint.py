@@ -50,7 +50,7 @@ def settitle(tilte: str):
 def clearline(): clear_line()
 
 
-def clearscreen(): 
+def clearscreen():
     if os.name == 'nt':
         os.system('cls')  # clear_screen()
     else:
@@ -62,8 +62,10 @@ def base_print(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":sp
     Base function to print a personalized message with color and emoji.
     """
     is_emojized = emoji_code.startswith(':')
-    print(color + background + ((emoji.emojize(emoji_code) if is_emojized else emoji_code) if position == "before" or position == "both" else "") + "  " +
-          message + "  " + ((emoji.emojize(emoji_code) if is_emojized else emoji_code) if position == "after" or position == "both" else "") + Style.RESET_ALL)
+    _emoji = emoji.emojize(emoji_code) if is_emojized else emoji_code
+
+    print(color + background + (_emoji if (position == "before" or position == "both") else "") + "  " +
+          message + "  " + (_emoji if (position == "after" or position == "both") else "") + Style.RESET_ALL)
 
 
 def print_info(message, position: EmojiPosition = 'both'):
@@ -71,24 +73,28 @@ def print_info(message, position: EmojiPosition = 'both'):
     Print an info message.
     """
     base_print(message, color=Fore.BLUE,
-                  emoji_code=":information:", position=position)
+               emoji_code=":information:", position=position)
 
-def print_message(message,position: EmojiPosition = 'both'):
-    base_print(message, color=Fore.WHITE,emoji_code='\U0001F4AC',position=position)
+
+def print_message(message, position: EmojiPosition = 'both'):
+    base_print(message, color=Fore.WHITE,
+               emoji_code='\U0001F4AC', position=position)
+
 
 def print_error(message, position: EmojiPosition = 'both'):
     """
     Print an error message.
     """
     base_print(message, color=Fore.RED, emoji_code="\u274C",
-                  position=position)
+               position=position)
+
 
 def print_warning(message, position: EmojiPosition = 'both'):
     """
     Print a warning message.
     """
     base_print(message, color=Fore.YELLOW,
-                  emoji_code=":warning:", position=position)
+               emoji_code=":warning:", position=position)
 
 
 def print_success(message, position: EmojiPosition = 'both'):
@@ -96,7 +102,7 @@ def print_success(message, position: EmojiPosition = 'both'):
     Print a success message.
     """
     base_print(message, color=Fore.GREEN, emoji_code="\u2705",
-                  position=position)
+               position=position)
 
 ########################################################################
 
@@ -126,54 +132,69 @@ class PrettyPrinter:
 
     @staticmethod
     def cache(func: Callable) -> Callable:
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             if 'saveable' not in kwargs:
                 saveable = True
             else:
                 saveable = kwargs['saveable']
+
+            if 'show' not in kwargs:
+                kwargs['show'] = True
+
             self: PrettyPrinter = args[0]
             if saveable:
-                kwargs['saveable'] = False
+                kwargs_prime = kwargs.copy()
+                kwargs_prime['saveable'] = False
+                kwargs_prime['show'] = True
                 self.buffer.append(
-                    {'func': func, 'args': args, 'kwargs': kwargs})
-            func(*args, **kwargs)
+                    {'func': func, 'args': args, 'kwargs': kwargs_prime})
+            return func(*args, **kwargs)
         return wrapper
 
     def __init__(self):
         self.buffer: list[Callable] = []
 
     @cache
-    def warning(self, message, saveable=True, position: EmojiPosition = 'both'):
-        print_warning(message, position)
+    def warning(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+        if show:
+            print_warning(message, position)
 
     @cache
-    def error(self, message, saveable=True, position: EmojiPosition = 'both'):
-        print_error(message, position)
+    def error(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+        if show:
+            print_error(message, position)
 
     @cache
-    def message(self, message, saveable=True, position: EmojiPosition = 'both'):
-        print_message(message, position)
+    def message(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+        if show:
+            print_message(message, position)
 
     @cache
-    def info(self, message, saveable=True, position: EmojiPosition = 'both'):
-        print_info(message, position)
+    def info(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+        if show:
+            print_info(message, position)
 
     @cache
-    def success(self, message, saveable=True, position: EmojiPosition = 'both'):
-        print_success(message, position)
+    def success(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+        if show:
+            print_success(message, position)
 
     @cache
-    def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", saveable=True, position: EmojiPosition = 'both'):
-        base_print(message, color, background, emoji_code, position)
+    def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", show=True, saveable=True, position: EmojiPosition = 'both'):
+        if show:
+            base_print(message, color, background, emoji_code, position)
 
     @cache
-    def json(self, content, indent=1, width=80, depth=None, compact=False, saveable=True,):
-        printJSON(content, indent, width, depth, compact)
+    def json(self, content, indent=1, width=80, depth=None, compact=False, show=True, saveable=True,):
+        if show:
+            printJSON(content, indent, width, depth, compact)
 
     @cache
-    def space_line(self, saveable=True):
-        print()
+    def space_line(self, show=True, saveable=True):
+        if show:
+            print()
 
     def clearScreen(self):
         clearscreen()
@@ -205,11 +226,11 @@ class PrettyPrinter:
 
     def setLayout(self):
         ...
-    
-    def wait(self, timeout:float,press_to_continue:bool = True):
+
+    def wait(self, timeout: float, press_to_continue: bool = True):
         time.sleep(timeout)
         if press_to_continue:
-            self.warning('Press to continue',saveable=False,position ='both')
+            self.warning('Press to continue', saveable=False, position='both')
             input('')
         clear_line()
 
