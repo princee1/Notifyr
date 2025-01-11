@@ -9,6 +9,8 @@ from namespace import Namespace
 from str2bool import str2bool
 import ast
 from enum import Enum
+import base64
+
 
 
 class SkipCode(Exception):
@@ -232,3 +234,11 @@ def generateRndNumber(len):
 def generateRndNumber(len):
     seed(time.time())
     return "".join(choice(hexdigits) for _ in range(len))
+
+
+################################## Base64 ##########################################3
+def b64_encode(value: str)->str:
+    return base64.b64encode(value.encode()).decode()
+
+def b64_decode(value: str)->str:
+    return base64.b64decode(value.encode()).decode()
