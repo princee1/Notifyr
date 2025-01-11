@@ -65,9 +65,9 @@ class AppParameter:
         summary = json['summary']
         description = json['description']
         ressources = [RESSOURCES[ressource]
-                      for ressource in json['ressources']]
+                      for ressource in json['ressources'] if ressource in RESSOURCES]
         middlewares = [MIDDLEWARE[middleware]
-                       for middleware in json['middlewares']]
+                       for middleware in json['middlewares'] if middleware in MIDDLEWARE]
         port = json['port']
         slog_level = json['log_level']
         return AppParameter(title, summary, description, ressources, middlewares, port, slog_level,)

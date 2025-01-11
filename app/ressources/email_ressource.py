@@ -5,13 +5,13 @@ from classes.email import EmailBuilder
 from services.config_service import ConfigService
 from services.security_service import SecurityService
 from container import InjectInMethod
-from definition._ressource import Permission, Ressource, UseHandler,NextHandlerException
+from definition._ressource import UsePermission, Ressource, UseHandler,NextHandlerException
 from definition._service import ServiceNotAvailableError
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
 from fastapi import Request, Response, HTTPException, status
 from utils.dependencies import get_api_key, get_client_ip, Depends, get_bearer_token
-
+from decorators import permissions
 
 def handling_error(callback: Callable, *args, **kwargs):
     try:
@@ -24,6 +24,7 @@ def handling_error(callback: Callable, *args, **kwargs):
 
     except Exception as e:
         #raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(e)
         raise NextHandlerException
 
 
@@ -74,7 +75,7 @@ class EmailTemplateRessource(Ressource):
     def on_shutdown(self):
         super().on_shutdown()
 
-    @Permission()
+    @UsePermission(permissions.JWTAuthPermission)
     @UseHandler(handling_error)
     @Ressource.HTTPRoute("/template/{template}",)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel,token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip) ):
@@ -94,7 +95,7 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(data, meta, images))
         pass
 
-    @Permission()
+    @UsePermission(permissions.JWTAuthPermission)
     @UseHandler(handling_error)
     @Ressource.HTTPRoute("/custom/",)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip)):

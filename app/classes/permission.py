@@ -16,7 +16,7 @@ class FileRessourcePermission(TypedDict):
     def __new__(mcls, name, bases, namespace, /, **kwargs):
         return super().__new__(name, bases, namespace, **kwargs)
         
-class PermissionAuth(TypedDict):
+class AuthPermission(TypedDict):
     generation_id: str
     #domain_name:str
     #client_id: str
