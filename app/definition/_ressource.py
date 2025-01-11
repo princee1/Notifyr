@@ -235,9 +235,16 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
             @functools.wraps(function)
             def callback(*args, **kwargs):
-                if len(kwargs) < 2:
+
+                if len(kwargs) < 1:
                     raise HTTPException(
                         status_code=status.HTTP_501_NOT_IMPLEMENTED)
+
+                if HTTPHeaderConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER in kwargs or HTTPHeaderConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER in kwargs:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'special key used'})
+
+                kwargs[HTTPHeaderConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER] = func_name
+                kwargs[HTTPHeaderConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
 
                 for permission in permission_function:
                     try:
@@ -252,10 +259,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                             continue
                         else:
                             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-                        # TODO defined in the decorator parameter
-                        #token = kwargs[HTTPHeaderConstant.TOKEN_NAME_PARAMETER]
-                        # TODO defined in the decorator parameter
-                        #issued_for = kwargs[HTTPHeaderConstant.CLIENT_IP_PARAMETER]
+                        
                     except PermissionDefaultException:
                         raise HTTPException( status_code=status.HTTP_501_NOT_IMPLEMENTED)
                     
