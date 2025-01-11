@@ -1,11 +1,21 @@
+from dataclasses import dataclass
 from typing import Literal, TypedDict,Dict,NotRequired
 
-RoutePermissionScope= Literal['custom','all']
+PermissionScope= Literal['custom','all']
 
 class RoutePermission(TypedDict):
-    scope: RoutePermissionScope
+    scope: PermissionScope
     custom_routes: NotRequired[list[str]]
 
+@dataclass
+class FileRessourcePermission(TypedDict):
+    scope: PermissionScope
+    name: str
+    custom_files: NotRequired[list[str]]
+
+    def __new__(mcls, name, bases, namespace, /, **kwargs):
+        return super().__new__(name, bases, namespace, **kwargs)
+        
 class PermissionAuth(TypedDict):
     generation_id: str
     #domain_name:str
@@ -15,6 +25,3 @@ class PermissionAuth(TypedDict):
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
-
-
-

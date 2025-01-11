@@ -9,7 +9,7 @@ from utils.question import SimpleInputHandler, ask_question, NumberInputHandler,
 from utils.prettyprint import printJSON, show, PrettyPrinter_
 from utils.validation import ipv4_validator
 from definition._ressource import PROTECTED_ROUTES
-from classes.permission import RoutePermission, RoutePermissionScope
+from classes.permission import RoutePermission, PermissionScope
 from utils.question import ask_question, ConfirmInputHandler, SimpleInputHandler, FileInputHandler
 from utils.fileIO import ConfigFile, FDFlag, JSONFile, exist, inputFilePath, writeContent
 
