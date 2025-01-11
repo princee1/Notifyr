@@ -69,12 +69,19 @@ class Guard(DecoratorObj):
         ...
 
 
+class GuardDefaultException(Exception):
+    ...
+
 class Handler(DecoratorObj):
     def __init__(self):
         super().__init__(self.handle, False)
 
     def handle(self, function: Callable, *args, **kwargs):
         ...
+
+
+class HandlerDefaultException(Exception):
+    ...
 
 
 class Pipe(DecoratorObj):
@@ -86,6 +93,10 @@ class Pipe(DecoratorObj):
         ...
 
 
+class PipeDefaultException(Exception):
+    ...
+
+
 class Permission(DecoratorObj):
 
     def __init__(self,):
@@ -93,6 +104,21 @@ class Permission(DecoratorObj):
 
     def permission(self):
         ...
+
+
+class PermissionDefaultException(Exception):
+    ...
+
+class Interceptor(DecoratorObj):
+
+    def __init__(self,):
+        super().__init__(self.intercept, True)
+
+    def intercept(self):
+        ...
+
+class InterceptorDefaultException(Exception):
+    ...
 
 
 RESSOURCES: dict[str, type] = {}
@@ -140,7 +166,7 @@ class HTTPMethod(Enum):
     
 class HTTPExceptionParams(TypedDict):
     status_code:int
-    details: Any | None
+    detail: Any | None
     headers: dict[str,str] | None = None
 
 
@@ -279,7 +305,7 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
     return None
 
 
-def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], start_with: str = DEFAULT_STARTS_WITH, defau):
+def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], start_with: str = DEFAULT_STARTS_WITH, default_error: HTTPExceptionParams =None):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         data = common_class_decorator(func, UsePermission, None, start_with)
@@ -301,17 +327,23 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                 for permission in permission_function:
                     try:
                         if type(permission) == type and issubclass(type(permission),Permission):
-                            return permission().do(args, **kwargs)
+                            flag = permission().do(args, **kwargs)
                         elif isinstance(permission, Permission):
-                            return permission.do(*args, **kwargs)
+                            flag = permission.do(*args, **kwargs)
                         else:
-                            return permission(*args, **kwargs)
+                            flag = permission(*args, **kwargs)
+                        
+                        if flag:
+                            continue
+                        else:
+                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
                         # TODO defined in the decorator parameter
                         #token = kwargs[HTTPHeaderConstant.TOKEN_NAME_PARAMETER]
                         # TODO defined in the decorator parameter
                         #issued_for = kwargs[HTTPHeaderConstant.CLIENT_IP_PARAMETER]
-                    except Exception as e:
+                    except PermissionDefaultException:
                         raise HTTPException( status_code=status.HTTP_501_NOT_IMPLEMENTED)
+                    
                 return function(*args, **kwargs)
 
                 # TODO permission callback
@@ -326,7 +358,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
     return decorator
 
 
-def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None] | Type[Handler] | Handler, start_with: str = DEFAULT_STARTS_WITH):
+def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None] | Type[Handler] | Handler, start_with: str = DEFAULT_STARTS_WITH,default_error: HTTPExceptionParams =None):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -340,7 +372,7 @@ def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str
             @functools.wraps(function)
             def callback(*args, **kwargs):
                 if len(handler_function) == 0:
-                    # BUG print a warning
+                    # TODO print a warning
                     return function(*args, **kwargs)
 
                 for handler in handler_function:
@@ -353,16 +385,20 @@ def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str
                             return handler(function, *args, **kwargs)
                     except NextHandlerException:
                         continue
-                # TODO add custom exception
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    except HandlerDefaultException as e:
+                        break
+
+                if default_error == None:
+                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                raise HTTPException(**default_error)
             return callback
         appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER)
         return func
     return decorator
 
 
-def UseGuard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[bool, str]] | Type[Guard] | Guard, start_with: str = DEFAULT_STARTS_WITH):
+def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Guard, start_with: str = DEFAULT_STARTS_WITH,default_error: HTTPExceptionParams =None):
     # INFO guards only purpose is to validate the request
     # NOTE:  be mindful of the order
 
@@ -388,8 +424,10 @@ def UseGuard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple
                         flag, message = guard(*args, **kwargs)
 
                     if not flag:
-                        raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
+                        if default_error == None:   
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
+                        raise HTTPException(**default_error)
 
                 return target_function(*args, **kwargs)
             return callback
@@ -399,7 +437,7 @@ def UseGuard(*guard_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple
     return decorator
 
 
-def UsePipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[Iterable[Any], Mapping[str, Any]]] | Type[Pipe] | Pipe, before: bool = True, start_with: str = DEFAULT_STARTS_WITH):
+def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]]| Any] | Type[Pipe] | Pipe, before: bool = True, start_with: str = DEFAULT_STARTS_WITH,default_error: HTTPExceptionParams =None):
     # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -412,26 +450,32 @@ def UsePipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[I
 
             @functools.wraps(function)
             def callback(*args, **kwargs):
-                if before:
-                    for pipe in pipe_function:  # verify annotation
-                        if type(pipe) == type and issubclass(type(pipe),Pipe):
-                            args, kwargs = pipe(before=True).do(*args, kwargs)
-                        elif isinstance(pipe, Pipe):
-                            args, kwargs = pipe.do(*args, kwargs)
-                        else:
-                            args, kwargs = pipe(*args, **kwargs)
-                    return function(*args, **kwargs)
-                else:
-                    result = function(*args, **kwargs)
-                    for pipe in pipe_function:
-                        if type(pipe) == type:
-                            result = pipe(before=False).do(result)
-                        elif isinstance(pipe, Pipe):
-                            result = pipe.do(result)
-                        else:
-                            result = pipe(result)
+                try:
+                    if before:
+                        for pipe in pipe_function:  # verify annotation
+                            if type(pipe) == type and issubclass(type(pipe),Pipe):
+                                args, kwargs = pipe(before=True).do(*args, kwargs)
+                            elif isinstance(pipe, Pipe):
+                                args, kwargs = pipe.do(*args, kwargs)
+                            else:
+                                args, kwargs = pipe(*args, **kwargs)
+                        return function(*args, **kwargs)
+                    else:
+                        result = function(*args, **kwargs)
+                        for pipe in pipe_function:
+                            if type(pipe) == type:
+                                result = pipe(before=False).do(result)
+                            elif isinstance(pipe, Pipe):
+                                result = pipe.do(result)
+                            else:
+                                result = pipe(result)
 
-                    return result
+                        return result
+                
+                except PipeDefaultException:
+                    if default_error == None:
+                        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    raise HTTPException(**default_error)
             return callback
 
         appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE,
@@ -440,7 +484,7 @@ def UsePipe(*pipe_function: Callable[[Iterable[Any], Mapping[str, Any]], tuple[I
     return decorator
 
 
-def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], start_with: str = DEFAULT_STARTS_WITH):
+def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], start_with: str = DEFAULT_STARTS_WITH,default_error: HTTPExceptionParams =None):
     raise NotImplementedError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
