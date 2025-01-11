@@ -11,7 +11,7 @@ from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
 from fastapi import Request, Response, HTTPException, status
 from utils.dependencies import get_api_key, get_client_ip, Depends, get_bearer_token
-
+from decorators import permissions
 
 def handling_error(callback: Callable, *args, **kwargs):
     try:
@@ -73,7 +73,7 @@ class EmailTemplateRessource(Ressource):
     def on_shutdown(self):
         super().on_shutdown()
 
-    @UsePermission()
+    @UsePermission(permissions.JWTAuthPermission)
     @UseHandler(handling_error)
     @Ressource.HTTPRoute("/template/{template}",)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel,token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip) ):
@@ -93,7 +93,7 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(data, meta, images))
         pass
 
-    @UsePermission()
+    @UsePermission(permissions.JWTAuthPermission)
     @UseHandler(handling_error)
     @Ressource.HTTPRoute("/custom/",)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip)):

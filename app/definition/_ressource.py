@@ -264,13 +264,6 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                         raise HTTPException( status_code=status.HTTP_501_NOT_IMPLEMENTED)
                     
                 return function(*args, **kwargs)
-
-                # TODO permission callback
-                jwtService: JWTAuthService = Get(JWTAuthService)
-                # TODO Need to replace the function name with the metadata mapping
-                if jwtService.verify_permission(token, class_name, func_name, issued_for):
-                    return function(*args, **kwargs)
-
             return callback
         appends_funcs_callback(func, wrapper, DecoratorPriority.PERMISSION)
         return func
