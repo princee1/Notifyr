@@ -5,6 +5,8 @@ from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 
+# TODO refresh template
+
 @ServiceClass
 class FileService(Service):
     # TODO add security layer on some file: encription,decryption
