@@ -7,6 +7,10 @@ import time
 from interface.injectable_middleware import InjectableMiddlewareInterface
 from utils.dependencies import get_api_key, get_client_ip
 from cryptography.fernet import InvalidToken
+from enum import Enum
+
+
+
 
 MIDDLEWARE: dict[str, type] = {}
 
@@ -52,3 +56,11 @@ class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
 
 class AnalyticsMiddleware(MiddleWare,InjectableMiddlewareInterface):
     ...
+
+
+
+class MiddlewarePriority(Enum):
+
+    PROCESS_TIME = 1
+    ANALYTICS = 2
+    SECURITY = 3
