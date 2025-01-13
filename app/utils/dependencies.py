@@ -3,7 +3,7 @@ Module to easily manage retrieving user information from the request object.
 """
 
 from typing import Annotated, Any, Callable, TypeVar
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from utils.constant import HTTPHeaderConstant
 
@@ -62,7 +62,7 @@ def get_api_key(request: Request=None) -> str:
         return request.headers.get(HTTPHeaderConstant.API_KEY_HEADER)
     return APIKeyHeader(name=HTTPHeaderConstant.API_KEY_HEADER)
 
-def get_bearer_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())] | Request) -> str:
+def get_bearer_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]) -> str:
     # if isinstance(credentials,Request):
     #     return credentials.headers['Authorization'].replace('Bearer ','')
     return credentials.credentials
@@ -74,3 +74,8 @@ def get_admin_token(request: Request = None):
     if request:
         return request.headers.get(HTTPHeaderConstant.ADMIN_KEY)
     return APIKeyHeader(name=HTTPHeaderConstant.ADMIN_KEY)
+
+async def get_auth_permission(request: Request):
+    if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return request.state.authPermission
