@@ -8,13 +8,10 @@ class RoutePermission(TypedDict):
     custom_routes: NotRequired[list[str]]
 
 @dataclass
-class FileRessourcePermission(TypedDict):
+class AssetsPermission(TypedDict):
     scope: PermissionScope
     name: str
     custom_files: NotRequired[list[str]]
-
-    def __new__(mcls, name, bases, namespace, /, **kwargs):
-        return super().__new__(name, bases, namespace, **kwargs)
         
 class AuthPermission(TypedDict):
     generation_id: str
@@ -25,3 +22,6 @@ class AuthPermission(TypedDict):
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
+    #allowed_assets:Dict[str,AssetsPermission]
+    #allowed_assets:List[str]
+
