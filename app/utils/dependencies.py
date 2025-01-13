@@ -57,14 +57,18 @@ def get_user_agent(request: Request) -> str:
 
 def get_client_ip(request: Request) -> str:
     return request.client.host
-
 def get_api_key(request: Request=None) -> str:
     if request:
         return request.headers.get(HTTPHeaderConstant.API_KEY_HEADER)
     return APIKeyHeader(name=HTTPHeaderConstant.API_KEY_HEADER)
 
-def get_bearer_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]) -> str:
+def get_bearer_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())] | Request) -> str:
+    # if isinstance(credentials,Request):
+    #     return credentials.headers['Authorization'].replace('Bearer ','')
     return credentials.credentials
+
+def get_bearer_token_from_request(request:Request):
+     return request.headers['Authorization'].replace('Bearer ','')
 
 def get_admin_token(request: Request = None):
     if request:

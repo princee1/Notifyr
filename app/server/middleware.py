@@ -1,11 +1,12 @@
-from services.security_service import SecurityService
+from classes.permission import AuthPermission
+from services.security_service import SecurityService, JWTAuthService
 from container import InjectInMethod
 from fastapi import HTTPException, Request, Response, FastAPI,status
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
 from interface.injectable_middleware import InjectableMiddlewareInterface
-from utils.dependencies import get_api_key, get_client_ip
+from utils.dependencies import get_api_key, get_client_ip,get_bearer_token_from_request
 from cryptography.fernet import InvalidToken
 from enum import Enum
 
@@ -57,6 +58,22 @@ class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
 class AnalyticsMiddleware(MiddleWare,InjectableMiddlewareInterface):
     ...
 
+
+
+class JWTMiddleware(MiddleWare,InjectableMiddlewareInterface):
+    def __init__(self, app, dispatch=None) -> None:
+        MiddleWare.__init__(self, app, dispatch)
+        InjectableMiddlewareInterface.__init__(self)
+
+    @InjectInMethod
+    def inject_middleware(self,jwtService: JWTAuthService):
+        self.jwtService = jwtService
+       
+    async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
+        token = get_bearer_token_from_request(request)
+        authPermission: AuthPermission = self.jwtService._decode_auth_token(token)
+        # TODO put it somewhere safe exemple in the Header 
+        return await super().dispatch(request, call_next) # TODO 
 
 
 class MiddlewarePriority(Enum):
