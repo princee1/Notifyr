@@ -67,7 +67,7 @@ class Permission(DecoratorObj):
     def __init__(self,):
         super().__init__(self.permission, True)
 
-    def permission(self,token_:str,issued_for:str,class_name:str,func_name:str):
+    def permission(self,):
         ...
 
 

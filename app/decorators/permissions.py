@@ -3,26 +3,25 @@ from services.assets_service import AssetService
 from definition._utils_decorator import Permission
 from container import InjectInMethod
 from services.security_service import SecurityService,JWTAuthService
-from classes.permission import RoutePermission
+from classes.permission import AuthPermission, RoutePermission
 
 
  
-class JWTAuthPermission(Permission):
+class JWTRoutePermission(Permission):
     
     @InjectInMethod
     def __init__(self,jwtAuthService: JWTAuthService):
         super().__init__()
         self.jwtAuthService = jwtAuthService
     
-    def permission(self, token_:str, client_ip_:str, class_name:str, func_name:str):
-        permission_ = self.jwtAuthService.verify_permission(token_, class_name, func_name,client_ip_)
+    def permission(self,class_name:str, func_name:str,authPermission:AuthPermission):
         operation_id = func_name
 
-        if class_name not in permission_["allowed_routes"]:
+        if class_name not in authPermission["allowed_routes"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Ressource not allowed")
 
-        routePermission: RoutePermission = permission_["allowed_routes"][class_name]
+        routePermission: RoutePermission =authPermission["allowed_routes"][class_name]
         if routePermission["scope"] == "all":
             return True
 
@@ -33,7 +32,7 @@ class JWTAuthPermission(Permission):
         return True
     
 
-class JWTAssetPermission(Permission):
+class JWTParamsAssetPermission(Permission):
     
     @InjectInMethod
     def __init__(self,jwtAuthService: JWTAuthService,assetService: AssetService):
@@ -41,7 +40,6 @@ class JWTAssetPermission(Permission):
         self.jwtAuthService = jwtAuthService
         self.assetService = assetService
 
-
-    def permission(self, token_, client_ip_, class_name, func_name):
-        permission_ = self.jwtAuthService.verify_permission(token_, class_name, func_name,client_ip_)
-        assetPermission = permission_['asset_permission']
+    def permission(self,template:str, authPermission:AuthPermission):
+        #assetPermission = authPermission['asset_permission']
+        return True
