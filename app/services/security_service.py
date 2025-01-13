@@ -117,20 +117,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         if permission["generation_id"] != self.generation_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
-
-        if class_name not in permission["allowed_routes"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Ressource not allowed")
-
-        routePermission: RoutePermission = permission["allowed_routes"][class_name]
-        if routePermission["scope"] == "all":
-            return True
-
-        if operation_id not in routePermission['custom_routes']:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Route not allowed")
-
-        return True
+        return permission
 
 
 @ServiceClass
