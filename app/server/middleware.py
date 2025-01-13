@@ -60,7 +60,7 @@ class AnalyticsMiddleware(MiddleWare,InjectableMiddlewareInterface):
 
 
 
-class JWTMiddleware(MiddleWare,InjectableMiddlewareInterface):
+class JWTAuthMiddleware(MiddleWare,InjectableMiddlewareInterface):
     def __init__(self, app, dispatch=None) -> None:
         MiddleWare.__init__(self, app, dispatch)
         InjectableMiddlewareInterface.__init__(self)
@@ -71,9 +71,10 @@ class JWTMiddleware(MiddleWare,InjectableMiddlewareInterface):
        
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         token = get_bearer_token_from_request(request)
-        authPermission: AuthPermission = self.jwtService._decode_auth_token(token)
-        # TODO put it somewhere safe exemple in the Header 
-        return await super().dispatch(request, call_next) # TODO 
+        client_ip = get_client_ip(request)
+        authPermission: AuthPermission = self.jwtService.verify_permission(token,client_ip)
+        request.state.authPermission = authPermission
+        return await call_next(request)
 
 
 class MiddlewarePriority(Enum):
@@ -81,3 +82,4 @@ class MiddlewarePriority(Enum):
     PROCESS_TIME = 1
     ANALYTICS = 2
     SECURITY = 3
+    AUTH=4
