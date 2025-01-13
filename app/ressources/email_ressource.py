@@ -5,7 +5,7 @@ from classes.email import EmailBuilder
 from services.config_service import ConfigService
 from services.security_service import SecurityService
 from container import InjectInMethod
-from definition._ressource import UsePermission, Ressource, UseHandler,NextHandlerException
+from definition._ressource import Ressource, UsePermission, BaseRessource, UseHandler,NextHandlerException
 from definition._service import ServiceNotAvailableError
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
@@ -60,11 +60,11 @@ class CustomEmailModel(BaseModel):
 
 EMAIL_PREFIX = "email"
 
-
-class EmailTemplateRessource(Ressource):
+@Ressource(EMAIL_PREFIX)
+class EmailTemplateRessource(BaseRessource):
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
-        super().__init__(EMAIL_PREFIX)
+        super().__init__()
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
@@ -77,9 +77,8 @@ class EmailTemplateRessource(Ressource):
 
     @UsePermission(permissions.JWTRoutePermission,permissions.JWTParamsAssetPermission)
     @UseHandler(handling_error)
-    @Ressource.HTTPRoute("/template/{template}",)
+    @BaseRessource.HTTPRoute("/template/{template}",)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel, authPermission = Depends(get_auth_permission)):
-
 
         meta = email.meta
         data = email.data
@@ -98,7 +97,7 @@ class EmailTemplateRessource(Ressource):
 
     @UsePermission(permissions.JWTRoutePermission)
     @UseHandler(handling_error)
-    @Ressource.HTTPRoute("/custom/",)
+    @BaseRessource.HTTPRoute("/custom/",)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, authPermission = Depends(get_auth_permission)):
         meta = customEmail.meta
         text_content = customEmail.text_content

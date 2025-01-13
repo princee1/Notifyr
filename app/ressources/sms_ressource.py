@@ -1,30 +1,30 @@
-from definition._ressource import UsePermission, Ressource, UseHandler
+from definition._ressource import Ressource, UsePermission, BaseRessource, UseHandler
 from container import InjectInMethod, InjectInFunction
 from services.twilio_service import SMSService
 
 
 SMS_ONGOING_PREFIX = 'sms-ongoing'
 
-
-class OnGoingSMSRessource(Ressource):
+@Ressource(SMS_ONGOING_PREFIX)
+class OnGoingSMSRessource(BaseRessource):
     @InjectInMethod
     def __init__(self, smsService: SMSService) -> None:
-        super().__init__("sms-ongoing")
+        super().__init__()
         self.smsService: SMSService = smsService
 
-    @Ressource.HTTPRoute('/otp/')
+    @BaseRessource.HTTPRoute('/otp/')
     def sms_relay_otp(self,):
         pass
 
-    @Ressource.HTTPRoute('/simple/')
+    @BaseRessource.HTTPRoute('/simple/')
     def sms_simple_message(self,):
         pass
 
-    @Ressource.HTTPRoute('/chat/')
+    @BaseRessource.HTTPRoute('/chat/')
     def sms_chat(self,):
         pass
 
-    @Ressource.HTTPRoute('/template/')
+    @BaseRessource.HTTPRoute('/template/')
     def sms_template(self,):
         ...
 
@@ -42,7 +42,8 @@ class OnGoingSMSRessource(Ressource):
 SMS_INCOMING_PREFIX = "sms-incoming"
 
 
-class IncomingSMSRessource(Ressource):
+@Ressource(SMS_INCOMING_PREFIX )
+class IncomingSMSRessource(BaseRessource):
     @InjectInMethod
     def __init__(self,) -> None:
-        super().__init__("sms-incoming")
+        super().__init__()
