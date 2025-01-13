@@ -1,9 +1,10 @@
-from definition._ressource import Ressource
+from definition._ressource import BaseRessource, Ressource
 
-WHATS_APP_PREFIX = '/whatsapp/'
+WHATS_APP_PREFIX = '/whatsapp'
 
-class WhatsAppRessource(Ressource):
+@Ressource(WHATS_APP_PREFIX)
+class WhatsAppRessource(BaseRessource):
     def __init__(self,):
-        super().__init__(WHATS_APP_PREFIX)
+        super().__init__()
     
     ...

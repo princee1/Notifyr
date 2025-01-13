@@ -41,7 +41,7 @@ PROTECTED_ROUTES: dict[str, list[str]] = {}
 ROUTES: dict[str, list[dict]] = {}
 METADATA_ROUTES: dict[str, str] = {}
 DECORATOR_METADATA: dict[str, dict[str, list[tuple[Callable, float]]]] = {}
-
+PREFIX_METADATA: dict[str,str] = { }
 
 def add_protected_route_metadata(class_name: str, method_name: str,):
     if class_name in PROTECTED_ROUTES:
@@ -85,7 +85,7 @@ class HTTPExceptionParams(TypedDict):
     headers: dict[str,str] | None = None
 
 
-class Ressource(EventInterface):
+class BaseRessource(EventInterface):
 
     @staticmethod
     def _build_operation_id(route_name: str, prefix: str, method_name: list[HTTPMethod] | HTTPMethod, operation_id: str) -> str:
@@ -99,10 +99,10 @@ class Ressource(EventInterface):
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
                   deprecated: bool | None = None):
         def decorator(func: Callable):
-            computed_operation_id = Ressource._build_operation_id(
+            computed_operation_id = BaseRessource._build_operation_id(
                 path, None, func.__qualname__, operation_id)
             METADATA_ROUTES[func.__qualname__] = computed_operation_id
-
+            
             class_name = get_class_name_from_method(func)
             kwargs = {
                 'path': path,
@@ -131,13 +131,13 @@ class Ressource(EventInterface):
     def Get(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
             responses: Dict[int | str, Dict[str, Any]] | None = None,
             deprecated: bool | None = None):
-        return Ressource.HTTPRoute(path, HTTPMethod.GET, operation_id, response_model, response_description, responses, deprecated)
+        return BaseRessource.HTTPRoute(path, HTTPMethod.GET, operation_id, response_model, response_description, responses, deprecated)
 
     @staticmethod
     def Post(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None):
-        return Ressource.HTTPRoute(path, HTTPMethod.POST, operation_id, response_model, response_description, responses, deprecated)
+        return BaseRessource.HTTPRoute(path, HTTPMethod.POST, operation_id, response_model, response_description, responses, deprecated)
 
     def init_stacked_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
@@ -156,11 +156,13 @@ class Ressource(EventInterface):
         RESSOURCES[cls.__name__] = cls
         # ROUTES[cls.__name__] = []
 
-    def __init__(self, prefix: str) -> None:
+    def __init__(self) -> None:
         self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
+        prefix = PREFIX_METADATA[self.__class__.__name__]
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
+        
         self.router = APIRouter(prefix=prefix, on_shutdown=[
                                 self.on_shutdown], on_startup=[self.on_startup])
         self.init_stacked_callback()
@@ -201,8 +203,15 @@ class Ressource(EventInterface):
         pass
 
 
-R = TypeVar('R', bound=Ressource)
+R = TypeVar('R', bound=BaseRessource)
 
+
+def Ressource(prefix:str):
+    def class_decorator(cls:Type[R]) ->Type[R]:
+        # TODO: support module-level injection 
+        PREFIX_METADATA[cls.__name__] = prefix
+        return R
+    return class_decorator
 
 def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handling_func: Callable | tuple[Callable, ...], start_with: str, **kwargs) -> Type[R] | None:
     if type(cls) == type and isclass(cls):
@@ -245,6 +254,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                 kwargs_prime = kwargs.copy()
                 kwargs_prime[SpecialKeyParameterConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER] = func_name
                 kwargs_prime[SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
+                # TODO use the prefix here
                 for permission in permission_function:
                     try:
                         if type(permission) == type or issubclass_of(Permission,type(permission)):

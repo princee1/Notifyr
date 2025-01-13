@@ -1,15 +1,15 @@
 from services.twilio_service import VoiceService
-from definition._ressource import Ressource, Ressource
+from definition._ressource import BaseRessource, BaseRessource, Ressource
 from container import InjectInMethod, InjectInFunction
 
 
 CALL_ONGOING_PREFIX = 'call-ongoing'
 
-
-class OnGoingCallRessources(Ressource):
+@Ressource(CALL_ONGOING_PREFIX)
+class OnGoingCallRessources(BaseRessource):
     @InjectInMethod
     def __init__(self, voiceService: VoiceService) -> None:
-        super().__init__("call-ongoing")
+        super().__init__()
         self.voiceService = voiceService
 
     def relay_otp(self,):
@@ -20,10 +20,11 @@ class OnGoingCallRessources(Ressource):
 
 
 CALL_INCOMING_PREFIX = "call-incoming"
-class IncomingCallRessources(Ressource):
+@Ressource(CALL_INCOMING_PREFIX)
+class IncomingCallRessources(BaseRessource):
     @InjectInMethod
     def __init__(self, voiceService: VoiceService) -> None:
-        super().__init__("call-incoming")
+        super().__init__()
         self.voiceService = voiceService
 
     pass

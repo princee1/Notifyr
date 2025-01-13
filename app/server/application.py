@@ -15,7 +15,7 @@ import uvicorn
 import multiprocessing
 import threading
 import sys
-from definition._ressource import RESSOURCES, Ressource
+from definition._ressource import RESSOURCES, BaseRessource
 from interface.events import EventInterface
 
 
@@ -28,13 +28,13 @@ class AppParameter:
     title: str
     summary: str
     description: str
-    ressources: list[type[Ressource]]
+    ressources: list[type[BaseRessource]]
     middlewares: list[type[BaseHTTPMiddleware]]
     port: int = 8000
     log_level: str = 'debug'
     log_config: Any = None
 
-    def __init__(self, title: str, summary: str, description: str, ressources: list[type[Ressource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug',):
+    def __init__(self, title: str, summary: str, description: str, ressources: list[type[BaseRessource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug',):
         self.title: str = title
         self.summary: str = summary
         self.description: str = description
