@@ -36,10 +36,13 @@ class ConfigAppConstant:
 
 class HTTPHeaderConstant:
     API_KEY_HEADER = 'X-API-KEY'
+    ADMIN_KEY = 'X-Admin-Key'
+
+
+class SpecialKeyParameterConstant:
     TOKEN_NAME_PARAMETER = 'token_'
     CLIENT_IP_PARAMETER = 'client_ip_'
     ADMIN_KEY_PARAMETER = 'admin_'
     FUNC_NAME_SPECIAL_KEY_PARAMETER = 'func_name'
     CLASS_NAME_SPECIAL_KEY_PARAMETER = 'class_name'
-
-    ADMIN_KEY = 'X-Admin-Key'
+    AUTH_PERMISSION_PARAMETER = 'authPermission'
