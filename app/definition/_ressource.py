@@ -5,9 +5,8 @@ instance imported from `container`.
 from inspect import isclass
 from typing import Any, Callable, Dict, Iterable, Mapping, TypeVar, Type, TypedDict
 from utils.helper import issubclass_of
-from utils.constant import HTTPHeaderConstant
+from utils.constant import SpecialKeyParameterConstant
 from services.assets_service import AssetService
-from services.security_service import JWTAuthService
 from container import Get, Need
 from definition._service import S
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -241,11 +240,11 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                     raise HTTPException(
                         status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
-                if HTTPHeaderConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER in kwargs or HTTPHeaderConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER in kwargs:
+                if SpecialKeyParameterConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER in kwargs or SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER in kwargs:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'special key used'})
                 kwargs_prime = kwargs.copy()
-                kwargs_prime[HTTPHeaderConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER] = func_name
-                kwargs_prime[HTTPHeaderConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
+                kwargs_prime[SpecialKeyParameterConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER] = func_name
+                kwargs_prime[SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
                 for permission in permission_function:
                     try:
                         if type(permission) == type or issubclass_of(Permission,type(permission)):

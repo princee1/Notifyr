@@ -101,36 +101,25 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
 
-    def verify_permission(self, token: str, class_name: str, operation_id: str, issued_for: str) -> bool:
+    def verify_permission(self, token: str,issued_for: str) -> AuthPermission:
 
         token = self._decode_auth_token(token)
         permission: AuthPermission = AuthPermission(**token)
+        try:
+            if issued_for != permission["issued_for"]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
 
-        if issued_for != permission["issued_for"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            if permission["expired_at"] < time.time():
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
 
-        if permission["expired_at"] < time.time():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
-
-        if permission["generation_id"] != self.generation_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
-
-        if class_name not in permission["allowed_routes"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Ressource not allowed")
-
-        routePermission: RoutePermission = permission["allowed_routes"][class_name]
-        if routePermission["scope"] == "all":
-            return True
-
-        if operation_id not in routePermission['custom_routes']:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Route not allowed")
-
-        return True
+            if permission["generation_id"] != self.generation_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
+            return permission
+        except KeyError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Data missing')
 
 
 @ServiceClass

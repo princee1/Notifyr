@@ -10,7 +10,7 @@ from definition._service import ServiceNotAvailableError
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
 from fastapi import Request, Response, HTTPException, status
-from utils.dependencies import get_api_key, get_client_ip, Depends, get_bearer_token
+from utils.dependencies import Depends,get_auth_permission
 from decorators import permissions
 
 def handling_error(callback: Callable, *args, **kwargs):
@@ -75,10 +75,11 @@ class EmailTemplateRessource(Ressource):
     def on_shutdown(self):
         super().on_shutdown()
 
-    @UsePermission(permissions.JWTAuthPermission)
+    @UsePermission(permissions.JWTRoutePermission,permissions.JWTParamsAssetPermission)
     @UseHandler(handling_error)
     @Ressource.HTTPRoute("/template/{template}",)
-    def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel,token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip) ):
+    def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel, authPermission = Depends(get_auth_permission)):
+
 
         meta = email.meta
         data = email.data
@@ -95,10 +96,10 @@ class EmailTemplateRessource(Ressource):
         self.emailService.send_message(EmailBuilder(data, meta, images))
         pass
 
-    @UsePermission(permissions.JWTAuthPermission)
+    @UsePermission(permissions.JWTRoutePermission)
     @UseHandler(handling_error)
     @Ressource.HTTPRoute("/custom/",)
-    def _api_send_customEmail(self, customEmail: CustomEmailModel, token_= Depends(get_bearer_token), client_ip_=Depends(get_client_ip)):
+    def _api_send_customEmail(self, customEmail: CustomEmailModel, authPermission = Depends(get_auth_permission)):
         meta = customEmail.meta
         text_content = customEmail.text_content
         html_content = customEmail.html_content

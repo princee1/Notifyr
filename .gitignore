@@ -174,3 +174,4 @@ test.ipynb
 config.app.json
 yahoo.secrets.txt
 email.test.py
+.vscode
