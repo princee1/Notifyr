@@ -90,11 +90,11 @@ class IMAPConfig (EmailConnInterface, Enum):
 
 
 @_service.AbstractServiceClass
-class EmailService(_service.Service):
+class BaseEmailService(_service.Service):
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__()
-        self.configService = configService
-        self.loggerService = loggerService
+        self.configService:ConfigService = configService
+        self.loggerService:ConfigService = loggerService
         self.hostPort: int
 
     def build(self):
@@ -113,7 +113,7 @@ class EmailService(_service.Service):
         ...
 
 @_service.ServiceClass
-class EmailSenderService(EmailService):
+class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__(configService, loggerService)
@@ -196,7 +196,7 @@ class EmailSenderService(EmailService):
             ...
 
 @_service.ServiceClass
-class EmailReaderService(EmailService):
+class EmailReaderService(BaseEmailService):
     def __init__(self, configService: ConfigService, loggerService: LoggerService,trainingService:TrainingService,) -> None:
         super().__init__(configService, loggerService)
         self.hostPort = IMAPConfig.setHostPort(
@@ -227,3 +227,7 @@ class EmailReaderService(EmailService):
 
     def updateRecurrenceReading(self):
         pass
+
+@_service.ServiceClass()
+class EmailAPIService(BaseEmailService):
+    ...

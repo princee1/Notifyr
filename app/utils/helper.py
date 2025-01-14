@@ -5,11 +5,14 @@ from string import hexdigits, digits, ascii_letters
 import time
 from inspect import currentframe, getargvalues
 from typing import Any, Callable
+import urllib.parse
 from namespace import Namespace
 from str2bool import str2bool
 import ast
 from enum import Enum
 import base64
+
+import urllib
 
 
 
@@ -236,9 +239,31 @@ def generateRndNumber(len):
     return "".join(choice(hexdigits) for _ in range(len))
 
 
-################################## Base64 ##########################################3
+################################## ** Base64 Helper ** #############################################
 def b64_encode(value: str)->str:
     return base64.b64encode(value.encode()).decode()
 
 def b64_decode(value: str)->str:
     return base64.b64decode(value.encode()).decode()
+
+###################################### ** URL Helper **  ###########################################
+
+def quote_safe_url(url:str)->str:
+    return  urllib.parse.quote(url, safe='~-._')
+
+def unquote_safe_url(url:str)->str:
+    return urllib.parse.unquote(url)
+
+def format_url_params(params: dict[str,str])->str:
+  """Formats parameters into a URL query string.
+
+  Args:
+    params: A key-value map.
+
+  Returns:
+    A URL query string version of the given parameters.
+  """
+  param_fragments = []
+  for param in sorted(params.items(), key=lambda x: x[0]):
+    param_fragments.append('%s=%s' % (param[0], quote_safe_url(param[1])))
+  return '&'.join(param_fragments)
