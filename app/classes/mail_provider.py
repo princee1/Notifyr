@@ -11,7 +11,7 @@ from utils.helper import b64_encode
 from typing import Literal,List, Optional
 from enum import Enum
 import time
-import json
+import pickle
 from utils.helper import format_url_params
 
 
@@ -103,7 +103,7 @@ class OAuth:
     
     @property
     def is_valid(self):
-        if self.auth_tokens is None:
+        if self.auth_tokens == None or self.auth_tokens == {}:
             return False
         if 'access_token' not in self.auth_tokens:
             return False
