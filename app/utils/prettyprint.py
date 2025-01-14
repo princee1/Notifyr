@@ -40,6 +40,9 @@ def show(t=10, title='Communication - Service', t1=0, color=Fore.WHITE):
     time.sleep(t)
 
 
+class  SkipInputException(Exception):
+    ...
+
 ########################################################################
 
 
@@ -57,15 +60,21 @@ def clearscreen():
         os.system('clear')
 
 
-def base_print(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", position: EmojiPosition = 'both'):
+def base_message(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", position: EmojiPosition = 'both'):
     """
-    Base function to print a personalized message with color and emoji.
+    Base function to return a personalized message with color and emoji.
     """
     is_emojized = emoji_code.startswith(':')
     _emoji = emoji.emojize(emoji_code) if is_emojized else emoji_code
 
-    print(color + background + (_emoji if (position == "before" or position == "both") else "") + "  " +
-          message + "  " + (_emoji if (position == "after" or position == "both") else "") + Style.RESET_ALL)
+    return color + background + (_emoji if (position == "before" or position == "both") else "") + "  " + message + "  " + (_emoji if (position == "after" or position == "both") else "") + Style.RESET_ALL
+
+
+def base_print(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", position: EmojiPosition = 'both'):
+    """
+    Base function to print a personalized message with color and emoji.
+    """
+    print(base_message(message, color, background, emoji_code, position))
 
 
 def print_info(message, position: EmojiPosition = 'both'):
@@ -127,6 +136,11 @@ def printTuple(): pass
 
 ########################################################################
 
+def get_toggle_args(key:str,kwargs:dict,):
+    if key not in kwargs:
+        return True
+    else:
+        return kwargs[key]
 
 class PrettyPrinter:
 
@@ -135,10 +149,7 @@ class PrettyPrinter:
 
         @wraps(func)
         def wrapper(*args, **kwargs):
-            if 'saveable' not in kwargs:
-                saveable = True
-            else:
-                saveable = kwargs['saveable']
+            saveable = get_toggle_args('saveable',kwargs)
 
             if 'show' not in kwargs:
                 kwargs['show'] = True
@@ -152,6 +163,17 @@ class PrettyPrinter:
                     {'func': func, 'args': args, 'kwargs': kwargs_prime})
             return func(*args, **kwargs)
         return wrapper
+
+    @staticmethod
+    def if_show(func:Callable)->Callable:
+        def wrapper(*args, **kwargs):
+            show = get_toggle_args('show',kwargs)
+            if show:
+                return func(*args, **kwargs)
+            return 
+        
+        return wrapper
+
 
     def __init__(self):
         self.buffer: list[Callable] = []
@@ -233,6 +255,17 @@ class PrettyPrinter:
             self.warning('Press to continue', saveable=False, position='both')
             input('')
         clear_line()
+
+    def input(self, message: str,color= Fore.WHITE,emoji_code:str='',position:EmojiPosition = 'none') -> None | str:
+        try:
+            message = base_message(message,color,emoji_code=emoji_code,position=position,)
+            return input(message)
+        
+        except KeyboardInterrupt:
+            return None
+
+        except EOFError:
+            raise SkipInputException
 
 
 PrettyPrinter_: PrettyPrinter = PrettyPrinter()
