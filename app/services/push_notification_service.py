@@ -1,5 +1,5 @@
 
-from app.services.config_service import ConfigService
+from services.config_service import ConfigService
 from definition._service import Service, ServiceClass
 import firebase_admin
 

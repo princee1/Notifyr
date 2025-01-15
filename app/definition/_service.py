@@ -4,6 +4,7 @@ from utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from utils.constant import DependencyConstant
 from utils.helper import issubclass_of
 import warnings
+import datetime as dt
 
 
 AbstractDependency: Dict[str, dict] = {}
@@ -90,20 +91,32 @@ class Service():
 
     def _builder(self):
         try:
+            now = dt.datetime.now()
+            #self.prettyPrinter.show()
+            #self.prettyPrinter.info(f'[{now}] Current Building the service: {self.__class__.__name__}',saveable=False)
             self.build()
             self._builded = True
             self._destroyed = False
+            self.prettyPrinter.success(f'[{now}] Successfully built the service: {self.__class__.__name__}',saveable=True)
+            self.prettyPrinter.wait(0.1,False)
+
         except BuildFailureError as e:
+            self.prettyPrinter.error(f'[{now}] Error while building the service: {self.__class__.__name__}',saveable=True)
             pass
 
         except BuildAbortError as e:
+            self.prettyPrinter.error(f'[{now}] Error while building the service: {self.__class__.__name__}',saveable=True)
             pass
 
         except BuildWarningError as e:
+            self.prettyPrinter.warning(f'[{now}] Problem encountered while building the service: {self.__class__.__name__}',saveable=True)
+
             pass
 
         except BuildSkipError as e:
+            self.prettyPrinter.message(f'[{now}] Problem encountered while building the service : {self.__class__.__name__} Skipping for now NOTE: this can cause some error',saveable=True)
             pass
+        
 
         finally:
             self.buildReport()
