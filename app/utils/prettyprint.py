@@ -12,7 +12,7 @@ import sys
 from functools import wraps
 
 
-EmojiPosition = Literal['before', 'after', 'both', 'none']
+EmojiPosition = Literal['left', 'right', 'both', 'none']
 # Initialize colorama
 colorama.init(autoreset=True)
 
@@ -40,7 +40,7 @@ def show(t=10, title='Communication - Service', t1=0, color=Fore.WHITE):
     time.sleep(t)
 
 
-class  SkipInputException(Exception):
+class SkipInputException(Exception):
     ...
 
 ########################################################################
@@ -67,7 +67,7 @@ def base_message(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":
     is_emojized = emoji_code.startswith(':')
     _emoji = emoji.emojize(emoji_code) if is_emojized else emoji_code
 
-    return color + background + (_emoji if (position == "before" or position == "both") else "") + "  " + message + "  " + (_emoji if (position == "after" or position == "both") else "") + Style.RESET_ALL
+    return color + background + (_emoji + "  " if (position == "left" or position == "both") else "") + message + ("  "+_emoji if (position == "right" or position == "both") else "") + Style.RESET_ALL
 
 
 def base_print(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", position: EmojiPosition = 'both'):
@@ -136,11 +136,12 @@ def printTuple(): pass
 
 ########################################################################
 
-def get_toggle_args(key:str,kwargs:dict,):
+def get_toggle_args(key: str, kwargs: dict,):
     if key not in kwargs:
         return True
     else:
         return kwargs[key]
+
 
 class PrettyPrinter:
 
@@ -149,7 +150,7 @@ class PrettyPrinter:
 
         @wraps(func)
         def wrapper(*args, **kwargs):
-            saveable = get_toggle_args('saveable',kwargs)
+            saveable = get_toggle_args('saveable', kwargs)
 
             if 'show' not in kwargs:
                 kwargs['show'] = True
@@ -165,15 +166,14 @@ class PrettyPrinter:
         return wrapper
 
     @staticmethod
-    def if_show(func:Callable)->Callable:
+    def if_show(func: Callable) -> Callable:
         def wrapper(*args, **kwargs):
-            show = get_toggle_args('show',kwargs)
+            show = get_toggle_args('show', kwargs)
             if show:
                 return func(*args, **kwargs)
-            return 
-        
-        return wrapper
+            return
 
+        return wrapper
 
     def __init__(self):
         self.buffer: list[Callable] = []
@@ -256,11 +256,12 @@ class PrettyPrinter:
             input('')
         clear_line()
 
-    def input(self, message: str,color= Fore.WHITE,emoji_code:str='',position:EmojiPosition = 'none') -> None | str:
+    def input(self, message: str, color=Fore.WHITE, emoji_code: str = '', position: EmojiPosition = 'none') -> None | str:
         try:
-            message = base_message(message,color,emoji_code=emoji_code,position=position,)
+            message = base_message(
+                message, color, emoji_code=emoji_code, position=position,)
             return input(message)
-        
+
         except KeyboardInterrupt:
             return None
 
