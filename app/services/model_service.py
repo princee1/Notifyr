@@ -4,7 +4,7 @@ from definition import _service
 from injector import inject
 
 @_service.ServiceClass
-class TrainingService(_service.Service):
+class LLMModelService(_service.Service):
     @inject
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__()

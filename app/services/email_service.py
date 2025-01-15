@@ -10,7 +10,7 @@ from utils.prettyprint import SkipInputException
 from classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 
-from .model_service import TrainingService
+from .model_service import LLMModelService
 from utils.constant import EmailHostConstant
 from classes.email import EmailBuilder
 from interface.threads import ThreadInterface
@@ -172,7 +172,7 @@ class EmailSenderService(BaseEmailService):
 
 @_service.ServiceClass
 class EmailReaderService(BaseEmailService):
-    def __init__(self, configService: ConfigService, loggerService: LoggerService, trainingService: TrainingService,) -> None:
+    def __init__(self, configService: ConfigService, loggerService: LoggerService, trainingService: LLMModelService,) -> None:
         super().__init__(configService, loggerService)
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
