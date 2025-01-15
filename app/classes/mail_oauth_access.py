@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from msal import ConfidentialClientApplication
 from typing import Any, Optional, Type, TypeVar, TypedDict, overload
-from app.utils.fileIO import JSONFile
-from utils.prettyprint import PrettyPrinter
+from utils.fileIO import JSONFile
+from utils.prettyprint import PrettyPrinter_
 from requests import post, Request,Response
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -25,6 +25,9 @@ class OAuthError(Exception):
 class GoogleOAuthError(OAuthError):
     """Base class for Google OAuth-specific errors."""
     pass
+
+class InvalidAuthorizationCodeError(OAuthError):
+    ...
 
 class InvalidGrantError(OAuthError):
     """Raised when the grant (authorization code or refresh token) is invalid."""
@@ -59,7 +62,7 @@ class AccessDeniedError(OAuthError):
 
 GOOGLE_ACCOUNTS_BASE_URL = 'https://accounts.google.com'
 GOOGLE_REDIRECT_URI = 'https://oauth2.dance/'
-YAHOO_BASE_URL = 'https://api.login.yahoo.com'
+YAHOO_BASE_URL = 'https://api.login.yahoo.com/oauth2'
 AOL_BASE_URL = 'https://'
 
 GMAIL_SCOPE = 'https://mail.google.com/'
@@ -84,8 +87,7 @@ class AuthToken(TypedDict):
 #########################################################                ##################################################
 class OAuth:
 
-    @overload
-    def __init__(self, client_id: str, client_secret: str, scope: list[str], baseurl: str,state:str |None =None ):
+    def __init__(self, client_id: str, client_secret: str, scope: list[str], baseurl: str,json_key =None,state:str |None =None ):
         self.client_id = client_id
         self.client_secret = client_secret
         self.scope = scope
@@ -93,26 +95,30 @@ class OAuth:
         self.state_ = state
         self.auth_tokens: AuthToken | None = ...
         self.temp_data: Any = None
-
-
-    @overload
-    def __init__(self, json_key):
         self.json_key_file = json_key
-        self.auth_tokens: AuthToken | None = ...
 
     def load_authToken(self,filepath:str):
-        self.token_jsonFile = JSONFile(filepath) # VERIFY Security Issues
+        self.filepath=filepath
+        self.token_jsonFile = JSONFile(self.filepath) # VERIFY Security Issues
         tokens = self.token_jsonFile.data
+        
         if tokens != None and isinstance(tokens,dict):
             self.auth_tokens = AuthToken(**tokens)
+            self.save()
+        else:
+            self.auth_tokens = AuthToken()
         return self.exists
+
+    def save(self):
+        self.token_jsonFile.load(self.auth_tokens)
+        self.token_jsonFile.save()
 
     @property
     def state(self):
-        '' if self.state_ == None else f'&state{self.state_}'
+        return '' if self.state_ == None else f'&state{self.state_}'
     
     @property
-    def is_valid(self):        
+    def is_valid(self):    
         return time.time() - self.auth_tokens['acquired_at'] < self.auth_tokens['expires_in']
     
     @property
@@ -121,6 +127,7 @@ class OAuth:
             return False
         if 'access_token' not in self.auth_tokens:
             return False
+        
         return True
 
     @property
@@ -135,22 +142,28 @@ class OAuth:
             return None
         return self.auth_tokens['access_token']
 
+    def __repr__(self):
+        return '%s(client_id=%s, client_secret=%s)' % (self.__class__.__name__,self.client_id, self.client_secret)
+
     def grant_access_token(self):
         ...
 
     def refresh_access_token(self):
         ...
+    
+    def build_auth_string(self,username:str):
+        return'user=%s\x01auth=Bearer %s\x01\x01' % (
+            username, self.access_token)
 
     def encode_token(self, username, b64=True):
-        auth_string = 'user=%s\1auth=Bearer %s\1\1' % (
-            username, self.access_token)
+        auth_string = self.build_auth_string(username)
         if b64:
             auth_string = b64_encode(auth_string)
         return auth_string
 
     def update_tokens(self, data: dict):
-        # TODO Verify Data
         self.auth_tokens = AuthToken(**data,acquired_at=time.time())
+        self.save()
 
 #########################################################                ##################################################
 
@@ -291,12 +304,12 @@ class OutlookOauth(OAuth):
 #########################################################                ##################################################
 
 class OAuthFlow(OAuth):
-    def __init__(self, client_id: str, client_secret: str, scope: list[str], base_url: str):
-        super().__init__(client_id, client_secret, scope, base_url)
+    def __init__(self, client_id: str, client_secret: str, scope: list[str], base_url: str,state=None):
+        super().__init__(client_id, client_secret, scope, base_url,state)
         self.authHeaders = {}
         self.authBody = {}
         self.authParams = {}
-        self.prettyPrinter = PrettyPrinter()
+        self.prettyPrinter = PrettyPrinter_
 
     @property
     def access_token(self):
@@ -308,18 +321,19 @@ class OAuthFlow(OAuth):
     def get_auth_code(self, url: str, show_init_message=True):
         self.prettyPrinter.show(pause_after=0.2, print_stack=False)
         self.prettyPrinter.info(
-            "Visit the url below and enter the authorization code" % url, show=show_init_message)
+            "Visit the url below, follow the instructions and enter the authorization code", show=show_init_message,saveable=False)
         self.prettyPrinter.custom_message(
-            "%s" % url, emoji_code='\U0001F310', position='left')
-        self.prettyPrinter.space_line()
+            "%s" % url, emoji_code='\U0001F310', position='both',saveable=False)
+        self.prettyPrinter.space_line(saveable=False)
         val = self.prettyPrinter.input(
             'Enter the authorization code: ', emoji_code='\U0001F510', position='left')
-        if isinstance(val, str):
+        if isinstance(val, str) and val:
             return val.strip()
         return None
 
     def request_tokens(self, route: str):
         url = f'{self.baseurl}/{route}'
+
         response = post(url, self.authBody,
                         headers=self.authHeaders, params=self.authParams)
         val = response.json()
@@ -339,17 +353,17 @@ class OAuthFlow(OAuth):
         show_init_message = True
         while True:
 
-            authorization_code = self.get_auth_code(show_init_message)
+            authorization_code = self.get_auth_code(show_init_message=show_init_message)
             if authorization_code == None:
                 show_init_message = True
                 self.prettyPrinter.error('No authorization code was provided')
                 self.prettyPrinter.wait(2, False)
                 continue
 
-            flag_ = self.get_access_token(authorization_code)
+            flag_,mess = self.get_access_token(authorization_code)
             if not flag_:
                 show_init_message = False
-                self.prettyPrinter.error('Error getting access token')
+                self.prettyPrinter.error(f'Error getting access token: {mess}')
                 self.prettyPrinter.wait(1.5, False)
                 continue
 
@@ -363,7 +377,7 @@ class GmailHTTPOAuth(OAuthFlow):
         self.authParams['client_id'] = self.client_id
         self.authParams['client_secret'] = self.client_secret
 
-    def get_auth_code(self,):
+    def get_auth_code(self,show_init_message):
         params = {}
         params['client_id'] = self.client_id
         params['redirect_uri'] = GOOGLE_REDIRECT_URI
@@ -372,7 +386,7 @@ class GmailHTTPOAuth(OAuthFlow):
         params['access_type'] = 'offline'
         params['prompt'] = 'consent'
         url = f'{self.baseurl}/o/oauth2/auth?{format_url_params(params)}'
-        return super().get_auth_code(url, True)
+        return super().get_auth_code(url, show_init_message)
 
     def request_tokens(self,):
         return super().request_tokens('o/oauth2/token')
@@ -418,10 +432,16 @@ class YahooFamilyOAuth(OAuthFlow):
         self.authBody['redirect_uri'] = OOB_STR
         self.bearer = b64_encode(f'{client_id}:{client_secret}')
         self.authHeaders['Authorization'] = 'Basic ' + self.bearer
+        self.authHeaders['Content-Type']= "application/x-www-form-urlencoded"
+
+    def build_auth_string(self, username):
+        return f"n,a={username},^Aauth=Bearer {self.access_token}^A^A"
 
     def update_tokens(self, tokens):
+        
         if 'error' in tokens:
             error = tokens['error']
+        
             if error == 'invalid_client':
                 raise InvalidClientError("Invalid client credentials provided.")
             elif error == 'access_denied':
@@ -430,19 +450,31 @@ class YahooFamilyOAuth(OAuthFlow):
                 raise InvalidGrantError("The grant type is not supported by Yahoo.")
             elif error == 'rate_limit_exceeded':
                 raise RateLimitExceededError("Rate limit exceeded for Yahoo API.")
+            elif error == 'INVALID_AUTHORIZATION_CODE':
+                raise InvalidAuthorizationCodeError("Invalid authorization code")
+
             else:
                 raise YahooOAuthError(f"Unexpected Yahoo OAuth error: {error}")
         return super().update_tokens(tokens)
 
-    def get_auth_code(self):
-        url = f'{self.baseurl}/request_auth?client_id={self.client_id}&redirect_uri=ood&response_type=code&language=en-us{self.state}'
-        return super().get_auth_code(url, True)
+    def get_auth_code(self,show_init_message):
+        url = f'{self.baseurl}/request_auth?client_id={self.client_id}&redirect_uri={OOB_STR}&response_type=code&language=en-us{self.state}'
+        return super().get_auth_code(url, show_init_message)
 
     def get_access_token(self, auth_code: str):
-        self.authBody['grant_type'] = 'authorization_code'
-        self.authBody['code'] = auth_code
-        self.authBody.pop('refresh_token', None)
-        self.request_tokens()
+        try:
+            self.authBody['grant_type'] = 'authorization_code'
+            self.authBody['code'] = auth_code
+            self.authBody.pop('refresh_token', None)
+            self.request_tokens()
+            return True,''
+        except InvalidAuthorizationCodeError as e:
+            return False,e.args[0]
+
+        except InvalidGrantError as e:
+            return False,e.args[0]
+            
+        return False,''
 
     def refresh_access_token(self):
         self.authBody['refresh_token'] = self.refresh_token

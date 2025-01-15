@@ -2,24 +2,28 @@
 Module to easily manage retrieving user information from the request object.
 """
 
-from typing import Annotated, Any, Callable, TypeVar
+from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from utils.constant import HTTPHeaderConstant
 
 D = TypeVar('D',bound=type)
 
-def APIFilterInject(func:Callable):
-
-    annotations = func.__annotations__.copy()
-    annotations.pop('return',None)
+def APIFilterInject(func:Callable | Type):
+    
+    if type(func) == type:
+        annotations = func.__init__.__annotations__.copy()
+    else:
+        annotations = func.__annotations__.copy()
+        annotations.pop('return',None)
 
     def wrapper(*args,**kwargs):
         filtered_kwargs = {
-            key: (annotations[key](value) if key in annotations and isinstance(value, (str, int, float, bool, list, dict)) else value)
+            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
             for key, value in kwargs.items()
             if key in annotations
         }
+        
         return func(*args, **filtered_kwargs)
     return wrapper
 
