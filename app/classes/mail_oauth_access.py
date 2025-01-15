@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from msal import ConfidentialClientApplication
 from typing import Any, Optional, Type, TypeVar, TypedDict, overload
+from app.utils.fileIO import JSONFile
 from utils.prettyprint import PrettyPrinter
 from requests import post, Request,Response
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -93,27 +94,34 @@ class OAuth:
         self.auth_tokens: AuthToken | None = ...
         self.temp_data: Any = None
 
+
     @overload
     def __init__(self, json_key):
         self.json_key_file = json_key
         self.auth_tokens: AuthToken | None = ...
 
-    def load_authToken(self,tokens:dict):
-        self.auth_tokens = AuthToken(**tokens)
-        return self.is_valid
+    def load_authToken(self,filepath:str):
+        self.token_jsonFile = JSONFile(filepath) # VERIFY Security Issues
+        tokens = self.token_jsonFile.data
+        if tokens != None and isinstance(tokens,dict):
+            self.auth_tokens = AuthToken(**tokens)
+        return self.exists
 
     @property
     def state(self):
         '' if self.state_ == None else f'&state{self.state_}'
     
     @property
-    def is_valid(self):
+    def is_valid(self):        
+        return time.time() - self.auth_tokens['acquired_at'] < self.auth_tokens['expires_in']
+    
+    @property
+    def exists(self):
         if self.auth_tokens == None or self.auth_tokens == {}:
             return False
         if 'access_token' not in self.auth_tokens:
             return False
-        
-        return time.time() - self.auth_tokens['acquired_at'] < self.auth_tokens['expires_in']
+        return True
 
     @property
     def refresh_token(self):
@@ -128,6 +136,9 @@ class OAuth:
         return self.auth_tokens['access_token']
 
     def grant_access_token(self):
+        ...
+
+    def refresh_access_token(self):
         ...
 
     def encode_token(self, username, b64=True):
@@ -228,9 +239,9 @@ class GoogleServiceOauth(OAuth):
         self.credentials = service_account.Credentials.from_service_account_file(
             self.json_key_file, scopes=self.scope
         )
-        self._refresh_access_token()
+        self.refresh_access_token()
 
-    def _refresh_access_token(self):
+    def refresh_access_token(self):
         """
         Refresh the access token using the service account credentials.
         """
@@ -259,7 +270,7 @@ class GoogleServiceOauth(OAuth):
         Return the current access token. Refresh if necessary.
         """
         if self.auth_tokens and time.time() > self.auth_tokens.acquired_at + self.auth_tokens.expires_in:
-            self._refresh_access_token()
+            self.refresh_access_token()
         return self.auth_tokens.access_token
 
 class OutlookOauth(OAuth):
@@ -448,27 +459,15 @@ O = TypeVar('O', bound = OAuth)
 # class GoogleServiceJWT:
 #     ...
 #########################################################                #################################################
-
-
-class MailAPI:
-    ...
-
 GoogleFlowType = Literal['service_account','oauth_custom','oauth_automatic']
 
-class GMailAPI(MailAPI):
-    def __init__(self,flowtype:GoogleFlowType):
-        super().__init__()
-        self.flowtype = flowtype
-
-class MicrosoftGraphMailAPI(MailAPI):
-    ...
 #########################################################                #################################################
 
 
-class MailProviderFactoryError(Exception):
+class MailOAuthFactoryError(Exception):
     ...
 
-def MailProviderFactory(emailHost:EmailHostConstant,kwargs:dict[str,Any],google_oauth_flow:Literal[GoogleFlowType]=None,json_file:str =None)->O:
+def MailOAuthFactory(emailHost:EmailHostConstant,kwargs:dict[str,Any],google_oauth_flow:Literal[GoogleFlowType]=None,json_file:str =None)->OAuth | OAuthFlow:
     match emailHost:
         case EmailHostConstant.AOL:
             kwargs['yFamily'] = 'AOL'
@@ -489,11 +488,11 @@ def MailProviderFactory(emailHost:EmailHostConstant,kwargs:dict[str,Any],google_
                     return GoogleLibraryFlow(json_key_file=json_file)
             else:
                 if 'client_id' not in kwargs and 'client_secret' not in kwargs:
-                    raise MailProviderFactoryError
+                    raise MailOAuthFactoryError
                 
                 return APIFilterInject(GmailHTTPOAuth)(**kwargs)
         case _:
             
-            raise MailProviderFactoryError
+            raise MailOAuthFactoryError
     ...
     
