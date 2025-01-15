@@ -105,7 +105,7 @@ class ConfigService(_service.Service):
 
         self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER') #OAuthFlow | OAuthLib
         self.OAUTH_JSON_KEY_FILE = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
-        self.OAUTH_DATA_FILE = self.getenv('OAUTH_DATA_FILE')
+        self.OAUTH_TOKEN_DATA_FILE = self.getenv('OAUTH_DATA_FILE')
         self.OAUTH_CLIENT_ID=self.getenv('OAUTH_CLIENT_ID')
         self.OAUTH_CLIENT_SECRET=self.getenv('OAUTH_CLIENT_SECRET')
         self.OAUTH_OUTLOOK_TENANT_ID=self.getenv('OAUTH_TENANT_ID')

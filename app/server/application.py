@@ -22,6 +22,7 @@ from interface.events import EventInterface
 AppParameterKey = Literal['title', 'summary', 'description',
                           'ressources', 'middlewares', 'port', 'log_level', 'log_config']
 
+HTTPMode = Literal['HTTPS','HTTP']
 
 @dataclass
 class AppParameter:
@@ -90,15 +91,27 @@ class Application(EventInterface):
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
         self.add_middlewares()
         self.add_ressources()
-        pass
-
+        self.set_httpMode()
+        
+    def set_httpMode(self):
+        self.mode = self.configService.HTTP_MODE
+        if self.configService.HTTPS_CERTIFICATE is None or self.configService.HTTPS_KEY:
+            self.mode  = 'HTTP'
+        return 
+        
     def start(self):
         # self.thread.start()
         self.run()
 
+    def __call__(self, *args, **kwds):
+        return super().__call__(*args, **kwds)
+
     def start_server(self):
-        uvicorn.run(self.app, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
+        if self.mode == 'HTTPS':
+            uvicorn.run(self.app, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
                     ssl_certfile=self.configService.HTTPS_CERTIFICATE)
+        else:
+            uvicorn.run(self.app, port=self.port, loop="asyncio",)
 
     def stop_server(self):
         pass
