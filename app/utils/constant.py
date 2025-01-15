@@ -1,3 +1,4 @@
+from enum import Enum
 ########################  ** Dependencies **   ########################################
 
 class DependencyConstant:
@@ -46,3 +47,14 @@ class SpecialKeyParameterConstant:
     FUNC_NAME_SPECIAL_KEY_PARAMETER = 'func_name'
     CLASS_NAME_SPECIAL_KEY_PARAMETER = 'class_name'
     AUTH_PERMISSION_PARAMETER = 'authPermission'
+
+########################                     ########################################
+
+class EmailHostConstant(Enum):
+    GMAIL_RELAY = "GMAIL_RELAY"
+    GMAIL_RESTRICTED = 'GMAIL_RESTRICTED'
+    GMAIL = "GMAIL"
+    OUTLOOK = "OUTLOOK"
+    YAHOO = "YAHOO"
+    AOL = 'AOL'
+    ICLOUD = 'ICLOUD'

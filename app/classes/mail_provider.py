@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from msal import ConfidentialClientApplication
-from typing import Any, Optional, TypedDict, overload
+from typing import Any, Optional, Type, TypeVar, TypedDict, overload
 from utils.prettyprint import PrettyPrinter
 from requests import post, Request,Response
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -13,7 +13,8 @@ from enum import Enum
 import time
 import pickle
 from utils.helper import format_url_params
-
+from utils.constant import EmailHostConstant
+from utils.dependencies import APIFilterInject
 
 class OAuthError(Exception):
     """Base class for all OAuth-related errors."""
@@ -96,6 +97,10 @@ class OAuth:
     def __init__(self, json_key):
         self.json_key_file = json_key
         self.auth_tokens: AuthToken | None = ...
+
+    def load_authToken(self,tokens:dict):
+        self.auth_tokens = AuthToken(**tokens)
+        return self.is_valid
 
     @property
     def state(self):
@@ -437,6 +442,7 @@ class YahooFamilyOAuth(OAuthFlow):
         return super().request_tokens('get_token')
 
 
+O = TypeVar('O', bound = OAuth)
 #########################################################                #################################################
 # class GoogleServiceJWT:
 #     ...
@@ -446,14 +452,46 @@ class YahooFamilyOAuth(OAuthFlow):
 class MailAPI:
     ...
 
-GoogleFlowType = Literal['service_account','oauth_consumer']
+GoogleFlowType = Literal['service_account','oauth_custom','oauth_automatic']
 
-class GmailApi(MailAPI):
+class GMailAPI(MailAPI):
     def __init__(self,flowtype:GoogleFlowType):
         super().__init__()
         self.flowtype = flowtype
 
-
 class MicrosoftGraphMailAPI(MailAPI):
     ...
 #########################################################                #################################################
+
+
+class MailProviderFactoryError(Exception):
+    ...
+
+def MailProviderFactory(emailHost:EmailHostConstant,kwargs:dict[str,Any],google_oauth_flow:Literal[GoogleFlowType]=None,json_file:str =None)->O:
+    match emailHost:
+        case EmailHostConstant.AOL:
+            kwargs['yFamily'] = 'AOL'
+            return APIFilterInject(YahooFamilyOAuth.__call__)(**kwargs)
+        case EmailHostConstant.YAHOO:
+            kwargs['yFamily'] = 'YAHOO'
+            return APIFilterInject(YahooFamilyOAuth.__call__)(**kwargs)
+        case EmailHostConstant.OUTLOOK:
+            return APIFilterInject(OutlookOauth.__call__)(**kwargs)
+        
+        case (EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED):
+            if google_oauth_flow =='service_account':
+                return GoogleServiceOauth(json_key_file=json_file)
+            elif google_oauth_flow =='oauth_automatic':
+                if json_file ==  None:
+                    return APIFilterInject(GoogleLibraryFlow.__call__)(**kwargs) # Might give error
+                else:
+                    return GoogleLibraryFlow(json_key_file=json_file)
+            else:
+                if 'client_id' not in kwargs and 'client_secret' not in kwargs:
+                    raise MailProviderFactoryError
+                
+                return APIFilterInject(GmailHTTPOAuth.__call__)(**kwargs)
+        case _:
+
+            raise MailProviderFactoryError
+    ...

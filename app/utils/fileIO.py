@@ -224,3 +224,7 @@ class ConfigFile(File):
             self.config.write(file_descriptor)
 
     pass
+
+
+class PickleFile(File):
+    ...
