@@ -90,8 +90,9 @@ class ConfigService(_service.Service):
     
     def getenv(self,key:str,default:Any=None)-> str | None | Any:
         val = os.getenv(key)
-        if isinstance(val,str) and not val:
-            return None
+        if isinstance(val,str) and not val.strip()=="":
+            return val
+        
         return default
 
     def set_config_value(self):
@@ -100,12 +101,12 @@ class ConfigService(_service.Service):
         self.PORT_PRIVATE = ConfigService.parseToInt(self.getenv("PORT_PRIVATE"),5000)
         self.LOG_LEVEL = ConfigService.parseToInt(self.getenv("LOG_LEVEL"), 2)
         self.HTTP_MODE = self.getenv("HTTP_MODE")
-        self.HTTPS_CERTIFICATE=self.getenv("HTTPS_CERTIFICATE")
-        self.HTTPS_KEY =self.getenv("HTTPS_KEY")
+        self.HTTPS_CERTIFICATE=self.getenv("HTTPS_CERTIFICATE",'cert.pem')
+        self.HTTPS_KEY =self.getenv("HTTPS_KEY",'key.pem')
 
-        self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER') #OAuthFlow | OAuthLib
+        self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER','oauth_custom') #OAuthFlow | OAuthLib
         self.OAUTH_JSON_KEY_FILE = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
-        self.OAUTH_TOKEN_DATA_FILE = self.getenv('OAUTH_DATA_FILE')
+        self.OAUTH_TOKEN_DATA_FILE = self.getenv('OAUTH_DATA_FILE','mail_provider.tokens.json')
         self.OAUTH_CLIENT_ID=self.getenv('OAUTH_CLIENT_ID')
         self.OAUTH_CLIENT_SECRET=self.getenv('OAUTH_CLIENT_SECRET')
         self.OAUTH_OUTLOOK_TENANT_ID=self.getenv('OAUTH_TENANT_ID')
@@ -120,11 +121,11 @@ class ConfigService(_service.Service):
         self.SMTP_EMAIL_CONN_METHOD= self.getenv("SMTP_EMAIL_CONN_METHOD")
         self.SMTP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"),1)
 
-        self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST").upper()
-        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))
-        self.IMAP_EMAIL = self.getenv("IMAP_EMAIL")
-        self.IMAP_EMAIL_PASS = self.getenv("IMAP_EMAIL_PASS")
-        self.IMAP_EMAIL_CONN_METHOD= self.getenv("IMAP_EMAIL_CONN_METHOD")
+        # self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST").upper()
+        # self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))
+        # self.IMAP_EMAIL = self.getenv("IMAP_EMAIL")
+        # self.IMAP_EMAIL_PASS = self.getenv("IMAP_EMAIL_PASS")
+        # self.IMAP_EMAIL_CONN_METHOD= self.getenv("IMAP_EMAIL_CONN_METHOD")
 
         self.ASSET_LANG = self.getenv("ASSET_LANG")
 
