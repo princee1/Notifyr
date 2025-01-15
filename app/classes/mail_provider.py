@@ -210,14 +210,14 @@ class GoogleLibraryFlow(OAuth):
             })
 
 class GoogleServiceOauth(OAuth):
-    def __init__(self, json_key_file: str, scope: List[str]):
+    def __init__(self, json_key_file: str):
         """
         Initialize the service account with the JSON key file and scope.
         :param json_key_file: Path to the service account JSON key file.
         :param scope: List of scopes for the API access.
         """
         self.json_key_file = json_key_file
-        self.scope = scope
+        self.scope = [] #TODO add scope
         self.credentials = None
         self.auth_tokens = None
 
@@ -263,8 +263,9 @@ class GoogleServiceOauth(OAuth):
         return self.auth_tokens.access_token
 
 class OutlookOauth(OAuth):
-    def __init__(self, client_id: str, client_secret: str, tenant_id: str, scope: list[str]):
-        super().__init__(client_id, client_secret, scope, '')  # BUG add url
+    def __init__(self, client_id: str, client_secret: str, tenant_id: str):
+        super().__init__(client_id, client_secret, '', '')#TODO add scope  # BUG add url 
+
         self.tenant_id = tenant_id
         self.authority = f'https://login.microsoftonline.com/{self.tenant_id}'
         self.app = ConfidentialClientApplication(
@@ -471,27 +472,28 @@ def MailProviderFactory(emailHost:EmailHostConstant,kwargs:dict[str,Any],google_
     match emailHost:
         case EmailHostConstant.AOL:
             kwargs['yFamily'] = 'AOL'
-            return APIFilterInject(YahooFamilyOAuth.__call__)(**kwargs)
+            return APIFilterInject(YahooFamilyOAuth)(**kwargs)
         case EmailHostConstant.YAHOO:
             kwargs['yFamily'] = 'YAHOO'
-            return APIFilterInject(YahooFamilyOAuth.__call__)(**kwargs)
+            return APIFilterInject(YahooFamilyOAuth)(**kwargs)
         case EmailHostConstant.OUTLOOK:
-            return APIFilterInject(OutlookOauth.__call__)(**kwargs)
+            return APIFilterInject(OutlookOauth)(**kwargs)
         
         case (EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED):
             if google_oauth_flow =='service_account':
                 return GoogleServiceOauth(json_key_file=json_file)
             elif google_oauth_flow =='oauth_automatic':
                 if json_file ==  None:
-                    return APIFilterInject(GoogleLibraryFlow.__call__)(**kwargs) # Might give error
+                    return APIFilterInject(GoogleLibraryFlow)(**kwargs) # Might give error
                 else:
                     return GoogleLibraryFlow(json_key_file=json_file)
             else:
                 if 'client_id' not in kwargs and 'client_secret' not in kwargs:
                     raise MailProviderFactoryError
                 
-                return APIFilterInject(GmailHTTPOAuth.__call__)(**kwargs)
+                return APIFilterInject(GmailHTTPOAuth)(**kwargs)
         case _:
-
+            
             raise MailProviderFactoryError
     ...
+    
