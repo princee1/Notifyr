@@ -79,6 +79,11 @@ class Container():
         self.__D: set[str] = self.__load_baseSet(D)
         dep_count = self.__load_dep(D)
         self.__D: OrderedSet[str] = self.__order_dependency(dep_count)
+
+        PrettyPrinter_.show()
+        PrettyPrinter_.message('Building the Container... !')
+        PrettyPrinter_.space_line()
+
         self.__buildContainer()
         self.__freeUpMemory()
         # TODO print success  in building the app
