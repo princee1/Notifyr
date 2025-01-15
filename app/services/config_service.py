@@ -1,9 +1,11 @@
 import os
+from typing import Any
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from utils.fileIO import JSONFile
 from definition import _service
 import socket
+from utils.helper import parseToBool
 
 
 ENV = ".env"
@@ -40,6 +42,16 @@ class ConfigService(_service.Service):
             path = find_dotenv(ENV)
             load_dotenv(path)
         self.config_json_app:JSONFile = None
+
+    def parseToBool(value:str,default:bool | None = None):
+        try:
+            return parseToBool(value)
+        except ValueError:
+            ...
+        except TypeError:
+            ...
+        
+        return default
     
     @staticmethod
     def parseToInt(value:str, default:int | None = None,positive = True): # TODO need to add the build error level
@@ -75,42 +87,54 @@ class ConfigService(_service.Service):
     def build(self):
         self.set_config_value()
         self.verify()
+    
+    def getenv(self,key:str,default:Any=None)-> str | None | Any:
+        val = os.getenv(key)
+        if isinstance(val,str) and not val:
+            return None
+        return default
 
     def set_config_value(self):
-        self.MODE = MODE.toMode(os.getenv('MODE'))
-        self.PORT_PUBLIC = ConfigService.parseToInt(os.getenv("PORT_PUBLIC"),3000)
-        self.PORT_PRIVATE = ConfigService.parseToInt(os.getenv("PORT_PRIVATE"),5000)
-        self.LOG_LEVEL = ConfigService.parseToInt(os.getenv("LOG_LEVEL"), 2)
-        self.HTTPS_CERTIFICATE=os.getenv("HTTPS_CERTIFICATE")
-        self.HTTPS_KEY =os.getenv("HTTPS_KEY")
+        self.MODE = MODE.toMode(self.getenv('MODE'))
+        self.PORT_PUBLIC = ConfigService.parseToInt(self.getenv("PORT_PUBLIC"),3000)
+        self.PORT_PRIVATE = ConfigService.parseToInt(self.getenv("PORT_PRIVATE"),5000)
+        self.LOG_LEVEL = ConfigService.parseToInt(self.getenv("LOG_LEVEL"), 2)
+        self.HTTP_MODE = self.getenv("HTTP_MODE")
+        self.HTTPS_CERTIFICATE=self.getenv("HTTPS_CERTIFICATE")
+        self.HTTPS_KEY =self.getenv("HTTPS_KEY")
 
+        self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER') #OAuthFlow | OAuthLib
+        self.OAUTH_JSON_KEY_FILE = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
+        self.OAUTH_DATA_FILE = self.getenv('OAUTH_DATA_FILE')
 
-        self.SMTP_EMAIL_HOST = os.getenv("SMTP_EMAIL_HOST").upper()
-        self.SMTP_EMAIL_PORT = ConfigService.parseToInt(os.getenv("SMTP_EMAIL_PORT"))
-        self.SMTP_EMAIL = os.getenv("SMTP_EMAIL")
-        self.SMTP_PASS = os.getenv("SMTP_EMAIL_PASS")
-        self.SMTP_EMAIL_CONN_METHOD= os.getenv("SMTP_EMAIL_CONN_METHOD")
-        self.SMTP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(os.getenv("SMTP_EMAIL_LOG_LEVEL"),0)
+        self.SEND_MAIL_METHOD = self.getenv("SEND_MAIL_METHOD",'SMTP')
+        self.SMTP_EMAIL_HOST = self.getenv("SMTP_EMAIL_HOST").upper()
+        self.SMTP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("SMTP_EMAIL_PORT"))
+        self.SMTP_EMAIL = self.getenv("SMTP_EMAIL")
+        self.SMTP_ADDR_SERVER  = self.getenv('SMTP_ADDR_SERVER')
+        self.SMTP_PASS = self.getenv("SMTP_EMAIL_PASS")
+        self.SMTP_EMAIL_CONN_METHOD= self.getenv("SMTP_EMAIL_CONN_METHOD")
+        self.SMTP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"),1)
 
-        self.IMAP_EMAIL_HOST = os.getenv("IMAP_EMAIL_HOST").upper()
-        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(os.getenv("IMAP_EMAIL_PORT"))
-        self.IMAP_EMAIL = os.getenv("IMAP_EMAIL")
-        self.IMAP_EMAIL_PASS = os.getenv("IMAP_EMAIL_PASS")
-        self.IMAP_EMAIL_CONN_METHOD= os.getenv("IMAP_EMAIL_CONN_METHOD")
+        self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST").upper()
+        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))
+        self.IMAP_EMAIL = self.getenv("IMAP_EMAIL")
+        self.IMAP_EMAIL_PASS = self.getenv("IMAP_EMAIL_PASS")
+        self.IMAP_EMAIL_CONN_METHOD= self.getenv("IMAP_EMAIL_CONN_METHOD")
 
-        self.ASSET_LANG = os.getenv("ASSET_LANG")
+        self.ASSET_LANG = self.getenv("ASSET_LANG")
 
-        self.TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-        self.TWILIO_AUTH_TOKEN= os.getenv("TWILIO_AUTH_TOKEN")
-        self.TWILIO_NUMBER= os.getenv("TWILIO_NUMBER")
+        self.TWILIO_ACCOUNT_SID = self.getenv("TWILIO_ACCOUNT_SID")
+        self.TWILIO_AUTH_TOKEN= self.getenv("TWILIO_AUTH_TOKEN")
+        self.TWILIO_NUMBER= self.getenv("TWILIO_NUMBER")
         
-        self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-        self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM")
-        self.API_KEY = os.getenv("API_KEY")
-        self.ON_TOP_SECRET_KEY = os.getenv("ON_TOP_SECRET_KEY")
-        self.API_ENCRYPT_TOKEN = os.getenv("API_ENCRYPT_TOKEN")
-        self.API_EXPIRATION = ConfigService.parseToInt(os.getenv("API_EXPIRATION"), 3600000000000)
-        self.AUTH_EXPIRATION = ConfigService.parseToInt(os.getenv("AUTH_EXPIRATION"), 3600000000000)
+        self.JWT_SECRET_KEY = self.getenv("JWT_SECRET_KEY")
+        self.JWT_ALGORITHM = self.getenv("JWT_ALGORITHM")
+        self.API_KEY = self.getenv("API_KEY")
+        self.ON_TOP_SECRET_KEY = self.getenv("ON_TOP_SECRET_KEY")
+        self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
+        self.API_EXPIRATION = ConfigService.parseToInt(self.getenv("API_EXPIRATION"), 3600000000000)
+        self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 3600000000000)
 
     def verify(self):
         if self.API_EXPIRATION < self.AUTH_EXPIRATION:
@@ -122,7 +146,7 @@ class ConfigService(_service.Service):
         return getattr(self, key)
     
     def get(self, key):
-        return os.getenv(key)
+        return self.getenv(key)
     
     def load_configApp(self,config_file: str):
         config_json_app = JSONFile(config_file)
