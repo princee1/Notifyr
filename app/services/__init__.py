@@ -10,5 +10,5 @@ from .security_service import *
 from .stats_service import *
 from .support_service import *
 from .throttling_service import *
-from .training_service import *
+from .model_service import *
 from .twilio_service import *

@@ -10,7 +10,7 @@ from utils.prettyprint import SkipInputException
 from classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 
-from .training_service import TrainingService
+from .model_service import TrainingService
 from utils.constant import EmailHostConstant
 from classes.email import EmailBuilder
 from interface.threads import ThreadInterface
