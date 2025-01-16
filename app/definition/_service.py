@@ -111,7 +111,7 @@ class Service():
             self._destroyed = False
             self.prettyPrinter.success(
                 f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
-            self.prettyPrinter.wait(0.1, False)
+            self.prettyPrinter.wait(0.2, False)
             self.service_status = ServiceStatus.AVAILABLE
 
         except BuildFailureError as e:
@@ -138,6 +138,8 @@ class Service():
         except BuildNotImplementedError as e:
             self.prettyPrinter.warning(
                 f'[{now}] Service Not Implemented Yet :{self.__class__.__name__} ', saveable=True)
+            self.prettyPrinter.wait(0.2, False)
+            
 
         finally:
             self.buildReport()

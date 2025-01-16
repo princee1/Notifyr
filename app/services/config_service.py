@@ -119,7 +119,7 @@ class ConfigService(_service.Service):
         self.SMTP_ADDR_SERVER  = self.getenv('SMTP_ADDR_SERVER')
         self.SMTP_PASS = self.getenv("SMTP_EMAIL_PASS")
         self.SMTP_EMAIL_CONN_METHOD= self.getenv("SMTP_EMAIL_CONN_METHOD")
-        self.SMTP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"),1)
+        self.SMTP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"),0)
 
         # self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST").upper()
         # self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))

@@ -48,7 +48,6 @@ class BaseEmailService(_service.Service):
             return result
         return wrapper
 
-    @TemporaryPrint
     def build(self):
         params = {
             'client_id': self.configService.OAUTH_CLIENT_ID,
@@ -157,7 +156,6 @@ class EmailSenderService(BaseEmailService):
                 auth_code, auth_mess = auth_status
                 if str(auth_code) != '235':
                     raise smtp.SMTPAuthenticationError(auth_code, auth_mess)
-                self.prettyPrinter.wait(1, True)
             self.state = True
             self._builded = True  # BUG
         except smtp.SMTPHeloError as e:
