@@ -15,6 +15,13 @@ OptionalDependencies: Dict[str, list[type]] = {}
 __DEPENDENCY: list[type] = []
 
 
+class ServiceStatus(Enum):
+    AVAILABLE = 1
+    NOT_AVAILABLE = 2
+    PARTIALLY_AVAILABLE = 3
+    WORKS_ALMOST_ATT = 4
+
+
 class BuildErrorLevel(Enum):
     ABORT = 4
     FAILURE = 3
@@ -48,26 +55,31 @@ class BuildFallbackError(BuildError):
     pass
 
 
+class BuildNotImplementedError(BuildError):
+    ...
+
+
 class ServiceNotAvailableError(BuildError):
     pass
+
 
 class MethodServiceNotAvailableError(BuildError):
     pass
 
 
-
 class Service():
 
     def __init__(self) -> None:
-        self._status:BuildErrorLevel = None
+        self.build_status: BuildErrorLevel = None
         self._builded: bool = False
         self._destroyed: bool = False
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
+        self.service_status: ServiceStatus = None
 
     def build(self):
         # warnings.warn(
         #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
-        pass
+        raise BuildNotImplementedError
 
     def destroy(self):
         warnings.warn(
@@ -92,31 +104,40 @@ class Service():
     def _builder(self):
         try:
             now = dt.datetime.now()
-            #self.prettyPrinter.show()
-            #self.prettyPrinter.info(f'[{now}] Current Building the service: {self.__class__.__name__}',saveable=False)
+            # self.prettyPrinter.show()
+            # self.prettyPrinter.info(f'[{now}] Current Building the service: {self.__class__.__name__}',saveable=False)
             self.build()
             self._builded = True
             self._destroyed = False
-            self.prettyPrinter.success(f'[{now}] Successfully built the service: {self.__class__.__name__}',saveable=True)
-            self.prettyPrinter.wait(0.1,False)
+            self.prettyPrinter.success(
+                f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
+            self.prettyPrinter.wait(0.1, False)
+            self.service_status = ServiceStatus.AVAILABLE
 
         except BuildFailureError as e:
-            self.prettyPrinter.error(f'[{now}] Error while building the service: {self.__class__.__name__}',saveable=True)
+            self.prettyPrinter.error(
+                f'[{now}] Error while building the service: {self.__class__.__name__}', saveable=True)
+            self.service_status = ServiceStatus.NOT_AVAILABLE
             pass
 
         except BuildAbortError as e:
-            self.prettyPrinter.error(f'[{now}] Error while building the service: {self.__class__.__name__}',saveable=True)
-            pass
+            self.prettyPrinter.error(
+                f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
+            exit(-1)
 
         except BuildWarningError as e:
-            self.prettyPrinter.warning(f'[{now}] Problem encountered while building the service: {self.__class__.__name__}',saveable=True)
-
+            self.prettyPrinter.warning(
+                f'[{now}] Problem encountered while building the service: {self.__class__.__name__}', saveable=True)
             pass
 
         except BuildSkipError as e:
-            self.prettyPrinter.message(f'[{now}] Problem encountered while building the service : {self.__class__.__name__} Skipping for now NOTE: this can cause some error',saveable=True)
+            self.prettyPrinter.message(
+                f'[{now}] Problem encountered while building the service : {self.__class__.__name__} Skipping for now NOTE: this can cause some error', saveable=True)
             pass
-        
+
+        except BuildNotImplementedError as e:
+            self.prettyPrinter.warning(
+                f'[{now}] Service Not Implemented Yet :{self.__class__.__name__} ', saveable=True)
 
         finally:
             self.buildReport()
@@ -127,7 +148,7 @@ class Service():
             self._destroyed = True
             self._builded = False
             pass
-        
+
         except BuildFailureError as e:
             pass
 
