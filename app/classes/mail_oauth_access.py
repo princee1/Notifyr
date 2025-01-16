@@ -61,11 +61,11 @@ class AccessDeniedError(OAuthError):
 
 
 GOOGLE_ACCOUNTS_BASE_URL = 'https://accounts.google.com'
-GOOGLE_REDIRECT_URI = 'https://oauth2.dance/'
+GOOGLE_REDIRECT_URI = 'https://localhost:433/'
 YAHOO_BASE_URL = 'https://api.login.yahoo.com/oauth2'
 AOL_BASE_URL = 'https://'
 
-GMAIL_SCOPE = 'https://mail.google.com/'
+GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.send'#'https://mail.google.com/'
 
 OOB_STR = 'oob'
 
@@ -172,7 +172,6 @@ class GoogleLibraryFlow(OAuth):
         self,
         client_id: str = None,
         client_secret: str = None,
-        scope: Optional[List[str]] = None,
         baseurl: Optional[str] = None,
         state: Optional[str] = None,
         json_key_file: Optional[str] = None,
@@ -181,8 +180,9 @@ class GoogleLibraryFlow(OAuth):
         if json_key_file:
             self.json_key_file = json_key_file
             self.auth_tokens = None
+            self.scope = [GMAIL_SCOPE]
         else:
-            super().__init__(client_id, client_secret, scope, baseurl, state)
+            super().__init__(client_id, client_secret,[GMAIL_SCOPE], baseurl, state)
 
     def grant_access_token(self):
         if hasattr(self, 'json_key_file') and self.json_key_file:
@@ -199,7 +199,7 @@ class GoogleLibraryFlow(OAuth):
             }
             flow = InstalledAppFlow.from_client_config(client_config, self.scope)
 
-        credentials = flow.run_local_server(port=0)
+        credentials = flow.run_local_server(port=443)
         self.update_tokens({
             "access_token": credentials.token,
             "refresh_token": credentials.refresh_token,
@@ -210,12 +210,14 @@ class GoogleLibraryFlow(OAuth):
         # Verify and store tokens
         if not all(key in data for key in ["access_token", "refresh_token", "expires_in"]):
             raise ValueError("Invalid token data")
-        self.auth_tokens = AuthToken(
-            access_token=data["access_token"],
-            refresh_token=data["refresh_token"],
-            expires_in=data["expires_in"],
-            acquired_at=time.time(),
-        )
+        # self.auth_tokens = AuthToken(
+        #     access_token=data["access_token"],
+        #     refresh_token=data["refresh_token"],
+        #     expires_in=data["expires_in"],
+        #     acquired_at=time.time(),
+        # )
+        super().update_tokens(data)
+
 
     def refresh_access_token(self):
         if not self.is_valid and self.refresh_token:
@@ -372,7 +374,7 @@ class OAuthFlow(OAuth):
 
 class GmailHTTPOAuth(OAuthFlow):
 
-    def __init__(self, client_id, client_secret,):
+    def __init__(self, client_id:str, client_secret:str):
         super().__init__(client_id, client_secret, GMAIL_SCOPE, GOOGLE_ACCOUNTS_BASE_URL)
         self.authParams['client_id'] = self.client_id
         self.authParams['client_secret'] = self.client_secret
@@ -386,7 +388,11 @@ class GmailHTTPOAuth(OAuthFlow):
         params['access_type'] = 'offline'
         params['prompt'] = 'consent'
         url = f'{self.baseurl}/o/oauth2/auth?{format_url_params(params)}'
+        print(url )
         return super().get_auth_code(url, show_init_message)
+
+    def build_auth_string(self, username):
+       return f"user={username}\1auth=Bearer {self.access_token}\1\1"
 
     def request_tokens(self,):
         return super().request_tokens('o/oauth2/token')
@@ -399,11 +405,22 @@ class GmailHTTPOAuth(OAuthFlow):
         self.request_tokens()
 
     def get_access_token(self, auth_code):
-        self.authParams['code'] = auth_code
-        self.authParams['redirect_uri'] = GOOGLE_REDIRECT_URI
-        self.authParams['grant_type'] = 'authorization_code'
-        self.authParams.pop('refresh_token', None)
-        self.request_tokens()
+        try:
+            self.authParams['code'] = auth_code
+            self.authParams['redirect_uri'] = GOOGLE_REDIRECT_URI
+            self.authParams['grant_type'] = 'authorization_code'
+            self.authParams.pop('refresh_token', None)
+            self.request_tokens()
+            return True,''
+        except InvalidAuthorizationCodeError as e:
+            return False,e.args[0]
+        except InvalidGrantError as e:
+            return False,e.args[0]
+
+        except InvalidClientError as e:
+            return False,e.args[0]
+        except GoogleOAuthError as e:
+            return False,e.args[0]
 
     def update_tokens(self, data):
 
@@ -510,7 +527,7 @@ def MailOAuthFactory(emailHost:EmailHostConstant,kwargs:dict[str,Any],google_oau
         case EmailHostConstant.OUTLOOK:
             return APIFilterInject(OutlookOauth)(**kwargs)
         
-        case (EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED):
+        case EmailHostConstant.GMAIL | EmailHostConstant.GMAIL_RELAY | EmailHostConstant.GMAIL_RESTRICTED:
             if google_oauth_flow =='service_account':
                 return GoogleServiceOauth(json_key_file=json_file)
             elif google_oauth_flow =='oauth_automatic':

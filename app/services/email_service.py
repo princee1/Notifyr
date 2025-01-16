@@ -135,14 +135,19 @@ class EmailSenderService(BaseEmailService):
                 self.connector.ehlo()
 
             if EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST] == EmailHostConstant.ICLOUD:
-
+                
                 auth_status=self.connector.login(self.configService.SMTP_EMAIL,self.configService.SMTP_PASS)
             else:
                 if self.mailOAuth.access_token ==None:
                     raise ...
+                print(self.mailOAuth.access_token)
                 access_token = self.mailOAuth.encode_token(self.configService.SMTP_EMAIL)
                 
                 auth_status = self.connector.docmd("AUTH XOAUTH2", access_token)
+                print(auth_status)
+
+                # auth_status = self.connector.docmd("AUTH XOAUTH2", access_token)
+                # print(auth_status)
 
                 self.prettyPrinter.wait(1,True)
             self.state = True
