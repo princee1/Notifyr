@@ -179,42 +179,42 @@ class PrettyPrinter:
         self.buffer: list[Callable] = []
 
     @cache
-    def warning(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+    def warning(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
         if show:
             print_warning(message, position)
 
     @cache
-    def error(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+    def error(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
         if show:
             print_error(message, position)
 
     @cache
-    def message(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+    def message(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
         if show:
             print_message(message, position)
 
     @cache
-    def info(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+    def info(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
         if show:
             print_info(message, position)
 
     @cache
-    def success(self, message, show=True, saveable=True, position: EmojiPosition = 'both'):
+    def success(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
         if show:
             print_success(message, position)
 
     @cache
-    def custom_message(self, message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", show=True, saveable=True, position: EmojiPosition = 'both'):
+    def custom_message(self, message:str, color:str=Fore.WHITE, background:str=Back.RESET, emoji_code=":speech_balloon:", show=True, saveable=True, position: EmojiPosition = 'both'):
         if show:
             base_print(message, color, background, emoji_code, position)
 
     @cache
-    def json(self, content, indent=1, width=80, depth=None, compact=False, show=True, saveable=True,):
+    def json(self, content:Any, indent=1, width=80, depth=None, compact=False, show:bool=True, saveable:bool=True,):
         if show:
             printJSON(content, indent, width, depth, compact)
 
     @cache
-    def space_line(self, show=True, saveable=True):
+    def space_line(self, show: bool = True, saveable: bool = True):
         if show:
             print()
 
@@ -272,7 +272,7 @@ class PrettyPrinter:
 PrettyPrinter_: PrettyPrinter = PrettyPrinter()
 
 
-def TemporaryPrint(func:Callable):
+def TemporaryPrint(func: Callable):
 
     @wraps(func)
     def wrapper(*args, **kwargs):
