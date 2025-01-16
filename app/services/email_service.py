@@ -3,8 +3,10 @@ import functools
 import smtplib as smtp
 import imaplib as imap
 import poplib as pop
+import socket
 from typing import Callable
 
+from utils.helper import b64_encode
 from utils.fileIO import JSONFile
 from utils.prettyprint import SkipInputException, TemporaryPrint
 from classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
@@ -31,17 +33,17 @@ class BaseEmailService(_service.Service):
         self.hostPort: int
         self.mailOAuth: OAuth = ...
         self.state = None
-        self.last_connectionTime:float =...
-        self.emailHost:EmailHostConstant =...
+        self.last_connectionTime: float = ...
+        self.emailHost: EmailHostConstant = ...
 
     @staticmethod
-    def task_lifecycle(func:Callable):
+    def task_lifecycle(func: Callable):
         @functools.warps(func)
-        def wrapper(*args,**kwargs):
-            self:BaseEmailService = args[0]
+        def wrapper(*args, **kwargs):
+            self: BaseEmailService = args[0]
             self.connect()
             self.authenticate()
-            result = func(*args,**kwargs)
+            result = func(*args, **kwargs)
             self.logout()
             return result
         return wrapper
@@ -52,13 +54,14 @@ class BaseEmailService(_service.Service):
             'client_id': self.configService.OAUTH_CLIENT_ID,
             'client_secret': self.configService.OAUTH_CLIENT_SECRET,
             'tenant_id': self.configService.OAUTH_OUTLOOK_TENANT_ID,
-            #'state': self.state,
+            'mail_provider': self.configService.SMTP_EMAIL_HOST
+            # 'state': self.state,
         }
+
         self.mailOAuth = MailOAuthFactory(
             self.emailHost, params, self.configService.OAUTH_METHOD_RETRIEVER, self.configService.OAUTH_JSON_KEY_FILE)
         self.mailOAuth.load_authToken(self.configService.OAUTH_TOKEN_DATA_FILE)
         if self.mailOAuth.exists:
-
             try:
                 if not self.mailOAuth.is_valid:
                     self.mailOAuth.refresh_access_token()
@@ -66,7 +69,7 @@ class BaseEmailService(_service.Service):
                 ...
         else:
             try:
-                self.mailOAuth.grant_access_token() 
+                self.mailOAuth.grant_access_token()
             except SkipInputException:
                 raise _service.BuildFailureError
 
@@ -99,13 +102,14 @@ class EmailSenderService(BaseEmailService):
         self.tlsConn: bool = SMTPConfig.setConnFlag(self.connMethod)
         self.hostPort = SMTPConfig.setHostPort(
             self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
-        
-        self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
+
+        self.emailHost = EmailHostConstant._member_map_[
+            self.configService.SMTP_EMAIL_HOST]
 
     def logout(self):
         self.connector.quit()
         self.connector.close()
-        
+
     def expn(self, addresses: str):
         return self.connector.expn(addresses)
 
@@ -114,15 +118,19 @@ class EmailSenderService(BaseEmailService):
             self.hostAddr = SMTPConfig.setHostAddr(
                 self.configService.SMTP_EMAIL_HOST)
             if self.connMethod == 'ssl':
-                self.connector = smtp.SMTP_SSL(self.hostAddr,self.hostPort)
+                self.connector = smtp.SMTP_SSL(self.hostAddr, self.hostPort)
             else:
                 self.connector = smtp.SMTP(self.hostAddr, self.hostPort)
             self.connector.set_debuglevel(
                 self.configService.SMTP_EMAIL_LOG_LEVEL)
+        except (socket.gaierror, ConnectionRefusedError, TimeoutError) as e:
+            raise _service.BuildFailureError(e.args[1])
+            
+        except ssl.SSLError as e:
+            raise _service.BuildFailureError(e.args[1])
+
         except NameError as e:
             pass  # BUG need to change the error name and a builder error
-        except:
-            pass
 
     def sendAutomaticMessage(self): pass
 
@@ -134,40 +142,42 @@ class EmailSenderService(BaseEmailService):
                 self.connector.starttls(context=context)
                 self.connector.ehlo()
 
-            if EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST] == EmailHostConstant.ICLOUD:
-                
-                auth_status=self.connector.login(self.configService.SMTP_EMAIL,self.configService.SMTP_PASS)
+            if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
+
+                auth_status = self.connector.login(
+                    self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
             else:
-                if self.mailOAuth.access_token ==None:
+                if self.mailOAuth.access_token == None:
                     raise ...
-                print(self.mailOAuth.access_token)
-                access_token = self.mailOAuth.encode_token(self.configService.SMTP_EMAIL)
-                
-                auth_status = self.connector.docmd("AUTH XOAUTH2", access_token)
-                print(auth_status)
-
-                # auth_status = self.connector.docmd("AUTH XOAUTH2", access_token)
-                # print(auth_status)
-
-                self.prettyPrinter.wait(1,True)
+                access_token = self.mailOAuth.encode_token(
+                    self.configService.SMTP_EMAIL)
+                auth_status = self.connector.docmd(
+                    "AUTH XOAUTH2", access_token)
+                auth_status = tuple(auth_status)
+                auth_code, auth_mess = auth_status
+                if str(auth_code) != '235':
+                    raise smtp.SMTPAuthenticationError(auth_code, auth_mess)
+                self.prettyPrinter.wait(1, True)
             self.state = True
             self._builded = True  # BUG
         except smtp.SMTPHeloError as e:
-
-            pass
+            raise _service.BuildFailureError(e.args[1])
+            
         except smtp.SMTPNotSupportedError as e:
-            ...
+            raise _service.BuildFailureError(e.args[1])
+
         except smtp.SMTPAuthenticationError as e:
-            print(e)
+            raise _service.BuildFailureError(e.args[1])
 
         except smtp.SMTPServerDisconnected as e:
-            ...
+            raise _service.BuildFailureError(e.args[1])
+
 
     def send_message(self, email: EmailBuilder):
         try:
             if not self._builded:
                 raise _service.ServiceNotAvailableError
-            
+
             emailID, message = email.mail_message
             for to in email.emailMetadata.To:
                 self.connector.verify(to)
@@ -189,7 +199,7 @@ class EmailSenderService(BaseEmailService):
             ...
 
 
-#@_service.ServiceClass
+# @_service.ServiceClass
 class EmailReaderService(BaseEmailService):
     def __init__(self, configService: ConfigService, loggerService: LoggerService, trainingService: LLMModelService,) -> None:
         super().__init__(configService, loggerService)
@@ -198,6 +208,7 @@ class EmailReaderService(BaseEmailService):
 
     def build(self):
         ...
+
     def connect(self):
         self.connector = imap.IMAP4_SSL(
             host=self.configService.IMAP_EMAIL_HOST, port=self.hostPort)
@@ -205,6 +216,7 @@ class EmailReaderService(BaseEmailService):
     def authenticate(self):
         self.connector.login(self.configService.IMAP_EMAIL,
                              self.configService.IMAP_EMAIL_PASS)
+
     def destroy(self):
         self.connector.logout()
         self.connector.close()
@@ -219,6 +231,6 @@ class EmailReaderService(BaseEmailService):
         pass
 
 
-#@_service.ServiceClass
+# @_service.ServiceClass
 class EmailAPIService(BaseEmailService):
     ...
