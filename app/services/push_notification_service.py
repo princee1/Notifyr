@@ -13,8 +13,6 @@ class PushNotificationService(Service):
     def notify(self):
         ...
 
-    def build(self):
-        return super().build()
 
     
 

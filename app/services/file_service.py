@@ -43,6 +43,9 @@ class FileService(Service):
     def addWatcher(self,path,):
         pass
 
+    def build(self):
+        ...
+        
     pass
 
 @ServiceClass
@@ -64,9 +67,6 @@ class FTPService(Service):
         except:
             pass
 
-    def build(self):
-        self.authenticate()
-
     def destroy(self):
         try:
             self.ftpClient.quit()
@@ -80,9 +80,6 @@ class GitCloneRepoService(Service):
         super().__init__()
         self.configService = configService
         self.fileService = fileService
-
-    def build(self):
-        return super().build()
     
     def destroy(self):
         return super().destroy()

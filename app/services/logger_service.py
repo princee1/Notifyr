@@ -11,4 +11,6 @@ class LoggerService(_service.Service):
     def __init__(self, configService: ConfigService) -> None:
         super().__init__()
         self.configService = configService
-    pass
+    
+    def build(self):
+       ...

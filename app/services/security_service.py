@@ -121,6 +121,8 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         except KeyError as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Data missing')
 
+    def build(self):
+        ...
 
 @ServiceClass
 class SecurityService(Service, EncryptDecryptInterface):
@@ -154,3 +156,6 @@ class SecurityService(Service, EncryptDecryptInterface):
         data = ip_address + SEPARATOR +  \
             str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
         return self._encode_value(data, self.configService.API_ENCRYPT_TOKEN)
+
+    def build(self):
+        ...

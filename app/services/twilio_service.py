@@ -18,7 +18,7 @@ class TwilioService(_service.Service):
     def build(self):
         # self.client = Client(self.configService.TWILIO_ACCOUNT_SID,
         #                      self.configService.TWILIO_AUTH_TOKEN)
-        ...
+        return super().build()
 
 
 @_service.AbstractServiceClass
@@ -38,7 +38,8 @@ class SMSService(BaseTwilioCommunication):
 
     def build(self):
         #self.message = self.twilioService.client.messages
-        ...
+        return super().build()
+        
 
     def send_message(self, to, body):
         self.message.create(to, body=body)
