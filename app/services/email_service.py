@@ -6,7 +6,7 @@ import poplib as pop
 from typing import Callable
 
 from utils.fileIO import JSONFile
-from utils.prettyprint import SkipInputException
+from utils.prettyprint import SkipInputException, TemporaryPrint
 from classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 
@@ -46,6 +46,7 @@ class BaseEmailService(_service.Service):
             return result
         return wrapper
 
+    @TemporaryPrint
     def build(self):
         params = {
             'client_id': self.configService.OAUTH_CLIENT_ID,
@@ -94,10 +95,11 @@ class EmailSenderService(BaseEmailService):
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__(configService, loggerService)
         self.fromEmails: set[str] = ()
-        self.tlsConn: bool = SMTPConfig.setConnFlag(
-            self.configService.SMTP_EMAIL_CONN_METHOD)
+        self.connMethod = self.configService.SMTP_EMAIL_CONN_METHOD.lower()
+        self.tlsConn: bool = SMTPConfig.setConnFlag(self.connMethod)
         self.hostPort = SMTPConfig.setHostPort(
             self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
+        
         self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
 
     def logout(self):
@@ -111,7 +113,10 @@ class EmailSenderService(BaseEmailService):
         try:
             self.hostAddr = SMTPConfig.setHostAddr(
                 self.configService.SMTP_EMAIL_HOST)
-            self.connector = smtp.SMTP(self.hostAddr, self.hostPort)
+            if self.connMethod == 'ssl':
+                self.connector = smtp.SMTP_SSL(self.hostAddr,self.hostPort)
+            else:
+                self.connector = smtp.SMTP(self.hostAddr, self.hostPort)
             self.connector.set_debuglevel(
                 self.configService.SMTP_EMAIL_LOG_LEVEL)
         except NameError as e:
@@ -136,17 +141,20 @@ class EmailSenderService(BaseEmailService):
                 if self.mailOAuth.access_token ==None:
                     raise ...
                 access_token = self.mailOAuth.encode_token(self.configService.SMTP_EMAIL)
+                
                 auth_status = self.connector.docmd("AUTH XOAUTH2", access_token)
-                print(auth_status)
+
                 self.prettyPrinter.wait(1,True)
             self.state = True
             self._builded = True  # BUG
         except smtp.SMTPHeloError as e:
+
             pass
         except smtp.SMTPNotSupportedError as e:
             ...
         except smtp.SMTPAuthenticationError as e:
-            ...
+            print(e)
+
         except smtp.SMTPServerDisconnected as e:
             ...
 

@@ -271,4 +271,15 @@ class PrettyPrinter:
 
 PrettyPrinter_: PrettyPrinter = PrettyPrinter()
 
+
+def TemporaryPrint(func:Callable):
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        PrettyPrinter_.show(print_stack=False)
+        result = func(*args, **kwargs)
+        PrettyPrinter_.show(print_stack=True)
+        return result
+    return wrapper
+
 ########################################################################
