@@ -6,6 +6,7 @@ import poplib as pop
 import socket
 from typing import Callable
 
+
 from utils.helper import b64_encode
 from utils.fileIO import JSONFile
 from utils.prettyprint import SkipInputException, TemporaryPrint
@@ -23,6 +24,8 @@ from definition import _service
 from .config_service import ConfigService
 import ssl
 
+
+from utils.validation import email_validator
 
 @_service.AbstractServiceClass
 class BaseEmailService(_service.Service):
@@ -96,7 +99,7 @@ class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__(configService, loggerService)
-        self.fromEmails: set[str] = ()
+        self.fromEmails: set[str] = set()
         self.connMethod = self.configService.SMTP_EMAIL_CONN_METHOD.lower()
         self.tlsConn: bool = SMTPConfig.setConnFlag(self.connMethod)
         self.hostPort = SMTPConfig.setHostPort(
@@ -104,6 +107,14 @@ class EmailSenderService(BaseEmailService):
 
         self.emailHost = EmailHostConstant._member_map_[
             self.configService.SMTP_EMAIL_HOST]
+    
+    def _load_valid_from_email(self):
+        config_str:str = ...
+        config_str = config_str.strip()
+        emails = config_str.split('|')
+        emails = [email for email in emails if email_validator(email)]
+        self.fromEmails.update(emails)
+
 
     def logout(self):
         self.connector.quit()
@@ -170,19 +181,30 @@ class EmailSenderService(BaseEmailService):
         except smtp.SMTPServerDisconnected as e:
             raise _service.BuildFailureError(e.args[1])
 
+    def sendTemplateEmail(self,data, meta, images):
+        email  = EmailBuilder(data,meta,images)
+        self._send_message(email)
+        
 
-    def send_message(self, email: EmailBuilder):
+    def sendCustomEmail(self,content, meta, images, attachment):
+        email =  EmailBuilder(content,meta,images,attachment)
+        self._send_message(email)
+
+
+    def _send_message(self, email: EmailBuilder):
         try:
             if not self._builded:
                 raise _service.ServiceNotAvailableError
 
             emailID, message = email.mail_message
-            for to in email.emailMetadata.To:
-                self.connector.verify(to)
+            # To = []
+            # for to in email.emailMetadata.To.split(','):
+            #     reply = self.connector.verify(to.strip())
             self.connector.sendmail(
                 email.emailMetadata.From, email.emailMetadata.To, message)
-            self.prettyPrinter.success(
-                'Mail sent successfully', saveable=False)
+            
+            # self.prettyPrinter.success(
+            #     'Mail sent successfully', saveable=False)
         except smtp.SMTPHeloError as e:
             pass
         except smtp.SMTPRecipientsRefused as e:
@@ -190,10 +212,13 @@ class EmailSenderService(BaseEmailService):
         except smtp.SMTPSenderRefused as e:
             pass
         except smtp.SMTPNotSupportedError as e:
+            print(e)
+
             pass
         except smtp.SMTPDataError as e:
             pass
         except smtp.SMTPServerDisconnected as e:
+            print(e)
             ...
 
 

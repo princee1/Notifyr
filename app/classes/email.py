@@ -23,8 +23,8 @@ class EmailMetadata:
     ):
         self.Subject = Subject
         self.From = From
-        self.To = To if isinstance(To, list) else [To]
-        self.CC = CC
+        self.To:list[str] | str = To if isinstance(To, list) else [To]
+        self.CC:list[str] | str = CC
         self.Bcc = Bcc
         self.replyTo = replyTo
         self.Return_Path = Return_Path
@@ -34,7 +34,7 @@ class EmailMetadata:
         return (
             f"Subject: {self.Subject}\n"
             f"From: {self.From}\n"
-            f"To: {', '.join(self.To)}\n"
+            f"To: {self.To}\n"
             f"CC: {self.CC}\n"
             f"Bcc: {self.Bcc}\n"
             f"Reply-To: {self.replyTo}\n"

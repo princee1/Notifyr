@@ -133,11 +133,12 @@ class HTMLTemplate(Template):
     def validate(self, document: dict):
         # TODO See: https://docs.python-cerberus.org/errors.html
         if self.Validator == None:
-            return True
+            return True,document
+        
         try:
-            flag = self.Validator.validate(document)
-            if not flag:
+            if not self.Validator.validate(document):
                 raise DocumentError
+            
             return True, self.Validator.document
             # return self.Validator.normalized(document)
         except DocumentError as e:
@@ -253,13 +254,16 @@ class CustomHTMLTemplate(HTMLTemplate):
 
 
 class PDFTemplate(Template):
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName)
+    def __init__(self, filename: str, dirName: str) -> None:
+        super().__init__(filename, None, dirName)
 
-    def encrypt(self, key: str): pass
+    def pdf_to_xml(self):
+        ...
+    
+    def xml_to_pdf(self):
+        ...
 
-    def decrypt(self, key: str): pass
-
+    
 
 class SMSTemplate(Template):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
