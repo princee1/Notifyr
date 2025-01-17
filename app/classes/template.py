@@ -277,3 +277,9 @@ class PhoneTemplate(Template):
 
 class TemplateNotFoundError(BaseError):
     ...
+
+class TemplateBuildError(BaseError):
+    ...
+
+class TemplateValidationError(BaseError):
+    ...

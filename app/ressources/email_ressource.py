@@ -11,22 +11,7 @@ from utils.dependencies import Depends, get_auth_permission
 from decorators import permissions, handlers
 
 
-def handling_error(callback: Callable, *args, **kwargs):
-    try:
-        return callback(*args, **kwargs)
-    except TemplateNotFoundError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND,)
-
-    # except ServiceNotAvailableError as e:
-    #     raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE)
-    except Exception as e:
-        # raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
-        print(e)
-        raise NextHandlerException
-
-
 def guard_function(request: Request, **kwargs):
-
     pass
 
 
@@ -65,9 +50,8 @@ DEFAULT_RESPONSE = {
         'message': 'email task received successfully'}
 }
 
-
 @Ressource(EMAIL_PREFIX)
-@UseHandler(handlers.ServiceNotAvailableHandler, start_with='_api_')
+@UseHandler(handlers.ServiceAvailabilityHandler, start_with='_api_')
 class EmailTemplateRessource(BaseRessource):
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
@@ -76,14 +60,8 @@ class EmailTemplateRessource(BaseRessource):
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
 
-    def on_startup(self):
-        super().on_startup()
-
-    def on_shutdown(self):
-        super().on_shutdown()
-
     @UsePermission(permissions.JWTRoutePermission, permissions.JWTParamsAssetPermission)
-    @UseHandler(handling_error)
+    @UseHandler(handlers.TemplateHandler)
     @BaseRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
 
@@ -119,5 +97,3 @@ class EmailTemplateRessource(BaseRessource):
 
         return BASE_SUCCESS_RESPONSE
 
-    def _add_handcrafted_routes(self):
-        ...
