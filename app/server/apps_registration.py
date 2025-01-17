@@ -47,7 +47,7 @@ def createApps() -> list[AppParameter]:
         result['port'] = int(result['port'])
         _results.append(AppParameter.fromJSON(result, RESSOURCES, MIDDLEWARE))
         show(1)
-        printJSON(_results)
+        #printJSON(_results)
 
     return _results
 

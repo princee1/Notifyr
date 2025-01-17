@@ -219,7 +219,6 @@ def Ressource(prefix:str):
     return class_decorator
 
 def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handling_func: Callable | tuple[Callable, ...], start_with: str, **kwargs) -> Type[R] | None:
-    print(cls)
     if type(cls) == type and isclass(cls):
         if start_with is None:
             raise MethodStartsWithError("start_with is required for class")

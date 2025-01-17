@@ -43,7 +43,7 @@ class CustomEmailModel(BaseModel):
 EMAIL_PREFIX = "email"
 
 BASE_SUCCESS_RESPONSE = RessourceResponse(
-    message='email task received successfully', details='Message takes time to be received. Be Patient !')
+    message='email task received successfully')
 
 DEFAULT_RESPONSE = {
     status.HTTP_202_ACCEPTED: {
@@ -64,6 +64,8 @@ class EmailTemplateRessource(BaseRessource):
     @UseHandler(handlers.TemplateHandler)
     @BaseRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
+        
+        self.emailService.pingService()
 
         meta = email.meta
         data = email.data
@@ -84,6 +86,8 @@ class EmailTemplateRessource(BaseRessource):
     @UsePermission(permissions.JWTRoutePermission)
     @BaseRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
+        self.emailService.pingService()
+        
         meta = customEmail.meta
         text_content = customEmail.text_content
         html_content = customEmail.html_content
@@ -91,9 +95,14 @@ class EmailTemplateRessource(BaseRessource):
         attachment = customEmail.attachments
         images = customEmail.images
 
-        # self.emailService.send_message(email)
         background_tasks.add_task(
             self.emailService.sendCustomEmail, content, meta, images, attachment)
 
         return BASE_SUCCESS_RESPONSE
 
+
+    def _api_schedule_custom_email(self, customEmail:CustomEmailModel, authPermission=Depends(get_auth_permission)):
+        ...
+
+    def _api_schedule_template(self, template:str, email: EmailTemplateModel, authPermission=Depends(get_auth_permission)):
+        ...
