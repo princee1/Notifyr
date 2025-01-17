@@ -3,7 +3,7 @@ The `BaseResource` class initializes with a `container` attribute assigned from 
 instance imported from `container`.
 """
 from inspect import isclass
-from typing import Any, Callable, Dict, Iterable, Mapping, TypeVar, Type, TypedDict
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, TypeVar, Type, TypedDict
 from utils.helper import issubclass_of
 from utils.constant import SpecialKeyParameterConstant
 from services.assets_service import AssetService
@@ -85,6 +85,11 @@ class HTTPExceptionParams(TypedDict):
     headers: dict[str,str] | None = None
 
 
+class RessourceResponse(TypedDict):
+    message:str
+    details:Optional[Any]
+
+
 class BaseRessource(EventInterface):
 
     @staticmethod
@@ -156,7 +161,7 @@ class BaseRessource(EventInterface):
         RESSOURCES[cls.__name__] = cls
         # ROUTES[cls.__name__] = []
 
-    def __init__(self,dependencies=None) -> None:
+    def __init__(self,dependencies=None,router_default_response:dict=None) -> None:
         self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         prefix = PREFIX_METADATA[self.__class__.__name__]
@@ -168,7 +173,7 @@ class BaseRessource(EventInterface):
         self.init_stacked_callback()
         self._add_routes()
         self._add_handcrafted_routes()
-        self.default_response: Dict[int | str, Dict[str, Any]] | None = None
+        self.default_response: Dict[int | str, Dict[str, Any]] | None = router_default_response
 
     def get(self, dep: Type[S], scope=None, all=False) -> Type[S]:
         return Get(dep, scope, all)
