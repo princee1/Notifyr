@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from msal import ConfidentialClientApplication
 from typing import Any, Optional, Type, TypeVar, TypedDict, overload
 from utils.fileIO import JSONFile
-from utils.prettyprint import PrettyPrinter_
+from utils.prettyprint import PrettyPrinter
 from requests import post, Request,Response
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -320,7 +320,7 @@ class OAuthFlow(OAuth):
         self.authHeaders = {}
         self.authBody = {}
         self.authParams = {}
-        self.prettyPrinter = PrettyPrinter_
+        self.prettyPrinter = PrettyPrinter()
 
     @property
     def access_token(self):
@@ -341,6 +341,7 @@ class OAuthFlow(OAuth):
         self.prettyPrinter.space_line(saveable=False)
         val = self.prettyPrinter.input(
             'Enter the authorization code: ', emoji_code='\U0001F510', position='left')
+        #self.prettyPrinter.show(0,print_stack=False)
         if isinstance(val, str) and val:
             return val.strip()
         return None
