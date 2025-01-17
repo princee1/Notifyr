@@ -68,11 +68,15 @@ class BaseEmailService(_service.Service):
                 if not self.mailOAuth.is_valid:
                     self.mailOAuth.refresh_access_token()
             except:
-                ...
+                raise _service.BuildFailureError
+                
         else:
             try:
                 self.mailOAuth.grant_access_token()
             except SkipInputException:
+                raise _service.BuildFailureError
+            
+        if self.mailOAuth.access_token == None:
                 raise _service.BuildFailureError
 
         self.connect()
@@ -157,8 +161,6 @@ class EmailSenderService(BaseEmailService):
                 auth_status = self.connector.login(
                     self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
             else:
-                if self.mailOAuth.access_token == None:
-                    raise ...
                 access_token = self.mailOAuth.encode_token(
                     self.configService.SMTP_EMAIL)
                 auth_status = self.connector.docmd(
@@ -181,11 +183,12 @@ class EmailSenderService(BaseEmailService):
         except smtp.SMTPServerDisconnected as e:
             raise _service.BuildFailureError(e.args[1])
 
+    @_service.Service.CheckStatusBeforeHand
     def sendTemplateEmail(self,data, meta, images):
         email  = EmailBuilder(data,meta,images)
         self._send_message(email)
         
-
+    @_service.Service.CheckStatusBeforeHand
     def sendCustomEmail(self,content, meta, images, attachment):
         email =  EmailBuilder(content,meta,images,attachment)
         self._send_message(email)
@@ -193,18 +196,13 @@ class EmailSenderService(BaseEmailService):
 
     def _send_message(self, email: EmailBuilder):
         try:
-            if not self._builded:
-                raise _service.ServiceNotAvailableError
-
             emailID, message = email.mail_message
             # To = []
             # for to in email.emailMetadata.To.split(','):
             #     reply = self.connector.verify(to.strip())
-            self.connector.sendmail(
+            reply = self.connector.sendmail(
                 email.emailMetadata.From, email.emailMetadata.To, message)
-            
-            # self.prettyPrinter.success(
-            #     'Mail sent successfully', saveable=False)
+            print(reply)
         except smtp.SMTPHeloError as e:
             pass
         except smtp.SMTPRecipientsRefused as e:
@@ -212,13 +210,18 @@ class EmailSenderService(BaseEmailService):
         except smtp.SMTPSenderRefused as e:
             pass
         except smtp.SMTPNotSupportedError as e:
+            print('SMTP not supported')
             print(e)
-
             pass
         except smtp.SMTPDataError as e:
             pass
         except smtp.SMTPServerDisconnected as e:
+            print('Server disconnected')
             print(e)
+            self._builded = False
+            # BUG service destroyed too ?
+            self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
+
             ...
 
 

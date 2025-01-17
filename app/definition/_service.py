@@ -1,4 +1,5 @@
 from enum import Enum
+import functools
 from typing import Any, overload, Callable, Type, TypeVar, Dict
 from utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from utils.constant import DependencyConstant
@@ -18,8 +19,9 @@ __DEPENDENCY: list[type] = []
 class ServiceStatus(Enum):
     AVAILABLE = 1
     NOT_AVAILABLE = 2
-    PARTIALLY_AVAILABLE = 3
-    WORKS_ALMOST_ATT = 4
+    TEMPORARY_NOT_AVAILABLE=3
+    PARTIALLY_AVAILABLE = 4
+    WORKS_ALMOST_ATT = 5
 
 
 class BuildErrorLevel(Enum):
@@ -59,12 +61,18 @@ class BuildNotImplementedError(BuildError):
     ...
 
 
+#################################            #####################################
+
 class ServiceNotAvailableError(BuildError):
     pass
 
+class ServiceTemporaryNotAvailableError(BuildError):
+    pass
 
 class MethodServiceNotAvailableError(BuildError):
     pass
+
+#################################            #####################################
 
 
 class Service():
@@ -75,6 +83,33 @@ class Service():
         self._destroyed: bool = False
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         self.service_status: ServiceStatus = None
+        self.method_not_available: list[str] = []
+
+    @staticmethod
+    def CheckStatusBeforeHand(func:Callable):
+        
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            
+            self:Service = args[0]
+
+            match self.service_status :
+                case ServiceStatus.NOT_AVAILABLE :
+                    raise ServiceNotAvailableError
+                case ServiceStatus.TEMPORARY_NOT_AVAILABLE:
+                    raise ServiceTemporaryNotAvailableError
+                case _:
+                    ...
+
+            if not self._builded  or self._destroyed:
+                raise ServiceNotAvailableError
+
+            if func.__name__ in self.method_not_available:
+                raise MethodServiceNotAvailableError
+
+            return func(*args, **kwargs)
+        
+        return wrapper
 
     def build(self):
         # warnings.warn(
@@ -139,6 +174,7 @@ class Service():
             self.prettyPrinter.warning(
                 f'[{now}] Service Not Implemented Yet :{self.__class__.__name__} ', saveable=True)
             self.prettyPrinter.wait(0.2, False)
+            self.service_status = ServiceStatus.NOT_AVAILABLE
             
 
         finally:

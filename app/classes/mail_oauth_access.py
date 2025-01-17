@@ -325,8 +325,11 @@ class OAuthFlow(OAuth):
 
     @property
     def access_token(self):
-        if not self.is_valid:
-            self.refresh_access_token()
+        try:
+            if not self.is_valid:
+                self.refresh_access_token()
+        except KeyError as e:
+            return None
         return self.auth_tokens['access_token']
     
 
