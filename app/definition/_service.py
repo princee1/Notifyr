@@ -111,6 +111,13 @@ class Service():
         
         return wrapper
 
+    def verify_dependency(self):
+        ...
+
+    @CheckStatusBeforeHand
+    def pingService(self):
+        ...
+    
     def build(self):
         # warnings.warn(
         #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
@@ -136,11 +143,15 @@ class Service():
     def destroyReport(self):
         pass
 
+    def check_dependencyService_status(self):
+        ...
+    
+    # TODO Dependency that use service with failed might not properly, need to handle the view
     def _builder(self):
         try:
             now = dt.datetime.now()
-            # self.prettyPrinter.show()
-            # self.prettyPrinter.info(f'[{now}] Current Building the service: {self.__class__.__name__}',saveable=False)
+            self.check_dependencyService_status()
+            self.verify_dependency()
             self.build()
             self._builded = True
             self._destroyed = False
@@ -151,7 +162,7 @@ class Service():
 
         except BuildFailureError as e:
             self.prettyPrinter.error(
-                f'[{now}] Error while building the service: {self.__class__.__name__}', saveable=True)
+                f'[{now}] Error while building the service: {self.__class__.__name__}. Service using this dependency will not function properly', saveable=True)
             self.service_status = ServiceStatus.NOT_AVAILABLE
             pass
 
@@ -161,17 +172,20 @@ class Service():
             exit(-1)
 
         except BuildWarningError as e:
+            # TODO might to change the color because of the error since, it will be for malfunction dependent service
             self.prettyPrinter.warning(
-                f'[{now}] Problem encountered while building the service: {self.__class__.__name__}', saveable=True)
-            pass
+                f'[{now}] Warning issued while building : {self.__class__.__name__}. Service might malfunction properly', saveable=True)
+            self.service_status = ServiceStatus.WORKS_ALMOST_ATT
 
-        except BuildSkipError as e:
-            self.prettyPrinter.message(
-                f'[{now}] Problem encountered while building the service : {self.__class__.__name__} Skipping for now NOTE: this can cause some error', saveable=True)
+        
+        except BuildSkipError as e: # TODO change color
+            self.prettyPrinter.info(
+                f'[{now}] Slight Problem encountered while building the service : {self.__class__.__name__}', saveable=True)
+            self.service_status = ServiceStatus.WORKS_ALMOST_ATT
             pass
 
         except BuildNotImplementedError as e:
-            self.prettyPrinter.warning(
+            self.prettyPrinter.warning( # TODO change color
                 f'[{now}] Service Not Implemented Yet :{self.__class__.__name__} ', saveable=True)
             self.prettyPrinter.wait(0.2, False)
             self.service_status = ServiceStatus.NOT_AVAILABLE
