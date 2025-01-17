@@ -183,6 +183,11 @@ class EmailSenderService(BaseEmailService):
         except smtp.SMTPServerDisconnected as e:
             raise _service.BuildFailureError(e.args[1])
 
+    def pingSMTP(self):
+        reply = self.connector.noop()
+        status,message = reply
+        # TODO 
+
     @_service.Service.CheckStatusBeforeHand
     def sendTemplateEmail(self,data, meta, images):
         email  = EmailBuilder(data,meta,images)
@@ -200,9 +205,9 @@ class EmailSenderService(BaseEmailService):
             # To = []
             # for to in email.emailMetadata.To.split(','):
             #     reply = self.connector.verify(to.strip())
-            reply = self.connector.sendmail(
+            self.connector.sendmail(
                 email.emailMetadata.From, email.emailMetadata.To, message)
-            print(reply)
+
         except smtp.SMTPHeloError as e:
             pass
         except smtp.SMTPRecipientsRefused as e:
