@@ -140,6 +140,7 @@ class ConfigService(_service.Service):
         self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
         self.API_EXPIRATION = ConfigService.parseToInt(self.getenv("API_EXPIRATION"), 3600000000000)
         self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 3600000000000)
+        self.ADMIN_KEY = self.getenv("ADMIN_KEY")
 
     def verify(self):
         if self.API_EXPIRATION < self.AUTH_EXPIRATION:

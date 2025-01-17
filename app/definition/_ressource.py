@@ -156,7 +156,7 @@ class BaseRessource(EventInterface):
         RESSOURCES[cls.__name__] = cls
         # ROUTES[cls.__name__] = []
 
-    def __init__(self) -> None:
+    def __init__(self,dependencies=None) -> None:
         self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         prefix = PREFIX_METADATA[self.__class__.__name__]
@@ -164,7 +164,7 @@ class BaseRessource(EventInterface):
             prefix = PATH_SEPARATOR + prefix
         
         self.router = APIRouter(prefix=prefix, on_shutdown=[
-                                self.on_shutdown], on_startup=[self.on_startup])
+                                self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
         self.init_stacked_callback()
         self._add_routes()
         self._add_handcrafted_routes()
@@ -214,6 +214,7 @@ def Ressource(prefix:str):
     return class_decorator
 
 def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handling_func: Callable | tuple[Callable, ...], start_with: str, **kwargs) -> Type[R] | None:
+    print(cls)
     if type(cls) == type and isclass(cls):
         if start_with is None:
             raise MethodStartsWithError("start_with is required for class")
