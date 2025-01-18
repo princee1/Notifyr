@@ -142,6 +142,11 @@ class ConfigService(_service.Service):
         self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 3600000000000)
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
 
+
+                                # Celery CONFIG #
+
+        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL")
+        self.CELERY_BACKEND_URL = self.getenv("CELERY_BACKEND_URL")
     def verify(self):
         if self.API_EXPIRATION < self.AUTH_EXPIRATION:
             # self.API_EXPIRATION = self.AUTH_EXPIRATION
@@ -149,8 +154,10 @@ class ConfigService(_service.Service):
             ...
 
     def __getitem__(self, key):
-        return getattr(self, key)
-    
+        result = getattr(self, key)
+        if result == None:
+            result = os.getenv(key)
+        return result
     def get(self, key):
         return self.getenv(key)
     
