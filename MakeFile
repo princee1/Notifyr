@@ -45,3 +45,14 @@ edit:
 
 register:
 	python ${src_dir}/main.py --config=${config_dir} --mode=register
+
+redis:
+	docker-compose up --build 
+
+celery:
+	celery -A task worker --pool=solo --loglevel=info
+
+container:
+	$(MAKE)  redis
+	$(MAKE)  celery
+
