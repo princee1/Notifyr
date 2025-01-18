@@ -20,6 +20,7 @@ class ServiceAvailabilityHandler(Handler):
             
         
         except Exception as e:
+            print(e)
             raise NextHandlerException
         
 

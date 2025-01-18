@@ -24,7 +24,6 @@ from definition import _service
 from .config_service import ConfigService
 import ssl
 
-
 from utils.validation import email_validator
 
 @_service.AbstractServiceClass
@@ -154,6 +153,8 @@ class EmailSenderService(BaseEmailService):
     def verify_dependency(self):
         if self.configService.SMTP_EMAIL_HOST not in EmailHostConstant._member_names_:
             raise _service.BuildFailureError
+        
+
 
     def sendAutomaticMessage(self): pass
 
@@ -198,19 +199,18 @@ class EmailSenderService(BaseEmailService):
     def sendTemplateEmail(self,data, meta, images):
         email  = EmailBuilder(data,meta,images)
         self._send_message(email)
-        
+
     def sendCustomEmail(self,content, meta, images, attachment):
         email =  EmailBuilder(content,meta,images,attachment)
         self._send_message(email)
-
 
     @BaseEmailService.task_lifecycle
     def _send_message(self, email: EmailBuilder,connector:smtp.SMTP):
         try:
             emailID, message = email.mail_message
-            connector.sendmail(
+            reply_ = connector.sendmail(
                 email.emailMetadata.From, email.emailMetadata.To, message)
-
+            return reply_
         except smtp.SMTPHeloError as e:
             pass
         except smtp.SMTPRecipientsRefused as e:

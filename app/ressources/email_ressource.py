@@ -2,13 +2,14 @@ from typing import Any, Callable, List, Literal, Optional
 from classes.template import HTMLTemplate, TemplateNotFoundError
 from services.config_service import ConfigService
 from services.security_service import SecurityService
-from container import InjectInMethod
+from container import Get, InjectInMethod
 from definition._ressource import Ressource, UsePermission, BaseRessource, UseHandler, NextHandlerException, RessourceResponse
 from services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
 from fastapi import BackgroundTasks, Request, Response, HTTPException, status
 from utils.dependencies import Depends, get_auth_permission
 from decorators import permissions, handlers
+from task import send_custom_email
 
 
 def guard_function(request: Request, **kwargs):
@@ -78,8 +79,11 @@ class EmailTemplateRessource(BaseRessource):
         if not flag:
             return HTTPException(status.HTTP_400_BAD_REQUEST, detail={'description': data, 'message': 'Validation Error'})
         images = template.images
-        background_tasks.add_task(
-            self.emailService.sendTemplateEmail, data, meta, images)
+
+        #self.emailService.sendTemplateEmail(data,meta,images).delay()
+
+        # background_tasks.add_task(
+        #     self.emailService.sendTemplateEmail, data, meta, images)
 
         return BASE_SUCCESS_RESPONSE
 
@@ -95,9 +99,11 @@ class EmailTemplateRessource(BaseRessource):
         attachment = customEmail.attachments
         images = customEmail.images
 
-        background_tasks.add_task(
-            self.emailService.sendCustomEmail, content, meta, images, attachment)
+        # background_tasks.add_task(
+        #     self.emailService.sendCustomEmail, content, meta, images, attachment)
 
+        #self.emailService.sendCustomEmail.delay(self.emailService,content, meta, images, attachment)
+        send_custom_email.delay(content, meta, images, attachment)
         return BASE_SUCCESS_RESPONSE
 
 
