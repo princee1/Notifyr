@@ -23,13 +23,15 @@ config_file = args.config
 
 PrettyPrinter_.show(1, print_stack=False)
 ########################################################################
+from container import build_container, Get
+build_container()
+
 from server.application import AppParameter, RESSOURCES
 from server.apps_registration import createApps, editApps,start_applications
 from server.access_registration import prompt_client_registration
 from server.middleware import MIDDLEWARE
 from utils.constant import ConfigAppConstant
 from services.config_service import ConfigService
-from container import build_container, Get
 from utils.question import ask_question,ConfirmInputHandler
 # from definition._ressource import DECORATOR_METADATA,METADATA_ROUTES,ROUTES,PROTECTED_ROUTES
 ########################################################################
@@ -44,7 +46,7 @@ apps_data = configService.config_json_app.data
 # c_flag = True
 # while c_flag:
 #     config_json_app = JSONFile(config_file)
-#     config_file = config_file if config_json_app.exists else None
+#     config_file = config_file if config_json_exists else None
 #     if not config_file:
 #         show(0.5)
 #         print(f"Invalid config file: {config_file}")
@@ -103,7 +105,7 @@ while True:
             exit(0) # BUG DISABLED FOR NOW
             prompt_client_registration()
             if valid:
-                mode = RunMode.File
+                mode = RunMode.FILE
                 continue
             exit(0)
 
