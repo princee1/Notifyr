@@ -5,7 +5,7 @@ https://www.youtube.com/watch?v=-AChTCBoTUM
 from injector import inject
 from definition import _service
 from .config_service import ConfigService
-from twilio.rest import Client
+#from twilio.rest import Client
 
 
 @_service.ServiceClass
