@@ -329,21 +329,20 @@ class Container():
     def toParams(self, dep, params_names):
         try:
             params = {}
-            i = 0
-            for d in dep:
+            for i,d in enumerate(dep):
                 obj_dep = self.get(
                     self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
                 params[params_names[i]] = obj_dep
-                i += 1
             return params
         except KeyError:
             raise NoResolvedDependencyError
 
-    def __createDep(self, typ: type, params):
+    def __createDep(self, typ: type, params:dict):
         flag = issubclass(typ)
         obj: Service = typ(**params)
-
+        
         if flag:
+            obj.service_list= list(params.values())
             willBuild = self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.FLAG_BUILD_KEY]
             if willBuild:
                 obj._builder()  # create the dependency but not calling the builder
@@ -405,7 +404,7 @@ class Container():
     def seek_bindings(self):
         return self.__app.binder._bindings
 
-CONTAINER: Container = Container(__DEPENDENCY)
+CONTAINER: Container = None #Container(__DEPENDENCY)
 
 def build_container():
     global CONTAINER

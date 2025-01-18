@@ -84,6 +84,7 @@ class Service():
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         self.service_status: ServiceStatus = None
         self.method_not_available: list[str] = []
+        self.service_list:list[Service] = []
 
     @staticmethod
     def CheckStatusBeforeHand(func:Callable):
@@ -189,7 +190,12 @@ class Service():
                 f'[{now}] Service Not Implemented Yet :{self.__class__.__name__} ', saveable=True)
             self.prettyPrinter.wait(0.2, False)
             self.service_status = ServiceStatus.NOT_AVAILABLE
-            
+
+        except :
+            self.prettyPrinter.error(
+                f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
+            exit(-1)    
+
 
         finally:
             self.buildReport()
