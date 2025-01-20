@@ -4,7 +4,7 @@ from services.config_service import ConfigService
 from utils.dependencies import get_admin_token, get_bearer_token, get_client_ip
 from container import InjectInMethod,Get
 from definition._ressource import Guard, UseGuard, UsePermission,BaseRessource,HTTPMethod,Ressource
-from decorators.permissions import JWTRoutePermission
+from decorators.permissions import JWTHTTPRoutePermission
 
 ADMIN_PREFIX = 'admin'
 ADMIN_STARTS_WITH = '_admin'
@@ -17,7 +17,7 @@ async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
 
 
 @Ressource(ADMIN_PREFIX)
-@UsePermission(JWTRoutePermission)
+@UsePermission(JWTHTTPRoutePermission)
 class AdminRessource(BaseRessource):
 
     @InjectInMethod

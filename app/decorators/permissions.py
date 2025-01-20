@@ -5,9 +5,8 @@ from container import InjectInMethod
 from services.security_service import SecurityService,JWTAuthService
 from classes.permission import AuthPermission, RoutePermission
 
-
  
-class JWTRoutePermission(Permission):
+class JWTHTTPRoutePermission(Permission):
     
     @InjectInMethod
     def __init__(self,jwtAuthService: JWTAuthService):
@@ -32,7 +31,7 @@ class JWTRoutePermission(Permission):
         return True
     
 
-class JWTParamsAssetPermission(Permission):
+class JWTAssetPermission(Permission):
     
     @InjectInMethod
     def __init__(self,jwtAuthService: JWTAuthService,assetService: AssetService):
@@ -43,3 +42,4 @@ class JWTParamsAssetPermission(Permission):
     def permission(self,template:str, authPermission:AuthPermission):
         #assetPermission = authPermission['asset_permission']
         return True
+

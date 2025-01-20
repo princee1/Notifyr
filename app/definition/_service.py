@@ -144,14 +144,14 @@ class Service():
     def destroyReport(self):
         pass
 
-    def check_dependencyService_status(self):
+    def check_service(self):
         ...
     
     # TODO Dependency that use service with failed might not properly, need to handle the view
     def _builder(self):
         try:
             now = dt.datetime.now()
-            self.check_dependencyService_status()
+            self.check_service()
             self.verify_dependency()
             self.build()
             self._builded = True
