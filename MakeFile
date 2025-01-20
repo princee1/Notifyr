@@ -50,7 +50,7 @@ redis:
 	docker-compose up --build 
 
 celery:
-	celery -A task worker --pool=solo --loglevel=info
+	celery -A celery_task.celery worker --pool=solo --loglevel=info
 
 container:
 	$(MAKE)  redis
