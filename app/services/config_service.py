@@ -43,6 +43,9 @@ class ConfigService(_service.Service):
             load_dotenv(path)
         self.config_json_app:JSONFile = None
 
+    def relative_path(self, path):
+        return self.BASE_DIR +path
+
     def parseToBool(value:str,default:bool | None = None):
         try:
             return parseToBool(value)
@@ -96,6 +99,8 @@ class ConfigService(_service.Service):
         return default
 
     def set_config_value(self):
+        self.BASE_DIR= self.getenv("BASE_DIR",'../')	
+
         self.MODE = MODE.toMode(self.getenv('MODE'))
         self.PORT_PUBLIC = ConfigService.parseToInt(self.getenv("PORT_PUBLIC"),3000)
         self.PORT_PRIVATE = ConfigService.parseToInt(self.getenv("PORT_PRIVATE"),5000)
@@ -162,6 +167,7 @@ class ConfigService(_service.Service):
         return self.getenv(key)
     
     def load_configApp(self,config_file: str):
+        config_file = self.relative_path(config_file)
         config_json_app = JSONFile(config_file)
         config_file = config_file if config_json_app.exists else None
         #apps_data = config_json_app.data
