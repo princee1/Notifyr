@@ -61,7 +61,7 @@ class EmailTemplateRessource(BaseRessource):
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
 
-    @UsePermission(permissions.JWTHTTPRoutePermission, permissions.JWTAssetPermission)
+    @UsePermission(permissions.JWTRouteHTTPPermission, permissions.JWTAssetPermission)
     @UseHandler(handlers.TemplateHandler)
     @BaseRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
@@ -87,7 +87,7 @@ class EmailTemplateRessource(BaseRessource):
 
         return BASE_SUCCESS_RESPONSE
 
-    @UsePermission(permissions.JWTHTTPRoutePermission)
+    @UsePermission(permissions.JWTRouteHTTPPermission)
     @BaseRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
