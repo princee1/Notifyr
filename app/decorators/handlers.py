@@ -18,10 +18,9 @@ class ServiceAvailabilityHandler(Handler):
         except ServiceTemporaryNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Service temporary not available')
             
-        
         except Exception as e:
-            print(e)
-            raise NextHandlerException
+            self.last_resort_handling()
+            #raise NextHandlerException
         
 
 class TemplateHandler(Handler):
@@ -40,4 +39,5 @@ class TemplateHandler(Handler):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Cannot validate template')
         
         except Exception as e:
-            raise NextHandlerException
+            self.last_resort_handling()
+            #raise NextHandlerException
