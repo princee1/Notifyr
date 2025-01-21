@@ -428,7 +428,7 @@ def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, A
                 return interceptor_function(function, *args, **kwargs)
             return callback
 
-        appends_funcs_callback(func, wrapper, 3)
+        appends_funcs_callback(func, wrapper, DecoratorPriority.INTERCEPTOR)
         return func
     return decorator
 

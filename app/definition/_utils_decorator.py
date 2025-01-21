@@ -7,6 +7,7 @@ class DecoratorPriority(Enum):
     GUARD = 2
     PIPE = 3
     HANDLER = 4
+    INTERCEPTOR = 5
 
 
 class NextHandlerException(Exception):
@@ -88,10 +89,14 @@ class PermissionDefaultException(Exception):
 class Interceptor(DecoratorObj):
 
     def __init__(self,):
-        super().__init__(self.intercept, True)
+        super().__init__(self.intercept_before, True)
 
-    def intercept(self):
+    def intercept_before(self):
         ...
+    
+    def intercept_after(self):
+        ...
+    
 
 class InterceptorDefaultException(Exception):
     ...
