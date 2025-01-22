@@ -1,3 +1,4 @@
+from threading import Thread
 import injector
 from inspect import signature, getmro
 # from dependencies import __DEPENDENCY
@@ -350,17 +351,6 @@ class Container():
             # WARNING raise we cant verify the data provided
             pass
         return obj
-
-    def __freeUpMemory(self):
-        return
-        for k, v in self.DEPENDENCY_MetaData.items():
-            del v[DependencyConstant.PARAM_NAMES_KEY]
-
-        for k, v in BuildOnlyIfDependencies.items():
-            del v[DependencyConstant.BUILD_ONLY_PARAMS_KEY]
-
-        # TODO free up temp variable
-        pass
 
     def need(self, typ: Type[S]) -> Type[S]:
         if not self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY]:

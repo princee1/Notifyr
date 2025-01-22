@@ -134,8 +134,8 @@ class Application(EventInterface):
         jwtService.set_generation_id(False)
 
     def on_shutdown(self):
-        pass
-
-    pass
+        for thread in threading.enumerate():
+            if thread is not threading.current_thread():
+                thread.join()
 
 #######################################################                          #####################################################

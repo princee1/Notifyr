@@ -8,11 +8,16 @@ class ThreadInterface(Interface):
     def __init__(self) -> None:
         super().__init__()
         self.thread = Thread(target=self._target, name=self.name)
-        self.thread.start()
 
     def _target(self) -> None:
         self._run()
         pass
+
+    def start(self):
+        self.thread.start()
+
+    def join(self):
+        self.thread.join()
 
     def _run(self):
         pass
@@ -47,6 +52,7 @@ class InfiniteThreadInterface(ThreadInterface):
         while self.active:
             try:
                 self.event.wait(self.waitTime)
+                self.reset()
                 if self.active:
                     self._todo()
                 self.event.clear()
@@ -55,16 +61,20 @@ class InfiniteThreadInterface(ThreadInterface):
 
     @overload
     def pause(self):
-        pass
+        self.paused = True
+        self.waitTime = None
+
+    def reset(self):
+        self.paused = False
+        self.waitTime = None
 
     @overload
     def pause(self, time):
-        pass
+        self.paused = True
+        self.waitTime = time
 
     def play(self):
-        pass
-
-    pass
+        self.event.set()
 
 
 @IsInterface
