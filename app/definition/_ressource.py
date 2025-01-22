@@ -4,16 +4,16 @@ instance imported from `container`.
 """
 from inspect import isclass
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, TypeVar, Type, TypedDict
-from utils.helper import issubclass_of
-from utils.constant import SpecialKeyParameterConstant
-from services.assets_service import AssetService
-from container import Get, Need
-from definition._service import S
+from app.utils.helper import issubclass_of
+from app.utils.constant import SpecialKeyParameterConstant
+from app.services.assets_service import AssetService
+from app.container import Get, Need
+from app.definition._service import S
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from utils.prettyprint import PrettyPrinter_, PrettyPrinter
+from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
 from fastapi import BackgroundTasks
-from interface.events import EventInterface
+from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
 

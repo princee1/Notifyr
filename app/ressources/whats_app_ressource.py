@@ -1,4 +1,4 @@
-from definition._ressource import BaseRessource, Ressource
+from app.definition._ressource import BaseRessource, Ressource
 
 WHATS_APP_PREFIX = '/whatsapp'
 

@@ -6,7 +6,7 @@ from email.mime.image import MIMEImage
 from email.utils import make_msgid
 from email.utils import formatdate
 from typing import List, Optional, Literal
-from utils.fileIO import getFilenameOnly
+from app.utils.fileIO import getFilenameOnly
 
 
 class EmailMetadata:

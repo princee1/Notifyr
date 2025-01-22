@@ -10,7 +10,7 @@ from InquirerPy.prompts.expand import ExpandChoice
 import pprint as pp
 from InquirerPy.validator import *
 from prompt_toolkit.styles import Style
-from utils.prettyprint import printJSON
+from .prettyprint import printJSON
 
 one_or_more_invalid_message = 'Should be at least 1 selection'
 instruction = '(Press space to select, enter to continue)'

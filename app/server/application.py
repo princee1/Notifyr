@@ -3,11 +3,11 @@ Contains the FastAPI app
 """
 
 from dataclasses import dataclass
-from container import InjectInMethod, Get, Need
-from ressources import *
+from app.container import InjectInMethod, Get, Need
+from app.ressources import *
 from starlette.types import ASGIApp
-from services.config_service import ConfigService
-from services.security_service import JWTAuthService, SecurityService
+from app.services.config_service import ConfigService
+from app.services.security_service import JWTAuthService, SecurityService
 from fastapi import Request, Response, FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload, TypedDict
@@ -15,8 +15,8 @@ import uvicorn
 import multiprocessing
 import threading
 import sys
-from definition._ressource import RESSOURCES, BaseRessource
-from interface.events import EventInterface
+from app.definition._ressource import RESSOURCES, BaseRessource
+from app.interface.events import EventInterface
 
 
 AppParameterKey = Literal['title', 'summary', 'description',

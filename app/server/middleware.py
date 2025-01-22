@@ -1,12 +1,12 @@
-from classes.permission import AuthPermission
-from services.security_service import SecurityService, JWTAuthService
-from container import InjectInMethod
+from app.classes.permission import AuthPermission
+from app.services.security_service import SecurityService, JWTAuthService
+from app.container import InjectInMethod
 from fastapi import HTTPException, Request, Response, FastAPI,status
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
-from interface.injectable_middleware import InjectableMiddlewareInterface
-from utils.dependencies import get_api_key, get_client_ip,get_bearer_token_from_request
+from app.interface.injectable_middleware import InjectableMiddlewareInterface
+from app.utils.dependencies import get_api_key, get_client_ip,get_bearer_token_from_request
 from cryptography.fernet import InvalidToken
 from enum import Enum
 

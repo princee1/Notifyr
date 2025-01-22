@@ -1,15 +1,15 @@
 from .config_service import ConfigService
-from utils.fileIO import FDFlag
-from classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
+from app.utils.fileIO import FDFlag
+from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
 from .security_service import SecurityService
 from .file_service import FileService, FTPService
-from definition import _service
+from app.definition import _service
 from injector import inject
 from enum import Enum
 import os
 from threading import Thread
 from typing import Any, Callable, Literal, Dict
-from utils.helper import issubclass_of
+from app.utils.helper import issubclass_of
 
 ROOT_PATH = "assets/"
 def path(x): return ROOT_PATH+x

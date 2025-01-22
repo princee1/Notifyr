@@ -1,6 +1,6 @@
-from services.push_notification_service import PushNotificationService
-from container import InjectInMethod
-from definition._ressource import BaseRessource, Ressource
+from app.services.push_notification_service import PushNotificationService
+from app.container import InjectInMethod
+from app.definition._ressource import BaseRessource, Ressource
 
 PUSH_NOTIFICATION_PREFIX = 'push-notification'
 

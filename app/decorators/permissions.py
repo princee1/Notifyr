@@ -1,9 +1,9 @@
 from fastapi import HTTPException,status
-from services.assets_service import AssetService
-from definition._utils_decorator import Permission
-from container import InjectInMethod
-from services.security_service import SecurityService,JWTAuthService
-from classes.permission import AuthPermission, RoutePermission
+from app.services.assets_service import AssetService
+from app.definition._utils_decorator import Permission
+from app.container import InjectInMethod
+from app.services.security_service import SecurityService,JWTAuthService
+from app.classes.permission import AuthPermission, RoutePermission
 
  
 class JWTHTTPRoutePermission(Permission):

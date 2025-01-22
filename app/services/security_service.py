@@ -1,20 +1,20 @@
 
 from typing import Any, Dict
 
-from definition._interface import Interface, IsInterface
+from app.definition._interface import Interface, IsInterface
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
-from definition._service import AbstractServiceClass, Service, ServiceClass
+from app.definition._service import AbstractServiceClass, Service, ServiceClass
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from classes.permission import AuthPermission, RoutePermission
+from app.classes.permission import AuthPermission, RoutePermission
 from random import randint, random
-from utils.helper import generateId
-from utils.constant import ConfigAppConstant
+from app.utils.helper import generateId
+from app.utils.constant import ConfigAppConstant
 from datetime import datetime, timezone
 
 

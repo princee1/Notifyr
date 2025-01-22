@@ -1,11 +1,11 @@
 from .email_service import EmailSenderService
 from .security_service import SecurityService
-from classes.report import DiscordReport, Report, SystemReport,EmailReport,GoogleReport
+from app.classes.report import DiscordReport, Report, SystemReport,EmailReport,GoogleReport
 from .config_service import ConfigService
-from definition import _service
+from app.definition import _service
 from time import sleep
 from discord_webhook import DiscordWebhook, AsyncDiscordWebhook
-from interface.threads import InfiniteThreadInterface
+from app.interface.threads import InfiniteThreadInterface
 
 
 @_service.AbstractServiceClass

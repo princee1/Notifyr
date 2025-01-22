@@ -1,7 +1,7 @@
 from .config_service import ConfigService
 from .file_service import FileService
 from .security_service import SecurityService
-from definition._service import Service,AbstractServiceClass,ServiceClass
+from app.definition._service import Service,AbstractServiceClass,ServiceClass
 import sqlite3
 import pandas as pd
 

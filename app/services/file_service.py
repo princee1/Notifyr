@@ -1,7 +1,6 @@
 from .config_service import ConfigService
-from definition._service import Service,ServiceClass
-from injector import inject
-from utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
+from app.definition._service import Service,ServiceClass
+from app.utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 
@@ -50,7 +49,6 @@ class FileService(Service):
 
 @ServiceClass
 class FTPService(Service):
-    @inject
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__()
 

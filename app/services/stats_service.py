@@ -1,6 +1,6 @@
 from .notification_service import DiscordService, NotificationService
 from .config_service import ConfigService
-from definition import _service
+from app.definition import _service
 from injector import inject
 
 class Stats:

@@ -5,7 +5,7 @@ Module to easily manage retrieving user information from the request object.
 from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
-from utils.constant import HTTPHeaderConstant
+from .constant import HTTPHeaderConstant
 
 D = TypeVar('D',bound=type)
 

@@ -1,7 +1,7 @@
 from typing import Callable
-from classes.template import TemplateBuildError, TemplateNotFoundError, TemplateValidationError
-from definition._utils_decorator import Handler,HandlerDefaultException,NextHandlerException
-from definition._service import ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
+from app.classes.template import TemplateBuildError, TemplateNotFoundError, TemplateValidationError
+from app.definition._utils_decorator import Handler,HandlerDefaultException,NextHandlerException
+from app.definition._service import ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
 
 class ServiceAvailabilityHandler(Handler):

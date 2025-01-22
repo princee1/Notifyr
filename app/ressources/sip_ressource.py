@@ -1,5 +1,5 @@
-from definition._ressource import BaseRessource, Ressource
-from container import InjectInMethod, InjectInFunction
+from app.definition._ressource import BaseRessource, Ressource
+from app.container import InjectInMethod, InjectInFunction
 
 
 SIP_INCOMING_PREFIX = "sip-incoming"

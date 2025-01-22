@@ -1,7 +1,7 @@
 import sched
 import time
 import asyncio
-from definition._interface import Interface, IsInterface
+from app.definition._interface import Interface, IsInterface
 from abc import abstractmethod
 
 

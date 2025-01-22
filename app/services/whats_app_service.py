@@ -1,4 +1,4 @@
-from definition._service import Service,ServiceClass
+from app.definition._service import Service,ServiceClass
 from .config_service import ConfigService
 from .logger_service import LoggerService
 

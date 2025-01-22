@@ -1,10 +1,10 @@
 from typing import Annotated, Any
 from fastapi import Depends, Header, Request, Response,HTTPException,status
-from services.config_service import ConfigService
-from utils.dependencies import get_admin_token, get_bearer_token, get_client_ip
-from container import InjectInMethod,Get
-from definition._ressource import Guard, UseGuard, UsePermission,BaseRessource,HTTPMethod,Ressource
-from decorators.permissions import JWTHTTPRoutePermission
+from app.services.config_service import ConfigService
+from app.utils.dependencies import get_admin_token, get_bearer_token, get_client_ip
+from app.container import InjectInMethod,Get
+from app.definition._ressource import Guard, UseGuard, UsePermission,BaseRessource,HTTPMethod,Ressource
+from app.decorators.permissions import JWTHTTPRoutePermission
 
 ADMIN_PREFIX = 'admin'
 ADMIN_STARTS_WITH = '_admin'

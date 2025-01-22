@@ -1,18 +1,14 @@
 from celery import Celery
 
-from container import Get
-
-#from .services.email_service import EmailSenderService
-celery = Celery('celery',
+celery_app = Celery('celery_app',
                 backend='redis://localhost/0',
                 broker='redis://localhost/0'
             )
-celery.conf.update(task_serializer='pickle', accept_content=['pickle'])
-celery.autodiscover_tasks(related_name='email_ressource')
+celery_app.conf.update(task_serializer='pickle', accept_content=['pickle'])
+celery_app.autodiscover_tasks(['app.services'], related_name='email_service')
 
-@celery.task()
-def send_custom_email(content, meta, images, attachment):
-    print('pk')
+
+
 
 # app.conf.update(
 #                 task_serializer="json",

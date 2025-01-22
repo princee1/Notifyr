@@ -1,21 +1,21 @@
 from dataclasses import dataclass
 from msal import ConfidentialClientApplication
 from typing import Any, Optional, Type, TypeVar, TypedDict, overload
-from utils.fileIO import JSONFile
-from utils.prettyprint import PrettyPrinter
+from app.utils.fileIO import JSONFile
+from app.utils.prettyprint import PrettyPrinter
 from requests import post, Request,Response
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
-from utils.helper import b64_encode
+from app.utils.helper import b64_encode
 from typing import Literal,List, Optional
 from enum import Enum
 import time
 import pickle
-from utils.helper import format_url_params
-from utils.constant import EmailHostConstant
-from utils.dependencies import APIFilterInject
+from app.utils.helper import format_url_params
+from app.utils.constant import EmailHostConstant
+from app.utils.dependencies import APIFilterInject
 
 class OAuthError(Exception):
     """Base class for all OAuth-related errors."""

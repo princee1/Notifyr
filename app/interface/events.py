@@ -1,6 +1,6 @@
 
 
-from definition._interface import Interface,IsInterface
+from app.definition._interface import Interface,IsInterface
 
 @IsInterface
 class EventInterface(Interface):

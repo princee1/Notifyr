@@ -2,10 +2,10 @@ import os
 from typing import Any
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
-from utils.fileIO import JSONFile
-from definition import _service
+from app.utils.fileIO import JSONFile
+from app.definition import _service
 import socket
-from utils.helper import parseToBool
+from app.utils.helper import parseToBool
 
 
 ENV = ".env"

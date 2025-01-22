@@ -7,24 +7,25 @@ import socket
 from typing import Callable
 
 
-from utils.helper import b64_encode
-from utils.fileIO import JSONFile
-from utils.prettyprint import SkipInputException, TemporaryPrint
-from classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
-from classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
+from app.utils.helper import b64_encode
+from app.utils.fileIO import JSONFile
+from app.utils.prettyprint import SkipInputException, TemporaryPrint
+from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
+from app.classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 
 from .model_service import LLMModelService
-from utils.constant import EmailHostConstant
-from classes.email import EmailBuilder
-from interface.threads import ThreadInterface
-from interface.timers import SchedulerInterface
+from app.utils.constant import EmailHostConstant
+from app.classes.email import EmailBuilder
+from app.interface.threads import ThreadInterface
+from app.interface.timers import SchedulerInterface
 
 from .logger_service import LoggerService
-from definition import _service
+from app.definition import _service
 from .config_service import ConfigService
 import ssl
 
-from utils.validation import email_validator
+from app.utils.validation import email_validator
+from app.celery_task import celery_app
 
 @_service.AbstractServiceClass
 class BaseEmailService(_service.Service):
@@ -198,12 +199,15 @@ class EmailSenderService(BaseEmailService):
 
     def sendTemplateEmail(self,data, meta, images):
         email  = EmailBuilder(data,meta,images)
-        self._send_message(email)
+        self._send_message.delay(email)
 
+    
     def sendCustomEmail(self,content, meta, images, attachment):
         email =  EmailBuilder(content,meta,images,attachment)
-        self._send_message(email)
+        #send_custom_email(content, meta, images, attachment)
+        self._send_message.delay(email)
 
+    @celery_app.task(bind=True)
     @BaseEmailService.task_lifecycle
     def _send_message(self, email: EmailBuilder,connector:smtp.SMTP):
         try:

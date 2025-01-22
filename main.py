@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from enum import Enum
-from signal_handler import SignalHandler_
-from utils.prettyprint import PrettyPrinter_
+from app.signal_handler import SignalHandler_
+from app.utils.prettyprint import PrettyPrinter_
 
 
 class RunMode(Enum):
@@ -23,16 +23,16 @@ config_file = args.config
 
 PrettyPrinter_.show(1, print_stack=False)
 ########################################################################
-from container import build_container, Get
+from app.container import build_container, Get
 build_container()
 
-from server.application import AppParameter, RESSOURCES
-from server.apps_registration import createApps, editApps,start_applications
-from server.access_registration import prompt_client_registration
-from server.middleware import MIDDLEWARE
-from utils.constant import ConfigAppConstant
-from services.config_service import ConfigService
-from utils.question import ask_question,ConfirmInputHandler
+from app.server.application import AppParameter, RESSOURCES
+from app.server.apps_registration import createApps, editApps,start_applications
+from app.server.access_registration import prompt_client_registration
+from app.server.middleware import MIDDLEWARE
+from app.utils.constant import ConfigAppConstant
+from app.services.config_service import ConfigService
+from app.utils.question import ask_question,ConfirmInputHandler
 # from definition._ressource import DECORATOR_METADATA,METADATA_ROUTES,ROUTES,PROTECTED_ROUTES
 ########################################################################
 

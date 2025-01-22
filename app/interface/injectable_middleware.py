@@ -1,4 +1,4 @@
-from definition._interface import Interface,IsInterface
+from app.definition._interface import Interface,IsInterface
 
 @IsInterface
 class InjectableMiddlewareInterface(Interface):

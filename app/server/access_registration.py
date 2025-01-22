@@ -1,17 +1,17 @@
-from utils.constant import ConfigAppConstant
-from container import InjectInFunction
-from services.security_service import SecurityService, JWTAuthService
-from services.config_service import ConfigService
-from utils.prettyprint import PrettyPrinter_
-from services.file_service import FileService
-from utils.question import SimpleInputHandler, ask_question, NumberInputHandler, ExpandInputHandler, ConfirmInputHandler, CheckboxInputHandler, one_or_more, one_or_more_invalid_message
+from app.utils.constant import ConfigAppConstant
+from app.container import InjectInFunction
+from app.services.security_service import SecurityService, JWTAuthService
+from app.services.config_service import ConfigService
+from app.utils.prettyprint import PrettyPrinter_
+from app.services.file_service import FileService
+from app.utils.question import SimpleInputHandler, ask_question, NumberInputHandler, ExpandInputHandler, ConfirmInputHandler, CheckboxInputHandler, one_or_more, one_or_more_invalid_message
 
-from utils.prettyprint import printJSON, show, PrettyPrinter_
-from utils.validation import ipv4_validator
-from definition._ressource import PROTECTED_ROUTES
-from classes.permission import RoutePermission, PermissionScope
-from utils.question import ask_question, ConfirmInputHandler, SimpleInputHandler, FileInputHandler
-from utils.fileIO import ConfigFile, FDFlag, JSONFile, exist, inputFilePath, writeContent
+from app.utils.prettyprint import printJSON, show, PrettyPrinter_
+from app.utils.validation import ipv4_validator
+from app.definition._ressource import PROTECTED_ROUTES
+from app.classes.permission import RoutePermission, PermissionScope
+from app.utils.question import ask_question, ConfirmInputHandler, SimpleInputHandler, FileInputHandler
+from app.utils.fileIO import ConfigFile, FDFlag, JSONFile, exist, inputFilePath, writeContent
 
 
 API_KEY = "api_key"

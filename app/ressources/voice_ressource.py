@@ -1,6 +1,6 @@
-from services.twilio_service import VoiceService
-from definition._ressource import BaseRessource, BaseRessource, Ressource
-from container import InjectInMethod, InjectInFunction
+from app.services.twilio_service import VoiceService
+from app.definition._ressource import BaseRessource, BaseRessource, Ressource
+from app.container import InjectInMethod, InjectInFunction
 
 
 CALL_ONGOING_PREFIX = 'call-ongoing'

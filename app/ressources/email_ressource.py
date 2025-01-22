@@ -1,15 +1,14 @@
 from typing import Any, Callable, List, Literal, Optional
-from classes.template import HTMLTemplate, TemplateNotFoundError
-from services.config_service import ConfigService
-from services.security_service import SecurityService
-from container import Get, InjectInMethod
-from definition._ressource import Ressource, UsePermission, BaseRessource, UseHandler, NextHandlerException, RessourceResponse
-from services.email_service import EmailSenderService
+from app.classes.template import HTMLTemplate, TemplateNotFoundError
+from app.services.config_service import ConfigService
+from app.services.security_service import SecurityService
+from app.container import Get, InjectInMethod
+from app.definition._ressource import Ressource, UsePermission, BaseRessource, UseHandler, NextHandlerException, RessourceResponse
+from app.services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
 from fastapi import BackgroundTasks, Request, Response, HTTPException, status
-from utils.dependencies import Depends, get_auth_permission
-from decorators import permissions, handlers
-from celery_task import send_custom_email
+from app.utils.dependencies import Depends, get_auth_permission
+from app.decorators import permissions, handlers
 
 
 def guard_function(request: Request, **kwargs):
@@ -102,8 +101,8 @@ class EmailTemplateRessource(BaseRessource):
         # background_tasks.add_task(
         #     self.emailService.sendCustomEmail, content, meta, images, attachment)
 
-        #self.emailService.sendCustomEmail.delay(self.emailService,content, meta, images, attachment)
-        send_custom_email.delay(content, meta, images, attachment)
+        background_tasks.add_task(self.emailService.sendCustomEmail,content, meta, images, attachment)
+        
         return BASE_SUCCESS_RESPONSE
 
 

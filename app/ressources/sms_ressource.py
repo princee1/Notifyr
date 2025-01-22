@@ -1,6 +1,6 @@
-from definition._ressource import Ressource, UsePermission, BaseRessource, UseHandler
-from container import InjectInMethod, InjectInFunction
-from services.twilio_service import SMSService
+from app.definition._ressource import Ressource, UsePermission, BaseRessource, UseHandler
+from app.container import InjectInMethod, InjectInFunction
+from app.services.twilio_service import SMSService
 
 
 SMS_ONGOING_PREFIX = 'sms-ongoing'

@@ -1,4 +1,4 @@
-from definition import _service
+from app.definition import _service
 
 
 @_service.ServiceClass

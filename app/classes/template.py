@@ -2,16 +2,16 @@
 from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
-from definition._error import BaseError
-from utils.schema import HtmlSchemaBuilder
-from utils.helper import strict_parseToBool, flatten_dict
-from utils.validation import CustomValidator
+from app.definition._error import BaseError
+from app.utils.schema import HtmlSchemaBuilder
+from app.utils.helper import strict_parseToBool, flatten_dict
+from app.utils.validation import CustomValidator
 # import fitz as pdf
 from cerberus import DocumentError, SchemaError
 from googletrans import Translator
 import os
 import re
-from utils.prettyprint import printJSON
+from app.utils.prettyprint import printJSON
 from cerberus import schema_registry
 
 

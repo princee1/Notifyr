@@ -1,4 +1,4 @@
-src_dir = app
+src_dir = .
 config_dir = config.app.json
 
 install	:
@@ -50,7 +50,7 @@ redis:
 	docker-compose up --build 
 
 celery:
-	celery -A celery_task.celery worker --pool=solo --loglevel=info
+	celery -A app.celery_task.celery_app worker --pool=solo --loglevel=info
 
 container:
 	$(MAKE)  redis

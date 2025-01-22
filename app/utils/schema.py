@@ -3,7 +3,7 @@ from .helper import parse_value
 from bs4 import Tag
 from enum import Enum
 from typing import Any, Literal
-from utils.prettyprint import printJSON
+from .prettyprint import printJSON
 
 
 class CSSLevel(Enum):

@@ -1,6 +1,6 @@
 from threading import Event, Thread
 from typing import overload
-from definition._interface import Interface, IsInterface
+from app.definition._interface import Interface, IsInterface
 
 
 @IsInterface

@@ -1,8 +1,8 @@
 import signal
 import sys
 from typing import Any, Callable, Iterable
-from utils.question import ask_question, ConfirmInputHandler
-from utils.prettyprint import PrettyPrinter_
+from app.utils.question import ask_question, ConfirmInputHandler
+from app.utils.prettyprint import PrettyPrinter_
 
 def default_term_handler(signal,frame):
     PrettyPrinter_.warning('Termination signal Detected...',saveable = False)

@@ -1,5 +1,5 @@
 from typing import Callable
-from utils.dependencies import APIFilterInject
+from app.utils.dependencies import APIFilterInject
 from enum import Enum
 
 class DecoratorPriority(Enum):
