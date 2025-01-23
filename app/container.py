@@ -86,7 +86,6 @@ class Container():
         PrettyPrinter_.space_line()
 
         self.__buildContainer()
-        self.__freeUpMemory()
         # TODO print success  in building the app
 
     def __bind(self, type_:type, obj:Any, scope=None):

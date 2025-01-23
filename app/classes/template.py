@@ -230,7 +230,7 @@ class HTMLTemplate(Template):
         translated = self.translator.translate(text, dest=targetLang, src=src)
         return translated.text
 
-    def build(self, target_lang, data):
+    def build(self,  data,target_lang):
         is_valid, data = super().build(target_lang, data)
         if not is_valid:
             return False, data
