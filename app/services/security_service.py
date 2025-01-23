@@ -49,8 +49,12 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             self.configService.config_json_app.data[ConfigAppConstant.META_KEY][
                 ConfigAppConstant.GENERATION_ID_KEY] = self.generation_id
             current_utc = datetime.now(timezone.utc)
+            expired_ = current_utc.timestamp() + self.configService.ALL_ACCESS_EXPIRATION
+            expired_utc = datetime.fromtimestamp(expired_, timezone.utc)
             self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.CREATION_DATE_KEY] = current_utc.strftime(
                 "%Y-%m-%d %H:%M:%S")
+            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_DATE_KEY] = expired_utc.strftime("%Y-%m-%d %H:%M:%S")
+            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY] = expired_
             self.configService.config_json_app.save()
 
         else:

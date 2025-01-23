@@ -379,13 +379,16 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
             def callback(*args, **kwargs):
                 try:
                     if before:
+                        kwargs_prime = kwargs.copy()
                         for pipe in pipe_function:  # verify annotation
                             if type(pipe) == type or issubclass_of(Pipe,type(pipe)):
-                                args, kwargs = pipe(before=True).do(*args, kwargs)
+                                args, kwargs_prime = pipe(before=True).do(*args, **kwargs_prime)
                             elif isinstance(pipe, Pipe):
-                                args, kwargs = pipe.do(*args, kwargs)
+                                args, kwargs_prime = pipe.do(*args, **kwargs_prime)
                             else:
-                                args, kwargs = pipe(*args, **kwargs)
+                                args, kwargs_prime = pipe(*args, **kwargs_prime)
+                                
+                        kwargs.update(kwargs_prime)
                         return function(*args, **kwargs)
                     else:
                         result = function(*args, **kwargs)
@@ -425,7 +428,7 @@ def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, A
                 return interceptor_function(function, *args, **kwargs)
             return callback
 
-        appends_funcs_callback(func, wrapper, 3)
+        appends_funcs_callback(func, wrapper, DecoratorPriority.INTERCEPTOR)
         return func
     return decorator
 

@@ -33,6 +33,8 @@ class ConfigAppConstant:
     APPS_KEY = 'apps'
     GENERATION_ID_KEY = 'generation_id'
     CREATION_DATE_KEY = 'creation_date'
+    EXPIRATION_DATE_KEY = 'expiration_date'
+    EXPIRATION_TIMESTAMP_KEY = 'expiration_timestamp'
 
 
 class HTTPHeaderConstant:

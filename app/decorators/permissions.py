@@ -6,7 +6,7 @@ from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.permission import AuthPermission, RoutePermission
 
  
-class JWTHTTPRoutePermission(Permission):
+class JWTRouteHTTPPermission(Permission):
     
     @InjectInMethod
     def __init__(self,jwtAuthService: JWTAuthService):

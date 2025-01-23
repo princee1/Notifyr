@@ -7,6 +7,7 @@ class DecoratorPriority(Enum):
     GUARD = 2
     PIPE = 3
     HANDLER = 4
+    INTERCEPTOR = 5
 
 
 class NextHandlerException(Exception):
@@ -38,11 +39,22 @@ class GuardDefaultException(Exception):
     ...
 
 class Handler(DecoratorObj):
-    def __init__(self):
+    def __init__(self,go_to_default_exception:False):
         super().__init__(self.handle, False)
+        self.go_to_default_exception = go_to_default_exception
 
     def handle(self, function: Callable, *args, **kwargs):
         ...
+
+    def last_resort_handling(self):
+        """
+        :raise: `NextHandlerException` if the go_to_default_exception is `False`
+        :raise: `HandlerDefaultException` if the go_to_default_exception is `True`
+        """
+        if not self.go_to_default_exception:
+            raise NextHandlerException
+        
+        raise HandlerDefaultException
 
 
 class HandlerDefaultException(Exception):
@@ -77,10 +89,14 @@ class PermissionDefaultException(Exception):
 class Interceptor(DecoratorObj):
 
     def __init__(self,):
-        super().__init__(self.intercept, True)
+        super().__init__(self.intercept_before, True)
 
-    def intercept(self):
+    def intercept_before(self):
         ...
+    
+    def intercept_after(self):
+        ...
+    
 
 class InterceptorDefaultException(Exception):
     ...
