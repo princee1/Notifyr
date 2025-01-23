@@ -25,7 +25,6 @@ from .config_service import ConfigService
 import ssl
 
 from app.utils.validation import email_validator
-from app.celery_task import celery_app
 
 @_service.AbstractServiceClass
 class BaseEmailService(_service.Service):
@@ -199,15 +198,14 @@ class EmailSenderService(BaseEmailService):
 
     def sendTemplateEmail(self,data, meta, images):
         email  = EmailBuilder(data,meta,images)
-        self._send_message.delay(email)
+        self._send_message(email)
 
     
     def sendCustomEmail(self,content, meta, images, attachment):
         email =  EmailBuilder(content,meta,images,attachment)
         #send_custom_email(content, meta, images, attachment)
-        self._send_message.delay(email)
+        self._send_message(email)
 
-    @celery_app.task(bind=True)
     @BaseEmailService.task_lifecycle
     def _send_message(self, email: EmailBuilder,connector:smtp.SMTP):
         try:

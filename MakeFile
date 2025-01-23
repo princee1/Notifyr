@@ -49,10 +49,10 @@ register:
 redis:
 	docker-compose up --build 
 
-celery:
-	celery -A app.celery_task.celery_app worker --pool=solo --loglevel=info
+dramatiq:
+	dramatiq
 
 container:
 	$(MAKE)  redis
-	$(MAKE)  celery
+	$(MAKE)  dramatiq
 

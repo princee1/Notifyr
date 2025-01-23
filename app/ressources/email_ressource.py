@@ -14,7 +14,7 @@ from app.decorators import permissions, handlers
 def guard_function(request: Request, **kwargs):
     pass
 
-
+    
 class EmailMetaModel(BaseModel):
     Subject: str
     From: str
@@ -79,10 +79,7 @@ class EmailTemplateRessource(BaseRessource):
             return HTTPException(status.HTTP_400_BAD_REQUEST, detail={'description': data, 'message': 'Validation Error'})
         images = template.images
 
-        #self.emailService.sendTemplateEmail(data,meta,images).delay()
-
-        # background_tasks.add_task(
-        #     self.emailService.sendTemplateEmail, data, meta, images)
+        background_tasks.add_task( self.emailService.sendTemplateEmail, data, meta, images)
 
         return BASE_SUCCESS_RESPONSE
 
@@ -98,11 +95,7 @@ class EmailTemplateRessource(BaseRessource):
         attachment = customEmail.attachments
         images = customEmail.images
 
-        # background_tasks.add_task(
-        #     self.emailService.sendCustomEmail, content, meta, images, attachment)
-
-        background_tasks.add_task(self.emailService.sendCustomEmail,content, meta, images, attachment)
-        
+        background_tasks.add_task(self.emailService.sendCustomEmail, content, meta, images, attachment)
         return BASE_SUCCESS_RESPONSE
 
 
