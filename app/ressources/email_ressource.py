@@ -3,7 +3,7 @@ from app.classes.template import HTMLTemplate, TemplateNotFoundError
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
-from app.definition._ressource import Ressource, UsePermission, BaseRessource, UseHandler, NextHandlerException, RessourceResponse
+from app.definition._ressource import HTTPRessource, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse
 from app.services.email_service import EmailSenderService
 from pydantic import BaseModel, RootModel
 from fastapi import BackgroundTasks, Request, Response, HTTPException, status
@@ -50,9 +50,9 @@ DEFAULT_RESPONSE = {
         'message': 'email task received successfully'}
 }
 
-@Ressource(EMAIL_PREFIX)
+@HTTPRessource(EMAIL_PREFIX)
 @UseHandler(handlers.ServiceAvailabilityHandler, start_with='_api_')
-class EmailTemplateRessource(BaseRessource):
+class EmailTemplateRessource(BaseHTTPRessource):
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
         super().__init__()
@@ -62,7 +62,7 @@ class EmailTemplateRessource(BaseRessource):
 
     @UsePermission(permissions.JWTRouteHTTPPermission, permissions.JWTAssetPermission)
     @UseHandler(handlers.TemplateHandler)
-    @BaseRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
+    @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
     def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         
         self.emailService.pingService()
@@ -84,7 +84,7 @@ class EmailTemplateRessource(BaseRessource):
         return BASE_SUCCESS_RESPONSE
 
     @UsePermission(permissions.JWTRouteHTTPPermission)
-    @BaseRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
+    @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
     def _api_send_customEmail(self, customEmail: CustomEmailModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
         

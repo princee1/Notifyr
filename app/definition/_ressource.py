@@ -17,7 +17,7 @@ from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
 
-class UseRole(Enum):
+class Role(Enum):
     PUBLIC = 1
     SERVICE = 2
     ADMIN = 3
@@ -35,6 +35,8 @@ class MethodStartsWithError(Exception):
     ...
 
 
+#TODO change from module metadata to class metadata
+#TODO Operation id
 
 RESSOURCES: dict[str, type] = {}
 PROTECTED_ROUTES: dict[str, list[str]] = {}
@@ -90,7 +92,13 @@ class RessourceResponse(TypedDict):
     details:Optional[Any]
 
 
-class BaseRessource(EventInterface):
+
+class HTTPRessMetaClass(type):
+    def __new__(cls, name, bases, dct):
+        setattr(cls,'meta',{})
+        return super().__new__(cls, name, bases, dct)
+
+class BaseHTTPRessource(EventInterface,metaclass=HTTPRessMetaClass):
 
     @staticmethod
     def _build_operation_id(route_name: str, prefix: str, method_name: list[HTTPMethod] | HTTPMethod, operation_id: str) -> str:
@@ -104,7 +112,7 @@ class BaseRessource(EventInterface):
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
                   deprecated: bool | None = None):
         def decorator(func: Callable):
-            computed_operation_id = BaseRessource._build_operation_id(
+            computed_operation_id = BaseHTTPRessource._build_operation_id(
                 path, None, func.__qualname__, operation_id)
             METADATA_ROUTES[func.__qualname__] = computed_operation_id
             
@@ -136,13 +144,13 @@ class BaseRessource(EventInterface):
     def Get(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
             responses: Dict[int | str, Dict[str, Any]] | None = None,
             deprecated: bool | None = None):
-        return BaseRessource.HTTPRoute(path, HTTPMethod.GET, operation_id, response_model, response_description, responses, deprecated)
+        return BaseHTTPRessource.HTTPRoute(path, HTTPMethod.GET, operation_id, response_model, response_description, responses, deprecated)
 
     @staticmethod
     def Post(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None):
-        return BaseRessource.HTTPRoute(path, HTTPMethod.POST, operation_id, response_model, response_description, responses, deprecated)
+        return BaseHTTPRessource.HTTPRoute(path, HTTPMethod.POST, operation_id, response_model, response_description, responses, deprecated)
 
     def init_stacked_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
@@ -158,8 +166,11 @@ class BaseRessource(EventInterface):
                 setattr(self, f, c)
 
     def __init_subclass__(cls: Type) -> None:
+
         RESSOURCES[cls.__name__] = cls
         # ROUTES[cls.__name__] = []
+        # setattr(cls, 'meta', {})
+        super().__init_subclass__()
 
     def __init__(self,dependencies=None,router_default_response:dict=None) -> None:
         self.assetService: AssetService = Get(AssetService)
@@ -170,6 +181,7 @@ class BaseRessource(EventInterface):
         
         self.router = APIRouter(prefix=prefix, on_shutdown=[
                                 self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
+        
         self.init_stacked_callback()
         self._add_routes()
         self._add_handcrafted_routes()
@@ -208,10 +220,10 @@ class BaseRessource(EventInterface):
         pass
 
 
-R = TypeVar('R', bound=BaseRessource)
+R = TypeVar('R', bound=BaseHTTPRessource)
 
 
-def Ressource(prefix:str):
+def HTTPRessource(prefix:str):
     def class_decorator(cls:Type[R]) ->Type[R]:
         # TODO: support module-level injection 
         PREFIX_METADATA[cls.__name__] = prefix
@@ -434,4 +446,7 @@ def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, A
 
 
 def UseRole(*role_function):
+    ...
+
+def IncludeRessource(*ressources: Type[R]):
     ...

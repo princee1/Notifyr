@@ -7,7 +7,7 @@ from app.services.security_service import JWTAuthService,SecurityService
 from app.services.config_service import ConfigService
 from app.utils.dependencies import get_admin_token, get_auth_permission, get_bearer_token, get_client_ip
 from app.container import InjectInMethod,Get
-from app.definition._ressource import Guard, UseGuard, UseHandler, UsePermission,BaseRessource,HTTPMethod,Ressource, UsePipe
+from app.definition._ressource import Guard, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.classes.permission import AuthPermission,RoutePermission,AssetsPermission
 from pydantic import BaseModel, RootModel,field_validator
@@ -38,9 +38,9 @@ class AuthPermissionModel(BaseModel):
         return issued_for
 
 
-@Ressource(ADMIN_PREFIX)
+@HTTPRessource(ADMIN_PREFIX)
 @UsePermission(JWTRouteHTTPPermission)
-class AdminRessource(BaseRessource):
+class AdminRessource(BaseHTTPRessource):
 
     @InjectInMethod
     def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,securityService:SecurityService,assetService:AssetService):
@@ -52,7 +52,7 @@ class AdminRessource(BaseRessource):
 
     
     @UseHandler(ServiceAvailabilityHandler)
-    @BaseRessource.HTTPRoute('/invalidate/',methods=[HTTPMethod.DELETE])
+    @BaseHTTPRessource.HTTPRoute('/invalidate/',methods=[HTTPMethod.DELETE])
     def invalidate_tokens(self,authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
         self.jwtAuthService.set_generation_id(True)
@@ -60,7 +60,7 @@ class AdminRessource(BaseRessource):
 
 
     @UseHandler(ServiceAvailabilityHandler)
-    @BaseRessource.HTTPRoute('/issue-auth/',methods=[HTTPMethod.GET])
+    @BaseHTTPRessource.HTTPRoute('/issue-auth/',methods=[HTTPMethod.GET])
     def issue_auth_token(self,authModel:AuthPermissionModel | List[AuthPermissionModel],authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
         authModel:list[AuthPermissionModel] = authModel if isinstance(authModel,list) else [authModel]
@@ -69,7 +69,7 @@ class AdminRessource(BaseRessource):
 
     @UseHandler(ServiceAvailabilityHandler)
     @UsePipe(AuthPermissionPipe)
-    @BaseRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST])
     def refresh_auth_token(self,tokens:str |list[str], authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
         tokens:list[AuthPermission] = tokens if isinstance(tokens,list) else [tokens]

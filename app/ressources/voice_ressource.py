@@ -1,12 +1,12 @@
 from app.services.twilio_service import VoiceService
-from app.definition._ressource import BaseRessource, BaseRessource, Ressource
+from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPRessource
 from app.container import InjectInMethod, InjectInFunction
 
 
 CALL_ONGOING_PREFIX = 'call-ongoing'
 
-@Ressource(CALL_ONGOING_PREFIX)
-class OnGoingCallRessources(BaseRessource):
+@HTTPRessource(CALL_ONGOING_PREFIX)
+class OnGoingCallRessources(BaseHTTPRessource):
     @InjectInMethod
     def __init__(self, voiceService: VoiceService) -> None:
         super().__init__()
@@ -20,8 +20,8 @@ class OnGoingCallRessources(BaseRessource):
 
 
 CALL_INCOMING_PREFIX = "call-incoming"
-@Ressource(CALL_INCOMING_PREFIX)
-class IncomingCallRessources(BaseRessource):
+@HTTPRessource(CALL_INCOMING_PREFIX)
+class IncomingCallRessources(BaseHTTPRessource):
     @InjectInMethod
     def __init__(self, voiceService: VoiceService) -> None:
         super().__init__()

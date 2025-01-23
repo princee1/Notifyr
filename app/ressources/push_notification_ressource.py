@@ -1,11 +1,11 @@
 from app.services.push_notification_service import PushNotificationService
 from app.container import InjectInMethod
-from app.definition._ressource import BaseRessource, Ressource
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource
 
 PUSH_NOTIFICATION_PREFIX = 'push-notification'
 
-@Ressource(PUSH_NOTIFICATION_PREFIX)
-class PushNotificationRessource(BaseRessource):
+@HTTPRessource(PUSH_NOTIFICATION_PREFIX)
+class PushNotificationRessource(BaseHTTPRessource):
 
     @InjectInMethod
     def __init__(self,push_notificationService:PushNotificationService,):
