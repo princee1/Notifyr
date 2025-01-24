@@ -10,6 +10,7 @@ import pyfiglet
 import time
 import sys
 from functools import wraps
+import datetime as dt
 
 
 EmojiPosition = Literal['left', 'right', 'both', 'none']
@@ -136,7 +137,7 @@ def printTuple(): pass
 
 ########################################################################
 
-def get_toggle_args(key: str, kwargs: dict,):
+def get_toggle_kwargs(key: str, kwargs: dict,):
     if key not in kwargs:
         return True
     else:
@@ -150,7 +151,7 @@ class PrettyPrinter:
 
         @wraps(func)
         def wrapper(*args, **kwargs):
-            saveable = get_toggle_args('saveable', kwargs)
+            saveable = get_toggle_kwargs('saveable', kwargs)
 
             if 'show' not in kwargs:
                 kwargs['show'] = True
@@ -161,14 +162,14 @@ class PrettyPrinter:
                 kwargs_prime['saveable'] = False
                 kwargs_prime['show'] = True
                 self.buffer.append(
-                    {'func': func, 'args': args, 'kwargs': kwargs_prime})
+                    {'func': func, 'args': args, 'kwargs': kwargs_prime,'now':dt.datetime.now()})
             return func(*args, **kwargs)
         return wrapper
 
     @staticmethod
     def if_show(func: Callable) -> Callable:
         def wrapper(*args, **kwargs):
-            show = get_toggle_args('show', kwargs)
+            show = get_toggle_kwargs('show', kwargs)
             if show:
                 return func(*args, **kwargs)
             return
@@ -178,45 +179,43 @@ class PrettyPrinter:
     def __init__(self):
         self.buffer: list[Callable] = []
 
+    @if_show
     @cache
     def warning(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        if show:
-            print_warning(message, position)
-
+        print_warning(message, position)
+    @if_show
     @cache
     def error(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        if show:
-            print_error(message, position)
+        print_error(message, position)
 
+    @if_show
     @cache
     def message(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        if show:
-            print_message(message, position)
+        print_message(message, position)
 
+    @if_show
     @cache
     def info(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        if show:
-            print_info(message, position)
+        print_info(message, position)
 
+    @if_show
     @cache
     def success(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        if show:
-            print_success(message, position)
+        print_success(message, position)
 
+    @if_show
     @cache
     def custom_message(self, message:str, color:str=Fore.WHITE, background:str=Back.RESET, emoji_code=":speech_balloon:", show=True, saveable=True, position: EmojiPosition = 'both'):
-        if show:
             base_print(message, color, background, emoji_code, position)
-
+    @if_show
     @cache
     def json(self, content:Any, indent=1, width=80, depth=None, compact=False, show:bool=True, saveable:bool=True,):
-        if show:
-            printJSON(content, indent, width, depth, compact)
+        printJSON(content, indent, width, depth, compact)
 
+    @if_show
     @cache
     def space_line(self, show: bool = True, saveable: bool = True):
-        if show:
-            print()
+        print()
 
     def clearScreen(self):
         clearscreen()
@@ -225,6 +224,26 @@ class PrettyPrinter:
         clearline()
 
     def show(self, pause_after=1, title='Communication - Service', pause_before=0, color=Fore.WHITE, clear_screen_after=False, print_stack=True, clear_stack=False, space_line=False):
+        """
+        Display the ASCII art title and optionally print the stack buffer.
+
+        This function clears the screen, sets a title, displays ASCII art, and can print
+        the contents of the stack buffer. It also provides options for pausing, clearing
+        the stack, and adding space lines.
+
+        Parameters:
+        `pause_after` (float): Time to pause after displaying content (default: 1 second)
+        `title` (str): The title to set for the console window (default: 'Communication - Service')
+        `pause_before` (float): Time to pause before displaying content (default: 0 seconds)
+        `color` (str): The color to use for the ASCII art (default: Fore.WHITE)
+        `clear_screen_afte`r (bool): Whether to clear the screen after displaying (default: False)
+        `print_stack` (bool): Whether to print the contents of the stack buffer (default: True)
+        `clear_stack `(bool): Whether to clear the stack buffer after printing (default: False)
+        `space_line` (bool): Whether to add a space line after printing (default: False)
+
+        Returns:
+        None
+        """
         time.sleep(pause_before)
         self.clearScreen()
         settitle(title)

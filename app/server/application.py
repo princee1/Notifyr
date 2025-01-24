@@ -3,8 +3,9 @@ Contains the FastAPI app
 """
 
 from dataclasses import dataclass
-from app.container import InjectInMethod, Get, Need
+from app.container import Get, Need
 from app.ressources import *
+from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
@@ -15,6 +16,7 @@ import uvicorn
 import multiprocessing
 import threading
 import sys
+import datetime as dt
 from app.definition._ressource import RESSOURCES, BaseHTTPRessource
 from app.interface.events import EventInterface
 
@@ -78,7 +80,7 @@ class Application(EventInterface):
 
     # TODO if it important add other on_start_up and on_shutdown hooks
     def __init__(self, appParameter: AppParameter):
-
+        self.pretty_printer = PrettyPrinter_
         self.thread = threading.Thread(
             None, self.run, appParameter.title, daemon=False)
         self.log_level = appParameter.log_level
@@ -121,10 +123,20 @@ class Application(EventInterface):
         self.start_server()
 
     def add_ressources(self):
+        self.pretty_printer.show(pause_before=1,clear_stack=True,space_line=True)
         for ressource_type in self.ressources:
-            res = ressource_type()
-            self.app.include_router(res.router, responses=res.default_response)
-        pass
+            try:
+                now = dt.datetime.now()
+                res = ressource_type()
+                self.app.include_router(res.router, responses=res.default_response)
+                self.pretty_printer.success(f"[{now}] Ressource {ressource_type.__name__} added successfully",saveable=True)
+            except Exception as e:
+                self.pretty_printer.error(f"[{now}] Error adding ressource {ressource_type.__name__} to the app",saveable=True)
+
+        self.pretty_printer.show(pause_before=1,clear_stack=True,space_line=False)
+        
+            
+
 
     def add_middlewares(self):
         for middleware in self.middlewares:
