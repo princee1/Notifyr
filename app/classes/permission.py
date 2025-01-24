@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Literal, TypedDict,Dict,NotRequired
+from typing import Literal,Dict,NotRequired
+from typing_extensions import TypedDict
 
 PermissionScope= Literal['custom','all']
 

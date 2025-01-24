@@ -25,7 +25,6 @@ async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
     if x_admin_token == None or x_admin_token != configService.ADMIN_KEY:
         raise HTTPException(status_code=403, detail="X-Admin-Token header invalid")
 
-@dataclass
 class AuthPermissionModel(BaseModel):
     issued_for:str
     allowed_routes:dict[str,RoutePermission] 
