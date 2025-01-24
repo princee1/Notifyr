@@ -176,6 +176,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessMetaClass):
         self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         prefix = PREFIX_METADATA[self.__class__.__name__]
+        #prefix:str = self.__class__.meta['prefix']
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
         
@@ -226,6 +227,7 @@ R = TypeVar('R', bound=BaseHTTPRessource)
 def HTTPRessource(prefix:str):
     def class_decorator(cls:Type[R]) ->Type[R]:
         # TODO: support module-level injection 
+        cls.meta['prefix'] = prefix
         PREFIX_METADATA[cls.__name__] = prefix
         return R
     return class_decorator

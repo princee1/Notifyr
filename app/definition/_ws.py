@@ -1,8 +1,11 @@
+import functools
 from fastapi import WebSocketDisconnect,WebSocketException,WebSocket
-from app.utils.dependencies import get_bearer_token
+#from app.interface.events import EventInterface
+#from app.utils.dependencies import get_bearer_token
 import json 
+import wrapt
 from pydantic import BaseModel
-from typing import Type,TypeVar
+from typing import Any, Callable, Type,TypeVar,NewType, Union
 
 class WSConnectionManager:
     def __init__(self):
@@ -24,44 +27,74 @@ class WSConnectionManager:
 
 
 class WSRessMetaClass(type):
-    ...
+    def __new__(cls, name, bases, dct):
+        setattr(cls,'meta',{})
+        return super().__new__(cls, name, bases, dct)
 
 
+WS_METADATA:dict[str,type] = {}
+
+
+class Protocol(BaseModel):
+    __protocol_name:str
+    
 
 class BaseWebSocketRessource(metaclass = WSRessMetaClass):
 
-
     @staticmethod
-    def WSLifestyle():
+    def WSLifecycle(func:Callable):
+
+        @functools.wraps(func)
+        def wrapper(*args,**kwargs):
+            return func(*args,**kwargs)
+
+        return wrapper
+    
+    @staticmethod
+    def WSEndpoint(path:str,protocol: str | bytes | dict | BaseModel=str):
         ...
-
+    
     @staticmethod
-    def OnEvent():
-        ... 
-
-    @staticmethod
-    def WSEndpoint():
-        ...
+    def WSProtocol(protocol:str | bytes | dict | BaseModel,protocol_definition:Callable[...,Any]):
+        
+        def decorator(func:Callable):
+            return func
+        
+        return decorator
+        
     
     def __init__(self):
-        #self.connection_manager = WSConnectionManager()
+        self.path:dict[str,Any] = {}
+        self.protocol:dict[str,type] = {}
         self.endpoints:dict = {}
-        self.events:dict = {}
-
+        self.connection_manager = WSConnectionManager()
+        self.protocol:dict = {}
     
+    def __init_subclass__(cls):
+        WS_METADATA[cls.__name__] = cls
+        
+    def on_connect(self,websocket:WebSocket):
+        ...
     
+    def on_disconnect(self,websocket:WebSocket):
+        ...
+    
+    def on_shutdown(self):
+        ...
+    
+    def on_startup(self):
+        ...
 
 
 W = TypeVar('W', bound=BaseWebSocketRessource)
 
 
-
-def WebSocketRessource():
-    ...
-
+@wrapt.decorator
+def WebSocketRessource(cls:Type[W])->Type[Union[W,BaseWebSocketRessource]]:
+    class Factory(cls,BaseWebSocketRessource):
+        ...
+    return type(cls.__name__, (cls, BaseWebSocketRessource), dict(Factory.__dict__))
+    
 
 def WSGuard():
-    ...
-
-def WSHandler():
     ...
