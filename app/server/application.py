@@ -15,7 +15,7 @@ import uvicorn
 import multiprocessing
 import threading
 import sys
-from app.definition._ressource import RESSOURCES, BaseRessource
+from app.definition._ressource import RESSOURCES, BaseHTTPRessource
 from app.interface.events import EventInterface
 
 
@@ -29,13 +29,13 @@ class AppParameter:
     title: str
     summary: str
     description: str
-    ressources: list[type[BaseRessource]]
+    ressources: list[type[BaseHTTPRessource]]
     middlewares: list[type[BaseHTTPMiddleware]]
     port: int = 8000
     log_level: str = 'debug'
     log_config: Any = None
 
-    def __init__(self, title: str, summary: str, description: str, ressources: list[type[BaseRessource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug',):
+    def __init__(self, title: str, summary: str, description: str, ressources: list[type[BaseHTTPRessource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug',):
         self.title: str = title
         self.summary: str = summary
         self.description: str = description
@@ -89,6 +89,7 @@ class Application(EventInterface):
         self.configService: ConfigService = Get(ConfigService)
         self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
+        
         self.add_middlewares()
         self.add_ressources()
         self.set_httpMode()

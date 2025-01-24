@@ -42,6 +42,9 @@ class HTTPHeaderConstant:
     ADMIN_KEY = 'X-Admin-Key'
 
 
+class CookieConstant:
+    JSESSION_ID= 'jsessionid'
+
 class SpecialKeyParameterConstant:
     TOKEN_NAME_PARAMETER = 'token_'
     CLIENT_IP_PARAMETER = 'client_ip_'

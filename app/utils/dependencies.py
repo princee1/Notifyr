@@ -61,6 +61,7 @@ def get_user_agent(request: Request) -> str:
 
 def get_client_ip(request: Request) -> str:
     return request.client.host
+
 def get_api_key(request: Request=None) -> str:
     if request:
         return request.headers.get(HTTPHeaderConstant.API_KEY_HEADER)
@@ -83,3 +84,8 @@ async def get_auth_permission(request: Request):
     if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.authPermission
+
+
+def get_session_id(request: Request):
+    ...
+
