@@ -1,4 +1,4 @@
-from app.classes.permission import AuthPermission
+from app.classes.auth_permission import AuthPermission
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 

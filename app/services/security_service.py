@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from app.classes.permission import AuthPermission, RoutePermission
+from app.classes.auth_permission import AuthPermission, RoutePermission
 from random import randint, random
 from app.utils.helper import generateId
 from app.utils.constant import ConfigAppConstant

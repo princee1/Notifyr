@@ -4,6 +4,8 @@ from typing_extensions import TypedDict
 
 PermissionScope= Literal['custom','all']
 
+
+
 class RoutePermission(TypedDict):
     scope: PermissionScope
     custom_routes: NotRequired[list[str]]
