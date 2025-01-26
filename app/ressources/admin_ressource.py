@@ -9,7 +9,7 @@ from app.utils.dependencies import get_admin_token, get_auth_permission, get_bea
 from app.container import InjectInMethod,Get
 from app.definition._ressource import Guard, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.classes.permission import AuthPermission,RoutePermission,AssetsPermission
+from app.classes.auth_permission import AuthPermission,RoutePermission,AssetsPermission
 from pydantic import BaseModel, RootModel,field_validator
 from app.decorators.handlers import ServiceAvailabilityHandler
 from app.decorators.pipes import AuthPermissionPipe
@@ -37,8 +37,8 @@ class AuthPermissionModel(BaseModel):
         return issued_for
 
 
-@HTTPRessource(ADMIN_PREFIX)
 @UsePermission(JWTRouteHTTPPermission)
+@HTTPRessource(ADMIN_PREFIX)
 class AdminRessource(BaseHTTPRessource):
 
     @InjectInMethod
@@ -55,7 +55,9 @@ class AdminRessource(BaseHTTPRessource):
     def invalidate_tokens(self,authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
         self.jwtAuthService.set_generation_id(True)
-        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Tokens successfully invalidated"})
+        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Tokens successfully invalidated",
+                                                                    "details": "Even if you're the admin old token wont be valid anymore",
+                                                                    "tokens":...})
 
 
     @UseHandler(ServiceAvailabilityHandler)

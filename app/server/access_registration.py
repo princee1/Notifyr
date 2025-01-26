@@ -9,8 +9,8 @@ from app.utils.question import SimpleInputHandler, ask_question, NumberInputHand
 from app.utils.prettyprint import printJSON, show, PrettyPrinter_
 from app.utils.validation import ipv4_validator
 from app.definition._ressource import PROTECTED_ROUTES
-from app.classes.permission import RoutePermission, PermissionScope
-from app.utils.question import ask_question, ConfirmInputHandler, SimpleInputHandler, FileInputHandler
+from app.classes.auth_permission import Role, RoutePermission, PermissionScope
+from app.utils.question import ask_question, ConfirmInputHandler, SimpleInputHandler, FileInputHandler,CheckboxInputHandler
 from app.utils.fileIO import ConfigFile, FDFlag, JSONFile, exist, inputFilePath, writeContent
 
 
@@ -47,41 +47,34 @@ def register_client_services(securityService: SecurityService, jwtAuthService: J
     clients_secrets = {}
 
     for i in range(client_number):
-        PrettyPrinter_.show(0,clear_stack=True)
-        PrettyPrinter_.info(
-            f"Registering client {i+1} of {client_number}", saveable=False)
+        PrettyPrinter_.show(0, clear_stack=True)
+        PrettyPrinter_.info(f"Registering client {i+1} of {client_number}", saveable=False)
         if i > 0:
             previous_clients = ask_question([ConfirmInputHandler('Do you want to copy the same config as previous clients?', default=False, name='copy_previous'), CheckboxInputHandler(
                 'Select the previous clients you want to copy', choices=ipv4_addresses, name='previous_clients', when=lambda x: x['copy_previous'])])
             ...  # TODO implements a copy of the previous client
 
-        questions_ip = [
+        bases_questions = [
             SimpleInputHandler("Enter the ip address of the client", default='', name='ip_address',
                                validate=ip_addr_validation, invalid_message="The ip address is already in use or not properly formatted",),
+            CheckboxInputHandler("Select the roles of the client", 'roles',Role._member_names_,validate=one_or_more,invalid_message=one_or_more_invalid_message)
         ]
-        questions_routes = []
-        for ressource in current_ressources:
-            ressource_routes = PROTECTED_ROUTES[ressource]
-            questions_routes.extend([
-                ConfirmInputHandler(
-                    f"Do you want to give all access (Y) or custom access (N) to the client for {ressource}", default=True, name=ress_conf(ressource),),
-                CheckboxInputHandler(
-                    f"Select the routes you want to give access to the client for {ressource}", choices=ressource_routes, name=ressource, validate=one_or_more,
-                    invalid_message=one_or_more_invalid_message, when=lambda result: not result[ress_conf(ressource)]),])
+       
+        results = ask_question(bases_questions)
+        client_ipv4 = results['ip_address']
+        roles = results['roles']
 
-        client_ipv4 = ask_question(questions_ip)['ip_address']
         ipv4_addresses.append(client_ipv4)
 
-        access_routes = ask_question(questions_routes)
-        access_routes = parse_access_routes(access_routes, current_ressources)
+        custom_route_permission ={}
+        if Role.CUSTOM.value in roles:
+            custom_route_permission = ask_custom_routes(current_ressources)
+            custom_route_permission = parse_access_routes(custom_route_permission, current_ressources)
 
         access_token = securityService.generate_custom_api_key(client_ipv4)
-        auth_token = jwtAuthService.encode_auth_token(
-            access_routes, client_ipv4)
-        clients_secrets[client_ipv4] = {
-            API_KEY: access_token, AUTH_KEY: auth_token}
-        PrettyPrinter_.success(
-            f"Client {i+1} successfully registered with ip address {client_ipv4}")
+        auth_token = jwtAuthService.encode_auth_token(custom_route_permission, roles,client_ipv4)
+        clients_secrets[client_ipv4] = {API_KEY: access_token, AUTH_KEY: auth_token}
+        PrettyPrinter_.success(f"Client {i+1} successfully registered with ip address {client_ipv4}")
 
     return clients_secrets
 
@@ -98,6 +91,9 @@ def parse_access_routes(access_routes: dict, current_ressources: list[str]):
 
     return result
 
+
+def ask_custom_routes(current_ressources:list[str]):
+    ...
 
 def prompt_client_registration():
 

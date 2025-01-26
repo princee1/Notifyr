@@ -3,7 +3,7 @@ from app.services.assets_service import AssetService
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, RoutePermission
+from app.classes.auth_permission import AuthPermission, Role, RoutePermission,FuncMetaData
 
  
 class JWTRouteHTTPPermission(Permission):
@@ -13,9 +13,20 @@ class JWTRouteHTTPPermission(Permission):
         super().__init__()
         self.jwtAuthService = jwtAuthService
     
-    def permission(self,class_name:str, func_name:str,authPermission:AuthPermission):
-        operation_id = func_name
+    def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission):
+        operation_id = func_meta["operation_id"]
+        roles= func_meta['roles']
+        auth_roles = authPermission["roles"]
 
+        if len(roles.intersection(auth_roles)) > 0:
+                return True
+               
+        if Role.CUSTOM not in auth_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Role not allowed")
+                
+        # Role.CUSTOM available
         if class_name not in authPermission["allowed_routes"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Ressource not allowed")
