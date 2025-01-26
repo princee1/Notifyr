@@ -39,7 +39,7 @@ class GuardDefaultException(Exception):
     ...
 
 class Handler(DecoratorObj):
-    def __init__(self,go_to_default_exception:False):
+    def __init__(self,go_to_default_exception:bool = False):
         super().__init__(self.handle, False)
         self.go_to_default_exception = go_to_default_exception
 

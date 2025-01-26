@@ -44,6 +44,7 @@ class HTTPHeaderConstant:
 
 class CookieConstant:
     JSESSION_ID= 'jsessionid'
+    LANG ='lang'
 
 class SpecialKeyParameterConstant:
     TOKEN_NAME_PARAMETER = 'token_'
@@ -52,6 +53,7 @@ class SpecialKeyParameterConstant:
     FUNC_NAME_SPECIAL_KEY_PARAMETER = 'func_name'
     CLASS_NAME_SPECIAL_KEY_PARAMETER = 'class_name'
     AUTH_PERMISSION_PARAMETER = 'authPermission'
+    META_SPECIAL_KEY_PARAMETER = 'func_meta'
 
 ########################                     ########################################
 

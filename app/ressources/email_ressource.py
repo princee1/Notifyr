@@ -50,8 +50,9 @@ DEFAULT_RESPONSE = {
         'message': 'email task received successfully'}
 }
 
+
 @HTTPRessource(EMAIL_PREFIX)
-@UseHandler(handlers.ServiceAvailabilityHandler, start_with='_api_')
+@UseHandler(handlers.ServiceAvailabilityHandler)
 class EmailTemplateRessource(BaseHTTPRessource):
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService):
@@ -63,7 +64,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UsePermission(permissions.JWTRouteHTTPPermission, permissions.JWTAssetPermission)
     @UseHandler(handlers.TemplateHandler)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
-    def _api_send_emailTemplate(self, template: str, email: EmailTemplateModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
+    def send_emailTemplate(self, template: str, email: EmailTemplateModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         
         self.emailService.pingService()
 
@@ -85,7 +86,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @UsePermission(permissions.JWTRouteHTTPPermission)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
-    def _api_send_customEmail(self, customEmail: CustomEmailModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
+    def send_customEmail(self, customEmail: CustomEmailModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
         
         meta = customEmail.meta
