@@ -135,11 +135,8 @@ class Application(EventInterface):
 
         self.pretty_printer.show(pause_before=1,clear_stack=True,space_line=False)
         
-            
-
-
     def add_middlewares(self):
-        for middleware in self.middlewares:
+        for middleware in sorted(self.middlewares,key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
 
     def on_startup(self):

@@ -12,7 +12,7 @@ class RunMode(Enum):
 
 
 parser = ArgumentParser(description="Communication Service Application")
-parser.add_argument('--mode', '-m', choices=['file', 'create', 'edit'],
+parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunMode.__members__.values()],
                     default='file', type=str, help='Running Mode')
 parser.add_argument('--config', '-c', required=True, default=None,
                     type=str, help='Path to the config file')
@@ -57,7 +57,7 @@ valid = True
 if not apps_data or ConfigAppConstant.META_KEY not in apps_data or ConfigAppConstant.APPS_KEY not in apps_data or not apps_data[ConfigAppConstant.APPS_KEY]:
     mode = RunMode.CREATE
     valid = False
-    PrettyPrinter_.show(0, )
+    PrettyPrinter_.show(0, print_stack=False)
     PrettyPrinter_.warning(
         f"Invalid config file: {config_file} - No apps data found")
     PrettyPrinter_.info(f"Running on CREATING mode")
@@ -101,8 +101,8 @@ while True:
             break
 
         case RunMode.REGISTER:
-            PrettyPrinter_.error("{EDIT} mode disabled for now")
-            exit(0) # BUG DISABLED FOR NOW
+            #PrettyPrinter_.error("{EDIT} mode disabled for now")
+            #exit(0) # BUG DISABLED FOR NOW
             prompt_client_registration()
             if valid:
                 mode = RunMode.FILE

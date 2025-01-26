@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from app.classes.auth_permission import AuthPermission, RoutePermission
+from app.classes.auth_permission import AuthPermission, Role, RoutePermission
 from random import randint, random
 from app.utils.helper import generateId
 from app.utils.constant import ConfigAppConstant
@@ -43,6 +43,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         self.configService = configService
         self.fileService = fileService
 
+
     def set_generation_id(self, gen=False) -> None:
         if gen:
             self.generation_id = generateId(ID_LENGTH)
@@ -61,11 +62,13 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             self.generation_id = self.configService.config_json_app.data[
                 ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY]
 
-    def encode_auth_token(self, data: Dict[str, RoutePermission], issue_for: str,) -> str:
+    def encode_auth_token(self,data: Dict[str, RoutePermission],roles:list[str], issue_for: str,) -> str:
         try:
+            if data==None:
+                data = {}
             created_time = time.time()
             permission = AuthPermission(generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
-                                        expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data)
+                                        expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data,roles=roles)
             encoded = jwt.encode(permission, self.configService.JWT_SECRET_KEY,
                                  algorithm=self.configService.JWT_ALGORITHM)
             return self._encode_value(encoded, self.configService.ON_TOP_SECRET_KEY)

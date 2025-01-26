@@ -73,7 +73,7 @@ def isabstract(cls):
 
 class Container():
 
-    def __init__(self, D: list[type]) -> None:  # TODO add the scope option
+    def __init__(self, D: list[type],quiet=False) -> None:  # TODO add the scope option
         self.__app = injector.Injector()
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
@@ -395,7 +395,7 @@ class Container():
 
 CONTAINER: Container = None #Container(__DEPENDENCY)
 
-def build_container():
+def build_container(quiet=False):
     global CONTAINER
     CONTAINER = Container(__DEPENDENCY)
 

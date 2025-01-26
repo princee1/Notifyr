@@ -1,5 +1,5 @@
 from fastapi.responses import JSONResponse
-from app.classes.permission import AuthPermission
+from app.classes.auth_permission import AuthPermission, Role
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import InjectInMethod
@@ -15,14 +15,20 @@ from enum import Enum
 
 
 MIDDLEWARE: dict[str, type] = {}
+class MiddlewarePriority(Enum):
+
+    PROCESS_TIME = 1
+    ANALYTICS = 2
+    SECURITY = 3
+    AUTH = 4
 
 
 class MiddleWare(BaseHTTPMiddleware):
 
     def __init_subclass__(cls: type) -> None:
         MIDDLEWARE[cls.__name__] = cls
-
-
+        setattr(cls,'priority',None)
+        
 class ProcessTimeMiddleWare(MiddleWare):
 
     def __init__(self, app, dispatch=None) -> None:
@@ -35,6 +41,8 @@ class ProcessTimeMiddleWare(MiddleWare):
         response.headers["X-Process-Time"] = str(process_time) + ' (s)'
         return response
 
+ProcessTimeMiddleWare.priority = MiddlewarePriority.PROCESS_TIME
+
 
 class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
 
@@ -44,7 +52,9 @@ class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
 
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         current_time = time.time()
-        if current_time - self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY] < 0:
+        timestamp =  self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY]
+        diff = timestamp -current_time
+        if diff< 0:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"message": "Unauthorized", "detail": "All Access and Auth token are expired"})
         try:
             request_api_key = get_api_key(request)
@@ -63,10 +73,14 @@ class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
         self.securityService = securityService
         self.configService = configService
 
+SecurityMiddleWare.priority = MiddlewarePriority.SECURITY
+
 
 class AnalyticsMiddleware(MiddleWare, InjectableMiddlewareInterface):
-    ...
+    async def dispatch(self, request, call_next):
+        return await call_next(request)
 
+AnalyticsMiddleware.priority = MiddlewarePriority.ANALYTICS
 
 class JWTAuthMiddleware(MiddleWare, InjectableMiddlewareInterface):
     def __init__(self, app, dispatch=None) -> None:
@@ -80,15 +94,15 @@ class JWTAuthMiddleware(MiddleWare, InjectableMiddlewareInterface):
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         token = get_bearer_token_from_request(request)
         client_ip = get_client_ip(request)
-        authPermission: AuthPermission = self.jwtService.verify_permission(
-            token, client_ip)
-        request.state.authPermission = authPermission
-        return await call_next(request)
+        try:
+            authPermission: AuthPermission = self.jwtService.verify_permission(
+                token, client_ip)
+            authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+            request.state.authPermission = authPermission
+            return await call_next(request)
+        except HTTPException as e:
+            return JSONResponse(e.detail,e.status_code)
+        except Exception as e:
+            return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-class MiddlewarePriority(Enum):
-
-    PROCESS_TIME = 1
-    ANALYTICS = 2
-    SECURITY = 3
-    AUTH = 4
+JWTAuthMiddleware.priority = MiddlewarePriority.AUTH
