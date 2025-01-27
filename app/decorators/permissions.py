@@ -18,26 +18,24 @@ class JWTRouteHTTPPermission(Permission):
         roles= func_meta['roles']
         auth_roles = authPermission["roles"]
 
+       
         if len(roles.intersection(auth_roles)) > 0:
                 return True
                
         if Role.CUSTOM not in auth_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Role not allowed")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role not allowed")
                 
         # Role.CUSTOM available
         if class_name not in authPermission["allowed_routes"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Ressource not allowed")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ressource not allowed")
 
         routePermission: RoutePermission =authPermission["allowed_routes"][class_name]
+        
         if routePermission["scope"] == "all":
             return True
 
         if operation_id not in routePermission['custom_routes']:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Route not allowed")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Route not allowed")
 
         return True
     

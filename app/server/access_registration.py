@@ -93,7 +93,19 @@ def parse_access_routes(access_routes: dict, current_ressources: list[str]):
 
 
 def ask_custom_routes(current_ressources:list[str]):
-    ...
+
+    result ={}
+    for ressource in current_ressources:
+        ressource_routes = PROTECTED_ROUTES[ressource]
+        questions_routes = []
+        questions_routes.extend([
+            ConfirmInputHandler(f"Do you want to give all access (Y) or custom access (N) to the client for {ressource}", default=True, name=ress_conf(ressource),),
+            CheckboxInputHandler(f"Select the routes you want to give access to the client for {ressource}",
+                                choices=ressource_routes, name=ressource, instruction='(Press Enter to skip this ressource)', when=lambda result: not result[ress_conf(ressource)]),])
+    
+        result.update(ask_question(questions_routes))
+    
+    return result
 
 def prompt_client_registration():
 
@@ -105,19 +117,14 @@ def prompt_client_registration():
         'Enter the path to save the client secrets', default='secrets.json', name='secrets_path', validate=lambda x: len(x) > 0, invalid_message='Invalid path', when=lambda x: x['save_secrets'])])
 
     if answers['save_secrets']:
-        writeContent(answers['secrets_path'],
-                     client_secrets, flag=FDFlag.WRITE)
+        writeContent(answers['secrets_path'],client_secrets, flag=FDFlag.WRITE)
         if exist(answers['secrets_path']):
-            PrettyPrinter_.success(
-                f"Client secrets successfully saved to {answers['secrets_path']}", saveable=False)
-            PrettyPrinter_.warning(
-                f'Make sure to keep the file in a secure place or to delete them after loading them in other clients', saveable=False)
+            PrettyPrinter_.success(f"Client secrets successfully saved to {answers['secrets_path']}", saveable=False)
+            PrettyPrinter_.warning(f'Make sure to keep the file in a secure place or to delete them after loading them in other clients', saveable=False)
         else:
-            PrettyPrinter_.error(
-                f"Errors while saving client secrets to {answers['secrets_path']}", saveable=False)
+            PrettyPrinter_.error(f"Errors while saving client secrets to {answers['secrets_path']}", saveable=False)
     else:
-        PrettyPrinter_.warning(
-            'Client secrets not saved... make sure to properly copy and set the clients secrets', saveable=False)
+        PrettyPrinter_.warning('Client secrets not saved... make sure to properly copy and set the clients secrets', saveable=False)
         printJSON(client_secrets)
 
     PrettyPrinter_.space_line(saveable=False)

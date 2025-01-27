@@ -58,8 +58,7 @@ if not apps_data or ConfigAppConstant.META_KEY not in apps_data or ConfigAppCons
     mode = RunMode.CREATE
     valid = False
     PrettyPrinter_.show(0, print_stack=False)
-    PrettyPrinter_.warning(
-        f"Invalid config file: {config_file} - No apps data found")
+    PrettyPrinter_.warning(f"Invalid config file: {config_file} - No apps data found")
     PrettyPrinter_.info(f"Running on CREATING mode")
 
 def app_params_to_json(params: list[AppParameter],metadata={}): return {
@@ -70,8 +69,7 @@ while True:
         case RunMode.CREATE:
             if configService.config_json_app.exists and valid:
                 PrettyPrinter_.show(0, clear_stack=False,print_stack=False)
-                PrettyPrinter_.warning(
-                    f"Config file {config_file} already exists",saveable=False)
+                PrettyPrinter_.warning(f"Config file {config_file} already exists",saveable=False)
                 overwrite = ask_question([ConfirmInputHandler('Do you want to overwrite the file?', name='overwrite_config',default=True)],)['overwrite_config']
                 if not overwrite:
                     mode = RunMode.FILE
@@ -94,15 +92,14 @@ while True:
             break
 
         case RunMode.FILE:
-            apps_data = [AppParameter.fromJSON(
-                app, RESSOURCES, MIDDLEWARE) for app in apps_data[ConfigAppConstant.APPS_KEY]]
+            apps_data = [AppParameter.fromJSON(app, RESSOURCES, MIDDLEWARE) for app in apps_data[ConfigAppConstant.APPS_KEY]]
             PrettyPrinter_.show(0, clear_stack=True)
             PrettyPrinter_.success(f"Apps Config successfully loaded")
             break
 
         case RunMode.REGISTER:
             #PrettyPrinter_.error("{EDIT} mode disabled for now")
-            #exit(0) # BUG DISABLED FOR NOW
+            #exit(0) # BUG DISABLED FOR
             prompt_client_registration()
             if valid:
                 mode = RunMode.FILE
