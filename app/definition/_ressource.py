@@ -106,8 +106,9 @@ class RessourceResponse(TypedDict):
 
 class HTTPRessourceMetaClass(type):
     def __new__(cls, name, bases, dct):
-        setattr(cls,'meta',{})
+        #setattr(cls,'meta',{})
         return super().__new__(cls, name, bases, dct)
+
 
 class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
 
@@ -186,13 +187,14 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
 
         RESSOURCES[cls.__name__] = cls
         # ROUTES[cls.__name__] = []
-        # setattr(cls, 'meta', {})
+        setattr(cls, 'meta', {})
         super().__init_subclass__()
 
     def __init__(self,dependencies=None,router_default_response:dict=None) -> None:
         self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         prefix:str = self.__class__.meta['prefix']
+        #prefix = 
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
         
@@ -253,13 +255,11 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
     if type(cls) == HTTPRessourceMetaClass:
         for attr in dir(cls):
             if callable(getattr(cls, attr)) and attr in [end['endpoint'] for end in ROUTES[cls.__name__]]:
-                
                 handler = getattr(cls, attr)
                 if handling_func == None:
                     setattr(cls, attr, decorator(**kwargs)(handler))
                 else:
-                    setattr(cls, attr, decorator(
-                        *handling_func, **kwargs)(handler))  # BUG can be an source of error if not a tuple
+                    setattr(cls, attr, decorator(*handling_func, **kwargs)(handler))  # BUG can be an source of error if not a tuple
         return cls
     return None
 
@@ -272,7 +272,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
             return data
 
         class_name = get_class_name_from_method(func)
-        add_protected_route_metadata(class_name, func['operation_id'])
+        add_protected_route_metadata(class_name, func.meta['operation_id'])
 
         def wrapper(function: Callable):
 
@@ -332,8 +332,8 @@ def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str
                 if len(handler_function) == 0:
                     # TODO print a warning
                     return function(*args, **kwargs)
-
                 for handler in handler_function:
+                    
                     try:
                         if type(handler) == type or issubclass_of(Handler,type(handler)):
                             return handler().do(function, *args, **kwargs)
@@ -347,7 +347,7 @@ def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str
                         break
 
                 if default_error == None:
-                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Could not correctly treat the error')
                 
                 raise HTTPException(**default_error)
             return callback
@@ -397,8 +397,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
     # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(
-            func, UsePipe, pipe_function, before=before)
+        data = common_class_decorator(func, UsePipe, pipe_function, before=before)
         if data != None:
             return data
 
@@ -460,9 +459,9 @@ def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, A
         return func
     return decorator
 
-def UseRole(*roles:Role):
+def UseRoles(roles:list[Role]):
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(func, UsePipe,None,roles=roles)
+        data = common_class_decorator(func, UseRoles,None,roles=roles)
         if data != None:
             return data
 
