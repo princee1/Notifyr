@@ -26,6 +26,16 @@ VALIDATION_CSS_SELECTOR = "head > validation"
 VALIDATION_REGISTRY_SELECTOR = "validation-registry"
 def BODY_SELECTOR(select): return f"body {select}"
 # ============================================================================================================
+
+
+class TemplateNotFoundError(BaseError):
+    ...
+
+class TemplateBuildError(BaseError):
+    ...
+
+class TemplateValidationError(BaseError):
+    ...
 # ============================================================================================================
 
 
@@ -233,7 +243,8 @@ class HTMLTemplate(Template):
     def build(self,  data,target_lang):
         is_valid, data = super().build(target_lang, data)
         if not is_valid:
-            return False, data
+            raise TemplateValidationError(data)
+        
         content_html, content_text = self.inject(data)
         content_html = self.translate(target_lang, content_html)
         content_text = self.translate(target_lang, content_text)
@@ -275,11 +286,3 @@ class PhoneTemplate(Template):
         super().__init__(filename, content, dirName)
 ####################### ########################
 
-class TemplateNotFoundError(BaseError):
-    ...
-
-class TemplateBuildError(BaseError):
-    ...
-
-class TemplateValidationError(BaseError):
-    ...

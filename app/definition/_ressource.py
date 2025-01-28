@@ -317,7 +317,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
         return func
     return decorator
 
-def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str, Any]], Exception | None] | Type[Handler] | Handler, default_error: HTTPExceptionParams =None):
+def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Handler] | Handler, default_error: HTTPExceptionParams =None):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -328,28 +328,37 @@ def UseHandler(*handler_function: Callable[[Callable, Iterable[Any], Mapping[str
         def wrapper(function: Callable):
 
             @functools.wraps(function)
-            def callback(*args, **kwargs):
+            def callback(*args, **kwargs): # Function that will be called 
                 if len(handler_function) == 0:
                     # TODO print a warning
                     return function(*args, **kwargs)
-                for handler in handler_function:
-                    
-                    try:
-                        if type(handler) == type or issubclass_of(Handler,type(handler)):
-                            return handler().do(function, *args, **kwargs)
-                        elif isinstance(handler, Handler):
-                            return handler.do(function, *args, **kwargs)
-                        else:
-                            return handler(function, *args, **kwargs)
-                    except NextHandlerException:
-                        continue
-                    except HandlerDefaultException as e:
-                        break
-
-                if default_error == None:
-                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Could not correctly treat the error')
                 
-                raise HTTPException(**default_error)
+
+                def handler_proxy(handler,f:Callable):
+
+                    def delegator(*a,**k):
+                        if type(handler) == type or issubclass_of(Handler,type(handler)):
+                            handler_obj:Handler = handler()
+                            return handler_obj.do(f, *a, **k)
+                        elif isinstance(handler, Handler):
+                            return handler.do(f, *a, **k)
+                        else:
+                            return handler(f, *a, **k)
+                    return delegator
+                    
+                handler_prime = function
+                for handler in reversed(handler_function):
+                    handler_prime = handler_proxy(handler,handler_prime)
+                     
+                try:
+                    return handler_prime(*args, **kwargs)
+                except HandlerDefaultException as e:
+
+                    if default_error == None:
+                        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Could not correctly treat the error')
+                
+                    raise HTTPException(**default_error)
+                
             return callback
         appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER)
         return func

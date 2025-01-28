@@ -103,6 +103,6 @@ class JWTAuthMiddleware(MiddleWare, InjectableMiddlewareInterface):
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code)
         except Exception as e:
-            return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={'message':''})
 
 JWTAuthMiddleware.priority = MiddlewarePriority.AUTH

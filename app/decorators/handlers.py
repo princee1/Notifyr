@@ -1,14 +1,17 @@
 from typing import Callable
 from app.classes.template import TemplateBuildError, TemplateNotFoundError, TemplateValidationError
+from app.definition._error import BaseError
 from app.definition._utils_decorator import Handler,HandlerDefaultException,NextHandlerException
 from app.definition._service import ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
+
 
 class ServiceAvailabilityHandler(Handler):
     
     def handle(self, function:Callable, *args, **kwargs):
         try:
             return function(*args, **kwargs)
+        
         except ServiceNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Service not available')
             
@@ -17,12 +20,8 @@ class ServiceAvailabilityHandler(Handler):
 
         except ServiceTemporaryNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Service temporary not available')
-            
-        except Exception as e:
-            self.last_resort_handling()
-            #raise NextHandlerException
+                  
         
-
 class TemplateHandler(Handler):
 
     def handle(self, function, *args, **kwargs):
@@ -36,8 +35,9 @@ class TemplateHandler(Handler):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Cannot build template with data specified')
 
         except TemplateValidationError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Cannot validate template')
+            error = e.args[0]
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
+                'details':error,
+                'message': 'Validation Error'
+            })
         
-        except Exception as e:
-            self.last_resort_handling()
-            #raise NextHandlerException

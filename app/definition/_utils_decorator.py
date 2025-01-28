@@ -46,17 +46,6 @@ class Handler(DecoratorObj):
     def handle(self, function: Callable, *args, **kwargs):
         ...
 
-    def last_resort_handling(self):
-        """
-        :raise: `NextHandlerException` if the go_to_default_exception is `False`
-        :raise: `HandlerDefaultException` if the go_to_default_exception is `True`
-        """
-        if not self.go_to_default_exception:
-            raise NextHandlerException
-        
-        raise HandlerDefaultException
-
-
 class HandlerDefaultException(Exception):
     ...
 

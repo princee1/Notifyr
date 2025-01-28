@@ -22,12 +22,10 @@ class EmailMetaModel(BaseModel):
     Return_Path: Optional[str] = None
     Priority: Literal['1', '3', '5'] = '1'
 
-
 class EmailTemplateModel(BaseModel):
     meta: EmailMetaModel
     data: dict[str, Any]
     attachments: Optional[dict[str, Any]] = {}
-
 
 class CustomEmailModel(BaseModel):
     meta: EmailMetaModel
@@ -35,7 +33,6 @@ class CustomEmailModel(BaseModel):
     html_content: str
     attachments: Optional[List[tuple[str, str]]] = []
     images: Optional[List[tuple[str, str]]] = []
-
 
 EMAIL_PREFIX = "email"
 
@@ -46,6 +43,7 @@ DEFAULT_RESPONSE = {
     status.HTTP_202_ACCEPTED: {
         'message': 'email task received successfully'}
 }
+
 
 
 @UseRoles([Role.CHAT,Role.RELAY])
@@ -66,14 +64,12 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
     def send_emailTemplate(self, template: str, email: EmailTemplateModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
-
         if template not in self.assetService.htmls:
             raise TemplateNotFoundError
+        
         template: HTMLTemplate = self.assetService.htmls[template]
-        flag, data = template.build(email.data)
-        if not flag:
-            return HTTPException(status.HTTP_400_BAD_REQUEST, detail={'description': data, 'message': 'Validation Error'})
-        background_tasks.add_task( self.emailService.sendTemplateEmail, data, email.meta, template.images)
+        _,data = template.build(email.data)
+        background_tasks.add_task( self.emailService.sendTemplateEmail, data, email.meta, template.images )
 
         return BASE_SUCCESS_RESPONSE
 
@@ -81,7 +77,6 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
     def send_customEmail(self, customEmail: CustomEmailModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
-
         content = (customEmail.html_content, customEmail.text_content)
         background_tasks.add_task(self.emailService.sendCustomEmail, content,customEmail.meta,customEmail.images, customEmail.attachments)
         
