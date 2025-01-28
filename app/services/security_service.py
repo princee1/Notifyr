@@ -69,14 +69,23 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             created_time = time.time()
             permission = AuthPermission(generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
                                         expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data,roles=roles)
-            encoded = jwt.encode(permission, self.configService.JWT_SECRET_KEY,
-                                 algorithm=self.configService.JWT_ALGORITHM)
-            return self._encode_value(encoded, self.configService.ON_TOP_SECRET_KEY)
+            token = self._encode_token(permission)
+            return token
         except Exception as e:
             print(e)
         return None
+    
 
-    def _decode_auth_token(self, token: str) -> dict:
+    def encode_temporary_token(self,):
+        ...
+
+    def _encode_token(self, obj):
+        encoded = jwt.encode(obj, self.configService.JWT_SECRET_KEY,
+                                 algorithm=self.configService.JWT_ALGORITHM)
+        token = self._encode_value(encoded, self.configService.ON_TOP_SECRET_KEY)
+        return token
+
+    def decode_token(self, token: str) -> dict:
         try:
             token = self._decode_value(
                 token, self.configService.ON_TOP_SECRET_KEY)
@@ -110,7 +119,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
 
     def verify_permission(self, token: str,issued_for: str) -> AuthPermission:
 
-        token = self._decode_auth_token(token)
+        token = self.decode_token(token)
         permission: AuthPermission = AuthPermission(**token)
         try:
             if issued_for != permission["issued_for"]:
