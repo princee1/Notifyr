@@ -43,3 +43,6 @@ class AuthPermission(TypedDict):
     #allowed_assets:Dict[str,AssetsPermission]
     #allowed_assets:List[str]
 
+
+class WSPermission(TypedDict):
+    ...

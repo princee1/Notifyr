@@ -45,7 +45,7 @@ WS_METADATA:dict[str,type] = {}
 
 #########################################                ##############################################
 
-WSHandler = Literal['current','handler','both']
+HandlerType = Literal['current','handler','both']
 
 class BaseProtocol(BaseModel):
     protocol_name:str
@@ -59,7 +59,7 @@ class WSIdentity:
 class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 
     @staticmethod
-    def WSEndpoint(path:str,type_: str | bytes | dict | BaseModel |BaseProtocol=str,name:str = None,path_conn_manager:str=None,handler:WSHandler='current'):
+    def WSEndpoint(path:str,type_: str | bytes | dict | BaseModel |BaseProtocol=str,name:str = None,path_conn_manager:str=None,handler:HandlerType='current'):
 
         def decorator(func:Callable):
             if not hasattr(func,'meta'):
@@ -189,6 +189,9 @@ def WebSocketRessource(cls:Type[W])->Type[Union[W,BaseWebSocketRessource]]:
     
 
 def WSGuard():
+    ...
+
+def WSHandler():
     ...
 
 #########################################                ##############################################
