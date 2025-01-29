@@ -4,6 +4,7 @@ instance imported from `container`.
 """
 from inspect import isclass
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, TypeVar, Type, TypedDict
+from app.definition._ws import W
 from app.utils.helper import issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
@@ -36,6 +37,8 @@ class MethodStartsWithError(Exception):
 
 class ClassMetaData(TypedDict):
     prefix:str
+    routers:list
+    websockets:list[W]
 
 
 
@@ -200,10 +203,14 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         
         self.router = APIRouter(prefix=prefix, on_shutdown=[
                                 self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
-        
+    
         self.init_stacked_callback()
         self._add_routes()
         self._add_handcrafted_routes()
+
+        self._mount_included_router()
+        self._add_websockets()
+
         self.default_response: Dict[int | str, Dict[str, Any]] | None = router_default_response
 
     def get(self, dep: Type[S], scope=None, all=False) -> Type[S]:
@@ -213,10 +220,19 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         return Need(dep)
 
     def on_startup(self):
-        pass
+        """
+        [Important] Ensure to call super when overriding this function 
+        """
+        for ws in self.websockets:
+            ws.on_startup()
+        
 
     def on_shutdown(self):
-        pass
+        """
+        [Important] Ensure to call super when overriding this function 
+        """
+        for ws in self.websockets:
+            ws.on_shutdown()
 
     def _add_routes(self):
         if self.__class__.__name__ not in ROUTES:
@@ -225,8 +241,26 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         routes_metadata = ROUTES[self.__class__.__name__]
         for route in routes_metadata:
             kwargs = route.copy()
+            operation_id = kwargs['operation_id']
             kwargs['endpoint'] = getattr(self, kwargs['endpoint'],)
             self.router.add_api_route(**kwargs)
+    
+    def _mount_included_router(self):
+        routers = set(self.__class__.meta['routers'])
+        for route in list(routers):
+            r:BaseHTTPRessource = route()
+            self.router.include_router(r.router,)
+    
+    def _add_websockets(self):
+        self.websockets:list[W] = []
+        w = set(self.__class__.meta['websockets'])
+        for websockets in list(w):
+            ws:W = websockets()
+            self.websockets.append(ws)
+            for endpoints in ws.ws_endpoints:
+                path = endpoints.meta['path']
+                name = endpoints.meta['name']
+                self.router.add_websocket_route(path,endpoints,name)
 
     def _add_handcrafted_routes(self):
         ...
@@ -242,11 +276,12 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
 R = TypeVar('R', bound=BaseHTTPRessource)
 
 
-def HTTPRessource(prefix:str):
+def HTTPRessource(prefix:str,routers:list[Type[R]]=[],websockets:list[Type[W]]=[]):
     def class_decorator(cls:Type[R]) ->Type[R]:
         # TODO: support module-level injection 
-        # TODO: include ressource and websocket
         cls.meta['prefix'] = prefix
+        cls.meta['routers'] = routers
+        cls.meta['websockets'] = websockets
         return cls
     return class_decorator
 
@@ -488,14 +523,24 @@ def UseRoles(roles:list[Role]):
         return func
     return decorator
 
-def IncludeRessource(*ressources: Type[R]):
+def IncludeRessource(*ressources: Type[R]| R):
     def class_decorator(cls:Type[R]) ->Type[R]:
         if type(cls)!=HTTPRessourceMetaClass:
-            meta:ClassMetaData =cls.meta
-            
-            return 
+            return
+        
+        meta:ClassMetaData =cls.meta
+        meta['routers'] = list(set(ressources))
+        
         return cls
     return class_decorator
 
-def IncludeWebsocket(*ressources: Type[Any]):
-    ...
+def IncludeWebsocket(*websocket: Type[W]):
+    def class_decorator(cls:Type[R]) ->Type[R]:
+        if type(cls)!=HTTPRessourceMetaClass:
+            return 
+
+        meta:ClassMetaData =cls.meta
+        meta['websockets'] = list(set(websocket))
+
+        return cls
+    return class_decorator
