@@ -175,19 +175,19 @@ class Service():
         except BuildWarningError as e:
             # TODO might to change the color because of the error since, it will be for malfunction dependent service
             self.prettyPrinter.warning(
-                f'[{now}] Warning issued while building : {self.__class__.__name__}. Service might malfunction properly', saveable=True)
+                f'[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
             self.service_status = ServiceStatus.WORKS_ALMOST_ATT
 
         
         except BuildSkipError as e: # TODO change color
             self.prettyPrinter.info(
-                f'[{now}] Slight Problem encountered while building the service : {self.__class__.__name__}', saveable=True)
+                f'[{now}] Slight Problem encountered while building the service: {self.__class__.__name__}', saveable=True)
             self.service_status = ServiceStatus.WORKS_ALMOST_ATT
             pass
 
         except BuildNotImplementedError as e:
             self.prettyPrinter.warning( # TODO change color
-                f'[{now}] Service Not Implemented Yet :{self.__class__.__name__} ', saveable=True)
+                f'[{now}] Service Not Implemented Yet: {self.__class__.__name__} ', saveable=True)
             self.prettyPrinter.wait(0.2, False)
             self.service_status = ServiceStatus.NOT_AVAILABLE
 

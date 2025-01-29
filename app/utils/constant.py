@@ -40,6 +40,7 @@ class ConfigAppConstant:
 class HTTPHeaderConstant:
     API_KEY_HEADER = 'X-API-KEY'
     ADMIN_KEY = 'X-Admin-Key'
+    WS_KEY = 'X-WS-Key'
 
 
 class CookieConstant:
@@ -54,6 +55,8 @@ class SpecialKeyParameterConstant:
     CLASS_NAME_SPECIAL_KEY_PARAMETER = 'class_name'
     AUTH_PERMISSION_PARAMETER = 'authPermission'
     META_SPECIAL_KEY_PARAMETER = 'func_meta'
+
+    WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
 
 ########################                     ########################################
 
