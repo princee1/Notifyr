@@ -47,8 +47,8 @@ DEFAULT_RESPONSE = {
 
 
 @UseRoles([Role.CHAT,Role.RELAY])
-@HTTPRessource(EMAIL_PREFIX)
 @UseHandler(handlers.ServiceAvailabilityHandler)
+@HTTPRessource(EMAIL_PREFIX)
 class EmailTemplateRessource(BaseHTTPRessource):
 
     @InjectInMethod

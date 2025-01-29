@@ -31,9 +31,9 @@ def ip_addr_validation(ip_addr: str):
 
 
 @InjectInFunction
-def register_client_services(securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService):
+def register_client_services(securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService,set_gen_id= False):
     PrettyPrinter_.show(1, print_stack=False,)
-    jwtAuthService.set_generation_id(True)
+    jwtAuthService.set_generation_id(set_gen_id)
     if not configService.config_json_app.exists:
         # TODO not implemented the error
         return
@@ -107,9 +107,9 @@ def ask_custom_routes(current_ressources:list[str]):
     
     return result
 
-def prompt_client_registration():
+def prompt_client_registration(set_gen_id=False):
 
-    client_secrets = register_client_services()
+    client_secrets = register_client_services(set_gen_id=set_gen_id)
     PrettyPrinter_.show(2, clear_stack=True)
 
     PrettyPrinter_.space_line()
