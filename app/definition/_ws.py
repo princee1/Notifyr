@@ -1,11 +1,16 @@
 from enum import Enum
 import functools
-from fastapi import WebSocketDisconnect,WebSocketException,WebSocket,status
+import time
+from fastapi import HTTPException, WebSocketDisconnect,WebSocketException,WebSocket,status
+from app.classes.auth_permission import WSPermission
+from app.container import InjectInMethod
 from app.interface.events import EventInterface
+from app.services.security_service import JWTAuthService
 from app.utils.dependencies import get_bearer_token,APIFilterInject
 import wrapt
 from pydantic import BaseModel
 from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict,Literal
+from app.utils.prettyprint import PrettyPrinter_
 
 #########################################                ##############################################
 
@@ -77,6 +82,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 websocket:WebSocket= APIFilterInject(self._websocket_injector)(*args,**kwargs)
                 kwargs_star = kwargs.copy()
                 kwargs_star['path'] = path_conn_manager_
+                kwargs_star['manager'] = manager
 
                 flag = APIFilterInject(self.on_connect)(*args,**kwargs_star)
                 
@@ -134,12 +140,15 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
             return func
         
         return decorator
-         
-    def __init__(self):
+    
+    @InjectInMethod
+    def __init__(self,jwtAuthService:JWTAuthService):
         self.connection_manager:dict[str,WSConnectionManager] = {}
         self.protocol:dict[str,Callable]={}
         self.ws_endpoints:list[tuple[str,Callable]] =[]
 
+        self.jwtAuthService = jwtAuthService
+        self.prettyPrinter = PrettyPrinter_
         self._register_protocol()
     
     def __init_subclass__(cls):
@@ -163,9 +172,24 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         """
         return websocket
                 
-    def on_connect(self,websocket:WebSocket):
-        ...
-    
+    def on_connect(self,websocket:WebSocket,path:str):
+        auth_token = websocket.headers.get() # TODO find a key name
+        
+        if auth_token == None:
+            return False
+        try:
+            permission:WSPermission = self.jwtAuthService.decode_token(auth_token)
+        except HTTPException as e:
+            return False
+
+        if path!= permission['path']:
+            return False
+        
+        if permission['expired_at'] < time.time():
+            return False
+        
+        return True
+     
     def on_disconnect(self,websocket:WebSocket):
         ...
     
