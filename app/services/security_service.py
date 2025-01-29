@@ -76,10 +76,10 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         return None
     
 
-    def encode_ws_token(self,operation_id:str,expiration:float):
+    def encode_ws_token(self,run_id:str,operation_id:str,expiration:float):
         now = time.time()
         expired_at = now + expiration
-        permission = WSPermission(operation_id=operation_id,expired_at=expired_at,created_at=now)
+        permission = WSPermission(operation_id=operation_id,expired_at=expired_at,created_at=now,run_id=run_id)
         return self._encode_token(permission)
         
 

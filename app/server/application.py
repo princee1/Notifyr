@@ -130,11 +130,10 @@ class Application(EventInterface):
                 res = ressource_type()
                 self.app.include_router(res.router, responses=res.default_response)
                 self.pretty_printer.success(f"[{now}] Ressource {ressource_type.__name__} added successfully",saveable=True)
-                self.pretty_printer.wait(0.1,press_to_continue=False)
+                self.pretty_printer.wait(0.25,press_to_continue=False)
             except Exception as e:
-                print(e)
                 self.pretty_printer.error(f"[{now}] Error adding ressource {ressource_type.__name__} to the app",saveable=True)
-                self.pretty_printer.wait(0.1,press_to_continue=False)
+                self.pretty_printer.wait(0.1,press_to_continue=True)
 
         self.pretty_printer.show(pause_before=1,clear_stack=True,space_line=False)
         
@@ -147,8 +146,9 @@ class Application(EventInterface):
         jwtService.set_generation_id(False)
 
     def on_shutdown(self):
-        for thread in threading.enumerate():
-            if thread is not threading.current_thread():
-                thread.join()
+        # for thread in threading.enumerate():
+        #     if thread is not threading.current_thread():
+        #         thread.join()
+        ...
 
 #######################################################                          #####################################################
