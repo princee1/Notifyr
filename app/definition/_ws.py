@@ -72,6 +72,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
             
             func.meta['path'] = path
             func.meta['name'] = name
+            func.meta['operation_id'] = BaseWebSocketRessource.build_operation_id(path,name)
 
             @functools.wraps(func)
             async def wrapper(*args,**kwargs):
@@ -81,7 +82,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 
                 websocket:WebSocket= APIFilterInject(self._websocket_injector)(*args,**kwargs)
                 kwargs_star = kwargs.copy()
-                kwargs_star['path'] = path_conn_manager_
+                kwargs_star['operation_id'] = func.meta['operation_id']
                 kwargs_star['manager'] = manager
 
                 flag = APIFilterInject(self.on_connect)(*args,**kwargs_star)
@@ -176,7 +177,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         """
         return websocket
                 
-    def on_connect(self,websocket:WebSocket,path:str):
+    def on_connect(self,websocket:WebSocket,operation_id:str):
         auth_token = websocket.headers.get() # TODO find a key name
         
         if auth_token == None:
@@ -186,7 +187,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         except HTTPException as e:
             return False
 
-        if path!= permission['path']:
+        if operation_id!= permission['operation_id']:
             return False
         
         if permission['expired_at'] < time.time():

@@ -47,7 +47,7 @@ class AuthPermission(TypedDict):
 
 
 class WSPermission(TypedDict):
-    path:str
+    operation_id:str
     created_at:float
     expired_at:float
     
