@@ -40,6 +40,7 @@ class AuthPermissionModel(BaseModel):
 
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
+@UseHandler(ServiceAvailabilityHandler)
 @HTTPRessource(ADMIN_PREFIX)
 class AdminRessource(BaseHTTPRessource):
 
@@ -52,7 +53,6 @@ class AdminRessource(BaseHTTPRessource):
         self.assetService = assetService
 
     
-    @UseHandler(ServiceAvailabilityHandler)
     @BaseHTTPRessource.HTTPRoute('/invalidate/',methods=[HTTPMethod.DELETE])
     def invalidate_tokens(self,authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
@@ -62,7 +62,6 @@ class AdminRessource(BaseHTTPRessource):
                                                                     "details": "Even if you're the admin old token wont be valid anymore",
                                                                     "tokens":tokens})
 
-    @UseHandler(ServiceAvailabilityHandler)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/',methods=[HTTPMethod.GET])
     def issue_auth_token(self,authModel:AuthPermissionModel | List[AuthPermissionModel],authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
@@ -70,7 +69,6 @@ class AdminRessource(BaseHTTPRessource):
         temp = self._create_tokens(authModel)
         return JSONResponse(status_code=status.HTTP_200_OK,content={"tokens":temp,"message":"Tokens successfully issued"})
 
-    @UseHandler(ServiceAvailabilityHandler)
     @UsePipe(AuthPermissionPipe)
     @BaseHTTPRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST])
     def refresh_auth_token(self,tokens:str |list[str], authPermission=Depends(get_auth_permission)):
