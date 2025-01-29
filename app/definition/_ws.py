@@ -2,11 +2,10 @@ from enum import Enum
 import functools
 from fastapi import WebSocketDisconnect,WebSocketException,WebSocket,status
 from app.interface.events import EventInterface
-#from app.utils.dependencies import get_bearer_token
-import json 
+from app.utils.dependencies import get_bearer_token,APIFilterInject
 import wrapt
 from pydantic import BaseModel
-from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict
+from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict,Literal
 
 #########################################                ##############################################
 
@@ -46,6 +45,8 @@ WS_METADATA:dict[str,type] = {}
 
 #########################################                ##############################################
 
+WSHandler = Literal['current','handler','both']
+
 class BaseProtocol(BaseModel):
     protocol_name:str
 
@@ -58,48 +59,65 @@ class WSIdentity:
 class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 
     @staticmethod
-    def WSEndpoint(path:str,protocol: str | bytes | dict | BaseModel |BaseProtocol=str,path_conn_manager=None):
+    def WSEndpoint(path:str,type_: str | bytes | dict | BaseModel |BaseProtocol=str,name:str = None,path_conn_manager:str=None,handler:WSHandler='current'):
 
         def decorator(func:Callable):
             if not hasattr(func,'meta'):
                 setattr(func,'meta',{})
             
             func.meta['path'] = path
+            func.meta['name'] = name
 
-
+            @functools.wraps(func)
             async def wrapper(*args,**kwargs):
                 path_conn_manager_ = path if path_conn_manager is None else path_conn_manager
                 self: BaseWebSocketRessource = args[0]
                 manager = self.connection_manager[path_conn_manager_]
                 
-                websocket:WebSocket=...
+                websocket:WebSocket= APIFilterInject(self._websocket_injector)(*args,**kwargs)
+                kwargs_star = kwargs.copy()
+                kwargs_star['path'] = path_conn_manager_
 
-                flag = self.on_connect()
+                flag = APIFilterInject(self.on_connect)(*args,**kwargs_star)
+                
                 if not flag:
                     return
                 await manager.connect()
                 try:
                     while True:
-                        if protocol == str:
+                        if type_ == str:
                             message:str = await websocket.receive_text()
-                            func(message)
-                        elif protocol == bytes:
+                            kwargs_star['message'] = message
+                            return  APIFilterInject(func)(*args,**kwargs_star)
+                        elif type_ == bytes:
                             message:bytes = await websocket.receive_bytes()
-                            func(message)
-                        elif protocol == dict:
+                            kwargs_star['message'] = message
+                            return  APIFilterInject(func)(*args,**kwargs_star)
+                        elif type_ == dict:
                             message:dict = await websocket.receive_json()
-                            func(message)
-                        elif protocol == BaseModel:
+                            kwargs_star['message'] = message
+                            return  APIFilterInject(func)(*args,**kwargs_star)
+                        elif type_ == BaseModel:
                             message:dict = await websocket.receive_json()
+                            kwargs_star['message'] = message
                             ... # TODO verify
-                            func(message)
-                        elif protocol == BaseProtocol:
+                            return  APIFilterInject(func)(*args,**kwargs_star)
+                        elif type_ == BaseProtocol:
                             ... # TODO verify
                             message:BaseProtocol = await websocket.receive_json()
-                            self.protocol[message['protocol_name']](message)
+                            kwargs_star['message'] = message
+                            c_result = APIFilterInject(func)(*args,**kwargs_star)
+                            h_protocol =APIFilterInject(self.protocol[message['protocol_name']])(message)
+
+                            if handler =='current':
+                                return c_result
+                            if handler =='handler':
+                                return h_protocol 
+                            
+                            return self._hybrid_protocol_handler(c_result,h_protocol)
 
                 except WebSocketDisconnect:
-                    self.on_disconnect()
+                    APIFilterInject(self.on_disconnect)(*args,**kwargs_star)
                     manager.disconnect()
 
             return wrapper
@@ -116,21 +134,19 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
             return func
         
         return decorator
-        
-    
-    
+         
     def __init__(self):
         self.connection_manager:dict[str,WSConnectionManager] = {}
         self.protocol:dict[str,Callable]={}
+        self.ws_endpoints:list[tuple[str,Callable]] =[]
 
-        self.register_protocol()
-        
+        self._register_protocol()
+    
     def __init_subclass__(cls):
         WS_METADATA[cls.__name__] = cls
         setattr(cls,'meta',WSMetaData())
         
-
-    def register_protocol(self,):
+    def _register_protocol(self,):
          for attr in dir(self.__class__):
             method = getattr(self.__class__, attr)
             if callable(method) and hasattr(method,'meta'):
@@ -138,12 +154,19 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                     proto_name = method.meta['protocol_name']
                     self.protocol[proto_name] = method
                 
-
-
-    async def on_connect(self,websocket:WebSocket,path:str):
+                if 'path' in method.meta:
+                    self.ws_endpoints.append(method)
+    
+    def _websocket_injector(websocket:WebSocket):
+        """
+        DO NOT MODIFY THIS FUNCTION
+        """
+        return websocket
+                
+    def on_connect(self,websocket:WebSocket):
         ...
     
-    def on_disconnect(self,websocket:WebSocket,path:str):
+    def on_disconnect(self,websocket:WebSocket):
         ...
     
     def on_shutdown(self):
@@ -152,6 +175,8 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
     def on_startup(self):
         ...
 
+    def _hybrid_protocol_handler(self,c_result:Any,h_protocol_result:Any):
+        return 
 
 W = TypeVar('W', bound=BaseWebSocketRessource)
 
