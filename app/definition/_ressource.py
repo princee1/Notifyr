@@ -21,7 +21,6 @@ from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
 
 
 PATH_SEPARATOR = "/"
-DEFAULT_STARTS_WITH = '_api_'
 
 
 def get_class_name_from_method(func: Callable) -> str:
@@ -223,7 +222,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         """
         [Important] Ensure to call super when overriding this function 
         """
-        for ws in self.websockets:
+        for ws in self.websockets.values():
             ws.on_startup()
         
 
@@ -231,7 +230,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         """
         [Important] Ensure to call super when overriding this function 
         """
-        for ws in self.websockets:
+        for ws in self.websockets.values():
             ws.on_shutdown()
 
     def _add_routes(self):
@@ -252,22 +251,21 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             self.router.include_router(r.router,)
     
     def _add_websockets(self):
-        self.websockets:list[W] = []
+        self.websockets:dict[str,W] = {}
         self.ws_path = []
         w = set(self.__class__.meta['websockets'])
-        for websockets in list(w):
-            ws:W = websockets()
-            self.websockets.append(ws)
+        for WS_Class in list(w):
+            ws:W = WS_Class()
+            self.websockets[WS_Class.__name__] = ws
             for endpoints in ws.ws_endpoints:
-                path:str = endpoints.meta['path']
-                
+                path:str = endpoints.meta['path']                
                 if not path.startswith('/'):
                     path = '/' + path
-                if not path.endswith('/'):
-                    path = path + '/'
-
+                # if not path.endswith('/'):
+                #     path = path + '/'
                 name = endpoints.meta['name']
-                self.ws_path.append(path)
+                self.ws_path.append(endpoints.meta['operation_id'])
+
                 self.router.add_websocket_route(path,endpoints,name)
         
     def _check_ws_path(self,ws_path):

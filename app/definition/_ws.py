@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 import functools
 import time
@@ -6,16 +7,27 @@ from app.classes.auth_permission import WSPermission
 from app.container import InjectInMethod
 from app.interface.events import EventInterface
 from app.services.security_service import JWTAuthService
+from app.utils.constant import HTTPHeaderConstant
 from app.utils.dependencies import get_bearer_token,APIFilterInject
 import wrapt
 from pydantic import BaseModel
 from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict,Literal
 from app.utils.prettyprint import PrettyPrinter_
+from app.utils.helper import generateId
 
 #########################################                ##############################################
+PATH_SEPARATOR = "/"
+
+
+class Room:
+    def __init__(self):
+        self.room_id = generateId(20)
+        self.clients:list[WebSocket]  = []
+    
 
 class WSConnectionManager:
-    def __init__(self):
+    def __init__(self): 
+        self.rooms: dict[str,Room] = {}
         self.active_connections: list[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
@@ -54,8 +66,7 @@ HandlerType = Literal['current','handler','both']
 
 class BaseProtocol(BaseModel):
     protocol_name:str
-
-    
+ 
 
 class WSIdentity:
     ...
@@ -80,16 +91,18 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 self: BaseWebSocketRessource = args[0]
                 manager = self.connection_manager[path_conn_manager_]
                 
-                websocket:WebSocket= APIFilterInject(self._websocket_injector)(*args,**kwargs)
+                websocket:WebSocket= APIFilterInject(BaseWebSocketRessource._websocket_injector)(*args,**kwargs)
+
                 kwargs_star = kwargs.copy()
                 kwargs_star['operation_id'] = func.meta['operation_id']
                 kwargs_star['manager'] = manager
 
-                flag = APIFilterInject(self.on_connect)(*args,**kwargs_star)
+                flag = APIFilterInject(BaseWebSocketRessource.on_connect)(*args,**kwargs_star)
                 
                 if not flag:
+                    websocket.close(status.WS_1002_PROTOCOL_ERROR,reason='Auth Token Not Present or not valid')
                     return
-                await manager.connect()
+                await manager.connect(websocket)
                 try:
                     while True:
                         if type_ == str:
@@ -124,8 +137,8 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                             return self._hybrid_protocol_handler(c_result,h_protocol)
 
                 except WebSocketDisconnect:
-                    APIFilterInject(self.on_disconnect)(*args,**kwargs_star)
-                    manager.disconnect()
+                    APIFilterInject(BaseWebSocketRessource.on_disconnect)(*args,**kwargs_star)
+                    manager.disconnect(websocket)
 
             return wrapper
 
@@ -143,14 +156,14 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         return decorator
 
     @staticmethod
-    def build_operation_id(path:str):
-        ...
+    def build_operation_id(path:str,name:str):
+        return path.replace(PATH_SEPARATOR, "_")
 
     @InjectInMethod
     def __init__(self,jwtAuthService:JWTAuthService):
         self.connection_manager:dict[str,WSConnectionManager] = {}
         self.protocol:dict[str,Callable]={}
-        self.ws_endpoints:list[tuple[str,Callable]] =[]
+        self.ws_endpoints:list[Callable] =[]
 
         self.jwtAuthService = jwtAuthService
         self.prettyPrinter = PrettyPrinter_
@@ -161,8 +174,9 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         setattr(cls,'meta',WSMetaData())
         
     def _register_protocol(self,):
+         
          for attr in dir(self.__class__):
-            method = getattr(self.__class__, attr)
+            method = getattr(self, attr)
             if callable(method) and hasattr(method,'meta'):
                 if 'protocol_name' in method.meta:
                     proto_name = method.meta['protocol_name']
@@ -170,16 +184,18 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 
                 if 'path' in method.meta:
                     self.ws_endpoints.append(method)
+
+                    path = method.meta['path']
+                    self.connection_manager[path] = WSConnectionManager()
     
-    def _websocket_injector(websocket:WebSocket):
+    def _websocket_injector(self,websocket:WebSocket):
         """
         DO NOT MODIFY THIS FUNCTION
         """
         return websocket
                 
     def on_connect(self,websocket:WebSocket,operation_id:str):
-        auth_token = websocket.headers.get() # TODO find a key name
-        
+        auth_token = websocket.headers.get(HTTPHeaderConstant.WS_KEY) # TODO find a key name
         if auth_token == None:
             return False
         try:
