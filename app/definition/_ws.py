@@ -140,7 +140,11 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
             return func
         
         return decorator
-    
+
+    @staticmethod
+    def build_operation_id(path:str):
+        ...
+
     @InjectInMethod
     def __init__(self,jwtAuthService:JWTAuthService):
         self.connection_manager:dict[str,WSConnectionManager] = {}
@@ -205,7 +209,6 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 W = TypeVar('W', bound=BaseWebSocketRessource)
 
 
-@wrapt.decorator
 def WebSocketRessource(cls:Type[W])->Type[Union[W,BaseWebSocketRessource]]:
     class Factory(cls,BaseWebSocketRessource):
         ...

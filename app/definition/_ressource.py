@@ -17,7 +17,7 @@ from fastapi import BackgroundTasks
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
-from app.classes.auth_permission import FuncMetaData, Role
+from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
 
 
 PATH_SEPARATOR = "/"
@@ -159,19 +159,19 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
     def Get(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
             responses: Dict[int | str, Dict[str, Any]] | None = None,
             deprecated: bool | None = None):
-        return BaseHTTPRessource.HTTPRoute(path, HTTPMethod.GET, operation_id, response_model, response_description, responses, deprecated)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.GET], operation_id, response_model, response_description, responses, deprecated)
 
     @staticmethod
     def Post(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None):
-        return BaseHTTPRessource.HTTPRoute(path, HTTPMethod.POST, operation_id, response_model, response_description, responses, deprecated)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.POST], operation_id, response_model, response_description, responses, deprecated)
     
     @staticmethod
     def Delete(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None):
-        return BaseHTTPRessource.HTTPRoute(path, HTTPMethod.DELETE, operation_id, response_model, response_description, responses, deprecated)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE], operation_id, response_model, response_description, responses, deprecated)
 
     def init_stacked_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
@@ -253,14 +253,26 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
     
     def _add_websockets(self):
         self.websockets:list[W] = []
+        self.ws_path = []
         w = set(self.__class__.meta['websockets'])
         for websockets in list(w):
             ws:W = websockets()
             self.websockets.append(ws)
             for endpoints in ws.ws_endpoints:
-                path = endpoints.meta['path']
+                path:str = endpoints.meta['path']
+                
+                if not path.startswith('/'):
+                    path = '/' + path
+                if not path.endswith('/'):
+                    path = path + '/'
+
                 name = endpoints.meta['name']
+                self.ws_path.append(path)
                 self.router.add_websocket_route(path,endpoints,name)
+        
+    def _check_ws_path(self,ws_path):
+        if ws_path not in self.ws_path:
+            raise WSPathNotFoundError
 
     def _add_handcrafted_routes(self):
         ...

@@ -17,7 +17,7 @@ class ChatWebSocket(BaseWebSocketRessource):
         self.configService = configService
     
 
-    @BaseWebSocketRessource.WSEndpoint()
+    @BaseWebSocketRessource.WSEndpoint('live-chat')
     def websocket_endpoint(self, websocket:WebSocket,message:Any):
         ...
 
