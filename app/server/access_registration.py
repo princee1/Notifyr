@@ -1,5 +1,5 @@
 from app.utils.constant import ConfigAppConstant
-from app.container import InjectInFunction
+from app.container import Get, InjectInFunction
 from app.services.security_service import SecurityService, JWTAuthService
 from app.services.config_service import ConfigService
 from app.utils.prettyprint import PrettyPrinter_
@@ -30,8 +30,12 @@ def ip_addr_validation(ip_addr: str):
     return ipv4_validator(ip_addr)
 
 
-@InjectInFunction
-def register_client_services(securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService,set_gen_id= False):
+def register_client_services(set_gen_id:bool):
+
+    securityService = Get(SecurityService)
+    jwtAuthService = Get(JWTAuthService)
+    configService = Get(ConfigService)
+    
     PrettyPrinter_.show(1, print_stack=False,)
     jwtAuthService.set_generation_id(set_gen_id)
     if not configService.config_json_app.exists:
