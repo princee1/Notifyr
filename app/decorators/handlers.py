@@ -1,4 +1,5 @@
 from typing import Callable
+from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.template import TemplateBuildError, TemplateNotFoundError, TemplateValidationError
 from app.definition._error import BaseError
 from app.definition._utils_decorator import Handler,HandlerDefaultException,NextHandlerException
@@ -41,3 +42,13 @@ class TemplateHandler(Handler):
                 'message': 'Validation Error'
             })
         
+class WebSocketHandler(Handler):
+
+    def handle(self, function, *args, **kwargs):
+        try:
+           return function(*args, **kwargs)
+        
+        except WSPathNotFoundError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={
+                'message':'WS Path Not Found'
+            })

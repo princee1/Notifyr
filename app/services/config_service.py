@@ -153,6 +153,12 @@ class ConfigService(_service.Service):
 
         self.DRAMATIQ_MESSAGE_BROKER_URL = self.getenv("DRAMATIQ_MESSAGE_BROKER_URL")
         self.DRAMATIQ_BACKEND_URL = self.getenv("DRAMATIQ_BACKEND_URL")
+
+                                # CHAT CONFIG #
+        
+        self.CHAT_EXPIRATION = ConfigService.parseToInt(self.getenv("CHAT_EXPIRATION"),3600)
+
+
     def verify(self):
         if self.API_EXPIRATION < self.AUTH_EXPIRATION:
             # self.API_EXPIRATION = self.AUTH_EXPIRATION

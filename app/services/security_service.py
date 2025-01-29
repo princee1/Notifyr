@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from app.classes.auth_permission import AuthPermission, Role, RoutePermission
+from app.classes.auth_permission import AuthPermission, Role, RoutePermission, WSPermission
 from random import randint, random
 from app.utils.helper import generateId
 from app.utils.constant import ConfigAppConstant
@@ -76,8 +76,12 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         return None
     
 
-    def encode_temporary_token(self,):
-        ...
+    def encode_ws_token(self,path:str,expiration:float):
+        now = time.time()
+        expired_at = now + expiration
+        permission = WSPermission(path=path,expired_at=expired_at,created_at=now)
+        return self._encode_token(permission)
+        
 
     def _encode_token(self, obj):
         encoded = jwt.encode(obj, self.configService.JWT_SECRET_KEY,
