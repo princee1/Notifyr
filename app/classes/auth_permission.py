@@ -3,6 +3,8 @@ from typing import Literal,Dict,NotRequired
 from typing_extensions import TypedDict
 from enum import Enum
 
+from app.definition._error import BaseError
+
 PermissionScope= Literal['custom','all']
 
 
@@ -49,3 +51,5 @@ class WSPermission(TypedDict):
     created_at:float
     expired_at:float
     
+class WSPathNotFoundError(BaseError):
+    ...

@@ -92,17 +92,21 @@ class JWTAuthMiddleware(MiddleWare, InjectableMiddlewareInterface):
         self.jwtService = jwtService
 
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
-        token = get_bearer_token_from_request(request)
-        client_ip = get_client_ip(request)
+        
         try:
+            token = get_bearer_token_from_request(request)
+            client_ip = get_client_ip(request)
             authPermission: AuthPermission = self.jwtService.verify_permission(
                 token, client_ip)
             authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
             request.state.authPermission = authPermission
             return await call_next(request)
+        except KeyError as e:
+            return JSONResponse('Error while getting value',status_code=status.HTTP_400_BAD_REQUEST)
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code)
         except Exception as e:
+            print(e)
             return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={'message':''})
 
 JWTAuthMiddleware.priority = MiddlewarePriority.AUTH

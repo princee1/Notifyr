@@ -130,8 +130,11 @@ class Application(EventInterface):
                 res = ressource_type()
                 self.app.include_router(res.router, responses=res.default_response)
                 self.pretty_printer.success(f"[{now}] Ressource {ressource_type.__name__} added successfully",saveable=True)
+                self.pretty_printer.wait(0.1,press_to_continue=False)
             except Exception as e:
+                print(e)
                 self.pretty_printer.error(f"[{now}] Error adding ressource {ressource_type.__name__} to the app",saveable=True)
+                self.pretty_printer.wait(0.1,press_to_continue=False)
 
         self.pretty_printer.show(pause_before=1,clear_stack=True,space_line=False)
         
