@@ -9,6 +9,7 @@ from app.decorators.handlers import ServiceAvailabilityHandler, WebSocketHandler
 from app.classes.auth_permission import WSPermission,Role
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.utils.dependencies import get_auth_permission
+from app.utils.helper import generateId
 
 
 CHAT_PREFIX= 'chat'
@@ -25,14 +26,16 @@ class LiveChatRessource(BaseHTTPRessource):
         self.jwtAuthService = jwtAuthService
         self.configService = configService
 
+        self.run_id =generateId(25)
+
     @UsePermission(JWTRouteHTTPPermission)
     @UseHandler(WebSocketHandler)
-    @BaseHTTPRessource.Get('/invoke-permission/{ws_path}',)
+    @BaseHTTPRessource.Get('/create-permission/{ws_path}',)
     def invoke_chat_permission(self, ws_path:str, authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
 
         self._check_ws_path(ws_path)
-        token = self.jwtAuthService.encode_ws_token(ws_path,self.configService.CHAT_EXPIRATION)
+        token = self.jwtAuthService.encode_ws_token(self.run_id,ws_path,self.configService.CHAT_EXPIRATION)
         return JSONResponse(status_code=status.HTTP_201_CREATED,content={
             'chat-token':token,
         })
