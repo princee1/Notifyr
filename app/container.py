@@ -377,6 +377,9 @@ class Container():
     def reloadDep(self, typ: type, scope=None):  # TODO
         pass
 
+    def register_new_dep(self,typ:type,scope= None):
+        ...
+    
     @property
     def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]  # TODO avoid to compute this everytime we call this function
