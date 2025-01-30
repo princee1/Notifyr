@@ -5,7 +5,7 @@ from .config_service import ConfigService
 from app.definition import _service
 from time import sleep
 from discord_webhook import DiscordWebhook, AsyncDiscordWebhook
-from app.interface.threads import InfiniteThreadInterface
+from app.interface.threads import InfiniteAsyncInterface
 
 
 @_service.AbstractServiceClass
@@ -27,7 +27,7 @@ class NotificationService(_service.Service):
     pass  # BUG we can specify a kid class if we decide to inject a Notification
 
 @_service.ServiceClass
-class SystemNotificationService(NotificationService,InfiniteThreadInterface):
+class SystemNotificationService(NotificationService,InfiniteAsyncInterface):
     MAX_TO_BE_SHOWED = 8
     DURATION = 10
 

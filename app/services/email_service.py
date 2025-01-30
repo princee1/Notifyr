@@ -16,7 +16,6 @@ from app.classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 from .model_service import LLMModelService
 from app.utils.constant import EmailHostConstant
 from app.classes.email import EmailBuilder
-from app.interface.threads import ThreadInterface
 from app.interface.timers import SchedulerInterface
 
 from .logger_service import LoggerService

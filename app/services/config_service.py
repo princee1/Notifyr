@@ -149,10 +149,10 @@ class ConfigService(_service.Service):
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
 
 
-                                # DRAMATIQ CONFIG #
+                                # CELERY CONFIG #
 
-        self.DRAMATIQ_MESSAGE_BROKER_URL = self.getenv("DRAMATIQ_MESSAGE_BROKER_URL")
-        self.DRAMATIQ_BACKEND_URL = self.getenv("DRAMATIQ_BACKEND_URL")
+        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL")
+        self.CELERY_BACKEND_URL = self.getenv("CELERY_BACKEND_URL")
 
                                 # CHAT CONFIG #
         
