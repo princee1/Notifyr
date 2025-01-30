@@ -3,14 +3,14 @@ The `BaseResource` class initializes with a `container` attribute assigned from 
 instance imported from `container`.
 """
 from inspect import isclass
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, TypeVar, Type, TypedDict
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 from app.definition._ws import W
 from app.utils.helper import issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
 from app.container import Get, Need
 from app.definition._service import S
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
 from fastapi import BackgroundTasks
@@ -123,7 +123,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         return route_name.replace(PATH_SEPARATOR, "_") + '_'.join(m)
 
     @staticmethod
-    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST], operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
+    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST], operation_id: str = None, dependencies:Sequence[Depends]=None, response_model: Any = None, response_description: str = "Successful Response",
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
                   deprecated: bool | None = None):
         def decorator(func: Callable):
@@ -132,12 +132,15 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             setattr(func,'meta', FuncMetaData())
             func.meta['operation_id'] = computed_operation_id
             func.meta['roles'] = set()
+            func.meta['excludes'] = set()
+            func.meta['options'] =[] 
             
             class_name = get_class_name_from_method(func)
             kwargs = {
                 'path': path,
                 'endpoint': func.__name__,
                 'operation_id': operation_id,
+                'dependencies': dependencies,
                 'summary': func.__doc__,
                 'response_model': response_model,
                 'methods': HTTPMethod.to_strs(methods),
@@ -155,22 +158,22 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         return decorator
 
     @staticmethod
-    def Get(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Get(path: str, operation_id: str = None, dependencies:Sequence[Depends]=None, response_model: Any = None, response_description: str = "Successful Response",
             responses: Dict[int | str, Dict[str, Any]] | None = None,
             deprecated: bool | None = None):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.GET], operation_id, response_model, response_description, responses, deprecated)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.GET], operation_id,dependencies, response_model, response_description, responses, deprecated)
 
     @staticmethod
-    def Post(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Post(path: str, operation_id: str = None,  dependencies:Sequence[Depends]=None,response_model: Any = None, response_description: str = "Successful Response",
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.POST], operation_id, response_model, response_description, responses, deprecated)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.POST], operation_id, dependencies, response_model, response_description, responses, deprecated)
     
     @staticmethod
-    def Delete(path: str, operation_id: str = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Delete(path: str, operation_id: str = None, dependencies:Sequence[Depends]=None, response_model: Any = None, response_description: str = "Successful Response",
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE], operation_id, response_model, response_description, responses, deprecated)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE], operation_id, dependencies,  response_model, response_description, responses, deprecated)
 
     def init_stacked_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
@@ -513,22 +516,26 @@ def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, A
         return func
     return decorator
 
-def UseRoles(roles:list[Role]):
+def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[]): # TODO options
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         data = common_class_decorator(func, UseRoles,None,roles=roles)
         if data != None:
             return data
 
         roles_ = set(roles)
+        excludes_ = set(excludes).difference(roles_)
+
         try:
             roles_.remove(Role.CUSTOM)
         except KeyError:
             ...
 
-        meta = getattr(func,'meta',None)
+        meta:FuncMetaData | None = getattr(func,'meta',None)
         if meta is not None:
-            meta:FuncMetaData = meta
             meta['roles'].update(roles_)
+            roles_ = meta['roles']
+            meta['excludes'].update(excludes_.difference(roles_))
+            meta['options'].extend(options)
 
         return func
     return decorator

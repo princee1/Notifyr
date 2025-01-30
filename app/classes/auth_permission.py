@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal,Dict,NotRequired
+from typing import Callable, Literal,Dict,NotRequired
 from typing_extensions import TypedDict
 from enum import Enum
 
@@ -16,11 +16,14 @@ class Role(Enum):
     CUSTOM ='CUSTOM'
     MFA_OTP ='MFA_OTP'
     CHAT = 'CHAT'
+    REDIS = 'REDIS'
 
 
 class FuncMetaData(TypedDict):
     operation_id:str
     roles:set[Role]
+    excludes:set[Role]
+    options: list[Callable]
 
 
 class RoutePermission(TypedDict):
