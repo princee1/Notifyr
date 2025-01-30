@@ -32,26 +32,12 @@ class RedisBackendRessource(BaseHTTPRessource):
         self.jwtAuthService: JWTAuthService = jwtService
         self.run_id = '1'
 
-
     @UseHandler(CeleryTaskHandler)
     @UsePipe(CeleryTaskIdentifierPipe)
     @BaseHTTPRessource.Get('/status/{task_id}')
     def check_status(self,task_id:str,authPermission=Depends(get_auth_permission)):
         self.celeryService.pingService()
         return task_id
-
-    @UsePipe(CeleryTaskIdentifierPipe)
-    @UseHandler(CeleryTaskHandler)
-    @BaseHTTPRessource.HTTPRoute('/status/{task_id}',methods=[HTTPMethod.POST,HTTPMethod.PUT, HTTPMethod.PATCH])
-    def update_task(self,task_id:str,authPermission=Depends(get_auth_permission)):
-        return task_id
-
-    @UsePipe(CeleryTaskIdentifierPipe)
-    @UseHandler(CeleryTaskHandler)
-    @BaseHTTPRessource.Delete('/status/{task_id}')
-    def delete_task(self,task_id:str,authPermission=Depends(get_auth_permission)):
-        return task_id
-        
 
     @UseHandler(WebSocketHandler)
     @BaseHTTPRessource.Get('/create-permission/{ws_path}',)
