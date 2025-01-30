@@ -396,6 +396,7 @@ class Container():
 CONTAINER: Container = None #Container(__DEPENDENCY)
 
 def build_container(quiet=False):
+    PrettyPrinter_.quiet=quiet
     global CONTAINER
     CONTAINER = Container(__DEPENDENCY)
 
