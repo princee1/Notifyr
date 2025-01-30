@@ -60,6 +60,7 @@ class CeleryTaskHandler(Handler):
     def handle(self, function, *args, **kwargs):
         try:
            return function(*args,**kwargs)
+        
         except CeleryTaskNotFoundError:
            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
 
