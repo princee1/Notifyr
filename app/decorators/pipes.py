@@ -20,7 +20,7 @@ class AuthPermissionPipe(Pipe):
             permission:AuthPermission = AuthPermission(**val)
             temp[permission.issued_for] = permission
 
-        return (),{'tokens':temp}
+        return {'tokens':temp}
 
 
 class CeleryTaskIdentifierPipe(Pipe):
@@ -31,4 +31,5 @@ class CeleryTaskIdentifierPipe(Pipe):
         self.celeryService:CeleryService = celeryService
     
     def pipe(self,task_id:str):
-        return self.celeryService.get_task_id(task_id)
+        task_id= self.celeryService.get_task_id(task_id)
+        return {'task_id':task_id}

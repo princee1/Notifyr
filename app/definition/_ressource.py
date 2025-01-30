@@ -315,7 +315,7 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams =None):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(func, UsePermission, None)
+        data = common_class_decorator(func, UsePermission, permission_function)
         if data != None:
             return data
 
@@ -328,8 +328,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
             def callback(*args, **kwargs):
 
                 if len(kwargs) < 1:
-                    raise HTTPException(
-                        status_code=status.HTTP_501_NOT_IMPLEMENTED)
+                    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
                 if SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER in kwargs or SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER in kwargs:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'special key used'})
@@ -342,7 +341,6 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                 for permission in permission_function:
                     try:
                         if type(permission) == type or issubclass_of(Permission,type(permission)):
-                           
                             flag = permission().do(*args, **kwargs_prime)
                         elif isinstance(permission, Permission):
                             flag = permission.do(*args, **kwargs_prime)
@@ -418,8 +416,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
     # BUG notify the developper if theres no guard_function mentioned
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
-        data = common_class_decorator(
-            func, UseGuard, guard_function)
+        data = common_class_decorator(func, UseGuard, guard_function)
         if data != None:
             return data
 
@@ -467,12 +464,17 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                         kwargs_prime = kwargs.copy()
                         for pipe in pipe_function:  # verify annotation
                             if type(pipe) == type or issubclass_of(Pipe,type(pipe)):
-                                args, kwargs_prime = pipe(before=True).do(*args, **kwargs_prime)
+                                result = pipe().do(*args, **kwargs_prime)
                             elif isinstance(pipe, Pipe):
-                                args, kwargs_prime = pipe.do(*args, **kwargs_prime)
+                                result = pipe.do(*args, **kwargs_prime)
                             else:
-                                args, kwargs_prime = pipe(*args, **kwargs_prime)
-                                
+                                result = pipe(*args, **kwargs_prime)
+
+                            if not isinstance(result,dict):
+                                raise PipeDefaultException
+                            
+                            kwargs_prime.update(result)
+                        
                         kwargs.update(kwargs_prime)
                         return function(*args, **kwargs)
                     else:
