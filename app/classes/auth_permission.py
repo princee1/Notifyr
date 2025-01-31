@@ -48,7 +48,6 @@ class AuthPermission(TypedDict):
     #allowed_assets:Dict[str,AssetsPermission]
     #allowed_assets:List[str]
 
-
 class WSPermission(TypedDict):
     operation_id:str
     run_id:str
@@ -57,3 +56,11 @@ class WSPermission(TypedDict):
     
 class WSPathNotFoundError(BaseError):
     ...
+
+
+def MustHave(role:Role):
+
+    def verify(authPermission:AuthPermission):
+        return role.value in authPermission
+
+    return verify

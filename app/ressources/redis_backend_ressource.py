@@ -10,7 +10,7 @@ from app.services.celery_service import CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
 from app.utils.dependencies import get_auth_permission
-from app.classes.auth_permission import Role
+from app.classes.auth_permission import MustHave, Role
 from app.websockets.redis_backend_ws  import RedisBackendWebSocket
 from pydantic.fields import Field
 
@@ -38,6 +38,12 @@ class RedisBackendRessource(BaseHTTPRessource):
     def check_status(self,task_id:str,authPermission=Depends(get_auth_permission)):
         self.celeryService.pingService()
         return task_id
+
+    @UseRoles(options=[MustHave(Role.ADMIN)])
+    @BaseHTTPRessource.Get('/schedule')
+    def check_schedule_database(self,authPermission=Depends(get_auth_permission)):
+        ...
+
 
     @UseHandler(WebSocketHandler)
     @BaseHTTPRessource.Get('/create-permission/{ws_path}',)
