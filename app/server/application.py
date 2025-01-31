@@ -1,9 +1,11 @@
 """
 Contains the FastAPI app
 """
-
 from dataclasses import dataclass
-from app.container import Get, Need
+from app.services.celery_service import CeleryService
+from app.container import Get, Need,Register
+Register(CeleryService)
+
 from app.ressources import *
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
@@ -81,13 +83,8 @@ class Application(EventInterface):
     # TODO if it important add other on_start_up and on_shutdown hooks
     def __init__(self, appParameter: AppParameter):
         self.pretty_printer = PrettyPrinter_
-        self.thread = threading.Thread(
-            None, self.run, appParameter.title, daemon=False)
-        self.log_level = appParameter.log_level
-        self.log_config = appParameter.log_config
-        self.port = appParameter.port
-        self.ressources = appParameter.ressources
-        self.middlewares = appParameter.middlewares
+        #self.thread = threading.Thread(None, self.run, appParameter.title, daemon=False)
+        self.appParameter = appParameter
         self.configService: ConfigService = Get(ConfigService)
         self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
@@ -111,10 +108,10 @@ class Application(EventInterface):
 
     def start_server(self):
         if self.mode == 'HTTPS':
-            uvicorn.run(self.app, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
+            uvicorn.run(self.app, port=self.appParameter.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
                     ssl_certfile=self.configService.HTTPS_CERTIFICATE)
         else:
-            uvicorn.run(self.app, port=self.port, loop="asyncio",)
+            uvicorn.run(self.app, port=self.appParameter.port, loop="asyncio",)
 
     def stop_server(self):
         pass
@@ -124,7 +121,7 @@ class Application(EventInterface):
 
     def add_ressources(self):
         self.pretty_printer.show(pause_before=1,clear_stack=True,space_line=True)
-        for ressource_type in self.ressources:
+        for ressource_type in self.appParameter.ressources:
             try:
                 now = dt.datetime.now()
                 res = ressource_type()
@@ -138,12 +135,14 @@ class Application(EventInterface):
         self.pretty_printer.show(pause_before=1,clear_stack=True,space_line=False)
         
     def add_middlewares(self):
-        for middleware in sorted(self.middlewares,key=lambda x: x.priority.value, reverse=True):
+        for middleware in sorted(self.appParameter.middlewares,key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
 
     def on_startup(self):
         jwtService = Get(JWTAuthService)
         jwtService.set_generation_id(False)
+
+
 
     def on_shutdown(self):
         # for thread in threading.enumerate():

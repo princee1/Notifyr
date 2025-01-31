@@ -75,8 +75,10 @@ class Container():
 
     def __init__(self, D: list[type],quiet=False) -> None:  # TODO add the scope option
         self.__app = injector.Injector()
+
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
+
         self.__D: set[str] = self.__load_baseSet(D)
         dep_count = self.__load_dep(D)
         self.__D: OrderedSet[str] = self.__order_dependency(dep_count)
@@ -211,17 +213,24 @@ class Container():
                 raise InvalidDependencyError
             t.add(d.__name__)
         return t
+    
+    def __add_dep(self, D:list[type]|type):
+        D = [D] if not isinstance(D,list) else D
+        set_d = self.__load_baseSet(D)
+        self.__D.update(set_d)
+
 
     def __buildContainer(self):
-        while self.__D.__len__() != 0:
+        D = self.__D.copy()
+        while D.__len__() != 0:
             no_dep = []
-            for x in self.__D:
+            for x in D:
                 d: set[str] = self.DEPENDENCY_MetaData[x][DependencyConstant.DEP_KEY]
-                if len(d.intersection(self.__D)) == 0:
+                if len(d.intersection(D)) == 0:
                     no_dep.append(x)
             if len(no_dep) == 0:
                 raise CircularDependencyError
-            self.__D.difference_update(no_dep)
+            D.difference_update(no_dep)
             for x in no_dep:
                 self.__inject(x)
 
@@ -378,7 +387,9 @@ class Container():
         pass
 
     def register_new_dep(self,typ:type,scope= None):
-        ...
+        self.__add_dep([typ])
+        self.__load_dep([typ])
+        self.__inject(typ.__name__)
     
     @property
     def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
@@ -526,6 +537,9 @@ def Get(typ: Type[S], scope=None, all=False) -> dict[str, Type[S]] | Type[S]:
     """
     return CONTAINER.get(typ, scope=scope, all=all)
 
+def Register(typ:Type[S],scope=None)->Type[S]:
+    CONTAINER.register_new_dep(typ,scope)
+    return Get(typ,scope)
 
 def Need(typ: Type[S]) -> Type[S]:
     """
