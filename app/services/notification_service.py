@@ -124,16 +124,11 @@ class EmailNotificationService(NotificationService):
         super().__init__(configService)
         self.emailService: EmailSenderService = emailService
 
-@_service.ServiceClass
-class GoogleNotificationService(NotificationService):
-    pass
 
 ReportClass = {
     DiscordService.__name__: DiscordReport,
     SystemNotificationService.__name__: SystemReport,
     EmailNotificationService.__name__: EmailReport,
-    GoogleNotificationService.__name__: GoogleReport,
-
 }
 
 def ReportBuilder(classname,*args,**kwargs) -> Report: # TODO Make as a decorator
