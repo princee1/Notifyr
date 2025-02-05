@@ -197,13 +197,13 @@ class EmailSenderService(BaseEmailService):
 
     def sendTemplateEmail(self,data, meta, images):
         email  = EmailBuilder(data,meta,images)
-        self._send_message(email)
+        return self._send_message(email)
 
     
     def sendCustomEmail(self,content, meta, images, attachment):
         email =  EmailBuilder(content,meta,images,attachment)
         #send_custom_email(content, meta, images, attachment)
-        self._send_message(email)
+        return self._send_message(email)
 
     @BaseEmailService.task_lifecycle
     def _send_message(self, email: EmailBuilder,connector:smtp.SMTP):

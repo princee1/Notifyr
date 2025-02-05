@@ -34,16 +34,20 @@ class RedisBackendRessource(BaseHTTPRessource):
 
     @UseHandler(CeleryTaskHandler)
     @UsePipe(CeleryTaskIdentifierPipe)
-    @BaseHTTPRessource.Get('/status/{task_id}')
+    @BaseHTTPRessource.Get('/result/{task_id}')
     def check_status(self,task_id:str,authPermission=Depends(get_auth_permission)):
         self.celeryService.pingService()
         return task_id
 
-    @UseRoles(options=[MustHave(Role.ADMIN)])
-    @BaseHTTPRessource.Get('/schedule')
-    def check_schedule_database(self,authPermission=Depends(get_auth_permission)):
+    #@UseRoles(options=[MustHave(Role.ADMIN)])
+    @BaseHTTPRessource.Get('/schedule/{schedule_id}')
+    def check_schedule(self,schedule_id:str,authPermission=Depends(get_auth_permission)):
         ...
 
+    @UseRoles(options=[MustHave(Role.ADMIN)])
+    @BaseHTTPRessource.Delete('/schedule/{schedule_id}')
+    def delete_schedule(self,schedule_id:str,authPermission=Depends(get_auth_permission)):
+        ...
 
     @UseHandler(WebSocketHandler)
     @BaseHTTPRessource.Get('/create-permission/{ws_path}',)

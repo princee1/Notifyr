@@ -2,8 +2,8 @@ from app.classes.celery import CeleryTask, CeleryTaskNotFoundError
 from app.definition._service import Service, ServiceClass
 from .config_service import ConfigService
 from app.interface.threads import InfiniteAsyncInterface
-from app.task import task_send_custom_mail,task_send_template_mail
 from app.utils.helper import generateId
+from app.task import TASK_REGISTRY
 
 @ServiceClass
 class CeleryService(Service,InfiniteAsyncInterface):
@@ -14,9 +14,19 @@ class CeleryService(Service,InfiniteAsyncInterface):
         self.configService = configService
         self.cross_reference_id:dict[str,str] = {}
 
-    def register_task(self,celery_task: CeleryTask)->str:
-        
+    def schedule_task(self,):
+        ...
 
+    def delete_task(self,):
+        ...
+
+    def seek_schedule(self,):
+        ...
+
+    def seek_result(self,):
+        ...
+
+    def trigger_task(self,celery_task: CeleryTask)->str:
         task_id = ...
         return self._reference_task(task_id)
 
@@ -31,3 +41,5 @@ class CeleryService(Service,InfiniteAsyncInterface):
             raise CeleryTaskNotFoundError
         return task_id
 
+    def build(self):
+        ...
