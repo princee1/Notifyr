@@ -59,6 +59,9 @@ def get_user_language(request: Request) -> str:
 def get_user_agent(request: Request) -> str:
     return request.headers.get('User-Agent')
 
+def get_timezone(request:Request)->str:
+    ...
+
 def get_client_ip(request: Request) -> str:
     return request.client.host
 
