@@ -2,7 +2,6 @@ import asyncio
 from typing import overload
 from app.definition._interface import Interface, IsInterface
 
-
 @IsInterface
 class AsyncInterface(Interface):
     def __init__(self) -> None:
@@ -55,7 +54,6 @@ class InfiniteAsyncInterface(AsyncInterface):
     async def _run(self):
         """Runs the infinite loop asynchronously"""
         while self.active:
-            print('running...')
             try:
                 await asyncio.sleep(self.waitTime or 0)  # Sleep for waitTime duration
                 self.event.wait()
