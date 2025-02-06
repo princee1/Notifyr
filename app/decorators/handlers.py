@@ -6,6 +6,7 @@ from app.definition._utils_decorator import Handler,HandlerDefaultException,Next
 from app.definition._service import ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
 from app.classes.celery import CeleryTaskNameNotExistsError,CeleryTaskNotFoundError
+from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
 
 class ServiceAvailabilityHandler(Handler):
@@ -61,9 +62,18 @@ class CeleryTaskHandler(Handler):
         try:
            return function(*args,**kwargs)
         
-        except CeleryTaskNotFoundError:
+        except CeleryTaskNotFoundError as e:
            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
 
-        except CeleryTaskNameNotExistsError:
+        except CeleryTaskNameNotExistsError as e:
            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
+        
+        except QueueNotFound as e:
+           raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
+            
+        except AlreadyRegistered as e:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,detail={})
+        
+        except NotRegistered as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={})
             
