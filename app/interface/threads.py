@@ -42,6 +42,7 @@ class InfiniteAsyncInterface(AsyncInterface):
         self.base_waitTime = None
         self.waitTime = self.base_waitTime
         self.paused = False
+        self.semaphore = asyncio.Semaphore()
 
     def kill(self):
         """Stops execution and ends the async task"""

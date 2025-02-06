@@ -6,6 +6,7 @@ from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from .constant import HTTPHeaderConstant
+from .helper import reverseDict
 
 D = TypeVar('D',bound=type)
 
@@ -28,6 +29,7 @@ def APIFilterInject(func:Callable | Type):
     return wrapper
 
 def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None):
+    reversed_kwargs = reverseDict(kwargs)
     if key == None and cls == None:
         raise KeyError
     # if cls:
