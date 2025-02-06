@@ -59,6 +59,8 @@ class CeleryTask(TypedDict):
     kwargs: dict[str,Any] = {}
     priority:Literal[1,2,3,4,5] = 1
     queue_name:Optional[str] = None
+    schedule_name:Optional[str] = None
+    task_id:Optional[str] = None
 
 
 
