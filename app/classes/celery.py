@@ -1,7 +1,7 @@
 from enum import Enum
 from ordered_set import OrderedSet
 from pydantic import BaseModel, field_validator
-from typing import Any,Iterable, Literal, Optional, TypedDict
+from typing import Any,Iterable, Literal, Optional, TypedDict, NotRequired
 from app.definition._error import BaseError
 from pydantic import BaseModel
 import time
@@ -25,17 +25,18 @@ class TaskType(Enum):
     RRULE = 'rrule'
     SOLAR = 'solar'
     CRONTAB = 'crontab'
-    TIMEDELTA = 'timedelta'
-    DATETIME = 'datetime'
+    #TIMEDELTA = 'timedelta'
+    #DATETIME = 'datetime'
     NOW = 'now' # direct task call
     ONCE= 'once' # direct task call
 
-TaskTypeLiteral = Literal['rrule','solar','crontab','timedelta','datetime','now','once'] 
+TaskTypeLiteral = Literal['rrule','solar','crontab','now','once']  #'timedelta','datetime'
 class SchedulerModel(BaseModel):
-    schedule_name:Optional[str]
+    schedule_name:Optional[str] = None
+    timezone:Optional[str] = None
     task_name:str
     task_type:TaskTypeLiteral
-    task_option:Optional[dict] =None
+    task_option:Optional[dict] ={}
     priority:Literal[1,2,3,4,5] = 1
     queue_name:Optional[str] = None
     content:Any
@@ -44,11 +45,11 @@ SCHEDULER_RULES:dict[str,type] = {
     'rrule': rrule,
     'solar':solar,
     'crontab':crontab,
-    'timedelta':timedelta,
-    'datetime':datetime,    
+    #'timedelta':timedelta,
+    #'datetime':datetime,    
 }
 
-SCHEDULER_VALID_KEYS = {k:OrderedSet(signature(r).parameters.keys()) for k,r in SCHEDULER_RULES.items()}
+SCHEDULER_VALID_KEYS = {k:OrderedSet(signature(r).parameters.keys()) for k,r in SCHEDULER_RULES.items() }
 
 class CeleryTask(TypedDict):
     task_name:str

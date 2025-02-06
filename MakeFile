@@ -1,5 +1,6 @@
 src_dir = .
 config_dir = config.app.json
+celery_app = app.task.celery_app
 
 install	:
 	pip install -r requirements_dev.txt
@@ -50,8 +51,10 @@ redis:
 	docker-compose up --build 
 
 celery:
-	celery -A app.task.celery_app worker --pool=solo --loglevel=info
+	celery -A ${celery_app} worker --pool=solo --loglevel=info
 
 celery_beat:
-	celery -A app.task.celery_app beat -S redbeat.RedBeatScheduler --max-interval 30 --loglevel=info
+	celery -A ${celery_app} beat -S redbeat.RedBeatScheduler --max-interval 30 --loglevel=info
 
+purge:
+	celery -A ${celery_app} purge

@@ -56,6 +56,6 @@ class JWTAssetPermission(Permission):
         self.assetService = assetService
 
     def permission(self,template:str, authPermission:AuthPermission):
-        #assetPermission = authPermission['asset_permission']
+        #TODO assetPermission = authPermission['asset_permission']
         return True
 
