@@ -1,9 +1,11 @@
-from typing import Any
-from app.classes.celery import CeleryTask, CeleryTaskNotFoundError,SCHEDULER_RULES
+from typing import Any, overload
+from app.classes.celery import CeleryTaskNotFoundError,SCHEDULER_RULES
+from app.classes.celery import  CeleryTask, SchedulerModel
+
 from app.definition._service import Service, ServiceClass, ServiceStatus
 from .config_service import ConfigService
 from app.utils.helper import generateId
-from app.task import TASK_REGISTRY,celery_app,task_name, AsyncResult
+from app.task import TASK_REGISTRY,celery_app,compute_name, AsyncResult
 from redbeat  import RedBeatSchedulerEntry
 from app.utils.helper import generateId
 import datetime as dt
@@ -16,16 +18,25 @@ class CeleryService(Service):
         self.configService = configService
         self._task_registry = TASK_REGISTRY
 
-    def trigger_task(self,celery_task:CeleryTask,schedule_name:str = None,timezone=None):
+    def trigger_task_from_scheduler(self,scheduler:SchedulerModel,*args,**kwargs):
+        celery_task = scheduler.model_dump(mode='python',exclude={'content'})
+        celery_task: CeleryTask = CeleryTask(args=args,kwargs=kwargs,**celery_task)
+        return self._trigger_task(celery_task,scheduler.schedule_name)
+
+
+    def trigger_task_from_task(self,celery_task:CeleryTask,schedule_name:str= None):
+        return self._trigger_task(celery_task,schedule_name)
+
+    def _trigger_task(self,celery_task:CeleryTask,schedule_name:str=None):
         schedule_id = schedule_name if schedule_name is not None else generateId(25)
         c_type = celery_task['task_type']
-        t_name = task_name(celery_task['task_name'])
+        t_name = celery_task['task_name']
         now = dt.datetime.now()
         result = {
-            'message': f'Task `{t_name}` received successfully at `{now}`'
+            'message': f'[{now}] - Task [{t_name}] received successfully'
         }
         
-        if c_type != 'now':
+        if c_type == 'now':
             task_result = TASK_REGISTRY[t_name].delay(*celery_task['args'],**celery_task['kwargs'])
             result.update({'task_id':task_result.id,'type':'task'})
             return result

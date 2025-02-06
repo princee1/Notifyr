@@ -6,12 +6,12 @@ from app.services.celery_service import CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
-from app.definition._ressource import HTTPRessource, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
+from app.definition._ressource import HTTPRessource, UseGuard, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailSenderService
 from pydantic import BaseModel
 from fastapi import BackgroundTasks, status
 from app.utils.dependencies import Depends, get_auth_permission
-from app.decorators import permissions, handlers,pipes
+from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import  CeleryTask, SchedulerModel
 
 
@@ -74,6 +74,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission)
     @UseHandler(handlers.TemplateHandler)
+    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
     def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
@@ -92,10 +93,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
             self.celeryService.pingService()
             return  #TODO  if celery service status is either 4 or 5 
         
-        scheduler = scheduler.model_copy(update={'args':(data, mail_content.meta, template.images)})
-        model = scheduler.model_dump(mode='python',exclude={'content'})
-        return self.celeryService.trigger_task(CeleryTask(**model),scheduler.schedule_name)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,data, mail_content.meta, template.images)
         
+    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
     def send_customEmail(self, scheduler: CustomEmailSchedulerModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
@@ -110,7 +110,4 @@ class EmailTemplateRessource(BaseHTTPRessource):
             self.celeryService.pingService()
             return #TODO  if celery service status is either 4 or 5 
         
-        scheduler = scheduler.model_copy(update={'args':( content,customEmail_content.meta,customEmail_content.images, customEmail_content.attachments)})
-        model = scheduler.model_dump(mode='python',exclude={'content'})
-
-        return self.celeryService.trigger_task(CeleryTask(**model),scheduler.schedule_name)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,content,customEmail_content.meta,customEmail_content.images, customEmail_content.attachments)
