@@ -1,45 +1,98 @@
-from app.classes.celery import CeleryTask, CeleryTaskNotFoundError
-from app.definition._service import Service, ServiceClass
+from typing import Any
+from app.classes.celery import CeleryTask, CeleryTaskNotFoundError,SCHEDULER_RULES
+from app.definition._service import Service, ServiceClass, ServiceStatus
 from .config_service import ConfigService
-from app.interface.threads import InfiniteAsyncInterface
 from app.utils.helper import generateId
-from app.task import TASK_REGISTRY
+from app.task import TASK_REGISTRY,celery_app,task_name, AsyncResult
+from redbeat  import RedBeatSchedulerEntry
+from app.utils.helper import generateId
+import datetime as dt
 
 @ServiceClass
-class CeleryService(Service,InfiniteAsyncInterface):
+class CeleryService(Service):
 
-    def __init__(self,configService:ConfigService,):
+    def __init__(self,configService:ConfigService):
         Service.__init__(self)
-        InfiniteAsyncInterface.__init__(self)
         self.configService = configService
-        self.cross_reference_id:dict[str,str] = {}
+        self._task_registry = TASK_REGISTRY
 
-    def schedule_task(self,):
-        ...
+    def trigger_task(self,celery_task:CeleryTask,schedule_name:str = None,timezone=None):
+        schedule_id = schedule_name if schedule_name is not None else generateId(25)
+        c_type = celery_task['task_type']
+        t_name = task_name(celery_task['task_name'])
+        now = dt.datetime.now()
+        result = {
+            'message': f'Task `{t_name}` received successfully at `{now}`'
+        }
+        
+        if c_type != 'now':
+            task_result = TASK_REGISTRY[t_name].delay(*celery_task['args'],**celery_task['kwargs'])
+            result.update({'task_id':task_result.id,'type':'task'})
+            return result
 
-    def delete_task(self,):
-        ...
+        options = celery_task['task_option']
+        if c_type == 'once':
+            task_result = TASK_REGISTRY[t_name].apply_async(**options,args=celery_task['args'],kwargs=celery_task['kwargs'])
+            result.update({'task_id':task_result.id,'type':'task'})
+            return task_result.id
 
-    def seek_schedule(self,):
-        ...
+        schedule = SCHEDULER_RULES[c_type]
+        schedule = schedule(**options)
+        entry = RedBeatSchedulerEntry(schedule_id,t_name,schedule,args=celery_task['args'],kwargs=celery_task['kwargs'])
+        entry.save()
+        result.update({'task_id':schedule_id,'type':'schedule'})
+        return result
+        
+    def cancel_task(self,task_id,force=False):
+        result = AsyncResult(task_id, app=celery_app)
 
-    def seek_result(self,):
-        ...
+        if result.state in ["PENDING", "RECEIVED"]:
+            result.revoke(terminate=False)
 
-    def trigger_task(self,celery_task: CeleryTask)->str:
-        task_id = ...
-        return self._reference_task(task_id)
+        elif result.state in ["STARTED"]:
+            if force:
+                result.revoke(terminate=True, signal="SIGTERM")
 
-    def _reference_task(self, task_id):
-        cross_id = generateId(25)
-        self.cross_reference_id[cross_id] = task_id
-        return cross_id
-    
-    def get_task_id(self,reference_id:str):
-        task_id = self.cross_reference_id.get(reference_id,None)
-        if task_id == None:
+    def delete_schedule(self,schedule_id:str):
+        try:
+            schedule_id = f'redbeat:{schedule_id}'
+            entry = RedBeatSchedulerEntry.from_key(schedule_id,app=celery_app)
+            entry.delete()
+        except KeyError:
             raise CeleryTaskNotFoundError
-        return task_id
 
+    def seek_schedule(self,schedule_id:str):
+        try:
+            schedule_id = f'redbeat:{schedule_id}'
+            entry = RedBeatSchedulerEntry.from_key(schedule_id,app=celery_app)
+            return {
+                'total_run_count':entry.total_run_count,
+                'due_at':entry.due_at,
+                'schedule':entry.schedule,
+                'last_run_at':entry.last_run_at
+            }
+        except KeyError:
+            raise CeleryTaskNotFoundError
+
+    def seek_result(self, task_id: str):
+        try:
+            result = AsyncResult(task_id, app=celery_app)
+            response = {
+                'task_id': result.id,
+                'status': result.status,
+                'result': result.result,
+                'traceback': result.traceback,
+                'date_done': result.date_done,
+                'successful': result.successful()
+            }
+            return response
+        except KeyError:
+            raise CeleryTaskNotFoundError
+    
     def build(self):
-        ...
+        response = celery_app.control.ping()
+        if len(response) == 0:
+            self.service_status = ServiceStatus.NOT_AVAILABLE
+        else:
+            self.service_status  = ServiceStatus.AVAILABLE
+
