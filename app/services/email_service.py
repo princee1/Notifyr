@@ -54,6 +54,9 @@ class BaseEmailService(_service.Service):
         return wrapper
 
     def build(self):
+        if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
+            return 
+        
         params = {
             'client_id': self.configService.OAUTH_CLIENT_ID,
             'client_secret': self.configService.OAUTH_CLIENT_SECRET,
@@ -168,8 +171,7 @@ class EmailSenderService(BaseEmailService):
 
             if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
 
-                auth_status = connector.login(
-                    self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
+                auth_status = connector.login(self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
             else:
                 access_token = self.mailOAuth.encode_token(
                     self.configService.SMTP_EMAIL)

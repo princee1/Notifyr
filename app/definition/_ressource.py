@@ -340,7 +340,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                 # TODO use the prefix here
                 for permission in permission_function:
                     try:
-                        if type(permission) == type or issubclass_of(Permission,type(permission)):
+                        if type(permission) == type:
                             flag = permission().do(*args, **kwargs_prime)
                         elif isinstance(permission, Permission):
                             flag = permission.do(*args, **kwargs_prime)
@@ -383,7 +383,7 @@ def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Ha
                 def handler_proxy(handler,f:Callable):
 
                     def delegator(*a,**k):
-                        if type(handler) == type or issubclass_of(Handler,type(handler)):
+                        if type(handler) == type:
                             handler_obj:Handler = handler()
                             return handler_obj.do(f, *a, **k)
                         elif isinstance(handler, Handler):
@@ -426,10 +426,12 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
             def callback(*args, **kwargs):
 
                 for guard in guard_function:
+
                     # BUG check annotations of the guard function
-                    if type(guard) == type or issubclass_of(Guard,type(guard)):
+                    if type(guard) == type :
                         flag, message = guard().do(*args, **kwargs)
-                    elif isinstance(guard, Guard):
+                    
+                    elif issubclass_of(Guard,type(guard)):
                         flag, message = guard.do(*args, **kwargs)
                     else:
                         flag, message = guard(*args, **kwargs)
@@ -463,7 +465,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                     if before:
                         kwargs_prime = kwargs.copy()
                         for pipe in pipe_function:  # verify annotation
-                            if type(pipe) == type or issubclass_of(Pipe,type(pipe)):
+                            if type(pipe) == type:
                                 result = pipe().do(*args, **kwargs_prime)
                             elif isinstance(pipe, Pipe):
                                 result = pipe.do(*args, **kwargs_prime)
@@ -541,6 +543,9 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
 
         return func
     return decorator
+
+def UseLimiter(): #TODO
+    ...
 
 def IncludeRessource(*ressources: Type[R]| R):
     def class_decorator(cls:Type[R]) ->Type[R]:
