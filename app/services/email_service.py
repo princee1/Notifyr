@@ -6,17 +6,13 @@ import poplib as pop
 import socket
 from typing import Callable
 
-
-from app.utils.helper import b64_encode
-from app.utils.fileIO import JSONFile
-from app.utils.prettyprint import SkipInputException, TemporaryPrint
+from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from app.classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 
 from .model_service import LLMModelService
 from app.utils.constant import EmailHostConstant
 from app.classes.email import EmailBuilder
-from app.interface.timers import SchedulerInterface
 
 from .logger_service import LoggerService
 from app.definition import _service
@@ -49,7 +45,7 @@ class BaseEmailService(_service.Service):
                 return
             kwargs['connector'] = connector # BUG if the name changes it will not work
             result = func(*args, **kwargs)
-            self.logout()
+            self.logout(connector)
             return result
         return wrapper
 
@@ -173,10 +169,8 @@ class EmailSenderService(BaseEmailService):
 
                 auth_status = connector.login(self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
             else:
-                access_token = self.mailOAuth.encode_token(
-                    self.configService.SMTP_EMAIL)
-                auth_status = connector.docmd(
-                    "AUTH XOAUTH2", access_token)
+                access_token = self.mailOAuth.encode_token(self.configService.SMTP_EMAIL)
+                auth_status = connector.docmd("AUTH XOAUTH2", access_token)
                 auth_status = tuple(auth_status)
                 auth_code, auth_mess = auth_status
                 if str(auth_code) != '235':
