@@ -52,7 +52,6 @@ redis:
 celery:
 	celery -A app.task.celery_app worker --pool=solo --loglevel=info
 
-container:
-	$(MAKE)  redis
-	$(MAKE)  dramatiq
+celery_beat:
+	celery -A app.task.celery_app beat -S redbeat.RedBeatScheduler --max-interval 30 --loglevel=info
 
