@@ -14,11 +14,15 @@ from app.utils.prettyprint import PrettyPrinter_
 
 CELERY_MODULE_NAME = __name__
 
-def task_name(t:str)-> str:
+def compute_name(t:str)-> str:
     
-    name = f'{CELERY_MODULE_NAME}.{t}'
+    name = task_name(t)
     if name not in TASK_REGISTRY:
         raise CeleryTaskNameNotExistsError(name)
+    return name
+
+def task_name(t):
+    return f'{CELERY_MODULE_NAME}.{t}'
 
 if 'worker' in sys.argv:
     PrettyPrinter_.message('Building container for the celery worker')
@@ -30,7 +34,6 @@ try:
     configService: ConfigService = Get(ConfigService)
     backend_url =  configService.CELERY_BACKEND_URL
     message_broker_url=  configService.CELERY_MESSAGE_BROKER_URL
-    print(backend_url)
 except :
     backend_url = "redis://localhost/0"
     message_broker_url="redis://localhost/0"
@@ -52,24 +55,23 @@ celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
 
 def RegisterTask(name:str=None):
     def decorator(task:Callable):
-        TASK_REGISTRY[task.__qualname__] = task
-        return celery_app.task(name=name)(task)
+
+        TASK_REGISTRY[task_name(task.__qualname__)] = celery_app.task(name=name)(task)
+        return task
     return decorator
 
-def RegisterTask(name:str=None):
+def SharedTask(name:str=None):
     def decorator(task:Callable):
-        TASK_REGISTRY[task.__qualname__] = task
-        return shared_task(name=name)(task)
+        TASK_REGISTRY[task_name(task.__qualname__)] = shared_task(name=name)(task)
+        return task
     return decorator
 
-    
-
-@RegisterTask
+@RegisterTask()
 def task_send_template_mail(data, meta, images):
     emailService:EmailSenderService = Get(EmailSenderService)
     return emailService.sendTemplateEmail(data, meta, images)
     
-@RegisterTask
+@RegisterTask()
 def task_send_custom_mail(content, meta, images, attachment):
     emailService:EmailSenderService = Get(EmailSenderService)
     return emailService.sendCustomEmail(content, meta, images, attachment)
