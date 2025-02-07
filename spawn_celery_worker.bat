@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 set "COMMAND=make celery"
 
 :: Set the number of processes to spawn
-set "NUM_PROCESSES=20"
+set "NUM_PROCESSES=25"
 
 echo Spawning %NUM_PROCESSES% processes...
 

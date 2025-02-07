@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Set the command to run (change this to your desired command)
-COMMAND="make celery"
+COMMAND="make celery > /dev/null"
 
 # Set the number of processes to spawn
-NUM_PROCESSES=20
+NUM_PROCESSES=25
 
 echo "Spawning $NUM_PROCESSES processes..."
 

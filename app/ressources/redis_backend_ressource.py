@@ -32,34 +32,34 @@ class RedisBackendRessource(BaseHTTPRessource):
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Get('/task/{task_id}')
-    def check_task(self,task_id:str,authPermission:AuthPermission=Depends(get_auth_permission)):
+    def check_task(self,task_id:str,authPermission=Depends(get_auth_permission)):
         self.celeryService.pingService()
         return self.celeryService.seek_result(task_id)
         
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/task/{task_id}')
-    def cancel_task(self,task_id:str,authPermission:AuthPermission=Depends(get_auth_permission)):
+    def cancel_task(self,task_id:str,authPermission=Depends(get_auth_permission)):
         self.celeryService.pingService()
         self.celeryService.cancel_task(task_id)
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Get('/schedule/{schedule_id}')
-    def check_schedule(self,schedule_id:str,authPermission:AuthPermission=Depends(get_auth_permission)):
+    def check_schedule(self,schedule_id:str,authPermission=Depends(get_auth_permission)):
         self.celeryService.pingService()
         return self.celeryService.seek_schedule(schedule_id)
         
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/schedule/{schedule_id}')
-    def delete_schedule(self,schedule_id:str,authPermission:AuthPermission=Depends(get_auth_permission)):
+    def delete_schedule(self,schedule_id:str,authPermission=Depends(get_auth_permission)):
         self.celeryService.pingService()
         self.celeryService.delete_schedule(schedule_id)
         
 
     @UseHandler(WebSocketHandler)
     @BaseHTTPRessource.Get('/create-permission/{ws_path}',)
-    def invoke_notify_permission(self, ws_path:str, authPermission:AuthPermission=Depends(get_auth_permission)):
+    def invoke_notify_permission(self, ws_path:str, authPermission=Depends(get_auth_permission)):
         self.celeryService.pingService()
         self.jwtAuthService.pingService()
         self._check_ws_path(ws_path)
