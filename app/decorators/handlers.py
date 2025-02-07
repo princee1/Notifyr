@@ -5,6 +5,8 @@ from app.definition._error import BaseError
 from app.definition._utils_decorator import Handler,HandlerDefaultException,NextHandlerException
 from app.definition._service import ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
+from app.classes.celery import CeleryTaskNameNotExistsError,CeleryTaskNotFoundError
+from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
 
 class ServiceAvailabilityHandler(Handler):
@@ -52,3 +54,26 @@ class WebSocketHandler(Handler):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={
                 'message':'WS Path Not Found'
             })
+
+
+class CeleryTaskHandler(Handler):
+
+    def handle(self, function, *args, **kwargs):
+        try:
+           return function(*args,**kwargs)
+        
+        except CeleryTaskNotFoundError as e:
+           raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
+
+        except CeleryTaskNameNotExistsError as e:
+           raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
+        
+        except QueueNotFound as e:
+           raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
+            
+        except AlreadyRegistered as e:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,detail={})
+        
+        except NotRegistered as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={})
+            

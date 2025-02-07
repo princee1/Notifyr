@@ -1,25 +1,31 @@
-from threading import Event, Thread
+import asyncio
 from typing import overload
 from app.definition._interface import Interface, IsInterface
 
-
 @IsInterface
-class ThreadInterface(Interface):
+class AsyncInterface(Interface):
     def __init__(self) -> None:
         super().__init__()
-        self.thread = Thread(target=self._target, name=self.name)
+        self.task = None  # Will hold an asyncio task
 
-    def _target(self) -> None:
-        self._run()
-        pass
+    async def _target(self):
+        await self._run()
 
     def start(self):
-        self.thread.start()
+        """Starts the async task"""
+        if self.task is None or self.task.done():
+            self.task = asyncio.create_task(self._target())
 
-    def join(self):
-        self.thread.join()
+    async def stop(self):
+        """Stops the async task gracefully"""
+        if self.task:
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
 
-    def _run(self):
+    async def _run(self):
         pass
 
     @property
@@ -28,75 +34,78 @@ class ThreadInterface(Interface):
 
 
 @IsInterface
-class InfiniteThreadInterface(ThreadInterface):
-
+class InfiniteAsyncInterface(AsyncInterface):
     def __init__(self) -> None:
         super().__init__()
-        self.event = Event()
+        self.event = asyncio.Event()
         self.active = True
         self.base_waitTime = None
-        self.waitTime =self.base_waitTime
+        self.waitTime = self.base_waitTime
         self.paused = False
+        self.semaphore = asyncio.Semaphore()
 
     def kill(self):
-        """
-        The function sets the event  to true, which causes the thread to exit the while loop and end
-        the thread
-        """
+        """Stops execution and ends the async task"""
         self.active = False
         self.event.set()
 
-    def _todo(self):
+    async def _todo(self):
         pass
 
-    def _run(self):
+    async def _run(self):
+        """Runs the infinite loop asynchronously"""
         while self.active:
-            print('running...')
             try:
-                self.event.wait(self.waitTime)
+                await asyncio.sleep(self.waitTime or 0)  # Sleep for waitTime duration
+                self.event.wait()
                 self.reset()
                 if self.active:
-                    self._todo()
+                    await self._todo()
                 self.event.clear()
-            except:
-                pass
-        
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Error in _run: {e}")
 
     @overload
     def pause(self):
+        """Pauses execution"""
         self.paused = True
         self.waitTime = self.base_waitTime
 
     def reset(self):
+        """Resets the pause state"""
         self.paused = False
         self.waitTime = self.base_waitTime
 
     @overload
     def pause(self, time):
+        """Pauses execution for a specific time"""
         self.paused = True
         self.waitTime = time
 
     def play(self):
+        """Resumes execution"""
         self.event.set()
-    
-    def join(self):
+
+    async def stop(self):
+        """Stops the async task and terminates execution"""
         self.active = False
-        return super().join()
+        await super().stop()
 
 
 @IsInterface
-class ControlledThreadInterface(InfiniteThreadInterface):
-    def changeState(self):
+class ControlledAsyncInterface(InfiniteAsyncInterface):
+    async def changeState(self):
         pass
-    pass
 
 
 @IsInterface
-class TaskThreadInterface(ThreadInterface):
-
-    def _join(self):
+class TaskAsyncInterface(AsyncInterface):
+    async def _join(self):
         pass
 
-    def join(self):
-        self.thread.join()
-        return self._join()
+    async def stop(self):
+        """Stops execution and calls _join()"""
+        await super().stop()
+        await self._join()

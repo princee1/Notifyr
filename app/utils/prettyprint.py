@@ -178,44 +178,53 @@ class PrettyPrinter:
 
     def __init__(self):
         self.buffer: list[Callable] = []
+        self.quiet= False
 
     @if_show
     @cache
     def warning(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        print_warning(message, position)
+        if not self.quiet:
+            print_warning(message, position)
     @if_show
     @cache
     def error(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        print_error(message, position)
+        if not self.quiet:
+            print_error(message, position)
 
     @if_show
     @cache
     def message(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        print_message(message, position)
+        if not self.quiet:
+            print_message(message, position)
 
     @if_show
     @cache
     def info(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        print_info(message, position)
+        if not self.quiet:
+            print_info(message, position)
 
     @if_show
     @cache
     def success(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
-        print_success(message, position)
+        if not self.quiet:
+            print_success(message, position)
 
     @if_show
     @cache
     def custom_message(self, message:str, color:str=Fore.WHITE, background:str=Back.RESET, emoji_code=":speech_balloon:", show=True, saveable=True, position: EmojiPosition = 'both'):
+        if not self.quiet:
             base_print(message, color, background, emoji_code, position)
     @if_show
     @cache
     def json(self, content:Any, indent=1, width=80, depth=None, compact=False, show:bool=True, saveable:bool=True,):
-        printJSON(content, indent, width, depth, compact)
+        if not self.quiet:
+            printJSON(content, indent, width, depth, compact)
 
     @if_show
     @cache
     def space_line(self, show: bool = True, saveable: bool = True):
-        print()
+        if not self.quiet:
+            print()
 
     def clearScreen(self):
         clearscreen()

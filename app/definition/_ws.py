@@ -167,6 +167,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 
         self.jwtAuthService = jwtAuthService
         self.prettyPrinter = PrettyPrinter_
+        self.run_id = generateId(30)
         self._register_protocol()
     
     def __init_subclass__(cls):
@@ -203,9 +204,12 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         except HTTPException as e:
             return False
 
+        if self.run_id != permission['run_id']:
+            return False
+
         if operation_id!= permission['operation_id']:
             return False
-        
+
         if permission['expired_at'] < time.time():
             return False
         

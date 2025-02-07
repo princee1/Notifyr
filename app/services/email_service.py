@@ -6,18 +6,13 @@ import poplib as pop
 import socket
 from typing import Callable
 
-
-from app.utils.helper import b64_encode
-from app.utils.fileIO import JSONFile
-from app.utils.prettyprint import SkipInputException, TemporaryPrint
+from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from app.classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 
 from .model_service import LLMModelService
 from app.utils.constant import EmailHostConstant
 from app.classes.email import EmailBuilder
-from app.interface.threads import ThreadInterface
-from app.interface.timers import SchedulerInterface
 
 from .logger_service import LoggerService
 from app.definition import _service
@@ -50,11 +45,14 @@ class BaseEmailService(_service.Service):
                 return
             kwargs['connector'] = connector # BUG if the name changes it will not work
             result = func(*args, **kwargs)
-            self.logout()
+            self.logout(connector)
             return result
         return wrapper
 
     def build(self):
+        if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
+            return 
+        
         params = {
             'client_id': self.configService.OAUTH_CLIENT_ID,
             'client_secret': self.configService.OAUTH_CLIENT_SECRET,
@@ -169,13 +167,10 @@ class EmailSenderService(BaseEmailService):
 
             if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
 
-                auth_status = connector.login(
-                    self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
+                auth_status = connector.login(self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
             else:
-                access_token = self.mailOAuth.encode_token(
-                    self.configService.SMTP_EMAIL)
-                auth_status = connector.docmd(
-                    "AUTH XOAUTH2", access_token)
+                access_token = self.mailOAuth.encode_token(self.configService.SMTP_EMAIL)
+                auth_status = connector.docmd("AUTH XOAUTH2", access_token)
                 auth_status = tuple(auth_status)
                 auth_code, auth_mess = auth_status
                 if str(auth_code) != '235':
@@ -198,13 +193,13 @@ class EmailSenderService(BaseEmailService):
 
     def sendTemplateEmail(self,data, meta, images):
         email  = EmailBuilder(data,meta,images)
-        self._send_message(email)
+        return self._send_message(email)
 
     
     def sendCustomEmail(self,content, meta, images, attachment):
         email =  EmailBuilder(content,meta,images,attachment)
         #send_custom_email(content, meta, images, attachment)
-        self._send_message(email)
+        return self._send_message(email)
 
     @BaseEmailService.task_lifecycle
     def _send_message(self, email: EmailBuilder,connector:smtp.SMTP):

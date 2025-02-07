@@ -4,9 +4,9 @@ from enum import Enum
 
 class DecoratorPriority(Enum):
     PERMISSION = 1
-    GUARD = 2
-    PIPE = 3
-    HANDLER = 4
+    HANDLER = 2
+    GUARD = 3
+    PIPE = 4
     INTERCEPTOR = 5
 
 

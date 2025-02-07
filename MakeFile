@@ -1,5 +1,6 @@
 src_dir = .
 config_dir = config.app.json
+celery_app = app.task.celery_app
 
 install	:
 	pip install -r requirements_dev.txt
@@ -49,10 +50,11 @@ register:
 redis:
 	docker-compose up --build 
 
-dramatiq:
-	dramatiq
+celery:
+	celery -A ${celery_app} worker --pool=solo --loglevel=info
 
-container:
-	$(MAKE)  redis
-	$(MAKE)  dramatiq
+celery_beat:
+	celery -A ${celery_app} beat -S redbeat.RedBeatScheduler --max-interval 30 --loglevel=info
 
+purge:
+	celery -A ${celery_app} purge
