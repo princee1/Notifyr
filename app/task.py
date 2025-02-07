@@ -5,16 +5,12 @@ from celery.result import AsyncResult
 from app.classes.celery import CeleryTaskNameNotExistsError
 from app.services.config_service import ConfigService
 from app.services.email_service import EmailSenderService
-from app.container import Get, build_container, Register
+from app.container import Get, build_container
 from app.utils.prettyprint import PrettyPrinter_
-from app.classes.celery import CeleryTaskNotFoundError,SCHEDULER_RULES
-from app.classes.celery import  CeleryTask, SchedulerModel
-from app.definition._service import Service, ServiceClass, ServiceStatus
-from app.utils.helper import generateId
-from redbeat  import RedBeatSchedulerEntry
-from app.utils.helper import generateId
-import datetime as dt
 import shutil
+
+##############################################           ##################################################
+
 
 exe_path = shutil.which("celery").replace(".EXE","")
 ##############################################           ##################################################
@@ -50,11 +46,6 @@ except :
 
 ##############################################           ##################################################
 
-#Register(CeleryService)
-
-##############################################           ##################################################
-
-
 celery_app = Celery('celery_app',
             backend=backend_url,
             broker=message_broker_url
@@ -70,7 +61,6 @@ celery_app.conf.timezone = "UTC"
 celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
 celery_app.autodiscover_tasks(['app.ressources'], related_name='email_ressource')
 
-#CeleryService._celery_app =celery_app
 
 def RegisterTask(name:str=None):
     def decorator(task:Callable):
