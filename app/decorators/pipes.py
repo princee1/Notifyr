@@ -1,10 +1,10 @@
 from app.classes.auth_permission import AuthPermission
 from app.classes.celery import SchedulerModel,CeleryTaskNameNotExistsError,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS
-from app.container import InjectInMethod
+from app.container import Get, InjectInMethod
 #from app.services.celery_service import CeleryService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
-from app.task import CeleryService, task_name
+from app.services.celery_service import CeleryService, task_name
 
 class AuthPermissionPipe(Pipe):
 
@@ -27,10 +27,10 @@ class AuthPermissionPipe(Pipe):
 
 
 class CeleryTaskPipe(Pipe):
-    @InjectInMethod
-    def __init__(self,celeryService:CeleryService):
+    
+    def __init__(self):
         super().__init__(True)
-        self.celeryService = celeryService
+        self.celeryService = Get(CeleryService)
     
     def pipe(self,scheduler:SchedulerModel):
         scheduler.task_name = task_name(scheduler.task_name)

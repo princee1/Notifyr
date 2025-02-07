@@ -4,7 +4,7 @@ Contains the FastAPI app
 from dataclasses import dataclass
 from app.services.celery_service import CeleryService
 from app.container import Get, Need,Register
-Register(CeleryService)
+#Register(CeleryService)
 
 from app.ressources import *
 from app.utils.prettyprint import PrettyPrinter_
