@@ -96,6 +96,7 @@ class Application(EventInterface):
     def add_exception_handlers(self):
         @self.app.exception_handler(KeyError)
         async def key_error(request,e):
+            print(e)
             return JSONResponse('Error while getting value',status_code=status.HTTP_400_BAD_REQUEST)
 
         @self.app.exception_handler(Exception)
@@ -146,7 +147,6 @@ class Application(EventInterface):
         
     def add_middlewares(self):
         for middleware in sorted(self.appParameter.middlewares,key=lambda x: x.priority.value, reverse=True):
-            print(middleware.priority)
             self.app.add_middleware(middleware)
 
     def on_startup(self):

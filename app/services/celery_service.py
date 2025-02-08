@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Callable, Dict, ParamSpec
+from typing import Any, Callable, ParamSpec
 import typing
 from app.classes.celery import CeleryTaskNotFoundError,SCHEDULER_RULES
 from app.classes.celery import  CeleryTask, SchedulerModel
@@ -21,13 +21,13 @@ class BackgroundTaskService(BackgroundTasks,Service):
     def __init__(self,configService:ConfigService):
         self.configService = configService
         self.running_tasks_count = 0
-        self.sharing_task = Dict[str,list[Callable]] = {}
+        self.sharing_task: dict[str,list[Callable]] = {}
         self.task_lock = asyncio.Lock()
         super().__init__(None)
         Service.__init__(self)
          
     def _register_tasks(self,request_id:str):
-        ...
+        self.sharing_task[request_id] = []
     
     def _delete_tasks(self, request_id:str):
         try:
@@ -59,8 +59,9 @@ class BackgroundTaskService(BackgroundTasks,Service):
             self.running_tasks_count -= len(self.sharing_task[request_id])  # Decrease count after tasks complete
             self._delete_tasks(request_id)
 
-    def populate_response_with_request_id(self,request:Request, response: Response):
-        response.headers[HTTPHeaderConstant.REQUEST_ID] = request.headers[HTTPHeaderConstant.REQUEST_ID]
+    @staticmethod
+    def populate_response_with_request_id(request:Request, response: Response):
+        response.headers[HTTPHeaderConstant.REQUEST_ID] = request.state.request_id
 
 @ServiceClass
 class CeleryService(Service):

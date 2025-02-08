@@ -1,17 +1,22 @@
+import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, Role
+from app.services.celery_service import BackgroundTaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import InjectInMethod
 from fastapi import HTTPException, Request, Response, FastAPI,status
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
+from starlette.datastructures import MutableHeaders,Headers
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
 from app.interface.injectable_middleware import InjectableMiddlewareInterface
-from app.utils.constant import ConfigAppConstant
-from app.utils.dependencies import get_api_key, get_client_ip,get_bearer_token_from_request
+from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
+from app.utils.dependencies import get_api_key, get_client_ip,get_bearer_token_from_request, get_response_id
 from cryptography.fernet import InvalidToken
 from enum import Enum
+
+from app.utils.helper import generateId
 
 
 MIDDLEWARE: dict[str, type] = {}
@@ -21,16 +26,17 @@ class MiddlewarePriority(Enum):
     ANALYTICS = 2
     SECURITY = 3
     AUTH = 4
+    BACKGROUND_TASK_SERVICE = 5
 
 
 class MiddleWare(BaseHTTPMiddleware):
 
     def __init_subclass__(cls: type) -> None:
         MIDDLEWARE[cls.__name__] = cls
-        setattr(cls,'priority',None)
+        #setattr(cls,'priority',None)
         
 class ProcessTimeMiddleWare(MiddleWare):
-
+    priority = MiddlewarePriority.PROCESS_TIME
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
 
@@ -41,11 +47,8 @@ class ProcessTimeMiddleWare(MiddleWare):
         response.headers["X-Process-Time"] = str(process_time) + ' (s)'
         return response
 
-ProcessTimeMiddleWare.priority = MiddlewarePriority.PROCESS_TIME
-
-
 class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
-
+    priority = MiddlewarePriority.SECURITY
     def __init__(self, app, dispatch=None) -> None:
         MiddleWare.__init__(self, app, dispatch)
         InjectableMiddlewareInterface.__init__(self)
@@ -73,16 +76,13 @@ class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
         self.securityService = securityService
         self.configService = configService
 
-SecurityMiddleWare.priority = MiddlewarePriority.SECURITY
-
-
 class AnalyticsMiddleware(MiddleWare, InjectableMiddlewareInterface):
+    priority = MiddlewarePriority.ANALYTICS
     async def dispatch(self, request, call_next):
         return await call_next(request)
 
-AnalyticsMiddleware.priority = MiddlewarePriority.ANALYTICS
-
 class JWTAuthMiddleware(MiddleWare, InjectableMiddlewareInterface):
+    priority = MiddlewarePriority.AUTH
     def __init__(self, app, dispatch=None) -> None:
         MiddleWare.__init__(self, app, dispatch)
         InjectableMiddlewareInterface.__init__(self)
@@ -91,22 +91,39 @@ class JWTAuthMiddleware(MiddleWare, InjectableMiddlewareInterface):
     def inject_middleware(self, jwtService: JWTAuthService):
         self.jwtService = jwtService
 
-    async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
-        
+    async def dispatch(self,  request: Request, call_next: Callable[..., Response]):  
         try:
             token = get_bearer_token_from_request(request)
             client_ip = get_client_ip(request)
-            authPermission: AuthPermission = self.jwtService.verify_permission(
-                token, client_ip)
+            authPermission: AuthPermission = self.jwtService.verify_permission(token, client_ip)
             authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
             request.state.authPermission = authPermission
-            return await call_next(request)
+            
         except KeyError as e:
             return JSONResponse('Error while getting value',status_code=status.HTTP_400_BAD_REQUEST)
-        except HTTPException as e:
-            return JSONResponse(e.detail,e.status_code)
-        except Exception as e:
-            print(e)
-            return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={'message':''})
 
-JWTAuthMiddleware.priority = MiddlewarePriority.AUTH
+        return await call_next(request)
+       
+
+class BackgroundTaskMiddleware(MiddleWare,InjectableMiddlewareInterface):
+    priority = MiddlewarePriority.BACKGROUND_TASK_SERVICE
+    def __init__(self, app, dispatch = None):
+        MiddleWare.__init__(self, app, dispatch)
+        InjectableMiddlewareInterface.__init__(self)
+    
+    @InjectInMethod
+    def inject_middleware(self,backgroundTaskService:BackgroundTaskService):
+        self.backgroundTaskService = backgroundTaskService
+    
+    async def dispatch(self, request:Request, call_next):
+        request_id = generateId(25)
+        self.backgroundTaskService._register_tasks(request_id)
+        request.state.request_id = request_id
+        response = await call_next(request)
+        rq_response_id = get_response_id(response)
+        if rq_response_id:
+            asyncio.create_task(self.backgroundTaskService(rq_response_id)) 
+        else: 
+            self.backgroundTaskService._delete_tasks(request_id)
+        return response   
+        
