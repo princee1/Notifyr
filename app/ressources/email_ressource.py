@@ -1,16 +1,16 @@
-from typing import Any, Callable, List, Literal, Optional
+from typing import Annotated, Any, Callable, List, Literal, Optional
 from app.classes.auth_permission import Role
 from app.classes.template import HTMLTemplate, TemplateNotFoundError
 from app.definition._service import ServiceStatus
-from app.services.celery_service import CeleryService
+from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
-from app.container import Get, InjectInMethod
+from app.container import GetDepends, InjectInMethod
 from app.definition._ressource import HTTPRessource, UseGuard, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailSenderService
 from pydantic import BaseModel
-from fastapi import BackgroundTasks, status
-from app.utils.dependencies import Depends, get_auth_permission
+from fastapi import BackgroundTasks, Header, Request, Response, status
+from app.utils.dependencies import Depends, get_auth_permission, get_request_id, get_response_id
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import  CeleryTask, SchedulerModel
 
@@ -55,7 +55,6 @@ DEFAULT_RESPONSE = {
 }
 
 
-
 @UseRoles([Role.CHAT,Role.RELAY])
 @UseHandler(handlers.ServiceAvailabilityHandler,handlers.CeleryTaskHandler)
 @UsePermission(permissions.JWTRouteHTTPPermission)
@@ -64,21 +63,25 @@ DEFAULT_RESPONSE = {
 class EmailTemplateRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService):
-        super().__init__()
+    def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,bkgTaskService:BackgroundTaskService):
+        super().__init__(dependencies=[Depends(BackgroundTaskService.populate_response_with_request_id)])
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
         self.celeryService:CeleryService = celeryService
+        self.bkgTaskService: BackgroundTaskService = bkgTaskService
+
 
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission)
     @UseHandler(handlers.TemplateHandler)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
-    def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
+    def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, x_request_id:str =Depends(get_request_id) ,authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
         mail_content = scheduler.content
+        meta = mail_content.meta.model_dump(mode='python')
+
         if template not in self.assetService.htmls:
             raise TemplateNotFoundError
         
@@ -87,27 +90,28 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             if scheduler.task_type == 'now' or scheduler.task_type == 'once':
-                background_tasks.add_task( self.emailService.sendTemplateEmail, data, mail_content.meta, template.images )
+                self.bkgTaskService.add_task( x_request_id,self.emailService.sendTemplateEmail, data, meta, template.images )
 
                 return BASE_SUCCESS_RESPONSE
             self.celeryService.pingService()
             return  #TODO  if celery service status is either 4 or 5 
         
-        return self.celeryService.trigger_task_from_scheduler(scheduler,data, mail_content.meta, template.images)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,data, meta, template.images)
         
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
-    def send_customEmail(self, scheduler: CustomEmailSchedulerModel, background_tasks: BackgroundTasks, authPermission=Depends(get_auth_permission)):
+    def send_customEmail(self, scheduler: CustomEmailSchedulerModel,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
         customEmail_content = scheduler.content
+        meta = customEmail_content.meta.model_dump()
         content = (customEmail_content.html_content, customEmail_content.text_content)
 
-        if self.celeryService.service_status != ServiceStatus.AVAILABLE:
+        if True:
             if scheduler.task_type == 'now' or scheduler.task_type == 'once':
-                background_tasks.add_task(self.emailService.sendCustomEmail, content,customEmail_content.meta,customEmail_content.images, customEmail_content.attachments)
+                self.bkgTaskService.add_task(x_request_id,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
                 return BASE_SUCCESS_RESPONSE
 
             self.celeryService.pingService()
             return #TODO  if celery service status is either 4 or 5 
         
-        return self.celeryService.trigger_task_from_scheduler(scheduler,content,customEmail_content.meta,customEmail_content.images, customEmail_content.attachments)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)
