@@ -51,7 +51,7 @@ celery_app = Celery('celery_app',
             broker=message_broker_url
         )
 
-celery_app.conf.update(task_serializer='pickle', accept_content=['pickle'])
+#celery_app.conf.update(task_serializer='pickle', accept_content=['pickle'])
 
 # Enable RedBeat Scheduler
 celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
@@ -60,6 +60,7 @@ celery_app.conf.timezone = "UTC"
 
 celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
 celery_app.autodiscover_tasks(['app.ressources'], related_name='email_ressource')
+celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 
 
 def RegisterTask(name:str=None):

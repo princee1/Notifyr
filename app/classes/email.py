@@ -69,7 +69,7 @@ class EmailBuilder():
     def multiple_dest(self, param, key,required =True):
         if type(param) == str:
             self.message[key] = param
-        elif type(param) == list[str]:
+        elif type(param) == list:
             temp = ",".join(param)
             self.message[key] = temp
             pass

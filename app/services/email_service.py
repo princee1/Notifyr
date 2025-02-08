@@ -12,7 +12,7 @@ from app.classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 
 from .model_service import LLMModelService
 from app.utils.constant import EmailHostConstant
-from app.classes.email import EmailBuilder
+from app.classes.email import EmailBuilder, EmailMetadata
 
 from .logger_service import LoggerService
 from app.definition import _service
@@ -192,11 +192,13 @@ class EmailSenderService(BaseEmailService):
         return False
 
     def sendTemplateEmail(self,data, meta, images):
+        meta = EmailMetadata(**meta)
         email  = EmailBuilder(data,meta,images)
         return self._send_message(email)
 
     
     def sendCustomEmail(self,content, meta, images, attachment):
+        meta = EmailMetadata(**meta)
         email =  EmailBuilder(content,meta,images,attachment)
         #send_custom_email(content, meta, images, attachment)
         return self._send_message(email)
@@ -205,21 +207,15 @@ class EmailSenderService(BaseEmailService):
     def _send_message(self, email: EmailBuilder,connector:smtp.SMTP):
         try:
             emailID, message = email.mail_message
-            reply_ = connector.sendmail(
-                email.emailMetadata.From, email.emailMetadata.To, message)
+            reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message)
             return reply_
-        except smtp.SMTPHeloError as e:
-            pass
-        except smtp.SMTPRecipientsRefused as e:
-            pass
+
         except smtp.SMTPSenderRefused as e:
             self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT
-            pass
+        
         except smtp.SMTPNotSupportedError as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
-            pass
-        except smtp.SMTPDataError as e:
-            pass
+
         except smtp.SMTPServerDisconnected as e:
             print('Server disconnected')
             print(e)
@@ -228,7 +224,6 @@ class EmailSenderService(BaseEmailService):
             self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
             # TODO retry getting the access token
             ...
-
 
 # @_service.ServiceClass
 class EmailReaderService(BaseEmailService):
