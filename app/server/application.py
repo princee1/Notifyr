@@ -2,8 +2,7 @@
 Contains the FastAPI app
 """
 from dataclasses import dataclass
-from app.services.celery_service import CeleryService
-from app.container import Get, Need,Register
+from app.container import Get
 #Register(CeleryService)
 
 from app.ressources import *
@@ -89,10 +88,22 @@ class Application(EventInterface):
         self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
         
+        self.add_exception_handlers()
         self.add_middlewares()
         self.add_ressources()
         self.set_httpMode()
         
+    def add_exception_handlers(self):
+        @self.app.exception_handler(KeyError)
+        async def key_error(request,e):
+            return JSONResponse('Error while getting value',status_code=status.HTTP_400_BAD_REQUEST)
+
+        @self.app.exception_handler(Exception)
+        async def base_exception(request, e):
+            print(e)
+            print(e.__class__)
+            return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={'message':'An unexpected error occurred!'})
+
     def set_httpMode(self):
         self.mode = self.configService.HTTP_MODE
         if self.configService.HTTPS_CERTIFICATE is None or self.configService.HTTPS_KEY:
@@ -102,9 +113,6 @@ class Application(EventInterface):
     def start(self):
         # self.thread.start()
         self.run()
-
-    def __call__(self, *args, **kwds):
-        return super().__call__(*args, **kwds)
 
     def start_server(self):
         if self.mode == 'HTTPS':
@@ -129,6 +137,8 @@ class Application(EventInterface):
                 self.pretty_printer.success(f"[{now}] Ressource {ressource_type.__name__} added successfully",saveable=True)
                 self.pretty_printer.wait(0.25,press_to_continue=False)
             except Exception as e:
+                print(e.__class__)
+                print(e)
                 self.pretty_printer.error(f"[{now}] Error adding ressource {ressource_type.__name__} to the app",saveable=True)
                 self.pretty_printer.wait(0.1,press_to_continue=True)
 
@@ -136,6 +146,7 @@ class Application(EventInterface):
         
     def add_middlewares(self):
         for middleware in sorted(self.appParameter.middlewares,key=lambda x: x.priority.value, reverse=True):
+            print(middleware.priority)
             self.app.add_middleware(middleware)
 
     def on_startup(self):
