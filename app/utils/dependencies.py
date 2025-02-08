@@ -3,7 +3,7 @@ Module to easily manage retrieving user information from the request object.
 """
 
 from typing import Annotated, Any, Callable, Type, TypeVar, Literal
-from fastapi import Depends, HTTPException, Request, Response
+from fastapi import Depends, HTTPException, Request, Response,status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from .constant import HTTPHeaderConstant
 from .helper import reverseDict
@@ -67,11 +67,15 @@ def get_timezone(request:Request)->str:
 def get_client_ip(request: Request) -> str:
     return request.client.host
 
-def get_request_id(r:Request|Response)-> str | None:
+def get_response_id(r:Response = None)-> str | None:
     try:
-        return r.headers[HTTPHeaderConstant.REQUEST_ID]
+        if r:
+            return r.headers[HTTPHeaderConstant.REQUEST_ID]
+        return APIKeyHeader(name=HTTPHeaderConstant.REQUEST_ID)
     except KeyError as e:
         return None
+
+
 
 def get_api_key(request: Request=None) -> str:
     if request:
@@ -95,6 +99,12 @@ async def get_auth_permission(request: Request):
     if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.authPermission
+
+async def get_request_id(request: Request):
+    if not hasattr(request.state, "request_id") or request.state.request_id is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
+    return request.state.request_id
+
 
 
 def get_session_id(request: Request):
