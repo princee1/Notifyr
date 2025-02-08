@@ -547,3 +547,9 @@ def Need(typ: Type[S]) -> Type[S]:
     method on the `CONTAINER` object with the specified type.
     """
     return CONTAINER.need(typ)
+
+
+def GetDepends(typ:type):
+    def get_task():
+        return Get(typ)
+    return get_task

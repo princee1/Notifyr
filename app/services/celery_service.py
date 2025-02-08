@@ -1,21 +1,75 @@
-from typing import Any, overload
+import asyncio
+from typing import Any, Callable, Dict, ParamSpec
+import typing
 from app.classes.celery import CeleryTaskNotFoundError,SCHEDULER_RULES
 from app.classes.celery import  CeleryTask, SchedulerModel
 from app.definition._service import Service, ServiceClass, ServiceStatus
+from app.utils.constant import HTTPHeaderConstant
 from .config_service import ConfigService
 from app.utils.helper import generateId
-from app.task import TASK_REGISTRY,celery_app,compute_name, task_name,AsyncResult
+from app.task import TASK_REGISTRY,celery_app,AsyncResult,task_name
 from redbeat  import RedBeatSchedulerEntry
 from app.utils.helper import generateId
 import datetime as dt
+from fastapi import BackgroundTasks, Request, Response
+from starlette.background import BackgroundTask
+
+P = ParamSpec("P")
+
+@ServiceClass
+class BackgroundTaskService(BackgroundTasks,Service):
+    def __init__(self,configService:ConfigService):
+        self.configService = configService
+        self.running_tasks_count = 0
+        self.sharing_task = Dict[str,list[Callable]] = {}
+        self.task_lock = asyncio.Lock()
+        super().__init__(None)
+        Service.__init__(self)
+         
+    def _register_tasks(self,request_id:str):
+        ...
+    
+    def _delete_tasks(self, request_id:str):
+        try:
+            del self.sharing_task[request_id]
+        except:
+            ...
+
+    def add_task(self,request_id:str,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
+        task = BackgroundTask(func, *args, **kwargs)
+        self.sharing_task[request_id].append(task)
+        
+    def build(self):
+        ...
+
+    @property
+    async def global_task_count(self):
+        async with self.task_lock:
+            return self.running_tasks_count
+    
+    async def __call__(self,request_id:str) -> None:
+        
+        async with self.task_lock:
+            self.running_tasks_count += len(self.sharing_task[request_id])  # Increase count based on new tasks
+
+        for task in self.sharing_task[request_id]:
+            await task()
+
+        async with self.task_lock:
+            self.running_tasks_count -= len(self.sharing_task[request_id])  # Decrease count after tasks complete
+            self._delete_tasks(request_id)
+
+    def populate_response_with_request_id(self,request:Request, response: Response):
+        response.headers[HTTPHeaderConstant.REQUEST_ID] = request.headers[HTTPHeaderConstant.REQUEST_ID]
 
 @ServiceClass
 class CeleryService(Service):
     _celery_app = celery_app
     _task_registry = TASK_REGISTRY
-    def __init__(self,configService:ConfigService):
+    def __init__(self,configService:ConfigService,bTaskService:BackgroundTaskService):
         Service.__init__(self)
         self.configService = configService
+        self.bTaskService = bTaskService
         
 
     def trigger_task_from_scheduler(self,scheduler:SchedulerModel,*args,**kwargs):

@@ -1,6 +1,9 @@
-from app.services.celery_service import CeleryService
+from app.services.celery_service import CeleryService,BackgroundTaskService
 from app.container import Register
+
+Register(BackgroundTaskService)
 Register(CeleryService)
+
 
 from .chat_ressource import *
 from .email_ressource import *
