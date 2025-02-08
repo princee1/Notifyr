@@ -41,6 +41,7 @@ class HTTPHeaderConstant:
     API_KEY_HEADER = 'X-API-KEY'
     ADMIN_KEY = 'X-Admin-Key'
     WS_KEY = 'X-WS-Key'
+    REQUEST_ID = 'X-Request-Id'
 
 
 class CookieConstant:

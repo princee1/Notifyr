@@ -3,7 +3,7 @@ Module to easily manage retrieving user information from the request object.
 """
 
 from typing import Annotated, Any, Callable, Type, TypeVar, Literal
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from .constant import HTTPHeaderConstant
 from .helper import reverseDict
@@ -66,6 +66,12 @@ def get_timezone(request:Request)->str:
 
 def get_client_ip(request: Request) -> str:
     return request.client.host
+
+def get_request_id(r:Request|Response)-> str | None:
+    try:
+        return r.headers[HTTPHeaderConstant.REQUEST_ID]
+    except KeyError as e:
+        return None
 
 def get_api_key(request: Request=None) -> str:
     if request:
