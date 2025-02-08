@@ -72,12 +72,10 @@ class CeleryService(Service):
         self.configService = configService
         self.bTaskService = bTaskService
         
-
     def trigger_task_from_scheduler(self,scheduler:SchedulerModel,*args,**kwargs):
         celery_task = scheduler.model_dump(mode='python',exclude={'content'})
         celery_task: CeleryTask = CeleryTask(args=args,kwargs=kwargs,**celery_task)
         return self._trigger_task(celery_task,scheduler.schedule_name)
-
 
     def trigger_task_from_task(self,celery_task:CeleryTask,schedule_name:str= None):
         return self._trigger_task(celery_task,schedule_name)
@@ -157,3 +155,20 @@ class CeleryService(Service):
     
     def build(self):
         ...
+
+    def check_workers_status(self,ratio:float = None):
+        try:
+            response = celery_app.control.ping(timeout=2.0)  # Timeout in seconds
+            available_workers_count = len(response)
+            if  available_workers_count == 0:
+                self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
+                return False
+            
+            return available_workers_count/self.configService.CELERY_WORKERS_COUNT >= ratio
+            
+        except Exception as e:
+            return {"error": str(e)}
+
+    def pingService(self):
+        self.check_workers_status(ratio=0.80)
+        return super().pingService()

@@ -113,6 +113,9 @@ class Service():
         return wrapper
 
     def verify_dependency(self):
+        """
+        Callback to check if the state of the service dependency is suffisant to run
+        """
         ...
 
     @CheckStatusBeforeHand
@@ -145,6 +148,9 @@ class Service():
         pass
 
     def check_service(self):
+        """
+        Callback to check internally if the state of the service is suffisant to run
+        """
         ...
     
     # TODO Dependency that use service with failed might not properly, need to handle the view

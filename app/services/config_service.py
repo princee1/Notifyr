@@ -95,7 +95,6 @@ class ConfigService(_service.Service):
         val = os.getenv(key)
         if isinstance(val,str) and not val.strip()=="":
             return val
-        
         return default
 
     def set_config_value(self):
@@ -153,6 +152,7 @@ class ConfigService(_service.Service):
 
         self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL")
         self.CELERY_BACKEND_URL = self.getenv("CELERY_BACKEND_URL")
+        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT")
 
                                 # CHAT CONFIG #
         
