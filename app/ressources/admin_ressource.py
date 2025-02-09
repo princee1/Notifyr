@@ -50,9 +50,9 @@ class AdminRessource(BaseHTTPRessource):
         self.securityService = securityService
         self.assetService = assetService
 
-    @UseLimiter(lmit_value='1/day')
+    @UseLimiter(limit_value='1/day')
     @BaseHTTPRessource.HTTPRoute('/invalidate/',methods=[HTTPMethod.DELETE])
-    def invalidate_tokens(self,authPermission=Depends(get_auth_permission)):
+    def invalidate_tokens(self,request:Request,authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
         self.jwtAuthService.set_generation_id(True)
         tokens = self._create_tokens(authPermission)
@@ -61,7 +61,7 @@ class AdminRessource(BaseHTTPRessource):
                                                                     "tokens":tokens})
     @UseLimiter(limit_value='4/day')
     @BaseHTTPRessource.HTTPRoute('/issue-auth/',methods=[HTTPMethod.GET])
-    def issue_auth_token(self,authModel:AuthPermissionModel | List[AuthPermissionModel],authPermission=Depends(get_auth_permission)):
+    def issue_auth_token(self,authModel:AuthPermissionModel | List[AuthPermissionModel],request:Request, authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
         authModel:list[AuthPermissionModel] = authModel if isinstance(authModel,list) else [authModel]
         temp = self._create_tokens(authModel)
@@ -71,7 +71,7 @@ class AdminRessource(BaseHTTPRessource):
     @UsePipe(AuthPermissionPipe)
     @UseRoles([Role.REFRESH])
     @BaseHTTPRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST])
-    def refresh_auth_token(self,tokens:str |list[str], authPermission=Depends(get_auth_permission)):
+    def refresh_auth_token(self,tokens:str |list[str], request:Request,authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
         tokens:list[AuthPermission] = tokens if isinstance(tokens,list) else [tokens]
         tokens = self._create_tokens(tokens)
