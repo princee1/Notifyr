@@ -17,22 +17,19 @@ from fastapi import BackgroundTasks
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
-from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
+from app.classes.auth_permission import FuncMetaData, LimitParams, Role, WSPathNotFoundError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 
 PATH_SEPARATOR = "/"
+GlobalLimiter = Limiter(get_remote_address) # BUG Need to change the datastructure to have more limiter
+RequestLimit =0
 
 
 def get_class_name_from_method(func: Callable) -> str:
     return func.__qualname__.split('.')[0]
 
-
-class MethodStartsWithError(Exception):
-    ...
-
-
-#TODO change from module metadata to class metadata
-#TODO Operation id
 
 class ClassMetaData(TypedDict):
     prefix:str
@@ -48,10 +45,13 @@ This variable contains a direct reference to the class by the class name
 
 PROTECTED_ROUTES: dict[str, list[str]] = {}
 """
+This variable contains the name of all the protected routes of the used ressources
+
 """
 
 ROUTES: dict[str, list[dict]] = {}
 """
+This variable contains all the routes of the used ressources
 """
 
 DECORATOR_METADATA: dict[str, dict[str, list[tuple[Callable, float]]]] = {}
@@ -134,6 +134,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             func.meta['roles'] = set()
             func.meta['excludes'] = set()
             func.meta['options'] =[] 
+            func.meta['limit_obj'] =None
             
             class_name = get_class_name_from_method(func)
             kwargs = {
@@ -175,7 +176,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
              deprecated: bool | None = None):
         return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE], operation_id, dependencies,  response_model, response_description, responses, deprecated)
 
-    def init_stacked_callback(self):
+    def _stack_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
             return
         M = DECORATOR_METADATA[self.__class__.__name__]
@@ -187,6 +188,17 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
                     sc_ = sc[0]
                     c = sc_(c)
                 setattr(self, f, c)
+    
+    def _set_rate_limit(self):
+        for end in ROUTES[self.__class__.__name__]:
+            func_name = end['endpoint']
+            func_attr = getattr(self,func_name)
+            meta:FuncMetaData = getattr(func_attr,'meta')
+            limit_obj = meta['limit_obj']
+            if limit_obj:
+                func_attr = GlobalLimiter.limit(**limit_obj)(func_attr)
+                setattr(self,func_name,func_attr)
+
 
     def __init_subclass__(cls: Type) -> None:
 
@@ -203,10 +215,10 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         if not prefix.startswith(PATH_SEPARATOR):
             prefix = PATH_SEPARATOR + prefix
         
-        self.router = APIRouter(prefix=prefix, on_shutdown=[
-                                self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
-    
-        self.init_stacked_callback()
+        self.router = APIRouter(prefix=prefix, on_shutdown=[self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
+        self._set_rate_limit()
+        self._stack_callback()
+
         self._add_routes()
         self._add_handcrafted_routes()
 
@@ -228,7 +240,6 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         for ws in self.websockets.values():
             ws.on_startup()
         
-
     def on_shutdown(self):
         """
         [Important] Ensure to call super when overriding this function 
@@ -544,9 +555,25 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
         return func
     return decorator
 
-def UseLimiter(): #TODO
-    ...
-
+@functools.wraps(GlobalLimiter.limit)
+def UseLimiter(**kwargs): #TODO
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        data = common_class_decorator(func, UseLimiter,None,**kwargs)
+        if data != None:
+            return data
+        meta:FuncMetaData | None = getattr(func,'meta',None)
+        if meta is not None:
+            meta['limit_obj'] = kwargs
+            limit_value:str = kwargs['limit_value']
+            try:
+                limit_value = int(limit_value.split('/')[0])
+                global RequestLimit
+                RequestLimit+= limit_value
+            except:
+                ...
+        return func
+    return decorator
+    
 def IncludeRessource(*ressources: Type[R]| R):
     def class_decorator(cls:Type[R]) ->Type[R]:
         if type(cls)!=HTTPRessourceMetaClass:

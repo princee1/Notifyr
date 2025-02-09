@@ -1,12 +1,12 @@
 from typing import Annotated, Any, Callable, List, Literal, Optional
-from app.classes.auth_permission import Role
+from app.classes.auth_permission import MustHave, Role
 from app.classes.template import HTMLTemplate, TemplateNotFoundError
 from app.definition._service import ServiceStatus
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
 from app.container import GetDepends, InjectInMethod
-from app.definition._ressource import HTTPRessource, UseGuard, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
+from app.definition._ressource import HTTPRessource, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailSenderService
 from pydantic import BaseModel
 from fastapi import BackgroundTasks, Header, Request, Response, status
@@ -97,21 +97,21 @@ class EmailTemplateRessource(BaseHTTPRessource):
             return  #TODO  if celery service status is either 4 or 5 
         
         return self.celeryService.trigger_task_from_scheduler(scheduler,data, meta, template.images)
-        
+    
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
-    def send_customEmail(self, scheduler: CustomEmailSchedulerModel,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
+    def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
         self.emailService.pingService()
         customEmail_content = scheduler.content
         meta = customEmail_content.meta.model_dump()
         content = (customEmail_content.html_content, customEmail_content.text_content)
-
-        if True:
+       
+        if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             if scheduler.task_type == 'now' or scheduler.task_type == 'once':
                 self.bkgTaskService.add_task(x_request_id,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
                 return BASE_SUCCESS_RESPONSE
 
             self.celeryService.pingService()
-            return #TODO  if celery service status is either 4 or 5 
+            return #TODO  if celery service status is either 4 or 5 th Status
         
         return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)
