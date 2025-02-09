@@ -5,9 +5,9 @@ from fastapi.responses import JSONResponse
 from app.services.assets_service import AssetService
 from app.services.security_service import JWTAuthService,SecurityService
 from app.services.config_service import ConfigService
-from app.utils.dependencies import get_admin_token, get_auth_permission, get_bearer_token, get_client_ip
+from app.utils.dependencies import get_admin_token, get_auth_permission
 from app.container import InjectInMethod,Get
-from app.definition._ressource import Guard, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles
+from app.definition._ressource import Guard, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthPermission, Role,RoutePermission,AssetsPermission
 from pydantic import BaseModel, RootModel,field_validator
@@ -36,8 +36,6 @@ class AuthPermissionModel(BaseModel):
             raise ValueError('Invalid IP Address')
         return issued_for
 
-
-
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
@@ -52,7 +50,7 @@ class AdminRessource(BaseHTTPRessource):
         self.securityService = securityService
         self.assetService = assetService
 
-    
+    @UseLimiter(lmit_value='1/day')
     @BaseHTTPRessource.HTTPRoute('/invalidate/',methods=[HTTPMethod.DELETE])
     def invalidate_tokens(self,authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
@@ -61,7 +59,7 @@ class AdminRessource(BaseHTTPRessource):
         return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Tokens successfully invalidated",
                                                                     "details": "Even if you're the admin old token wont be valid anymore",
                                                                     "tokens":tokens})
-
+    @UseLimiter(limit_value='4/day')
     @BaseHTTPRessource.HTTPRoute('/issue-auth/',methods=[HTTPMethod.GET])
     def issue_auth_token(self,authModel:AuthPermissionModel | List[AuthPermissionModel],authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
@@ -69,7 +67,9 @@ class AdminRessource(BaseHTTPRessource):
         temp = self._create_tokens(authModel)
         return JSONResponse(status_code=status.HTTP_200_OK,content={"tokens":temp,"message":"Tokens successfully issued"})
 
+    @UseLimiter(limit_value='1/day')
     @UsePipe(AuthPermissionPipe)
+    @UseRoles([Role.REFRESH])
     @BaseHTTPRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST])
     def refresh_auth_token(self,tokens:str |list[str], authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()

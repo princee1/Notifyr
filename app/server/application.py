@@ -3,14 +3,13 @@ Contains the FastAPI app
 """
 from dataclasses import dataclass
 from app.container import Get
-#Register(CeleryService)
-
 from app.ressources import *
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from fastapi import Request, Response, FastAPI
+from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload, TypedDict
 import uvicorn
@@ -151,6 +150,7 @@ class Application(EventInterface):
         self.pretty_printer.show(pause_before=1,clear_stack=True,space_line=False)
         
     def add_middlewares(self):
+        self.app.add_middleware(SlowAPIMiddleware)
         for middleware in sorted(self.appParameter.middlewares,key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
 

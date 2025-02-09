@@ -17,6 +17,7 @@ class Role(Enum):
     MFA_OTP ='MFA_OTP'
     CHAT = 'CHAT'
     REDIS = 'REDIS'
+    REFRESH = 'REFRESH'
 
 
 class FuncMetaData(TypedDict):
