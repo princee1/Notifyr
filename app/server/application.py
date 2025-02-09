@@ -14,11 +14,13 @@ from fastapi import Request, Response, FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload, TypedDict
 import uvicorn
+from slowapi.errors import RateLimitExceeded
+from slowapi import Limiter, _rate_limit_exceeded_handler
 import multiprocessing
 import threading
 import sys
 import datetime as dt
-from app.definition._ressource import RESSOURCES, BaseHTTPRessource
+from app.definition._ressource import RESSOURCES, BaseHTTPRessource, GlobalLimiter
 from app.interface.events import EventInterface
 
 
@@ -87,6 +89,7 @@ class Application(EventInterface):
         self.configService: ConfigService = Get(ConfigService)
         self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
+        self.app.state.limiter = GlobalLimiter
         
         self.add_exception_handlers()
         self.add_middlewares()
@@ -94,6 +97,8 @@ class Application(EventInterface):
         self.set_httpMode()
         
     def add_exception_handlers(self):
+        self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
         @self.app.exception_handler(KeyError)
         async def key_error(request,e):
             print(e)
