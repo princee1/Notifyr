@@ -153,6 +153,9 @@ class ConfigService(_service.Service):
         self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL")
         self.CELERY_BACKEND_URL = self.getenv("CELERY_BACKEND_URL")
         self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT",1)
+        self.REDBEAT_REDIS_URL = self.getenv("REDBEAT_REDIS_URL",self.CELERY_MESSAGE_BROKER_URL)
+        self.CELERY_RESULT_EXPIRES=ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"),60*60*24)
+
 
                                 # CHAT CONFIG #
         

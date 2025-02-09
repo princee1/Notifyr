@@ -35,27 +35,25 @@ def task_name(t):
 
 
 TASK_REGISTRY:dict[str,Callable] = {}
-try:
 
-    configService: ConfigService = Get(ConfigService)
-    backend_url =  configService.CELERY_BACKEND_URL
-    message_broker_url=  configService.CELERY_MESSAGE_BROKER_URL
-except :
-    backend_url = "redis://localhost/0"
-    message_broker_url="redis://localhost/0"
+##############################################           ##################################################
+
+
+configService: ConfigService = Get(ConfigService)
 
 ##############################################           ##################################################
 
 celery_app = Celery('celery_app',
-            backend=backend_url,
-            broker=message_broker_url
+            backend=configService.CELERY_BACKEND_URL,
+            broker=configService.CELERY_MESSAGE_BROKER_URL,
+            result_expires=configService.CELERY_RESULT_EXPIRES
         )
 
 #celery_app.conf.update(task_serializer='pickle', accept_content=['pickle'])
 
 # Enable RedBeat Scheduler
 celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
-celery_app.conf.redbeat_redis_url = backend_url
+celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL
 celery_app.conf.timezone = "UTC"
 
 celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
