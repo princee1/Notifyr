@@ -17,7 +17,7 @@ from fastapi import BackgroundTasks
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
-from app.classes.auth_permission import FuncMetaData, LimitParams, Role, WSPathNotFoundError
+from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 

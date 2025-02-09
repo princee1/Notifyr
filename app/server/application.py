@@ -158,6 +158,9 @@ class Application(EventInterface):
         jwtService = Get(JWTAuthService)
         jwtService.set_generation_id(False)
 
+        celery_service:CeleryService = Get(CeleryService)
+        celery_service.start_interval(1)
+
 
 
     def on_shutdown(self):

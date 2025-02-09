@@ -74,6 +74,7 @@ class CeleryService(Service, IntervalInterface):
         self.configService = configService
         self.bTaskService = bTaskService
         self.available_workers_count = -1
+        self.task_lock = asyncio.Lock()
         
     def trigger_task_from_scheduler(self,scheduler:SchedulerModel,*args,**kwargs):
         celery_task = scheduler.model_dump(mode='python',exclude={'content'})
@@ -180,10 +181,13 @@ class CeleryService(Service, IntervalInterface):
             ...
     
     @property
-    async def get_available_workers_count(self):
-        ...
-
+    async def get_available_workers_count(self)->int:
+        async with self.task_lock:
+            return self.available_workers_count
 
     def pingService(self):
-        self.check_workers_status(count=0.80)
+        #TODO access the value
         return super().pingService()
+
+    def callback(self):
+        ...
