@@ -281,7 +281,11 @@ class PrettyPrinter:
         time.sleep(timeout)
         if press_to_continue:
             self.warning('Press to continue', saveable=False, position='both')
-            input('')
+            try:
+                input('')
+            except KeyboardInterrupt:
+                self.info(message='Exiting gracefully')
+                exit(0)
         clear_line()
 
     def input(self, message: str, color=Fore.WHITE, emoji_code: str = '', position: EmojiPosition = 'none') -> None | str:
