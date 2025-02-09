@@ -39,7 +39,7 @@ class SchedulerInterface(Interface):
 
 @IsInterface
 class IntervalInterface(Interface):
-    def __init__(self):
+    def __init__(self,):
         self._task = None
         self._interval = None
 
@@ -49,11 +49,10 @@ class IntervalInterface(Interface):
             await asyncio.sleep(self._interval)
             await self.callback()
 
-    def start_interval(self, interval: float, callback) -> None:
+    def start_interval(self, interval: float) -> None:
         """Start a new interval timer."""
         self.stop_interval()  # Stop any running interval
         self._interval = interval
-        self._callback = callback
         self._task = asyncio.create_task(self._run_interval())
 
     def stop_interval(self) -> None:

@@ -147,12 +147,12 @@ class ConfigService(_service.Service):
         self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
 
-
+        
                                 # CELERY CONFIG #
 
         self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL")
         self.CELERY_BACKEND_URL = self.getenv("CELERY_BACKEND_URL")
-        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT")
+        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT",1)
 
                                 # CHAT CONFIG #
         

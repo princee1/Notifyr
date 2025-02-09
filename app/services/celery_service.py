@@ -4,6 +4,7 @@ import typing
 from app.classes.celery import CeleryTaskNotFoundError,SCHEDULER_RULES
 from app.classes.celery import  CeleryTask, SchedulerModel
 from app.definition._service import Service, ServiceClass, ServiceStatus
+from app.interface.timers import IntervalInterface
 from app.utils.constant import HTTPHeaderConstant
 from .config_service import ConfigService
 from app.utils.helper import generateId
@@ -64,13 +65,15 @@ class BackgroundTaskService(BackgroundTasks,Service):
         response.headers[HTTPHeaderConstant.REQUEST_ID] = request.state.request_id
 
 @ServiceClass
-class CeleryService(Service):
+class CeleryService(Service, IntervalInterface):
     _celery_app = celery_app
     _task_registry = TASK_REGISTRY
     def __init__(self,configService:ConfigService,bTaskService:BackgroundTaskService):
         Service.__init__(self)
+        IntervalInterface.__init__(self)
         self.configService = configService
         self.bTaskService = bTaskService
+        self.available_workers_count = -1
         
     def trigger_task_from_scheduler(self,scheduler:SchedulerModel,*args,**kwargs):
         celery_task = scheduler.model_dump(mode='python',exclude={'content'})
@@ -156,19 +159,31 @@ class CeleryService(Service):
     def build(self):
         ...
 
-    def check_workers_status(self,ratio:float = None):
+    def check_workers_status(self):
         try:
-            response = celery_app.control.ping(timeout=2.0)  # Timeout in seconds
+            response = celery_app.control.ping()  # Timeout in seconds
+            
             available_workers_count = len(response)
             if  available_workers_count == 0:
                 self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
-                return False
-            
-            return available_workers_count/self.configService.CELERY_WORKERS_COUNT >= ratio
-            
+                self.available_workers_count = 0
+
+            self.available_workers_count = available_workers_count
+            worker_not_available = self.configService.CELERY_WORKERS_COUNT - available_workers_count
+            if worker_not_available > 5 and worker_not_available <=10:
+                ...
+            elif worker_not_available > 10 and worker_not_available <= 15:
+                ...
+            else: ...
+                        
         except Exception as e:
-            return {"error": str(e)}
+            ...
+    
+    @property
+    async def get_available_workers_count(self):
+        ...
+
 
     def pingService(self):
-        self.check_workers_status(ratio=0.80)
+        self.check_workers_status(count=0.80)
         return super().pingService()
