@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Callable, ParamSpec
 import typing
-from app.classes.celery import CeleryTaskNotFoundError,SCHEDULER_RULES
+from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES
 from app.classes.celery import  CeleryTask, SchedulerModel
 from app.definition._service import Service, ServiceClass, ServiceStatus
 from app.interface.timers import IntervalInterface
@@ -105,8 +105,12 @@ class CeleryService(Service, IntervalInterface):
             return task_result.id
 
         schedule = SCHEDULER_RULES[c_type]
-        schedule = schedule(**options)
-        entry = RedBeatSchedulerEntry(schedule_id,t_name,schedule,args=celery_task['args'],kwargs=celery_task['kwargs'])
+        try:
+            schedule = schedule(**options) # ERROR
+        except ValueError:
+            raise CelerySchedulerOptionError
+        
+        entry = RedBeatSchedulerEntry(schedule_id,t_name,schedule,args=celery_task['args'],kwargs=celery_task['kwargs'],app=self._celery_app)
         entry.save()
         result.update({'task_id':schedule_id,'type':'schedule'})
         return result
@@ -169,14 +173,8 @@ class CeleryService(Service, IntervalInterface):
                 self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
                 self.available_workers_count = 0
 
-            self.available_workers_count = available_workers_count
-            worker_not_available = self.configService.CELERY_WORKERS_COUNT - available_workers_count
-            if worker_not_available > 5 and worker_not_available <=10:
-                ...
-            elif worker_not_available > 10 and worker_not_available <= 15:
-                ...
-            else: ...
-                        
+            self.available_workers_count = available_workers_count/self.configService.CELERY_WORKERS_COUNT 
+            worker_not_available = self.configService.CELERY_WORKERS_COUNT - available_workers_count                        
         except Exception as e:
             ...
     
@@ -186,7 +184,7 @@ class CeleryService(Service, IntervalInterface):
             return self.available_workers_count
 
     def pingService(self):
-        #TODO access the value
+        #TODO access the value and check the interval so we can set the availability
         return super().pingService()
 
     def callback(self):
