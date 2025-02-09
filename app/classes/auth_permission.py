@@ -24,6 +24,7 @@ class FuncMetaData(TypedDict):
     roles:set[Role]
     excludes:set[Role]
     options: list[Callable]
+    limit_obj:dict
 
 
 class RoutePermission(TypedDict):

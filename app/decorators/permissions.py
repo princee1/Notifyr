@@ -1,7 +1,7 @@
 from fastapi import HTTPException,status
 from app.services.assets_service import AssetService
 from app.definition._utils_decorator import Permission
-from app.container import InjectInMethod
+from app.container import InjectInMethod, Get
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, Role, RoutePermission,FuncMetaData
 
@@ -48,14 +48,15 @@ class JWTRouteHTTPPermission(Permission):
     
 
 class JWTAssetPermission(Permission):
-    
-    @InjectInMethod
-    def __init__(self,jwtAuthService: JWTAuthService,assetService: AssetService):
+
+    def __init__(self,):
+        #TODO Look for the scheduler object and the template
         super().__init__()
-        self.jwtAuthService = jwtAuthService
-        self.assetService = assetService
+        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
+        self.assetService:AssetService = Get(AssetService)
 
     def permission(self,template:str, authPermission:AuthPermission):
         #TODO assetPermission = authPermission['asset_permission']
+
         return True
 
