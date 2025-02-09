@@ -1,3 +1,4 @@
+import functools
 import sys
 from typing import Callable
 from celery import Celery,shared_task
@@ -60,17 +61,17 @@ celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
 celery_app.autodiscover_tasks(['app.ressources'], related_name='email_ressource')
 celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 
-
-def RegisterTask(name:str=None):
+@functools.wraps(celery_app.task)
+def RegisterTask(**kwargs):
     def decorator(task:Callable):
 
-        TASK_REGISTRY[task_name(task.__qualname__)] = celery_app.task(name=name)(task)
+        TASK_REGISTRY[task_name(task.__qualname__)] = celery_app.task(**kwargs)(task)
         return task
     return decorator
 
-def SharedTask(name:str=None):
+def SharedTask(**kwargs):
     def decorator(task:Callable):
-        TASK_REGISTRY[task_name(task.__qualname__)] = shared_task(name=name)(task)
+        TASK_REGISTRY[task_name(task.__qualname__)] = shared_task(**kwargs)(task)
         return task
     return decorator
 

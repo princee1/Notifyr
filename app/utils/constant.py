@@ -56,7 +56,8 @@ class SpecialKeyParameterConstant:
     CLASS_NAME_SPECIAL_KEY_PARAMETER = 'class_name'
     AUTH_PERMISSION_PARAMETER = 'authPermission'
     META_SPECIAL_KEY_PARAMETER = 'func_meta'
-
+    TEMPLATE_SPECIAL_KEY_PARAMETER = 'template'
+    SCHEDULER_SPECIAL_KEY_PARAMETER = 'scheduler'
     WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
 
 ########################                     ########################################

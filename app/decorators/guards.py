@@ -1,5 +1,7 @@
 from app.definition._utils_decorator import Guard
-from app.container import InjectInMethod
+from app.container import Get, InjectInMethod
+from app.services.assets_service import AssetService
+from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskType,SchedulerModel
@@ -27,6 +29,26 @@ class CeleryTaskGuard(Guard):
         
         return True,''
 
-       
+class AssetGuard(Guard):
+    #TODO If a route allowed a certain type asset
+    def __init__(self,allowed_path=[],options=[]):
+        super().__init__()
+        self.assetService = Get(AssetService)       
+        self.configService = Get(ConfigService)
+        self.options = options
+        self.allowed_path = allowed_path
+
+    def guard(self,template:str):
+        ...
+
         
+class TaskWorkerGuard(Guard):
+    #TODO Check before hand if the background task and the workers are available to do some job
+    def __init__(self, heaviness):
+        super().__init__()
+        self.celeryService = Get(CeleryService)
+        self.bckgroundTaskService = Get(BackgroundTaskService)
+        self.heaviness = heaviness
     
+    def guard(self,scheduler:SchedulerModel):
+        ...
