@@ -63,4 +63,10 @@ class CeleryTask(TypedDict):
     task_id:Optional[str] = None
 
 
+class TaskHeaviness(Enum):
+    VERY_LIGHT = 1  # Minimal effort required
+    LIGHT = 2       # Some effort, but not demanding
+    MODERATE = 3    # Balanced workload
+    HEAVY = 4       # Challenging and requires focus
+    VERY_HEAVY = 5  # Extremely demanding and time-consuming
 

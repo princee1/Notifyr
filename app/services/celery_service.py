@@ -14,6 +14,7 @@ from app.utils.helper import generateId
 import datetime as dt
 from fastapi import BackgroundTasks, Request, Response
 from starlette.background import BackgroundTask
+from redis import Redis
 
 P = ParamSpec("P")
 
@@ -75,6 +76,8 @@ class CeleryService(Service, IntervalInterface):
         self.bTaskService = bTaskService
         self.available_workers_count = -1
         self.task_lock = asyncio.Lock()
+    
+        #self.redis_client = Redis(host='localhost', port=6379, db=0)# set from config
         
     def trigger_task_from_scheduler(self,scheduler:SchedulerModel,*args,**kwargs):
         celery_task = scheduler.model_dump(mode='python',exclude={'content'})
@@ -161,6 +164,12 @@ class CeleryService(Service, IntervalInterface):
         except KeyError:
             raise CeleryTaskNotFoundError
     
+    def manually_set_task_expires_result(self,expires:int,scheduler:SchedulerModel):
+        raise NotImplementedError
+        if scheduler.task_type == 'now':
+            self.redis_client.expire(f'celery-task-meta-{scheduler.task_name}', 3600)  # Expire in 1 hour
+        
+
     def build(self):
         ...
 

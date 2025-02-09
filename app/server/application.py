@@ -101,7 +101,12 @@ class Application(EventInterface):
         @self.app.exception_handler(KeyError)
         async def key_error(request,e):
             print(e)
-            return JSONResponse('Error while getting value',status_code=status.HTTP_400_BAD_REQUEST)
+            return JSONResponse({'message':'Error while retrieving an important key '},status_code=status.HTTP_400_BAD_REQUEST)
+
+        @self.app.exception_handler(NotImplementedError)
+        async def not_implemented_error(request,e):
+            print(e)
+            return JSONResponse({'message':'The service requested is not available in this version'},status_code=status.HTTP_504_SERVICE_NOT_AVAILABLE)
 
         @self.app.exception_handler(Exception)
         async def base_exception(request, e):
