@@ -1,4 +1,6 @@
 from enum import Enum
+from types import NoneType
+from fastapi import HTTPException,status
 from ordered_set import OrderedSet
 from pydantic import BaseModel, field_validator
 from typing import Any,Iterable, Literal, Optional, TypedDict, NotRequired
@@ -46,8 +48,12 @@ class SchedulerModel(BaseModel):
     priority:Literal[1,2,3,4,5] = 1
     queue_name:Optional[str] = None
     content:Any
-    #heaviness: TaskHeaviness = None
+    heaviness: Any = None
 
+    @field_validator('heaviness')
+    def check_heaviness(cls, heaviness:Any):
+        if heaviness is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'heaviness property should not be set'})
     
 SCHEDULER_RULES:dict[str,type] = {
     'rrule': rrule,
