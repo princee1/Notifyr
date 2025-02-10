@@ -12,6 +12,9 @@ from typing import Any, Callable, Literal, Dict
 from app.utils.helper import issubclass_of
 
 ROOT_PATH = "assets/"
+DIRECTORY_SEPARATOR = '/'
+REQUEST_DIRECTORY_SEPARATOR = '|'
+
 def path(x): return ROOT_PATH+x
 
 
@@ -35,7 +38,8 @@ class AssetType(Enum):
     SMS = "sms"
     PHONE = "phone"
     HTML = Extension.HTML.value
-
+    
+RouteAssetType = Literal['htmls', 'sms', 'phone']
 
 def extension(extension: Extension): return f".{extension.value}"
 
@@ -161,6 +165,8 @@ class AssetService(_service.Service):
         self.pdf = pdfReader.join()
         self.sms = smsReader.join()
         self.phone = phoneReader.join()
+
+        
         
     def loadHTMLData(self, html: HTMLTemplate):
         cssInPath = self.fileService.listExtensionPath(
@@ -181,7 +187,7 @@ class AssetService(_service.Service):
             except KeyError as e:
                 pass
 
-    def exportRouteName(self,attributeName:Literal["htmls","sms","phone"])-> list[str] | None:
+    def exportRouteName(self,attributeName:RouteAssetType)-> list[str] | None:
         """
         htmls: HTML Template Key
         sms: SMS Template Key

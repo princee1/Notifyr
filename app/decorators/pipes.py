@@ -1,7 +1,9 @@
+from typing import Literal
 from app.classes.auth_permission import AuthPermission
-from app.classes.celery import SchedulerModel,CeleryTaskNameNotExistsError,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS
+from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS
+from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
-#from app.services.celery_service import CeleryService
+from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, task_name
@@ -24,7 +26,21 @@ class AuthPermissionPipe(Pipe):
 
         return {'tokens':temp}
 
+class TemplateParamsPipe(Pipe):
+    
+    def __init__(self,template_type:RouteAssetType):
+        super().__init__(True)
+        self.assetService= Get(AssetService)
+        self.template_type = template_type
+    
+    def pipe(self,template:str):
+        asset_routes = self.assetService.exportRouteName(self.template_type)
+        template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
+        if template not in asset_routes:
+            raise TemplateNotFoundError
 
+        return {'template':template}
+        
 
 class CeleryTaskPipe(Pipe):
     
@@ -44,5 +60,4 @@ class CeleryTaskPipe(Pipe):
                 raise CelerySchedulerOptionError
         
         setattr(scheduler,'heaviness' , self.celeryService._task_registry[scheduler.task_name]['heaviness'])
-            
         return {'scheduler':scheduler}
