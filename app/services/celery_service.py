@@ -75,6 +75,7 @@ class CeleryService(Service, IntervalInterface):
         self.configService = configService
         self.bTaskService = bTaskService
         self.available_workers_count = -1
+        self.worker_not_available_count = 0
         self.task_lock = asyncio.Lock()
     
         #self.redis_client = Redis(host='localhost', port=6379, db=0)# set from config
@@ -169,32 +170,39 @@ class CeleryService(Service, IntervalInterface):
         if scheduler.task_type == 'now':
             self.redis_client.expire(f'celery-task-meta-{scheduler.task_name}', 3600)  # Expire in 1 hour
         
-
     def build(self):
         ...
 
-    def check_workers_status(self):
+    async def _check_workers_status(self):
         try:
             response = celery_app.control.ping()  # Timeout in seconds
             
             available_workers_count = len(response)
             if  available_workers_count == 0:
                 self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
-                self.available_workers_count = 0
-
-            self.available_workers_count = available_workers_count/self.configService.CELERY_WORKERS_COUNT 
-            worker_not_available = self.configService.CELERY_WORKERS_COUNT - available_workers_count                        
+                async with self.task_lock:
+                    self.available_workers_count = 0
+            
+            async with self.task_lock:
+                self.available_workers_count = available_workers_count 
+            self.worker_not_available = self.configService.CELERY_WORKERS_COUNT - available_workers_count                        
         except Exception as e:
             ...
     
     @property
-    async def get_available_workers_count(self)->int:
+    async def get_available_workers_count(self)->float:
         async with self.task_lock:
             return self.available_workers_count
 
-    def pingService(self):
-        #TODO access the value and check the interval so we can set the availability
-        return super().pingService()
+    async def pingService(self,ratio:float=None,count:int=None):
+        response_count = await self.get_available_workers_count
+        if ratio:
+            # TODO check in which interval the ratio is in
+            return super().pingService()
+        if count:
+            # TODO check in which interval the ratio is in
+            return super().pingService()
+        return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
     def callback(self):
-        ...
+        asyncio.create_task(self._check_workers_status())
