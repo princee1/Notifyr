@@ -42,5 +42,7 @@ class CeleryTaskPipe(Pipe):
                 raise CelerySchedulerOptionError
             if len(s_keys.difference(rules_keys)) != 0:
                 raise CelerySchedulerOptionError
+        
+        setattr(scheduler,'heaviness' , self.celeryService._task_registry[scheduler.task_name]['heaviness'])
             
         return {'scheduler':scheduler}

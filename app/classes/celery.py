@@ -19,6 +19,12 @@ class CeleryTaskNameNotExistsError(BaseError):
 
 class CelerySchedulerOptionError(BaseError):
     ...
+class TaskHeaviness(Enum):
+    VERY_LIGHT = 1  # Minimal effort required
+    LIGHT = 2       # Some effort, but not demanding
+    MODERATE = 3    # Balanced workload
+    HEAVY = 4       # Challenging and requires focus
+    VERY_HEAVY = 5  # Extremely demanding and time-consuming
 
 
 class TaskType(Enum):
@@ -40,6 +46,8 @@ class SchedulerModel(BaseModel):
     priority:Literal[1,2,3,4,5] = 1
     queue_name:Optional[str] = None
     content:Any
+    #heaviness: TaskHeaviness = None
+
     
 SCHEDULER_RULES:dict[str,type] = {
     'rrule': rrule,
@@ -61,12 +69,4 @@ class CeleryTask(TypedDict):
     queue_name:Optional[str] = None
     schedule_name:Optional[str] = None
     task_id:Optional[str] = None
-
-
-class TaskHeaviness(Enum):
-    VERY_LIGHT = 1  # Minimal effort required
-    LIGHT = 2       # Some effort, but not demanding
-    MODERATE = 3    # Balanced workload
-    HEAVY = 4       # Challenging and requires focus
-    VERY_HEAVY = 5  # Extremely demanding and time-consuming
 

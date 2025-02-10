@@ -69,6 +69,7 @@ class BackgroundTaskService(BackgroundTasks,Service):
 class CeleryService(Service, IntervalInterface):
     _celery_app = celery_app
     _task_registry = TASK_REGISTRY
+
     def __init__(self,configService:ConfigService,bTaskService:BackgroundTaskService):
         Service.__init__(self)
         IntervalInterface.__init__(self)
@@ -93,18 +94,16 @@ class CeleryService(Service, IntervalInterface):
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
         now = dt.datetime.now()
-        result = {
-            'message': f'[{now}] - Task [{t_name}] received successfully'
-        }
+        result = {'message': f'[{now}] - Task [{t_name}] received successfully'}
         
         if c_type == 'now':
-            task_result = self._task_registry[t_name].delay(*celery_task['args'],**celery_task['kwargs'])
+            task_result = self._task_registry[t_name]['task'].delay(*celery_task['args'],**celery_task['kwargs'])
             result.update({'task_id':task_result.id,'type':'task'})
             return result
 
         options = celery_task['task_option']
         if c_type == 'once':
-            task_result = self._task_registry[t_name].apply_async(**options,args=celery_task['args'],kwargs=celery_task['kwargs'])
+            task_result = self._task_registry[t_name]['task'].apply_async(**options,args=celery_task['args'],kwargs=celery_task['kwargs'])
             result.update({'task_id':task_result.id,'type':'task'})
             return task_result.id
 

@@ -1,9 +1,9 @@
 import functools
 import sys
-from typing import Callable
-from celery import Celery,shared_task
+from typing import Any, Callable
+from celery import Celery, shared_task
 from celery.result import AsyncResult
-from app.classes.celery import CeleryTaskNameNotExistsError
+from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import ConfigService
 from app.services.email_service import EmailSenderService
 from app.container import Get, build_container
@@ -13,7 +13,7 @@ import shutil
 ##############################################           ##################################################
 
 
-exe_path = shutil.which("celery").replace(".EXE","")
+exe_path = shutil.which("celery").replace(".EXE", "")
 ##############################################           ##################################################
 
 if sys.argv[0] == exe_path:
@@ -24,33 +24,34 @@ if sys.argv[0] == exe_path:
 
 CELERY_MODULE_NAME = __name__
 
-def compute_name(t:str)-> str:
-    
+
+def compute_name(t: str) -> str:
+
     name = task_name(t)
     if name not in TASK_REGISTRY:
         raise CeleryTaskNameNotExistsError(name)
     return name
 
+
 def task_name(t):
     return f'{CELERY_MODULE_NAME}.{t}'
 
 
-TASK_REGISTRY:dict[str,Callable] = {}
+TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 
 ##############################################           ##################################################
-
 
 configService: ConfigService = Get(ConfigService)
 
 ##############################################           ##################################################
 
 celery_app = Celery('celery_app',
-            backend=configService.CELERY_BACKEND_URL,
-            broker=configService.CELERY_MESSAGE_BROKER_URL,
-            result_expires=configService.CELERY_RESULT_EXPIRES
-        )
+                    backend=configService.CELERY_BACKEND_URL,
+                    broker=configService.CELERY_MESSAGE_BROKER_URL,
+                    result_expires=configService.CELERY_RESULT_EXPIRES
+                    )
 
-#celery_app.conf.update(task_serializer='pickle', accept_content=['pickle'])
+# celery_app.conf.update(task_serializer='pickle', accept_content=['pickle'])
 
 # Enable RedBeat Scheduler
 celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
@@ -58,31 +59,47 @@ celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL
 celery_app.conf.timezone = "UTC"
 
 celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
-celery_app.autodiscover_tasks(['app.ressources'], related_name='email_ressource')
+celery_app.autodiscover_tasks(
+    ['app.ressources'], related_name='email_ressource')
 celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 
+
 @functools.wraps(celery_app.task)
-def RegisterTask(**kwargs):
-    def decorator(task:Callable):
+def RegisterTask(heaviness: TaskHeaviness, **kwargs):
+    def decorator(task: Callable):
 
-        TASK_REGISTRY[task_name(task.__qualname__)] = celery_app.task(**kwargs)(task)
+        TASK_REGISTRY[task_name(task.__qualname__)] = {
+            'heaviness': heaviness,
+            'task': celery_app.task(**kwargs)(task)
+        }
+
         return task
     return decorator
 
-def SharedTask(**kwargs):
-    def decorator(task:Callable):
-        TASK_REGISTRY[task_name(task.__qualname__)] = shared_task(**kwargs)(task)
+
+@functools.wraps(shared_task)
+def SharedTask(heaviness: TaskHeaviness, **kwargs):
+    def decorator(task: Callable):
+        TASK_REGISTRY[task_name(task.__qualname__)] = {
+            'heaviness':heaviness,
+            'task':shared_task(**kwargs)(task)
+        }
+        
         return task
     return decorator
 
-@RegisterTask()
+##############################################           ##################################################
+
+
+@RegisterTask(TaskHeaviness.LIGHT)
 def task_send_template_mail(data, meta, images):
-    emailService:EmailSenderService = Get(EmailSenderService)
+    emailService: EmailSenderService = Get(EmailSenderService)
     return emailService.sendTemplateEmail(data, meta, images)
-    
-@RegisterTask()
+
+
+@RegisterTask(TaskHeaviness.LIGHT)
 def task_send_custom_mail(content, meta, images, attachment):
-    emailService:EmailSenderService = Get(EmailSenderService)
+    emailService: EmailSenderService = Get(EmailSenderService)
     return emailService.sendCustomEmail(content, meta, images, attachment)
 
 
