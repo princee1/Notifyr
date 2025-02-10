@@ -4,7 +4,7 @@ from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.utils.constant  import HTTPHeaderConstant
-from app.classes.celery import TaskType,SchedulerModel
+from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
 
 class TwilioGuard(Guard):
     ...
@@ -44,11 +44,12 @@ class AssetGuard(Guard):
         
 class TaskWorkerGuard(Guard):
     #TODO Check before hand if the background task and the workers are available to do some job
-    def __init__(self, heaviness):
+    def __init__(self, heaviness:TaskHeaviness=None):
         super().__init__()
         self.celeryService = Get(CeleryService)
         self.bckgroundTaskService = Get(BackgroundTaskService)
         self.heaviness = heaviness
     
     def guard(self,scheduler:SchedulerModel):
+        task_heaviness:TaskHeaviness = scheduler.heaviness
         ...
