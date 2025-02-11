@@ -164,9 +164,7 @@ class Application(EventInterface):
         jwtService.set_generation_id(False)
 
         celery_service:CeleryService = Get(CeleryService)
-        celery_service.start_interval(1)
-
-
+        celery_service.start_interval(60*60)
 
     def on_shutdown(self):
         # for thread in threading.enumerate():

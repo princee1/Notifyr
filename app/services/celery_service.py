@@ -77,6 +77,8 @@ class CeleryService(Service, IntervalInterface):
         self.bTaskService = bTaskService
         self.available_workers_count = -1
         self.worker_not_available_count = 0
+
+        self.timeout_count = 0
         self.task_lock = asyncio.Lock()
     
         #self.redis_client = Redis(host='localhost', port=6379, db=0)# set from config
@@ -172,10 +174,15 @@ class CeleryService(Service, IntervalInterface):
     def build(self):
         ...
 
+    @property
+    def set_next_timeout(self):
+        if self.timeout_count >= 30:
+            return 60
+        return 1 *(1.1 ** self.timeout_count)
+
     async def _check_workers_status(self):
         try:
-            response = celery_app.control.ping()  # Timeout in seconds
-            
+            response = celery_app.control.ping(timeout=self.set_next_timeout)
             available_workers_count = len(response)
             if  available_workers_count == 0:
                 self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
@@ -184,9 +191,12 @@ class CeleryService(Service, IntervalInterface):
             
             async with self.task_lock:
                 self.available_workers_count = available_workers_count 
-            self.worker_not_available = self.configService.CELERY_WORKERS_COUNT - available_workers_count                        
+            self.worker_not_available = self.configService.CELERY_WORKERS_COUNT - available_workers_count       
+            self.timeout_count=0             
         except Exception as e:
-            ...
+            self.timeout_count +=1
+            async with self.task_lock:
+                    self.available_workers_count = 0
     
     @property
     async def get_available_workers_count(self)->float:
