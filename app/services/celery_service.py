@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Callable, ParamSpec
 import typing
-from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES
+from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES, TaskHeaviness
 from app.classes.celery import  CeleryTask, SchedulerModel
 from app.definition._service import Service, ServiceClass, ServiceStatus
 from app.interface.timers import IntervalInterface
@@ -39,10 +39,13 @@ class BackgroundTaskService(BackgroundTasks,Service):
         except:
             ...
 
-    def add_task(self,request_id:str,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
+    def add_task(self,heaviness:TaskHeaviness, request_id:str,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
         task = BackgroundTask(func, *args, **kwargs)
         self.sharing_task[request_id].append(task)
-        return {'message': f"[{func.__qualname__}] - Task added successfully"}
+        now = dt.datetime.now()
+
+        return {'data':now,
+            'message': f"[{func.__qualname__}] - Task added successfully",'heaviness':heaviness,'handler':'BackgroundTask'}
     def build(self):
         ...
 
@@ -98,7 +101,8 @@ class CeleryService(Service, IntervalInterface):
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
         now = dt.datetime.now()
-        result = {'message': f'[{now}] - Task [{t_name}] received successfully'}
+        result = {'data': now,
+            'message': f'Task [{t_name}] received successfully','heaviness':celery_task['heaviness'],'handler':'Redis'}
         
         if c_type == 'now':
             task_result = self._task_registry[t_name]['task'].delay(*celery_task['args'],**celery_task['kwargs'])

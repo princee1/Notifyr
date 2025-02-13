@@ -86,11 +86,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             if scheduler.task_type == 'now' or scheduler.task_type == 'once':
-                return self.bkgTaskService.add_task( x_request_id,self.emailService.sendTemplateEmail, data, meta, template.images )
-              
-            self.celeryService.pingService()
-            return  #TODO  if celery service status is either 4 or 5 
-        
+                return self.bkgTaskService.add_task( scheduler.heaviness,x_request_id,self.emailService.sendTemplateEmail, data, meta, template.images )
+
         return self.celeryService.trigger_task_from_scheduler(scheduler,data, meta, template.images)
     
     @UseLimiter(limit_value='10/minute')
@@ -104,9 +101,6 @@ class EmailTemplateRessource(BaseHTTPRessource):
        
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             if scheduler.task_type == 'now' or scheduler.task_type == 'once':
-                return self.bkgTaskService.add_task(x_request_id,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
+                return self.bkgTaskService.add_task(scheduler.heaviness,x_request_id,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
             
-            self.celeryService.pingService()
-            return #TODO  if celery service status is either 4 or 5 th Status
-        
         return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)

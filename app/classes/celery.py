@@ -75,4 +75,5 @@ class CeleryTask(TypedDict):
     queue_name:Optional[str] = None
     schedule_name:Optional[str] = None
     task_id:Optional[str] = None
+    heaviness:TaskHeaviness
 
