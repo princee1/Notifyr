@@ -62,13 +62,14 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             self.generation_id = self.configService.config_json_app.data[
                 ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY]
 
-    def encode_auth_token(self,data: Dict[str, RoutePermission],roles:list[str], issue_for: str,) -> str:
+    def encode_auth_token(self,data: Dict[str, RoutePermission],roles:list[str], issue_for: str,allowed_assets:list[str]=[]) -> str:
         try:
             if data==None:
                 data = {}
             created_time = time.time()
             permission = AuthPermission(generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
-                                        expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data,roles=roles)
+                                        expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data,roles=roles,allowed_assets=allowed_assets
+                                        )
             token = self._encode_token(permission)
             return token
         except Exception as e:

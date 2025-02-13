@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Literal,Dict,NotRequired
+from typing import Callable, List, Literal,Dict,NotRequired
 from typing_extensions import TypedDict
 from enum import Enum
 
@@ -48,7 +48,7 @@ class AuthPermission(TypedDict):
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
     #allowed_assets:Dict[str,AssetsPermission]
-    #allowed_assets:List[str]
+    allowed_assets:List[str]
 
 class WSPermission(TypedDict):
     operation_id:str

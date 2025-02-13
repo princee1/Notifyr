@@ -98,7 +98,9 @@ class ConfigService(_service.Service):
         return default
 
     def set_config_value(self):
-        self.BASE_DIR= self.getenv("BASE_DIR",'../')	
+        self.BASE_DIR= self.getenv("BASE_DIR",'./')	
+        self.ASSET_DIR= self.getenv("ASSETS_DIR",'assets/')	
+
 
         self.MODE = MODE.toMode(self.getenv('MODE'))
         self.PORT_PUBLIC = ConfigService.parseToInt(self.getenv("PORT_PUBLIC"),3000)
