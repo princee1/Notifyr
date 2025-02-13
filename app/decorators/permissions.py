@@ -51,38 +51,25 @@ class JWTRouteHTTPPermission(Permission):
 
 class JWTAssetPermission(Permission):
 
-    def __init__(self,template_type:RouteAssetType,model_keys:list[str]=[]):
+    def __init__(self,template_type:RouteAssetType,model_keys:list[str]=[],options=[]):
         #TODO Look for the scheduler object and the template
         super().__init__()
         self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
         self.assetService:AssetService = Get(AssetService)
         self.model_keys=model_keys
         self.template_type = template_type
+        self.options = options
 
     def permission(self,template:str, scheduler:SchedulerModel, authPermission:AuthPermission):
         assetPermission = authPermission['allowed_assets']
-        assetPermission = tuple(assetPermission)
+        permission = tuple(assetPermission)
         if template:
             content = scheduler.model_dump(include={'content'})
             template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
             template = self.assetService.asset_rel_path(template,self.template_type)
-            if not template.startswith(assetPermission):
+            if not template.startswith(permission):
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
 
         content = flatten_dict(content)
-        for keys in self.model_keys:
-            s_content=content[keys]
-            if type(s_content) == list:
-                for c in s_content:
-                    if type(c) == str:
-                        if not c.startswith(assetPermission):
-                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{c}] not allowed' })
-                    
-            elif type(s_content)==str:
-                if not c.startswith(assetPermission):
-                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{s_content}] not allowed' })      
-            else:
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={'message':'Entity not properly accessed'})
-
-        return True
+        return self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options)
 

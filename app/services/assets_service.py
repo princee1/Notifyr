@@ -1,3 +1,4 @@
+from fastapi import HTTPException,status
 from .config_service import ConfigService
 from app.utils.fileIO import FDFlag
 from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
@@ -209,6 +210,29 @@ class AssetService(_service.Service):
     def asset_rel_path(self,path,asset_type):
         return f"{self.configService.ASSET_DIR}{asset_type}\\{path}"
         
+    def verify_asset_permission(self,content,model_keys,assetPermission,options):
+        
+        permission = tuple(assetPermission)
+        for keys in model_keys:
+            s_content=content[keys]
+            if type(s_content) == list:
+                for c in s_content:
+                    if type(c) == str:
+                        if not c.startswith(permission):
+                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{c}] not allowed' })
+                    
+            elif type(s_content)==str:
+                if not c.startswith(permission):
+                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{s_content}] not allowed' })      
+            else:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={'message':'Entity not properly accessed'})
+            
+            for option in options:
+                if not option(assetPermission):
+                    return False
+
+        return True
+    
     def destroy(self): pass
 
     def encryptPdf(self, name):

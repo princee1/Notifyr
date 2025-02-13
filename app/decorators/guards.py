@@ -5,14 +5,13 @@ from app.services.celery_service import BackgroundTaskService, CeleryService,tas
 from app.services.config_service import ConfigService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
+from app.utils.helper import flatten_dict
 
 class TwilioGuard(Guard):
     ...
 
-
 class PlivoGuard(Guard):
     ...
-
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
@@ -31,22 +30,24 @@ class CeleryTaskGuard(Guard):
 
 class AssetGuard(Guard):
     #TODO If a route allowed a certain type asset
-    def __init__(self,allowed_path=[],options=[]):
+    def __init__(self,content_keys=[],allowed_path=[],options=[]):
         super().__init__()
         self.assetService = Get(AssetService)       
         self.configService = Get(ConfigService)
         self.options = options
-        self.allowed_path = allowed_path
+        self.allowed_path = [self.configService.ASSET_DIR +p for p in  allowed_path]
+        self.content_keys = content_keys
 
-    def guard(self,template:str,scheduler:SchedulerModel):
-        if template != None:
-            
-            ...
-        if scheduler != None:
-            ...
-        
-
-        
+    def guard(self,scheduler:SchedulerModel):
+        if scheduler == None:
+            return True,_
+        content = scheduler.model_dump(include={'content'})
+        content = flatten_dict(content)
+        flag = self.assetService.verify_asset_permission(content,self.content_keys,self.allowed_path,self.options)
+        if not flag:
+            return False, 'message'
+        return True,''
+                
 class TaskWorkerGuard(Guard):
     #TODO Check before hand if the background task and the workers are available to do some job
     def __init__(self, heaviness:TaskHeaviness=None):
