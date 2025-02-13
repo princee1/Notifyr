@@ -1,17 +1,20 @@
+from app.services.assets_service import AssetService
 from app.utils.constant import ConfigAppConstant
 from app.container import Get, InjectInFunction
 from app.services.security_service import SecurityService, JWTAuthService
 from app.services.config_service import ConfigService
 from app.utils.prettyprint import PrettyPrinter_
 from app.services.file_service import FileService
-from app.utils.question import SimpleInputHandler, ask_question, NumberInputHandler, ExpandInputHandler, ConfirmInputHandler, CheckboxInputHandler, one_or_more, one_or_more_invalid_message
+from app.utils.question import FuzzyInputHandler, SimpleInputHandler, ask_question, NumberInputHandler, ExpandInputHandler, ConfirmInputHandler, CheckboxInputHandler, one_or_more, one_or_more_invalid_message
 
 from app.utils.prettyprint import printJSON, show, PrettyPrinter_
 from app.utils.validation import ipv4_validator
 from app.definition._ressource import PROTECTED_ROUTES
 from app.classes.auth_permission import Role, RoutePermission, PermissionScope
 from app.utils.question import ask_question, ConfirmInputHandler, SimpleInputHandler, FileInputHandler,CheckboxInputHandler
-from app.utils.fileIO import ConfigFile, FDFlag, JSONFile, exist, inputFilePath, writeContent
+from app.utils.fileIO import ConfigFile, FDFlag, JSONFile, exist, inputFilePath, writeContent,listFilesExtension
+import os
+
 
 
 API_KEY = "api_key"
@@ -75,12 +78,15 @@ def register_client_services(set_gen_id:bool):
             custom_route_permission = ask_custom_routes(current_ressources)
             custom_route_permission = parse_access_routes(custom_route_permission, current_ressources)
 
+        allowed_assets = ask_asset()
+        PrettyPrinter_.wait(0)
+
         access_token = securityService.generate_custom_api_key(client_ipv4)
-        auth_token = jwtAuthService.encode_auth_token(custom_route_permission, roles,client_ipv4)
+        auth_token = jwtAuthService.encode_auth_token(custom_route_permission, roles,client_ipv4,allowed_assets)
         clients_secrets[client_ipv4] = {API_KEY: access_token, AUTH_KEY: auth_token}
         PrettyPrinter_.success(f"Client {i+1} successfully registered with ip address {client_ipv4}")
 
-    return clients_secrets
+    return clients_secrets 
 
 
 def parse_access_routes(access_routes: dict, current_ressources: list[str]):
@@ -110,6 +116,40 @@ def ask_custom_routes(current_ressources:list[str]):
         result.update(ask_question(questions_routes))
     
     return result
+
+
+def ask_asset():
+    assetService:AssetService = Get(AssetService)
+    all_files = listFilesExtension('','assets/',True,exclude_extension=['.css','.js'])
+    
+    choices = all_files.copy()
+    key = 'assets'
+
+    def _validate(result:list):
+        choices.clear()
+        if len(result)==0:
+            choices.extend(all_files.copy())
+        for r in result:
+            if os.path.isdir(r):
+                choices.extend([c for c in all_files if c.startswith(r)])
+            choices.append(r)
+
+        return one_or_more(result)
+    
+    def _filter(paths):
+        paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
+        results = []
+
+        for path in paths:
+            if not any(path.startswith(d + "\\") for d in results):
+                results.append(path)
+
+
+        return ['assets/'+ p for p in results ]
+    answer = ask_question([FuzzyInputHandler('Select assets to be included in the permission (files and folder)',
+                                    key,None,one_or_more,choices,invalid_message=one_or_more_invalid_message,instruction='(Press tab to select and enter to answer)')])
+    return _filter(answer[key])
+
 
 def prompt_client_registration(set_gen_id=False):
 
