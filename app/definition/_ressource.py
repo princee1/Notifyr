@@ -573,6 +573,9 @@ def UseLimiter(**kwargs): #TODO
                 ...
         return func
     return decorator
+
+def Exclude():
+    ...
     
 def IncludeRessource(*ressources: Type[R]| R):
     def class_decorator(cls:Type[R]) ->Type[R]:

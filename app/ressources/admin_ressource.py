@@ -59,6 +59,7 @@ class AdminRessource(BaseHTTPRessource):
         return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Tokens successfully invalidated",
                                                                     "details": "Even if you're the admin old token wont be valid anymore",
                                                                     "tokens":tokens})
+    
     @UseLimiter(limit_value='4/day')
     @BaseHTTPRessource.HTTPRoute('/issue-auth/',methods=[HTTPMethod.GET])
     def issue_auth_token(self,authModel:AuthPermissionModel | List[AuthPermissionModel],request:Request, authPermission=Depends(get_auth_permission)):
@@ -77,7 +78,6 @@ class AdminRessource(BaseHTTPRessource):
         tokens = self._create_tokens(tokens)
         return JSONResponse(status_code=status.HTTP_200_OK,content={'tokens':tokens ,"message":"Tokens successfully invalidated"})
     
-
     def _create_tokens(self,tokens):
         temp ={}
         for token in tokens:
