@@ -60,11 +60,15 @@ def writeContent(path: str, content, flag: FDFlag, enc: str = "utf-8"):
         pass
 
 
-def listFilesExtension(extension: str, root=None, recursive: bool = False):
+def listFilesExtension(extension: str, root=None, recursive: bool = False,exclude_extension:list[str]=None):
     if root != None and not os.path.isdir(f"{os.path.curdir}/{root}"):
         raise OSError
 
-    return glob.glob(f"**/*{extension}", root_dir=root, recursive=recursive)
+    result = glob.glob(f"**/*{extension}", root_dir=root, recursive=recursive)
+
+    if exclude_extension!= None:
+        return  [file for file in result if not file.endswith(tuple(exclude_extension))]
+    return result
 
 
 def listFilesExtensionCertainPath(path: str, extension: str):

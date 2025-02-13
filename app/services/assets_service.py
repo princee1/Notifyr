@@ -12,8 +12,8 @@ from typing import Any, Callable, Literal, Dict
 from app.utils.helper import issubclass_of
 
 ROOT_PATH = "assets/"
-DIRECTORY_SEPARATOR = '/'
-REQUEST_DIRECTORY_SEPARATOR = '|'
+DIRECTORY_SEPARATOR = '\\'
+REQUEST_DIRECTORY_SEPARATOR = ':'
 
 def path(x): return ROOT_PATH+x
 
@@ -39,7 +39,7 @@ class AssetType(Enum):
     PHONE = "phone"
     HTML = Extension.HTML.value
     
-RouteAssetType = Literal['htmls', 'sms', 'phone']
+RouteAssetType = Literal['html', 'sms', 'phone']
 
 def extension(extension: Extension): return f".{extension.value}"
 
@@ -142,7 +142,7 @@ class AssetService(_service.Service):
         self.images: dict[str, Asset] = {}
         self.css: dict[str, Asset] = {}
 
-        self.htmls: dict[str, HTMLTemplate] = {}
+        self.html: dict[str, HTMLTemplate] = {}
         self.pdf: dict[str, PDFTemplate] = {}
         self.sms: dict[str, SMSTemplate] = {}
         self.phone: dict[str, PhoneTemplate] = {}
@@ -161,11 +161,10 @@ class AssetService(_service.Service):
         phoneReader: ThreadedReader = ThreadedReader(PhoneTemplate)(
             Extension.PHONE, FDFlag.READ, AssetType.PHONE.value)
 
-        self.htmls = htmlReader.join()
+        self.html = htmlReader.join()
         self.pdf = pdfReader.join()
         self.sms = smsReader.join()
         self.phone = phoneReader.join()
-
         
         
     def loadHTMLData(self, html: HTMLTemplate):
@@ -189,31 +188,29 @@ class AssetService(_service.Service):
 
     def exportRouteName(self,attributeName:RouteAssetType)-> list[str] | None:
         """
-        htmls: HTML Template Key
+        html: HTML Template Key
         sms: SMS Template Key
         phone: Phone Template Key
         """
         try:
-            # if attributeName != "htmls" or "sms" or"phone":
-            #     raise AttributeError
-            temp:dict[str,Asset] = self.__getattribute__(attributeName)
+            if attributeName != "html" and  attributeName !="sms" and attributeName != "phone":
+                raise AttributeError
+            temp:dict[str,Asset] = getattr(self,attributeName)
             if type(temp) is not dict:
                 raise TypeError()
-            return [route.name for route in temp.values()]
+            return list(temp.keys())
         except TypeError as e:
             return None
         except KeyError as e:
             return None
-        
         except AttributeError as e:
             pass
+
+    def asset_rel_path(self,path,asset_type):
+        return f"{self.configService.ASSET_DIR}{asset_type}\\{path}"
         
     def destroy(self): pass
 
     def encryptPdf(self, name):
         KEY=""
         self.pdf[name].encrypt(KEY)
-
-    def decryptPdf(self, name):
-        KEY=""
-        self.pdf[name].decrypt(KEY)

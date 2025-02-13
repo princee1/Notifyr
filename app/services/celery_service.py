@@ -18,6 +18,8 @@ from redis import Redis
 
 P = ParamSpec("P")
 
+
+
 @ServiceClass
 class BackgroundTaskService(BackgroundTasks,Service):
     def __init__(self,configService:ConfigService):
@@ -40,7 +42,7 @@ class BackgroundTaskService(BackgroundTasks,Service):
     def add_task(self,request_id:str,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
         task = BackgroundTask(func, *args, **kwargs)
         self.sharing_task[request_id].append(task)
-        
+        return {'message': f"[{func.__qualname__}] - Task added successfully"}
     def build(self):
         ...
 
