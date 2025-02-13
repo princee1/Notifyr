@@ -1,7 +1,7 @@
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.services.assets_service import AssetService
-from app.services.celery_service import BackgroundTaskService, CeleryService
+from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
@@ -17,15 +17,15 @@ class PlivoGuard(Guard):
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
         super().__init__()
-        self.task_names = task_names
+        self.task_names = [task_name(t) for t in  task_names]
         self.task_types = task_types
     
-    def guard(self,scheduler:SchedulerModel):
-        if scheduler.task_name not in self.task_names:
-            return False,f'The task: {scheduler.task_name} is  not permitted for this route'
+    def guard(self,scheduler:SchedulerModel):        
+        if self.task_names and scheduler.task_name not in self.task_names:
+            return False,f'The task: [{scheduler.task_name}] is  not permitted for this route'
         
         if self.task_types != None and scheduler.task_name not in self.task_types:
-            return False,f'The task_type: {scheduler.task_type} is not permitted for this route'
+            return False,f'The task_type: [{scheduler.task_type}] is not permitted for this route'
         
         return True,''
 
@@ -38,8 +38,13 @@ class AssetGuard(Guard):
         self.options = options
         self.allowed_path = allowed_path
 
-    def guard(self,template:str):
-        ...
+    def guard(self,template:str,scheduler:SchedulerModel):
+        if template != None:
+            
+            ...
+        if scheduler != None:
+            ...
+        
 
         
 class TaskWorkerGuard(Guard):

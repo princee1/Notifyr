@@ -4,6 +4,7 @@ from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDUL
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
+from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, task_name
@@ -31,13 +32,16 @@ class TemplateParamsPipe(Pipe):
     def __init__(self,template_type:RouteAssetType):
         super().__init__(True)
         self.assetService= Get(AssetService)
+        self.configService = Get(ConfigService)
         self.template_type = template_type
     
     def pipe(self,template:str):
         asset_routes = self.assetService.exportRouteName(self.template_type)
         template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
+        template = self.assetService.asset_rel_path(template,self.template_type)
+
         if template not in asset_routes:
-            raise TemplateNotFoundError
+            raise TemplateNotFoundError(template)
 
         return {'template':template}
         
