@@ -192,6 +192,25 @@ class FileInputHandler(InputHandler):
         self.only_directories = isDir
 
 
+class FuzzyInputHandler(InputHandler,ChoiceInterface):
+    
+    def __init__(self,message,name, when, validate,choices=[], filter=None, invalid_message=None, instruction=None):
+        super().__init__('fuzzy', message, '', name, when, validate, filter, invalid_message, instruction)
+        ChoiceInterface.__init__(self, choices)
+
+    def addChoices(self, name, value):
+        self.choices.append(Choice(value, name))
+        return super().addChoices()
+    
+    @property
+    def question(self) -> dict:
+        value = super().question
+        value.update(ChoiceInterface.toDict(self))
+        value.update({'multiselect':True,'max_height':'70%'})
+        return value
+
+
+
 custom_style = Style.from_dict({
     "question": "bold #ansiblue",        # Question text
     "answer": "#ffcc00",                 # Answer text
