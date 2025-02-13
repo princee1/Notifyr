@@ -2,15 +2,20 @@
 https://www.youtube.com/watch?v=-AChTCBoTUM
 """
 
-from injector import inject
+from typing import Annotated
+from fastapi import Header
 from app.definition import _service
+from app.services.logger_service import LoggerService
 from .config_service import ConfigService
 #from twilio.rest import Client
 
 
+
+async def verify_twilio_token(x_twilio_token: Annotated[str, Header()]):
+    ...
+
 @_service.ServiceClass
 class TwilioService(_service.Service):
-    @inject
     def __init__(self, configService: ConfigService):
         super().__init__()
         self.configService = configService
@@ -32,7 +37,6 @@ class BaseTwilioCommunication(_service.Service):
 @_service.ServiceClass
 class SMSService(BaseTwilioCommunication):
 
-    @inject
     def __init__(self, configService: ConfigService, twilioService: TwilioService):
         super().__init__(configService, twilioService)
 
@@ -40,17 +44,12 @@ class SMSService(BaseTwilioCommunication):
         #self.message = self.twilioService.client.messages
         return super().build()
         
-
-    def send_message(self, to, body):
-        self.message.create(to, body=body)
-        pass
     pass
 
 
 @_service.ServiceClass
 class VoiceService(BaseTwilioCommunication):
 
-    @inject
     def __init__(self, configService: ConfigService, twilioService: TwilioService):
         super().__init__(configService, twilioService)
     pass
@@ -59,7 +58,6 @@ class VoiceService(BaseTwilioCommunication):
 @_service.ServiceClass
 class FaxService(BaseTwilioCommunication):
 
-    @inject
     def __init__(self, configService: ConfigService, twilioService: TwilioService):
         super().__init__(configService, twilioService)
 
@@ -67,6 +65,12 @@ class FaxService(BaseTwilioCommunication):
 @_service.ServiceClass
 class SIPService(BaseTwilioCommunication):
 
-    @inject
     def __init__(self, configService: ConfigService, twilioService: TwilioService):
         super().__init__(configService, twilioService)
+
+
+@_service.ServiceClass
+class WhatsAppService(BaseTwilioCommunication):
+    def __init__(self, configService: ConfigService, loggerService: LoggerService,twilioService: TwilioService):
+        super().__init__(configService,twilioService)
+        self.loggerService = loggerService
