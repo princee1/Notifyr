@@ -4,18 +4,18 @@ This project is a powerful and flexible messaging relay system supporting OTPs a
 
 ### 🚀 Features  
 - **Multi-Channel Messaging:** Seamlessly relay messages via Email, SMS, and Voice Calls.  
-- **OTP Support:** Secure one-time password delivery for authentication workflows.  
+- **OTP Support:** Secure one-time password delivery for authentication workflows. [In developement]
 - **Scheduling & Background Tasks:** Efficiently manage message scheduling using **Redis**, with offloading handled by **FastAPI Background Tasks** or **Celery Workers** to ensure high reliability.  
 - **Advanced Design Pattern:** Utilizes a customized **Decorator Design Pattern** and **IoC Container** on top of **FastAPI Routers** for clean, maintainable, and reusable code.  
-- **AI Customer Service Assistant:** Leverages **LLM (Large Language Models)**, **RAG (Retrieval-Augmented Generation)**, and **Knowledge Graphs** for intelligent customer interactions.  
-- **Speech Capabilities:** Integrates **Speech-to-Text** and **Text-to-Speech** for voice-based customer support.  
-- **Analytics & Logging:** Sends analytics and information through **Discord Webhooks** and has a comprehensive **logging setup** for monitoring and debugging.  
+- **AI Customer Service Assistant:** Leverages **LLM (Large Language Models)**, **RAG (Retrieval-Augmented Generation)**, and **Knowledge Graphs** for intelligent customer interactions. [In developement] 
+- **Speech Capabilities:** Integrates **Speech-to-Text** and **Text-to-Speech** for voice-based customer support. [In developement] 
+- **Analytics & Logging:** Sends analytics and information through **Discord Webhooks** and has a comprehensive **logging setup** for monitoring and debugging.  [In developement]
 - **Data Retrieval:** Access historical and real-time data through a **Redis backend**.  
 - **Secure Communication:**  
   - Uses **Custom Client JWT Tokens** and **Custom API Keys** for secure communication.  
   - **RBAC Permission System** and **Rate Limiter** to enhance security and reliability.  
   - **Blacklist JWT Tokens** and **Remote Token Issuance** via an **Admin Router** for better control and security.  
-- **Live Chat Support:** Integrates a limited public **WebSocket Endpoint** to enable real-time live chat with users.  
+- **Live Chat Support:** Integrates a limited public **WebSocket Endpoint** to enable real-time live chat with users.  [In developement]
 
 ### 🎯 Use Cases  
 - Multi-factor authentication via OTPs.  
@@ -24,7 +24,7 @@ This project is a powerful and flexible messaging relay system supporting OTPs a
 - Real-time customer interactions with live chat support.  
 
 ### 🛠️ Tech Stack  
-- **FastAPI**: High-performance web framework for building APIs.  
+- **FastAPI**: High-performance web framework for building APIs with python.   
 - **Redis**: Efficient scheduling, caching, and data retrieval mechanism.  
 - **Celery**: Distributed task queue for background processing.  
 - **LLM, RAG, KG**: AI capabilities for intelligent responses and support automation.  
