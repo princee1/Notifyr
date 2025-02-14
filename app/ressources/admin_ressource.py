@@ -17,6 +17,7 @@ from pydantic import BaseModel, RootModel,field_validator
 from app.decorators.handlers import ServiceAvailabilityHandler
 from app.decorators.pipes import AuthPermissionPipe, CeleryTaskPipe
 from app.utils.validation import ipv4_validator
+from slowapi.util import get_remote_address
 
 ADMIN_PREFIX = 'admin'
 
@@ -85,7 +86,7 @@ class AdminRessource(BaseHTTPRessource):
         return JSONResponse(status_code=status.HTTP_200_OK,content={"tokens":temp,"message":"Tokens successfully issued"})
 
 
-    @UseLimiter(limit_value='1/day')#VERIFY Once a month
+    @UseLimiter(limit_value='1/day',key_func=get_remote_address)#VERIFY Once a month
     @UsePipe(AuthPermissionPipe)
     @UseRoles([Role.REFRESH])
     @BaseHTTPRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST],deprecated=True)# ERROR Security Error

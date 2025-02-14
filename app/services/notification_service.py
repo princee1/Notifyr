@@ -118,17 +118,9 @@ class DiscordService(NotificationService):
         webhook = DiscordWebhook()
         pass
 
-@_service.ServiceClass
-class EmailNotificationService(NotificationService):
-    def __init__(self, configService: ConfigService, emailService: EmailSenderService) -> None:
-        super().__init__(configService)
-        self.emailService: EmailSenderService = emailService
-
-
 ReportClass = {
     DiscordService.__name__: DiscordReport,
     SystemNotificationService.__name__: SystemReport,
-    EmailNotificationService.__name__: EmailReport,
 }
 
 def ReportBuilder(classname,*args,**kwargs) -> Report: # TODO Make as a decorator
