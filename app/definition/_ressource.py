@@ -9,7 +9,7 @@ from app.utils.helper import issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
 from app.container import Get, Need
-from app.definition._service import S
+from app.definition._service import S, Service
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
@@ -326,9 +326,9 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams =None):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(func, UsePermission, permission_function)
-        if data != None:
-            return data
+        cls = common_class_decorator(func, UsePermission, permission_function)
+        if cls != None:
+            return cls
 
         class_name = get_class_name_from_method(func)
         add_protected_route_metadata(class_name, func.meta['operation_id'])
@@ -378,9 +378,9 @@ def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Ha
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(func, UseHandler, handler_function)
-        if data != None:
-            return data
+        cls = common_class_decorator(func, UseHandler, handler_function)
+        if cls != None:
+            return cls
 
         def wrapper(function: Callable):
 
@@ -427,9 +427,9 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
     # BUG notify the developper if theres no guard_function mentioned
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
-        data = common_class_decorator(func, UseGuard, guard_function)
-        if data != None:
-            return data
+        cls = common_class_decorator(func, UseGuard, guard_function)
+        if cls != None:
+            return cls
 
         def wrapper(target_function: Callable):
 
@@ -464,9 +464,9 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
     # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(func, UsePipe, pipe_function, before=before)
-        if data != None:
-            return data
+        cls = common_class_decorator(func, UsePipe, pipe_function, before=before)
+        if cls != None:
+            return cls
 
         def wrapper(function: Callable):
 
@@ -516,10 +516,10 @@ def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, A
     raise NotImplementedError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(
+        cls = common_class_decorator(
             func, UseInterceptor, interceptor_function)
-        if data != None:
-            return data
+        if cls != None:
+            return cls
 
         def wrapper(function: Callable):
             @functools.wraps(function)
@@ -533,9 +533,9 @@ def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, A
 
 def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[]): # TODO options
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(func, UseRoles,None,roles=roles)
-        if data != None:
-            return data
+        cls = common_class_decorator(func, UseRoles,None,roles=roles)
+        if cls != None:
+            return cls
 
         roles_ = set(roles)
         excludes_ = set(excludes).difference(roles_)
@@ -558,9 +558,9 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
 @functools.wraps(GlobalLimiter.limit)
 def UseLimiter(**kwargs): #TODO
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        data = common_class_decorator(func, UseLimiter,None,**kwargs)
-        if data != None:
-            return data
+        cls = common_class_decorator(func, UseLimiter,None,**kwargs)
+        if cls != None:
+            return cls
         meta:FuncMetaData | None = getattr(func,'meta',None)
         if meta is not None:
             meta['limit_obj'] = kwargs
@@ -573,6 +573,25 @@ def UseLimiter(**kwargs): #TODO
                 ...
         return func
     return decorator
+
+def PingService(services:list[S]):
+
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func,PingService,None,services=services)
+        if cls != None:
+            return cls
+        
+        @functools.wraps(func)
+        def wrapper(*args,**kwargs):
+            for s in services:
+                s: Service = Get(s)
+                s.pingService()
+            
+            return func(*args,**kwargs)
+        
+        return wrapper
+    return decorator
+
 
 def Exclude():
     ...

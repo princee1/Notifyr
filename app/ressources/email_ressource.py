@@ -6,7 +6,7 @@ from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
 from app.container import GetDepends, InjectInMethod
-from app.definition._ressource import HTTPRessource, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
+from app.definition._ressource import HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailSenderService
 from pydantic import BaseModel
 from fastapi import BackgroundTasks, Header, Request, Response, status
@@ -57,6 +57,7 @@ DEFAULT_RESPONSE = {
 @UseHandler(handlers.ServiceAvailabilityHandler,handlers.CeleryTaskHandler)
 @UsePermission(permissions.JWTRouteHTTPPermission)
 @UsePipe(pipes.CeleryTaskPipe)
+@PingService([EmailSenderService])
 @HTTPRessource(EMAIL_PREFIX)
 class EmailTemplateRessource(BaseHTTPRessource):
 
@@ -69,7 +70,6 @@ class EmailTemplateRessource(BaseHTTPRessource):
         self.celeryService:CeleryService = celeryService
         self.bkgTaskService: BackgroundTaskService = bkgTaskService
 
-
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission('html'))
     @UseHandler(handlers.TemplateHandler)
@@ -77,7 +77,6 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
     def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, x_request_id:str =Depends(get_request_id) ,authPermission=Depends(get_auth_permission)):
-        self.emailService.pingService()
         mail_content = scheduler.content
         meta = mail_content.meta.model_dump(mode='python')
         
@@ -90,11 +89,10 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,data, meta, template.images)
     
-    @UseLimiter(limit_value='10/minute')
+    @UseLimiter(limit_value='10000/minute')
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
     def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
-        self.emailService.pingService()
         customEmail_content = scheduler.content
         meta = customEmail_content.meta.model_dump()
         content = (customEmail_content.html_content, customEmail_content.text_content)
