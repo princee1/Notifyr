@@ -2,17 +2,20 @@ from dataclasses import dataclass
 from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Header, Request, Response,HTTPException,status
 from fastapi.responses import JSONResponse
+from app.classes.celery import SchedulerModel, TaskType
+from app.decorators.guards import CeleryTaskGuard
 from app.services.assets_service import AssetService
+from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.security_service import JWTAuthService,SecurityService
 from app.services.config_service import ConfigService
-from app.utils.dependencies import get_admin_token, get_auth_permission
+from app.utils.dependencies import get_admin_token, get_auth_permission, get_request_id
 from app.container import InjectInMethod,Get
 from app.definition._ressource import Guard, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.classes.auth_permission import AuthPermission, Role,RoutePermission,AssetsPermission
+from app.classes.auth_permission import AuthPermission, Role,RoutePermission,AssetsPermission, TokensModel
 from pydantic import BaseModel, RootModel,field_validator
 from app.decorators.handlers import ServiceAvailabilityHandler
-from app.decorators.pipes import AuthPermissionPipe
+from app.decorators.pipes import AuthPermissionPipe, CeleryTaskPipe
 from app.utils.validation import ipv4_validator
 
 ADMIN_PREFIX = 'admin'
@@ -36,6 +39,9 @@ class AuthPermissionModel(BaseModel):
             raise ValueError('Invalid IP Address')
         return issued_for
 
+class BlacklistScheduler(SchedulerModel):
+    ...
+
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
@@ -49,10 +55,20 @@ class AdminRessource(BaseHTTPRessource):
         self.jwtAuthService = jwtAuthService
         self.securityService = securityService
         self.assetService = assetService
+        self.celeryService:CeleryService = Get(CeleryService)
 
+    @UseLimiter(limit_value ='20/week')
+    @UsePipe(CeleryTaskPipe)
+    @UseGuard(CeleryTaskGuard(task_names=['task_blacklist_client'],task_types=[TaskType.ONCE]))
+    @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}',methods=[HTTPMethod.DELETE])
+    def blacklist_tokens(self,client_id:str,request:Request ,scheduler:BlacklistScheduler,authPermission=Depends(get_auth_permission)):
+        # TODO verify if already blacklisted
+        # TODO add to database 
+        return self.celeryService.trigger_task_from_scheduler(scheduler,client_id)
+    
     @UseLimiter(limit_value='1/day')
-    @BaseHTTPRessource.HTTPRoute('/invalidate/',methods=[HTTPMethod.DELETE])
-    def invalidate_tokens(self,request:Request,authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/invalidate-all/',methods=[HTTPMethod.DELETE])
+    def invalidate_all_tokens(self,request:Request,authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
         self.jwtAuthService.set_generation_id(True)
         tokens = self._create_tokens(authPermission)
@@ -68,13 +84,14 @@ class AdminRessource(BaseHTTPRessource):
         temp = self._create_tokens(authModel)
         return JSONResponse(status_code=status.HTTP_200_OK,content={"tokens":temp,"message":"Tokens successfully issued"})
 
-    @UseLimiter(limit_value='1/day')
+
+    @UseLimiter(limit_value='1/day')#VERIFY Once a month
     @UsePipe(AuthPermissionPipe)
     @UseRoles([Role.REFRESH])
-    @BaseHTTPRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST])
-    def refresh_auth_token(self,tokens:str |list[str], request:Request,authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST],deprecated=True)# ERROR Security Error
+    def refresh_auth_token(self,tokens:TokensModel, request:Request,authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()
-        tokens:list[AuthPermission] = tokens if isinstance(tokens,list) else [tokens]
+        tokens:list[AuthPermission] = tokens
         tokens = self._create_tokens(tokens)
         return JSONResponse(status_code=status.HTTP_200_OK,content={'tokens':tokens ,"message":"Tokens successfully invalidated"})
     

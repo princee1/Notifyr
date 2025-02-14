@@ -60,6 +60,7 @@ class BackgroundTaskService(BackgroundTasks,Service):
             self.running_tasks_count += len(self.sharing_task[request_id])  # Increase count based on new tasks
 
         for task in self.sharing_task[request_id]:
+            await asyncio.sleep(0)
             await task()
 
         async with self.task_lock:

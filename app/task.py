@@ -7,6 +7,7 @@ from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import ConfigService
 from app.services.email_service import EmailSenderService
 from app.container import Get, build_container
+from app.services.security_service import JWTAuthService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 
@@ -102,5 +103,8 @@ def task_send_custom_mail(content, meta, images, attachment):
     emailService: EmailSenderService = Get(EmailSenderService)
     return emailService.sendCustomEmail(content, meta, images, attachment)
 
+@RegisterTask(TaskHeaviness.VERY_LIGHT)
+def task_blacklist_client(client_id:str):
+    jwtAuthService = Get(JWTAuthService)
 
 ##############################################           ##################################################

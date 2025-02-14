@@ -2,6 +2,7 @@
 from typing import Any, Dict
 
 from app.definition._interface import Interface, IsInterface
+from app.services.database_service import SQLService
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
@@ -38,10 +39,11 @@ class EncryptDecryptInterface(Interface):
 
 @ServiceClass
 class JWTAuthService(Service, EncryptDecryptInterface):
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,sqlService:SQLService) -> None:
         super().__init__()
         self.configService = configService
         self.fileService = fileService
+        self.sqlService = sqlService
 
 
     def set_generation_id(self, gen=False) -> None:
@@ -148,9 +150,11 @@ class JWTAuthService(Service, EncryptDecryptInterface):
 @ServiceClass
 class SecurityService(Service, EncryptDecryptInterface):
 
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,sqlService:SQLService) -> None:
         super().__init__()
         self.configService = configService
+        self.fileService = fileService
+        self.sqlService  = sqlService
 
     def verify_server_access(self, token: str, sent_ip_addr) -> bool:
         token = self._decode_value(token, self.configService.API_ENCRYPT_TOKEN)

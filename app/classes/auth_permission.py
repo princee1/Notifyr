@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Callable, List, Literal,Dict,NotRequired
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 from enum import Enum
 
@@ -39,16 +40,20 @@ class AssetsPermission(TypedDict):
         
 class AuthPermission(TypedDict):
     generation_id: str
-    #domain_name:str
-    #client_id: str
-    #app_id: str
+    domain_name:str=None # TODO accept sudomains 
+    client_id: str= None # TODO
+    application_id: str = None # TODO
     roles:list[str]
-    issued_for: str
+    issued_for: str # Subnets
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
     #allowed_assets:Dict[str,AssetsPermission]
     allowed_assets:List[str]
+
+
+class TokensModel(BaseModel):
+    tokens: str | list[str]
 
 class WSPermission(TypedDict):
     operation_id:str

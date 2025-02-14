@@ -120,7 +120,7 @@ class BackgroundTaskMiddleware(MiddleWare,InjectableMiddlewareInterface):
         self.backgroundTaskService._register_tasks(request_id)
         request.state.request_id = request_id
         response = await call_next(request)
-        rq_response_id = get_response_id(response)
+        rq_response_id = get_response_id(response) #NOTE if theres no rq_response_id in the response this means we can safely remove the referencece
         if rq_response_id:
             asyncio.create_task(self.backgroundTaskService(rq_response_id)) 
         else: 
