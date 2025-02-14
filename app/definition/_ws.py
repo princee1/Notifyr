@@ -75,7 +75,7 @@ class WSIdentity:
 class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 
     @staticmethod
-    def WSEndpoint(path:str,type_: str | bytes | dict | BaseModel |BaseProtocol=str,name:str = None,path_conn_manager:str=None,handler:HandlerType='current'):
+    def WSEndpoint(path:str,type_: str | bytes | dict | BaseModel |BaseProtocol=str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current'):
 
         def decorator(func:Callable):
             if not hasattr(func,'meta'):
@@ -126,8 +126,9 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                             ... # TODO verify
                             message:BaseProtocol = await websocket.receive_json()
                             kwargs_star['message'] = message
+                            key = 'protocol_name' if set_protocol_key == None else 'protocol_name'
                             c_result = APIFilterInject(func)(*args,**kwargs_star)
-                            h_protocol =APIFilterInject(self.protocol[message['protocol_name']])(message)
+                            h_protocol =APIFilterInject(self.protocol[message[key]])(message)
 
                             if handler =='current':
                                 return c_result
@@ -169,6 +170,8 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         self.prettyPrinter = PrettyPrinter_
         self.run_id = generateId(30)
         self._register_protocol()
+
+        self.bypass_auth = False
     
     def __init_subclass__(cls):
         WS_METADATA[cls.__name__] = cls
@@ -196,6 +199,9 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         return websocket
                 
     def on_connect(self,websocket:WebSocket,operation_id:str):
+        if self.bypass_auth:
+            return True
+            
         auth_token = websocket.headers.get(HTTPHeaderConstant.WS_KEY) # TODO find a key name
         if auth_token == None:
             return False

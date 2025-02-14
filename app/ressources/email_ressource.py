@@ -53,7 +53,7 @@ DEFAULT_RESPONSE = {
 }
 
 
-@UseRoles([Role.CHAT,Role.RELAY])
+@UseRoles([Role.RELAY])
 @UseHandler(handlers.ServiceAvailabilityHandler,handlers.CeleryTaskHandler)
 @UsePermission(permissions.JWTRouteHTTPPermission)
 @UsePipe(pipes.CeleryTaskPipe)

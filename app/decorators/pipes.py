@@ -1,5 +1,5 @@
 from typing import Literal
-from app.classes.auth_permission import AuthPermission
+from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
@@ -16,7 +16,8 @@ class AuthPermissionPipe(Pipe):
         super().__init__(True)
         self.jwtAuthService = jwtAuthService
 
-    def pipe(self,tokens:str| list[str]):
+    def pipe(self,tokens:TokensModel):
+        tokens = tokens.model_dump(include={'tokens'})
         if isinstance(tokens,str):
             tokens = [tokens]
         temp = {}

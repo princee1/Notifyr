@@ -1,6 +1,7 @@
-from typing import Annotated
+from typing import Annotated, Any
 from fastapi import Depends, Header
 from app.classes.auth_permission import Role
+from app.classes.celery import SchedulerModel
 from app.decorators.guards import CeleryTaskGuard
 from app.decorators.handlers import ServiceAvailabilityHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
@@ -15,7 +16,11 @@ from app.utils.dependencies import get_auth_permission
 
 SMS_ONGOING_PREFIX = 'sms-ongoing'
 
-@UseRoles([Role.CHAT,Role.RELAY])
+class SMSTemplateSchedulerModel(SchedulerModel):
+    content: Any # TODO
+
+
+
 @UseHandler(ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(SMS_ONGOING_PREFIX)
@@ -33,14 +38,16 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     def sms_relay_otp(self,authPermission=Depends(get_auth_permission)):
         pass
         
+    @UseRoles([Role.RELAY])
     @BaseHTTPRessource.HTTPRoute('/simple/')
-    def sms_simple_message(self,authPermission=Depends(get_auth_permission)):
+    def sms_simple_message(self,scheduler: SMSTemplateSchedulerModel,authPermission=Depends(get_auth_permission)):
         pass
     
+    @UseRoles([Role.RELAY])
     @UsePipe(TemplateParamsPipe('sms'))
     @UsePermission(JWTAssetPermission('html'))
     @BaseHTTPRessource.HTTPRoute('/template/{template}')
-    def sms_template(self,template:str,authPermission=Depends(get_auth_permission)):
+    def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,authPermission=Depends(get_auth_permission)):
         ...
 
 SMS_INCOMING_PREFIX = "sms-incoming"
@@ -49,7 +56,7 @@ SMS_INCOMING_PREFIX = "sms-incoming"
 class IncomingSMSRessource(BaseHTTPRessource):
     @InjectInMethod
     def __init__(self,) -> None:
-        super().__init__(depends=[Depends(verify_twilio_token)])
+        super().__init__(dependencies=[Depends(verify_twilio_token)])
 
     
     @BaseHTTPRessource.HTTPRoute('/chat/')
