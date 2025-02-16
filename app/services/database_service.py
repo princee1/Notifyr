@@ -14,27 +14,27 @@ class DatabaseService(Service):
 
 
 @ServiceClass
-class SQLiteService(DatabaseService):
+class SQLiteService(DatabaseService): # logging
     def __init__(self,configService:ConfigService, securityService:SecurityService, fileService:FileService) -> None:
         super().__init__(configService,fileService)
         self.securityService = securityService
     
 
 @ServiceClass
-class CSVService(DatabaseService):
+class CSVService(DatabaseService): # analytics
 
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
     ...
 
 @ServiceClass
-class MongooseService(DatabaseService):
+class MongooseService(DatabaseService): # Chat data
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
     
 
 @ServiceClass
-class SQLService(DatabaseService):
+class SQLService(DatabaseService): # token blacklist data
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
 
