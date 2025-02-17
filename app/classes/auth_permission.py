@@ -19,6 +19,7 @@ class Role(Enum):
     CHAT = 'CHAT'
     REDIS = 'REDIS'
     REFRESH = 'REFRESH'
+    CONTACTS = 'CONTACTS'
 
 
 class FuncMetaData(TypedDict):
