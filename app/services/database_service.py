@@ -19,20 +19,20 @@ class SQLiteService(DatabaseService):
 
 
 @ServiceClass
-class CSVService(DatabaseService):
+class CSVService(DatabaseService): # analytics
 
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
     ...
 
 @ServiceClass
-class MongooseService(DatabaseService):
+class MongooseService(DatabaseService): # Chat data
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
     
 
 @ServiceClass
-class SQLService(DatabaseService):
+class SQLService(DatabaseService): # token blacklist data and contacts
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
 
