@@ -1,6 +1,5 @@
 from .config_service import ConfigService
 from .file_service import FileService
-from .security_service import SecurityService
 from app.definition._service import Service,AbstractServiceClass,ServiceClass
 import sqlite3
 import pandas as pd
@@ -15,10 +14,9 @@ class DatabaseService(Service):
 
 @ServiceClass
 class SQLiteService(DatabaseService):
-    def __init__(self,configService:ConfigService, securityService:SecurityService, fileService:FileService) -> None:
+    def __init__(self,configService:ConfigService, fileService:FileService) -> None:
         super().__init__(configService,fileService)
-        self.securityService = securityService
-    
+
 
 @ServiceClass
 class CSVService(DatabaseService):
