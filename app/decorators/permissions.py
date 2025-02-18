@@ -69,7 +69,24 @@ class JWTAssetPermission(Permission):
             template = self.assetService.asset_rel_path(template,self.template_type)
             if not template.startswith(permission):
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
-
+            
+        if scheduler == None:
+            return True
+        
         content = flatten_dict(content)
         return self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options)
 
+
+class JWTQueryAssetPermission(JWTAssetPermission):
+     
+    def __init__(self,allowed_assets:RouteAssetType, model_keys = [], options=[]):
+        """
+        Use kwargs the model_keys and options parameter
+        """
+        super().__init__(None, model_keys, options)
+        self.allowed_assets = allowed_assets
+        
+    def permission(self,template:str, scheduler:SchedulerModel, asset:str,authPermission:AuthPermission):
+        self.assetService.check_asset(asset,self.allowed_assets)
+        self.template_type = asset
+        return super().permission(template,scheduler,authPermission)

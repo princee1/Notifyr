@@ -11,6 +11,7 @@ from app.definition._ressource import HTTPRessource, PingService, UseGuard, UseL
 from app.container import InjectInMethod, InjectInFunction
 from app.services.assets_service import AssetService
 from app.services.chat_service import ChatService
+from app.services.contacts_service import ContactsService
 from app.services.twilio_service import SMSService, verify_twilio_token
 from app.utils.dependencies import get_auth_permission
 
@@ -29,11 +30,11 @@ class SMSTemplateSchedulerModel(SchedulerModel):
 @HTTPRessource(SMS_ONGOING_PREFIX)
 class OnGoingSMSRessource(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self, smsService: SMSService,assetService:AssetService,chatService:ChatService) -> None:
+    def __init__(self, smsService: SMSService,chatService:ChatService,contactService:ContactsService) -> None:
         super().__init__()
         self.smsService: SMSService = smsService
-        self.assetService: AssetService = assetService
         self.chatService: ChatService = chatService
+        self.contactService: ContactsService = contactService
         
     @UseRoles([Role.MFA_OTP])
     @BaseHTTPRessource.HTTPRoute('/otp/')
@@ -57,7 +58,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseRoles([Role.RELAY])
     @UseGuard(CeleryTaskGuard(['']))
     @UsePipe(TemplateParamsPipe('sms'),CeleryTaskPipe)
-    @UsePermission(JWTAssetPermission('html'))
+    @UsePermission(JWTAssetPermission('sms'))
     @BaseHTTPRessource.HTTPRoute('/template/{template}')
     def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,authPermission=Depends(get_auth_permission)):
         ...
@@ -67,8 +68,9 @@ SMS_INCOMING_PREFIX = "sms-incoming"
 @HTTPRessource(SMS_INCOMING_PREFIX )
 class IncomingSMSRessource(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self,) -> None:
+    def __init__(self,contactService:ContactsService) -> None:
         super().__init__(dependencies=[Depends(verify_twilio_token)])
+        self.contactService: ContactsService = contactService
 
     
     @BaseHTTPRessource.HTTPRoute('/chat/')

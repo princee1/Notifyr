@@ -1,6 +1,7 @@
 from app.classes.auth_permission import Role
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.services.chat_service import ChatService
+from app.services.contacts_service import ContactsService
 from app.services.twilio_service import VoiceService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPRessource, UsePermission, UseRoles
 from app.container import InjectInMethod, InjectInFunction
@@ -12,9 +13,11 @@ CALL_ONGOING_PREFIX = 'call-ongoing'
 @HTTPRessource(CALL_ONGOING_PREFIX)
 class OnGoingCallRessources(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self, voiceService: VoiceService) -> None:
+    def __init__(self, voiceService: VoiceService,contactsService:ContactsService,chatService:ChatService) -> None:
         super().__init__()
         self.voiceService = voiceService
+        self.contactsService = contactsService  
+        self.chatService = chatService
 
     @UseRoles([Role.MFA_OTP])
     @BaseHTTPRessource.HTTPRoute('/otp/')

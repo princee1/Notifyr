@@ -1,10 +1,13 @@
 from typing import Literal
+
+from fastapi import HTTPException,status
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
 from app.services.config_service import ConfigService
+from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, task_name
@@ -46,6 +49,15 @@ class TemplateParamsPipe(Pipe):
 
         return {'template':template}
         
+class TemplateQueryPipe(TemplateParamsPipe):
+    def __init__(self,*allowed_assets:RouteAssetType):
+        super().__init__(None)
+        self.allowed_assets = list(allowed_assets)
+
+    def pipe(self, asset:str,template:str):
+        self.assetService.check_asset(asset,self.allowed_assets)
+        self.template_type = asset
+        return super().pipe(template)
 
 class CeleryTaskPipe(Pipe):
     
@@ -66,3 +78,26 @@ class CeleryTaskPipe(Pipe):
         
         setattr(scheduler,'heaviness' , self.celeryService._task_registry[scheduler.task_name]['heaviness'])
         return {'scheduler':scheduler}
+    
+class ContactsIdPipe(Pipe):
+        @InjectInMethod
+        def __init__(self, contactsService:ContactsService):
+            super().__init__(True)
+            self.contactsService = contactsService
+
+        def pipe(self,contact_id:int):
+            return {'contact_id':contact_id}
+
+class RelayPipe(Pipe):
+
+    def pipe(self,relay:str):
+        if relay==None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Relay not specified')
+
+        if relay != 'sms' and relay != 'email':
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Relay not allowed')
+        
+        if relay=='email':
+            relay = 'html'
+
+        return {'relay':relay}
