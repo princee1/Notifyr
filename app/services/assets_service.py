@@ -1,4 +1,6 @@
 from fastapi import HTTPException,status
+
+from app.definition._error import BaseError
 from .config_service import ConfigService
 from app.utils.fileIO import FDFlag
 from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
@@ -18,6 +20,8 @@ REQUEST_DIRECTORY_SEPARATOR = ':'
 
 def path(x): return ROOT_PATH+x
 
+class AssetNotFoundError(BaseError):
+    ...
 
 class Extension(Enum):
     """
@@ -238,3 +242,13 @@ class AssetService(_service.Service):
     def encryptPdf(self, name):
         KEY=""
         self.pdf[name].encrypt(KEY)
+
+    def check_asset(self,asset, allowed_assets:list[str]=None):
+        if asset == None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Asset not specified')
+
+        if allowed_assets == None and asset != "html" and  asset !="sms" and asset != "phone":
+            raise AssetNotFoundError(asset)
+        
+        return asset in allowed_assets
+            
