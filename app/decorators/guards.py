@@ -62,9 +62,12 @@ class TaskWorkerGuard(Guard):
         task_heaviness:TaskHeaviness = scheduler.heaviness
         ...
 
-    class ForceContactsGuard(Guard):
 
-        def __init__(self, model_keys:List[str]):
+class RegisteredContactsGuard(Guard):
+
+        def __init__(self,):
             super().__init__()
             self.contactsService = Get(ContactsService)
-            self.model_keys = model_keys
+        
+        def guard(self):
+            return super().guard()
