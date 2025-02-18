@@ -47,8 +47,8 @@ edit:
 register:
 	python ${src_dir}/main.py --config=${config_dir} --mode=register
 
-redis:
-	docker-compose up --build 
+docker:
+	docker-compose up --build
 
 celery:
 	celery -A ${celery_app} worker --pool=solo --loglevel=info
