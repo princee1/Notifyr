@@ -11,3 +11,4 @@ from .stats_service import *
 from .chat_service import *
 from .model_service import *
 from .twilio_service import *
+from .contacts_service import *

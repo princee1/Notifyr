@@ -1,6 +1,5 @@
 from .config_service import ConfigService
 from .file_service import FileService
-from .security_service import SecurityService
 from app.definition._service import Service,AbstractServiceClass,ServiceClass
 import sqlite3
 import pandas as pd
@@ -14,11 +13,10 @@ class DatabaseService(Service):
 
 
 @ServiceClass
-class SQLiteService(DatabaseService): # logging
-    def __init__(self,configService:ConfigService, securityService:SecurityService, fileService:FileService) -> None:
+class SQLiteService(DatabaseService):
+    def __init__(self,configService:ConfigService, fileService:FileService) -> None:
         super().__init__(configService,fileService)
-        self.securityService = securityService
-    
+
 
 @ServiceClass
 class CSVService(DatabaseService): # analytics
@@ -34,7 +32,7 @@ class MongooseService(DatabaseService): # Chat data
     
 
 @ServiceClass
-class SQLService(DatabaseService): # token blacklist data
+class SQLService(DatabaseService): # token blacklist data and contacts
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
 

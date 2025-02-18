@@ -98,17 +98,17 @@ class Application(EventInterface):
     def add_exception_handlers(self):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-        # @self.app.exception_handler(TypeError)
-        # async def type_error(request,e):
-        #     return JSONResponse({'message':''},500)
+        @self.app.exception_handler(TypeError)
+        async def type_error(request,e):
+            return JSONResponse({'message':''},500)
 
-        # @self.app.exception_handler(AttributeError)
-        # async def attribute_error(request,e):
-        #     return JSONResponse({'message':''},500)
+        @self.app.exception_handler(AttributeError)
+        async def attribute_error(request,e):
+            return JSONResponse({'message':''},500)
         
-        # @self.app.exception_handler(OSError)
-        # async def os_error(request,e):
-        #     return JSONResponse({'message':''},500)
+        @self.app.exception_handler(OSError)
+        async def os_error(request,e):
+            return JSONResponse({'message':''},500)
 
         @self.app.exception_handler(KeyError)
         async def key_error(request,e):

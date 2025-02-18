@@ -40,4 +40,7 @@ class IncomingCallRessources(BaseHTTPRessource):
         self.voiceService = voiceService
         self.chatService = chatService
 
-    pass
+    @BaseHTTPRessource.HTTPRoute('/call/')
+    def voice_relay_otp(self,):
+        pass
+

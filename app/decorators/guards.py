@@ -1,8 +1,10 @@
+from typing import List
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
+from app.services.contacts_service import ContactsService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import flatten_dict
@@ -59,3 +61,10 @@ class TaskWorkerGuard(Guard):
     def guard(self,scheduler:SchedulerModel):
         task_heaviness:TaskHeaviness = scheduler.heaviness
         ...
+
+    class ForceContactsGuard(Guard):
+
+        def __init__(self, model_keys:List[str]):
+            super().__init__()
+            self.contactsService = Get(ContactsService)
+            self.model_keys = model_keys
