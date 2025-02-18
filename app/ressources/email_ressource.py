@@ -1,42 +1,18 @@
-from typing import Annotated, Any, Callable, List, Literal, Optional
 from app.classes.auth_permission import MustHave, Role
-from app.classes.template import HTMLTemplate, TemplateNotFoundError
+from app.classes.template import HTMLTemplate
 from app.definition._service import ServiceStatus
+from app.models.email_model import CustomEmailModel, EmailTemplateModel
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
 from app.container import GetDepends, InjectInMethod
 from app.definition._ressource import HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailSenderService
-from pydantic import BaseModel
-from fastapi import BackgroundTasks, Header, Request, Response, status
+from fastapi import  Header, Request, status
 from app.utils.dependencies import Depends, get_auth_permission, get_request_id, get_response_id
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import  CeleryTask, SchedulerModel
 
-
-    
-class EmailMetaModel(BaseModel):
-    Subject: str
-    From: str
-    To: str | List[str]
-    CC: Optional[str] = None
-    Bcc: Optional[str] = None
-    replyTo: Optional[str] = None
-    Return_Path: Optional[str] = None
-    Priority: Literal['1', '3', '5'] = '1'
-
-class EmailTemplateModel(BaseModel):
-    meta: EmailMetaModel
-    data: dict[str, Any]
-    attachments: Optional[dict[str, Any]] = {}
-
-class CustomEmailModel(BaseModel):
-    meta: EmailMetaModel
-    text_content: str
-    html_content: str
-    attachments: Optional[List[tuple[str, str]]] = []
-    images: Optional[List[tuple[str, str]]] = []
 
 class EmailTemplateSchedulerModel(SchedulerModel):
     content: EmailTemplateModel
