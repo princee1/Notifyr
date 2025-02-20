@@ -4,13 +4,12 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.services.celery_service import BackgroundTaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
-from app.container import InjectInMethod
+from app.container import Get, InjectInMethod
 from fastapi import HTTPException, Request, Response, FastAPI,status
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from starlette.datastructures import MutableHeaders,Headers
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
-from app.interface.injectable_middleware import InjectableMiddlewareInterface
 from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
 from app.utils.dependencies import get_api_key, get_client_ip,get_bearer_token_from_request, get_response_id
 from cryptography.fernet import InvalidToken
@@ -47,11 +46,14 @@ class ProcessTimeMiddleWare(MiddleWare):
         response.headers["X-Process-Time"] = str(process_time) + ' (s)'
         return response
 
-class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
+class SecurityMiddleWare(MiddleWare):
     priority = MiddlewarePriority.SECURITY
     def __init__(self, app, dispatch=None) -> None:
-        MiddleWare.__init__(self, app, dispatch)
-        InjectableMiddlewareInterface.__init__(self)
+        super().__init__(self, app, dispatch)
+        self.securityService = Get(SecurityService)
+        self.configService = Get(ConfigService)
+
+
 
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         current_time = time.time()
@@ -70,50 +72,33 @@ class SecurityMiddleWare(MiddleWare, InjectableMiddlewareInterface):
             return response
         except InvalidToken:
             return Response(status_code=status.HTTP_401_UNAUTHORIZED, content='Unauthorized')
-
-    @InjectInMethod
-    def inject_middleware(self, securityService: SecurityService, configService: ConfigService):
-        self.securityService = securityService
-        self.configService = configService
-
-class AnalyticsMiddleware(MiddleWare, InjectableMiddlewareInterface):
+       
+class AnalyticsMiddleware(MiddleWare):
     priority = MiddlewarePriority.ANALYTICS
     async def dispatch(self, request, call_next):
         return await call_next(request)
 
-class JWTAuthMiddleware(MiddleWare, InjectableMiddlewareInterface):
+class JWTAuthMiddleware(MiddleWare):
     priority = MiddlewarePriority.AUTH
     def __init__(self, app, dispatch=None) -> None:
-        MiddleWare.__init__(self, app, dispatch)
-        InjectableMiddlewareInterface.__init__(self)
-
-    @InjectInMethod
-    def inject_middleware(self, jwtService: JWTAuthService):
-        self.jwtService = jwtService
+        super().__init__(self, app, dispatch)
+        self.jwtService:JWTAuthService = Get(JWTAuthService)
 
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):  
-        try:
-            token = get_bearer_token_from_request(request)
-            client_ip = get_client_ip(request)
-            authPermission: AuthPermission = self.jwtService.verify_permission(token, client_ip)
-            authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
-            request.state.authPermission = authPermission
-            
-        except KeyError as e:
-            return JSONResponse('Error while getting value',status_code=status.HTTP_400_BAD_REQUEST)
+        token = get_bearer_token_from_request(request)
+        client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
+        authPermission: AuthPermission = self.jwtService.verify_permission(token, client_ip)
+        authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+        request.state.authPermission = authPermission
 
         return await call_next(request)
        
 
-class BackgroundTaskMiddleware(MiddleWare,InjectableMiddlewareInterface):
+class BackgroundTaskMiddleware(MiddleWare):
     priority = MiddlewarePriority.BACKGROUND_TASK_SERVICE
     def __init__(self, app, dispatch = None):
-        MiddleWare.__init__(self, app, dispatch)
-        InjectableMiddlewareInterface.__init__(self)
-    
-    @InjectInMethod
-    def inject_middleware(self,backgroundTaskService:BackgroundTaskService):
-        self.backgroundTaskService = backgroundTaskService
+        super().__init__(self, app, dispatch)
+        self.backgroundTaskService:BackgroundTaskService = Get(BackgroundTaskMiddleware)
     
     async def dispatch(self, request:Request, call_next):
         request_id = generateId(25)
