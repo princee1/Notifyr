@@ -6,6 +6,7 @@ from app.decorators.guards import CeleryTaskGuard, ContactsGuard
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe
+from app.models.otp_model import OTPModel
 from app.services.celery_service import CeleryService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
@@ -38,7 +39,7 @@ class OnGoingCallRessources(BaseHTTPRessource):
 
     @UseRoles([Role.MFA_OTP])
     @BaseHTTPRessource.HTTPRoute('/otp/',methods=['POST'])
-    def voice_relay_otp(self,):
+    def voice_relay_otp(self,otpModel:OTPModel,authPermission=Depends(get_auth_permission)):
         pass
     
     @UsePermission(JWTAssetPermission('phone'))
@@ -47,7 +48,7 @@ class OnGoingCallRessources(BaseHTTPRessource):
     @UseGuard(CeleryTaskGuard(['']))
     @UseRoles([Role.RELAY])
     @BaseHTTPRessource.HTTPRoute('/template/{template}/',methods=['POST'])
-    def voice_template(self,template:str,scheduler: VoiceSchedulerModel):
+    def voice_template(self,template:str,scheduler: VoiceSchedulerModel,authPermission=Depends(get_auth_permission)):
         ...
 
     @UseRoles([Role.RELAY])
@@ -55,13 +56,13 @@ class OnGoingCallRessources(BaseHTTPRessource):
     @UseGuard(CeleryTaskGuard(['']))
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.HTTPRoute('/custom',methods=['POST'])
-    def voice_custom(self,scheduler: VoiceSchedulerModel):
+    def voice_custom(self,scheduler: VoiceSchedulerModel,authPermission=Depends(get_auth_permission)):
         ...
     
     @UseRoles([Role.MFA_OTP])
     @UseGuard(ContactsGuard)
     @BaseHTTPRessource.HTTPRoute('/authenticate/',methods=['GET'])
-    async def voice_authenticate(self):
+    async def voice_authenticate(self,authPermission=Depends(get_auth_permission)):
         ...
     
 

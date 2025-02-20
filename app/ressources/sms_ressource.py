@@ -9,6 +9,7 @@ from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe
 from app.definition._ressource import HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import InjectInMethod, InjectInFunction
+from app.models.otp_model import OTPModel
 from app.services.assets_service import AssetService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
@@ -41,7 +42,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         
     @UseRoles([Role.MFA_OTP])
     @BaseHTTPRessource.HTTPRoute('/otp/')
-    def sms_relay_otp(self,authPermission=Depends(get_auth_permission)):
+    def sms_relay_otp(self,otpModel:OTPModel,authPermission=Depends(get_auth_permission)):
         pass
 
     @UseLimiter(limit_value='200/minute')
