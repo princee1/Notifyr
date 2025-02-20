@@ -20,7 +20,6 @@ CALL_ONGOING_PREFIX = 'call-ongoing'
 class VoiceSchedulerModel(SchedulerModel):
     content: Any # TODO
 
-@UseRoles([Role.TWILIO])
 @PingService([VoiceService])
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
 @UsePermission(JWTRouteHTTPPermission)

@@ -25,7 +25,6 @@ class SMSSchedulerModel(SchedulerModel):
     content: Any # TODO
 
 
-@UseRoles([Role.TWILIO])
 @PingService([SMSService])
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
 @UsePermission(JWTRouteHTTPPermission)
