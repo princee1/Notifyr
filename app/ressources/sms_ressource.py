@@ -11,6 +11,7 @@ from app.definition._ressource import HTTPRessource, PingService, UseGuard, UseL
 from app.container import InjectInMethod, InjectInFunction
 from app.services.assets_service import AssetService
 from app.services.chat_service import ChatService
+from app.services.contacts_service import ContactsService
 from app.services.twilio_service import SMSService, verify_twilio_token
 from app.utils.dependencies import get_auth_permission
 
@@ -30,8 +31,8 @@ class SMSTemplateSchedulerModel(SchedulerModel):
 class OnGoingSMSRessource(BaseHTTPRessource):
     @InjectInMethod
     def __init__(self, smsService: SMSService,assetService:AssetService,chatService:ChatService) -> None:
-        super().__init__()
         self.smsService: SMSService = smsService
+        super().__init__(dependencies=[Depends(self.smsService.verify_twilio_token)])
         self.assetService: AssetService = assetService
         self.chatService: ChatService = chatService
         
@@ -62,15 +63,27 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,authPermission=Depends(get_auth_permission)):
         ...
 
+
+
 SMS_INCOMING_PREFIX = "sms-incoming"
 
 @HTTPRessource(SMS_INCOMING_PREFIX )
 class IncomingSMSRessource(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self,) -> None:
-        super().__init__(dependencies=[Depends(verify_twilio_token)])
+    def __init__(self,smsService:SMSService,contactsService:ContactsService,chatService:ChatService) -> None:
+        self.smsService: SMSService = smsService
+        self.contactsService: ContactsService = contactsService
+        self.chatService: ChatService = chatService
+        super().__init__(dependencies=[Depends(self.smsService.verify_twilio_token)])
 
+    @BaseHTTPRessource.HTTPRoute('/menu/',methods=['POST'])
+    def sms_menu(self,authPermission=Depends(get_auth_permission)):
+        pass
     
-    @BaseHTTPRessource.HTTPRoute('/chat/')
+    @BaseHTTPRessource.HTTPRoute('/live-chat/',methods=['POST'])
     def sms_chat(self,authPermission=Depends(get_auth_permission)):
+        pass
+
+    @BaseHTTPRessource.HTTPRoute('/automate-response/',methods=['POST'])
+    def sms_automated(self,authPermission=Depends(get_auth_permission)):
         pass
