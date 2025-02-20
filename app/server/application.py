@@ -120,11 +120,24 @@ class Application(EventInterface):
             print(e)
             return JSONResponse({'message':'The service requested is not available in this version'},status_code=504)
 
+        @self.app.exception_handler(MemoryError)
+        async def memory_error(request, e):
+            return JSONResponse({'message':'Memory Error'},status_code=500)
+
+        @self.app.exception_handler(NameError)
+        async def name_error(request, e):
+           return JSONResponse({'message':'Name Error'},status_code=500)
+
+        @self.app.exception_handler(TimeoutError)
+        async def timeout_error(request, e):
+            return JSONResponse({'message':'Timeout Error'},status_code=500)
+        
         @self.app.exception_handler(Exception)
         async def base_exception(request, e):
             print(e)
             print(e.__class__)
             return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={'message':'An unexpected error occurred!'})
+        
 
     def set_httpMode(self):
         self.mode = self.configService.HTTP_MODE
