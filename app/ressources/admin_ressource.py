@@ -1,21 +1,22 @@
 from dataclasses import dataclass
 from typing import Annotated, Any, List, Optional
-from fastapi import Depends, Header, Request, Response,HTTPException,status
+from fastapi import Depends, Header, Query, Request, Response,HTTPException,status
 from fastapi.responses import JSONResponse
 from app.classes.celery import SchedulerModel, TaskType
 from app.decorators.guards import CeleryTaskGuard
 from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService
+from app.services.database_service import MongooseService
 from app.services.security_service import JWTAuthService,SecurityService
 from app.services.config_service import ConfigService
 from app.utils.dependencies import get_admin_token, get_auth_permission, get_request_id
 from app.container import InjectInMethod,Get
-from app.definition._ressource import Guard, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
+from app.definition._ressource import Guard, PingService, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthPermission, Role,RoutePermission,AssetsPermission, TokensModel
 from pydantic import BaseModel, RootModel,field_validator
 from app.decorators.handlers import ServiceAvailabilityHandler
-from app.decorators.pipes import AuthPermissionPipe, CeleryTaskPipe
+from app.decorators.pipes import AuthClientPipe, AuthPermissionPipe, CeleryTaskPipe
 from app.utils.validation import ipv4_validator
 from slowapi.util import get_remote_address
 
@@ -55,11 +56,11 @@ class AdminRessource(BaseHTTPRessource):
         self.configService = configService
         self.jwtAuthService = jwtAuthService
         self.securityService = securityService
-        self.assetService = assetService
         self.celeryService:CeleryService = Get(CeleryService)
 
     @UseLimiter(limit_value ='20/week')
     @UsePipe(CeleryTaskPipe)
+    @PingService([CeleryService])
     @UseGuard(CeleryTaskGuard(task_names=['task_blacklist_client'],task_types=[TaskType.ONCE]))
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}',methods=[HTTPMethod.DELETE])
     def blacklist_tokens(self,client_id:str,request:Request ,scheduler:BlacklistScheduler,authPermission=Depends(get_auth_permission)):
@@ -67,17 +68,27 @@ class AdminRessource(BaseHTTPRessource):
         # TODO add to database 
         return self.celeryService.trigger_task_from_scheduler(scheduler,client_id)
     
+
     @UseLimiter(limit_value='1/day')
+    @PingService([MongooseService,JWTAuthService])
     @BaseHTTPRessource.HTTPRoute('/invalidate-all/',methods=[HTTPMethod.DELETE])
     def invalidate_all_tokens(self,request:Request,authPermission=Depends(get_auth_permission)):
-        self.jwtAuthService.pingService()
+       
         self.jwtAuthService.set_generation_id(True)
         tokens = self._create_tokens(authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Tokens successfully invalidated",
                                                                     "details": "Even if you're the admin old token wont be valid anymore",
                                                                     "tokens":tokens})
     
+    @UseLimiter(limit_value='10/day')
+    @UsePipe(AuthClientPipe)
+    @PingService([MongooseService,JWTAuthService])
+    @BaseHTTPRessource.HTTPRoute('/invalidate/{client}',methods=[HTTPMethod.DELETE],dependencies=None)
+    def invalidate_tokens(self,client:str,scope:str = Query(), authPermission=Depends(get_auth_permission)):
+        ...
+
     @UseLimiter(limit_value='4/day')
+    @PingService([MongooseService,JWTAuthService])
     @BaseHTTPRessource.HTTPRoute('/issue-auth/',methods=[HTTPMethod.GET])
     def issue_auth_token(self,authModel:AuthPermissionModel | List[AuthPermissionModel],request:Request, authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.pingService()

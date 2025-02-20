@@ -49,9 +49,9 @@ class AuthPermission(TypedDict):
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
-    #allowed_assets:Dict[str,AssetsPermission]
     allowed_assets:List[str]
-
+    challenge: str= None # TODO 
+    scope:list[str] = None # TODO
 
 class TokensModel(BaseModel):
     tokens: str | list[str]

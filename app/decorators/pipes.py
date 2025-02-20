@@ -66,3 +66,15 @@ class CeleryTaskPipe(Pipe):
         
         setattr(scheduler,'heaviness' , self.celeryService._task_registry[scheduler.task_name]['heaviness'])
         return {'scheduler':scheduler}
+
+
+
+class AuthClientPipe(Pipe):
+
+    @InjectInMethod
+    def __init__(self,jwtAuthService:JWTAuthService):
+        super().__init__(True)
+        self.jwtAuthService = jwtAuthService
+    
+    def pipe(self,client:str,scope:str):
+        return {'client':client,'scope':scope}
