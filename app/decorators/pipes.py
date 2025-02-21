@@ -85,7 +85,7 @@ class ContactsIdPipe(Pipe):
             super().__init__(True)
             self.contactsService = contactsService
 
-        def pipe(self,contact_id:int):
+        def pipe(self,contact_id:str):
             return {'contact_id':contact_id}
 
 class RelayPipe(Pipe):
