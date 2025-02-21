@@ -1,9 +1,9 @@
 exports.handler = function(context, event, callback) {
-  const assets = Runtime.getAssets();
-  const privateMessageAsset = assets['/message.js'];
-  const privateMessagePath = privateMessageAsset.path;
-  const privateMessage = require(privateMessagePath);
-  const twiml = new Twilio.twiml.MessagingResponse();
-  twiml.message(privateMessage());
+  const twiml = new Twilio.twiml.VoiceResponse();
+  console.log(context);
+  console.log(event)
+  console.log(event.request.headers);
+  twiml.say('Hello World!');
   callback(null, twiml);
+
 };
