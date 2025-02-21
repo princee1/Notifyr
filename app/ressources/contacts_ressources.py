@@ -18,6 +18,7 @@ class ContactsRessource(BaseHTTPRessource):
         super().__init__()
         self.contactsService = contactsService
 
+    @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Get('/{contact_id}')
     def get_contact(self,):
         ...

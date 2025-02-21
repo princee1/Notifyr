@@ -10,6 +10,7 @@ from app.models.otp_model import OTPModel
 from app.services.celery_service import CeleryService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
+from app.services.logger_service import LoggerService
 from app.services.twilio_service import VoiceService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod, InjectInFunction
@@ -75,10 +76,11 @@ CALL_INCOMING_PREFIX = "call-incoming"
 @HTTPRessource(CALL_INCOMING_PREFIX)
 class IncomingCallRessources(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self, voiceService: VoiceService,chatService:ChatService,contactsService:ContactsService) -> None:
+    def __init__(self, voiceService: VoiceService,chatService:ChatService,contactsService:ContactsService,loggerService:LoggerService) -> None:
         self.voiceService = voiceService
         self.chatService = chatService
         self.contactsService = contactsService
+        self.loggerService = loggerService
         super().__init__(dependencies=[Depends(self.voiceService.verify_twilio_token)])
 
 
@@ -102,3 +104,7 @@ class IncomingCallRessources(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/status/',methods=['POST'])
     async def voice_call_status_changes(self,authPermission=Depends(get_auth_permission)):
         ...
+
+    @BaseHTTPRessource.HTTPRoute('/error/',methods=['POST'])
+    async def voice_error(self,authPermission=Depends(get_auth_permission)):
+        pass
