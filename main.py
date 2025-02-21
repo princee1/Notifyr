@@ -25,7 +25,7 @@ PrettyPrinter_.show(1, print_stack=False)
 ########################################################################
 from app.container import build_container, Get
 build_container()
-
+########################################################################
 from app.server.application import AppParameter, RESSOURCES
 from app.server.apps_registration import createApps, editApps,start_applications
 from app.server.access_registration import prompt_client_registration
@@ -35,24 +35,10 @@ from app.services.config_service import ConfigService
 from app.utils.question import ask_question,ConfirmInputHandler
 # from definition._ressource import DECORATOR_METADATA,METADATA_ROUTES,ROUTES,PROTECTED_ROUTES
 ########################################################################
-
 configService:ConfigService = Get(ConfigService)
 configService.load_configApp(config_file)
 apps_data = configService.config_json_app.data
-#TODO modify the metadata
 
-
-# NOTE Keep this code for later use
-# c_flag = True
-# while c_flag:
-#     config_json_app = JSONFile(config_file)
-#     config_file = config_file if config_json_exists else None
-#     if not config_file:
-#         show(0.5)
-#         print(f"Invalid config file: {config_file}")
-#         config_file = inputFilePath("Enter a valid path to the config file",)
-#     else:
-#         c_flag = False
 valid = True
 if not apps_data or ConfigAppConstant.META_KEY not in apps_data or ConfigAppConstant.APPS_KEY not in apps_data or not apps_data[ConfigAppConstant.APPS_KEY]:
     mode = RunMode.CREATE
@@ -112,7 +98,7 @@ while True:
             PrettyPrinter_.error(f"Errors while load apps")
             exit(0)
 
-
+########################################################################
 PrettyPrinter_.show(0, pause_before=1)
 PrettyPrinter_.info('Starting applications...')
 PrettyPrinter_.space_line()
