@@ -1,17 +1,14 @@
 
 
-from typing import Any
 from fastapi import Depends, Query
 from app.classes.auth_permission import Role
-from app.classes.celery import SchedulerModel, TaskType
 from app.container import InjectInMethod
-from app.decorators.guards import CeleryTaskGuard
-from app.decorators.permissions import JWTAssetPermission, JWTQueryAssetPermission, JWTRouteHTTPPermission
+from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UsePermission, UsePipe, UseRoles
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.contacts_service import ContactsService
 from app.utils.dependencies import get_auth_permission
-from app.decorators.pipes import ContactsIdPipe, RelayPipe, TemplateParamsPipe, TemplateQueryPipe
+from app.decorators.pipes import ContactsIdPipe, RelayPipe
 
 CONTACTS_PREFIX = 'contacts'
 
@@ -32,7 +29,9 @@ class ContactsRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/{relay}')
     def create_contact(self,relay:str, authPermission=Depends(get_auth_permission)):
         ...
-
+    
+    @UseRoles([Role.TWILIO])
+    @UsePipe(ContactsIdPipe)
     @BaseHTTPRessource.Get('/{contact_id}')
     def read_contact(self,contact_id:str, authPermission=Depends(get_auth_permission)):
         ...
