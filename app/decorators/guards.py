@@ -5,15 +5,25 @@ from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
+from app.services.logger_service import LoggerService
+from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import flatten_dict
 
 class TwilioGuard(Guard):
-    ...
+    
+    def __init__(self,path:str):
+        super().__init__()
+        self.twilioService = Get(TwilioService)
+        self.configService = Get(ConfigService)
+        self.loggerService = Get(LoggerService)
 
-class PlivoGuard(Guard):
-    ...
+        self.path = path
+    
+    def guard(self,x_twilio_signature:str):
+        ...
+        return True,''
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
@@ -62,9 +72,16 @@ class TaskWorkerGuard(Guard):
         task_heaviness:TaskHeaviness = scheduler.heaviness
         ...
 
-    class ForceContactsGuard(Guard):
+class ContactsGuard(Guard):
+        """
+        Guard to check if the callee is in the contact list
+        """
 
         def __init__(self, model_keys:List[str]):
             super().__init__()
             self.contactsService = Get(ContactsService)
             self.model_keys = model_keys
+
+
+class TwilioLookUpPhoneGuard(Guard):
+    ...

@@ -42,6 +42,7 @@ class ConfigService(_service.Service):
             path = find_dotenv(ENV)
             load_dotenv(path)
         self.config_json_app:JSONFile = None
+        self.isServerScope = None
 
     def relative_path(self, path):
         return self.BASE_DIR +path
@@ -162,7 +163,6 @@ class ConfigService(_service.Service):
                                 # CHAT CONFIG #
         
         self.CHAT_EXPIRATION = ConfigService.parseToInt(self.getenv("CHAT_EXPIRATION"),3600)
-
 
     def verify(self):
         if self.API_EXPIRATION < self.AUTH_EXPIRATION:

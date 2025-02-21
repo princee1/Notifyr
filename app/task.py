@@ -11,14 +11,16 @@ from app.services.security_service import JWTAuthService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 
+
 ##############################################           ##################################################
 
-
+IS_SERVER_SCOPE=True
 exe_path = shutil.which("celery").replace(".EXE", "")
 ##############################################           ##################################################
 
 if sys.argv[0] == exe_path:
     PrettyPrinter_.message('Building container for the celery worker')
+    IS_SERVER_SCOPE = False
     build_container(False)
 
 ##############################################           ##################################################
@@ -43,6 +45,7 @@ TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 ##############################################           ##################################################
 
 configService: ConfigService = Get(ConfigService)
+configService.isServerScope = IS_SERVER_SCOPE
 
 ##############################################           ##################################################
 

@@ -76,7 +76,19 @@ class CeleryTaskHandler(Handler):
             
         except AlreadyRegistered as e:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,detail={})
-        
+
         except NotRegistered as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={})
             
+        except MaxRetriesExceededError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={})
+        
+class TwilioHandler(Handler):
+
+    def handle(self, function, *args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        
+        except BaseError as e:
+            raise AttributeError
+    
