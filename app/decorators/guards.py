@@ -72,16 +72,18 @@ class TaskWorkerGuard(Guard):
         task_heaviness:TaskHeaviness = scheduler.heaviness
         ...
 
-class ContactsGuard(Guard):
-        """
-        Guard to check if the callee is in the contact list
-        """
 
-        def __init__(self, model_keys:List[str]):
-            super().__init__()
-            self.contactsService = Get(ContactsService)
-            self.model_keys = model_keys
+class RegisteredContactsGuard(Guard):
+    """
+    Guard to check if the callee is in the contact list
+    """
+
+    def __init__(self,model_keys:List[str]):
+        super().__init__()
+        self.contactsService = Get(ContactsService)
+        self.model_keys = model_keys
 
 
 class TwilioLookUpPhoneGuard(Guard):
-    ...
+    def guard(self):
+        return super().guard()

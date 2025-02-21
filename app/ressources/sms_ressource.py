@@ -32,13 +32,11 @@ class SMSSchedulerModel(SchedulerModel):
 @HTTPRessource(SMS_ONGOING_PREFIX)
 class OnGoingSMSRessource(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self, smsService: SMSService,assetService:AssetService,chatService:ChatService) -> None:
+    def __init__(self, smsService: SMSService,chatService:ChatService,contactService:ContactsService) -> None:
+        super().__init__()
         self.smsService: SMSService = smsService
-        self.assetService: AssetService = assetService
         self.chatService: ChatService = chatService
-
-        super().__init__(dependencies=[Depends(self.smsService.verify_twilio_token)])
-
+        self.contactService: ContactsService = contactService
         
     @UseRoles([Role.MFA_OTP])
     @BaseHTTPRessource.HTTPRoute('/otp/')

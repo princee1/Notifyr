@@ -8,6 +8,8 @@ from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError,CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
+from app.services.assets_service import AssetNotFoundError
+
 
 class ServiceAvailabilityHandler(Handler):
     
@@ -30,7 +32,10 @@ class TemplateHandler(Handler):
     def handle(self, function, *args, **kwargs):
         try:
             return function(*args, **kwargs)
-            
+
+        except AssetNotFoundError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail='Asset not found')
+        
         except TemplateNotFoundError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail='Template not found')
         
