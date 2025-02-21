@@ -101,3 +101,13 @@ class RelayPipe(Pipe):
             relay = 'html'
 
         return {'relay':relay}
+
+class AuthClientPipe(Pipe):
+
+    @InjectInMethod
+    def __init__(self,jwtAuthService:JWTAuthService):
+        super().__init__(True)
+        self.jwtAuthService = jwtAuthService
+    
+    def pipe(self,client:str,scope:str):
+        return {'client':client,'scope':scope}
