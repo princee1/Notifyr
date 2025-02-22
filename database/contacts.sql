@@ -5,7 +5,7 @@ SET search_path TO contacts;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS Contact (
-    contact_id  UUID PRIMARY KEY DEFAULT uuid_generate_v5(),
+    PRIMARY KEY contact_id  UUID DEFAULT uuid_generate_v5(),
     first_name  VARCHAR(50) NOT NULL,
     last_name   VARCHAR(50) NOT NULL,
     email       VARCHAR(50) UNIQUE NOT NULL,
@@ -15,11 +15,11 @@ CREATE TABLE IF NOT EXISTS Contact (
 )
 
 CREATE TABLE IF NOT EXISTS Security (
-    security_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    contact_id  UNIQUE UUID REFERENCES Contact(contact_id),
+    PRIMARY KEY security_id UUID  DEFAULT uuid_generate_v4(),
+    FOREIGN KEY contact_id UUID REFERENCES Contact(contact_id) ON DELETE CASCADE ON UPDATE CASCADE,
     security_code TEXT,
     security_phrase TEXT,
-    embedding_vector FLOAT[],
+    voice_embedding FLOAT[],
     created_at  TIMESTAMP DEFAULT NOW(),
     updated_at  TIMESTAMP DEFAULT NOW()
 )
