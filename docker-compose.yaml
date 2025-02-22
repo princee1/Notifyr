@@ -2,8 +2,11 @@
 services:
   redis:
     image: redis #Queue for the taks
+    container_name: redis
+    restart: always
     ports:
       - 6379:6379
+  
 
   redis-commander:
     container_name: redis-commander
@@ -39,18 +42,31 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-  
-  adminer:
-    image: adminer:latest
-    container_name: my-adminer
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
     restart: always
+    hostname: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
-      - "8080:8080"
+      - "8080:8088"
     depends_on:
       - postgres
-    environment:
-      ADMINER_DEFAULT_SERVER: postgres
-  
+
+  # adminer:
+  #   image: adminer:latest
+  #   container_name: my-adminer
+  #   restart: always
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - postgres
+  #   environment:
+  #     ADMINER_DEFAULT_SERVER: postgres
+
 volumes:
   mongo-data:
     driver: local
