@@ -42,13 +42,8 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/otp/')
     def sms_relay_otp(self,otpModel:OTPModel,authPermission=Depends(get_auth_permission)):
         pass
-
-    @UseLimiter(limit_value='200/minute')
-    @BaseHTTPRessource.HTTPRoute('/chat/')
-    def sms_chat(self,model:OnGoingSMSModel,authPermission=Depends(get_auth_permission)):
-        pass
-        
-    @UseRoles([Role.RELAY])
+    
+    @UseRoles([Role.RELAY])    
     @UsePipe(CeleryTaskPipe)
     @UseGuard(CeleryTaskGuard(['']))
     @UseHandler(CeleryTaskHandler)
