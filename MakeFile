@@ -9,7 +9,7 @@ cleandep:
 	pipreqs --clean requirements_dev.txt
 
 getdep: 
-	pipreqs --savepath requirements_dev.txt --force .
+	pipreqs --savepath requirements_dev.txt --force app/
 
 setenv:
 	cp base.env .env
