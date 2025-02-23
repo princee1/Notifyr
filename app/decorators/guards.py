@@ -11,20 +11,6 @@ from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import flatten_dict
 
-class TwilioGuard(Guard):
-    
-    def __init__(self,path:str):
-        super().__init__()
-        self.twilioService = Get(TwilioService)
-        self.configService = Get(ConfigService)
-        self.loggerService = Get(LoggerService)
-
-        self.path = path
-    
-    def guard(self,x_twilio_signature:str):
-        ...
-        return True,''
-
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
         super().__init__()

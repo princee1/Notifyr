@@ -3,7 +3,7 @@ https://www.youtube.com/watch?v=-AChTCBoTUM
 """
 
 from typing import Annotated
-from fastapi import Header
+from fastapi import HTTPException, Header, Request
 from app.definition import _service
 from app.services.logger_service import LoggerService
 from .config_service import ConfigService
@@ -31,7 +31,17 @@ class BaseTwilioCommunication(_service.Service):
         self.configService = configService
         self.twilioService = twilioService
     
-    async def verify_twilio_token(self,x_twilio_signature: Annotated[str, Header()]):
+    async def verify_twilio_token(self,request:Request):
+        twilio_signature = request.headers.get("X-Twilio-Signature", "")
+
+        full_url = str(request.url)
+
+        form_data = await request.form()
+        params = {key: form_data[key] for key in form_data}
+
+        validator = RequestValidator(self.configService.TWILIO_AUTH_TOKEN)
+        if not validator.validate(full_url, params, twilio_signature):
+            raise HTTPException(status_code=403, detail="Invalid Twilio Signature")
         ...
 
 

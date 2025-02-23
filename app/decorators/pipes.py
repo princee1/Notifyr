@@ -11,6 +11,7 @@ from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, task_name
+from app.services.twilio_service import TwilioService
 
 class AuthPermissionPipe(Pipe):
 
@@ -86,6 +87,7 @@ class ContactsIdPipe(Pipe):
             self.contactsService = contactsService
 
         def pipe(self,contact_id:str):
+            # TODO check if it is 
             return {'contact_id':contact_id}
 
 class RelayPipe(Pipe):
@@ -101,6 +103,19 @@ class RelayPipe(Pipe):
             relay = 'html'
 
         return {'relay':relay}
+    
+
+class TwilioNumberPipe(Pipe):
+
+    @InjectInMethod
+    def __init__(self, phone_number:str):
+        super().__init__(True)
+        self.twilioService = Get(TwilioService)
+        self.configService = Get(ConfigService)
+
+        self.phone_number = phone_number
+    
+    
 
 class AuthClientPipe(Pipe):
 
