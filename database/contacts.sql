@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS Contact (
     last_name   VARCHAR(50) NOT NULL,
     email       VARCHAR(50) UNIQUE NOT NULL,
     phone       VARCHAR(50) UNIQUE,
+    app_registered  BOOLEAN DEFAULT FALSE,
     created_at  TIMESTAMP DEFAULT NOW(),
     updated_at  TIMESTAMP DEFAULT NOW()
 )

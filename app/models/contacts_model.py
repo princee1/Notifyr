@@ -6,8 +6,8 @@ class ContactModel(Model):
     id = fields.IntField(pk=True)
     first_name = fields.CharField(max_length=255)
     last_name = fields.CharField(max_length=255)
-    email = fields.CharField(max_length=255)
-    phone = fields.CharField(max_length=255)
+    email = fields.CharField(max_length=255, null=False, unique=True)
+    phone = fields.CharField(max_length=255, null=False, unique=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 

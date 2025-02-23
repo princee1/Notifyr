@@ -5,6 +5,7 @@ from app.classes.auth_permission import Role
 from app.container import InjectInMethod
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UsePermission, UsePipe, UseRoles
+from app.models.contacts_model import ContactModel
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.contacts_service import ContactsService
 from app.utils.dependencies import get_auth_permission
@@ -36,6 +37,7 @@ class ContactsRessource(BaseHTTPRessource):
     def read_contact(self,contact_id:str, authPermission=Depends(get_auth_permission)):
         ...
 
+    @UseRoles([Role.TWILIO])
     @UsePipe(ContactsIdPipe)
     @BaseHTTPRessource.HTTPRoute('/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT])
     def update_contact(self, contact_id: str, authPermission=Depends(get_auth_permission)):
@@ -44,6 +46,12 @@ class ContactsRessource(BaseHTTPRessource):
     @UsePipe(ContactsIdPipe)
     @BaseHTTPRessource.Delete('/{contact_id}')
     def delete_contact(self, contact_id: str,authPermission=Depends(get_auth_permission)):
+        ...
+
+    @UseRoles([Role.TWILIO])
+    @UsePipe(ContactsIdPipe)
+    @BaseHTTPRessource.Post('/security/{contact_id}')
+    def update_contact_security(self, contact_id: str, authPermission=Depends(get_auth_permission)):
         ...
 
     @UsePipe(RelayPipe)
@@ -60,8 +68,3 @@ class ContactsRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/resubscribe/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
     def resubscribe_contact(self, contact_id: str,relay:str =Query(),authPermission=Depends(get_auth_permission)):
         ...
-
-    @BaseHTTPRessource.Post('/notify/{notify_id}')
-    def notify_contact(self,notify_id:str,authPermission=Depends(get_auth_permission)):
-        ...
-
