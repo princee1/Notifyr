@@ -2,7 +2,7 @@ from typing import Any
 from fastapi import Depends
 from app.classes.auth_permission import Role
 from app.classes.celery import SchedulerModel
-from app.decorators.guards import CeleryTaskGuard, ContactsGuard
+from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe
@@ -35,7 +35,7 @@ class OnGoingCallRessources(BaseHTTPRessource):
         self.contactsService = contactsService
         self.celeryService: CeleryService = Get(CeleryService)
 
-        super().__init__(dependencies=[Depends(self.voiceService.verify_twilio_token)])
+        super().__init__()
 
 
     @UseRoles([Role.MFA_OTP])
@@ -61,7 +61,7 @@ class OnGoingCallRessources(BaseHTTPRessource):
         ...
     
     @UseRoles([Role.MFA_OTP])
-    @UseGuard(ContactsGuard)
+    @UseGuard(RegisteredContactsGuard)
     @BaseHTTPRessource.HTTPRoute('/authenticate/',methods=['GET'])
     async def voice_authenticate(self,authPermission=Depends(get_auth_permission)):
         ...

@@ -47,7 +47,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(CeleryTaskPipe)
     @UseGuard(CeleryTaskGuard(['']))
     @UseHandler(CeleryTaskHandler)
-    @BaseHTTPRessource.HTTPRoute('/simple/')
+    @BaseHTTPRessource.HTTPRoute('/custom/')
     def sms_simple_message(self,scheduler: SMSSchedulerModel,authPermission=Depends(get_auth_permission)):
         pass
     
@@ -92,4 +92,12 @@ class IncomingSMSRessource(BaseHTTPRessource):
     
     @BaseHTTPRessource.HTTPRoute('/handler_fail/',methods=['POST'])
     async def sms_primary_handler_fail(self,authPermission=Depends(get_auth_permission)):
+        pass
+
+    @BaseHTTPRessource.HTTPRoute('/status/',methods=['POST'])
+    async def sms_call_status_changes(self,authPermission=Depends(get_auth_permission)):
+        ...
+
+    @BaseHTTPRessource.HTTPRoute('/error/',methods=['POST'])
+    async def sms_error(self,authPermission=Depends(get_auth_permission)):
         pass
