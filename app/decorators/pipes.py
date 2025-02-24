@@ -5,6 +5,8 @@ from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
+from app.models.otp_model import OTPModel
+from app.models.sms_model import OnGoingSMSModel
 from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
@@ -12,6 +14,7 @@ from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, task_name
 from app.services.twilio_service import TwilioService
+from app.utils.validation import phone_number_validator
 
 class AuthPermissionPipe(Pipe):
 
@@ -105,17 +108,38 @@ class RelayPipe(Pipe):
         return {'relay':relay}
     
 
-class TwilioNumberPipe(Pipe):
+class TwilioFromPipe(Pipe):
 
     @InjectInMethod
     def __init__(self, phone_number:str):
         super().__init__(True)
-        self.twilioService = Get(TwilioService)
+        self.twilioService:TwilioService = Get(TwilioService)
         self.configService = Get(ConfigService)
 
         self.phone_number = phone_number
     
-    
+    def pipe(self,scheduler:SchedulerModel,otpModel:OTPModel=None):
+
+        if scheduler!= None:
+            content:OnGoingSMSModel = scheduler.content
+            content.from_ = self.setFrom_(content.from_)
+            content.to = self.twilioService.parse_to_phone_format(content.to)
+            return {'scheduler':scheduler}
+
+        if otpModel != None:
+            otpModel.to = self.twilioService.parse_to_phone_format(otpModel.to)
+            otpModel.from_ = self.setFrom_(otpModel.from_)
+            return {'otpModel':otpModel}
+        
+        return {}
+
+    def setFrom_(self,from_):
+        if from_ == None:
+            return  self.phone_number
+        return self.twilioService.parse_to_phone_format(from_)
+        
+        
+
 
 class AuthClientPipe(Pipe):
 

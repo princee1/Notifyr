@@ -4,6 +4,10 @@ from pydantic import BaseModel
 
 class OTPModel(BaseModel):
     otp:str
-    name:str
-    phone:str
+    to:str
+    from_:str
+    brand:str = None
+    expiry:int
+    type:str
+
     

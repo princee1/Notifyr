@@ -110,4 +110,12 @@ def task_send_custom_mail(content, meta, images, attachment):
 def task_blacklist_client(client_id:str):
     jwtAuthService = Get(JWTAuthService)
 
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_custom_sms():
+    pass
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_template_sms():
+    pass
 ##############################################           ##################################################

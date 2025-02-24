@@ -41,8 +41,8 @@ def email_validator(e_mail):
 
 def phone_number_validator(phone):
     try:
-        parsed_phone = phonenumbers.parse(phone, None, keep_raw_input=False)
-        return phonenumbers.is_valid_number(parsed_phone)
+        parsed_phone = phonenumbers.parse(phone, None)
+        return phonenumbers.is_valid_number(parsed_phone) and phonenumbers.is_possible_number(parsed_phone)
     except phonenumbers.phonenumberutil.NumberParseException:
         return False
 
