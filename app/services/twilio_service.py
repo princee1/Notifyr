@@ -91,6 +91,9 @@ class SMSService(BaseTwilioCommunication):
         otp = otpModel.otp
         expiry = timedelta(seconds=otpModel.expiry).min
         match otpModel.type:
+            case "verification":
+                otp_phrase = f"You're verification code is: {otp}"
+
             case "login":
                 otp_phrase = f"Your login OTP for {company} is {otp}. It will expire in {expiry} minutes. Do not share it."
 
@@ -133,15 +136,3 @@ class FaxService(BaseTwilioCommunication):
         super().__init__(configService, twilioService)
 
 
-@_service.ServiceClass
-class SIPService(BaseTwilioCommunication):
-
-    def __init__(self, configService: ConfigService, twilioService: TwilioService):
-        super().__init__(configService, twilioService)
-
-
-@_service.ServiceClass
-class WhatsAppService(BaseTwilioCommunication):
-    def __init__(self, configService: ConfigService, loggerService: LoggerService, twilioService: TwilioService):
-        super().__init__(configService, twilioService)
-        self.loggerService = loggerService
