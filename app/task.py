@@ -8,6 +8,7 @@ from app.services.config_service import ConfigService
 from app.services.email_service import EmailSenderService
 from app.container import Get, build_container
 from app.services.security_service import JWTAuthService
+from app.services.twilio_service import SMSService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 
@@ -112,10 +113,21 @@ def task_blacklist_client(client_id:str):
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_sms():
-    pass
+def task_send_custom_sms(messages):
+    smsService:SMSService = Get(SMSService)
+    return smsService.send_custom_sms(messages)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_sms():
-    pass
+def task_send_template_sms(messages):
+    smsService:SMSService = Get(SMSService)
+    return smsService.send_template_sms(messages)
+
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def send_template_voice_call():
+    ...
+    
+@RegisterTask(TaskHeaviness.LIGHT)
+def send_custom_voice_call():
+    ...
 ##############################################           ##################################################

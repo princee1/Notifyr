@@ -2,7 +2,7 @@ from typing import Literal
 
 from fastapi import HTTPException,status
 from app.classes.auth_permission import AuthPermission, TokensModel
-from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS
+from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.models.otp_model import OTPModel
@@ -110,15 +110,14 @@ class RelayPipe(Pipe):
 
 class TwilioFromPipe(Pipe):
 
-    @InjectInMethod
-    def __init__(self, phone_number:str):
+    def __init__(self, phone_number_name:str):
         super().__init__(True)
         self.twilioService:TwilioService = Get(TwilioService)
         self.configService = Get(ConfigService)
 
-        self.phone_number = phone_number
+        self.phone_number = self.configService[phone_number_name]
     
-    def pipe(self,scheduler:SchedulerModel,otpModel:OTPModel=None):
+    def pipe(self,scheduler:SchedulerModel=None,otpModel:OTPModel=None):
 
         if scheduler!= None:
             content:OnGoingSMSModel = scheduler.content
