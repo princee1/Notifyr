@@ -339,8 +339,7 @@ class Container():
         try:
             params = {}
             for i,d in enumerate(dep):
-                obj_dep = self.get(
-                    self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
+                obj_dep = self.get(self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
                 params[params_names[i]] = obj_dep
             return params
         except KeyError:
