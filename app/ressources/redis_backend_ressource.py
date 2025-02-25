@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from app.container import Get, InjectInMethod
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, WebSocketHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import AsyncPingService, BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UsePermission, UsePipe, UseRoles
 from app.services.celery_service import CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
@@ -20,7 +20,7 @@ REDIS_PREFIX = 'redis'
 @UseRoles([Role.REDIS])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
-@PingService([CeleryService])
+#@AsyncPingService([CeleryService])
 @HTTPRessource(prefix=REDIS_PREFIX,websockets=[RedisBackendWebSocket])
 class RedisBackendRessource(BaseHTTPRessource):
     
@@ -39,7 +39,7 @@ class RedisBackendRessource(BaseHTTPRessource):
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/task/{task_id}')
     def cancel_task(self,task_id:str,authPermission=Depends(get_auth_permission)):
-        self.celeryService.cancel_task(task_id)
+        return self.celeryService.cancel_task(task_id)
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Get('/schedule/{schedule_id}')
@@ -50,7 +50,7 @@ class RedisBackendRessource(BaseHTTPRessource):
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/schedule/{schedule_id}')
     def delete_schedule(self,schedule_id:str,authPermission=Depends(get_auth_permission)):
-        self.celeryService.delete_schedule(schedule_id)
+       return  self.celeryService.delete_schedule(schedule_id)
         
     @PingService([JWTAuthService])
     @UseHandler(WebSocketHandler)

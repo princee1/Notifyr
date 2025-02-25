@@ -3,7 +3,7 @@ The `BaseResource` class initializes with a `container` attribute assigned from 
 instance imported from `container`.
 """
 from inspect import isclass
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
+from typing import Any, Callable,Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 from app.definition._ws import W
 from app.utils.helper import issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
@@ -586,12 +586,28 @@ def PingService(services:list[S]):
             for s in services:
                 s: Service = Get(s)
                 s.pingService()
-            
+                
             return func(*args,**kwargs)
         
         return wrapper
     return decorator
 
+def AsyncPingService(services:list[S]):
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func,PingService,None,services=services)
+        if cls != None:
+            return cls
+        
+        @functools.wraps(func)
+        async def wrapper(*args,**kwargs):
+            for s in services:
+                s: Service = Get(s)
+                await s.pingService()
+                
+            return func(*args,**kwargs)
+    
+        return wrapper
+    return decorator
 
 def Exclude():
     ...

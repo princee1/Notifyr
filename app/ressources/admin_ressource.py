@@ -11,7 +11,7 @@ from app.services.security_service import JWTAuthService,SecurityService
 from app.services.config_service import ConfigService
 from app.utils.dependencies import get_admin_token, get_auth_permission, get_request_id
 from app.container import InjectInMethod,Get
-from app.definition._ressource import Guard, PingService, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
+from app.definition._ressource import AsyncPingService, Guard, PingService, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthPermission, Role,RoutePermission,AssetsPermission, TokensModel
 from pydantic import BaseModel, RootModel,field_validator
@@ -60,7 +60,7 @@ class AdminRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value ='20/week')
     @UsePipe(CeleryTaskPipe)
-    @PingService([CeleryService])
+    #@AsyncPingService([CeleryService])
     @UseGuard(CeleryTaskGuard(task_names=['task_blacklist_client'],task_types=[TaskType.ONCE]))
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}',methods=[HTTPMethod.DELETE])
     def blacklist_tokens(self,client_id:str,request:Request ,scheduler:BlacklistScheduler,authPermission=Depends(get_auth_permission)):
@@ -84,7 +84,7 @@ class AdminRessource(BaseHTTPRessource):
     @UsePipe(AuthClientPipe)
     @PingService([MongooseService,JWTAuthService])
     @BaseHTTPRessource.HTTPRoute('/invalidate/{client}',methods=[HTTPMethod.DELETE],dependencies=None)
-    def invalidate_tokens(self,client:str,scope:str = Query(), authPermission=Depends(get_auth_permission)):
+    def invalidate_tokens(self,request:Request,client:str,scope:str = Query(), authPermission=Depends(get_auth_permission)):
         ...
 
     @UseLimiter(limit_value='4/day')
