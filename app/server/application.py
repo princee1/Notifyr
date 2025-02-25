@@ -91,15 +91,14 @@ class Application(EventInterface):
         self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
         self.app.state.limiter = GlobalLimiter
-        self.register_tortoise()
+        #self.register_tortoise()
         self.add_exception_handlers()
         self.add_middlewares()
         self.add_ressources()
         self.set_httpMode()
 
     def add_exception_handlers(self):
-        self.app.add_exception_handler(
-            RateLimitExceeded, _rate_limit_exceeded_handler)
+        self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
         @self.app.exception_handler(TypeError)
         async def type_error(request, e):

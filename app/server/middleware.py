@@ -48,8 +48,8 @@ class ProcessTimeMiddleWare(MiddleWare):
 
 class SecurityMiddleWare(MiddleWare):
     priority = MiddlewarePriority.SECURITY
-    def __init__(self, app, dispatch=None) -> None:
-        super().__init__(self, app, dispatch)
+    def __init__(self,app, dispatch=None) -> None:
+        super().__init__(app, dispatch)
         self.securityService = Get(SecurityService)
         self.configService = Get(ConfigService)
 
@@ -81,24 +81,27 @@ class AnalyticsMiddleware(MiddleWare):
 class JWTAuthMiddleware(MiddleWare):
     priority = MiddlewarePriority.AUTH
     def __init__(self, app, dispatch=None) -> None:
-        super().__init__(self, app, dispatch)
+        super().__init__(app, dispatch)
         self.jwtService:JWTAuthService = Get(JWTAuthService)
 
-    async def dispatch(self,  request: Request, call_next: Callable[..., Response]):  
-        token = get_bearer_token_from_request(request)
-        client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
-        authPermission: AuthPermission = self.jwtService.verify_permission(token, client_ip)
-        authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
-        request.state.authPermission = authPermission
+    async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
+        try:  
+            token = get_bearer_token_from_request(request)
+            client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
+            authPermission: AuthPermission = self.jwtService.verify_permission(token, client_ip)
+            authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+            request.state.authPermission = authPermission
+        except HTTPException as e:
+            return JSONResponse(e.detail,e.status_code,e.headers)
 
         return await call_next(request)
-       
+        
 
 class BackgroundTaskMiddleware(MiddleWare):
     priority = MiddlewarePriority.BACKGROUND_TASK_SERVICE
     def __init__(self, app, dispatch = None):
-        super().__init__(self, app, dispatch)
-        self.backgroundTaskService:BackgroundTaskService = Get(BackgroundTaskMiddleware)
+        super().__init__(app, dispatch)
+        self.backgroundTaskService:BackgroundTaskService = Get(BackgroundTaskService)
     
     async def dispatch(self, request:Request, call_next):
         request_id = generateId(25)
