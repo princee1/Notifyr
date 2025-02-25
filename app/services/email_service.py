@@ -109,8 +109,7 @@ class EmailSenderService(BaseEmailService):
         self.hostPort = SMTPConfig.setHostPort(
             self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
 
-        self.emailHost = EmailHostConstant._member_map_[
-            self.configService.SMTP_EMAIL_HOST]
+        self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
     
     def _load_valid_from_email(self):
         config_str:str = ...

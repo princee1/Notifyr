@@ -38,7 +38,7 @@ class ConfigService(_service.Service):
     
     def __init__(self) -> None:
         super().__init__()
-        if not load_dotenv(ENV):
+        if not load_dotenv(ENV,verbose=True):
             path = find_dotenv(ENV)
             load_dotenv(path)
         self.config_json_app:JSONFile = None
@@ -94,7 +94,10 @@ class ConfigService(_service.Service):
     
     def getenv(self,key:str,default:Any=None)-> str | None | Any:
         val = os.getenv(key)
-        if isinstance(val,str) and not val.strip()=="":
+        if val is not None:
+            val = val.strip()
+            val = val.replace('"',"")
+        if isinstance(val,str) and not val=="":
             return val
         return default
 
@@ -171,9 +174,11 @@ class ConfigService(_service.Service):
             ...
 
     def __getitem__(self, key):
-        result = getattr(self, key)
-        if result == None:
+        try:
+            result = getattr(self, key)
+        except AttributeError:
             result = os.getenv(key)
+
         return result
     def get(self, key):
         return self.getenv(key)

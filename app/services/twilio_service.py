@@ -2,7 +2,8 @@
 https://www.youtube.com/watch?v=-AChTCBoTUM
 """
 
-from typing import Annotated
+import functools
+from typing import Annotated, Callable
 from fastapi import HTTPException, Header, Request
 from app.classes.template import SMSTemplate
 from app.definition import _service
@@ -16,6 +17,7 @@ from twilio.rest import Client
 from app.utils.validation import phone_number_validator
 from app.classes.twilio import TwilioPhoneNumberParseError
 from datetime import timedelta
+from twilio.rest.api.v2010.account.message import MessageInstance
 
 letter_to_number = {
     'A': '2', 'B': '2', 'C': '2',
@@ -82,10 +84,29 @@ class BaseTwilioCommunication(_service.Service):
 @_service.ServiceClass
 class SMSService(BaseTwilioCommunication):
 
-    def __init__(self, configService: ConfigService, twilioService: TwilioService):
-        super().__init__(configService, twilioService)
-        self.status_callback = ...
+    def __init__(self, configService: ConfigService, twilioService: TwilioService,assetService:AssetService):
+        super().__init__(configService, twilioService,assetService)
+        self.status_callback = None
 
+    @staticmethod
+    def parse_message_to_json(func:Callable):
+
+        @functools.wraps(func)
+        def wrapper(*args,**kwargs):
+            message:MessageInstance = func(*args,**kwargs)
+            return {
+                'date_created':message.date_created,
+                'date_sent':message.date_sent,
+                'data_updated':message.date_updated,
+                'price':message.price,
+                'price_unit':message.price_unit,
+                'status':message.status,
+                'sid':message.sid,
+                'message_service_sid':message.messaging_service_sid,
+            }
+        return wrapper
+
+    @parse_message_to_json
     def send_otp(self, otpModel: OTPModel):
         company = otpModel.brand
         otp = otpModel.otp
@@ -109,30 +130,32 @@ class SMSService(BaseTwilioCommunication):
             case _:
                 otp_phrase = f"Your OTP code is: {otp}. Do not share this code with anyone. It expires soon."
 
-        return self.message.create(to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=otp_phrase)
-
+        return self.messages.create(to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=otp_phrase)
+     
     def build(self):
-        self.message = self.twilioService.client.messages
+        self.messages = self.twilioService.client.messages
 
+    @parse_message_to_json
     def send_custom_sms(self, messageData: dict):
-        return self.message.create(send_as_mms=True, status_callback=self.status_callback, **messageData)
+        return self.messages.create(send_as_mms=True, status_callback=self.status_callback, **messageData)
 
+    @parse_message_to_json
     def send_template_sms(self, message):
-        return self.message.create(send_as_mms=True, status_callback=self.status_callback, **message)
+        return self.messages.create(send_as_mms=True, status_callback=self.status_callback, **message)
 
 
 @_service.ServiceClass
 class VoiceService(BaseTwilioCommunication):
 
-    def __init__(self, configService: ConfigService, twilioService: TwilioService):
-        super().__init__(configService, twilioService)
+    def __init__(self, configService: ConfigService, twilioService: TwilioService,assetService: AssetService):
+        super().__init__(configService, twilioService,assetService)
     pass
 
 
 @_service.ServiceClass
 class FaxService(BaseTwilioCommunication):
 
-    def __init__(self, configService: ConfigService, twilioService: TwilioService):
-        super().__init__(configService, twilioService)
+    def __init__(self, configService: ConfigService, twilioService: TwilioService,assetService: AssetService):
+        super().__init__(configService, twilioService,assetService)
 
 
