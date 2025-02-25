@@ -31,8 +31,3 @@ class MongooseService(DatabaseService): # Chat data
         super().__init__(configService,fileService)
     
 
-@ServiceClass
-class SQLService(DatabaseService): # token blacklist data and contacts
-    def __init__(self,configService:ConfigService,fileService:FileService):
-        super().__init__(configService,fileService)
-
