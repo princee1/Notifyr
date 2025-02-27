@@ -131,8 +131,7 @@ class HTMLTemplate(Template):
             flattened_data = flatten_dict()
             for key in flattened_data:
                 regex = re.compile(rf"{{{{{key}}}}}")
-                content_html = regex.sub(
-                    str(flattened_data[key]), content_html)
+                content_html = regex.sub( str(flattened_data[key]), content_html)
             content_text = self.exportText(data)
             return content_html, content_text
         except KeyError as e:
