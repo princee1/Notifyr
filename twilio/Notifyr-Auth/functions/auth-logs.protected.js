@@ -48,9 +48,12 @@ function setSmsLog(params) {
 }
 
 exports.handler = async function (context, event, callback) {
+  
   const service = new NotifyrAuthService(context, event);
   const type = service.type;
+  
   let url = String(service.url);
+  let body;
 
   if (type === CALL_TYPE) {
     url += "/call-incoming/status";
@@ -59,6 +62,7 @@ exports.handler = async function (context, event, callback) {
     url += "sms-incoming/status";
     body = setSmsLog(event);
   } else {
+
   }
   await service.sendLogStatus(body, url);
 
