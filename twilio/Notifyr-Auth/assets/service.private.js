@@ -1,22 +1,23 @@
 const axios = require("axios");
 const set_auth_token = (token) => "Bearer " + token;
 
-const { Contact } = require(assets["/contacts.private.js"].path);
+const assets = Runtime.getAssets();
+const { Contact } = require(assets["/contacts.js"].path);
 
 class NotifyrAuthService {
+
   constructor(context,event) {
     this.context = context;
     this.event = event;
     this.client = this.context.getTwilioClient();
     this.mode = this.context.MODE;
-    this.url =
-      this.mode === "prod" ? this.context.URL_PROD : this.context.URL_TEST;
+    this.setUrl();
     this.headers = {
-      "API-KEY": this.context.API_KEY,
-      Authorization: set_auth_token(this.context.AUTH_KEY),
+      "x-api-key": this.context.API_KEY,
+      "Authorization": set_auth_token(this.context.AUTH_KEY),
     };
 
-    this.relayPath = this.event.path
+    //this.relayPath = this.event.path
   }
 
   async authenticate(phoneNumber, codeEntered) {
@@ -28,9 +29,43 @@ class NotifyrAuthService {
     response.data;
   }
 
-  async query_server() {}
+  setUrl(){
+    switch (this.mode) {
+      case 'prod':
+        this.url = this.context.URL_PROD;
+        break;
+      
+      case 'test':
+        this.url =  this.context.URL_TEST;
+        break;
+      
+      case 'dev':
+        this.url = this.context.URL_DEV;
+        break;
+      default:
+        this.url =  this.context.URL_TEST;
+        
+        break;
+    };
+    
+  }
 
-  async log_status() {}
+  async pingNotifyr(){
+
+  }
+
+  async queryUserData(){
+
+  }
+
+  async sendDtmf(){
+
+  }
+
+  async sendLogStatus() {
+
+  }
+
 }
 
 module.exports = {

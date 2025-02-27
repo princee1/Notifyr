@@ -7,5 +7,5 @@ exports.handler = function(context, event, callback) {
   twiml.message("Hello World!");
   console.log(event);
 
-  callback(null, twiml);
+  return callback(null, twiml);
 };
