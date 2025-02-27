@@ -604,7 +604,7 @@ def AsyncPingService(services:list[S]):
                 s: Service = Get(s)
                 await s.pingService()
                 
-            return func(*args,**kwargs)
+            return await func(*args,**kwargs)
     
         return wrapper
     return decorator

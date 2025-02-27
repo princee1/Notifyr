@@ -120,7 +120,7 @@ class TwilioFromPipe(Pipe):
     def pipe(self,scheduler:SchedulerModel=None,otpModel:OTPModel=None):
 
         if scheduler!= None:
-            content:OnGoingSMSModel = scheduler.content
+            content = scheduler.content
             content.from_ = self.setFrom_(content.from_)
             content.to = self.twilioService.parse_to_phone_format(content.to)
             return {'scheduler':scheduler}

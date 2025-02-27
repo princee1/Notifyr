@@ -55,9 +55,9 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])    
+    @UseHandler(CeleryTaskHandler)
     @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
-    @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST])
     def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,authPermission=Depends(get_auth_permission)):
         message = scheduler.content.model_dump()

@@ -11,7 +11,7 @@ from app.services.email_service import EmailSenderService
 from fastapi import  Header, Request, status
 from app.utils.dependencies import Depends, get_auth_permission, get_request_id, get_response_id
 from app.decorators import permissions, handlers,pipes,guards
-from app.classes.celery import  CeleryTask, SchedulerModel
+from app.classes.celery import  CeleryTask, SchedulerModel, TaskType
 
 
 class EmailTemplateSchedulerModel(SchedulerModel):
@@ -60,7 +60,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
     
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-            if scheduler.task_type == 'now' or scheduler.task_type == 'once':
+            if scheduler.task_type == TaskType.NOW.value:
                 return self.bkgTaskService.add_task( scheduler.heaviness,x_request_id,self.emailService.sendTemplateEmail, data, meta, template.images )
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,data, meta, template.images)
@@ -74,7 +74,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         content = (customEmail_content.html_content, customEmail_content.text_content)
        
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-            if scheduler.task_type == 'now' or scheduler.task_type == 'once':
+            if scheduler.task_type == TaskType.NOW.value:
                 return self.bkgTaskService.add_task(scheduler.heaviness,x_request_id,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
             
         return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)

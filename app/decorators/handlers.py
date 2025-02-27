@@ -9,7 +9,7 @@ from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExis
 from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
 from app.services.assets_service import AssetNotFoundError
-
+from twilio.base.exceptions import TwilioRestException
 
 class ServiceAvailabilityHandler(Handler):
     
@@ -93,7 +93,7 @@ class TwilioHandler(Handler):
     def handle(self, function, *args, **kwargs):
         try:
             return function(*args, **kwargs)
-        
-        except BaseError as e:
-            raise AttributeError
+    
+        except TwilioRestException as e:
+            raise HTTPException(status=status.HTTP_400_BAD_REQUEST,details={})
     

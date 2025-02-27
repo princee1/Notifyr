@@ -1,5 +1,5 @@
 from typing import Any
-from fastapi import Depends
+from fastapi import Depends, Request
 from app.classes.auth_permission import Role
 from app.classes.celery import SchedulerModel, TaskType
 from app.classes.template import PhoneTemplate
@@ -8,6 +8,7 @@ from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandle
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe, TwilioFromPipe
 from app.models.otp_model import OTPModel
+from app.models.voice_model import BaseVoiceCallModel,OnGoingTwimlVoiceCallModel,OnGoingCustomVoiceCallModel
 from app.services.celery_service import CeleryService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
@@ -20,14 +21,22 @@ from app.utils.dependencies import get_auth_permission
 
 CALL_ONGOING_PREFIX = 'call-ongoing'
 
-class VoiceSchedulerModel(SchedulerModel):
-    content: Any # TODO
+
+
+class CallTemplateSchedulerModel(SchedulerModel):
+    content: BaseVoiceCallModel
+
+class CallTwimlSchedulerModel(SchedulerModel):
+    content: OnGoingTwimlVoiceCallModel
+
+class CallCustomSchedulerModel(SchedulerModel):
+    content: OnGoingCustomVoiceCallModel
 
 @PingService([VoiceService])
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CALL_ONGOING_PREFIX)
-class OnGoingCallRessources(BaseHTTPRessource):
+class OnGoingCallRessource(BaseHTTPRessource):
 
     @InjectInMethod
     def __init__(self, voiceService: VoiceService,chatService:ChatService,contactsService:ContactsService) -> None:
@@ -35,38 +44,65 @@ class OnGoingCallRessources(BaseHTTPRessource):
         self.chatService = chatService
         self.contactsService = contactsService
         self.celeryService: CeleryService = Get(CeleryService)
-
         super().__init__()
 
-    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @UseRoles([Role.CHAT])
+    @BaseHTTPRessource.Get('/balance')
+    def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
+        return self.voiceService.fetch_balance()
+
     @UseRoles([Role.MFA_OTP])
-    @BaseHTTPRessource.HTTPRoute('/otp/',methods=[HTTPMethod.POST])
+    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @BaseHTTPRessource.Post('/otp/')
     def voice_relay_otp(self,otpModel:OTPModel,authPermission=Depends(get_auth_permission)):
         pass
+        
+    @UseRoles([Role.MFA_OTP])
+    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @BaseHTTPRessource.Get('/otp/')
+    async def enter_digit_otp(self,otpModel:OTPModel,authPermission=Depends(get_auth_permission)):
+        ...
     
     @UseRoles([Role.RELAY])
     @UsePermission(JWTAssetPermission('phone'))
     @UseHandler(TemplateHandler,CeleryTaskHandler)
     @UsePipe(TemplateParamsPipe('phone'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
-    @UseGuard(CeleryTaskGuard(['send_template_voice_call']))
+    @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}/',methods=[HTTPMethod.POST])
-    def voice_template(self,template:str,scheduler: VoiceSchedulerModel,authPermission=Depends(get_auth_permission)):
-        # content = scheduler.content.model_dump()
-        # phoneTemplate:PhoneTemplate = self.assetService.phone[template]
-        # _,result = phoneTemplate.build(...,content)
+    def voice_template(self,template:str,scheduler: CallTemplateSchedulerModel,authPermission=Depends(get_auth_permission)):
+        content = scheduler.content.model_dump()
+        phoneTemplate:PhoneTemplate = self.assetService.phone[template]
+        _,result = phoneTemplate.build(...,content)
 
-        # if scheduler.task_type == TaskType.NOW:
-        #     return ...
-        ...
-        
+        if scheduler.task_type == TaskType.NOW.value:
+            return self.voiceService.send_template_voice_call(result,content)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,result,content)
 
     @UseRoles([Role.RELAY])
     @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
-    @UseGuard(CeleryTaskGuard(['send_custom_voice_call']))
+    @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']))
     @UseHandler(CeleryTaskHandler)
-    @BaseHTTPRessource.HTTPRoute('/custom',methods=[HTTPMethod.POST])
-    def voice_custom(self,scheduler: VoiceSchedulerModel,authPermission=Depends(get_auth_permission)):
-        ...
+    @BaseHTTPRessource.HTTPRoute('/twiml/',methods=[HTTPMethod.POST])
+    def voice_twilio_twiml(self,scheduler:CallTwimlSchedulerModel,authPermission=Depends(get_auth_permission)):
+        details = scheduler.content.model_dump(exclude={'url'})
+        url = scheduler.content.url
+
+        if scheduler.task_type == TaskType.NOW.value:
+            return self.voiceService.send_twiml_voice_call(url,details)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,url,details)
+
+    @UseRoles([Role.RELAY])
+    @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']))
+    @UseHandler(CeleryTaskHandler)
+    @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST])
+    def voice_custom(self,scheduler: CallCustomSchedulerModel,authPermission=Depends(get_auth_permission)):
+        details = scheduler.content.model_dump(exclude={'body'})
+        body = scheduler.content.body
+
+        if scheduler.task_type == TaskType.NOW.value:
+            return self.voiceService.send_custom_voice_call(body,details)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,body,details)
     
     @UseRoles([Role.MFA_OTP])
     @UseGuard(RegisteredContactsGuard)
