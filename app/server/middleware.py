@@ -88,6 +88,7 @@ class JWTAuthMiddleware(MiddleWare):
         try:  
             token = get_bearer_token_from_request(request)
             client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
+            print(client_ip)
             authPermission: AuthPermission = self.jwtService.verify_permission(token, client_ip)
             authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
             request.state.authPermission = authPermission

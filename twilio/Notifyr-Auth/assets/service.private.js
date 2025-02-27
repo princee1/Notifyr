@@ -11,6 +11,7 @@ class NotifyrAuthService {
     this.event = event;
     this.client = this.context.getTwilioClient();
     this.mode = this.context.MODE;
+    this.type = this.event.type??null
     this.setUrl();
     this.headers = {
       "x-api-key": this.context.API_KEY,
@@ -62,8 +63,8 @@ class NotifyrAuthService {
 
   }
 
-  async sendLogStatus() {
-
+  async sendLogStatus(body) {
+    const result = axios
   }
 
 }
