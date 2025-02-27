@@ -1,38 +1,20 @@
 import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, Role
+from app.definition._middleware import MiddleWare, MiddlewarePriority
 from app.services.celery_service import BackgroundTaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod
 from fastapi import HTTPException, Request, Response, FastAPI,status
-from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
-from starlette.datastructures import MutableHeaders,Headers
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
 from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
 from app.utils.dependencies import get_api_key, get_client_ip,get_bearer_token_from_request, get_response_id
 from cryptography.fernet import InvalidToken
-from enum import Enum
 
 from app.utils.helper import generateId
 
-
-MIDDLEWARE: dict[str, type] = {}
-class MiddlewarePriority(Enum):
-
-    PROCESS_TIME = 1
-    ANALYTICS = 2
-    SECURITY = 3
-    AUTH = 4
-    BACKGROUND_TASK_SERVICE = 5
-
-
-class MiddleWare(BaseHTTPMiddleware):
-
-    def __init_subclass__(cls: type) -> None:
-        MIDDLEWARE[cls.__name__] = cls
-        #setattr(cls,'priority',None)
         
 class ProcessTimeMiddleWare(MiddleWare):
     priority = MiddlewarePriority.PROCESS_TIME
