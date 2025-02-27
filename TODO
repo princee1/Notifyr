@@ -1,0 +1,21 @@
+# TODO
+
+1. Introduce Challenge to domain, ip, subnet to invalidate more easily
+2. Introduce local model like BERT or LLAMA, OpenAI realtime API, or OpenAI remote
+3. Various phone number for multiples means like menu, otp, simple message, and other
+4. Redis subscriber to subscribe to any change in the redis backend with the server
+5. Monitoring and Alerts: in a discord serber or other any webhook server
+6. logging and auditing
+7. Fix __init__ file to export only needed definition
+8. Upgrading calls to change response
+9. Gather input and wait
+10. gather feedback
+11. Tortoise for postgres sql database
+12. If user exist but do not have a code setup a code creation flow, same flow if forget
+13. SDK with OpenAPI ?
+14. check wether the celery beat is running ?
+15. Redis Cache for LLM responses
+16. WhatsApp
+17. Quit after register?
+18. I need a go server that act has a load balancer that can hold pingpong connection to the norifyr products to know which one are available or not, the go server will have an extra  auth-key so each accounts can only access its own server, i can ban some host in this go server. Each server will be selected by random using a probabilistic function to preserve the fiability of the whole systems (or round-robin, wieght balancer or least connection), using the address or the port as a key. return the heaviness of each function. Logs the fowarding and track traffic count per backend. Websocket connection with the backends server
+19. Redis backend for limiters
