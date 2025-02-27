@@ -63,8 +63,10 @@ class NotifyrAuthService {
 
   }
 
-  async sendLogStatus(body) {
-    const result = axios
+  async sendLogStatus(body,url) {
+    const result = await axios.post(url,{headers:this.headers,body});
+    console.log("Result",result.status)
+    console.log("Result",result.data)
   }
 
 }
