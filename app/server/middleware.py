@@ -1,7 +1,7 @@
 import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, Role
-from app.definition._middleware import MiddleWare, MiddlewarePriority
+from app.definition._middleware import MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.services.celery_service import BackgroundTaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService

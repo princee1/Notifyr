@@ -92,7 +92,7 @@ class Application(EventInterface):
         self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
         self.app.state.limiter = GlobalLimiter
-        #self.register_tortoise()
+        self.register_tortoise()
         self.add_exception_handlers()
         self.add_middlewares()
         self.add_ressources()
@@ -207,12 +207,11 @@ class Application(EventInterface):
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
         pg_database = self.configService.getenv('POSTGRES_DB')
         register_tortoise(
-            self.app,
+            app=self.app,
             db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}",
-            modules={"app.models": ["contacts_model","security_model"]},
+            modules={"models": ["app.models.contacts_model"]},
             generate_schemas=True,
-            add_exception_handlers=True,
-
+            add_exception_handlers=True,    
         )
 
     def on_startup(self):
