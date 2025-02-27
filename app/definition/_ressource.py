@@ -231,7 +231,13 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             func_name = end['endpoint']
             func_attr = getattr(self,func_name)
             meta:FuncMetaData = getattr(func_attr,'meta')
+
             limit_obj = meta['limit_obj']
+            if meta['limit_exempt']:
+                func_attr= GlobalLimiter.exempt(func_attr)
+                setattr(self,func_name,func_attr)
+                return
+            
             if limit_obj:
                 func_attr = GlobalLimiter.limit(**limit_obj)(func_attr)
                 setattr(self,func_name,func_attr)
@@ -608,6 +614,17 @@ def UseLimiter(**kwargs): #TODO
                 RequestLimit+= limit_value
             except:
                 ...
+        return func
+    return decorator
+
+def ExemptLimiter():
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, UseLimiter,None)
+        if cls != None:
+            return cls
+        meta:FuncMetaData | None = getattr(func,'meta',None)
+        if meta is not None:
+            meta['limit_exempt']=True
         return func
     return decorator
 
