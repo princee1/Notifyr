@@ -56,8 +56,13 @@ This variable contains all the routes of the used ressources
 
 DECORATOR_METADATA: dict[str, dict[str, list[tuple[Callable, float]]]] = {}
 """
+This variable holds all the callback that will be decorate an http function
 """
 
+EVENTS:dict[str,set[str]] = {}
+"""
+This variable contains the functions that will be an events listener
+"""
 
 def add_protected_route_metadata(class_name: str, operation_id: str):
     if class_name in PROTECTED_ROUTES:
@@ -157,7 +162,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
 
             return func
         return decorator
-
+        
     @staticmethod
     def Get(path: str, operation_id: str = None, dependencies:Sequence[Depends]=None, response_model: Any = None, response_description: str = "Successful Response",
             responses: Dict[int | str, Dict[str, Any]] | None = None,
@@ -175,6 +180,38 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None):
         return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE], operation_id, dependencies,  response_model, response_description, responses, deprecated)
+
+    @staticmethod
+    def OnEvent(event:str):
+        # VERIFY use reactivex?
+        def decorator(func:Callable):
+            
+            if getattr(func,'meta'):
+                raise AttributeError('Cannot set an http route as an event listener')
+            setattr(func,'event',event)
+            class_name = get_class_name_from_method(func)
+            if class_name not in EVENTS:
+                EVENTS[class_name] = set([func.__qualname__])
+            else:
+                EVENTS[class_name].add(func.__qualname__)
+                
+            return func
+        
+        return decorator
+
+    def _register_event(self,):
+        class_name = self.__class__.__name__
+        if class_name not in EVENTS:
+            return 
+        self.events = {}
+        for func in EVENTS[class_name]:
+            f = getattr(self,func)
+            self.events[f.event] = f
+    
+    def emits(self,event:str,data:Any):
+        if event not in self.events:
+            return
+        return self.events[event](data)
 
     def _stack_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
@@ -268,9 +305,9 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         self.websockets:dict[str,W] = {}
         self.ws_path = []
         w = set(self.__class__.meta['websockets'])
-        for WS_Class in list(w):
-            ws:W = WS_Class()
-            self.websockets[WS_Class.__name__] = ws
+        for WSClass in list(w):
+            ws:W = WSClass()
+            self.websockets[WSClass.__name__] = ws
             for endpoints in ws.ws_endpoints:
                 path:str = endpoints.meta['path']                
                 if not path.startswith('/'):
@@ -289,7 +326,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
     def _add_handcrafted_routes(self):
         ...
 
-    def _add_event(self):
+    def _add_router_event(self):
         ...
 
     @property

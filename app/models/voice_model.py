@@ -21,3 +21,20 @@ class OnGoingTwimlVoiceCallModel(BaseVoiceCallModel):
             raise ValueError('Invalid URL Address')
         return url
     
+###############################################             ################################################
+
+class CallStatusModel(BaseModel):
+    CallSid:str
+    RecordingSid:str
+    Duration:int=None
+    CallDuration:int=None
+    RecordingDuration:int=None
+    Direction:str
+    Timestamp:str
+    AccountSid:str
+    CallStatus:str
+    ToCity:str
+    SipResponse:int
+    To:str
+    From:str
+    SequenceNumber:str

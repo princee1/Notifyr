@@ -14,3 +14,14 @@ class OnGoingSMSModel(OnGoingBaseSMSModel):
     body:str
     media_url:List[str] = []
  
+
+###############################################             ################################################
+
+class SMSStatusModel(BaseModel):
+    MessageSid:str
+    AccountSid:str
+    To:str
+    From:str
+    SmsSid:str
+    SmsStatus:str
+    MessageStatus:str

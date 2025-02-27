@@ -11,7 +11,7 @@ from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe, TwilioFromP
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import InjectInMethod, InjectInFunction
 from app.models.otp_model import OTPModel
-from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel
+from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
 from app.services.assets_service import AssetService
 from app.services.celery_service import CeleryService
 from app.services.chat_service import ChatService
@@ -125,7 +125,7 @@ class IncomingSMSRessource(BaseHTTPRessource):
         pass
 
     @BaseHTTPRessource.HTTPRoute('/status/',methods=[HTTPMethod.POST])
-    async def sms_call_status_changes(self,authPermission=Depends(get_auth_permission)):
+    async def sms_call_status_changes(self,status: SMSStatusModel,authPermission=Depends(get_auth_permission)):
         ...
 
     @BaseHTTPRessource.HTTPRoute('/error/',methods=[HTTPMethod.POST])

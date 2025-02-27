@@ -8,7 +8,7 @@ from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandle
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe, TwilioFromPipe
 from app.models.otp_model import OTPModel
-from app.models.voice_model import BaseVoiceCallModel,OnGoingTwimlVoiceCallModel,OnGoingCustomVoiceCallModel
+from app.models.voice_model import BaseVoiceCallModel, CallStatusModel,OnGoingTwimlVoiceCallModel,OnGoingCustomVoiceCallModel
 from app.services.celery_service import CeleryService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
@@ -146,9 +146,10 @@ class IncomingCallRessources(BaseHTTPRessource):
         pass
 
     @BaseHTTPRessource.HTTPRoute('/status/',methods=[HTTPMethod.POST])
-    async def voice_call_status_changes(self,authPermission=Depends(get_auth_permission)):
+    async def voice_call_status(self,status:CallStatusModel,authPermission=Depends(get_auth_permission)):
         ...
 
     @BaseHTTPRessource.HTTPRoute('/error/',methods=[HTTPMethod.POST])
     async def voice_error(self,authPermission=Depends(get_auth_permission)):
         pass
+
