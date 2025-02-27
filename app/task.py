@@ -8,7 +8,7 @@ from app.services.config_service import ConfigService
 from app.services.email_service import EmailSenderService
 from app.container import Get, build_container
 from app.services.security_service import JWTAuthService
-from app.services.twilio_service import SMSService
+from app.services.twilio_service import SMSService, VoiceService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 
@@ -124,10 +124,19 @@ def task_send_template_sms(messages):
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def send_template_voice_call():
-    ...
+def task_send_template_voice_call(result,content):
+    voiceService:VoiceService = Get(VoiceService)
+    return voiceService.send_template_voice_call(result,content)
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_twiml_voice_call(url,details):
+    voiceService:VoiceService = Get(VoiceService)
+    return voiceService.send_twiml_voice_call(url,details)
+    
     
 @RegisterTask(TaskHeaviness.LIGHT)
-def send_custom_voice_call():
-    ...
+def task_send_custom_voice_call(body,details):
+    voiceService:VoiceService = Get(VoiceService)
+    return voiceService.send_custom_voice_call(body,details)
+
 ##############################################           ##################################################
