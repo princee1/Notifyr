@@ -22,6 +22,7 @@ import datetime as dt
 from app.definition._ressource import RESSOURCES, BaseHTTPRessource, GlobalLimiter
 from app.interface.events import EventInterface
 from tortoise.contrib.fastapi import register_tortoise
+import ngrok
 
 
 AppParameterKey = Literal['title', 'summary', 'description',
@@ -151,6 +152,17 @@ class Application(EventInterface):
         self.run()
 
     def start_server(self):
+
+        # match self.configService.MODE:
+        #     case 'TEST':
+        #         domain = self.configService.NGROK_DOMAIN
+        #         ngrok_tunnel = ngrok.connect(self.appParameter.port,hostname=domain)
+        #     case 'DEV':
+        #         listener = ngrok.forward(f'http://localhost:{self.appParameter.port}')
+        #         NGROK_URL = listener.url()
+        #     case 'PROD':
+        #         ...
+
         if self.mode == 'HTTPS':
             uvicorn.run(self.app, port=self.appParameter.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
                         ssl_certfile=self.configService.HTTPS_CERTIFICATE)

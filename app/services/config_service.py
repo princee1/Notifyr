@@ -28,7 +28,7 @@ class MODE(Enum):
     
     def modeToAddr(mode):
         match mode:
-            case MODE.TEST_MODE:
+            case MODE.DEV_MODE:
                 return "127.0.0.1"
             case _:
                 return "127.0.0.1"
@@ -114,6 +114,8 @@ class ConfigService(_service.Service):
         self.HTTPS_CERTIFICATE=self.getenv("HTTPS_CERTIFICATE",'cert.pem')
         self.HTTPS_KEY =self.getenv("HTTPS_KEY",'key.pem')
 
+        self.NGROK_DOMAIN = self.getenv("NGROK_DOMAIN",None)
+
         self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER','oauth_custom') #OAuthFlow | OAuthLib
         self.OAUTH_JSON_KEY_FILE = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
         self.OAUTH_TOKEN_DATA_FILE = self.getenv('OAUTH_DATA_FILE','mail_provider.tokens.json')
@@ -142,6 +144,9 @@ class ConfigService(_service.Service):
         self.TWILIO_ACCOUNT_SID = self.getenv("TWILIO_ACCOUNT_SID")
         self.TWILIO_AUTH_TOKEN= self.getenv("TWILIO_AUTH_TOKEN")
         self.TWILIO_NUMBER= self.getenv("TWILIO_NUMBER")
+        self.TWILIO_PROD_URL = self.getenv("TWILIO_PROD_URL",None)
+        self.TWILIO_TEST_URL = self.getenv("TWILIO_TEST_URL",None)
+
         
         self.JWT_SECRET_KEY = self.getenv("JWT_SECRET_KEY")
         self.JWT_ALGORITHM = self.getenv("JWT_ALGORITHM")
@@ -180,6 +185,7 @@ class ConfigService(_service.Service):
             result = os.getenv(key)
 
         return result
+    
     def get(self, key):
         return self.getenv(key)
     
