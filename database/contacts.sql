@@ -1,8 +1,10 @@
 DROP SCHEMA IF  EXISTS contacts CASCADE;
 CREATE SCHEMA contacts;
-SET search_path TO contacts;
+SET search_path = contacts;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr','en'))
 
 CREATE TABLE IF NOT EXISTS Contact (
     PRIMARY KEY contact_id  UUID DEFAULT uuid_generate_v5(),
@@ -11,6 +13,7 @@ CREATE TABLE IF NOT EXISTS Contact (
     email       VARCHAR(50) UNIQUE NOT NULL,
     phone       VARCHAR(50) UNIQUE,
     app_registered  BOOLEAN DEFAULT FALSE,
+    lang    Lang,
     created_at  TIMESTAMP DEFAULT NOW(),
     updated_at  TIMESTAMP DEFAULT NOW()
 )

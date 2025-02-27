@@ -12,6 +12,10 @@ class ContactModel(Model):
     updated_at = fields.DatetimeField(auto_now=True)
 
     def __str__(self):
+        return self.full_name
+    
+    @property
+    def full_name(self):
         return f"{self.first_name} {self.last_name}"
 
 
