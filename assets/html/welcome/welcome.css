@@ -84,3 +84,16 @@ table {
   font-size: 14px;
   color: #9e9e9e;
 }
+
+.highlight {
+    color: #6200ea; /* Highlight color */
+    font-weight: bold;
+}
+.small-text {
+    font-size: 13px;
+    color: #b0b0b0;
+}
+.divider {
+    border-top: 1px solid #444444;
+    margin: 30px 0;
+}
