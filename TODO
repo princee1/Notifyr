@@ -16,6 +16,10 @@
 14. check wether the celery beat is running ?
 15. Redis Cache for LLM responses
 16. WhatsApp
-17. Quit after register?
+17. Quit after make register?
 18. I need a go server that act has a load balancer that can hold pingpong connection to the norifyr products to know which one are available or not, the go server will have an extra  auth-key so each accounts can only access its own server, i can ban some host in this go server. Each server will be selected by random using a probabilistic function to preserve the fiability of the whole systems (or round-robin, wieght balancer or least connection), using the address or the port as a key. return the heaviness of each function. Logs the fowarding and track traffic count per backend setup X-Fowarded-Address to get the real ip address and add a ProxyHeaderMiddleware in the fastapi middleware. Websocket connection with the backends server
 19. Redis backend for limiters
+20. Celery Async?
+21. Webhook to email status code,
+22. reactive x to wait for redis backend result
+23. public route for redirecting
