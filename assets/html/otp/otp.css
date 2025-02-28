@@ -1,0 +1,65 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f8ff; /* Light blue background */
+    color: #333;
+    line-height: 1.6;
+}
+.container {
+    width: 90%;
+    max-width: 600px;
+    margin: 30px auto;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+.header {
+    background: linear-gradient(135deg, #007bff, #00b050); /* Blue to green gradient header */
+    color: white;
+    padding: 40px 20px;
+    text-align: center;
+}
+.header h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 600;
+}
+.content {
+    padding: 30px;
+}
+.otp-box {
+    background-color: #e6f7ff; /* Lighter blue for OTP box */
+    padding: 25px;
+    border-radius: 8px;
+    text-align: center;
+    margin: 20px 0;
+}
+.otp-box h2 {
+    font-size: 24px;
+    margin: 10px 0;
+    color: #007bff; /* Blue OTP code color */
+}
+.instructions {
+    margin-top: 20px;
+    font-size: 14px;
+    color: #555;
+}
+.footer {
+    text-align: center;
+    padding: 20px;
+    background-color: #f9f9f9;
+    font-size: 12px;
+    color: #777;
+    border-top: 1px solid #eee;
+}
+.button {
+    display: inline-block;
+    background-color: #00b050; /* Green button */
+    color: white;
+    padding: 12px 25px;
+    text-decoration: none;
+    border-radius: 6px;
+    margin-top:20px;
+}
