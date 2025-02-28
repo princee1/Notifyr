@@ -213,7 +213,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             return
         return self.events[event](data)
 
-    def _stack_callback(self):
+    def _stack_callback(self): # TODO sync to async if necessary
         if self.__class__.__name__ not in DECORATOR_METADATA:
             return
         M = DECORATOR_METADATA[self.__class__.__name__]
@@ -628,7 +628,7 @@ def ExemptLimiter():
         return func
     return decorator
 
-def PingService(services:list[S]):
+def PingService(services:list[S|dict]):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func,PingService,None,services=services)
@@ -638,8 +638,17 @@ def PingService(services:list[S]):
         @functools.wraps(func)
         def wrapper(*args,**kwargs):
             for s in services:
-                s: Service = Get(s)
-                s.pingService()
+                if isinstance(s,dict):
+                    cls= s['cls']
+                    a = s['args']
+                    k = s['kwargs']
+                    
+                    cls:S = Get(s)
+                    cls.pingService(*a,**k)
+                    
+                else:    
+                    s: Service = Get(s)
+                    s.pingService()
                 
             return func(*args,**kwargs)
         

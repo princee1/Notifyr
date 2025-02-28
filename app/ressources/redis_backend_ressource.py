@@ -20,7 +20,7 @@ REDIS_PREFIX = 'redis'
 @UseRoles([Role.REDIS])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
-#@AsyncPingService([CeleryService])
+@PingService([CeleryService])
 @HTTPRessource(prefix=REDIS_PREFIX,websockets=[RedisBackendWebSocket])
 class RedisBackendRessource(BaseHTTPRessource):
     

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Callable, ParamSpec
+from typing import Any, Callable, ParamSpec, TypedDict
 import typing
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES, TaskHeaviness
 from app.classes.celery import  CeleryTask, SchedulerModel
@@ -20,13 +20,21 @@ P = ParamSpec("P")
 
 
 
+class TaskConfig(TypedDict):
+        task:BackgroundTask
+        heaviness:TaskHeaviness
+
+
 @ServiceClass
 class BackgroundTaskService(BackgroundTasks,Service):
+
+   
     def __init__(self,configService:ConfigService):
         self.configService = configService
         self.running_tasks_count = 0
-        self.sharing_task: dict[str,list[Callable]] = {}
+        self.sharing_task: dict[str,list[TaskConfig]] = {}
         self.task_lock = asyncio.Lock()
+        self.server_load:dict[TaskHeaviness,int] = {t:0 for t in TaskHeaviness._value2member_map_.values()}
         super().__init__(None)
         Service.__init__(self)
          
@@ -41,7 +49,10 @@ class BackgroundTaskService(BackgroundTasks,Service):
 
     def add_task(self,heaviness:TaskHeaviness, request_id:str,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
         task = BackgroundTask(func, *args, **kwargs)
-        self.sharing_task[request_id].append(task)
+        self.sharing_task[request_id].append(TaskConfig(
+            task=task,
+            heaviness=heaviness
+        ))
         now = dt.datetime.now()
 
         return {'data':now,
@@ -58,14 +69,33 @@ class BackgroundTaskService(BackgroundTasks,Service):
         
         async with self.task_lock:
             self.running_tasks_count += len(self.sharing_task[request_id])  # Increase count based on new tasks
+            heaviness = self.sharing_task[request_id]['heaviness']
+            self.server_load[heaviness] +=1
 
-        for task in self.sharing_task[request_id]:
+        for t in self.sharing_task[request_id]:
+            task = t['task']
+            heaviness_ = t['heaviness']
             await asyncio.sleep(0)
             await task()
+            async with self.task_lock:
+                self.running_tasks_count -= 1  # Decrease count after tasks complete
+                self.server_load[heaviness_]-=1
 
-        async with self.task_lock:
-            self.running_tasks_count -= len(self.sharing_task[request_id])  # Decrease count after tasks complete
-            self._delete_tasks(request_id)
+        #async with self.task_lock:
+        self._delete_tasks(request_id)
+    
+    def pingService(self,count=None):
+        response_count = int(self.running_tasks_count)
+        load = self.server_load.copy()
+
+        self.check_system_ram()
+        if count:
+            ...
+        
+        return Service.pingService(self)
+    
+    def check_system_ram():
+        ...
 
     @staticmethod
     def populate_response_with_request_id(request:Request, response: Response):
@@ -210,14 +240,15 @@ class CeleryService(Service, IntervalInterface):
         async with self.task_lock:
             return self.available_workers_count
 
-    async def pingService(self,ratio:float=None,count:int=None):
-        response_count = await self.get_available_workers_count
+    def pingService(self,ratio:float=None,count:int=None):
+        response_count = int(self.available_workers_count)
         if ratio:
             # TODO check in which interval the ratio is in
-            return super().pingService()
+            ...
         if count:
             # TODO check in which interval the ratio is in
-            return super().pingService()
+            ...
+        super().pingService()
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
     def callback(self):
