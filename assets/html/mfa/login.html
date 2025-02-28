@@ -6,7 +6,7 @@
     <title>Email MFA Login</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f4f4f4;
             display: flex;
             justify-content: center;
@@ -16,15 +16,16 @@
         }
         .container {
             background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            width: 300px;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 350px;
             text-align: center;
         }
         .container h2 {
             margin-bottom: 20px;
             color: #333;
+            font-size: 24px;
         }
         .user-info {
             margin-bottom: 20px;
@@ -42,6 +43,7 @@
         .instructions {
             margin-bottom: 15px;
             color: #555;
+            font-size: 16px;
         }
         .message {
             margin-bottom: 15px;
@@ -49,22 +51,24 @@
             font-size: 14px;
         }
         .mfa-code {
-            font-size: 18px;
-            letter-spacing: 5px;
+            font-size: 20px;
+            letter-spacing: 10px;
             background-color: #f0f0f0;
-            padding: 10px;
-            border-radius: 4px;
+            padding: 15px;
+            border-radius: 8px;
             text-align: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             display: flex;
             justify-content: center;
+            cursor: pointer;
         }
         .mfa-code span {
-            margin: 0 2px;
-            padding: 5px;
+            margin: 0 5px;
+            padding: 10px;
             background-color: #fff;
-            border-radius: 4px;
+            border-radius: 8px;
             cursor: pointer;
+            transition: background-color 0.3s;
         }
         .mfa-code span:hover {
             background-color: #e0e0e0;
@@ -72,11 +76,13 @@
         .btn {
             background-color: #007bff;
             color: #fff;
-            padding: 10px;
+            padding: 12px;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             cursor: pointer;
             width: 100%;
+            font-size: 16px;
+            transition: background-color 0.3s;
         }
         .btn:hover {
             background-color: #0056b3;
@@ -94,31 +100,39 @@
         }
         @media (max-width: 600px) {
             .container {
-                padding: 15px;
+                padding: 20px;
+                width: 90%;
             }
             .mfa-code {
-                font-size: 16px;
-                letter-spacing: 3px;
-                padding: 8px;
+                font-size: 18px;
+                letter-spacing: 5px;
+                padding: 10px;
             }
             .btn {
-                padding: 8px;
+                padding: 10px;
             }
         }
     </style>
+    <script>
+        function copyMfaCode() {
+            const mfaCode = '123456';
+            navigator.clipboard.writeText(mfaCode).then(() => {
+                alert('MFA code copied to clipboard');
+            });
+        }
+    </script>
 </head>
 <body>
     <div class="container">
         <h2>Email MFA Login</h2>
         <div class="user-info">
-            <img src="user-avatar.jpg" alt="User Avatar">
             <p>John Doe</p>
             <p>john.doe@example.com</p>
         </div>
         <div class="instructions">
             <p>Your MFA code is:</p>
         </div>
-        <div class="mfa-code">
+        <div class="mfa-code" onclick="">
             <span>1</span>
             <span>2</span>
             <span>3</span>
@@ -136,7 +150,6 @@
             <p>Thank you for helping us keep your account secure.</p>
             <p>Best regards,<br>Notifyr Team</p>
         </div>
-        <button class="btn">Continue</button>
         <div class="footer">
             <p>&copy; 2023 Notifyr. All rights reserved.</p>
         </div>
