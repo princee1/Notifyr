@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSO MFA Code</title>
+</head>
+<body>
+    <div class="container">
+        <h2>Single Sign-On (SSO) Verification</h2>
+        <div class="user-info">
+            <p>{{username}}</p>
+            <p>{{useremail}}</p>
+        </div>
+        <div class="instructions">
+            Please use the following code to complete your sign-in process:
+        </div>
+        <div class="mfa-code">
+            <span>{{mfa-digit-1}}</span>
+            <span>{{mfa-digit-2}}</span>
+            <span>{{mfa-digit-3}}</span>
+            <span>{{mfa-digit-4}}</span>
+            <span>{{mfa-digit-5}}</span>
+            <span>{{mfa-digit-6}}</span>
+        </div>
+        <div class="footer">
+            If you did not request this code, please ignore this email.
+        </div>
+        <div class="detailed-message">
+            This code is valid for the next 10 minutes. For your security, do not share this code with anyone.
+        </div>
+        <div class="footer">
+            <p>Thank you for using our service!</p>
+            <p>Best regards,</p>
+            <p>The Notifyr Team</p>
+        </div>
+    </div>
+</body>
+</html>
