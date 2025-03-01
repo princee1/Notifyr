@@ -16,7 +16,7 @@ class SchemaBuilder:
     pass
 
 
-class HtmlSchemaBuilder (SchemaBuilder):
+class MLSchemaBuilder (SchemaBuilder):
     CurrentHashRegistry = {}
     HashSchemaRegistry = {}
 
@@ -32,8 +32,8 @@ class HtmlSchemaBuilder (SchemaBuilder):
         # next_children_css_selector = css_selector if next_children_css_selector is None else next_children_css_selector
         for validator in validation_item.find_all(ValidationHTMLConstant.VALIDATION_ITEM_BALISE, recursive=False):
             v: Tag = validator
-            has_noSuccessor = len(v.find_all(
-                ValidationHTMLConstant.VALIDATION_ITEM_BALISE, recursive=False)) == 0
+            has_noSuccessor = len(v.find_all(ValidationHTMLConstant.VALIDATION_ITEM_BALISE, recursive=False)) == 0
+            
             if not v.attrs.__contains__("type"):
                 # TODO find the error element
                 raise TypeError
@@ -51,8 +51,8 @@ class HtmlSchemaBuilder (SchemaBuilder):
 
                 if schema[key].__contains__("schema"):
                     default_schema_registry = schema[key]["schema"]
-                    if type(default_schema_registry) == str and default_schema_registry in HtmlSchemaBuilder.HashSchemaRegistry.keys():
-                        schema[key]["schema"] = HtmlSchemaBuilder.HashSchemaRegistry[default_schema_registry]
+                    if type(default_schema_registry) == str and default_schema_registry in MLSchemaBuilder.HashSchemaRegistry.keys():
+                        schema[key]["schema"] = MLSchemaBuilder.HashSchemaRegistry[default_schema_registry]
                 continue
 
             if not is_struct:

@@ -157,7 +157,7 @@ class AssetService(_service.Service):
 
         htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ)
         pdfReader: ThreadedReader = ThreadedReader(PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES)
-        smsReader: ThreadedReader = ThreadedReader(SMSTemplate)(Extension.TXT, FDFlag.READ, AssetType.SMS.value)
+        smsReader: ThreadedReader = ThreadedReader(SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
         phoneReader: ThreadedReader = ThreadedReader(PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
 
         self.html = htmlReader.join()

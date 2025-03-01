@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from app.definition._error import BaseError
-from app.utils.schema import HtmlSchemaBuilder
+from app.utils.schema import MLSchemaBuilder
 from app.utils.helper import strict_parseToBool, flatten_dict
 from app.utils.validation import CustomValidator
 # import fitz as pdf
@@ -174,19 +174,19 @@ class HTMLTemplate(Template):
         for registry in self.validation_balise.find_all(VALIDATION_REGISTRY_SELECTOR, recursive=False):
             registry: Tag = registry
             registry_key = registry.attrs["id"]
-            schema = HtmlSchemaBuilder(registry).schema
+            schema = MLSchemaBuilder(registry).schema
             _hash = hash(schema)
-            if _hash not in HtmlSchemaBuilder.CurrentHashRegistry.keys():
-                HtmlSchemaBuilder.CurrentHashRegistry[_hash] = registry_key
+            if _hash not in MLSchemaBuilder.CurrentHashRegistry.keys():
+                MLSchemaBuilder.CurrentHashRegistry[_hash] = registry_key
                 schema_registry.add(registry_key, schema)
             else:
-                HtmlSchemaBuilder.HashSchemaRegistry[registry_key] = HtmlSchemaBuilder.CurrentHashRegistry[_hash]
+                MLSchemaBuilder.HashSchemaRegistry[registry_key] = MLSchemaBuilder.CurrentHashRegistry[_hash]
 
     def extractValidation(self,):
         try:
             if self.validation_balise is None:
                 return
-            schema = HtmlSchemaBuilder(self.validation_balise).schema
+            schema = MLSchemaBuilder(self.validation_balise).schema
             self.Validator = CustomValidator(schema)
             # for property_ in HTMLTemplate.ValidatorConstructorParam:
             #     self.set_ValidatorDefaultBehavior(property_)
@@ -278,6 +278,9 @@ class SMSTemplate(Template):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
 
+
+    def load_media(self, media: list[str]):
+        ...
 
 class PhoneTemplate(Template):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
