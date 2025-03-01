@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email MFA Login</title>
+    <validation>
+        
+    </validation>
 </head>
 <body>
     <div class="container">
@@ -16,25 +19,25 @@
             <p>Your MFA code is:</p>
         </div>
         <div class="mfa-code" onclick="">
-            <span>{{mfa-digit-1}}</span>
-            <span>{{mfa-digit-2}}</span>
-            <span>{{mfa-digit-3}}</span>
-            <span>{{mfa-digit-4}}</span>
-            <span>{{mfa-digit-5}}</span>
-            <span>{{mfa-digit-6}}</span>
+            <span>{{mfa->1}}</span>
+            <span>{{mfa->2}}</span>
+            <span>{{mfa->3}}</span>
+            <span>{{mfa->4}}</span>
+            <span>{{mfa->5}}</span>
+            <span>{{mfa->6}}</span>            
         </div>
         <div class="message">
             <p>If you did not request this code, please contact support immediately.</p>
         </div>
         <div class="detailed-message">
-            <p>Dear John Doe,</p>
+            <p>Dear {{firstname}} {{lastname}},</p>
             <p>We received a request to access your account using Multi-Factor Authentication (MFA). Your security is our top priority, and we want to ensure that it is really you trying to access your account.</p>
             <p>If you did not request this code, please contact our support team immediately at support@example.com or call us at (123) 456-7890.</p>
             <p>Thank you for helping us keep your account secure.</p>
             <p>Best regards,<br>Notifyr Team</p>
         </div>
         <div class="footer">
-            <p>&copy; 2023 Notifyr. All rights reserved.</p>
+            <p>&copy; 2025 Notifyr. All rights reserved.</p>
         </div>
     </div>
 </body>

@@ -11,10 +11,10 @@
             <h1>Your One-Time Password</h1>
         </div>
         <div class="content">
-            <p>Hello,</p>
+            <p>Hello, {{username}}</p>
             <p>Here is your One-Time Password (OTP) to complete the verification process:</p>
             <div class="otp-box">
-                <h2>123456</h2> </div>
+                <h2>{{otp}}</h2> </div>
             <p class="instructions">
                 This OTP is valid for 5 minutes. Please enter it on the login screen. Do not share this code with anyone.
             </p>
@@ -22,7 +22,7 @@
             </div>
         </div>
         <div class="footer">
-            <p>This is an automated message from [Company Name] for [Service Requested]. Please do not reply.</p>
+            <p>This is an automated message from Notifyr for {{service}}. Please do not reply.</p>
         </div>
     </div>
 </body>

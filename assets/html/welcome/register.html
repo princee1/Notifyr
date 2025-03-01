@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <title>Welcome to the Dark Nexus!</title>
+    <title>Welcome to the Notifyr!</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </head>
 <body style="margin: 0; padding: 0;">
@@ -13,28 +13,28 @@
                     <tr>
                         <td class="hero">
                             <img src="https://via.placeholder.com/120x120.png?text=Logo" alt="Your Logo" />
-                            <h1>Welcome to the Dark Nexus!</h1>
+                            <h1>Welcome to the Notifyr!</h1>
                         </td>
                     </tr>
                     <tr>
                         <td class="content">
-                            <p>Greetings, [User Name],</p>
+                            <p>Greetings, {{firstname}} {{lastname}},</p>
                             <p>You've stepped into the Dark Nexus, a realm of endless possibilities and hidden depths. Your journey begins now, and we're thrilled to have you join our ranks.</p>
                             <p>Here's your access data for navigating this new reality:</p>
                             <div class="details">
-                                <p><strong>Username:</strong> [Your Username]</p>
-                                <p><strong>Email:</strong> [Your Email Address]</p>
-                                <p><strong>Initiation Date:</strong> [Date Created]</p>
+                                <p><strong>Username:</strong> {{username}}</p>
+                                <p><strong>Email:</strong> {{email}}</p>
+                                <p><strong>Initiation Date:</strong> {{date}}</p>
                             </div>
                             <p>Unlock the secrets within by accessing your account:</p>
-                            <p><a href="[Your Login Link]" class="button">Enter the Nexus</a></p>
-                            <p>Should you encounter shadows or require guidance, our support team is available at [Support Email Address].</p>
+                            <p><a href="{{login-link}}" class="button">Enter to Notifyr</a></p>
+                            <p>Should you encounter shadows or require guidance, our support team is available at support@email.com</p>
                             <p>May your path be illuminated by the Dark Nexus.</p>
                         </td>
                     </tr>
                     <tr>
                         <td class="footer">
-                            <p>&copy; [Year] [Your Company Name]. All rights reserved.</p>
+                            <p>&copy; 2025 Notifyr. All rights reserved.</p>
                         </td>
                     </tr>
                 </table>

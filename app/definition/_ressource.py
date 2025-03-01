@@ -140,6 +140,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             func.meta['excludes'] = set()
             func.meta['options'] =[] 
             func.meta['limit_obj'] =None
+            func.meta['limit_exempt']=False
             
             class_name = get_class_name_from_method(func)
             kwargs = {

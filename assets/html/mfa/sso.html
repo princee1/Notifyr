@@ -13,21 +13,21 @@
             <p>{{useremail}}</p>
         </div>
         <div class="instructions">
-            Please use the following code to complete your sign-in process:
+            Please use the following code to complete your single sign-in process:
         </div>
         <div class="mfa-code">
-            <span>{{mfa-digit-1}}</span>
-            <span>{{mfa-digit-2}}</span>
-            <span>{{mfa-digit-3}}</span>
-            <span>{{mfa-digit-4}}</span>
-            <span>{{mfa-digit-5}}</span>
-            <span>{{mfa-digit-6}}</span>
+            <span>{{mfa->1}}</span>
+            <span>{{mfa->2}}</span>
+            <span>{{mfa->3}}</span>
+            <span>{{mfa->4}}</span>
+            <span>{{mfa->5}}</span>
+            <span>{{mfa->6}}</span>
         </div>
         <div class="footer">
             If you did not request this code, please ignore this email.
         </div>
         <div class="detailed-message">
-            This code is valid for the next 10 minutes. For your security, do not share this code with anyone.
+            This code is valid for the next {{expiry}}. For your security, do not share this code with anyone.
         </div>
         <div class="footer">
             <p>Thank you for using our service!</p>

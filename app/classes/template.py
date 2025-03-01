@@ -57,8 +57,7 @@ class Template(Asset):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
         self.keys: list[str] = []
-        self.translator = Translator(
-            ['translate.google.com', 'translate.google.com'])
+        self.translator = Translator(['translate.google.com', 'translate.google.com'])
         self.load()
 
     def inject(self, data:  dict) -> bool:
@@ -159,7 +158,7 @@ class HTMLTemplate(Template):
         style = self.bs4.find("head > style")
         if style is None:
             head = self.bs4.find("head")
-            new_style = PageElement()
+            new_style = Tag(name="style",attrs={"type": "text/css"})
             head.append(new_style)
             return
         style.replace(style.contents + cssContent)

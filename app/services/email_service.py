@@ -207,7 +207,11 @@ class EmailSenderService(BaseEmailService):
         try:
             emailID, message = email.mail_message
             reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message)
-            return reply_
+
+            return {
+                "emailID":emailID,
+                "status":reply_
+            }
 
         except smtp.SMTPSenderRefused as e:
             self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT
@@ -224,6 +228,7 @@ class EmailSenderService(BaseEmailService):
             # TODO retry getting the access token
             ...
 
+    
 # @_service.ServiceClass
 class EmailReaderService(BaseEmailService):
     def __init__(self, configService: ConfigService, loggerService: LoggerService, trainingService: LLMModelService,) -> None:
@@ -258,4 +263,8 @@ class EmailReaderService(BaseEmailService):
 
 # @_service.ServiceClass
 class EmailAPIService(BaseEmailService):
+    ...
+
+
+class EmailDnsService(_service.Service):
     ...

@@ -117,8 +117,7 @@ class ThreadedReader(Reader):
         self.thread: Thread
 
     def read(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
-        self.thread = Thread(target=super().read, args=(
-            ext, flag, rootFlag, encoding))
+        self.thread = Thread(target=super().read, args=(ext, flag, rootFlag, encoding))
         self.thread.start()
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
@@ -165,11 +164,13 @@ class AssetService(_service.Service):
         self.pdf = pdfReader.join()
         self.sms = smsReader.join()
         self.phone = phoneReader.join()
+
+        print(self.html)
+        self.prettyPrinter.wait(0)
         
         
     def loadHTMLData(self, html: HTMLTemplate):
-        cssInPath = self.fileService.listExtensionPath(
-            html.dirName, Extension.CSS)
+        cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS)
         for cssPath in cssInPath:
             try:
                 css_content = self.css[cssPath].content
@@ -177,8 +178,7 @@ class AssetService(_service.Service):
             except KeyError as e:
                 pass
 
-        imagesInPath = self.fileService.listExtensionPath(
-            html.dirName, Extension.JPEG)
+        imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG)
         for imagesPath in imagesInPath:
             try:
                 imageContent = self.images[imagesPath].content
