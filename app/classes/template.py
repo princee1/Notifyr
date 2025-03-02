@@ -105,8 +105,6 @@ class Template(Asset):
 
 class HTMLTemplate(Template):
 
-    ValidatorConstructorParam = [
-        "require_all", "ignore_none_values", "allow_unknown", "purge_unknown", "purge_readonly"]
     DefaultValidatorConstructorParamValues = {
         "require_all": True,
         "ignore_none_values": False,
@@ -127,7 +125,7 @@ class HTMLTemplate(Template):
                 # TODO Raise Error
                 pass
             content_html = str(self.content_to_inject)
-            flattened_data = flatten_dict()
+            flattened_data = flatten_dict(data)
             for key in flattened_data:
                 regex = re.compile(rf"{{{{{key}}}}}")
                 content_html = regex.sub( str(flattened_data[key]), content_html)
@@ -140,20 +138,20 @@ class HTMLTemplate(Template):
 
     def validate(self, document: dict):
         # TODO See: https://docs.python-cerberus.org/errors.html
-        if self.Validator == None:
+        if self.schema == None or self.schema == {}:
             return True,document
-        
+        Validator = CustomValidator(self.schema)
+        for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues.items():
+            Validator.__setattr__(property_, flag)
         try:
-            if not self.Validator.validate(document):
-                raise DocumentError
-            
-            return True, self.Validator.document
+            document = Validator.normalized(document)
+            if not Validator.validate(document):
+                return False, Validator.errors
+            return True, Validator.document
             # return self.Validator.normalized(document)
         except DocumentError as e:
-            # TODO raise a certain error
-            print(self.Validator.errors)
-            return False, self.Validator.errors
-
+            raise TemplateBuildError("Document is not a mapping of corresponding schema")
+            
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
         style = self.bs4.find("head > style")
         if style is None:
@@ -186,13 +184,8 @@ class HTMLTemplate(Template):
         try:
             if self.validation_balise is None:
                 return
-            schema = MLSchemaBuilder(self.validation_balise).schema
-            self.Validator = CustomValidator(schema)
-            # for property_ in HTMLTemplate.ValidatorConstructorParam:
-            #     self.set_ValidatorDefaultBehavior(property_)
-            for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues.items():
-                self.Validator.__setattr__(property_, flag)
-            self.keys = schema.keys()
+            self.schema = MLSchemaBuilder(self.validation_balise).schema
+            self.keys = self.schema.keys()
             self.validation_balise.decompose()
             self.content_to_inject = self.bs4.prettify(formatter="html5")
             # TODO success
@@ -202,18 +195,16 @@ class HTMLTemplate(Template):
             pass
 
     def set_ValidatorDefaultBehavior(self, validator_property):
+        raise NotImplementedError
         try:
-            flag = strict_parseToBool(
-                self.validation_balise.attrs[validator_property])
+            flag = strict_parseToBool( self.validation_balise.attrs[validator_property])
             if flag is None:
                 raise ValueError
             self.Validator.__setattr__(validator_property, flag)
         except KeyError:
-            self.Validator.__setattr__(
-                validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
+            self.Validator.__setattr__(validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
         except ValueError:
-            self.Validator.__setattr__(
-                validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
+            self.Validator.__setattr__(validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
 
     def exportText(self, content: str):
         bs4 = BeautifulSoup(content, XMLLikeParser.LXML.value)
@@ -273,7 +264,6 @@ class PDFTemplate(Template):
         ...
 
     
-
 class SMSTemplate(Template):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)

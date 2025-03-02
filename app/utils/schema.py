@@ -36,10 +36,10 @@ class MLSchemaBuilder (SchemaBuilder):
             
             if not v.attrs.__contains__("type"):
                 # TODO find the error element
-                raise TypeError
+                raise TypeError("Specify the type of the value")
             if not v.attrs.__contains__("id") and v.name == ValidationHTMLConstant.VALIDATION_ITEM_BALISE:
                 # TODO find the error element
-                raise NameError
+                raise NameError("Specify the id of the value")
             key = v.attrs["id"]
             # TODO validates arguments
             schema[key] = self.parse(v.attrs)
@@ -47,7 +47,7 @@ class MLSchemaBuilder (SchemaBuilder):
             is_struct = v.attrs['type'] in ["list", "dict"]
             if has_noSuccessor:
                 if is_struct:
-                    raise TypeError
+                    raise TypeError("Specify the type of the children of the structure")
 
                 if schema[key].__contains__("schema"):
                     default_schema_registry = schema[key]["schema"]
@@ -56,9 +56,9 @@ class MLSchemaBuilder (SchemaBuilder):
                 continue
 
             if not is_struct:
-                print(v.attrs["type"])
+                type_ = v.attrs["type"]
                 # TODO: find the one element that was supposed to be a dict or a list and that has children
-                raise TypeError
+                raise TypeError(f"{key} cannot have defined children because it is not a struct: Type: {type_}")
             
             successor_schema = self.find(v)
             next_key = "schema"  # NOTE might add valuerules

@@ -4,7 +4,7 @@ import phonenumbers
 from validators import url as validate_url, ipv4 as IPv4Address, ValidationError, ipv6 as IPv6Address, email, mac_address
 from geopy.geocoders import Nominatim
 from bs4 import Tag
-from cerberus import Validator
+from cerberus import Validator,SchemaError
 
 def ipv4_validator(ip):
     """
@@ -73,6 +73,10 @@ def location_validator(latitude, longitude):
     location = geolocator.reverse((latitude, longitude), exactly_one=True)
     return location is not None
 
+
+def digit_validator(val:int):
+    return val>=0 and val <=9
+
 #######################                      #################################
 class ValidatorType(Enum):
     IPV4= ipv4_validator,"Must be an ipv4 address format"
@@ -82,19 +86,22 @@ class ValidatorType(Enum):
     EMAIL=email_validator,"Must be an email address format"
     LOCATION=location_validator,"Must be an geolocation location format"
     URL=url_validator,"Must be an url address format"
+    DIGIT=digit_validator,"Must be a digit"
 #######################                      #################################
 
 class CustomValidator(Validator):
     def __init__(self,schema) -> None:
         super().__init__(schema)
 
-    def _validate_custom(self,constraint:Literal["ipv4","ipv6","url","mac","email","phone","location"],field,value):
-        validator_type = ValidatorType.__getitem__(constraint.upper())
+    def _validate_custom(self,constraint:Literal["ipv4","ipv6","url","mac","email","phone","location","digit"],field,value):
+        constraint = constraint.upper()
+        if constraint not in ValidatorType._member_names_():
+            raise SchemaError
+        validator_type = ValidatorType.__getitem__(constraint)
         validationFunc, error_message = validator_type.value
         flag = validationFunc(value)
         if not flag:
             self._error(field, error_message)
-        
-    def _validate_for(self,field,value):
-        pass
+    # ERROR extending :check normal validation 
+    # TODO for  operator
 
