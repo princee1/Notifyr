@@ -1,13 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email MFA Login</title>
     <validation>
-        
+        <validation-item id="firstname" type="string" empty="False" maxlength="50"></validation-item>
+        <validation-item id="lastname" type="string" empty="False" maxlength="50"></validation-item>
+        <validation-item id="username" type="string" empty="False" maxlength="100"></validation-item>
+        <validation-item id="useremail" type="string" empty="False" custom="email"></validation-item>
+        <validation-item id="mfa" type="dict">
+            <validation-item id="0" type="integer" custom="digit"></validation-item>
+            <validation-item id="1" type="integer" custom="digit"></validation-item>
+            <validation-item id="2" type="integer" custom="digit"></validation-item>
+            <validation-item id="3" type="integer" custom="digit"></validation-item>
+            <validation-item id="4" type="integer" custom="digit"></validation-item>
+            <validation-item id="5" type="integer" custom="digit"></validation-item>
+        </validation-item>
     </validation>
 </head>
+
 <body>
     <div class="container">
         <h2>Email MFA Login</h2>
@@ -19,20 +32,22 @@
             <p>Your MFA code is:</p>
         </div>
         <div class="mfa-code" onclick="">
+            <span>{{mfa->0}}</span>
             <span>{{mfa->1}}</span>
             <span>{{mfa->2}}</span>
             <span>{{mfa->3}}</span>
             <span>{{mfa->4}}</span>
             <span>{{mfa->5}}</span>
-            <span>{{mfa->6}}</span>            
         </div>
         <div class="message">
             <p>If you did not request this code, please contact support immediately.</p>
         </div>
         <div class="detailed-message">
             <p>Dear {{firstname}} {{lastname}},</p>
-            <p>We received a request to access your account using Multi-Factor Authentication (MFA). Your security is our top priority, and we want to ensure that it is really you trying to access your account.</p>
-            <p>If you did not request this code, please contact our support team immediately at support@example.com or call us at (123) 456-7890.</p>
+            <p>We received a request to access your account using Multi-Factor Authentication (MFA). Your security is
+                our top priority, and we want to ensure that it is really you trying to access your account.</p>
+            <p>If you did not request this code, please contact our support team immediately at support@example.com or
+                call us at (123) 456-7890.</p>
             <p>Thank you for helping us keep your account secure.</p>
             <p>Best regards,<br>Notifyr Team</p>
         </div>
@@ -41,4 +56,5 @@
         </div>
     </div>
 </body>
+
 </html>

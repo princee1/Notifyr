@@ -49,6 +49,7 @@ class Asset():
         # BUG need to replace the path separator
         self.name.replace("\\", ROUTE_SEP)
         self.name.replace("/", ROUTE_SEP)
+        self.ignore=False
 
 
 class Template(Asset):
@@ -103,6 +104,9 @@ class Template(Asset):
     def routeName(self,): return self.name.replace(os.sep, ROUTE_SEP)
 
 
+class MarkupLanguageBaseTemplate(Template):
+    ...
+
 class HTMLTemplate(Template):
 
     DefaultValidatorConstructorParamValues = {
@@ -118,12 +122,10 @@ class HTMLTemplate(Template):
         self.image_needed: list[str] = []
         self.content_to_inject = None
         super().__init__(filename, content, dirName)
+        self.ignore = self.filename.endswith(".registry.html")
 
     def inject(self, data: dict):
         try:
-            if not super().inject(data):
-                # TODO Raise Error
-                pass
             content_html = str(self.content_to_inject)
             flattened_data = flatten_dict(data)
             for key in flattened_data:
@@ -212,9 +214,6 @@ class HTMLTemplate(Template):
         title.decompose()
         return bs4.get_text("\n", True)
 
-    def save(self):
-        pass
-
     def load(self):
         self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
         self.validation_balise = self.bs4.select_one(VALIDATION_CSS_SELECTOR)
@@ -247,11 +246,6 @@ class HTMLTemplate(Template):
             if src is None or not src.startswith("cid:"):
                 continue
             self.image_needed.append(src)
-
-
-class CustomHTMLTemplate(HTMLTemplate):
-    pass
-
 
 class PDFTemplate(Template):
     def __init__(self, filename: str, dirName: str) -> None:

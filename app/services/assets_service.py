@@ -39,6 +39,7 @@ class Extension(Enum):
 
 class AssetType(Enum):
     IMAGES = "images"
+    PDF = "pdf"
     SMS = "sms"
     PHONE = "phone"
     HTML = Extension.HTML.value
@@ -155,8 +156,8 @@ class AssetService(_service.Service):
         self.images = Reader()(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
         self.css = Reader()(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
 
-        htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ)
-        pdfReader: ThreadedReader = ThreadedReader(PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES)
+        htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.HTML.value)
+        pdfReader: ThreadedReader = ThreadedReader(PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)
         smsReader: ThreadedReader = ThreadedReader(SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
         phoneReader: ThreadedReader = ThreadedReader(PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
 
@@ -165,7 +166,7 @@ class AssetService(_service.Service):
         self.sms = smsReader.join()
         self.phone = phoneReader.join()
 
-        print(self.html)
+    
         self.prettyPrinter.wait(0)
         
         

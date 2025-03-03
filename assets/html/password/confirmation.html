@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Email Change Confirmation</title>
+    <validation>
+      <validation-item id="fullname" type="string" empty="False" maxlength="100"></validation-item>
+      <validation-item id="ipaddress" type="string" custom="ipv4" ></validation-item>
+      <validation-item id="location" type="string" empty="False" maxlength="100" ></validation-item>
+      <validation-item id="username" type="string" empty="False" maxlength="100"></validation-item>
+      <validation-item id="email" type="string" custom="email"></validation-item>
+      <validation-item id="link" type="string" custom="url"> </validation-item>
+      <validation-item id="date" type="string" custom="date"></validation-item>
+      <validation-item id="time" type="string" custom="time"></validation-item>
+    </validation>
 
   </head>
   <body>
@@ -18,7 +28,7 @@
         <p>Dear {{fullname}},</p>
         <p>
           We've detected a recent email address change request originating from
-          IP address: <strong>{{ip-address}}</strong>, and estimated location:
+          IP address: <strong>{{ipaddress}}</strong>, and estimated location:
           <strong>{{location}}</strong>.
         </p>
         <p>
@@ -45,7 +55,7 @@
       <p>This link will expire in 24 hours.</p>
       <div class="footer">
         <p>If you have any questions, please contact our support team.</p>
-        <p>Thank you for choosing [Your Company Name]. We are committed to protecting your account security.</p>
+        <p>Thank you for choosing Notify. We are committed to protecting your account security.</p>
       </div>
     </div>
   </body>

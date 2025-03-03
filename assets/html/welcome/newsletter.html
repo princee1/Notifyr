@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Newsletter Welcome</title>
+
+    <validation>
+        <validation-item id="username" type="string" empty="False" maxlength="100"></validation-item>
+        <validation-item id="details" type="string" empty="False" maxlength="125"></validation-item>
+        <validation-item id="email" type="string" custom="email"></validation-item>
+        <validation-item id="date" type="string" custom="date"></validation-item>
+        <validation-item id="time" type="string" custom="time"></validation-item>
+        <validation-item id="explorelink" type="string" custom="url"> </validation-item>
+        <validation-item id="unsubscribelink" type="string" custom="url"> </validation-item>
+
+    </validation>
 </head>
 <body>
     <div class="container">
@@ -21,13 +32,13 @@
             <div class="details">
                 <p><strong>Your Subscription Details:{{details}}</strong></p>
                 <p>Email: {{email}}</p>
-                <p>Subscription Date: {{subscription-date}}</p>
+                <p>Subscription Date: {{date}} - {{time}}</p>
             </div>
             <p>
                 Ready to explore? Click the button below to get started:
             </p>
             <div style="text-align: center;">
-                <a href="#" class="button">Explore Now</a>
+                <a href="{{explorelink}}" class="button">Explore Now</a>
             </div>
             <div class="divider"></div>
             <p>
@@ -35,8 +46,8 @@
             </p>
         </div>
         <div class="footer">
-            <p>&copy; 2023 Your Company. All rights reserved.</p>
-            <p class="small-text">You are receiving this email because you subscribed to our newsletter. If you wish to unsubscribe, <a href="#" style="color: #9e9e9e;">click here</a>.</p>
+            <p>&copy; 2025 Notifyr. All rights reserved.</p>
+            <p class="small-text">You are receiving this email because you subscribed to our newsletter. If you wish to unsubscribe, <a href="{{unsubscribelink}}" style="color: #9e9e9e;">click here</a>.</p>
         </div>
     </div>
 </body>

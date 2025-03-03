@@ -77,6 +77,22 @@ def location_validator(latitude, longitude):
 def digit_validator(val:int):
     return val>=0 and val <=9
 
+from datetime import datetime
+
+def date_validator(date: str) -> bool:
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+def time_validator(time: str) -> bool:
+    try:
+        datetime.strptime(time, "%H:%M:%S")
+        return True
+    except ValueError:
+        return False
+
 #######################                      #################################
 class ValidatorType(Enum):
     IPV4= ipv4_validator,"Must be an ipv4 address format"
@@ -87,6 +103,8 @@ class ValidatorType(Enum):
     LOCATION=location_validator,"Must be an geolocation location format"
     URL=url_validator,"Must be an url address format"
     DIGIT=digit_validator,"Must be a digit"
+    DATE = date_validator,"Must be a date format Y-M-D"
+    TIME = time_validator,"Must be a time format H:M:S" 
 #######################                      #################################
 
 class CustomValidator(Validator):
