@@ -69,8 +69,9 @@ class BackgroundTaskService(BackgroundTasks,Service):
         
         async with self.task_lock:
             self.running_tasks_count += len(self.sharing_task[request_id])  # Increase count based on new tasks
-            heaviness = self.sharing_task[request_id]['heaviness']
-            self.server_load[heaviness] +=1
+            for t_config in self.sharing_task[request_id]:
+                heaviness = t_config['heaviness']
+                self.server_load[heaviness] +=1
 
         for t in self.sharing_task[request_id]:
             task = t['task']

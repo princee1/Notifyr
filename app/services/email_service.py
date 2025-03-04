@@ -133,8 +133,7 @@ class EmailSenderService(BaseEmailService):
                 connector = smtp.SMTP_SSL(self.hostAddr, self.hostPort)
             else:
                 connector = smtp.SMTP(self.hostAddr, self.hostPort)
-            connector.set_debuglevel(
-                self.configService.SMTP_EMAIL_LOG_LEVEL)
+            connector.set_debuglevel(self.configService.SMTP_EMAIL_LOG_LEVEL)
             return connector
         except (socket.gaierror, ConnectionRefusedError, TimeoutError) as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
