@@ -104,10 +104,8 @@ class Template(Asset):
     def routeName(self,): return self.name.replace(os.sep, ROUTE_SEP)
 
 
-class MarkupLanguageBaseTemplate(Template):
-    ...
 
-class HTMLTemplate(Template):
+class MLTemplate(Template):
 
     DefaultValidatorConstructorParamValues = {
         "require_all": True,
@@ -117,12 +115,15 @@ class HTMLTemplate(Template):
         "purge_unknown": False,
     }
 
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
-        self.images: list[tuple[str, str]] = []
-        self.image_needed: list[str] = []
+    def __init__(self, filename: str, content: str, dirName: str,extension:str,validation_selector:str) -> None:
         self.content_to_inject = None
+        self.extension = extension
+        self.validation_selector = validation_selector
         super().__init__(filename, content, dirName)
-        self.ignore = self.filename.endswith(".registry.html")
+        self.ignore = self.filename.endswith(f".registry.{self.extension}")
+
+    def _built_template(self,content):
+        ...
 
     def inject(self, data: dict):
         try:
@@ -132,14 +133,13 @@ class HTMLTemplate(Template):
                 regex = re.compile(rf"{{{{{key}}}}}")
                 content_html = regex.sub( str(flattened_data[key]), content_html)
 
-            content_text = self.exportText(content_html)
-            return content_html, content_text
+            return self._built_template(content_html)
+            
         except Exception as e:
             print(e.__class__)
             print(e.__cause__)
             print(e.args)  
-            raise TemplateBuildError
-            
+            raise TemplateBuildError          
 
     def validate(self, document: dict):
         # TODO See: https://docs.python-cerberus.org/errors.html
@@ -156,27 +156,9 @@ class HTMLTemplate(Template):
             # return self.Validator.normalized(document)
         except DocumentError as e:
             raise TemplateBuildError("Document is not a mapping of corresponding schema")
-            
-    def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
-        style = self.bs4.select_one("head > style")
-        if style is None:
-            head = self.bs4.select_one("head")
-            style = Tag(name="style", attrs={"type": "text/css"})
-            head.append(style)
-        
-        if style.string==None:
-            style.string=""
-        
-        style.string += cssContent
-
-       
-    def set_content(self,):
-        self.content_to_inject = self.bs4.prettify(formatter="html5")
-
-        
-    def loadImage(self, image_path, imageContent: str):
-        if image_path in self.image_needed:
-            self.images.append((image_path, imageContent))
+               
+    def set_content(self,formatter):
+        self.content_to_inject = self.bs4.prettify(formatter=formatter)
 
     def extractExtraSchemaRegistry(self):
 
@@ -200,37 +182,17 @@ class HTMLTemplate(Template):
             self.schema = MLSchemaBuilder(self.validation_balise).schema
             self.keys = self.schema.keys()
             self.validation_balise.decompose()
-            # TODO success
         except SchemaError as e:
             # TODO raise another error and print the name of the template so the route will not be available
             printJSON(e.args[0])
             pass
 
-    def set_ValidatorDefaultBehavior(self, validator_property):
-        raise NotImplementedError
-        try:
-            flag = strict_parseToBool( self.validation_balise.attrs[validator_property])
-            if flag is None:
-                raise ValueError
-            self.Validator.__setattr__(validator_property, flag)
-        except KeyError:
-            self.Validator.__setattr__(validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
-        except ValueError:
-            self.Validator.__setattr__(validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
-
-    def exportText(self, content: str):
-        bs4 = BeautifulSoup(content, XMLLikeParser.HTML.value)
-        title = bs4.select_one("title")
-        title.decompose()
-        return bs4.get_text("\n", True)
-
     def load(self):
         self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
-        self.validation_balise = self.bs4.select_one(VALIDATION_CSS_SELECTOR)
+        self.validation_balise = self.bs4.select_one(self.validation_selector)
         self.extractExtraSchemaRegistry()
         self.extractValidation()
-        self.extractImageKey()
-
+        
     def translate(self, targetLang: str, text: str):
         if targetLang == Template.LANG:
             return text
@@ -243,10 +205,32 @@ class HTMLTemplate(Template):
         if not is_valid:
             raise TemplateValidationError(data)
         
-        content_html, content_text = self.inject(data)
-        content_html = self.translate(target_lang, content_html)
-        content_text = self.translate(target_lang, content_text)
-        return True, (content_html, content_text)
+
+class HTMLTemplate(MLTemplate):
+
+    def __init__(self,filename:str,content:str,dirname:str):
+        super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
+        self.images: list[tuple[str, str]] = []
+        self.image_needed: list[str] = []
+    
+    def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
+        style = self.bs4.select_one("head > style")
+        if style is None:
+            head = self.bs4.select_one("head")
+            style = Tag(name="style", attrs={"type": "text/css"})
+            head.append(style)
+        
+        if style.string==None:
+            style.string=""
+        
+        style.string += cssContent
+
+    def exportText(self, content: str):
+        bs4 = BeautifulSoup(content, XMLLikeParser.HTML.value)
+        title = bs4.select_one("title")
+        title.decompose()
+        return bs4.get_text("\n", True)
+    
 
     def extractImageKey(self,):
         img_element: set[Tag] = self.bs4.find_all("img")
@@ -257,6 +241,28 @@ class HTMLTemplate(Template):
                 continue
             self.image_needed.append(src)
 
+    def load(self):
+        super().load()
+        self.extractImageKey()
+    
+    def loadImage(self, image_path, imageContent: str):
+        if image_path in self.image_needed:
+            self.images.append((image_path, imageContent))
+
+    def set_content(self,):
+        super().set_content("html5")
+
+    def build(self,data,target_lang):
+        super().build(data,target_lang)
+        content_html, content_text = self.inject(data)
+        content_html = self.translate(target_lang, content_html)
+        content_text = self.translate(target_lang, content_text)
+        return True, (content_html, content_text)
+    
+    def _built_template(self,content):
+        content_text = self.exportText(content)
+        return content, content_text
+    
 class PDFTemplate(Template):
     def __init__(self, filename: str, dirName: str) -> None:
         super().__init__(filename, None, dirName)
@@ -268,15 +274,18 @@ class PDFTemplate(Template):
         ...
 
     
-class SMSTemplate(Template):
+class SMSTemplate(MLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName)
+        super().__init__(filename, content, dirName,"xml","validation")
+
+    def _built_template(self,content):
+        return content
 
 
     def load_media(self, media: list[str]):
         ...
 
-class PhoneTemplate(Template):
+class PhoneTemplate(MLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
 ####################### ########################
