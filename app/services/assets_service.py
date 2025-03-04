@@ -92,9 +92,9 @@ class Reader():
             setTempFile.add(keyName)
             self.values[relpath] = self.asset(keyName, content, dir)
 
-        if issubclass_of(Template, self.asset):  # TODO the part when we can load
-            if self.func != None:
-                self.func(self.values[relpath])
+            if issubclass_of(Template, self.asset):
+                if self.func != None:
+                    self.func(self.values[relpath])
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """
@@ -164,28 +164,33 @@ class AssetService(_service.Service):
         self.html = htmlReader.join()
         self.pdf = pdfReader.join()
         self.sms = smsReader.join()
-        self.phone = phoneReader.join()
+        self.phone = phoneReader.join() 
 
-    
-        self.prettyPrinter.wait(0)
-        
+        #self.prettyPrinter.wait(0)      
         
     def loadHTMLData(self, html: HTMLTemplate):
-        cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS)
+        cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
+        css_content=""
         for cssPath in cssInPath:
+            cssPath = self.asset_rel_path(cssPath,Extension.HTML.value)
+            cssPath = cssPath.replace(Extension.CSS.value+"\\",'')
+            cssPath = cssPath.replace(Extension.HTML.value+"\\"+Extension.HTML.value+"\\",Extension.HTML.value+"\\")
             try:
-                css_content = self.css[cssPath].content
-                html.loadCSS(css_content)
+                css_content += self.css[cssPath].content
+                
             except KeyError as e:
+                print('error')
                 pass
-
-        imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG)
+        html.loadCSS(css_content)
+        imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG.value)
         for imagesPath in imagesInPath:
             try:
                 imageContent = self.images[imagesPath].content
                 html.loadImage(imagesPath,imageContent)
             except KeyError as e:
                 pass
+        
+        html.set_content()
 
     def exportRouteName(self,attributeName:RouteAssetType)-> list[str] | None:
         """

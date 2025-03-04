@@ -131,12 +131,15 @@ class HTMLTemplate(Template):
             for key in flattened_data:
                 regex = re.compile(rf"{{{{{key}}}}}")
                 content_html = regex.sub( str(flattened_data[key]), content_html)
-            content_text = self.exportText(data)
+
+            content_text = self.exportText(content_html)
             return content_html, content_text
-        except KeyError as e:
-            pass
-        except:
-            pass
+        except Exception as e:
+            print(e.__class__)
+            print(e.__cause__)
+            print(e.args)  
+            raise TemplateBuildError
+            
 
     def validate(self, document: dict):
         # TODO See: https://docs.python-cerberus.org/errors.html
@@ -155,14 +158,22 @@ class HTMLTemplate(Template):
             raise TemplateBuildError("Document is not a mapping of corresponding schema")
             
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
-        style = self.bs4.find("head > style")
+        style = self.bs4.select_one("head > style")
         if style is None:
-            head = self.bs4.find("head")
-            new_style = Tag(name="style",attrs={"type": "text/css"})
-            head.append(new_style)
-            return
-        style.replace(style.contents + cssContent)
+            head = self.bs4.select_one("head")
+            style = Tag(name="style", attrs={"type": "text/css"})
+            head.append(style)
+        
+        if style.string==None:
+            style.string=""
+        
+        style.string += cssContent
 
+       
+    def set_content(self,):
+        self.content_to_inject = self.bs4.prettify(formatter="html5")
+
+        
     def loadImage(self, image_path, imageContent: str):
         if image_path in self.image_needed:
             self.images.append((image_path, imageContent))
@@ -189,7 +200,6 @@ class HTMLTemplate(Template):
             self.schema = MLSchemaBuilder(self.validation_balise).schema
             self.keys = self.schema.keys()
             self.validation_balise.decompose()
-            self.content_to_inject = self.bs4.prettify(formatter="html5")
             # TODO success
         except SchemaError as e:
             # TODO raise another error and print the name of the template so the route will not be available
@@ -209,8 +219,8 @@ class HTMLTemplate(Template):
             self.Validator.__setattr__(validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
 
     def exportText(self, content: str):
-        bs4 = BeautifulSoup(content, XMLLikeParser.LXML.value)
-        title = bs4.find("title", recursive=False)
+        bs4 = BeautifulSoup(content, XMLLikeParser.HTML.value)
+        title = bs4.select_one("title")
         title.decompose()
         return bs4.get_text("\n", True)
 

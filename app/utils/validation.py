@@ -113,7 +113,7 @@ class CustomValidator(Validator):
 
     def _validate_custom(self,constraint:Literal["ipv4","ipv6","url","mac","email","phone","location","digit"],field,value):
         constraint = constraint.upper()
-        if constraint not in ValidatorType._member_names_():
+        if constraint not in ValidatorType._member_names_:
             raise SchemaError
         validator_type = ValidatorType.__getitem__(constraint)
         validationFunc, error_message = validator_type.value

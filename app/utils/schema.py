@@ -25,7 +25,6 @@ class MLSchemaBuilder (SchemaBuilder):
         # next_children = self.css_selectorBuilder(CSSLevel.SAME, [ValidationHTMLConstant.VALIDATION_ITEM_BALISE,
         #                                          ValidationHTMLConstant.VALIDATION_VALUES_RULES_BALISE, ValidationHTMLConstant.VALIDATION_KEYS_RULES_BALISE])
         self.schema: dict[str, dict] = self.find(self.root)
-        printJSON(self.schema)
 
     def find(self, validation_item: Tag, css_selector: str | None = None, next_children_css_selector=None):
         schema: dict[str, dict | str] = {}
