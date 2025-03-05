@@ -66,7 +66,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.RELAY])
     @UsePermission(JWTAssetPermission('phone'))
     @UseHandler(TemplateHandler,CeleryTaskHandler)
-    @UsePipe(TemplateParamsPipe('phone'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @UsePipe(TemplateParamsPipe('phone','xml'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}/',methods=[HTTPMethod.POST])
     def voice_template(self,template:str,scheduler: CallTemplateSchedulerModel,authPermission=Depends(get_auth_permission)):

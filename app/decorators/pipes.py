@@ -37,13 +37,15 @@ class AuthPermissionPipe(Pipe):
 
 class TemplateParamsPipe(Pipe):
     
-    def __init__(self,template_type:RouteAssetType):
+    def __init__(self,template_type:RouteAssetType,extension:str=None):
         super().__init__(True)
         self.assetService= Get(AssetService)
         self.configService = Get(ConfigService)
         self.template_type = template_type
+        self.extension = extension
     
     def pipe(self,template:str):
+        template+=self.extension
         asset_routes = self.assetService.exportRouteName(self.template_type)
         template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
         template = self.assetService.asset_rel_path(template,self.template_type)

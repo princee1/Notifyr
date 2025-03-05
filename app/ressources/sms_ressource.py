@@ -69,7 +69,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
     @UseHandler(CeleryTaskHandler)
-    @UsePipe(TemplateParamsPipe('sms'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CeleryTaskGuard([' task_send_template_sms']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST])
