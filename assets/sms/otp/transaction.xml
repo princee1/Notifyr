@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Template>
-    <validation></validation>
-    <body>
-        <Response>
-            <Message></Message>
-        </Response>
-    </body>
+    <validation>
+        <validation-item id="otp" type="string" empty="false" maxlength="10"></validation-item>
+        <validation-item id="expiry" type="int" min="5" max="120"></validation-item>
+    </validation>
+    <Response>
+        <Message>Your OTP for confirming your transaction is {otp}. This code will expire in {expiry} minutes.</Message>
+    </Response>
 </Template>
