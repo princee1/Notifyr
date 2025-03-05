@@ -45,7 +45,7 @@ class TemplateParamsPipe(Pipe):
         self.extension = extension
     
     def pipe(self,template:str):
-        template+=self.extension
+        template+="."+self.extension
         asset_routes = self.assetService.exportRouteName(self.template_type)
         template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
         template = self.assetService.asset_rel_path(template,self.template_type)

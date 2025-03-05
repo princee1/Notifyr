@@ -18,6 +18,7 @@ from cerberus import schema_registry
 class XMLLikeParser(Enum):
     HTML = "html.parser"
     LXML = "lxml"
+    XML ="xml"
 
 
 # ============================================================================================================
@@ -188,7 +189,7 @@ class MLTemplate(Template):
             pass
 
     def load(self):
-        self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
+        self.bs4 = BeautifulSoup(self.content,self.parser)
         self.validation_balise = self.bs4.select_one(self.validation_selector)
         self.extractExtraSchemaRegistry()
         self.extractValidation()
@@ -209,6 +210,8 @@ class MLTemplate(Template):
 class HTMLTemplate(MLTemplate):
 
     def __init__(self,filename:str,content:str,dirname:str):
+        self.parser = XMLLikeParser.LXML.value
+
         super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
         self.images: list[tuple[str, str]] = []
         self.image_needed: list[str] = []
@@ -262,6 +265,7 @@ class HTMLTemplate(MLTemplate):
         content_text = self.exportText(content)
         return content, content_text
     
+
 class PDFTemplate(Template):
     def __init__(self, filename: str, dirName: str) -> None:
         super().__init__(filename, None, dirName)
@@ -277,13 +281,19 @@ class TWIMLTemplate(MLTemplate):
         return content
     
     def set_content(self):
-        super().set_content("xml")
+        response = self.bs4.select_one("Response")
+        self.content_to_inject = response.prettify(formatter="xml")
 
+    def build(self, data, target_lang):
+        super().build(data, target_lang)
+        body = self.inject(data)
+        body = self.translate(target_lang,body)
+        return True,body
 
 class SMSTemplate(TWIMLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
+        self.parser =  XMLLikeParser.XML.value
         super().__init__(filename, content, dirName,"xml","validation")
-
     
 
     def load_media(self, media: list[str]):

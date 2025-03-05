@@ -116,30 +116,9 @@ class SMSService(BaseTwilioCommunication):
         return wrapper
 
     @parse_message_to_json
-    def send_otp(self, otpModel: OTPModel): #TODO otp template
-        company = otpModel.brand
-        otp = otpModel.otp
-        expiry = timedelta(seconds=otpModel.expiry).min
-        match otpModel.type:
-            case "verification":
-                otp_phrase = f"You're verification code is: {otp}"
-
-            case "login":
-                otp_phrase = f"Your login OTP for {company} is {otp}. It will expire in {expiry} minutes. Do not share it."
-
-            case "transaction":
-                otp_phrase = f"Your OTP for confirming your transaction is {otp}. This code will expire in {expiry} minutes."
-
-            case "mfa":
-                otp_phrase = f"Use this OTP ({otp}) to verify your login for {company}. This code expires in {expiry} minutes."
-
-            case "password_reset":
-                otp_phrase = f"Use {otp} to reset your password for {company}. This code is valid for {expiry} minutes."
-
-            case _:
-                otp_phrase = f"Your OTP code is: {otp}. Do not share this code with anyone. It expires soon."
-
-        return self.messages.create(provide_feedback=True,to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=otp_phrase)
+    def send_otp(self, otpModel: OTPModel,body:str): #TODO otp template
+       
+        return self.messages.create(send_as_mms=True,provide_feedback=True,to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=body)
      
     def build(self):
         self.messages = self.twilioService.client.messages

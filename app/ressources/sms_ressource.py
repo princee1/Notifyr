@@ -31,6 +31,11 @@ class SMSCustomSchedulerModel(SchedulerModel):
 class SMSTemplateSchedulerModel(SchedulerModel):
     content: OnGoingTemplateSMSModel
 
+
+def _to_otp_path(template:str):
+    template = "otp\\"+template
+    return {'template':template}
+
 @PingService([SMSService])
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
 @UsePermission(JWTRouteHTTPPermission)
@@ -46,11 +51,15 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         self.celeryService: CeleryService = celeryService
 
     @UseLimiter(limit_value="10000/minutes")
-    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseRoles([Role.MFA_OTP])
-    @BaseHTTPRessource.HTTPRoute('/otp/',methods=[HTTPMethod.POST])
-    def sms_relay_otp(self,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
-        return self.smsService.send_otp(otpModel)
+    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
+    @UsePipe(_to_otp_path)
+    @UsePermission(JWTAssetPermission('sms'))
+    @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST])
+    def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
+        smsTemplate:SMSTemplate = self.assetService.sms[template]
+        _,body= smsTemplate.build(otpModel.content,...)
+        return self.smsService.send_otp(otpModel,body)
     
     
     @UseLimiter(limit_value="5000/minutes")

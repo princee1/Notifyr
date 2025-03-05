@@ -166,7 +166,8 @@ class AssetService(_service.Service):
         self.sms = smsReader.join()
         self.phone = phoneReader.join() 
 
-        #self.prettyPrinter.wait(0)      
+        print(self.sms)
+        self.prettyPrinter.wait(0)      
         
     def loadHTMLData(self, html: HTMLTemplate):
         cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
