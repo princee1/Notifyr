@@ -231,7 +231,6 @@ class HTMLTemplate(MLTemplate):
         title.decompose()
         return bs4.get_text("\n", True)
     
-
     def extractImageKey(self,):
         img_element: set[Tag] = self.bs4.find_all("img")
         for img in img_element:
@@ -273,20 +272,33 @@ class PDFTemplate(Template):
     def xml_to_pdf(self):
         ...
 
+class TWIMLTemplate(MLTemplate):
+    def _built_template(self,content):
+        return content
     
-class SMSTemplate(MLTemplate):
+    def set_content(self):
+        super().set_content("xml")
+
+
+class SMSTemplate(TWIMLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName,"xml","validation")
 
-    def _built_template(self,content):
-        return content
-
+    
 
     def load_media(self, media: list[str]):
-        ...
+        response = self.bs4.select_one("Response")
+        if response is None:
+            print("error")
+            return
+        for m in media:
+            tag  = Tag(name="Media")
+            tag.string = m
+            response.append(tag)
+        
 
-class PhoneTemplate(MLTemplate):
+class PhoneTemplate(TWIMLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName)
+        super().__init__(filename, content, dirName,"xm","validation")
 ####################### ########################
 
