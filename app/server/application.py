@@ -206,11 +206,12 @@ class Application(EventInterface):
         pg_user = self.configService.getenv('POSTGRES_USER')
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
         pg_database = self.configService.getenv('POSTGRES_DB')
+        pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
         register_tortoise(
             app=self.app,
-            db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}",
+            db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}?options=-c%20search_path={pg_schemas}",
             modules={"models": ["app.models.contacts_model"]},
-            generate_schemas=True,
+            generate_schemas=False,
             add_exception_handlers=True,    
         )
 
