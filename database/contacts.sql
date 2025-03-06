@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS Contact (
 CREATE TABLE IF NOT EXISTS SecurityContact (
     security_id  UUID PRIMARY KEY  DEFAULT uuid_generate_v4(),
     contact_id  UUID,
-    security_code TEXT,
+    security_code INT,
     security_phrase TEXT,
     voice_embedding FLOAT[],
     created_at  TIMESTAMP DEFAULT NOW(),

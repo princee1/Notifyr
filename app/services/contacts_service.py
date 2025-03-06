@@ -1,5 +1,3 @@
-
-
 from app.definition._service import Service, ServiceClass
 
 @ServiceClass
