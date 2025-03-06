@@ -1,9 +1,18 @@
 from tortoise import fields
 from tortoise.models import Model
 import uuid
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator,model_validator
+from typing_extensions import Self
 from app.utils.helper import phone_parser
 from app.utils.validation import email_validator, phone_number_validator
+from app.definition._error import BaseError
+
+
+class ContactNotExistsError(BaseError):
+    ...
+
+class ContactAlreadyExistsError(BaseError):
+    ...
 
 
 CONTACTS_SCHEMA = "schema"
@@ -12,7 +21,7 @@ def table_builder (name:str):
     return f"{CONTACTS_SCHEMA}.{name}"
 
 
-class ContactModelORM(Model):
+class ContactORM(Model):
     contact_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     first_name = fields.CharField(max_length=50)
     last_name = fields.CharField(max_length=50)
@@ -34,7 +43,7 @@ class ContactModelORM(Model):
         table = table_builder("Contact")
 
 
-class SecurityContactModelORM(Model):
+class SecurityContactORM(Model):
     security_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     contact_id = fields.ForeignKeyField('models.ContactModelORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     security_code = fields.IntField()
@@ -49,7 +58,7 @@ class SecurityContactModelORM(Model):
     class Meta:
         table = table_builder("SecurityContact")
 
-class SubscriptionModelORM(Model):
+class SubscriptionORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     contact_id = fields.ForeignKeyField('models.ContactModelORM', related_name='subscriptions', unique=True)
     email_status = fields.CharField(max_length=20)
@@ -95,6 +104,12 @@ class InfoModel(BaseModel):
             raise ValueError('Value lang is not supported yet only en or fr')
         return lang
 
+    @model_validator(mode="after")
+    def check_email_phone(self)->Self:
+        if self.phone ==None and self.email == None:
+            raise ValueError("Email and phone cant be both null")
+        return self
+
 class SecurityModel(BaseModel):
     security_code:int
     security_phrase:str
@@ -111,15 +126,26 @@ class SubscriptionModel(BaseModel):
 
     @field_validator('email_status')
     def  check_lang(cls,email_status):
+        if email_status == None:
+            return None
         if email_status not in ('Active','Inactive'):
             raise ValueError('Suscription status is not valid: (Active or Inactive)')
         return email_status
 
     @field_validator('sms_status')
     def  check_lang(cls,sms_status):
+        if sms_status ==None:
+            return None
         if sms_status not in ('Active','Inactive'):
             raise ValueError('Suscription status is not valid (Active or Inactive)')
         return sms_status
+    
+    @model_validator(mode="after")
+    def check_email_phone(self)->Self:
+        if self.email_status ==None and self.sms_status == None:
+            raise ValueError("Email status and phone status cant be both null")
+        return self
+
 
 
 class ContactModel(BaseModel):

@@ -8,6 +8,7 @@ from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError,CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
+from app.models.contacts_model import ContactAlreadyExistsError, ContactNotExistsError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -97,3 +98,17 @@ class TwilioHandler(Handler):
         except TwilioRestException as e:
             raise HTTPException(status=status.HTTP_400_BAD_REQUEST,details={})
     
+
+
+class ContactsHandler(Handler):
+
+    def handle(self, function, *args, **kwargs):
+        try:
+
+            return function(*args, **kwargs)
+        
+        except ContactNotExistsError:
+            ...
+
+        except ContactAlreadyExistsError:
+            ...

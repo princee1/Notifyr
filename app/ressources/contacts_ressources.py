@@ -4,11 +4,14 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Query, status
 from app.classes.auth_permission import Role
 from app.container import InjectInMethod
+from app.decorators.handlers import ContactsHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UsePermission, UsePipe, UseRoles
-from app.models.contacts_model import ContactModelORM,ContactModel
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
+from app.models.contacts_model import ContactORM,ContactModel
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.contacts_service import ContactsService
+from app.services.email_service import EmailSenderService
+from app.services.twilio_service import SMSService
 from app.utils.dependencies import get_auth_permission
 from app.decorators.pipes import ContactsIdPipe, RelayPipe
 from pydantic import BaseModel
@@ -17,16 +20,16 @@ from pydantic import BaseModel
 CONTACTS_PREFIX = 'contacts'
 
 
-async def get_contacts(contact_id: str, idtype: str = Query("id")) -> ContactModelORM:
+async def get_contacts(contact_id: str, idtype: str = Query("id")) -> ContactORM:
     match idtype:
         case "id":
-            user = await ContactModelORM.filter(contact_id=contact_id)[0]
+            user = await ContactORM.filter(contact_id=contact_id)[0]
 
         case "phone":
-            user = await ContactModelORM.filter(phone=contact_id)[0]
+            user = await ContactORM.filter(phone=contact_id)[0]
 
         case "email":
-            user = await ContactModelORM.filter(email=contact_id)[0]
+            user = await ContactORM.filter(email=contact_id)[0]
 
         case _:
             raise HTTPException(
@@ -38,45 +41,52 @@ async def get_contacts(contact_id: str, idtype: str = Query("id")) -> ContactMod
     return user
 
 
+@UseHandler(ContactsHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CONTACTS_PREFIX)
 class ContactsRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: BackgroundTaskService):
+    def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: BackgroundTaskService,emailService:EmailSenderService,smsService:SMSService):
         super().__init__()
         self.contactsService = contactsService
         self.celeryService = celeryService
         self.bkgTaskService = bkgTaskService
+        self.emailService = emailService
+        self.smsService = smsService
 
     @UsePipe(RelayPipe)
     @BaseHTTPRessource.Post('/{relay}')
     async def create_contact(self, relay: str, contact:ContactModel,authPermission=Depends(get_auth_permission)):
+        
+        result = await self.contactsService.create_new_contact(contact)
+        template_dict = getattr(self.assetService,relay)
         ...
+
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Get('/{contact_id}')
-    async def read_contact(self, contact: Annotated[ContactModelORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
-        ...
+    async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+        return 
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT])
-    async def update_contact(self, contact: Annotated[ContactModelORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+    async def update_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         ...
 
     @BaseHTTPRessource.Delete('/{contact_id}')
-    async def delete_contact(self, contact: Annotated[ContactModelORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+    async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         ...
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Post('/security/{contact_id}')
-    async def update_contact_security(self, contact: Annotated[ContactModelORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+    async def update_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         ...
 
     @UsePipe(RelayPipe)
     @BaseHTTPRessource.Delete('/unsubscribe/{contact_id}')
-    async def unsubscribe_contact(self, contact: Annotated[ContactModelORM, Depends(get_contacts)], relay: str = Query(), authPermission=Depends(get_auth_permission)):
+    async def unsubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], relay: str = Query(), authPermission=Depends(get_auth_permission)):
         if relay == None:
             ...
         if relay != 'sms' and relay != 'email':
@@ -84,5 +94,5 @@ class ContactsRessource(BaseHTTPRessource):
 
     @UsePipe(RelayPipe)
     @BaseHTTPRessource.HTTPRoute('/resubscribe/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
-    async def resubscribe_contact(self, contact: Annotated[ContactModelORM, Depends(get_contacts)], relay: str = Query(), authPermission=Depends(get_auth_permission)):
+    async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], relay: str = Query(), authPermission=Depends(get_auth_permission)):
         ...
