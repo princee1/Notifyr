@@ -267,3 +267,31 @@ def format_url_params(params: dict[str,str])->str:
   for param in sorted(params.items(), key=lambda x: x[0]):
     param_fragments.append('%s=%s' % (param[0], quote_safe_url(param[1])))
   return '&'.join(param_fragments)
+
+
+
+letter_to_number = {
+    'A': '2', 'B': '2', 'C': '2',
+    'D': '3', 'E': '3', 'F': '3',
+    'G': '4', 'H': '4', 'I': '4',
+    'J': '5', 'K': '5', 'L': '5',
+    'M': '6', 'N': '6', 'O': '6',
+    'P': '7', 'Q': '7', 'R': '7', 'S': '7',
+    'T': '8', 'U': '8', 'V': '8',
+    'W': '9', 'X': '9', 'Y': '9', 'Z': '9'
+}
+
+
+def phone_parser(phone_number:str):
+    phone_number = phone_number.upper()
+    converted_number = ''.join(letter_to_number.get(
+        char, char) for char in phone_number)
+
+    cleaned_number = ''.join(filter(str.isdigit, converted_number))
+
+    if not cleaned_number.startswith('1'):
+        cleaned_number = '1' + cleaned_number
+
+    formatted_number = f"+{cleaned_number}"
+    return formatted_number
+    

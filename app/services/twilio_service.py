@@ -11,7 +11,7 @@ from app.models.otp_model import OTPModel
 from app.services.assets_service import AssetService
 from app.services.logger_service import LoggerService
 from .config_service import ConfigService
-from app.utils.helper import b64_encode
+from app.utils.helper import b64_encode, phone_parser
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
 from app.utils.validation import phone_number_validator
@@ -21,17 +21,6 @@ from twilio.rest.api.v2010.account.message import MessageInstance
 from twilio.rest.api.v2010.account.call import CallInstance
 from twilio.twiml.voice_response import VoiceResponse
 
-
-letter_to_number = {
-    'A': '2', 'B': '2', 'C': '2',
-    'D': '3', 'E': '3', 'F': '3',
-    'G': '4', 'H': '4', 'I': '4',
-    'J': '5', 'K': '5', 'L': '5',
-    'M': '6', 'N': '6', 'O': '6',
-    'P': '7', 'Q': '7', 'R': '7', 'S': '7',
-    'T': '8', 'U': '8', 'V': '8',
-    'W': '9', 'X': '9', 'Y': '9', 'Z': '9'
-}
 
 
 @_service.ServiceClass
@@ -45,16 +34,7 @@ class TwilioService(_service.Service):
                              self.configService.TWILIO_AUTH_TOKEN)
 
     def parse_to_phone_format(self, phone_number: str) -> str:
-        phone_number = phone_number.upper()
-        converted_number = ''.join(letter_to_number.get(
-            char, char) for char in phone_number)
-
-        cleaned_number = ''.join(filter(str.isdigit, converted_number))
-
-        if not cleaned_number.startswith('1'):
-            cleaned_number = '1' + cleaned_number
-
-        formatted_number = f"+{cleaned_number}"
+        formatted_number=phone_parser(phone_number)
 
         if not phone_number_validator(formatted_number):
             raise TwilioPhoneNumberParseError(formatted_number)

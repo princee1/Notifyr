@@ -13,3 +13,4 @@ from .voice_ressource import *
 from .support_ressource import *
 from .admin_ressource import *
 from .redis_backend_ressource import *
+from .contacts_ressources import ContactsRessource
