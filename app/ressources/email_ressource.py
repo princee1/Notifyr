@@ -52,7 +52,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UsePipe(pipes.TemplateParamsPipe('html','html'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
-    def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, x_request_id:str =Depends(get_request_id) ,authPermission=Depends(get_auth_permission)):
+    async def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, x_request_id:str =Depends(get_request_id) ,authPermission=Depends(get_auth_permission)):
         mail_content = scheduler.content
         meta = mail_content.meta.model_dump(mode='python')
         
@@ -68,7 +68,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10000/minute')
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
-    def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
+    async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
         customEmail_content = scheduler.content
         meta = customEmail_content.meta.model_dump()
         content = (customEmail_content.html_content, customEmail_content.text_content)

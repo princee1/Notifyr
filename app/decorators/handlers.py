@@ -14,9 +14,9 @@ from twilio.base.exceptions import TwilioRestException
 
 class ServiceAvailabilityHandler(Handler):
     
-    def handle(self, function:Callable, *args, **kwargs):
+    async def handle(self, function:Callable, *args, **kwargs):
         try:
-            return function(*args, **kwargs)
+            return await function(*args, **kwargs)
         
         except ServiceNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Service not available')
@@ -30,9 +30,9 @@ class ServiceAvailabilityHandler(Handler):
         
 class TemplateHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-            return function(*args, **kwargs)
+            return await function(*args, **kwargs)
 
         except AssetNotFoundError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail='Asset not found')
@@ -52,9 +52,9 @@ class TemplateHandler(Handler):
         
 class WebSocketHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-           return function(*args, **kwargs)
+           return await function(*args, **kwargs)
         
         except WSPathNotFoundError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={
@@ -64,9 +64,9 @@ class WebSocketHandler(Handler):
 
 class CeleryTaskHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-           return function(*args,**kwargs)
+           return await function(*args,**kwargs)
         
         except CeleryTaskNotFoundError as e:
            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
@@ -91,9 +91,9 @@ class CeleryTaskHandler(Handler):
         
 class TwilioHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-            return function(*args, **kwargs)
+            return await function(*args, **kwargs)
     
         except TwilioRestException as e:
             raise HTTPException(status=status.HTTP_400_BAD_REQUEST,details={})
@@ -102,10 +102,10 @@ class TwilioHandler(Handler):
 
 class ContactsHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
 
-            return function(*args, **kwargs)
+            return await function(*args, **kwargs)
         
         except ContactNotExistsError:
             ...

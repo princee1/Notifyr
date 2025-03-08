@@ -85,15 +85,15 @@ class BackgroundTaskService(BackgroundTasks,Service):
         #async with self.task_lock:
         self._delete_tasks(request_id)
     
-    def pingService(self,count=None):
-        response_count = int(self.running_tasks_count)
+    async def pingService(self,count=None):
+        response_count = await self.global_task_count
         load = self.server_load.copy()
 
         self.check_system_ram()
         if count:
             ...
         
-        return Service.pingService(self)
+        return await Service.pingService(self)
     
     def check_system_ram():
         ...
@@ -241,15 +241,15 @@ class CeleryService(Service, IntervalInterface):
         async with self.task_lock:
             return self.available_workers_count
 
-    def pingService(self,ratio:float=None,count:int=None):
-        response_count = int(self.available_workers_count)
+    async def pingService(self,ratio:float=None,count:int=None):
+        response_count = await self.get_available_workers_count
         if ratio:
             # TODO check in which interval the ratio is in
             ...
         if count:
             # TODO check in which interval the ratio is in
             ...
-        super().pingService()
+        await super().pingService()
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
     def callback(self):

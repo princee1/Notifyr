@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from app.container import Get, InjectInMethod
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, WebSocketHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import AsyncPingService, BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UsePermission, UsePipe, UseRoles
 from app.services.celery_service import CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService

@@ -45,7 +45,7 @@ class ContactORM(Model):
 
 class SecurityContactORM(Model):
     security_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    contact_id = fields.ForeignKeyField('models.ContactModelORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact_id = fields.ForeignKeyField('models.ContactORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     security_code = fields.IntField()
     security_phrase = fields.TextField()
     voice_embeddings = fields.JSONField()
@@ -60,7 +60,7 @@ class SecurityContactORM(Model):
 
 class SubscriptionORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    contact_id = fields.ForeignKeyField('models.ContactModelORM', related_name='subscriptions', unique=True)
+    contact_id = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions', unique=True)
     email_status = fields.CharField(max_length=20)
     sms_status = fields.CharField(max_length=20)
     created_at = fields.DatetimeField(auto_now_add=True)

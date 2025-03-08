@@ -11,7 +11,7 @@ from app.services.security_service import JWTAuthService,SecurityService
 from app.services.config_service import ConfigService
 from app.utils.dependencies import get_admin_token, get_auth_permission, get_request_id
 from app.container import InjectInMethod,Get
-from app.definition._ressource import AsyncPingService, Guard, PingService, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
+from app.definition._ressource import  Guard, PingService, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthPermission, Role,RoutePermission,AssetsPermission, TokensModel
 from pydantic import BaseModel, RootModel,field_validator
@@ -60,7 +60,7 @@ class AdminRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value ='20/week')
     @UsePipe(CeleryTaskPipe)
-    #@AsyncPingService([CeleryService])
+    @PingService([CeleryService])
     @UseGuard(CeleryTaskGuard(task_names=['task_blacklist_client'],task_types=[TaskType.ONCE]))
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}',methods=[HTTPMethod.DELETE])
     def blacklist_tokens(self,client_id:str,request:Request ,scheduler:BlacklistScheduler,authPermission=Depends(get_auth_permission)):
@@ -91,7 +91,6 @@ class AdminRessource(BaseHTTPRessource):
     @PingService([MongooseService,JWTAuthService])
     @BaseHTTPRessource.HTTPRoute('/issue-auth/',methods=[HTTPMethod.GET])
     def issue_auth_token(self,authModel:AuthPermissionModel | List[AuthPermissionModel],request:Request, authPermission=Depends(get_auth_permission)):
-        self.jwtAuthService.pingService()
         authModel:list[AuthPermissionModel] = authModel if isinstance(authModel,list) else [authModel]
         temp = self._create_tokens(authModel)
         return JSONResponse(status_code=status.HTTP_200_OK,content={"tokens":temp,"message":"Tokens successfully issued"})
@@ -99,10 +98,10 @@ class AdminRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='1/day',key_func=get_remote_address)#VERIFY Once a month
     @UsePipe(AuthPermissionPipe)
+    @PingService([JWTAuthService])
     @UseRoles([Role.REFRESH])
     @BaseHTTPRessource.HTTPRoute('/refresh-auth/',methods=[HTTPMethod.GET,HTTPMethod.POST],deprecated=True)# ERROR Security Error
     def refresh_auth_token(self,tokens:TokensModel, request:Request,authPermission=Depends(get_auth_permission)):
-        self.jwtAuthService.pingService()
         tokens:list[AuthPermission] = tokens
         tokens = self._create_tokens(tokens)
         return JSONResponse(status_code=status.HTTP_200_OK,content={'tokens':tokens ,"message":"Tokens successfully invalidated"})
