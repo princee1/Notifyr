@@ -119,7 +119,7 @@ class Service():
         ...
 
     @CheckStatusBeforeHand
-    def pingService(self):
+    async def pingService(self):
         ...
     
     def build(self):
