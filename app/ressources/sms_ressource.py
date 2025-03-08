@@ -32,7 +32,7 @@ class SMSTemplateSchedulerModel(SchedulerModel):
     content: OnGoingTemplateSMSModel
 
 
-def _to_otp_path(template:str):
+async def _to_otp_path(template:str):
     template = "otp\\"+template
     return {'template':template}
 
@@ -56,7 +56,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(_to_otp_path)
     @UsePermission(JWTAssetPermission('sms'))
     @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST])
-    def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
+    async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
         smsTemplate:SMSTemplate = self.assetService.sms[template]
         _,body= smsTemplate.build(otpModel.content,...)
         return self.smsService.send_otp(otpModel,body)
@@ -68,7 +68,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST])
-    def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,authPermission=Depends(get_auth_permission)):
+    async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,authPermission=Depends(get_auth_permission)):
         message = scheduler.content.model_dump()
         if scheduler.task_type == TaskType.NOW.value:
             return self.smsService.send_template_sms(message)
@@ -82,7 +82,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CeleryTaskGuard([' task_send_template_sms']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST])
-    def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,authPermission=Depends(get_auth_permission)):
+    async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,authPermission=Depends(get_auth_permission)):
         sms_data = scheduler.content
         smsTemplate:SMSTemplate = self.assetService.sms[template]
         _,result=smsTemplate.build(self.configService.ASSET_LANG,sms_data.data)
@@ -93,10 +93,10 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         return self.celeryService.trigger_task_from_scheduler(scheduler,message)
     
 
-    def sms_get_message(self,):
+    async def sms_get_message(self,):
         ...
 
-    def sms_delete_message(self,):
+    async def sms_delete_message(self,):
         ...
 
 
