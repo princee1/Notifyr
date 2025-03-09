@@ -145,7 +145,7 @@ class CeleryService(Service, IntervalInterface):
         if c_type == 'once':
             task_result = self._task_registry[t_name]['task'].apply_async(**options,args=celery_task['args'],kwargs=celery_task['kwargs'])
             result.update({'task_id':task_result.id,'type':'task'})
-            return task_result.id
+            return result
 
         schedule = SCHEDULER_RULES[c_type]
         try:
