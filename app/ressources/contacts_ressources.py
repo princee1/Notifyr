@@ -3,12 +3,15 @@
 from typing import Annotated
 from fastapi import Depends, HTTPException, Query, status
 from app.classes.auth_permission import Role
-from app.container import InjectInMethod
-from app.decorators.handlers import ContactsHandler
+from app.classes.celery import CeleryTask, TaskHeaviness
+from app.classes.template import Template
+from app.container import Get, InjectInMethod
+from app.decorators.handlers import ContactsHandler, TemplateHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
 from app.models.contacts_model import ContactORM,ContactModel
 from app.services.celery_service import BackgroundTaskService, CeleryService
+from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.email_service import EmailSenderService
 from app.services.twilio_service import SMSService
@@ -56,19 +59,22 @@ class ContactsRessource(BaseHTTPRessource):
         self.emailService = emailService
         self.smsService = smsService
 
+        self.from_ = Get(ConfigService).getenv('TWILIO_OTP_NUMBER')
+
     @UsePipe(RelayPipe)
+    @UseHandler(TemplateHandler)
     @BaseHTTPRessource.Post('/{relay}')
     async def create_contact(self, relay: str, contact:ContactModel,authPermission=Depends(get_auth_permission)):
         
         result = await self.contactsService.create_new_contact(contact)
-        template_dict = getattr(self.assetService,relay)
-        ...
-
+        if contact.info.app_registered:
+            return result
+        
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Get('/{contact_id}')
     async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
-        return 
+        return await self.contactsService.read_contact(contact.contact_id)
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT])
