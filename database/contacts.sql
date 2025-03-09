@@ -24,9 +24,12 @@ CREATE TABLE IF NOT EXISTS Contact (
 CREATE TABLE IF NOT EXISTS SecurityContact (
     security_id  UUID PRIMARY KEY  DEFAULT uuid_generate_v4(),
     contact_id  UUID,
-    security_code INT,
-    security_phrase TEXT,
-    voice_embedding FLOAT[] DEFAULT [],
+    security_code TEXT DEFAULT NULL,
+    security_code_salt VARCHAR(64) DEFAULT NULL,
+    security_phrase TEXT DEFAULT NULL,
+    security_phrase_salt VARCHAR(64) DEFAULT NULL,
+    voice_embedding TEXT DEFAULT NULL,
+    voice_embedding_salt VARCHAR(64) DEFAULT NULL,
     created_at  TIMESTAMPTZ DEFAULT NOW(),
     updated_at  TIMESTAMPTZ DEFAULT NOW(),
     FOREIGN KEY (contact_id) REFERENCES Contact(contact_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -42,3 +45,7 @@ CREATE TABLE IF NOT EXISTS SubscriptionContact (
     PRIMARY KEY (subscription_id),
     FOREIGN KEY (contact_id) REFERENCES Contact(contact_id) ON DELETE CASCADE ON UPDATE CASCADE
 )
+
+
+-- 1-to-many Subscriptions + manage subscription
+-- users Views

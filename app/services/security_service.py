@@ -13,14 +13,18 @@ from fastapi import HTTPException, status
 import time
 from app.classes.auth_permission import AuthPermission, Role, RoutePermission, WSPermission
 from random import randint, random
-from app.utils.helper import generateId
+from app.utils.helper import generateId,b64_encode,b64_decode
 from app.utils.constant import ConfigAppConstant
 from datetime import datetime, timezone
+import os
+import hmac
+import hashlib
 
 
 SEPARATOR = "|"
 ID_LENGTH = 25
-
+def generate_salt(length=16):
+    return os.urandom(length)
 
 @IsInterface
 class EncryptDecryptInterface(Interface):
@@ -179,5 +183,25 @@ class SecurityService(Service, EncryptDecryptInterface):
             str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
         return self._encode_value(data, self.configService.API_ENCRYPT_TOKEN)
 
+   
     def build(self):
         ...
+
+
+    def hash_value_with_salt(self,value, key, salt):
+        value_with_salt = value.encode() + salt
+        hmac_obj = hmac.new(key.encode(), value_with_salt, hashlib.sha256)
+        return hmac_obj.hexdigest()
+
+    def store_password(self,password, key):
+        salt = generate_salt()
+        hashed_password = self.hash_value_with_salt(password, key, salt)
+        salt = b64_encode(salt)
+        hashed_password = b64_encode(hashed_password)
+        return hashed_password, salt
+
+    def verify_password(self,stored_hash, stored_salt, provided_password, key):
+        stored_hash = b64_decode(stored_hash)
+        stored_salt = b64_decode(stored_salt)
+        hashed_provided_password = self.hash_value_with_salt(provided_password, key, stored_salt)
+        return hmac.compare_digest(stored_hash, hashed_provided_password)

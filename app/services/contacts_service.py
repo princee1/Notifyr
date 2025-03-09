@@ -3,8 +3,17 @@ from app.definition._service import Service, ServiceClass
 from app.models.contacts_model import ContactAlreadyExistsError, ContactModel, ContactORM, SubscriptionORM, SecurityContactORM
 from tortoise.exceptions import OperationalError
 
+from app.services.config_service import ConfigService
+from app.services.security_service import SecurityService
+
 @ServiceClass
 class ContactsService(Service):
+
+    def __init__(self,securityService:SecurityService,configService:ConfigService):
+        super().__init__()
+        self.securityService = securityService
+        self.configService = configService
+
 
     def build(self):
         ...
@@ -16,32 +25,34 @@ class ContactsService(Service):
         user_by_phone = None
 
         if email != None:
-            user_by_email = await ContactORM.filter(email=email) == None
+            user_by_email = await ContactORM.filter(email=email).exists()
         if phone != None:
-            user_by_phone = await ContactORM.filter(phone=phone) == None
+            user_by_phone = await ContactORM.filter(phone=phone).exists()
 
         if user_by_phone or user_by_email:
             raise ContactAlreadyExistsError(user_by_email, user_by_phone)
 
         contact_info = contact.info.model_dump()
-        # contact_info['created_at'] = str(datetime.now(timezone.utc))
-        # contact_info['updated_at'] = str(datetime.now(timezone.utc))
         user = await ContactORM.create(**contact_info)
-        contact_id = user.contact_id
+        contact_id = user
 
         security = contact.security.model_dump()
-        security.update({'contact_id': contact_id})
+        security.update({'contact': contact_id})
+
+        hash_key = self.configService.CONTACTS_HASH_KEY
+        security_code = str(security['security_code'])
+        if security_code:
+            security['security_code'],security['security_code_salt'] = self.securityService.store_password(security_code,hash_key)
+
+        security_code_phrase = security['security_phrase']
+        if security_code_phrase:
+            security['security_phrase'],security['security_phrase_salt'] = self.securityService.store_password(security_code_phrase,hash_key)
+
         subs = contact.subscription.model_dump()
-        subs.update({'contact_id': contact_id})
-    
-        try:
-            security = await SecurityContactORM.create(**security)
-        except OperationalError:
-            ...
-        try:
-            subs = await SubscriptionORM.create(**subs)
-        except OperationalError:
-            ...
+        subs.update({'contact': contact_id})
+
+        security = await SecurityContactORM.create(**security)
+        subs = await SubscriptionORM.create(**subs)
 
         return {'contact_id': contact_id,
                 'app_registered': user.app_registered,
@@ -52,10 +63,8 @@ class ContactsService(Service):
         ...
 
     async def read_contact(self, contact_id: str):
-        user = await ContactORM.filter(contact_id=contact_id)
-        user = user[0]
-        subs = await SubscriptionORM.filter(contact_id=contact_id)[0]
-        subs = subs[0]
+        user = await ContactORM.filter(contact_id=contact_id).first()
+        subs = await SubscriptionORM.filter(contact_id=contact_id).first()
 
         return {'contact_id': contact_id,
                 'app_registered': user.app_registered,

@@ -157,6 +157,7 @@ class ConfigService(_service.Service):
         self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 36000000)
         self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
+        self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
 
         
                                 # CELERY CONFIG #
