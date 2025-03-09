@@ -60,33 +60,33 @@ class ContactORM(Model):
 
 class SecurityContactORM(Model):
     security_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    contact_id = fields.ForeignKeyField('models.ContactORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField('models.ContactORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     security_code = fields.IntField()
     security_phrase = fields.TextField()
-    voice_embeddings = fields.JSONField()
+    voice_embedding = fields.JSONField()
     created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
 
     def __str__(self):
-        return f"{self.security_id} {self.contact_id}"
+        return f"{self.security_id} {self.contact}"
 
     class Meta:
         schema = CONTACTS_SCHEMA
-        table = table_builder("securityContact")
+        table = table_builder("securitycontact")
 
 class SubscriptionORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    contact_id = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions', unique=True)
+    contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
     email_status = fields.CharField(max_length=20)
     sms_status = fields.CharField(max_length=20)
     created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
 
     def __str__(self):
-        return f"{self.subscription_id} {self.contact_id}"
+        return f"{self.subscription_id} {self.contact}"
 
     class Meta:
-        table = table_builder("subscriptionContact")
+        table = table_builder("subscriptioncontact")
         schema = CONTACTS_SCHEMA
 
 

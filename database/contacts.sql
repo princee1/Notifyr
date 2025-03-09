@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS Contact (
     phone       VARCHAR(50) UNIQUE,
     app_registered  BOOLEAN DEFAULT FALSE,
     lang    Lang,
-    created_at  TIMESTAMP DEFAULT NOW(),
-    updated_at  TIMESTAMP DEFAULT NOW()
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
 )
 
 CREATE TABLE IF NOT EXISTS SecurityContact (
@@ -26,9 +26,9 @@ CREATE TABLE IF NOT EXISTS SecurityContact (
     contact_id  UUID,
     security_code INT,
     security_phrase TEXT,
-    voice_embedding FLOAT[],
-    created_at  TIMESTAMP DEFAULT NOW(),
-    updated_at  TIMESTAMP DEFAULT NOW(),
+    voice_embedding FLOAT[] DEFAULT [],
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW(),
     FOREIGN KEY (contact_id) REFERENCES Contact(contact_id) ON DELETE CASCADE ON UPDATE CASCADE
 )
 
@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS SubscriptionContact (
     contact_id UUID UNIQUE,
     email_status SubscriptionStatus NOT NULL,
     sms_status SubscriptionStatus NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (subscription_id),
     FOREIGN KEY (contact_id) REFERENCES Contact(contact_id) ON DELETE CASCADE ON UPDATE CASCADE
 )
