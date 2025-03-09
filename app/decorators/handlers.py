@@ -12,6 +12,7 @@ from app.models.contacts_model import ContactAlreadyExistsError, ContactNotExist
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
+from tortoise.exceptions import OperationalError,DBConnectionError,ValidationError
 class ServiceAvailabilityHandler(Handler):
     
     async def handle(self, function:Callable, *args, **kwargs):
@@ -113,3 +114,16 @@ class ContactsHandler(Handler):
         except ContactAlreadyExistsError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Error could not create the user because info are already used','detail':e.message})
             
+    
+class TortoiseHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except OperationalError:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={'message':'Database execution error',})
+
+        except ValidationError as e:
+            mess= e.args[0]
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Database execution error','detail':mess})
+

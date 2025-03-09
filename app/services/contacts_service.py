@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 from app.definition._service import Service, ServiceClass
 from app.models.contacts_model import ContactAlreadyExistsError, ContactModel, ContactORM, SubscriptionORM, SecurityContactORM
-
+from tortoise.exceptions import OperationalError
 
 @ServiceClass
 class ContactsService(Service):
@@ -22,16 +23,25 @@ class ContactsService(Service):
         if user_by_phone or user_by_email:
             raise ContactAlreadyExistsError(user_by_email, user_by_phone)
 
-        user = await ContactORM.create(**contact.info.model_dump())
+        contact_info = contact.info.model_dump()
+        # contact_info['created_at'] = str(datetime.now(timezone.utc))
+        # contact_info['updated_at'] = str(datetime.now(timezone.utc))
+        user = await ContactORM.create(**contact_info)
         contact_id = user.contact_id
 
         security = contact.security.model_dump()
         security.update({'contact_id': contact_id})
         subs = contact.subscription.model_dump()
         subs.update({'contact_id': contact_id})
-
-        security = await SecurityContactORM.create(**security)
-        subs = await SubscriptionORM.create(**subs)
+    
+        try:
+            security = await SecurityContactORM.create(**security)
+        except OperationalError:
+            ...
+        try:
+            subs = await SubscriptionORM.create(**subs)
+        except OperationalError:
+            ...
 
         return {'contact_id': contact_id,
                 'app_registered': user.app_registered,

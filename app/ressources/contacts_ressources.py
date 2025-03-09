@@ -6,7 +6,7 @@ from app.classes.auth_permission import Role
 from app.classes.celery import CeleryTask, TaskHeaviness
 from app.classes.template import Template
 from app.container import Get, InjectInMethod
-from app.decorators.handlers import ContactsHandler, TemplateHandler
+from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
 from app.models.contacts_model import ContactORM,ContactModel
