@@ -97,6 +97,9 @@ class ContactsIdPipe(Pipe):
 
 class RelayPipe(Pipe):
 
+    def __init__(self):
+        super().__init__(True)
+
     def pipe(self,relay:str):
         if relay==None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Relay not specified')
