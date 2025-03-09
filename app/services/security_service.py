@@ -196,12 +196,12 @@ class SecurityService(Service, EncryptDecryptInterface):
     def store_password(self,password, key):
         salt = generate_salt()
         hashed_password = self.hash_value_with_salt(password, key, salt)
-        salt = b64_encode(salt)
+        #salt = b64_encode(salt)
         hashed_password = b64_encode(hashed_password)
         return hashed_password, salt
 
     def verify_password(self,stored_hash, stored_salt, provided_password, key):
         stored_hash = b64_decode(stored_hash)
-        stored_salt = b64_decode(stored_salt)
+        #stored_salt = b64_decode(stored_salt)
         hashed_provided_password = self.hash_value_with_salt(provided_password, key, stored_salt)
         return hmac.compare_digest(stored_hash, hashed_provided_password)

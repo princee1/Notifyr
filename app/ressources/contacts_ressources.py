@@ -70,6 +70,7 @@ class ContactsRessource(BaseHTTPRessource):
         if contact.info.app_registered:
             return result
         
+        
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Get('/{contact_id}')

@@ -41,9 +41,10 @@ class ContactsService(Service):
 
         hash_key = self.configService.CONTACTS_HASH_KEY
         security_code = str(security['security_code'])
+
         if security_code:
             security['security_code'],security['security_code_salt'] = self.securityService.store_password(security_code,hash_key)
-
+            
         security_code_phrase = security['security_phrase']
         if security_code_phrase:
             security['security_phrase'],security['security_phrase_salt'] = self.securityService.store_password(security_code_phrase,hash_key)
