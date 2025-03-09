@@ -34,10 +34,9 @@ class ContactsService(Service):
 
         contact_info = contact.info.model_dump()
         user = await ContactORM.create(**contact_info)
-        contact_id = user
 
         security = contact.security.model_dump()
-        security.update({'contact': contact_id})
+        security.update({'contact': user})
 
         hash_key = self.configService.CONTACTS_HASH_KEY
         security_code = str(security['security_code'])
@@ -50,15 +49,12 @@ class ContactsService(Service):
             security['security_phrase'],security['security_phrase_salt'] = self.securityService.store_password(security_code_phrase,hash_key)
 
         subs = contact.subscription.model_dump()
-        subs.update({'contact': contact_id})
+        subs.update({'contact': user})
 
         security = await SecurityContactORM.create(**security)
         subs = await SubscriptionORM.create(**subs)
-
-        return {'contact_id': contact_id,
-                'app_registered': user.app_registered,
-                'created-at': user.created_at,
-                'updated-at': user.updated_at}
+        
+        return user.to_json
 
     async def update_contact(self,):
         ...

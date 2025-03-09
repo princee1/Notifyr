@@ -50,6 +50,20 @@ class ContactORM(Model):
         return self.full_name
     
     @property
+    def to_json(self):
+        return {
+        'contact_id': str(self.contact_id),
+        'first_name': self.first_name,
+        'last_name': self.last_name,
+        'email': self.email,
+        'phone': self.phone,
+        'app_registered': self.app_registered,
+        'lang': self.lang,
+        'created_at': self.created_at.isoformat(),
+        'updated_at': self.updated_at.isoformat(),
+    }
+
+    @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
 

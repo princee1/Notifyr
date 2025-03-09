@@ -8,7 +8,7 @@ from app.classes.template import Template
 from app.container import Get, InjectInMethod
 from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
 from app.models.contacts_model import ContactORM,ContactModel
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
@@ -26,17 +26,17 @@ CONTACTS_PREFIX = 'contacts'
 async def get_contacts(contact_id: str, idtype: str = Query("id")) -> ContactORM:
     match idtype:
         case "id":
-            user = await ContactORM.filter(contact_id=contact_id)[0]
+            user = await ContactORM.filter(contact_id=contact_id).first()
 
         case "phone":
-            user = await ContactORM.filter(phone=contact_id)[0]
+            user = await ContactORM.filter(phone=contact_id).first()
 
         case "email":
-            user = await ContactORM.filter(email=contact_id)[0]
+            user = await ContactORM.filter(email=contact_id).first()
 
         case _:
             raise HTTPException(
-                400, {"detail": {"message": "idtype not not properly specified"}})
+                400,{"message": "idtype not not properly specified"})
 
     if user == None:
         raise HTTPException(404, {"detail": "user does not exists"})
@@ -47,6 +47,7 @@ async def get_contacts(contact_id: str, idtype: str = Query("id")) -> ContactORM
 @UseHandler(ContactsHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
+@PingService([ContactsService])
 @HTTPRessource(CONTACTS_PREFIX)
 class ContactsRessource(BaseHTTPRessource):
 
@@ -69,7 +70,9 @@ class ContactsRessource(BaseHTTPRessource):
         result = await self.contactsService.create_new_contact(contact)
         if contact.info.app_registered:
             return result
-        
+
+        #TODO send welcome email or sms
+        return result
         
 
     @UseRoles([Role.TWILIO])
@@ -77,14 +80,14 @@ class ContactsRessource(BaseHTTPRessource):
     async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         return await self.contactsService.read_contact(contact.contact_id)
 
-    @UseRoles([Role.TWILIO])
+
     @BaseHTTPRessource.HTTPRoute('/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT])
     async def update_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         ...
 
     @BaseHTTPRessource.Delete('/{contact_id}')
     async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
-        ...
+        return await contact.delete()
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Post('/security/{contact_id}')
