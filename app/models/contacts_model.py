@@ -1,3 +1,4 @@
+from enum import Enum
 from tortoise import fields
 from tortoise.models import Model
 import uuid
@@ -6,6 +7,22 @@ from typing_extensions import Self
 from app.utils.helper import phone_parser
 from app.utils.validation import email_validator, phone_number_validator
 from app.definition._error import BaseError
+
+class Frequency(Enum):
+    weekly = 'weekly'
+    bi_weekly= 'bi_weekly'
+    monthly = 'monthly'
+    always = 'always'
+
+class Status(Enum):
+    Active = 'Active'
+    Pending = 'Pending'
+    Blacklist = 'Blacklist'
+    Inactive = 'Inactive'
+
+class Lang(Enum):
+    fr='fr'
+    en='en'
 
 
 class ContactNotExistsError(BaseError):
@@ -42,7 +59,11 @@ class ContactORM(Model):
     email = fields.CharField(max_length=50, null=True, unique=True)
     phone = fields.CharField(max_length=50, null=True, unique=True)
     app_registered = fields.BooleanField(default=False)
-    lang = fields.CharField(max_length=15,default="en")
+    opt_in_code= fields.IntField(unique=True, null=True)
+    frequency = fields.CharEnumField(max_length=20,enum_type=Frequency,default=Frequency.always)
+    action_code = fields.TextField()
+    status = fields.CharEnumField(max_length=20,enum_type=Status,default=Status.Active)
+    lang = fields.CharField(max_length=20,default="en")
     created_at = fields.DatetimeField(auto_now=True,use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
 
@@ -91,7 +112,7 @@ class SecurityContactORM(Model):
         schema = CONTACTS_SCHEMA
         table = table_builder("securitycontact")
 
-class SubscriptionORM(Model):
+class SubscriptionContactORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
     email_status = fields.CharField(max_length=20)
@@ -107,13 +128,47 @@ class SubscriptionORM(Model):
         schema = CONTACTS_SCHEMA
 
 
+class Reason(Model):
+    reason_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    reason_description = fields.TextField(null=True)
+    reason_name = fields.CharField(max_length=255, unique=True)
+    reason_count = fields.BigIntField(default=0)
+
+    class Meta:
+        table = "reason"
+        schema = CONTACTS_SCHEMA
+
+class SubsContent(Model):
+    content_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    content_name = fields.CharField(max_length=50, unique=True)
+    content_description = fields.TextField(null=True)
+
+    class Meta:
+        table = "subscontent"
+        schema = CONTACTS_SCHEMA
+
+class Subscription(Model):
+    subs_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    content = fields.ForeignKeyField('models.SubsContent', related_name='subscriptions', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    subs_status = fields.CharEnumField(max_length=20, enum_type=Status, default=Status.Active)
+    created_at = fields.DatetimeField(auto_now_add=True, use_tz=True)
+    updated_at = fields.DatetimeField(auto_now=True, use_tz=True)
+
+    class Meta:
+        table = "subscription"
+        schema = CONTACTS_SCHEMA
+        unique_together = (("subs_id", "contact", "content"),)
+
+
 class InfoModel(BaseModel):
     first_name:str
     last_name:str
     email:str =None
     phone:str=None
     app_registered:bool
-    lang:str
+    lang:Lang
+    frequency:Frequency
 
     @field_validator('email')
     def  check_email(cls,email):

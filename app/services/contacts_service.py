@@ -1,10 +1,19 @@
 from datetime import datetime, timezone
+from typing import Literal
 from app.definition._service import Service, ServiceClass
-from app.models.contacts_model import ContactAlreadyExistsError, ContactModel, ContactORM, SubscriptionORM, SecurityContactORM
+from app.models.contacts_model import ContactAlreadyExistsError, ContactModel, ContactORM, SubscriptionContactORM, SecurityContactORM
 from tortoise.exceptions import OperationalError
 
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
+
+
+@ServiceClass
+class SubscriptionService(Service):
+    ...
+
+
+
 
 @ServiceClass
 class ContactsService(Service):
@@ -13,7 +22,6 @@ class ContactsService(Service):
         super().__init__()
         self.securityService = securityService
         self.configService = configService
-
 
     def build(self):
         ...
@@ -52,7 +60,7 @@ class ContactsService(Service):
         subs.update({'contact': user})
 
         security = await SecurityContactORM.create(**security)
-        subs = await SubscriptionORM.create(**subs)
+        subs = await SubscriptionContactORM.create(**subs)
         
         return user.to_json
 
@@ -61,7 +69,7 @@ class ContactsService(Service):
 
     async def read_contact(self, contact_id: str):
         user = await ContactORM.filter(contact_id=contact_id).first()
-        subs = await SubscriptionORM.filter(contact_id=contact_id).first()
+        subs = await SubscriptionContactORM.filter(contact_id=contact_id).first()
 
         return {'contact_id': contact_id,
                 'app_registered': user.app_registered,
@@ -73,3 +81,7 @@ class ContactsService(Service):
                 'phone': user.phone,
                 'email': user.email,
                 'lang': user.lang}
+
+    async def filter_registered_contacts(self,by:Literal['email','id','phone'],app_registered:bool,):
+
+        ...
