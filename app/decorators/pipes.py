@@ -62,7 +62,7 @@ class TemplateQueryPipe(TemplateParamsPipe):
 
     def pipe(self, asset:str,template:str):
         self.assetService.check_asset(asset,self.allowed_assets)
-        self.template_type = asset
+        self.template_type = asset #BUG 
         return super().pipe(template)
 
 class CeleryTaskPipe(Pipe):

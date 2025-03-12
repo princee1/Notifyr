@@ -59,7 +59,7 @@ exports.handler = async function (context, event, callback) {
     url += "/call-incoming/status";
     body = setCallLog(event);
   } else if (type === SMS_TYPE) {
-    url += "sms-incoming/status";
+    url += "/sms-incoming/status";
     body = setSmsLog(event);
   } else {
 

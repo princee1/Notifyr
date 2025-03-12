@@ -18,7 +18,7 @@ from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.twilio_service import SMSService, TwilioService
-from app.utils.dependencies import get_auth_permission
+from app.utils.dependencies import APIFilterInject, get_auth_permission
 
 
 SMS_ONGOING_PREFIX = 'sms-ongoing'
@@ -31,7 +31,7 @@ class SMSCustomSchedulerModel(SchedulerModel):
 class SMSTemplateSchedulerModel(SchedulerModel):
     content: OnGoingTemplateSMSModel
 
-
+@APIFilterInject
 async def _to_otp_path(template:str):
     template = "otp\\"+template
     return {'template':template}
