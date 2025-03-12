@@ -9,7 +9,7 @@ from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
 from deprecated import deprecated
 from ordered_set import OrderedSet
-from app.definition._service import S, Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from app.definition._service import S, MethodServiceNotExistsError, Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
@@ -548,7 +548,17 @@ def Need(typ: Type[S]) -> Type[S]:
     return CONTAINER.need(typ)
 
 
-def GetDepends(typ:type):
-    def get_task():
+def GetDepends(typ:type[S])->Type[S] | dict[str,Type[S]]:
+    def depends():
         return Get(typ)
-    return get_task
+    return depends
+
+def GetDependsFunc(typ:type[S],func_name:str):
+    def depends():
+        self = Get(typ)
+        func = getattr(self,func_name,None)
+        if not func:
+            raise MethodServiceNotExistsError
+        return func
+    return depends
+

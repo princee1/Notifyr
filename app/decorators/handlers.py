@@ -3,7 +3,7 @@ from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.template import TemplateBuildError, TemplateNotFoundError, TemplateValidationError
 from app.definition._error import BaseError
 from app.definition._utils_decorator import Handler,HandlerDefaultException,NextHandlerException
-from app.definition._service import ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
+from app.definition._service import MethodServiceNotExistsError, ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError,CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
@@ -24,6 +24,10 @@ class ServiceAvailabilityHandler(Handler):
             
         except MethodServiceNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Method service not available')
+
+        except MethodServiceNotExistsError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Method service does not exists')
+
 
         except ServiceTemporaryNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Service temporary not available')

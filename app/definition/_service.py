@@ -72,6 +72,9 @@ class ServiceTemporaryNotAvailableError(BuildError):
 class MethodServiceNotAvailableError(BuildError):
     pass
 
+class MethodServiceNotExistsError(BuildError):
+    ...
+
 #################################            #####################################
 
 
