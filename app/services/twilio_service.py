@@ -40,6 +40,22 @@ class TwilioService(_service.Service):
             raise TwilioPhoneNumberParseError(formatted_number)
 
         return formatted_number
+    
+    async def verify_twilio_token(self, request: Request):
+        twilio_signature = request.headers.get("X-Twilio-Signature", None)
+
+        if not twilio_signature:
+            raise HTTPException(status_code=400,detail='Twilio Signature not available')
+
+        full_url = str(request.url)
+
+        form_data = await request.form()
+        params = {key: form_data[key] for key in form_data}
+
+        validator = RequestValidator(self.configService.TWILIO_AUTH_TOKEN)
+        if not validator.validate(full_url, params, twilio_signature):
+            raise HTTPException(
+                status_code=403, detail="Invalid Twilio Signature")
 
 
 @_service.AbstractServiceClass
@@ -56,18 +72,7 @@ class BaseTwilioCommunication(_service.Service):
         
 
 
-    async def verify_twilio_token(self, request: Request):
-        twilio_signature = request.headers.get("X-Twilio-Signature", "")
-
-        full_url = str(request.url)
-
-        form_data = await request.form()
-        params = {key: form_data[key] for key in form_data}
-
-        validator = RequestValidator(self.configService.TWILIO_AUTH_TOKEN)
-        if not validator.validate(full_url, params, twilio_signature):
-            raise HTTPException(
-                status_code=403, detail="Invalid Twilio Signature")
+   
 
 
 @_service.ServiceClass
