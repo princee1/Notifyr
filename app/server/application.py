@@ -101,17 +101,17 @@ class Application(EventInterface):
     def add_exception_handlers(self):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-        @self.app.exception_handler(TypeError)
-        async def type_error(request, e):
-            return JSONResponse({'message': ''}, 500)
+        # @self.app.exception_handler(TypeError)
+        # async def type_error(request, e):
+        #     return JSONResponse({'message': ''}, 500)
 
-        @self.app.exception_handler(AttributeError)
-        async def attribute_error(request, e):
-            return JSONResponse({'message': ''}, 500)
+        # @self.app.exception_handler(AttributeError)
+        # async def attribute_error(request, e):
+        #     return JSONResponse({'message': ''}, 500)
 
-        @self.app.exception_handler(OSError)
-        async def os_error(request, e):
-            return JSONResponse({'message': ''}, 500)
+        # @self.app.exception_handler(OSError)
+        # async def os_error(request, e):
+        #     return JSONResponse({'message': ''}, 500)
 
         @self.app.exception_handler(KeyError)
         async def key_error(request, e):
@@ -209,7 +209,7 @@ class Application(EventInterface):
         pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
         register_tortoise(
             app=self.app,
-            db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}?options=-c%20search_path={pg_schemas}",
+            db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}",
             modules={"models": ["app.models.contacts_model"]},
             generate_schemas=False,
             add_exception_handlers=True,    

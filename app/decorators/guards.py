@@ -64,10 +64,11 @@ class RegisteredContactsGuard(Guard):
     Guard to check if the callee is in the contact list
     """
 
-    def __init__(self,model_keys:List[str]):
+    def __init__(self,model_keys:List[str],app_registered:bool=True):
         super().__init__()
-        self.contactsService = Get(ContactsService)
+        self.contactsService:ContactsService = Get(ContactsService)
         self.model_keys = model_keys
+        self.app_registered = app_registered
 
 
 class TwilioLookUpPhoneGuard(Guard):

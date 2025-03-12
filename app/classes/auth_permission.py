@@ -21,6 +21,7 @@ class Role(Enum):
     REFRESH = 'REFRESH'
     CONTACTS = 'CONTACTS'
     TWILIO = 'TWILIO'
+    SUBSCRIPTION = 'SUBSCRIPTION'
 
 
 class FuncMetaData(TypedDict):
@@ -71,6 +72,25 @@ class WSPathNotFoundError(BaseError):
 def MustHave(role:Role):
 
     def verify(authPermission:AuthPermission):
-        return role.value in authPermission
+        return role.value in authPermission['roles']
+
+    return verify
+
+def MustNotHave(role:Role):
+
+    def verify(authPermission:AuthPermission):
+        return role.value not in authPermission['roles']
+
+    return verify
+
+
+def MustHaveRoleSuchHas(*role:Role):
+
+    roles = set(role)
+    roles_size= len(roles)
+    
+    def verify(authPermission:AuthPermission):
+        permissionRoles = authPermission['roles']
+        return len(roles.intersection(permissionRoles)) == roles_size
 
     return verify
