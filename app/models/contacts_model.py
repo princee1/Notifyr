@@ -240,5 +240,4 @@ class SubscriptionModel(BaseModel):
 
 class ContactModel(BaseModel):
     info:InfoModel
-    security:SecurityModel
-    subscription:SubscriptionModel
+    subscription:SubscriptionModel | None = None
