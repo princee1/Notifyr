@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from app.classes.auth_permission import AuthPermission, Role, RoutePermission, WSPermission
+from app.classes.auth_permission import AuthPermission, ContactPermission, Role, RoutePermission, WSPermission
 from random import randint, random
 from app.utils.helper import generateId,b64_encode,b64_decode
 from app.utils.constant import ConfigAppConstant
@@ -126,7 +126,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
 
-    def verify_permission(self, token: str,issued_for: str) -> AuthPermission:
+    def verify_auth_permission(self, token: str,issued_for: str) -> AuthPermission:
 
         token = self.decode_token(token)
         permission: AuthPermission = AuthPermission(**token)
@@ -145,6 +145,20 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             return permission
         except KeyError as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Data missing')
+
+
+    def verify_contact_permission(self,token:str)->ContactPermission:
+
+        token = self.decode_token(token)
+        permission:ContactPermission = ContactPermission(**token)
+
+        try:
+            if permission["expired_at"] < time.time():
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
+        except KeyError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Data missing')
+
 
     def build(self):
         ...

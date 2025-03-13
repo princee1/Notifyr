@@ -8,7 +8,7 @@ from app.definition._error import BaseError
 
 PermissionScope= Literal['custom','all']
 
-
+ContactPermissionScope = Literal['update','create','any']
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
@@ -55,6 +55,12 @@ class AuthPermission(TypedDict):
     allowed_assets:List[str]
     challenge: str= None # TODO 
     scope:list[str] = None # TODO
+
+
+class ContactPermission(TypedDict):
+    expired_at:int
+    contact_id:str
+    scope: ContactPermissionScope
 
 class TokensModel(BaseModel):
     tokens: str | list[str]

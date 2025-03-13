@@ -553,7 +553,7 @@ def GetDepends(typ:type[S])->Type[S] | dict[str,Type[S]]:
         return Get(typ)
     return depends
 
-def GetDependsAttr(typ:type[S],func_name:str):
+def GetDependsAttr(typ:type[S],func_name:str)->Callable:
     def depends():
         self = Get(typ)
         func = getattr(self,func_name,None)

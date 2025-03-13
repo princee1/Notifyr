@@ -1,10 +1,12 @@
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
+from app.models.contacts_model import ContactORM
 from app.services.assets_service import DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR, AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
+from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, Role, RoutePermission,FuncMetaData
+from app.classes.auth_permission import AuthPermission, ContactPermission, ContactPermissionScope, Role, RoutePermission,FuncMetaData
 from app.utils.helper import flatten_dict
 
  
@@ -90,3 +92,32 @@ class JWTQueryAssetPermission(JWTAssetPermission):
         self.assetService.check_asset(asset,self.allowed_assets)
         self.template_type = asset
         return super().permission(template,scheduler,authPermission)
+    
+
+class JWTContactPermission(Permission):
+
+    
+    def __init__(self,scope:ContactPermissionScope):
+        super().__init__()
+        self.contactsService= Get(ContactsService)
+        self.jwtAuthSErvice = Get(JWTAuthService)
+        self.scope = scope
+
+
+    def permission(self,contact:ContactORM,contactPermission:ContactPermission,token:str):
+
+        if contact.auth_token != token:
+            raise HTTPException(status=403,detail="Token not issued for this user")
+        
+        if contact.contact_id != contactPermission['contact_id']:
+            raise HTTPException(status=403,detail="Token not issued for this user") # NOTE seems non-necessary but fuck it 
+
+        if self.scope =='any':
+            return True
+
+        if self.scope != contactPermission['scope']:
+            raise HTTPException(status=403,detail="")
+        
+        return True
+
+        
