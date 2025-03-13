@@ -52,14 +52,10 @@ class SubscriptionRessource(BaseHTTPRessource):
     async def update_subscription_ttl(self):
         ...
 
-    
-    
-
+##############################################                   ##################################################
 CONTACTS_PREFIX = 'contacts'
 CONTACTS_SECURITY_PREFIX = 'security'
 CONTACTS_SUBSCRIPTION_PREFIX = 'subscription'
-
-
 
 async def get_contacts(contact_id: str, idtype: str = Query("id"),authPermission:AuthPermission=Depends(get_auth_permission)) -> ContactORM:
 
@@ -92,7 +88,10 @@ def get_contact_permission(token:str= Query(None))->ContactPermission:
     if token == None:
         raise # TODO 
     return jwtAuthService.verify_contact_permission(token)
-    
+
+
+##############################################                   ##################################################
+
 
 @UseHandler(ContactsHandler)
 @UseRoles([Role.CONTACTS])
@@ -156,6 +155,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
     async def check_password(self,contact: Annotated[ContactORM, Depends(get_contacts)],request:Request,authPermission=Depends(get_auth_permission)):
         ...
 
+    @UsePermission(JWTContactPermission)
     @UseGuard(RegisteredContactsGuard)
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PUT])
     async def update_raw_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
@@ -176,6 +176,29 @@ class ContactSecurityRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PATCH])
     async def update_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Query(None),forgot:bool=Query(False), contactPermission=Depends(get_contact_permission),  authPermission=Depends(get_auth_permission)):
         # TODO update token permission after use
+        ...
+
+
+    @UsePipe(RelayPipe)
+    @UseGuard(RegisteredContactsGuard)
+    @PingService([ContactsService])
+    @BaseHTTPRessource.HTTPRoute('/token/{contact_id}',[HTTPMethod.GET])
+    async def get_token_link(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
+        return 
+
+
+    @UsePipe(RelayPipe)
+    @UseGuard(RegisteredContactsGuard)
+    @PingService([CeleryService,VoiceService,EmailSenderService,ContactsService])
+    @BaseHTTPRessource.HTTPRoute('/token/{contact_id}',[HTTPMethod.POST])
+    async def request_new_token_link(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
+        ...
+
+    @UsePipe(RelayPipe)
+    @UseGuard(RegisteredContactsGuard)
+    @PingService([ContactsService])
+    @BaseHTTPRessource.HTTPRoute('/token/{contact_id}',[HTTPMethod.PATCH])
+    async def update_token(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
         ...
 
 
@@ -201,7 +224,7 @@ class ContactsRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/{relay}')
     async def create_contact(self, relay: str, contact:ContactModel,authPermission=Depends(get_auth_permission)):
         
-        #NOTE  if app registered send a jwt token for changing is security shit
+        #NOTE  if app registered send a jwt token for changing his security shit
         #NOTE double opt in is only to send other than notification like newsletter and promotion anything marketing
         result = await self.contactsService.create_new_contact(contact)
         if contact.info.app_registered:
@@ -209,7 +232,7 @@ class ContactsRessource(BaseHTTPRessource):
         
         return result
         #TODO send welcome email or sms
-        template:Template = getattr(self.assetService,relay)[...]
+        
         _,data= template.build(...,{})
 
         if relay =="sms":
@@ -229,6 +252,7 @@ class ContactsRessource(BaseHTTPRessource):
         return {'result':result,
                 'task':celery_result}
 
+    
     @BaseHTTPRessource.Post('/activate/{contact_id}')
     async def activate_contact(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
         # TODO newsletter and spam like can be sent
@@ -253,3 +277,7 @@ class ContactsRessource(BaseHTTPRessource):
 
     async def export_contacts(self):
         ...
+
+
+
+##############################################                   ##################################################

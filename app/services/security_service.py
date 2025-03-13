@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from app.classes.auth_permission import AuthPermission, ContactPermission, Role, RoutePermission, WSPermission
+from app.classes.auth_permission import AuthPermission, ContactPermission, ContactPermissionScope, Role, RoutePermission, WSPermission
 from random import randint, random
 from app.utils.helper import generateId,b64_encode,b64_decode
 from app.utils.constant import ConfigAppConstant
@@ -23,7 +23,7 @@ import hashlib
 
 SEPARATOR = "|"
 ID_LENGTH = 25
-def generate_salt(length=16):
+def generate_salt(length=64):
     return os.urandom(length)
 
 @IsInterface
@@ -39,6 +39,9 @@ class EncryptDecryptInterface(Interface):
         value = cipher_suite.decrypt(value.encode())
         return base64.b64decode(value).decode()
 
+    @property
+    def salt(self):
+        return generate_salt()
 
 @ServiceClass
 class JWTAuthService(Service, EncryptDecryptInterface):
@@ -70,10 +73,11 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         try:
             if data==None:
                 data = {}
+            salt = str(self.salt)
             created_time = time.time()
             permission = AuthPermission(generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
-                                        expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data,roles=roles,allowed_assets=allowed_assets
-                                        )
+                                        expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data,roles=roles,allowed_assets=allowed_assets,
+                                        salt=salt)
             token = self._encode_token(permission)
             return token
         except Exception as e:
@@ -84,22 +88,38 @@ class JWTAuthService(Service, EncryptDecryptInterface):
     def encode_ws_token(self,run_id:str,operation_id:str,expiration:float):
         now = time.time()
         expired_at = now + expiration
-        permission = WSPermission(operation_id=operation_id,expired_at=expired_at,created_at=now,run_id=run_id)
-        return self._encode_token(permission)
+        salt = str(self.salt)
+        permission = WSPermission(operation_id=operation_id,expired_at=expired_at,created_at=now,run_id=run_id,salt=salt)
+        return self._encode_token(permission,'WS_JWT_SECRET_KEY')
         
+    
+    def encode_contact_token(self,contact_id:str,expiration:float,scope:ContactPermissionScope):
+        now=time.time()
+        expiration = now + expiration
+        salt = str(self.salt)
+        permission = ContactPermission(expired_at=expiration,create_at=now,scope=scope,contact_id=contact_id,salt=salt)
+        return self._encode_token(permission,'CONTACT_JWT_SECRET_KEY')
 
-    def _encode_token(self, obj):
-        encoded = jwt.encode(obj, self.configService.JWT_SECRET_KEY,
-                                 algorithm=self.configService.JWT_ALGORITHM)
+
+    def _encode_token(self, obj,secret_key:str=None):
+        if secret_key == None:
+            secret_key = self.configService.JWT_SECRET_KEY
+        else:
+            secret_key = self.configService.getenv(secret_key,self.configService.JWT_SECRET_KEY)
+        encoded = jwt.encode(obj, secret_key, algorithm=self.configService.JWT_ALGORITHM)
         token = self._encode_value(encoded, self.configService.ON_TOP_SECRET_KEY)
         return token
 
-    def decode_token(self, token: str) -> dict:
+    def decode_token(self, token: str,secret_key:str=None) -> dict:
         try:
+            if secret_key == None:
+                secret_key = self.configService.JWT_SECRET_KEY
+            else:
+                secret_key = self.configService.getenv(secret_key,self.configService.JWT_SECRET_KEY)
+
             token = self._decode_value(
                 token, self.configService.ON_TOP_SECRET_KEY)
-            decoded = jwt.decode(token, self.configService.JWT_SECRET_KEY,
-                                 algorithms=self.configService.JWT_ALGORITHM)
+            decoded = jwt.decode(token, self.configService.JWT_SECRET_KEY,algorithms=self.configService.JWT_ALGORITHM)
             return decoded
 
         # TODO: For each exception, we should return a specific error message
@@ -145,7 +165,6 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             return permission
         except KeyError as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Data missing')
-
 
     def verify_contact_permission(self,token:str)->ContactPermission:
 

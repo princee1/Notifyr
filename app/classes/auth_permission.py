@@ -3,6 +3,7 @@ from typing import Callable, List, Literal,Dict,NotRequired
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 from enum import Enum
+from time import time
 
 from app.definition._error import BaseError
 
@@ -55,12 +56,15 @@ class AuthPermission(TypedDict):
     allowed_assets:List[str]
     challenge: str= None # TODO 
     scope:list[str] = None # TODO
+    salt:str
 
 
 class ContactPermission(TypedDict):
     expired_at:int
     contact_id:str
     scope: ContactPermissionScope
+    create_at:int
+    salt:str
 
 class TokensModel(BaseModel):
     tokens: str | list[str]
@@ -70,6 +74,7 @@ class WSPermission(TypedDict):
     run_id:str
     created_at:float
     expired_at:float
+    salt:str
     
 class WSPathNotFoundError(BaseError):
     ...
