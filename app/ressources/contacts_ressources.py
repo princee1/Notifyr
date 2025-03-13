@@ -1,13 +1,14 @@
 
 
 from typing import Annotated
-from fastapi import Depends, HTTPException, Query, status
-from app.classes.auth_permission import AuthPermission, MustHave, Role
+from fastapi import Depends, HTTPException, Query, Request, status
+from app.classes.auth_permission import AuthPermission, ContactPermission, MustHave, Role
 from app.classes.celery import CeleryTask, TaskHeaviness
 from app.classes.template import Template
-from app.container import Get, InjectInMethod
+from app.container import Get, GetDependsAttr, InjectInMethod
+from app.decorators.guards import RegisteredContactsGuard
 from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler
-from app.decorators.permissions import JWTRouteHTTPPermission
+from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
 from app.models.contacts_model import ContactORM,ContactModel
 from app.services.celery_service import BackgroundTaskService, CeleryService
@@ -15,12 +16,13 @@ from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService, SubscriptionService
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.services.twilio_service import SMSService
+from app.services.twilio_service import SMSService, TwilioService, VoiceService
 from app.utils.dependencies import get_auth_permission
 from app.decorators.pipes import ContactsIdPipe, RelayPipe
 from pydantic import BaseModel
 
 
+verify_twilio_token = GetDependsAttr(TwilioService,'verify_twilio_token')
 
 SUBSCRIPTION_PREFIX = 'subscription'
 
@@ -84,6 +86,14 @@ async def get_contacts(contact_id: str, idtype: str = Query("id"),authPermission
     return user
 
 
+def get_contact_permission(token:str= Query(None))->ContactPermission:
+
+    jwtAuthService:JWTAuthService = Get(JWTAuthService)
+    if token == None:
+        raise # TODO 
+    return jwtAuthService.verify_contact_permission(token)
+    
+
 @UseHandler(ContactsHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
@@ -126,27 +136,46 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
 
 
 @UseHandler(ContactsHandler)
-@UseRoles([Role.CONTACTS,Role.TWILIO])
+@UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([ContactsService])
 @HTTPRessource(CONTACTS_SECURITY_PREFIX)
 class ContactSecurityRessource(BaseHTTPRessource):
     
     @InjectInMethod
-    def __init__(self,securityService:SecurityService,jwtService:JWTAuthService,contactsService:ContactsService ):
+    def __init__(self,securityService:SecurityService,jwtService:JWTAuthService,contactsService:ContactsService,celeryService:CeleryService ):
         super().__init__()
         self.securityService = securityService
         self.jwtAuthService = jwtService
         self.contactService = contactsService
+        self.celeryService = celeryService
     
-
+    @UseGuard(RegisteredContactsGuard)
     @UseRoles(options=[MustHave(Role.TWILIO)])
-    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.GET],)
-    async def check_password(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.GET],dependencies=[Depends(verify_twilio_token)])
+    async def check_password(self,contact: Annotated[ContactORM, Depends(get_contacts)],request:Request,authPermission=Depends(get_auth_permission)):
+        ...
+
+    @UseGuard(RegisteredContactsGuard)
+    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PUT])
+    async def update_raw_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+        # BUG cant update without having in set up before
+        ...
+
+    @UsePermission(JWTContactPermission)
+    @UseGuard(RegisteredContactsGuard)
+    @PingService([CeleryService,VoiceService,EmailSenderService])
+    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
+    async def create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Query(None), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
+        # TODO update token permission after use
         ...
     
-    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.PATCH])
-    async def update_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+    @UsePermission(JWTContactPermission)
+    @UseGuard(RegisteredContactsGuard)
+    @PingService([CeleryService,VoiceService,EmailSenderService])
+    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PATCH])
+    async def update_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Query(None),forgot:bool=Query(False), contactPermission=Depends(get_contact_permission),  authPermission=Depends(get_auth_permission)):
+        # TODO update token permission after use
         ...
 
 
@@ -172,6 +201,8 @@ class ContactsRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/{relay}')
     async def create_contact(self, relay: str, contact:ContactModel,authPermission=Depends(get_auth_permission)):
         
+        #NOTE  if app registered send a jwt token for changing is security shit
+        #NOTE double opt in is only to send other than notification like newsletter and promotion anything marketing
         result = await self.contactsService.create_new_contact(contact)
         if contact.info.app_registered:
             return result
@@ -200,6 +231,7 @@ class ContactsRessource(BaseHTTPRessource):
 
     @BaseHTTPRessource.Post('/activate/{contact_id}')
     async def activate_contact(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
+        # TODO newsletter and spam like can be sent
         ...
 
     @UseRoles([Role.TWILIO])

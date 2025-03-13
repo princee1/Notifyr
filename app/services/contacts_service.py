@@ -5,7 +5,7 @@ from app.models.contacts_model import ContactAlreadyExistsError, ContactModel, C
 from tortoise.exceptions import OperationalError
 
 from app.services.config_service import ConfigService
-from app.services.security_service import SecurityService
+from app.services.security_service import JWTAuthService, SecurityService
 
 
 @ServiceClass
@@ -18,12 +18,21 @@ class SubscriptionService(Service):
 @ServiceClass
 class ContactsService(Service):
 
-    def __init__(self,securityService:SecurityService,configService:ConfigService):
+    def __init__(self,securityService:SecurityService,configService:ConfigService,jwtService:JWTAuthService):
         super().__init__()
         self.securityService = securityService
         self.configService = configService
+        self.jwtService = jwtService
 
     def build(self):
+        ...
+
+
+    def create_contacts_security_permission(self):
+        # TODO Delete after used
+        ...
+    
+    def activate_newsletter_contact(self,): # Only if your are not app registered
         ...
 
     async def create_new_contact(self, contact: ContactModel):
