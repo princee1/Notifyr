@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.models.contacts_model import ContactORM
@@ -75,20 +75,7 @@ class RegisteredContactsGuard(Guard):
             return True,''
         return False,'Contact Must be registered to proceed with this actions'
     
-
-class JWTContactGuard(Guard):
-
-    @InjectInMethod
-    def __init__(self,contactService:ContactsService,jwtAuthService:JWTAuthService):
-        super().__init__()
-        self.contactsService= contactService
-        self.jwtAuthSErvice = jwtAuthService
-
-    def guard(self,contact:ContactORM):
-        ...
-
-
-
+# TODO add a guard contacts states
 
 class TwilioLookUpPhoneGuard(Guard):
     def guard(self):

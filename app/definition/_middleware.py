@@ -1,3 +1,4 @@
+import functools
 from typing import Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
@@ -20,8 +21,10 @@ class MiddleWare(BaseHTTPMiddleware):
         MIDDLEWARE[cls.__name__] = cls
         #setattr(cls,'priority',None)
     
-def ApplyOn(paths:list[str],exclude:list[str]=[],methods:list[str]=[]   ):
+def ApplyOn(paths:list[str],exclude:list[str]=[],methods:list[str]=[],options:list[Callable[...,bool]]=[]   ):
     def decorator(func:Callable):
+
+        @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
             base_url = str(request.base_url)
             url = str(request.url).replace(base_url,"")
