@@ -35,9 +35,9 @@ CREATE DOMAIN ContentType AS VARCHAR(30) CHECK (
     VALUE IN (
         'newsletter',
         'event',
-        'notification',
+        'notification', -- user can receive by default
         'promotion',
-        'update',
+        'update', -- user can receive by default
         'other'
     )
 )
@@ -48,12 +48,13 @@ CREATE TABLE IF NOT EXISTS Contact (
     last_name VARCHAR(50) NOT NULL,
     email VARCHAR(50) UNIQUE NOT NULL,
     phone VARCHAR(50) UNIQUE,
-    status Status DEFAULT 'Active',
+    status Status DEFAULT 'Pending',
     app_registered BOOLEAN DEFAULT FALSE,
     opt_in_code INT UNIQUE,
     lang Lang DEFAULT 'en',
     frequency Frequency DEFAULT 'always',
-    action_code TEXT,
+    action_code TEXT UNIQUE,
+    auth_token TEXT UNIQUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT chk_opt_in_code CHECK (opt_in_code >= 100000 AND opt_in_code <= 999999)
