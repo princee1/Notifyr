@@ -1,11 +1,13 @@
 from typing import List
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
+from app.models.contacts_model import ContactORM
 from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
+from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
@@ -61,14 +63,31 @@ class TaskWorkerGuard(Guard):
 
 class RegisteredContactsGuard(Guard):
     """
-    Guard to check if the callee is in the contact list
+    Guard to check if the callee is registered
     """
 
-    def __init__(self,model_keys:List[str],app_registered:bool=True):
+    def __init__(self):
         super().__init__()
         self.contactsService:ContactsService = Get(ContactsService)
-        self.model_keys = model_keys
-        self.app_registered = app_registered
+
+    def guard(self,contact:ContactORM):
+        if contact.app_registered:
+            return True,''
+        return False,'Contact Must be registered to proceed with this actions'
+    
+
+class JWTContactGuard(Guard):
+
+    @InjectInMethod
+    def __init__(self,contactService:ContactsService,jwtAuthService:JWTAuthService):
+        super().__init__()
+        self.contactsService= contactService
+        self.jwtAuthSErvice = jwtAuthService
+
+    def guard(self,contact:ContactORM):
+        ...
+
+
 
 
 class TwilioLookUpPhoneGuard(Guard):

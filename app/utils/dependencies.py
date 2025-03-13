@@ -7,6 +7,8 @@ from fastapi import Depends, HTTPException, Request, Response,status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from .constant import HTTPHeaderConstant
 from .helper import reverseDict
+import asyncio
+
 
 D = TypeVar('D',bound=type)
 
@@ -24,9 +26,27 @@ def APIFilterInject(func:Callable | Type):
             for key, value in kwargs.items()
             if key in annotations
         }
-        
         return func(*args, **filtered_kwargs)
     return wrapper
+
+
+def AsyncAPIFilterInject(func:Callable | Type):
+    
+    if type(func) == type:
+        annotations = func.__init__.__annotations__.copy()
+    else:
+        annotations = func.__annotations__.copy()
+        annotations.pop('return',None)
+
+    async def wrapper(*args,**kwargs):
+        filtered_kwargs = {
+            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
+            for key, value in kwargs.items()
+            if key in annotations
+        }
+        return await func(*args, **filtered_kwargs)
+    return wrapper
+
 
 def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None):
     reversed_kwargs = reverseDict(kwargs)
