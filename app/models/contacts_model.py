@@ -60,9 +60,9 @@ class ContactORM(Model):
     phone = fields.CharField(max_length=50, null=True, unique=True)
     app_registered = fields.BooleanField(default=False)
     opt_in_code= fields.IntField(unique=True, null=True)
-    auth_token = fields.TextField(unique=True,null=True)
+    auth_token = fields.TextField(null=True)
     frequency = fields.CharEnumField(max_length=20,enum_type=Frequency,default=Frequency.always)
-    action_code = fields.TextField(unique=True,null=True)
+    action_code = fields.TextField(null=True)
     status = fields.CharEnumField(max_length=20,enum_type=Status,default=Status.Active)
     lang = fields.CharField(max_length=20,default="en")
     created_at = fields.DatetimeField(auto_now=True,use_tz=True)
@@ -150,8 +150,8 @@ class SubsContent(Model):
 
 class Subscription(Model):
     subs_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions', on_delete=fields.CASCADE, on_update=fields.CASCADE)
-    content = fields.ForeignKeyField('models.SubsContent', related_name='subscriptions', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField('models.ContactORM', related_name='contact', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    content = fields.ForeignKeyField('models.SubsContent', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     subs_status = fields.CharEnumField(max_length=20, enum_type=Status, default=Status.Active)
     created_at = fields.DatetimeField(auto_now_add=True, use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True, use_tz=True)

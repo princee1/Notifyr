@@ -37,18 +37,23 @@ class SubscriptionRessource(BaseHTTPRessource):
         self.contactsService = contactsService
         self.subscriptionService = subscriptionService
     
+    @BaseHTTPRessource.Post('/')
     async def register_subscription(self,):
         ...
 
+    @BaseHTTPRessource.Delete('/')
     async def delete_subscription(self):
         ...
     
+    @BaseHTTPRessource.Get('/')
     async def get_subscription(self):
         ...
 
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
     async def update_subscription(self):
         ...
     
+    @BaseHTTPRessource.HTTPRoute('/ttl',methods=[HTTPMethod.PUT])
     async def update_subscription_ttl(self):
         ...
 
@@ -100,7 +105,9 @@ def get_contact_permission(token:str= Query(None))->ContactPermission:
 @HTTPRessource(CONTACTS_SUBSCRIPTION_PREFIX)
 class ContactsSubscriptionRessource(BaseHTTPRessource):
 
+    @InjectInMethod
     def __init__(self,contactService:ContactsService,subscriptionService:SubscriptionService):
+        super().__init__()
         self.contactService = contactService
         self.subscriptionService = subscriptionService
 
@@ -206,7 +213,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([ContactsService])
-@HTTPRessource(CONTACTS_PREFIX,router= [ContactSecurityRessource,ContactsSubscriptionRessource])
+@HTTPRessource(CONTACTS_PREFIX,routers= [ContactSecurityRessource,ContactsSubscriptionRessource])
 class ContactsRessource(BaseHTTPRessource):
 
     @InjectInMethod
