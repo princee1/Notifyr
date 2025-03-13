@@ -9,7 +9,7 @@ from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandle
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe, TwilioFromPipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
-from app.container import GetDependsFunc, InjectInMethod, InjectInFunction
+from app.container import GetDependsAttr, InjectInMethod, InjectInFunction
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
 from app.services.assets_service import AssetService
@@ -114,7 +114,7 @@ class IncomingSMSRessource(BaseHTTPRessource):
         self.smsService: SMSService = smsService
         self.contactsService: ContactsService = contactsService
         self.chatService: ChatService = chatService
-        super().__init__(dependencies=[Depends(GetDependsFunc(TwilioService,'verify_twilio_token'))])
+        super().__init__(dependencies=[Depends(GetDependsAttr(TwilioService,'verify_twilio_token'))])
 
     @BaseHTTPRessource.HTTPRoute('/menu/',methods=[HTTPMethod.POST])
     async def sms_menu(self,authPermission=Depends(get_auth_permission)):

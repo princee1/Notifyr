@@ -15,7 +15,7 @@ from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
 from app.services.twilio_service import TwilioService, VoiceService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
-from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
+from app.container import Get, GetDependsAttr, InjectInMethod, InjectInFunction
 from app.utils.dependencies import get_auth_permission
 
 
@@ -125,7 +125,7 @@ class IncomingCallRessources(BaseHTTPRessource):
         self.chatService = chatService
         self.contactsService = contactsService
         self.loggerService = loggerService
-        super().__init__(dependencies=[Depends(GetDependsFunc(TwilioService,'verify_twilio_token'))])
+        super().__init__(dependencies=[Depends(GetDependsAttr(TwilioService,'verify_twilio_token'))])
 
 
     @BaseHTTPRessource.HTTPRoute('/menu/',methods=[HTTPMethod.POST])
