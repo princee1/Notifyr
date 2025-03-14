@@ -50,14 +50,14 @@ CREATE TABLE IF NOT EXISTS Contact (
     phone VARCHAR(50) UNIQUE,
     status Status DEFAULT 'Pending',
     app_registered BOOLEAN DEFAULT FALSE,
-    opt_in_code INT UNIQUE,
+    opt_in_code INT UNIQUE, -- double opt in code
     lang Lang DEFAULT 'en',
     frequency Frequency DEFAULT 'always',
-    action_code TEXT UNIQUE,
-    auth_token TEXT UNIQUE, --NONCE
+    action_code TEXT UNIQUE DEFAULT NULL, -- unsubscribe/subscribe
+    auth_token TEXT UNIQUE DEFAULT NULL, --NONCE
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT chk_opt_in_code CHECK (opt_in_code >= 100000 AND opt_in_code <= 999999)
+    CONSTRAINT chk_opt_in_code CHECK (opt_in_code >= 10000000000000 AND opt_in_code <= 99999999999999)
 )
 
 CREATE TABLE IF NOT EXISTS SecurityContact (
@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS SecurityContact (
     FOREIGN KEY (contact_id) REFERENCES Contact (contact_id) ON DELETE CASCADE ON UPDATE CASCADE
 )
 
+-- TODO Combine the SubscriptionContact and Content Type Later ...
 CREATE TABLE IF NOT EXISTS SubscriptionContact (
     subscription_id UUID DEFAULT uuid_generate_v4(),
     contact_id UUID UNIQUE,
@@ -82,6 +83,21 @@ CREATE TABLE IF NOT EXISTS SubscriptionContact (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (subscription_id),
+    FOREIGN KEY (contact_id) REFERENCES Contact (contact_id) ON DELETE CASCADE ON UPDATE CASCADE
+)
+
+
+CREATE TABLE IF NOT EXISTS ContentTypeSubscription (
+    contact_id UUID UNIQUE,
+    newsletter BOOLEAN DEFAULT FALSE,
+    event BOOLEAN DEFAULT FALSE,
+    -- notification BOOLEAN DEFAULT TRUE, -- user can receive by default
+    promotion BOOLEAN DEFAULT FALSE,
+    -- update BOOLEAN DEFAULT TRUE, -- user can receive by default
+    other BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (contact_id),
     FOREIGN KEY (contact_id) REFERENCES Contact (contact_id) ON DELETE CASCADE ON UPDATE CASCADE
 )
 
@@ -106,15 +122,20 @@ CREATE TABLE IF NOT EXISTS Subscription (
     contact_id UUID,
     content_id UUID,
     subs_status SubscriptionStatus DEFAULT 'Active',
+    preferred_method VARCHAR(20)  NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (
-        subs_id,
         contact_id,
         content_id
     ),
     FOREIGN KEY (contact_id) REFERENCES Contact (contact_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (content_id) REFERENCES SubsContent (content_id) ON DELETE CASCADE ON UPDATE CASCADE
+    FOREIGN KEY (content_id) REFERENCES SubsContent (content_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT preferred_method CHECK (
+    preferred_method IN (
+        'email',
+        'sms'
+    ))
 )
 
 

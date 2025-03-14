@@ -25,10 +25,20 @@ class Lang(Enum):
     fr='fr'
     en='en'
 
+class ContentType(Enum):
+    newsletter = 'newsletter'
+    event = 'event'
+    notification = 'notification'
+    promotion = 'promotion'
+    update = 'update'
+    other = 'other'
+
+
+
+##################################################################              ##############################################################3333333333
 
 class ContactNotExistsError(BaseError):
     ...
-
 class ContactAlreadyExistsError(BaseError):
     
     def __init__(self,email,phone ,*args):
@@ -45,6 +55,14 @@ class ContactAlreadyExistsError(BaseError):
             return "The email field is already used"
         
         return "The phone field is already used"
+
+class ContactOptInCodeNotMatchError(BaseError):
+    ...
+
+class ContactDoubleOptInAlreadySetError(BaseError):
+    ...
+
+##################################################################              ##############################################################3333333333
 
 CONTACTS_SCHEMA = "contacts"
 
@@ -83,7 +101,6 @@ class ContactORM(Model):
         'app_registered': self.app_registered,
         'lang': self.lang,
         'created_at': self.created_at.isoformat(),
-        'updated_at': self.updated_at.isoformat(),
     }
 
     @property
@@ -114,7 +131,7 @@ class SecurityContactORM(Model):
         schema = CONTACTS_SCHEMA
         table = table_builder("securitycontact")
 
-class SubscriptionContactORM(Model):
+class SubscriptionContactStatusORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
     email_status = fields.CharField(max_length=20)
@@ -140,10 +157,11 @@ class Reason(Model):
         table = "reason"
         schema = CONTACTS_SCHEMA
 
-class SubsContent(Model):
+class SubsContentORM(Model):
     content_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     content_name = fields.CharField(max_length=50, unique=True)
     content_description = fields.TextField(null=True)
+    content_type = fields.CharEnumField(max_length=20,enum_type=ContentType)
 
     class Meta:
         table = "subscontent"
@@ -160,10 +178,66 @@ class Subscription(Model):
     class Meta:
         table = "subscription"
         schema = CONTACTS_SCHEMA
-        unique_together = (("subs_id", "contact", "content"),)
+        unique_together = (("contact", "content"),)
 
 
-class InfoModel(BaseModel):
+class ContentTypeSubscriptionORM(Model):
+    contact = fields.ForeignKeyField('models.ContactORM', related_name='contact', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    event = fields.BooleanField(default=False)
+    newsletter = fields.BooleanField(default=False)
+    promotion= fields.BooleanField(default=False)
+    other = fields.BooleanField(default =True)
+    created_at = fields.DatetimeField(auto_now_add=True, use_tz=True)
+    updated_at = fields.DatetimeField(auto_now=True, use_tz=True)
+
+
+    class Meta:
+        table = "contenttypesubscription"
+        schema = CONTACTS_SCHEMA
+
+##################################################################              ##############################################################3333333333
+
+
+class SubscriptionStatusModel(BaseModel):
+    email_status:str=None
+    sms_status:str=None
+
+    @field_validator('email_status')
+    def  check_lang(cls,email_status):
+        if email_status == None:
+            return None
+        if email_status not in ('Active','Inactive'):
+            raise ValueError('Suscription status is not valid: (Active or Inactive)')
+        return email_status
+
+    @field_validator('sms_status')
+    def  check_lang(cls,sms_status):
+        if sms_status ==None:
+            return None
+        if sms_status not in ('Active','Inactive'):
+            raise ValueError('Suscription status is not valid (Active or Inactive)')
+        return sms_status
+    
+    @model_validator(mode="after")
+    def check_email_phone(self)->Self:
+        if self.email_status ==None and self.sms_status == None:
+            raise ValueError("Email status and phone status cant be both null")
+        return self
+
+class ContentTypeSubsModel(BaseModel):
+    event:bool |None = None
+    newsletter:bool|None =None
+    promotion:bool|None = None
+    other:bool |None = None
+    subscription_status:SubscriptionStatusModel |None =None
+
+    @model_validator(mode="after")
+    def check_flag(self,):
+        if self.event == None and self.newsletter == None and self.promotion== None and self.other == None and self.subscription_status==None:
+            raise ValueError('Every values cannot all be false')
+        return self
+
+class ContactModel(BaseModel):
     first_name:str
     last_name:str
     email:str =None
@@ -211,41 +285,13 @@ class SecurityModel(BaseModel):
             raise ValueError("Value is not a valid 6 digit format")
         return security_code
 
-class SubscriptionModel(BaseModel):
-    email_status:str=None
-    sms_status:str=None
-
-    @field_validator('email_status')
-    def  check_lang(cls,email_status):
-        if email_status == None:
-            return None
-        if email_status not in ('Active','Inactive'):
-            raise ValueError('Suscription status is not valid: (Active or Inactive)')
-        return email_status
-
-    @field_validator('sms_status')
-    def  check_lang(cls,sms_status):
-        if sms_status ==None:
-            return None
-        if sms_status not in ('Active','Inactive'):
-            raise ValueError('Suscription status is not valid (Active or Inactive)')
-        return sms_status
-    
-    @model_validator(mode="after")
-    def check_email_phone(self)->Self:
-        if self.email_status ==None and self.sms_status == None:
-            raise ValueError("Email status and phone status cant be both null")
-        return self
+class SubsContentModel(BaseModel):
+    ...
 
 
-
-class ContactModel(BaseModel):
-    info:InfoModel
-    subscription:SubscriptionModel | None = None
-
+##################################################################              ##############################################################3333333333
 
 def query(method:Literal['update','reset']): return f'SELECT {method}_reason($1::VARCHAR(50))'
-
 
 async def reset_reason(name:str):
     q = query('reason')
@@ -261,4 +307,4 @@ async def get_contact_summary(contact_id: str):
     query = "SELECT * FROM contact_summary WHERE contact_id = $1::UUID"
     client = Tortoise.get_connection('default')
     result = await client.execute_query(query, [contact_id])
-    return result[0] if result else None
+    return result[1][0] if result else None
