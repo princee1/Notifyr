@@ -3,10 +3,11 @@ from tortoise import fields
 from tortoise.models import Model
 import uuid
 from pydantic import BaseModel, field_validator,model_validator
-from typing_extensions import Self
+from typing_extensions import Literal, Self
 from app.utils.helper import phone_parser
 from app.utils.validation import email_validator, phone_number_validator
 from app.definition._error import BaseError
+from tortoise import Tortoise
 
 class Frequency(Enum):
     weekly = 'weekly'
@@ -241,3 +242,23 @@ class SubscriptionModel(BaseModel):
 class ContactModel(BaseModel):
     info:InfoModel
     subscription:SubscriptionModel | None = None
+
+
+def query(method:Literal['update','reset']): return f'SELECT {method}_reason($1::VARCHAR(50))'
+
+
+async def reset_reason(name:str):
+    q = query('reason')
+    client = Tortoise.get_connection('default')
+    await client.execute_query(q,[name])
+    
+async def update_reason(name:str):
+    q = query('update')
+    client = Tortoise.get_connection('default')
+    await client.execute_query(q,[name])
+
+async def get_contact_summary(contact_id: str):
+    query = "SELECT * FROM contact_summary WHERE contact_id = $1::UUID"
+    client = Tortoise.get_connection('default')
+    result = await client.execute_query(query, [contact_id])
+    return result[0] if result else None

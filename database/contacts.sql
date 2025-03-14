@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS SubscriptionContact (
 CREATE TABLE IF NOT EXISTS Reason (
     reason_id UUID DEFAULT uuid_generate_v4(),
     reason_description TEXT DEFAULT NULL,
-    reason_name TEXT UNIQUE,
+    reason_name VARCHAR(50) UNIQUE,
     reason_count BIGINT DEFAULT 0,
     PRIMARY KEY (reason_id)
 )
