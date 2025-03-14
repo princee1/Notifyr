@@ -62,13 +62,14 @@ class JWTAssetPermission(Permission):
         self.template_type = template_type
         self.options = options
 
-    def permission(self,template:str, scheduler:SchedulerModel, authPermission:AuthPermission):
+    def permission(self,template:str, scheduler:SchedulerModel, authPermission:AuthPermission,template_type:RouteAssetType=None):
         assetPermission = authPermission['allowed_assets']
+        template_type = self.template_type if template_type == None else template_type
         permission = tuple(assetPermission)
         if template:
             content = scheduler.model_dump(include={'content'})
             template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
-            template = self.assetService.asset_rel_path(template,self.template_type)
+            template = self.assetService.asset_rel_path(template,template_type)
             if not template.startswith(permission):
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
             
@@ -87,11 +88,11 @@ class JWTQueryAssetPermission(JWTAssetPermission):
         """
         super().__init__(None, model_keys, options)
         self.allowed_assets = allowed_assets
+        self.template_type=...
         
     def permission(self,template:str, scheduler:SchedulerModel, asset:str,authPermission:AuthPermission):
         self.assetService.check_asset(asset,self.allowed_assets)
-        self.template_type = asset
-        return super().permission(template,scheduler,authPermission)
+        return super().permission(template,scheduler,authPermission,asset)
     
 
 class JWTContactPermission(Permission):
