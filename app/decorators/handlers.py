@@ -13,6 +13,9 @@ from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
 from tortoise.exceptions import OperationalError,DBConnectionError,ValidationError
+from requests.exceptions import SSLError,Timeout
+
+
 class ServiceAvailabilityHandler(Handler):
     
     async def handle(self, function:Callable, *args, **kwargs):
@@ -101,7 +104,19 @@ class TwilioHandler(Handler):
             return await function(*args, **kwargs)
     
         except TwilioRestException as e:
-            raise HTTPException(status=status.HTTP_400_BAD_REQUEST,details={})
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Twilio REST API error',
+            })
+
+        except SSLError as e:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={
+                'message': 'SSL error',
+            })
+
+        except Timeout as e:
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail={
+                'message': 'Request timed out',
+            })
     
 
 
