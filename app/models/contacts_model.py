@@ -9,6 +9,14 @@ from app.utils.validation import email_validator, phone_number_validator
 from app.definition._error import BaseError
 from tortoise import Tortoise
 
+class Relay(Enum):
+    email="email"
+    sms="sms"
+
+class SubscriptionStatus(Enum):
+    Active="Active"
+    Inactive="Inactive"
+
 class Frequency(Enum):
     weekly = 'weekly'
     bi_weekly= 'bi_weekly'
@@ -134,8 +142,8 @@ class SecurityContactORM(Model):
 class SubscriptionContactStatusORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions_status', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
-    email_status = fields.CharField(max_length=20)
-    sms_status = fields.CharField(max_length=20)
+    email_status = fields.CharEnumField(enum_type=SubscriptionStatus,max_length=20)
+    sms_status = fields.CharEnumField(enum_type=SubscriptionStatus,max_length=20)
     created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
 
@@ -167,13 +175,14 @@ class SubsContentORM(Model):
         table = "subscontent"
         schema = CONTACTS_SCHEMA
 
-class Subscription(Model):
+class SubscriptionORM(Model):
     subs_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscription', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     content = fields.ForeignKeyField('models.SubsContentORM', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
-    subs_status = fields.CharEnumField(max_length=20, enum_type=Status, default=Status.Active)
+    subs_status = fields.CharEnumField(max_length=20, enum_type=SubscriptionStatus, default=SubscriptionStatus.Active)
     created_at = fields.DatetimeField(auto_now_add=True, use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True, use_tz=True)
+    preferred_method = fields.CharEnumField(enum_type=Relay,max_length=20)
 
     class Meta:
         table = "subscription"
@@ -286,12 +295,21 @@ class SecurityModel(BaseModel):
         return security_code
 
 class SubsContentModel(BaseModel):
-    ...
+    content_name:str
+    content_description:str
+    content_type:ContentType
+    
 
 
 ##################################################################              ##############################################################3333333333
 
 def query(method:Literal['update','reset']): return f'SELECT {method}_reason($1::VARCHAR(50))'
+
+async def delete_subscriptions_by_contact(contact_id):
+    client = Tortoise.get_connection('default')
+    q = "SELECT delete_subscriptions_by_contact($1::UUID)"
+    row_count, _=await client.execute_query(q,[contact_id])
+    return row_count
 
 async def reset_reason(name:str):
     q = query('reason')

@@ -139,6 +139,16 @@ CREATE TABLE IF NOT EXISTS Subscription (
 )
 
 
+CREATE OR REPLACE FUNCTION delete_subscriptions_by_contact(contact_id UUID) RETURNS VOID AS $$
+BEGIN
+    DELETE FROM Subscription S
+    WHERE S.contact_id = contact_id AND S.content_id NOT IN (
+        SELECT T.content_id FROM Subscription AS T
+        NATURAL JOIN SubsContent C WHERE C.content_type='notification' OR C.content_type='update'
+    );
+END; $$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION update_reason(reason_name VARCHAR(50)) RETURNS VOID AS $$
 BEGIN
 
