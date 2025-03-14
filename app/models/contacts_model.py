@@ -133,7 +133,7 @@ class SecurityContactORM(Model):
 
 class SubscriptionContactStatusORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions_status', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
     email_status = fields.CharField(max_length=20)
     sms_status = fields.CharField(max_length=20)
     created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
@@ -169,8 +169,8 @@ class SubsContentORM(Model):
 
 class Subscription(Model):
     subs_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    contact = fields.ForeignKeyField('models.ContactORM', related_name='contact', on_delete=fields.CASCADE, on_update=fields.CASCADE)
-    content = fields.ForeignKeyField('models.SubsContent', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField('models.ContactORM', related_name='subscription', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    content = fields.ForeignKeyField('models.SubsContentORM', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     subs_status = fields.CharEnumField(max_length=20, enum_type=Status, default=Status.Active)
     created_at = fields.DatetimeField(auto_now_add=True, use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True, use_tz=True)
@@ -182,7 +182,7 @@ class Subscription(Model):
 
 
 class ContentTypeSubscriptionORM(Model):
-    contact = fields.ForeignKeyField('models.ContactORM', related_name='contact', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField('models.ContactORM', related_name='content_type_subs', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     event = fields.BooleanField(default=False)
     newsletter = fields.BooleanField(default=False)
     promotion= fields.BooleanField(default=False)
