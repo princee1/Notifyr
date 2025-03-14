@@ -2,30 +2,35 @@
 
 from typing import Annotated
 from fastapi import Depends, HTTPException, Query, Request, status
-from app.classes.auth_permission import AuthPermission, ContactPermission, MustHave, Role
-from app.classes.celery import CeleryTask, TaskHeaviness
-from app.classes.template import Template
-from app.container import Get, GetDependsAttr, InjectInMethod
+from fastapi.responses import JSONResponse
+from app.classes.auth_permission import MustHave, Role
+from app.container import Get,InjectInMethod
 from app.decorators.guards import ActiveContactGuard, ContactActionCodeGuard, RegisteredContactsGuard
 from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler
+from app.decorators.my_depends import get_contact_permission, get_contacts, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
-from app.models.contacts_model import ContactORM,ContactModel, ContentTypeSubsModel, SubsContentORM
+from app.models.contacts_model import ContactORM,ContactModel, ContentTypeSubsModel, Status, SubsContentORM, SubscriptionStatus
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.services.twilio_service import SMSService, TwilioService, VoiceService
+from app.services.twilio_service import SMSService, VoiceService
 from app.utils.dependencies import get_auth_permission
-from app.decorators.pipes import ContactsIdPipe, RelayPipe
-from pydantic import BaseModel
+from app.decorators.pipes import ContactStatusPipe, RelayPipe
 
 
-verify_twilio_token = GetDependsAttr(TwilioService,'verify_twilio_token')
+CONTACTS_PREFIX = 'contacts'
+CONTACTS_SECURITY_PREFIX = 'security'
+CONTACTS_SUBSCRIPTION_PREFIX = 'subscription'
+       
+##############################################                   ##################################################
+
 
 SUBSCRIPTION_PREFIX = 'subscription'
 
+@UseHandler(TortoiseHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @UseRoles([Role.SUBSCRIPTION])
 @HTTPRessource(SUBSCRIPTION_PREFIX)
@@ -58,64 +63,8 @@ class SubscriptionRessource(BaseHTTPRessource):
         ...
 
 ##############################################                   ##################################################
-CONTACTS_PREFIX = 'contacts'
-CONTACTS_SECURITY_PREFIX = 'security'
-CONTACTS_SUBSCRIPTION_PREFIX = 'subscription'
 
-async def get_contacts(contact_id: str, idtype: str = Query("id"),authPermission:AuthPermission=Depends(get_auth_permission)) -> ContactORM:
-
-    if Role.CONTACTS not in authPermission['roles']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role not allowed")
-        
-    match idtype:
-        case "id":
-            user = await ContactORM.filter(contact_id=contact_id).first()
-
-        case "phone":
-            user = await ContactORM.filter(phone=contact_id).first()
-
-        case "email":
-            user = await ContactORM.filter(email=contact_id).first()
-
-        case _:
-            raise HTTPException(
-                400,{"message": "idtype not not properly specified"})
-
-    if user == None:
-        raise HTTPException(404, {"detail": "user does not exists"})
-
-    return user
-
-def get_contact_permission(token:str= Query(None))->ContactPermission:
-
-    jwtAuthService:JWTAuthService = Get(JWTAuthService)
-    if token == None:
-        raise # TODO 
-    return jwtAuthService.verify_contact_permission(token)
-
-def get_subs_content(content_id:str,idtype:str = Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->SubsContentORM:
-
-    if Role.CONTACTS not in authPermission['roles']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role not allowed")
-    
-    match idtype:
-        case "id":
-            content = SubsContentORM.filter(content_id=content_id).first()
-        case "name":
-            content = SubsContentORM.filter(name=content_id).first()
-        case _:
-            raise HTTPException(
-                400,{"message": "idtype not not properly specified"})
-    
-    if content == None:
-        raise HTTPException(404, {"message": "Subscription Content does not exists with those information"})
-
-            
-
-##############################################                   ##################################################
-
-
-@UseHandler(ContactsHandler)
+@UseHandler(TortoiseHandler,ContactsHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([ContactsService])
@@ -132,30 +81,33 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     @UseGuard(ContactActionCodeGuard)
     @UseGuard(ActiveContactGuard)
     @UseHandler(TemplateHandler)
+    @UsePipe(ContactStatusPipe)
     @BaseHTTPRessource.Delete('/unsubscribe/{contact_id}')
-    async def unsubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],action_code=Query(None), authPermission=Depends(get_auth_permission)):
-        #TODO  Inactive will not delete the contact subscription 
-        #NOTE what to do when Blacklist ?
-
-       # TODO set a new opt-in code
-       # TODO delete  the contact subscription status if back to pending
-       # TODO set the user status back to Pending or Inactive
-       # TODO Delete all subscription
-       # TODO Delete content_type_subscription if back to pending
-       ...
+    async def unsubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],action_code=Query(None),next_status:Status= Query(None), authPermission=Depends(get_auth_permission)):
+        if next_status == Status.Active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Next status cannot to Active be set when unsubscribing to the contact")
+        
+        return await self.contactService.unsubscribe_contact(contact,next_status)
 
     @UseGuard(ContactActionCodeGuard)
     @BaseHTTPRessource.HTTPRoute('/resubscribe/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
-    async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],action_code:str=Query(None), authPermission=Depends(get_auth_permission)):
-        # TODO if inactive set back to Active otherwise cant do None,
-        ...
+    async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
+        if contact.status == Status.Active:
+            return JSONResponse(status_code=status.HTTP_202_ACCEPTED,content='Nothing to do')
+        
+        if contact.status == Status.Inactive or contact.status == Status.Blacklist:
+            contact.status = Status.Active
+            await contact.save()
+            return JSONResponse('Re activated the contacts back to active',status_code=status.HTTP_200_OK)
+        
+        return JSONResponse("You must re activate your account with your new opt-int",status_code = status.HTTP_423_LOCKED)
 
     @UsePipe(RelayPipe(False))
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.HTTPRoute('/content-subscribe/{contact_id}',[HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
     async def content_subscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)], subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],relay:str = Query(None), authPermission=Depends(get_auth_permission)):
-        # TODO if its okay add subscription
-        ...
+        return await self.subscriptionService.subscribe_user(contact,subs_content,relay)
+        
     
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.HTTPRoute('/content-preferences/{contact_id}',[HTTPMethod.POST])
@@ -166,13 +118,17 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Delete('/content-unsubscribe/{contact_id}')
     async def content_unsubscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
-        ...
+        return await self.subscriptionService.unsubscribe_user(contact,subs_content)
 
     @UseGuard(ContactActionCodeGuard(True))  # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
     @UseGuard(ActiveContactGuard)
+    @UsePipe(RelayPipe)
     @BaseHTTPRessource.HTTPRoute('/content-status/{contact_id}',[HTTPMethod.POST])
-    async def update_content_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
-        ...
+    async def update_content_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],relay:str = Query(None),action_code:str=Query(None),next_status:SubscriptionStatus=Query(None),authPermission=Depends(get_auth_permission)):
+        if not next_status:
+            return JSONResponse(content='',status_code=status.HTTP_400_BAD_REQUEST)
+        
+        return await self.subscriptionService.update_subscription(contact,subs_content,relay,next_status)
 
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Get('/{contact_id}')
@@ -180,7 +136,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
         return await self.subscriptionService.get_contact_subscription(contact.contact_id,subs_content.content_id)
 
 
-@UseHandler(ContactsHandler)
+@UseHandler(TortoiseHandler,ContactsHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([ContactsService])
@@ -250,7 +206,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
         ...
 
 
-@UseHandler(ContactsHandler)
+@UseHandler(TortoiseHandler,ContactsHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([ContactsService])
@@ -268,7 +224,7 @@ class ContactsRessource(BaseHTTPRessource):
     @UseHandler(TemplateHandler)
     @BaseHTTPRessource.Post('/activate/{contact_id}')
     async def activate_contact(self,contact: Annotated[ContactORM, Depends(get_contacts)],opt:int = Query(ge=MIN_OPT_IN_CODE,le=MAX_OPT_IN_CODE),authPermission=Depends(get_auth_permission)):
-       return await self.contactsService.activate_newsletter_contact(contact,opt)
+       return await self.contactsService.activate_contact(contact,opt)
         
     @UsePipe(RelayPipe)
     @UseRoles([Role.RELAY])
