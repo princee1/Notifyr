@@ -168,7 +168,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
 
     def verify_contact_permission(self,token:str)->ContactPermission:
 
-        token = self.decode_token(token)
+        token = self.decode_token(token,'CONTACT_JWT_SECRET_KEY')
         permission:ContactPermission = ContactPermission(**token)
 
         try:
