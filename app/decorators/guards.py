@@ -1,7 +1,7 @@
 from typing import Any, List
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
-from app.models.contacts_model import ContactORM
+from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, SubsContentORM, SubscriptionContactStatusORM
 from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
@@ -11,7 +11,8 @@ from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
-from app.utils.helper import flatten_dict
+from app.utils.helper import flatten_dict,b64_encode
+from fastapi import HTTPException,status
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
@@ -75,7 +76,55 @@ class RegisteredContactsGuard(Guard):
             return True,''
         return False,'Contact Must be registered to proceed with this actions'
     
-# TODO add a guard contacts states
+class ActiveContactGuard(Guard):
+
+    async def guard(self,contact:ContactORM,subs_content:SubsContentORM=None,relay:str=None):
+
+        subs_content_type = subs_content.content_type
+        if subs_content:
+            if subs_content_type in [ContentType.notification,ContentType.update]:
+                return True,''
+
+        if contact.status != Status.Active:
+            return False,'Contact is not active yet for non alert content type'
+        
+        if relay:
+            subscription = await SubscriptionContactStatusORM.filter(contact=contact).first()
+            relay+='_status'
+            if getattr(subscription,relay) != 'Active':
+                return False,'Contact method is not active'
+
+        contact_content_type = await ContentTypeSubscriptionORM.filter(contact=contact).first()
+
+        if not getattr(contact_content_type,subs_content_type):
+            return False,'Content Type is not allowed for this user'
+
+        return True,''
+
+class ContactActionCodeGuard(Guard):
+
+    def __init__(self,bypass_content=False):
+        super().__init__()
+        self.bypass = bypass_content
+
+    def guard(self,action_code:str,contact:ContactORM,subsContent:SubsContentORM=None):
+
+        if self.bypass:
+            if  subsContent.content_type  in [ContentType.notification, ContentType.update]:
+                return True,''
+                # raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contact status is not active and content type is not permitted")
+
+        if not action_code:
+            raise HTTPException(status_code=400, detail="Action code is required")
+        
+        if not contact.action_code:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contact action code is missing")
+
+        action_code = b64_encode(action_code)
+        if action_code != contact.action_code:
+            return False,'Contact action Code is not valid'
+        
+        return True,''
 
 class TwilioLookUpPhoneGuard(Guard):
     def guard(self):

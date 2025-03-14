@@ -97,8 +97,9 @@ class ContactsIdPipe(Pipe):
 
 class RelayPipe(Pipe):
 
-    def __init__(self):
+    def __init__(self,parse_email=True):
         super().__init__(True)
+        self.parse_email = parse_email
 
     def pipe(self,relay:str):
         if relay==None:
@@ -107,7 +108,7 @@ class RelayPipe(Pipe):
         if relay != 'sms' and relay != 'email':
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Relay not allowed')
         
-        if relay=='email':
+        if relay=='email' and self.parse_email:
             relay = 'html'
 
         return {'relay':relay}

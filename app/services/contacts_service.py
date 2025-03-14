@@ -1,18 +1,28 @@
 from datetime import datetime, timezone
 from typing import Literal
+
+from fastapi import HTTPException,status
+from app.classes.auth_permission import ContactPermissionScope
 from app.definition._service import Service, ServiceClass
-from app.models.contacts_model import ContactAlreadyExistsError, ContactModel, ContactORM, SubscriptionContactORM, SecurityContactORM
+from app.models.contacts_model import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactModel, ContactORM, ContactOptInCodeNotMatchError, ContentTypeSubsModel, ContentTypeSubscriptionORM, Status, SubscriptionContactStatusORM, SecurityContactORM, get_contact_summary
 from tortoise.exceptions import OperationalError
 
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
+from random import randint
 
+from app.utils.helper import generateId,b64_encode
+
+
+MIN_OPT_IN_CODE = 10000000000000
+MAX_OPT_IN_CODE  = 99999999999999
 
 @ServiceClass
 class SubscriptionService(Service):
     ...
 
-
+    def get_contact_subscription(self,contact_id,content_id):
+        ...
 
 
 @ServiceClass
@@ -23,21 +33,50 @@ class ContactsService(Service):
         self.securityService = securityService
         self.configService = configService
         self.jwtService = jwtService
+        
+        self.expiration = 3600000000
 
     def build(self):
         ...
 
+    @property
+    def opt_in_code(self):
+        return randint(MIN_OPT_IN_CODE,MAX_OPT_IN_CODE)
 
-    def create_contacts_security_permission(self):
-        # TODO Delete after used
-        ...
-    
-    def activate_newsletter_contact(self,): # Only if your are not app registered
-        ...
+
+    async def toggle_content_type_subs_flag(self,contact:ContactORM,ctype:ContentTypeSubsModel):
+        flag:dict = ctype.model_dump(exclude_none=True)
+        record:ContentTypeSubscriptionORM = await ContentTypeSubscriptionORM.filter(contact=contact).first()
+
+        for key,item in flag.items():
+            setattr(record,key,item)
+        
+        await record.save()
+
+
+    async def activate_newsletter_contact(self,contact:ContactORM,opt_in_code:int,subscription_status):
+        
+        if contact.opt_in_code == None:
+            raise ContactDoubleOptInAlreadySetError
+
+        if contact.opt_in_code != opt_in_code:
+            raise ContactOptInCodeNotMatchError
+        
+        subs = subscription_status.model_dump()
+        subs.update({'contact': contact})
+        subs = await SubscriptionContactStatusORM.create(**subs)
+
+        action_code = generateId(16)
+
+        contact.status = Status.Active.value
+        contact.action_code = b64_encode(action_code)
+        await ContentTypeSubscriptionORM.create(contact=contact)
+        await contact.save(force_update=True)
+        return action_code
 
     async def create_new_contact(self, contact: ContactModel):
-        email = contact.info.email
-        phone = contact.info.phone
+        email = contact.email
+        phone = contact.phone
         user_by_email = None
         user_by_phone = None
 
@@ -49,36 +88,39 @@ class ContactsService(Service):
         if user_by_phone or user_by_email:
             raise ContactAlreadyExistsError(user_by_email, user_by_phone)
 
-        contact_info = contact.info.model_dump()
+        contact_info = contact.model_dump()
+        contact_info['opt_in_code']=self.opt_in_code
+
         user = await ContactORM.create(**contact_info)
+        if user.app_registered:
+            user.auth_token = self.jwtService.encode_contact_token(user.contact_id,self.expiration,'create')
 
-        security = contact.security.model_dump()
-        security.update({'contact': user})
+        await user.save()
 
-        hash_key = self.configService.CONTACTS_HASH_KEY
-        security_code = str(security['security_code'])
-
-        if security_code:
-            security['security_code'],security['security_code_salt'] = self.securityService.store_password(security_code,hash_key)
-            
-        security_code_phrase = security['security_phrase']
-        if security_code_phrase:
-            security['security_phrase'],security['security_phrase_salt'] = self.securityService.store_password(security_code_phrase,hash_key)
-
-        subs = contact.subscription.model_dump()
-        subs.update({'contact': user})
-
-        security = await SecurityContactORM.create(**security)
-        subs = await SubscriptionContactORM.create(**subs)
+        if user.app_registered:
+            d = user.to_json.copy()
+            d.update({'auth_token',user.auth_token})
         
         return user.to_json
+
+    async def setup_security(self,contact:ContactORM):
+
+        ...
+
+    async def update_security(self,contact:ContactORM,scope:ContactPermissionScope):
+        auth_token = self.jwtService.encode_contact_token(contact.contact_id,self.expiration,scope)
+        contact.auth_token = auth_token
+        await contact.save(force_update=True)
+        return auth_token
 
     async def update_contact(self,):
         ...
 
     async def read_contact(self, contact_id: str):
+        return await get_contact_summary(contact_id)
+    
         user = await ContactORM.filter(contact_id=contact_id).first()
-        subs = await SubscriptionContactORM.filter(contact_id=contact_id).first()
+        subs = await SubscriptionContactStatusORM.filter(contact_id=contact_id).first()
 
         return {'contact_id': contact_id,
                 'app_registered': user.app_registered,

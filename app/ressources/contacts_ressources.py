@@ -6,14 +6,14 @@ from app.classes.auth_permission import AuthPermission, ContactPermission, MustH
 from app.classes.celery import CeleryTask, TaskHeaviness
 from app.classes.template import Template
 from app.container import Get, GetDependsAttr, InjectInMethod
-from app.decorators.guards import RegisteredContactsGuard
+from app.decorators.guards import ActiveContactGuard, ContactActionCodeGuard, RegisteredContactsGuard
 from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
-from app.models.contacts_model import ContactORM,ContactModel
+from app.models.contacts_model import ContactORM,ContactModel, ContentTypeSubsModel, SubsContentORM
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
-from app.services.contacts_service import ContactsService, SubscriptionService
+from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import SMSService, TwilioService, VoiceService
@@ -86,7 +86,6 @@ async def get_contacts(contact_id: str, idtype: str = Query("id"),authPermission
 
     return user
 
-
 def get_contact_permission(token:str= Query(None))->ContactPermission:
 
     jwtAuthService:JWTAuthService = Get(JWTAuthService)
@@ -94,6 +93,24 @@ def get_contact_permission(token:str= Query(None))->ContactPermission:
         raise # TODO 
     return jwtAuthService.verify_contact_permission(token)
 
+def get_subs_content(content_id:str,idtype:str = Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->SubsContentORM:
+
+    if Role.CONTACTS not in authPermission['roles']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role not allowed")
+    
+    match idtype:
+        case "id":
+            content = SubsContentORM.filter(content_id=content_id).first()
+        case "name":
+            content = SubsContentORM.filter(name=content_id).first()
+        case _:
+            raise HTTPException(
+                400,{"message": "idtype not not properly specified"})
+    
+    if content == None:
+        raise HTTPException(404, {"message": "Subscription Content does not exists with those information"})
+
+            
 
 ##############################################                   ##################################################
 
@@ -111,34 +128,56 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
         self.contactService = contactService
         self.subscriptionService = subscriptionService
 
-    @UsePipe(RelayPipe)
+    @UseRoles([Role.RELAY])
+    @UseGuard(ContactActionCodeGuard)
+    @UseGuard(ActiveContactGuard)
+    @UseHandler(TemplateHandler)
     @BaseHTTPRessource.Delete('/unsubscribe/{contact_id}')
-    async def unsubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], relay: str, authPermission=Depends(get_auth_permission)):
-        if relay == None:
-            ...
-        if relay != 'sms' and relay != 'email':
-            ...
+    async def unsubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],action_code=Query(None), authPermission=Depends(get_auth_permission)):
+        #TODO  Inactive will not delete the contact subscription 
+        #NOTE what to do when Blacklist ?
 
-    @UsePipe(RelayPipe)
+       # TODO set a new opt-in code
+       # TODO delete  the contact subscription status if back to pending
+       # TODO set the user status back to Pending or Inactive
+       # TODO Delete all subscription
+       # TODO Delete content_type_subscription if back to pending
+       ...
+
+    @UseGuard(ContactActionCodeGuard)
     @BaseHTTPRessource.HTTPRoute('/resubscribe/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
-    async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], relay: str = Query(), reason:str = Query(), authPermission=Depends(get_auth_permission)):
+    async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],action_code:str=Query(None), authPermission=Depends(get_auth_permission)):
+        # TODO if inactive set back to Active otherwise cant do None,
         ...
 
+    @UsePipe(RelayPipe(False))
+    @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.HTTPRoute('/content-subscribe/{contact_id}',[HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
-    async def content_subscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
+    async def content_subscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)], subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],relay:str = Query(None), authPermission=Depends(get_auth_permission)):
+        # TODO if its okay add subscription
         ...
     
+    @UseGuard(ActiveContactGuard)
+    @BaseHTTPRessource.HTTPRoute('/content-preferences/{contact_id}',[HTTPMethod.POST])
+    async def toggle_content_type_preferences(self,flags_content_types:ContentTypeSubsModel,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
+        await self.contactService.toggle_content_type_subs_flag(contact,flags_content_types)
+
+    @UseGuard(ContactActionCodeGuard(True)) # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
+    @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Delete('/content-unsubscribe/{contact_id}')
-    async def content_unsubscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
+    async def content_unsubscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
         ...
 
-    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PUT])
-    async def update_content_subscription_status(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
+    @UseGuard(ContactActionCodeGuard(True))  # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
+    @UseGuard(ActiveContactGuard)
+    @BaseHTTPRessource.HTTPRoute('/content-status/{contact_id}',[HTTPMethod.POST])
+    async def update_content_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
         ...
 
+    @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Get('/{contact_id}')
-    async def get_contact_subscription(contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
-        ...
+    async def get_contact_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
+        return await self.subscriptionService.get_contact_subscription(contact.contact_id,subs_content.content_id)
 
 
 @UseHandler(ContactsHandler)
@@ -162,14 +201,14 @@ class ContactSecurityRessource(BaseHTTPRessource):
     async def check_password(self,contact: Annotated[ContactORM, Depends(get_contacts)],request:Request,authPermission=Depends(get_auth_permission)):
         ...
 
-    @UsePermission(JWTContactPermission)
+    @UsePermission(JWTContactPermission('update'))
     @UseGuard(RegisteredContactsGuard)
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PUT])
-    async def update_raw_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+    async def update_raw_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)],token:str= Query(None),contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
         # BUG cant update without having in set up before
         ...
 
-    @UsePermission(JWTContactPermission)
+    @UsePermission(JWTContactPermission('create'))
     @UseGuard(RegisteredContactsGuard)
     @PingService([CeleryService,VoiceService,EmailSenderService])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
@@ -177,7 +216,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
         # TODO update token permission after use
         ...
     
-    @UsePermission(JWTContactPermission)
+    @UsePermission(JWTContactPermission('update'))
     @UseGuard(RegisteredContactsGuard)
     @PingService([CeleryService,VoiceService,EmailSenderService])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PATCH])
@@ -202,6 +241,8 @@ class ContactSecurityRessource(BaseHTTPRessource):
         ...
 
     @UsePipe(RelayPipe)
+    @UseHandler(TemplateHandler)
+    @UseRoles([Role.RELAY])
     @UseGuard(RegisteredContactsGuard)
     @PingService([ContactsService])
     @BaseHTTPRessource.HTTPRoute('/token/{contact_id}',[HTTPMethod.PATCH])
@@ -222,49 +263,21 @@ class ContactsRessource(BaseHTTPRessource):
         self.contactsService = contactsService
         self.celeryService = celeryService
         self.bkgTaskService = bkgTaskService
-        self.emailService = emailService
-        self.smsService = smsService
         self.from_ = Get(ConfigService).getenv('TWILIO_OTP_NUMBER')
 
+    @UseHandler(TemplateHandler)
+    @BaseHTTPRessource.Post('/activate/{contact_id}')
+    async def activate_contact(self,contact: Annotated[ContactORM, Depends(get_contacts)],opt:int = Query(ge=MIN_OPT_IN_CODE,le=MAX_OPT_IN_CODE),authPermission=Depends(get_auth_permission)):
+       return await self.contactsService.activate_newsletter_contact(contact,opt)
+        
     @UsePipe(RelayPipe)
+    @UseRoles([Role.RELAY])
     @UseHandler(TemplateHandler)
     @BaseHTTPRessource.Post('/{relay}')
     async def create_contact(self, relay: str, contact:ContactModel,authPermission=Depends(get_auth_permission)):
-        
         #NOTE  if app registered send a jwt token for changing his security shit
-        #NOTE double opt in is only to send other than notification like newsletter and promotion anything marketing
-        result = await self.contactsService.create_new_contact(contact)
-        if contact.info.app_registered:
-            return result
-        
-        return result
-        #TODO send welcome email or sms
-        
-        _,data= template.build(...,{})
-
-        if relay =="sms":
-            message = {'body':data,'to':contact.info.phone,'from_':self.from_}
-            celeryTask = CeleryTask(task_name='task_send_template_sms',task_type='now',heaviness=TaskHeaviness.VERY_LIGHT,args=(message))
-            celery_result = self.celeryService.trigger_task_from_task(celeryTask,None)
-
-        elif relay =="html":
-            meta={
-                'From':'Contact Management',
-                'To':contact.info.email,
-                'Subject':'Welcome to our Circle!',
-            }
-            celeryTask = CeleryTask(task_name='task_send_template_mail',task_type='now',heaviness=TaskHeaviness.LIGHT,args=(data,meta,template.images))
-            celery_result = self.celeryService.trigger_task_from_task(celeryTask,None)
-        
-        return {'result':result,
-                'task':celery_result}
-
+        return await self.contactsService.create_new_contact(contact)
     
-    @BaseHTTPRessource.Post('/activate/{contact_id}')
-    async def activate_contact(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
-        # TODO newsletter and spam like can be sent
-        ...
-
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Get('/{contact_id}')
     async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
@@ -278,13 +291,17 @@ class ContactsRessource(BaseHTTPRessource):
     async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         return await contact.delete()
 
-    
-    async def import_contacts(self):
+    @BaseHTTPRessource.Get('/all')
+    async def get_all_contacts(self,authPermission=Depends(get_auth_permission)):
         ...
 
-    async def export_contacts(self):
+    @BaseHTTPRessource.Get('/file')
+    async def import_contacts(self,authPermission=Depends(get_auth_permission)):
         ...
 
+    @BaseHTTPRessource.Post('/file')
+    async def export_contacts(self,authPermission=Depends(get_auth_permission)):
+        ...
 
 
 ##############################################                   ##################################################
