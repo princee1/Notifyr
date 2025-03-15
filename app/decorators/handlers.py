@@ -12,7 +12,7 @@ from app.models.contacts_model import ContactAlreadyExistsError, ContactNotExist
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
-from tortoise.exceptions import OperationalError,DBConnectionError,ValidationError
+from tortoise.exceptions import OperationalError,DBConnectionError,ValidationError,IntegrityError,DoesNotExist,MultipleObjectsReturned,TransactionManagementError,UnSupportedError,ConfigurationError,ParamsError
 from requests.exceptions import SSLError,Timeout
 
 
@@ -139,10 +139,42 @@ class TortoiseHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         try:
             return await function(*args, **kwargs)
-        except OperationalError:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={'message':'Database execution error',})
+        except OperationalError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database execution error', 'detail': mess, 'args': e.args})
 
         except ValidationError as e:
-            mess= e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Database execution error','detail':mess})
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Validation error', 'detail': mess, 'args': e.args})
 
+        except DBConnectionError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database connection error', 'detail': mess, 'args': e.args})
+
+        except IntegrityError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={'message': 'Integrity error', 'detail': mess, 'args': e.args})
+
+        except DoesNotExist as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={'message': 'Record not found', 'detail': mess, 'args': e.args})
+
+        except MultipleObjectsReturned as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Multiple objects returned', 'detail': mess, 'args': e.args})
+
+        except TransactionManagementError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Transaction management error', 'detail': mess, 'args': e.args})
+
+        except UnSupportedError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Unsupported operation', 'detail': mess, 'args': e.args})
+
+        except ConfigurationError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Configuration error', 'detail': mess, 'args': e.args})
+
+        except ParamsError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Parameters error', 'detail': mess, 'args': e.args})

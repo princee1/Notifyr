@@ -10,7 +10,7 @@ from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHa
 from app.decorators.my_depends import get_contact_permission, get_contacts, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
-from app.models.contacts_model import ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, get_all_contact_summary
+from app.models.contacts_model import ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
@@ -205,47 +205,51 @@ class ContactSecurityRessource(BaseHTTPRessource):
     # async def request_new_token(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
     #     ...
 
-
-@UseHandler(TortoiseHandler,ContactsHandler)
+@UseHandler(TortoiseHandler, ContactsHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([ContactsService])
-@HTTPRessource(CONTACTS_PREFIX,routers= [ContactSecurityRessource,ContactsSubscriptionRessource])
+@HTTPRessource(CONTACTS_PREFIX, routers=[ContactSecurityRessource, ContactsSubscriptionRessource])
 class ContactsRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: BackgroundTaskService,emailService:EmailSenderService,smsService:SMSService):
+    def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: BackgroundTaskService, emailService: EmailSenderService, smsService: SMSService):
         super().__init__()
         self.contactsService = contactsService
         self.celeryService = celeryService
         self.bkgTaskService = bkgTaskService
-        self.from_ = Get(ConfigService).getenv('TWILIO_OTP_NUMBER')
 
     @BaseHTTPRessource.Post('/activate/{contact_id}')
-    async def activate_contact(self,contact: Annotated[ContactORM, Depends(get_contacts)],opt:int = Query(ge=MIN_OPT_IN_CODE,le=MAX_OPT_IN_CODE),authPermission=Depends(get_auth_permission)):
-       return await self.contactsService.activate_contact(contact,opt)
-        
+    async def activate_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], opt: int = Query(ge=MIN_OPT_IN_CODE, le=MAX_OPT_IN_CODE), authPermission=Depends(get_auth_permission)):
+        action_code = await self.contactsService.activate_contact(contact, opt)
+        return JSONResponse(content={"detail": "Contact activated", "action_code": action_code}, status_code=status.HTTP_200_OK)
+
     @BaseHTTPRessource.Post('/')
-    async def create_contact(self,contact:ContactModel,authPermission=Depends(get_auth_permission)):
-        return await self.contactsService.create_new_contact(contact)
-    
+    async def create_contact(self, contact: ContactModel, authPermission=Depends(get_auth_permission)):
+        new_contact = await self.contactsService.create_new_contact(contact)
+        return JSONResponse(content={"detail": "Contact created", "contact": new_contact}, status_code=status.HTTP_201_CREATED)
+
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Get('/{contact_id}')
     async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
-        return await self.contactsService.read_contact(contact.contact_id)
+        contact_data = await self.contactsService.read_contact(contact.contact_id)
+        return JSONResponse(content={"detail": "Contact retrieved", "contact": contact_data}, status_code=status.HTTP_200_OK)
 
     @BaseHTTPRessource.HTTPRoute('/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT])
-    async def update_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
-        ...
+    async def update_contact(self, update_contact_model: UpdateContactModel, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+        updated_contact = await self.contactsService.update_contact(update_contact_model, contact)
+        return JSONResponse(content={"detail": "Contact updated", "contact": updated_contact}, status_code=status.HTTP_200_OK)
 
     @BaseHTTPRessource.Delete('/{contact_id}')
     async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
-        return await contact.delete()
+        content_data = await self.contactsService.read_contact(contact.contact_id)
+        await contact.delete()
+        return JSONResponse(content={"detail": "Contact deleted", "contact":content_data}, status_code=status.HTTP_200_OK)
 
     @BaseHTTPRessource.Get('/all')
-    async def get_all_contacts(self,authPermission=Depends(get_auth_permission)):
-        row_affected,result = await get_all_contact_summary()
-        return result
+    async def get_all_contacts(self, authPermission=Depends(get_auth_permission)):
+        row_affected, result = await get_all_contact_summary()
+        return JSONResponse(content={"detail": "All contacts retrieved", "contacts": result}, status_code=status.HTTP_200_OK)
 
     @BaseHTTPRessource.Get('/file')
     async def import_contacts(self,authPermission=Depends(get_auth_permission)):
@@ -253,9 +257,6 @@ class ContactsRessource(BaseHTTPRessource):
      
     @BaseHTTPRessource.Post('/file')
     async def export_contacts(self,authPermission=Depends(get_auth_permission)):
-        row_affected,contact_result = await get_all_contact_summary()
-        # TODO save subscriptions too
-        
-
+        raise NotImplementedError
 
 ##############################################                   ##################################################
