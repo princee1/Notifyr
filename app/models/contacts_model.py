@@ -165,7 +165,7 @@ class Reason(Model):
         table = "reason"
         schema = CONTACTS_SCHEMA
 
-class SubsContentORM(Model):
+class ContentSubscriptionORM(Model):
     content_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     content_name = fields.CharField(max_length=50, unique=True)
     content_description = fields.TextField(null=True)
@@ -178,7 +178,7 @@ class SubsContentORM(Model):
 class SubscriptionORM(Model):
     subs_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscription', on_delete=fields.CASCADE, on_update=fields.CASCADE)
-    content = fields.ForeignKeyField('models.SubsContentORM', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    content = fields.ForeignKeyField('models.ContentSubscriptionORM', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     subs_status = fields.CharEnumField(max_length=20, enum_type=SubscriptionStatus, default=SubscriptionStatus.Active)
     created_at = fields.DatetimeField(auto_now_add=True, use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True, use_tz=True)

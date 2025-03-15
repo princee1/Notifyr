@@ -2,7 +2,7 @@ from typing import Callable
 from fastapi import Depends, HTTPException, Query,status
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetDependsAttr
-from app.models.contacts_model import ContactORM, SubsContentORM
+from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.dependencies import get_auth_permission
@@ -43,16 +43,16 @@ def get_contact_permission(token:str= Query(None))->ContactPermission:
         raise # TODO 
     return jwtAuthService.verify_contact_permission(token)
 
-async def get_subs_content(content_id:str,content_idtype:str = Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->SubsContentORM:
+async def get_subs_content(content_id:str,content_idtype:str = Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->ContentSubscriptionORM:
 
     if Role.SUBSCRIPTION not in authPermission['roles']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role not allowed")
     
     match content_idtype:
         case "id":
-            content = await SubsContentORM.filter(content_id=content_id).first()
+            content = await ContentSubscriptionORM.filter(content_id=content_id).first()
         case "name":
-            content = await SubsContentORM.filter(name=content_id).first()
+            content = await ContentSubscriptionORM.filter(name=content_id).first()
         case _:
             raise HTTPException(
                 400,{"message": "idtype not not properly specified"})

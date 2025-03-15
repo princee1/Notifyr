@@ -22,24 +22,24 @@ class SubscriptionService(Service):
     def build(self):
         ...
 
-    async def get_contact_subscription(self, contact: ContactORM, content: SubsContentORM):
+    async def get_contact_subscription(self, contact: ContactORM, content: ContentSubscriptionORM):
         subs = await SubscriptionORM.filter(contact=contact, content=content).first()
         if subs is None:
             return JSONResponse(content={"detail": "Subscription not found"}, status_code=404)
         return subs
 
-    async def subscribe_user(self, contact: ContactORM, content: SubsContentORM, relay: str):
+    async def subscribe_user(self, contact: ContactORM, content: ContentSubscriptionORM, relay: str):
         subscription = await SubscriptionORM.create(contact=contact, content=content, preferred_method=relay)
         return JSONResponse(content={"detail": "Subscription created", "subscription": subscription}, status_code=201)
 
-    async def unsubscribe_user(self, contact: ContactORM, content: SubsContentORM):
+    async def unsubscribe_user(self, contact: ContactORM, content: ContentSubscriptionORM):
         subs = await SubscriptionORM.filter(contact=contact, content=content).first()
         if subs is None:
             return JSONResponse(content={"detail": "Subscription not found"}, status_code=404)
         await subs.delete()
         return JSONResponse(content={"detail": "Subscription deleted"}, status_code=200)
 
-    async def update_subscription(self, contact: ContactORM, content: SubsContentORM, relay: str, next_status: SubscriptionStatus):
+    async def update_subscription(self, contact: ContactORM, content: ContentSubscriptionORM, relay: str, next_status: SubscriptionStatus):
         subs = await SubscriptionORM.filter(contact=contact, content=content).first()
         if subs is None:
             return JSONResponse(content={"detail": "Subscription not found"}, status_code=404)

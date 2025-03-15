@@ -10,7 +10,7 @@ from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHa
 from app.decorators.my_depends import get_contact_permission, get_contacts, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
-from app.models.contacts_model import ContactORM,ContactModel, ContentTypeSubsModel, Status, SubsContentORM, SubscriptionStatus
+from app.models.contacts_model import ContactORM,ContactModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionStatus
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
@@ -34,7 +34,7 @@ SUBSCRIPTION_PREFIX = 'subscription'
 @UsePermission(JWTRouteHTTPPermission)
 @UseRoles([Role.SUBSCRIPTION])
 @HTTPRessource(SUBSCRIPTION_PREFIX)
-class SubscriptionRessource(BaseHTTPRessource):
+class ContentSubscriptionRessource(BaseHTTPRessource):
     
     @InjectInMethod
     def __init__(self,contactsService:ContactsService,subscriptionService:SubscriptionService):
@@ -47,19 +47,19 @@ class SubscriptionRessource(BaseHTTPRessource):
         ...
 
     @BaseHTTPRessource.Delete('/')
-    async def delete_subscription(self,subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
+    async def delete_subscription(self,subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         ...
     
     @BaseHTTPRessource.Get('/')
-    async def get_subscription(self,subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
+    async def get_subscription(self,subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         ...
 
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
-    async def update_subscription(self,subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
+    async def update_subscription(self,subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         ...
     
     @BaseHTTPRessource.HTTPRoute('/ttl',methods=[HTTPMethod.PUT])
-    async def update_subscription_ttl(self,subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
+    async def update_subscription_ttl(self,subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         ...
 
 ##############################################                   ##################################################
@@ -105,7 +105,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     @UsePipe(RelayPipe(False))
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.HTTPRoute('/content-subscribe/{contact_id}',[HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
-    async def content_subscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)], subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],relay:str = Query(None), authPermission=Depends(get_auth_permission)):
+    async def content_subscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)], subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],relay:str = Query(None), authPermission=Depends(get_auth_permission)):
         return await self.subscriptionService.subscribe_user(contact,subs_content,relay)
         
     
@@ -117,14 +117,14 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     @UseGuard(ContactActionCodeGuard(True)) # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Delete('/content-unsubscribe/{contact_id}')
-    async def content_unsubscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
+    async def content_unsubscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
         return await self.subscriptionService.unsubscribe_user(contact,subs_content)
 
     @UseGuard(ContactActionCodeGuard(True))  # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
     @UseGuard(ActiveContactGuard)
     @UsePipe(RelayPipe)
     @BaseHTTPRessource.HTTPRoute('/content-status/{contact_id}',[HTTPMethod.POST])
-    async def update_content_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],relay:str = Query(None),action_code:str=Query(None),next_subs_status:SubscriptionStatus=Query(None),authPermission=Depends(get_auth_permission)):
+    async def update_content_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],relay:str = Query(None),action_code:str=Query(None),next_subs_status:SubscriptionStatus=Query(None),authPermission=Depends(get_auth_permission)):
         if not next_subs_status:
             return JSONResponse(content='',status_code=status.HTTP_400_BAD_REQUEST)
         
@@ -132,7 +132,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
 
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Get('/{contact_id}')
-    async def get_contact_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
+    async def get_contact_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         return await self.subscriptionService.get_contact_subscription(contact.contact_id,subs_content.content_id)
 
 

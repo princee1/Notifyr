@@ -1,7 +1,7 @@
 from typing import Any, List
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
-from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, SubsContentORM, SubscriptionContactStatusORM
+from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
@@ -78,7 +78,7 @@ class RegisteredContactsGuard(Guard):
     
 class ActiveContactGuard(Guard):
 
-    async def guard(self,contact:ContactORM,subs_content:SubsContentORM=None,relay:str=None):
+    async def guard(self,contact:ContactORM,subs_content:ContentSubscriptionORM=None,relay:str=None):
 
         subs_content_type = subs_content.content_type
         if subs_content:
@@ -107,7 +107,7 @@ class ContactActionCodeGuard(Guard):
         super().__init__()
         self.bypass = bypass_content
 
-    def guard(self,action_code:str,contact:ContactORM,subsContent:SubsContentORM=None):
+    def guard(self,action_code:str,contact:ContactORM,subsContent:ContentSubscriptionORM=None):
 
         if self.bypass:
             if  subsContent.content_type  in [ContentType.notification, ContentType.update]:
