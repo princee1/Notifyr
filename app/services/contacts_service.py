@@ -1,39 +1,63 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import HTTPException,status
+from fastapi.responses import JSONResponse
 from app.classes.auth_permission import ContactPermissionScope
 from app.definition._service import Service, ServiceClass
-from app.models.contacts_model import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactModel, ContactORM, ContactOptInCodeNotMatchError, ContentTypeSubsModel, ContentTypeSubscriptionORM, Status, SubscriptionContactStatusORM, SecurityContactORM, get_contact_summary
-from tortoise.exceptions import OperationalError
-
+from app.models.contacts_model import *
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from random import randint
 
-from app.utils.helper import generateId,b64_encode
+from app.utils.helper import generateId, b64_encode
 
 
 MIN_OPT_IN_CODE = 10000000000000
-MAX_OPT_IN_CODE  = 99999999999999
+MAX_OPT_IN_CODE = 99999999999999
+
 
 @ServiceClass
 class SubscriptionService(Service):
-    ...
 
-    def get_contact_subscription(self,contact_id,content_id):
+    def build(self):
         ...
+
+    async def get_contact_subscription(self, contact: ContactORM, content: SubsContentORM):
+        subs = await SubscriptionORM.filter(contact=contact, content=content).first()
+        if subs is None:
+            return JSONResponse(content={"detail": "Subscription not found"}, status_code=404)
+        return subs
+
+    async def subscribe_user(self, contact: ContactORM, content: SubsContentORM, relay: str):
+        subscription = await SubscriptionORM.create(contact=contact, content=content, preferred_method=relay)
+        return JSONResponse(content={"detail": "Subscription created", "subscription": subscription}, status_code=201)
+
+    async def unsubscribe_user(self, contact: ContactORM, content: SubsContentORM):
+        subs = await SubscriptionORM.filter(contact=contact, content=content).first()
+        if subs is None:
+            return JSONResponse(content={"detail": "Subscription not found"}, status_code=404)
+        await subs.delete()
+        return JSONResponse(content={"detail": "Subscription deleted"}, status_code=200)
+
+    async def update_subscription(self, contact: ContactORM, content: SubsContentORM, relay: str, next_status: SubscriptionStatus):
+        subs = await SubscriptionORM.filter(contact=contact, content=content).first()
+        if subs is None:
+            return JSONResponse(content={"detail": "Subscription not found"}, status_code=404)
+        subs.preferred_method = relay
+        subs.subs_status = next_status
+        await subs.save()
+        return JSONResponse(content={"detail": "Subscription updated", "subscription": subs}, status_code=200)
 
 
 @ServiceClass
 class ContactsService(Service):
 
-    def __init__(self,securityService:SecurityService,configService:ConfigService,jwtService:JWTAuthService):
+    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService):
         super().__init__()
         self.securityService = securityService
         self.configService = configService
         self.jwtService = jwtService
-        
+
         self.expiration = 3600000000
 
     def build(self):
@@ -41,27 +65,59 @@ class ContactsService(Service):
 
     @property
     def opt_in_code(self):
-        return randint(MIN_OPT_IN_CODE,MAX_OPT_IN_CODE)
+        return randint(MIN_OPT_IN_CODE, MAX_OPT_IN_CODE)
 
+    async def toggle_content_type_subs_flag(self, contact: ContactORM, ctype: ContentTypeSubsModel):
+        flag: dict = ctype.model_dump(exclude_none=True)
+        record: ContentTypeSubscriptionORM = await ContentTypeSubscriptionORM.filter(contact=contact).first()
 
-    async def toggle_content_type_subs_flag(self,contact:ContactORM,ctype:ContentTypeSubsModel):
-        flag:dict = ctype.model_dump(exclude_none=True)
-        record:ContentTypeSubscriptionORM = await ContentTypeSubscriptionORM.filter(contact=contact).first()
+        for key, item in flag.items():
+            setattr(record, key, item)
 
-        for key,item in flag.items():
-            setattr(record,key,item)
-        
         await record.save()
 
+    async def unsubscribe_contact(self, contact: ContactORM, next_status: Status):
 
-    async def activate_newsletter_contact(self,contact:ContactORM,opt_in_code:int,subscription_status):
-        
+        contact.status = next_status
+
+        result = {
+            'new_status': next_status,
+        }
+
+        # NOTE what to do when Blacklist ?
+        if next_status == Status.Pending:
+            new_opt_in_code = self.opt_in_code
+            contact.opt_in_code = new_opt_in_code
+
+            subs = await SubscriptionContactStatusORM.filter(contact=contact).first()
+            await subs.delete()
+
+            content = await ContentTypeSubscriptionORM.filter(contact=contact).first()
+            await content.delete()
+
+            row_affected = await delete_subscriptions_by_contact(contact.contact_id)
+
+            contact.action_code = None
+            result.update({
+                'opt_in_code': new_opt_in_code,
+            })
+
+        await contact.save()
+        result.update(
+            {
+                'subscriptions_deleted': row_affected
+            }
+        )
+        return result
+
+    async def activate_contact(self, contact: ContactORM, opt_in_code: int, subscription_status: SubscriptionStatusModel):
+
         if contact.opt_in_code == None:
             raise ContactDoubleOptInAlreadySetError
 
         if contact.opt_in_code != opt_in_code:
             raise ContactOptInCodeNotMatchError
-        
+
         subs = subscription_status.model_dump()
         subs.update({'contact': contact})
         subs = await SubscriptionContactStatusORM.create(**subs)
@@ -89,26 +145,28 @@ class ContactsService(Service):
             raise ContactAlreadyExistsError(user_by_email, user_by_phone)
 
         contact_info = contact.model_dump()
-        contact_info['opt_in_code']=self.opt_in_code
+        contact_info['opt_in_code'] = self.opt_in_code
 
         user = await ContactORM.create(**contact_info)
         if user.app_registered:
-            user.auth_token = self.jwtService.encode_contact_token(user.contact_id,self.expiration,'create')
+            user.auth_token = self.jwtService.encode_contact_token(
+                user.contact_id, self.expiration, 'create')
 
         await user.save()
 
         if user.app_registered:
             d = user.to_json.copy()
-            d.update({'auth_token',user.auth_token})
-        
+            d.update({'auth_token', user.auth_token})
+
         return user.to_json
 
-    async def setup_security(self,contact:ContactORM):
+    async def setup_security(self, contact: ContactORM):
 
         ...
 
-    async def update_security(self,contact:ContactORM,scope:ContactPermissionScope):
-        auth_token = self.jwtService.encode_contact_token(contact.contact_id,self.expiration,scope)
+    async def update_security(self, contact: ContactORM, scope: ContactPermissionScope):
+        auth_token = self.jwtService.encode_contact_token(
+            contact.contact_id, self.expiration, scope)
         contact.auth_token = auth_token
         await contact.save(force_update=True)
         return auth_token
@@ -118,7 +176,7 @@ class ContactsService(Service):
 
     async def read_contact(self, contact_id: str):
         return await get_contact_summary(contact_id)
-    
+
         user = await ContactORM.filter(contact_id=contact_id).first()
         subs = await SubscriptionContactStatusORM.filter(contact_id=contact_id).first()
 
@@ -128,11 +186,11 @@ class ContactsService(Service):
                 'updated-at': user.updated_at,
                 'email-status': subs.email_status,
                 'phone-status': subs.sms_status,
-                'subs-updated-at':subs.updated_at,
+                'subs-updated-at': subs.updated_at,
                 'phone': user.phone,
                 'email': user.email,
                 'lang': user.lang}
 
-    async def filter_registered_contacts(self,by:Literal['email','id','phone'],app_registered:bool,):
+    async def filter_registered_contacts(self, by: Literal['email', 'id', 'phone'], app_registered: bool,):
 
         ...

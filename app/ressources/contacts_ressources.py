@@ -43,23 +43,23 @@ class SubscriptionRessource(BaseHTTPRessource):
         self.subscriptionService = subscriptionService
     
     @BaseHTTPRessource.Post('/')
-    async def register_subscription(self,):
+    async def register_subscription(self,authPermission=Depends(get_auth_permission)):
         ...
 
     @BaseHTTPRessource.Delete('/')
-    async def delete_subscription(self):
+    async def delete_subscription(self,subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         ...
     
     @BaseHTTPRessource.Get('/')
-    async def get_subscription(self):
+    async def get_subscription(self,subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         ...
 
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
-    async def update_subscription(self):
+    async def update_subscription(self,subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         ...
     
     @BaseHTTPRessource.HTTPRoute('/ttl',methods=[HTTPMethod.PUT])
-    async def update_subscription_ttl(self):
+    async def update_subscription_ttl(self,subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
         ...
 
 ##############################################                   ##################################################
@@ -124,11 +124,11 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     @UseGuard(ActiveContactGuard)
     @UsePipe(RelayPipe)
     @BaseHTTPRessource.HTTPRoute('/content-status/{contact_id}',[HTTPMethod.POST])
-    async def update_content_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],relay:str = Query(None),action_code:str=Query(None),next_status:SubscriptionStatus=Query(None),authPermission=Depends(get_auth_permission)):
-        if not next_status:
+    async def update_content_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[SubsContentORM,Depends(get_subs_content)],relay:str = Query(None),action_code:str=Query(None),next_subs_status:SubscriptionStatus=Query(None),authPermission=Depends(get_auth_permission)):
+        if not next_subs_status:
             return JSONResponse(content='',status_code=status.HTTP_400_BAD_REQUEST)
         
-        return await self.subscriptionService.update_subscription(contact,subs_content,relay,next_status)
+        return await self.subscriptionService.update_subscription(contact,subs_content,relay,next_subs_status)
 
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Get('/{contact_id}')
