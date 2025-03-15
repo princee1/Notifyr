@@ -95,7 +95,7 @@ def MustNotHave(role:Role):
     return verify
 
 
-def MustHaveRoleSuchHas(*role:Role):
+def MustHaveRoleSuchAs(*role:Role):
 
     roles = set(role)
     roles_size= len(roles)
