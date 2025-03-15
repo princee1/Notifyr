@@ -1,4 +1,6 @@
+from datetime import datetime
 from enum import Enum
+from typing import Optional
 from tortoise import fields
 from tortoise.models import Model
 import uuid
@@ -8,6 +10,9 @@ from app.utils.helper import phone_parser
 from app.utils.validation import email_validator, phone_number_validator
 from app.definition._error import BaseError
 from tortoise import Tortoise
+
+
+##################################################################              ##############################################################3333333333
 
 class Relay(Enum):
     email="email"
@@ -40,8 +45,6 @@ class ContentType(Enum):
     promotion = 'promotion'
     update = 'update'
     other = 'other'
-
-
 
 ##################################################################              ##############################################################3333333333
 
@@ -77,7 +80,6 @@ CONTACTS_SCHEMA = "contacts"
 def table_builder (name:str):
     return name
     return f"{CONTACTS_SCHEMA}.{name}"
-
 
 class ContactORM(Model):
     contact_id = fields.UUIDField(pk=True, default=uuid.uuid4)
@@ -119,7 +121,6 @@ class ContactORM(Model):
         schema = CONTACTS_SCHEMA
         table = table_builder("contact")
 
-
 class SecurityContactORM(Model):
     security_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
@@ -154,8 +155,7 @@ class SubscriptionContactStatusORM(Model):
         table = table_builder("subscriptioncontact")
         schema = CONTACTS_SCHEMA
 
-
-class Reason(Model):
+class ReasonORM(Model):
     reason_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     reason_description = fields.TextField(null=True)
     reason_name = fields.CharField(max_length=255, unique=True)
@@ -170,6 +170,10 @@ class ContentSubscriptionORM(Model):
     content_name = fields.CharField(max_length=50, unique=True)
     content_description = fields.TextField(null=True)
     content_type = fields.CharEnumField(max_length=20,enum_type=ContentType)
+    content_ttl = fields.DatetimeField()
+    created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
+    updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
+    
 
     class Meta:
         table = "subscontent"
@@ -189,7 +193,6 @@ class SubscriptionORM(Model):
         schema = CONTACTS_SCHEMA
         unique_together = (("contact", "content"),)
 
-
 class ContentTypeSubscriptionORM(Model):
     contact = fields.ForeignKeyField('models.ContactORM', related_name='content_type_subs', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     event = fields.BooleanField(default=False)
@@ -205,7 +208,6 @@ class ContentTypeSubscriptionORM(Model):
         schema = CONTACTS_SCHEMA
 
 ##################################################################              ##############################################################3333333333
-
 
 class SubscriptionStatusModel(BaseModel):
     email_status:str=None
@@ -294,11 +296,17 @@ class SecurityModel(BaseModel):
             raise ValueError("Value is not a valid 6 digit format")
         return security_code
 
-class SubsContentModel(BaseModel):
-    content_name:str
-    content_description:str
-    content_type:ContentType
-    
+class ContentSubscriptionModel(BaseModel):
+    content_name:str = None
+    content_description:str = None
+    content_type:ContentType = None
+    content_ttl: Optional[datetime] = None   
+
+    @model_validator(mode="after")
+    def check_content(self)->Self:
+        if not self.content_name and not self.content_description and not self.content_type and not self.content_type:
+            raise ValueError('All Value cannot be null')
+        return self
 
 
 ##################################################################              ##############################################################3333333333
@@ -326,3 +334,8 @@ async def get_contact_summary(contact_id: str):
     client = Tortoise.get_connection('default')
     result = await client.execute_query(query, [contact_id])
     return result[1][0] if result else None
+
+async def get_all_contact_summary():
+    query = "SELECT * FROM contact_summary"
+    client = Tortoise.get_connection('default')
+    return await client.execute_query(query,[])

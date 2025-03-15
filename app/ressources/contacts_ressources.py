@@ -10,7 +10,7 @@ from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHa
 from app.decorators.my_depends import get_contact_permission, get_contacts, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
-from app.models.contacts_model import ContactORM,ContactModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionStatus
+from app.models.contacts_model import ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionStatus, get_all_contact_summary
 from app.services.celery_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
@@ -43,24 +43,35 @@ class ContentSubscriptionRessource(BaseHTTPRessource):
         self.subscriptionService = subscriptionService
     
     @BaseHTTPRessource.Post('/')
-    async def register_subscription(self,authPermission=Depends(get_auth_permission)):
-        ...
+    async def register_content_subscription(self, contentSubsModel: ContentSubscriptionModel, authPermission=Depends(get_auth_permission)):
+        if not all([contentSubsModel.content_name, contentSubsModel.content_type, contentSubsModel.content_description]):
+            return JSONResponse(content={"detail": "Missing required fields"}, status_code=status.HTTP_400_BAD_REQUEST)
+        
+        content = await ContentSubscriptionORM.create(**contentSubsModel.model_dump())
+        return JSONResponse(content={"detail": "Subscription registered", "content": content}, status_code=status.HTTP_201_CREATED)
 
     @BaseHTTPRessource.Delete('/')
-    async def delete_subscription(self,subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
-        ...
-    
-    @BaseHTTPRessource.Get('/')
-    async def get_subscription(self,subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
-        ...
+    async def delete_content_subscription(self, subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], authPermission=Depends(get_auth_permission)):
+        await subs_content.delete()
+        return JSONResponse(content={"detail": "Subscription deleted"}, status_code=status.HTTP_200_OK)
 
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
-    async def update_subscription(self,subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
-        ...
-    
-    @BaseHTTPRessource.HTTPRoute('/ttl',methods=[HTTPMethod.PUT])
-    async def update_subscription_ttl(self,subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
-        ...
+    @BaseHTTPRessource.Get('/')
+    async def get_content_subscription(self, subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], authPermission=Depends(get_auth_permission)):
+        return JSONResponse(content={"detail": "Subscription retrieved", "content": subs_content}, status_code=status.HTTP_200_OK)
+
+    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
+    async def update_subscription(self, contentSubsModel: ContentSubscriptionModel, subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], authPermission=Depends(get_auth_permission)):
+        if contentSubsModel.content_name:
+            subs_content.content_name = contentSubsModel.content_name
+        if contentSubsModel.content_description:
+            subs_content.content_description = contentSubsModel.content_description
+        if contentSubsModel.content_ttl:
+            subs_content.content_ttl = contentSubsModel.content_ttl
+        if contentSubsModel.content_type:
+            subs_content.content_type = contentSubsModel.content_type
+
+        await subs_content.save()
+        return JSONResponse(content={"detail": "Subscription updated", "content": subs_content}, status_code=status.HTTP_200_OK)
 
 ##############################################                   ##################################################
 
@@ -108,7 +119,6 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     async def content_subscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)], subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],relay:str = Query(None), authPermission=Depends(get_auth_permission)):
         return await self.subscriptionService.subscribe_user(contact,subs_content,relay)
         
-    
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.HTTPRoute('/content-preferences/{contact_id}',[HTTPMethod.POST])
     async def toggle_content_type_preferences(self,flags_content_types:ContentTypeSubsModel,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
@@ -249,15 +259,17 @@ class ContactsRessource(BaseHTTPRessource):
 
     @BaseHTTPRessource.Get('/all')
     async def get_all_contacts(self,authPermission=Depends(get_auth_permission)):
-        ...
+        row_affected,result = await get_all_contact_summary()
+        return result
 
     @BaseHTTPRessource.Get('/file')
     async def import_contacts(self,authPermission=Depends(get_auth_permission)):
-        ...
-
+        raise NotImplementedError
+     
     @BaseHTTPRessource.Post('/file')
     async def export_contacts(self,authPermission=Depends(get_auth_permission)):
-        ...
+        row_affected,result = await get_all_contact_summary()
+        
 
 
 ##############################################                   ##################################################

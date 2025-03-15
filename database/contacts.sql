@@ -7,6 +7,8 @@ SET search_path = contacts;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
 CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr', 'en'))
 
 CREATE DOMAIN SubscriptionStatus AS VARCHAR(20) CHECK (
@@ -155,8 +157,13 @@ CREATE TABLE IF NOT EXISTS SubsContent (
     content_name VARCHAR(50) UNIQUE,
     content_description TEXT DEFAULT NULL,
     content_type ContentType DEFAULT 'other',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
     PRIMARY KEY (content_id)
 )
+
+ALTER TABLE Subscontent ADD COLUMN ttl TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS Subscription (
     subs_id UUID UNIQUE DEFAULT uuid_generate_v4 (),
@@ -258,3 +265,13 @@ GROUP BY
     s.email_status,
     s.sms_status,
     c.contact_id;
+
+CREATE OR REPLACE FUNCTION delete_expired_subscontent() RETURNS VOID AS $$
+BEGIN
+    DELETE FROM SubsContent WHERE ttl != NULL and ttl < NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT cron.schedule('delete_expired_subscontent', '0 0 * * *', $$CALL delete_expired_subscontent();$$);
+
+-- NOTE or create a schedule for each row using a Trigger
