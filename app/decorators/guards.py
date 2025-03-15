@@ -118,7 +118,7 @@ class ContactActionCodeGuard(Guard):
             raise HTTPException(status_code=400, detail="Action code is required")
         
         if not contact.action_code:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contact action code is missing")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contact action code is null at the moment")
 
         action_code = b64_encode(action_code)
         if action_code != contact.action_code:

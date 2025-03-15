@@ -43,21 +43,19 @@ def get_contact_permission(token:str= Query(None))->ContactPermission:
         raise # TODO 
     return jwtAuthService.verify_contact_permission(token)
 
-def get_subs_content(content_id:str,content_idtype:str = Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->SubsContentORM:
+async def get_subs_content(content_id:str,content_idtype:str = Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->SubsContentORM:
 
-    if Role.CONTACTS not in authPermission['roles']:
+    if Role.SUBSCRIPTION not in authPermission['roles']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role not allowed")
     
     match content_idtype:
         case "id":
-            content = SubsContentORM.filter(content_id=content_id).first()
+            content = await SubsContentORM.filter(content_id=content_id).first()
         case "name":
-            content = SubsContentORM.filter(name=content_id).first()
+            content = await SubsContentORM.filter(name=content_id).first()
         case _:
             raise HTTPException(
                 400,{"message": "idtype not not properly specified"})
     
     if content == None:
         raise HTTPException(404, {"message": "Subscription Content does not exists with those information"})
-
-     

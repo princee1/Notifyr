@@ -5,6 +5,7 @@ from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
+from app.models.contacts_model import Status
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingSMSModel
 from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
@@ -155,3 +156,17 @@ class AuthClientPipe(Pipe):
     
     def pipe(self,client:str,scope:str):
         return {'client':client,'scope':scope}
+
+
+class ContactStatusPipe(Pipe):
+
+    def pipe(self,next_status:str):
+        allowed_status = Status._member_names_.copy() 
+        allowed_status.remove(Status.Active.value)
+        next_status = next_status.capitalize()
+
+        if next_status not in allowed_status:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Next status query is not valid")
+
+        next_status:Status = Status._member_map_[next_status]
+        return {'next_status':next_status}
