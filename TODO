@@ -24,5 +24,6 @@
 22. public route for redirecting
 23. Set timezone and language with cookies and date for template
 24. Check Cereberus registry in the static values
-25. Verify Email before sending, and deactivate bounced contacts
+25. Verify Email before sending, and deactivate bounced contacts, Also add webhook when the email is opened
 26. Always verify status before sending a promotion, subscription status , and active user or other with FilterPipe
+27. Add Reason

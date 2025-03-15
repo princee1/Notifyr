@@ -9,6 +9,7 @@ from app.services.email_service import EmailSenderService
 from app.container import Get, build_container
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import SMSService, VoiceService
+from app.services.webhook_service import WebhookService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 
@@ -68,6 +69,8 @@ celery_app.autodiscover_tasks(
     ['app.ressources'], related_name='email_ressource')
 celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 
+##############################################           ##################################################
+
 
 @functools.wraps(celery_app.task)
 def RegisterTask(heaviness: TaskHeaviness, **kwargs):
@@ -92,6 +95,21 @@ def SharedTask(heaviness: TaskHeaviness, **kwargs):
         
         return task
     return decorator
+
+##############################################           ##################################################
+
+def WebHook():
+    webhookService = Get(WebhookService)
+    def decorator(func:Callable):
+        t_name:str = task_name(func.__qualname__)
+        def wrapper(*args,**kwargs):
+            result = func(*args,**kwargs)
+            
+            return result
+        return wrapper
+    
+    return decorator
+        
 
 ##############################################           ##################################################
 
