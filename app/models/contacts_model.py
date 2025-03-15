@@ -287,6 +287,26 @@ class ContactModel(BaseModel):
             raise ValueError("Email and phone cant be both null")
         return self
 
+
+class UpdateContactModel(ContactModel):
+    first_name:str | None= None
+    last_name:str | None = None
+    app_registered:bool| None = None
+    lang:str | None = None
+    frequency:Frequency | None = None
+    
+
+    @model_validator(mode="after")
+    def check_email_phone(self)->Self:
+        return self
+
+    @model_validator(mode="after")
+    def check_value(self)->Self:
+        if not all(self.model_dump().values()):
+            raise ValueError("Cant update with an empty body")
+        return self
+        
+    
 class SecurityModel(BaseModel):
     security_code:int
     security_phrase:str

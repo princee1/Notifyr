@@ -174,8 +174,15 @@ class ContactsService(Service):
         await contact.save(force_update=True)
         return auth_token
 
-    async def update_contact(self,):
-        ...
+    async def update_contact(self,update:UpdateContactModel, contact:ContactORM):
+        
+        update:dict = update.model_dump()
+        for key, value in update.items():
+            if value:
+                setattr(contact, key, value)
+        await contact.save()
+        return update
+
 
     async def read_contact(self, contact_id: str):
         return await get_contact_summary(contact_id)

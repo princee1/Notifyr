@@ -251,10 +251,10 @@ SELECT
     COALESCE(s.email_status, 'Inactive') AS email_status,
     COALESCE(s.sms_status, 'Inactive') AS sms_status,
     COUNT(subs.content_id) AS subscription_count,
-    cts.newsletter,
-    cts.promotion,
-    cts.event,
-    cts.other,
+    COALESCE(cts.newsletter, NULL) AS newsletter_status,
+    COALESCE(cts.promotion, NULL) AS promotion_status,
+    COALESCE(cts.event, NULL) AS event_status,
+    COALESCE(cts.other, NULL) AS other_status,
     cts.update_at AS content_type_subs_updated_at
 FROM
     Contact c
