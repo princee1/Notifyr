@@ -128,6 +128,7 @@ class ContactsService(Service):
 
         contact.status = Status.Active.value
         contact.action_code = b64_encode(action_code)
+        
         await ContentTypeSubscriptionORM.create(contact=contact)
         await contact.save(force_update=True)
         return action_code
@@ -159,6 +160,7 @@ class ContactsService(Service):
         if user.app_registered:
             d = user.to_json.copy()
             d.update({'auth_token', user.auth_token})
+            return d
 
         return user.to_json
 
@@ -167,8 +169,7 @@ class ContactsService(Service):
         ...
 
     async def update_security(self, contact: ContactORM, scope: ContactPermissionScope):
-        auth_token = self.jwtService.encode_contact_token(
-            contact.contact_id, self.expiration, scope)
+        auth_token = self.jwtService.encode_contact_token(contact.contact_id, self.expiration, scope)
         contact.auth_token = auth_token
         await contact.save(force_update=True)
         return auth_token

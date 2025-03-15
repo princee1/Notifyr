@@ -109,6 +109,7 @@ class ContactORM(Model):
         'email': self.email,
         'phone': self.phone,
         'app_registered': self.app_registered,
+        'opt_in_code':self.opt_in_code,
         'lang': self.lang,
         'created_at': self.created_at.isoformat(),
     }

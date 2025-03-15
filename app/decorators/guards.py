@@ -93,11 +93,12 @@ class ActiveContactGuard(Guard):
             relay+='_status'
             if getattr(subscription,relay) != 'Active':
                 return False,'Contact method is not active'
+            
+        if subs_content:
+            contact_content_type = await ContentTypeSubscriptionORM.filter(contact=contact).first()
 
-        contact_content_type = await ContentTypeSubscriptionORM.filter(contact=contact).first()
-
-        if not getattr(contact_content_type,subs_content_type):
-            return False,'Content Type is not allowed for this user'
+            if not getattr(contact_content_type,subs_content_type):
+                return False,'Content Type is not allowed for this user'
 
         return True,''
 

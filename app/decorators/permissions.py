@@ -23,9 +23,10 @@ class JWTRouteHTTPPermission(Permission):
         auth_roles = authPermission["roles"]
         roles_excluded =func_meta['excludes']
 
-        for options in func_meta['options']:
-            if not options(authPermission):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role details not allowed")
+        if options:
+            for options in func_meta['options']:
+                if not options(authPermission):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role details not allowed")
                     
         if len(roles_excluded.intersection(auth_roles)) > 0:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role not allowed")
