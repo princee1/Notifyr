@@ -74,8 +74,7 @@ class ContentSubscriptionRessource(BaseHTTPRessource):
         return JSONResponse(content={"detail": "Subscription updated", "content": subs_content}, status_code=status.HTTP_200_OK)
 
 ##############################################                   ##################################################
-
-@UseHandler(TortoiseHandler,ContactsHandler)
+@UseHandler(TortoiseHandler, ContactsHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([ContactsService])
@@ -83,7 +82,7 @@ class ContentSubscriptionRessource(BaseHTTPRessource):
 class ContactsSubscriptionRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self,contactService:ContactsService,subscriptionService:SubscriptionService):
+    def __init__(self, contactService: ContactsService, subscriptionService: SubscriptionService):
         super().__init__()
         self.contactService = contactService
         self.subscriptionService = subscriptionService
@@ -94,57 +93,60 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     @UseHandler(TemplateHandler)
     @UsePipe(ContactStatusPipe)
     @BaseHTTPRessource.Delete('/unsubscribe/{contact_id}')
-    async def unsubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],action_code=Query(None),next_status:Status= Query(None), authPermission=Depends(get_auth_permission)):
+    async def unsubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], action_code=Query(None), next_status: Status = Query(None), authPermission=Depends(get_auth_permission)):
         if next_status == Status.Active:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Next status cannot to Active be set when unsubscribing to the contact")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Next status cannot be set to Active when unsubscribing the contact")
         
-        return await self.contactService.unsubscribe_contact(contact,next_status)
+        result = await self.contactService.unsubscribe_contact(contact, next_status)
+        return JSONResponse(content=result, status_code=status.HTTP_200_OK)
 
     @UseGuard(ContactActionCodeGuard)
     @BaseHTTPRessource.HTTPRoute('/resubscribe/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
-    async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
+    async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], action_code: str = Query(None), authPermission=Depends(get_auth_permission)):
         if contact.status == Status.Active:
-            return JSONResponse(status_code=status.HTTP_202_ACCEPTED,content='Nothing to do')
+            return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"detail": "Nothing to do"})
         
-        if contact.status == Status.Inactive or contact.status == Status.Blacklist:
+        if contact.status in [Status.Inactive, Status.Blacklist]:
             contact.status = Status.Active
             await contact.save()
-            return JSONResponse('Re activated the contacts back to active',status_code=status.HTTP_200_OK)
+            return JSONResponse(content={"detail": "Reactivated the contact back to active"}, status_code=status.HTTP_200_OK)
         
-        return JSONResponse("You must re activate your account with your new opt-int",status_code = status.HTTP_423_LOCKED)
+        return JSONResponse(content={"detail": "You must reactivate your account with your new opt-in code"}, status_code=status.HTTP_423_LOCKED)
 
     @UsePipe(RelayPipe(False))
     @UseGuard(ActiveContactGuard)
-    @BaseHTTPRessource.HTTPRoute('/content-subscribe/{contact_id}',[HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
-    async def content_subscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)], subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],relay:str = Query(None), authPermission=Depends(get_auth_permission)):
-        return await self.subscriptionService.subscribe_user(contact,subs_content,relay)
-        
-    @UseGuard(ActiveContactGuard)
-    @BaseHTTPRessource.HTTPRoute('/content-preferences/{contact_id}',[HTTPMethod.POST])
-    async def toggle_content_type_preferences(self,flags_content_types:ContentTypeSubsModel,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
-        await self.contactService.toggle_content_type_subs_flag(contact,flags_content_types)
+    @BaseHTTPRessource.HTTPRoute('/content-subscribe/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
+    async def content_subscribe(self, contact: Annotated[ContactORM, Depends(get_contacts)], subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], relay: str = Query(None), authPermission=Depends(get_auth_permission)):
+        response = await self.subscriptionService.subscribe_user(contact, subs_content, relay)
+        return response
 
-    @UseGuard(ContactActionCodeGuard(True)) # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
+    @UseGuard(ActiveContactGuard)
+    @BaseHTTPRessource.HTTPRoute('/content-preferences/{contact_id}', [HTTPMethod.POST])
+    async def toggle_content_type_preferences(self, flags_content_types: ContentTypeSubsModel, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+        await self.contactService.toggle_content_type_subs_flag(contact, flags_content_types)
+        return JSONResponse(content={"detail": "Content type preferences updated"}, status_code=status.HTTP_200_OK)
+
+    @UseGuard(ContactActionCodeGuard(True))  # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Delete('/content-unsubscribe/{contact_id}')
-    async def content_unsubscribe(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],action_code:str=Query(None),authPermission=Depends(get_auth_permission)):
-        return await self.subscriptionService.unsubscribe_user(contact,subs_content)
+    async def content_unsubscribe(self, contact: Annotated[ContactORM, Depends(get_contacts)], subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], action_code: str = Query(None), authPermission=Depends(get_auth_permission)):
+        return await self.subscriptionService.unsubscribe_user(contact, subs_content)     
 
     @UseGuard(ContactActionCodeGuard(True))  # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
     @UseGuard(ActiveContactGuard)
     @UsePipe(RelayPipe)
-    @BaseHTTPRessource.HTTPRoute('/content-status/{contact_id}',[HTTPMethod.POST])
-    async def update_content_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],relay:str = Query(None),action_code:str=Query(None),next_subs_status:SubscriptionStatus=Query(None),authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/content-status/{contact_id}', [HTTPMethod.POST])
+    async def update_content_subscription(self, contact: Annotated[ContactORM, Depends(get_contacts)], subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], relay: str = Query(None), action_code: str = Query(None), next_subs_status: SubscriptionStatus = Query(None), authPermission=Depends(get_auth_permission)):
         if not next_subs_status:
-            return JSONResponse(content='',status_code=status.HTTP_400_BAD_REQUEST)
+            return JSONResponse(content={"detail": "Next subscription status is required"}, status_code=status.HTTP_400_BAD_REQUEST)
         
-        return await self.subscriptionService.update_subscription(contact,subs_content,relay,next_subs_status)
-
+        return await self.subscriptionService.update_subscription(contact, subs_content, relay, next_subs_status)
+        
     @UseGuard(ActiveContactGuard)
     @BaseHTTPRessource.Get('/{contact_id}')
-    async def get_contact_subscription(self,contact: Annotated[ContactORM, Depends(get_contacts)],subs_content:Annotated[ContentSubscriptionORM,Depends(get_subs_content)],authPermission=Depends(get_auth_permission)):
-        return await self.subscriptionService.get_contact_subscription(contact.contact_id,subs_content.content_id)
-
+    async def get_contact_subscription(self, contact: Annotated[ContactORM, Depends(get_contacts)], subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], authPermission=Depends(get_auth_permission)):
+        return await self.subscriptionService.get_contact_subscription(contact, subs_content)
+        
 
 @UseHandler(TortoiseHandler,ContactsHandler)
 @UseRoles([Role.CONTACTS])

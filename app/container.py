@@ -562,3 +562,7 @@ def GetDependsAttr(typ:type[S],func_name:str)->Callable:
         return func
     return depends
 
+def GetAttr(typ:type[S],attr_name:str):
+    self = Get(typ)
+    return getattr(self,attr_name,None)
+
