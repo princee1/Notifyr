@@ -250,13 +250,19 @@ SELECT
     ) AS has_voice_embedding,
     COALESCE(s.email_status, 'Inactive') AS email_status,
     COALESCE(s.sms_status, 'Inactive') AS sms_status,
-    COUNT(subs.content_id) AS subscription_count
+    COUNT(subs.content_id) AS subscription_count,
+    cts.newsletter,
+    cts.promotion,
+    cts.event,
+    cts.other,
+    cts.update_at AS content_type_subs_updated_at
 FROM
     Contact c
     LEFT JOIN SecurityContact sc ON c.contact_id = sc.contact_id
     LEFT JOIN SubscriptionContact s ON c.contact_id = s.contact_id
     LEFT JOIN Subscription subs ON c.contact_id = subs.contact_id
     LEFT JOIN SubsContent sub_content ON subs.content_id = sub_content.content_id
+    LEFT JOIN ContentTypeSubscription cts  ON cts.contact_id = c.contact_id
 GROUP BY
     sub_content.content_id,
     sc.security_code,
