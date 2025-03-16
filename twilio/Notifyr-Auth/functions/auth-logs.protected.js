@@ -64,6 +64,7 @@ exports.handler = async function (context, event, callback) {
   } else {
 
   }
+  console.log(body);
   await service.sendLogStatus(body, url);
 
   // return callback(null,{})

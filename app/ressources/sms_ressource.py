@@ -12,13 +12,13 @@ from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, Us
 from app.container import GetDependsAttr, InjectInMethod, InjectInFunction
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
-from app.services.assets_service import AssetService
 from app.services.celery_service import CeleryService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.twilio_service import SMSService, TwilioService
+from app.services.twilio_service import SMSService
 from app.utils.dependencies import APIFilterInject, get_auth_permission
+from app.decorators.my_depends import verify_twilio_token
 
 
 SMS_ONGOING_PREFIX = 'sms-ongoing'
@@ -114,7 +114,7 @@ class IncomingSMSRessource(BaseHTTPRessource):
         self.smsService: SMSService = smsService
         self.contactsService: ContactsService = contactsService
         self.chatService: ChatService = chatService
-        super().__init__(dependencies=[Depends(GetDependsAttr(TwilioService,'verify_twilio_token'))])
+        super().__init__(dependencies=[Depends(verify_twilio_token)])
 
     @BaseHTTPRessource.HTTPRoute('/menu/',methods=[HTTPMethod.POST])
     async def sms_menu(self,authPermission=Depends(get_auth_permission)):
@@ -128,6 +128,7 @@ class IncomingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/automate-response/',methods=[HTTPMethod.POST])
     async def sms_automated(self,authPermission=Depends(get_auth_permission)):
         pass
+    
     
     @BaseHTTPRessource.HTTPRoute('/handler_fail/',methods=[HTTPMethod.POST])
     async def sms_primary_handler_fail(self,authPermission=Depends(get_auth_permission)):

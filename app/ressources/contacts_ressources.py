@@ -183,6 +183,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
     async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
         # TODO Request from the user
+        # TODO hash the token before sending
         ...
     
     @UsePermission(JWTContactPermission('update'))
@@ -190,6 +191,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PATCH])
     async def request_update_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token),forgot:bool=Query(False), contactPermission=Depends(get_contact_permission),  authPermission=Depends(get_auth_permission)):
         # TODO request from the user
+        # TODO hash the token before sending
         ...
 
     @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
