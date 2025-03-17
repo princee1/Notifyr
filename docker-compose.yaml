@@ -13,6 +13,8 @@ services:
     hostname: redis-commander
     image: rediscommander/redis-commander:latest
     restart: always
+    depends_on:
+      - redis
     environment:
       - REDIS_HOSTS=local:redis:6379
     ports:
@@ -31,13 +33,19 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
   
   postgres:
+    build:
+      context: ./database/
+      dockerfile: Dockerfile.postgres
     image: postgres:latest
     container_name: my-postgres
     restart: always
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./database/postgresql.conf:/etc/postgresql/postgresql.conf
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
