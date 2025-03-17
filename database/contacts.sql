@@ -7,13 +7,11 @@ SET search_path = contacts;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr', 'en'))
 
 CREATE DOMAIN SubscriptionStatus AS VARCHAR(20) CHECK (
     VALUE IN ('Active', 'Inactive')
-)
+);
 
 CREATE DOMAIN Status AS VARCHAR(20) CHECK (
     VALUE IN (
@@ -22,7 +20,7 @@ CREATE DOMAIN Status AS VARCHAR(20) CHECK (
         'Blacklist',
         'Inactive'
     )
-)
+);
 
 CREATE DOMAIN Frequency AS VARCHAR(20) CHECK (
     VALUE IN (
@@ -31,7 +29,7 @@ CREATE DOMAIN Frequency AS VARCHAR(20) CHECK (
         'monthly',
         'always'
     )
-)
+);
 
 CREATE DOMAIN ContentType AS VARCHAR(30) CHECK (
     VALUE IN (
@@ -42,7 +40,7 @@ CREATE DOMAIN ContentType AS VARCHAR(30) CHECK (
         'update', -- user can receive by default
         'other'
     )
-)
+);
 
 CREATE TABLE IF NOT EXISTS Contact (
     contact_id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
@@ -63,7 +61,7 @@ CREATE TABLE IF NOT EXISTS Contact (
         opt_in_code >= 10000000000000
         AND opt_in_code <= 99999999999999
     )
-)
+);
 
 CREATE TABLE IF NOT EXISTS SecurityContact (
     security_id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
@@ -77,7 +75,7 @@ CREATE TABLE IF NOT EXISTS SecurityContact (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     FOREIGN KEY (contact_id) REFERENCES Contact (contact_id) ON DELETE CASCADE ON UPDATE CASCADE
-)
+);
 
 -- TODO Combine the SubscriptionContact and Content Type Later ...
 CREATE TABLE IF NOT EXISTS SubscriptionContact (
@@ -89,7 +87,7 @@ CREATE TABLE IF NOT EXISTS SubscriptionContact (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (subscription_id),
     FOREIGN KEY (contact_id) REFERENCES Contact (contact_id) ON DELETE CASCADE ON UPDATE CASCADE
-)
+);
 
 CREATE TABLE IF NOT EXISTS ContentTypeSubscription (
     contact_id UUID UNIQUE,
@@ -103,7 +101,7 @@ CREATE TABLE IF NOT EXISTS ContentTypeSubscription (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (contact_id),
     FOREIGN KEY (contact_id) REFERENCES Contact (contact_id) ON DELETE CASCADE ON UPDATE CASCADE
-)
+);
 
 CREATE TABLE IF NOT EXISTS Reason (
     reason_id UUID DEFAULT uuid_generate_v4 (),
@@ -161,7 +159,7 @@ CREATE TABLE IF NOT EXISTS SubsContent (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
     PRIMARY KEY (content_id)
-)
+);
 
 ALTER TABLE Subscontent ADD COLUMN ttl TIMESTAMP;
 
@@ -179,7 +177,7 @@ CREATE TABLE IF NOT EXISTS Subscription (
     CONSTRAINT preferred_method CHECK (
         preferred_method IN ('email', 'sms')
     )
-)
+);
 
 CREATE OR REPLACE FUNCTION delete_subscriptions_by_contact(contact_id UUID) RETURNS VOID AS $$
 BEGIN
