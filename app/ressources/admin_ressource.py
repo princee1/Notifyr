@@ -15,7 +15,7 @@ from app.definition._ressource import  Guard, PingService, UseGuard, UseHandler,
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthPermission, Role,RoutePermission,AssetsPermission, TokensModel
 from pydantic import BaseModel, RootModel,field_validator
-from app.decorators.handlers import ServiceAvailabilityHandler
+from app.decorators.handlers import ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.pipes import AuthClientPipe, AuthPermissionPipe, CeleryTaskPipe
 from app.utils.validation import ipv4_validator
 from slowapi.util import get_remote_address
@@ -33,17 +33,15 @@ class AuthPermissionModel(BaseModel):
     issued_for:str
     allowed_routes:dict[str,RoutePermission] 
     allowed_assets:Optional[dict[str,AssetsPermission]]
-    roles:Optional[list[str]] = [Role.PUBLIC.value]
+    roles:Optional[list[Role]] = [Role.PUBLIC.value]
 
     @field_validator('issued_for')
     def check_issued_for(cls,issued_for:str):
         if not ipv4_validator(issued_for):
             raise ValueError('Invalid IP Address')
         return issued_for
-
-class BlacklistScheduler(SchedulerModel):
-    ...
-
+    
+@UseHandler(TortoiseHandler)   
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
@@ -51,7 +49,7 @@ class BlacklistScheduler(SchedulerModel):
 class AdminRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,securityService:SecurityService,assetService:AssetService):
+    def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,securityService:SecurityService):
         super().__init__(dependencies=[Depends(verify_admin_token)])
         self.configService = configService
         self.jwtAuthService = jwtAuthService
@@ -59,16 +57,13 @@ class AdminRessource(BaseHTTPRessource):
         self.celeryService:CeleryService = Get(CeleryService)
 
     @UseLimiter(limit_value ='20/week')
-    @UsePipe(CeleryTaskPipe)
-    @PingService([CeleryService])
-    @UseGuard(CeleryTaskGuard(task_names=['task_blacklist_client'],task_types=[TaskType.ONCE]))
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}',methods=[HTTPMethod.DELETE])
-    def blacklist_tokens(self,client_id:str,request:Request ,scheduler:BlacklistScheduler,authPermission=Depends(get_auth_permission)):
+    def blacklist_tokens(self,client_id:str,request:Request ,authPermission=Depends(get_auth_permission)):
         # TODO verify if already blacklisted
         # TODO add to database 
-        return self.celeryService.trigger_task_from_scheduler(scheduler,client_id)
+        ...
     
-
+    
     @UseLimiter(limit_value='1/day')
     @PingService([MongooseService,JWTAuthService])
     @BaseHTTPRessource.HTTPRoute('/invalidate-all/',methods=[HTTPMethod.DELETE])
@@ -106,6 +101,7 @@ class AdminRessource(BaseHTTPRessource):
         tokens = self._create_tokens(tokens)
         return JSONResponse(status_code=status.HTTP_200_OK,content={'tokens':tokens ,"message":"Tokens successfully invalidated"})
     
+
     def _create_tokens(self,tokens):
         temp ={}
         for token in tokens:

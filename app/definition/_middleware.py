@@ -9,10 +9,11 @@ MIDDLEWARE: dict[str, type] = {}
 class MiddlewarePriority(Enum):
 
     PROCESS_TIME = 1
-    ANALYTICS = 2
-    SECURITY = 3
-    AUTH = 4
-    BACKGROUND_TASK_SERVICE = 5
+    LOAD_BALANCER= 2
+    ANALYTICS = 3
+    SECURITY = 4
+    AUTH = 5
+    BACKGROUND_TASK_SERVICE = 6
 
 
 class MiddleWare(BaseHTTPMiddleware):

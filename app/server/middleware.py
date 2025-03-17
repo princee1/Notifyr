@@ -28,6 +28,17 @@ class ProcessTimeMiddleWare(MiddleWare):
         response.headers["X-Process-Time"] = str(process_time) + ' (s)'
         return response
 
+class LoadBalancerMiddleWare(MiddleWare):
+    def __init__(self, app, dispatch = None):
+        super().__init__(app, dispatch)
+        self.configService: ConfigService = Get(ConfigService)
+        self.securityService: SecurityService = Get(SecurityService)
+    
+    async def dispatch(self, request:Request, call_next:Callable[...,Response]):
+        response = await call_next(request)
+        # TODO add headers like application id, notifyr-service id, Signature-Service, myb generation id 
+        return response
+
 class SecurityMiddleWare(MiddleWare):
     priority = MiddlewarePriority.SECURITY
     def __init__(self,app, dispatch=None) -> None:
@@ -36,10 +47,10 @@ class SecurityMiddleWare(MiddleWare):
         self.configService = Get(ConfigService)
 
 
-
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         current_time = time.time()
         timestamp =  self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY]
+
         diff = timestamp -current_time
         if diff< 0:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"message": "Unauthorized", "detail": "All Access and Auth token are expired"})
@@ -65,6 +76,7 @@ class JWTAuthMiddleware(MiddleWare):
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
         self.jwtService:JWTAuthService = Get(JWTAuthService)
+        self.configService: ConfigService = Get(ConfigService)
 
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
@@ -78,7 +90,6 @@ class JWTAuthMiddleware(MiddleWare):
 
         return await call_next(request)
         
-
 class BackgroundTaskMiddleware(MiddleWare):
     priority = MiddlewarePriority.BACKGROUND_TASK_SERVICE
     def __init__(self, app, dispatch = None):

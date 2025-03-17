@@ -59,3 +59,11 @@ async def get_subs_content(content_id:str,content_idtype:str = Query('id'),authP
     
     if content == None:
         raise HTTPException(404, {"message": "Subscription Content does not exists with those information"})
+
+
+
+async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
+    configService:ConfigService = Get(ConfigService)
+    
+    if x_admin_token == None or x_admin_token != configService.ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="X-Admin-Token header invalid")
