@@ -7,7 +7,9 @@ SET search_path = security;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+
+
 
 -- NOTE or create a schedule for each row using a Trigger
 
