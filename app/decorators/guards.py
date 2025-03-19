@@ -130,3 +130,14 @@ class ContactActionCodeGuard(Guard):
 class TwilioLookUpPhoneGuard(Guard):
     def guard(self):
         return super().guard()
+
+
+class RefreshTokenGuard(Guard):
+
+    @InjectInMethod
+    def __init__(self,jwtAuthService:JWTAuthService):
+        super().__init__()
+        self.jwtAuthService = jwtAuthService
+
+    def guard(self,):
+        ...

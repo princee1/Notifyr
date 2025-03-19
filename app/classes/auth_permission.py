@@ -24,6 +24,11 @@ class Role(Enum):
     TWILIO = 'TWILIO'
     SUBSCRIPTION = 'SUBSCRIPTION'
 
+class Scope(Enum):
+    SoloDolo = 'SoloDolo'
+    Organization = 'Organization'
+    #Domain = 'Domain'
+
 
 class FuncMetaData(TypedDict):
     operation_id:str
@@ -45,8 +50,8 @@ class AssetsPermission(TypedDict):
         
 class AuthPermission(TypedDict):
     generation_id: str
-    domain_name:str=None # TODO accept sudomains 
-    client_id: str= None # TODO
+    #domain_name:str=None # TODO accept sudomains 
+    client_id: str
     application_id: str = None # TODO
     roles:list[str]
     issued_for: str # Subnets
@@ -54,10 +59,19 @@ class AuthPermission(TypedDict):
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str]
-    challenge: str= None # TODO 
-    scope:list[str] = None # TODO
+    challenge: str
+    scope:Scope
     salt:str
 
+class RefreshPermission(TypedDict):
+    generation_id: str
+    challenge:str
+    salt:str
+    client_id:str
+    scope_id:str
+    issued_for:str
+    created_at:float
+    expired_at:float
 
 class ContactPermission(TypedDict):
     expired_at:int

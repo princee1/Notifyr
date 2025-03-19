@@ -1,11 +1,33 @@
+import functools
 from typing import Callable
-from fastapi import Depends, HTTPException, Query,status
+from fastapi import Depends, HTTPException, Query, Request,status
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetDependsAttr
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
+from app.models.security_model import ClientORM, GroupORM
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.dependencies import get_auth_permission
+
+
+def AcceptNone(pos,key=None ):
+
+    def depends(func:Callable):
+
+        @functools.warps(func)
+        async def wrapper(*args,**kwargs):
+            if key !=None:
+                param = kwargs[key]
+            else:
+                param = args[pos]
+            
+            if param==None:
+                return None
+            
+            return await func(*args,**kwargs)
+        return wrapper
+
+    return depends
 
 
 
@@ -61,9 +83,22 @@ async def get_subs_content(content_id:str,content_idtype:str = Query('id'),authP
         raise HTTPException(404, {"message": "Subscription Content does not exists with those information"})
 
 
-
-async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
-    configService:ConfigService = Get(ConfigService)
+def cost()->int:
+    ...
     
-    if x_admin_token == None or x_admin_token != configService.ADMIN_KEY:
-        raise HTTPException(status_code=403, detail="X-Admin-Token header invalid")
+def key_contact_id()->str:
+    ...
+
+def key_client_id()->str:
+    ...
+
+def key_group_id()->str:
+    ...
+
+@AcceptNone(0)
+async def get_client(client_id:str,authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
+    ...
+
+@AcceptNone(0)
+async def get_group(group_id:str,authPermission:AuthPermission=Depends(get_auth_permission))->GroupORM:
+    ...

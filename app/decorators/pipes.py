@@ -7,6 +7,7 @@ from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.models.contacts_model import Status
 from app.models.otp_model import OTPModel
+from app.models.security_model import ClientORM
 from app.models.sms_model import OnGoingSMSModel
 from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
 from app.services.config_service import ConfigService
@@ -156,7 +157,20 @@ class AuthClientPipe(Pipe):
     
     def pipe(self,client:str,scope:str):
         return {'client':client,'scope':scope}
+    
 
+class ForceClientPipe(Pipe):
+
+    def pipe(self,client:ClientORM):
+        if client== None:
+            raise HTTPException(status=status.HTTP_400_BAD_REQUEST,detail={})
+
+        return {'client':client}
+
+class RefreshTokenPipe(Pipe):
+
+    async def pipe(self):
+        return super().pipe()
 
 class ContactStatusPipe(Pipe):
 

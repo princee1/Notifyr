@@ -7,8 +7,8 @@ from enum import Enum
 class DecoratorPriority(Enum):
     PERMISSION = 1
     HANDLER = 2
-    GUARD = 4
     PIPE = 3
+    GUARD = 4
     INTERCEPTOR = 5
 
 
