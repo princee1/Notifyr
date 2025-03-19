@@ -10,6 +10,7 @@ from app.definition._error import BaseError
 PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
+PermissionStatus= Literal['active','inactive','expired']
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
@@ -63,8 +64,9 @@ class AuthPermission(TypedDict):
     challenge: str
     scope:Scope
     salt:str
+    status:PermissionStatus= 'active'
 
-class RefreshPermission(TypedDict):
+class RefreshPermission(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
     generation_id: str
     challenge:str
     salt:str
@@ -73,6 +75,8 @@ class RefreshPermission(TypedDict):
     issued_for:str
     created_at:float
     expired_at:float
+    status:PermissionStatus= 'active'
+
 
 class ContactPermission(TypedDict):
     expired_at:int

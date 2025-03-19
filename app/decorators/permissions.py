@@ -12,12 +12,19 @@ from app.utils.helper import flatten_dict
  
 class JWTRouteHTTPPermission(Permission):
     
-    @InjectInMethod
-    def __init__(self,jwtAuthService: JWTAuthService):
+    def __init__(self,accept_inactive=False):
         super().__init__()
-        self.jwtAuthService = jwtAuthService
+        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
+        self.accept_inactive = accept_inactive
     
     def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission):
+        
+        if authPermission == None:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Auth Permission not implemented")
+        
+        if authPermission['status'] == 'inactive' and not self.accept_inactive:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
+
         operation_id = func_meta["operation_id"]
         roles= func_meta['roles']
         auth_roles = authPermission["roles"]

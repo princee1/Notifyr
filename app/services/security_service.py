@@ -83,7 +83,14 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         except Exception as e:
             print(e)
         return None
+
+    def encode_refresh_token(self,):
+        ...
     
+    def set_status(self,authPermission:AuthPermission):
+        ...
+    
+
 
     def encode_ws_token(self,run_id:str,operation_id:str,expiration:float):
         now = time.time()
@@ -155,7 +162,9 @@ class JWTAuthService(Service, EncryptDecryptInterface):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
 
-            if permission["expired_at"] < time.time():
+            self.set_status(permission)
+
+            if permission['status'] == 'expired':
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
 
