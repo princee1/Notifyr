@@ -1,6 +1,7 @@
 from tortoise import fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
 import uuid
+from pydantic import BaseModel, field_validator
 
 from app.classes.auth_permission import Scope
 
@@ -53,7 +54,19 @@ class BlacklistORM(models.Model):
         schema = SCHEMA
         table = "blacklist"
 
-Group_Pydantic = pydantic_model_creator(GroupClientORM, name="GroupClientORM")
-Client_Pydantic = pydantic_model_creator(ClientORM, name="ClientORM")
-Challenge_Pydantic = pydantic_model_creator(ChallengeORM, name="ChallengeORM")
-Blacklist_Pydantic = pydantic_model_creator(BlacklistORM, name="BlacklistORM")
+
+class GroupModel(BaseModel):
+    group_name: str
+
+    @field_validator('group_name')
+    def parse_name(cls,group_name:str):
+        group_name= group_name.strip()
+        group_name=group_name.lower()
+        # TODO add regex remove extra space
+        return group_name.capitalize()
+    
+
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id'))
+
+class ClientModel(ClientModelBase):
+    ...

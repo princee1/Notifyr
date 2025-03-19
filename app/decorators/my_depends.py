@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, Query, Request,status
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetDependsAttr
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
-from app.models.security_model import ClientORM, GroupORM
+from app.models.security_model import ClientORM, GroupClientORM
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.dependencies import get_auth_permission
@@ -96,9 +96,9 @@ def key_group_id()->str:
     ...
 
 @AcceptNone(0)
-async def get_client(client_id:str,authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
+async def get_client(client_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
     ...
 
 @AcceptNone(0)
-async def get_group(group_id:str,authPermission:AuthPermission=Depends(get_auth_permission))->GroupORM:
+async def get_group(group_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->GroupClientORM:
     ...

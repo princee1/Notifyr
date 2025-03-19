@@ -23,6 +23,7 @@ class Role(Enum):
     CONTACTS = 'CONTACTS'
     TWILIO = 'TWILIO'
     SUBSCRIPTION = 'SUBSCRIPTION'
+    CLIENT = "CLIENT"
 
 class Scope(Enum):
     SoloDolo = 'SoloDolo'

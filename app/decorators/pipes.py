@@ -7,7 +7,7 @@ from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.models.contacts_model import Status
 from app.models.otp_model import OTPModel
-from app.models.security_model import ClientORM
+from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import OnGoingSMSModel
 from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
 from app.services.config_service import ConfigService
@@ -161,11 +161,19 @@ class AuthClientPipe(Pipe):
 
 class ForceClientPipe(Pipe):
 
-    def pipe(self,client:ClientORM):
-        if client== None:
-            raise HTTPException(status=status.HTTP_400_BAD_REQUEST,detail={})
+    def pipe(self, client: ClientORM):
+        if client is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Client information is missing or invalid.")
 
-        return {'client':client}
+        return {'client': client}
+    
+class ForceGroupPipe(Pipe):
+
+    def pipe(self, group: GroupClientORM):
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group information is missing or invalid.")
+
+        return {'group': group}
 
 class RefreshTokenPipe(Pipe):
 

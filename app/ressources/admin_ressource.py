@@ -4,11 +4,12 @@ from fastapi import Depends, Header, Query, Request, Response,HTTPException,stat
 from fastapi.responses import JSONResponse
 from app.decorators.guards import RefreshTokenGuard
 from app.decorators.my_depends import get_client, get_group
-from app.models.security_model import ClientORM, GroupORM
+from app.models.security_model import ClientModel, ClientORM, GroupClientORM, GroupModel
 from app.services.admin_service import AdminService
 from app.services.celery_service import CeleryService
 from app.services.security_service import JWTAuthService,SecurityService
 from app.services.config_service import ConfigService
+from app.utils.constant import ConfigAppConstant
 from app.utils.dependencies import  get_auth_permission, get_request_id
 from app.container import InjectInMethod,Get
 from app.definition._ressource import PingService, UseGuard, UseHandler, UsePermission,BaseHTTPRessource,HTTPMethod,HTTPRessource, UsePipe, UseRoles,UseLimiter
@@ -16,7 +17,7 @@ from app.decorators.permissions import JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthPermission, Role,RoutePermission,AssetsPermission, TokensModel
 from pydantic import BaseModel, RootModel,field_validator
 from app.decorators.handlers import ServiceAvailabilityHandler, TortoiseHandler
-from app.decorators.pipes import  AuthPermissionPipe, ForceClientPipe, RefreshTokenPipe
+from app.decorators.pipes import  AuthPermissionPipe, ForceClientPipe, ForceGroupPipe, RefreshTokenPipe
 from app.utils.validation import ipv4_validator
 from slowapi.util import get_remote_address
 
@@ -42,6 +43,9 @@ class AuthPermissionModel(BaseModel):
             raise ValueError('Invalid IP Address')
         return issued_for
     
+class GenerationModel(BaseModel):
+    generation_id:str
+    
 
 @UseHandler(TortoiseHandler)   
 @UseRoles([Role.ADMIN])
@@ -60,9 +64,21 @@ class ClientRessource(BaseHTTPRessource):
 
     
     @BaseHTTPRessource.Post('/')
-    async def create_client(self,authPermission=Depends(get_auth_permission)):
-        ...
+    async def create_client(self,client:ClientModel, authPermission=Depends(get_auth_permission)):
+        name = client.client_name
+        scope = client.scope
+        group_id = client.group_id
+        client = await ClientORM.create(client_name= name,client_scope=scope,group=group_id)
+        return JSONResponse(status_code=status.HTTP_201_CREATED,content={"message":"Client successfully created","client":client})
     
+    @UsePipe(ForceGroupPipe)
+    @UsePipe(ForceClientPipe)
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
+    async def add_client_to_group(self,client:Annotated[ClientORM,Depends(get_client)],group:Annotated[GroupClientORM,Depends(get_group)]):
+        client.group = group
+        await client.save()
+        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Client successfully added to group","client":client})
+
     @UsePipe(ForceClientPipe)
     @BaseHTTPRessource.Delete('/')
     async def delete_client(self,client:Annotated[ClientORM,Depends(get_client)],authPermission=Depends(get_auth_permission)):
@@ -74,21 +90,22 @@ class ClientRessource(BaseHTTPRessource):
         ...
     
     @BaseHTTPRessource.Post('/group/')
-    async def create_group(self, group:Annotated[GroupORM,Depends(get_group)],authPermission=Depends(get_auth_permission)):
-        if group == None:
-            ...
-        ...
-    
+    async def create_group(self, group:GroupModel ,authPermission=Depends(get_auth_permission)):
+        group_name = group.group_name
+        group = await GroupClientORM.create(group_name=group_name)
+        return JSONResponse(status_code=status.HTTP_201_CREATED,content={"message":"Group successfully created","group":group})
+        
+    @UsePipe(ForceGroupPipe)
     @BaseHTTPRessource.Delete('/group/')
-    async def delete_group(self,authPermission=Depends(get_auth_permission)):
-        ...
+    async def delete_group(self,group:Annotated[GroupClientORM,Depends(get_group)],authPermission=Depends(get_auth_permission)):
+        await group.delete()
+        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Group successfully deleted","group":group})
 
     @BaseHTTPRessource.Get('/group/')
     async def get_all_group(self,authPermission=Depends(get_auth_permission)):
         ...
 
-
-    
+ 
 @UseHandler(TortoiseHandler)   
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
@@ -107,26 +124,46 @@ class AdminRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value ='20/week')
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}',methods=[HTTPMethod.DELETE,HTTPMethod.POST])
-    def blacklist_tokens(self,group:Annotated[GroupORM,get_group],client:Annotated[ClientORM,Depends(get_client)], request:Request ,authPermission=Depends(get_auth_permission)):
+    def blacklist_tokens(self,group:Annotated[GroupClientORM,get_group],client:Annotated[ClientORM,Depends(get_client)], request:Request ,authPermission=Depends(get_auth_permission)):
         # TODO verify if already blacklisted
         # TODO add to database 
         ...
     
     @UseLimiter(limit_value='1/day')
     @PingService([JWTAuthService])
-    @BaseHTTPRessource.HTTPRoute('/invalidate-all/',methods=[HTTPMethod.DELETE])
-    def invalidate_all_tokens(self,request:Request,authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/revoke-all/',methods=[HTTPMethod.DELETE])
+    def revoke_all_tokens(self,request:Request,authPermission=Depends(get_auth_permission)):
+        old_generation_id = self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY]
         self.jwtAuthService.set_generation_id(True)
+        new_generation_id= self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY]
         tokens = self._create_tokens(authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Tokens successfully invalidated",
                                                                     "details": "Even if you're the admin old token wont be valid anymore",
-                                                                    "tokens":tokens})
+                                                                    "tokens":tokens,
+                                                                    "old_generation_id":old_generation_id,
+                                                                    "new_generation_id":new_generation_id}) 
     
+    @UseLimiter(limit_value='1/day')
+    @PingService([JWTAuthService])
+    @BaseHTTPRessource.HTTPRoute('/unrevoke-all/',methods=[HTTPMethod.POST])
+    def unrevoke_all_tokens(self,request:Request,generation:GenerationModel, authPermission=Depends(get_auth_permission)):
+        old_generation_id = self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY]
+        self.jwtAuthService.set_generation_id(True)
+        new_generation_id = generation.generation_id
+        self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY] = new_generation_id
+        self.configService.config_json_app.save()
+        tokens = self._create_tokens(authPermission)
+        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Tokens successfully invalidated",
+                                                                    "details": "Even if you're the admin old token wont be valid anymore",
+                                                                    "tokens":tokens,
+                                                                    "old_generation_id":old_generation_id,
+                                                                    "new_generation_id":new_generation_id}) 
+
     @UseLimiter(limit_value='10/day')
     @UsePipe(ForceClientPipe)
     @PingService([JWTAuthService])
     @BaseHTTPRessource.HTTPRoute('/invalidate/{client_id}',methods=[HTTPMethod.DELETE],dependencies=None)
-    def invalidate_tokens(self,request:Request,client:Annotated[ClientORM,Depends(get_client)], authPermission=Depends(get_auth_permission)):
+    def revoke_tokens(self,request:Request,client:Annotated[ClientORM,Depends(get_client)], authPermission=Depends(get_auth_permission)):
         ...
 
     @UseLimiter(limit_value='4/day')
