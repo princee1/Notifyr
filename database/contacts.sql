@@ -1,7 +1,4 @@
 -- Active: 1740679093248@@127.0.0.1@5432@notifyr@contacts
-DROP SCHEMA IF EXISTS contacts CASCADE;
-
-CREATE SCHEMA contacts;
 
 SET search_path = contacts;
 
