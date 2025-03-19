@@ -2,8 +2,6 @@
 
 SET search_path = contacts;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA contacts;
-
 CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr', 'en'))
 
 CREATE DOMAIN SubscriptionStatus AS VARCHAR(20) CHECK (
@@ -107,45 +105,6 @@ CREATE TABLE IF NOT EXISTS Reason (
     reason_count BIGINT DEFAULT 0
 );
 
-DELETE FROM Reason;
-
-INSERT INTO
-    Reason (
-        reason_name,
-        reason_description
-    )
-VALUES (
-        'Not Interested',
-        'The user is not interested in the content.'
-    ),
-    (
-        'Too Many Emails',
-        'The user is receiving too many emails.'
-    ),
-    (
-        'Content Not Relevant',
-        'The content is not relevant to the user.'
-    ),
-    (
-        'Other',
-        'Other reasons for unsubscribing.'
-    ),
-    (
-        'Switched to Competitor',
-        'The user has switched to a competitor.'
-    ),
-    (
-        'Privacy Concerns',
-        'The user has concerns about privacy.'
-    ),
-    (
-        'Technical Issues',
-        'The user is experiencing technical issues.'
-    ),
-    (
-        'No Longer Needed',
-        'The user no longer needs the service.'
-    );
 
 CREATE TABLE IF NOT EXISTS SubsContent (
     content_id UUID DEFAULT uuid_generate_v4 (),

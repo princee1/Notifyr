@@ -22,7 +22,7 @@ CREATE DOMAIN Scope AS VARCHAR(25) CHECK (
 
 
 CREATE TABLE IF NOT EXISTS GroupClient (
-    group_id UUID DEFAULT contacts.uuid_generate_v4(),
+    group_id UUID DEFAULT uuid_generate_v4(),
     group_name VARCHAR(80) UNIQUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 );
 
 CREATE TABLE  IF NOT EXISTS Client (
-    client_id UUID DEFAULT contacts.uuid_generate_v4 (),
+    client_id UUID DEFAULT uuid_generate_v4 (),
     client_name VARCHAR(120) UNIQUE,
     client_scope Scope DEFAULT 'SoloDolo',
     group_id UUID DEFAULT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE  IF NOT EXISTS Client (
 );
 
 CREATE TABLE  IF NOT EXISTS Challenge (
-    client_id UUID DEFAULT contacts.uuid_generate_v4(),
+    client_id UUID DEFAULT uuid_generate_v4(),
     challenge_auth TEXT UNIQUE NOT NULL DEFAULT secure_random_string(64),
     created_at_auth TIMESTAMPTZ DEFAULT NOW(),
     expired_at_auth TIMESTAMPTZ,
@@ -53,7 +53,7 @@ CREATE TABLE  IF NOT EXISTS Challenge (
 );
 
 CREATE TABLE IF NOT EXISTS Blacklist (
-    blacklist_id UUID DEFAULT contacts.uuid_generate_v4(),
+    blacklist_id UUID DEFAULT uuid_generate_v4(),
     client_id UUID DEFAULT NULL,
     group_id UUID DEFAULT NULL,
     create_at TIMESTAMPTZ DEFAULT NOW(),
