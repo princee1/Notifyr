@@ -12,5 +12,4 @@ COPY MakeFile Makefile
 
 RUN make install
 
-RUN make celery_worker
 
