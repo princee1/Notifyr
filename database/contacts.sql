@@ -5,7 +5,7 @@ CREATE SCHEMA contacts;
 
 SET search_path = contacts;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA contacts;
 
 CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr', 'en'))
 
@@ -107,10 +107,10 @@ CREATE TABLE IF NOT EXISTS Reason (
     reason_id UUID DEFAULT uuid_generate_v4 (),
     reason_description TEXT DEFAULT NULL,
     reason_name VARCHAR(50) UNIQUE,
-    reason_count BIGINT DEFAULT 0,
+    reason_count BIGINT DEFAULT 0
 );
 
-DELETE * FROM Reason;
+DELETE FROM Reason;
 
 INSERT INTO
     Reason (
@@ -253,7 +253,7 @@ SELECT
     COALESCE(cts.promotion, NULL) AS promotion_status,
     COALESCE(cts.event, NULL) AS event_status,
     COALESCE(cts.other, NULL) AS other_status,
-    cts.update_at AS content_type_subs_updated_at
+    cts.updated_at AS content_type_subs_updated_at
 FROM
     Contact c
     LEFT JOIN SecurityContact sc ON c.contact_id = sc.contact_id
@@ -263,6 +263,11 @@ FROM
     LEFT JOIN ContentTypeSubscription cts  ON cts.contact_id = c.contact_id
 GROUP BY
     sub_content.content_id,
+    cts.updated_at,
+    cts.newsletter,
+    cts.promotion,
+    cts.event,
+    cts.other,
     sc.security_code,
     sc.security_phrase,
     sc.voice_embedding,
@@ -276,6 +281,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT cron.schedule('delete_expired_subscontent', '0 0 * * *', $$CALL delete_expired_subscontent();$$);
+SELECT cron.schedule('delete_expired_subscontent', '0 0 * * *', 'CALL delete_expired_subscontent();');
 
 -- NOTE or create a schedule for each row using a Trigger

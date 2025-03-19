@@ -1,5 +1,5 @@
--- run as superuser:
-CREATE EXTENSION pg_cron IF NOT EXISTS;
+CREATE EXTENSION pg_cron;
 
--- optionally, grant usage to regular users:
-GRANT USAGE ON SCHEMA cron TO marco;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- GRANT USAGE ON SCHEMA cron TO marco;
