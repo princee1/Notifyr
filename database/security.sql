@@ -63,6 +63,12 @@ CREATE TABLE IF NOT EXISTS Blacklist (
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- add a trigger to delete expired blacklist entries
+-- add a trigger to delete expired challenge entries
+-- add a trigger to delete expired refresh entries
+
+
+
 -- NOTE or create a schedule for each row using a Trigger
 
 -- -- Create the pgAgent job
