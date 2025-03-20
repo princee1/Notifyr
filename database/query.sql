@@ -37,3 +37,38 @@ VALUES (
         'No Longer Needed',
         'The user no longer needs the service.'
     );
+
+DELETE FROM security.Client;
+
+DELETE FROM security.Groupclient;
+
+INSERT INTO
+    security.Client (
+        client_name,
+        client_type,
+        issued_for,
+        authenticated,
+    )
+VALUES (
+        'Notifyr ADMIN',
+        'Admin',
+        '127.0.0.1',
+        True,
+    );
+
+INSERT INTO
+    security.Challenge (
+        client_id,
+        expired_at_auth,
+        expired_at_refresh
+    )
+VALUES (
+        (
+            SELECT client_id
+            FROM security.Client
+            WHERE
+                client_type = 'Admin'
+        ),
+        created_at_auth + INTERVAL '1 day',
+        created_at_refresh + INTERVAL '100 day',
+    );

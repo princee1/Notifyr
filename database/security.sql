@@ -46,13 +46,13 @@ CREATE TABLE IF NOT EXISTS Client (
 );
 
 CREATE TABLE IF NOT EXISTS Challenge (
-    client_id UUID DEFAULT uuid_generate_v4 (),
-    challenge_auth TEXT UNIQUE DEFAULT NULL,
+    client_id UUID ,
+    challenge_auth TEXT UNIQUE DEFAULT secure_random_string(64),
     created_at_auth TIMESTAMPTZ DEFAULT NOW(),
     expired_at_auth TIMESTAMPTZ,
-    challenge_refresh TEXT UNIQUE DEFAULT NULL,
+    challenge_refresh TEXT UNIQUE DEFAULT secure_random_string(128),
     created_at_refresh TIMESTAMPTZ DEFAULT NOW(),
-    expired_at_refresh TIMESTAMPTZ,
+    expired_at_refresh TIMESTAMPTZ ,
     PRIMARY KEY (client_id),
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -204,6 +204,7 @@ BEGIN
     IF NEW.client_type = 'Admin' THEN
         IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
             RAISE NOTICE 'Admin already exists';
+            RETURN NULL;
         END IF;
     END IF;
     RETURN NEW;
@@ -219,13 +220,14 @@ CREATE OR REPLACE FUNCTION guard_admin_deletion RETURNS TRIGGER AS $guard_admin_
 BEGIN
     SET search_path = security;
     IF OLD.client_type = 'Admin' THEN
-        RAISE NOTICE 'Admin cannot be deleted'; 
+        RAISE NOTICE 'Admin cannot be deleted';
+       RETURN NULL;  
     END IF;
     RETURN OLD;
 END;
 
 CREATE TRIGGER guard_admin_deletion
-    BEFORE DELETE
+    BEFORE DELETE OR UPDATE
     ON Client
     FOR EACH ROW
     EXECUTE FUNCTION guard_admin_deletion();
