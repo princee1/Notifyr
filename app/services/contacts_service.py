@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import ContactPermissionScope
 from app.definition._service import Service, ServiceClass
+from app.errors.contact_error import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.models.contacts_model import *
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService

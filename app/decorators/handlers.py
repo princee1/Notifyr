@@ -8,7 +8,7 @@ from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError,CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
-from app.models.contacts_model import ContactAlreadyExistsError, ContactNotExistsError
+from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError,ContactDoubleOptInAlreadySetError,ContactOptInCodeNotMatchError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -132,7 +132,12 @@ class ContactsHandler(Handler):
 
         except ContactAlreadyExistsError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Error could not create the user because info are already used','detail':e.message})
-            
+        
+        except ContactDoubleOptInAlreadySetError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Error could not create the user because info are already used','detail':e.message})
+        
+        except ContactOptInCodeNotMatchError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Error could not create the user because info are already used','detail':e.message})
     
 class TortoiseHandler(Handler):
 

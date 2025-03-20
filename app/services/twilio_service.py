@@ -15,7 +15,7 @@ from app.utils.helper import b64_encode, phone_parser
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
 from app.utils.validation import phone_number_validator
-from app.classes.twilio import TwilioPhoneNumberParseError
+from app.errors.twilio_error import TwilioPhoneNumberParseError
 from datetime import timedelta
 from twilio.rest.api.v2010.account.message import MessageInstance
 from twilio.rest.api.v2010.account.call import CallInstance
