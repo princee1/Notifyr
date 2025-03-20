@@ -143,30 +143,28 @@ class AdminRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}', methods=[HTTPMethod.POST])
     async def blacklist_tokens(self, group: Annotated[GroupClientORM, get_group], client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
-        if group == None and client == None:
+        if group is None and client is None:
             raise SecurityIdentityNotResolvedError
-            
 
-        if group != None and client != None and client.group_id != group.group_id:
+        if group is not None and client is not None and client.group_id != group.group_id:
             raise GroupIdNotMatchError(client.group_id, group.group_id)
 
-        return await self.adminService.blacklist(client, group)
+        blacklist = await self.adminService.blacklist(client, group)
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully blacklisted", "blacklist": blacklist})
 
     @UseLimiter(limit_value='20/week')
     @UsePermission(AdminPermission)
     @UseHandler(SecurityClientHandler)
-    @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}',methods=[HTTPMethod.DELETE])
-    async def un_blacklist_tokens(self,group: Annotated[GroupClientORM, get_group], client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
-        if group == None and client == None:
+    @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}', methods=[HTTPMethod.DELETE])
+    async def un_blacklist_tokens(self, group: Annotated[GroupClientORM, get_group], client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
+        if group is None and client is None:
             raise SecurityIdentityNotResolvedError
 
-        if group != None and client != None and client.group_id != group.group_id:
+        if group is not None and client is not None and client.group_id != group.group_id:
             raise GroupIdNotMatchError(client.group_id, group.group_id)
-            
-        return await self.adminService.un_blacklist(client, group)
 
-        
-
+        blacklist = await self.adminService.un_blacklist(client, group)
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully un-blacklisted", "un_blacklist": blacklist})
 
     @UseLimiter(limit_value='1/day')
     @UsePermission(AdminPermission)
@@ -181,7 +179,8 @@ class AdminRessource(BaseHTTPRessource):
         self.configService.config_json_app.save()
 
         client = await ClientORM.filter(client=authPermission['client_id']).first()
-        auth_token, refresh_token = self.adminService.issue_auth(client, authPermission)
+        auth_token, refresh_token = self.adminService.issue_auth(
+            client, authPermission)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
@@ -203,7 +202,8 @@ class AdminRessource(BaseHTTPRessource):
         self.configService.config_json_app.save()
 
         client = await ClientORM.filter(client=authPermission['client_id']).first()
-        auth_token, refresh_token = self.adminService.issue_auth(client, authPermission)
+        auth_token, refresh_token = self.adminService.issue_auth(
+            client, authPermission)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
@@ -221,6 +221,7 @@ class AdminRessource(BaseHTTPRessource):
         await raw_revoke_challenge(client)
         client.authenticated = False
         await client.save()
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client})
 
     @UseLimiter(limit_value='4/day')
     @UsePermission(AdminPermission)
