@@ -11,6 +11,7 @@ PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
 PermissionStatus= Literal['active','inactive','expired']
+ClientTypeLiteral = Literal['User','Admin']
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
@@ -30,6 +31,11 @@ class Scope(Enum):
     SoloDolo = 'SoloDolo'
     Organization = 'Organization'
     #Domain = 'Domain'
+
+
+class ClientType(Enum):
+    User = 'User'
+    Admin = 'Admin'
 
 
 class FuncMetaData(TypedDict):
@@ -52,17 +58,19 @@ class AssetsPermission(TypedDict):
         
 class AuthPermission(TypedDict):
     generation_id: str
-    #domain_name:str=None # TODO accept sudomains 
+    hostname:str
     client_id: str
-    application_id: str = None # TODO
+    client_type:ClientTypeLiteral = 'User'
+    #application_id: str = None # TODO
     roles:list[str]
     issued_for: str # Subnets
+    group_id:str | None = None
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str]
     challenge: str
-    scope:Scope
+    scope:str
     salt:str
     status:PermissionStatus= 'active'
 
@@ -71,11 +79,12 @@ class RefreshPermission(TypedDict): # NOTE if someone from an organization chang
     challenge:str
     salt:str
     client_id:str
-    scope_id:str
+    group_id:str | None = None
     issued_for:str
     created_at:float
     expired_at:float
     status:PermissionStatus= 'active'
+    client_type:ClientTypeLiteral = 'User'
 
 
 class ContactPermission(TypedDict):
@@ -86,7 +95,7 @@ class ContactPermission(TypedDict):
     salt:str
 
 class TokensModel(BaseModel):
-    tokens: str | list[str]
+    tokens: str
 
 class WSPermission(TypedDict):
     operation_id:str

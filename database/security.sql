@@ -17,6 +17,11 @@ CREATE DOMAIN Scope AS VARCHAR(25) CHECK (
     VALUE IN ('SoloDolo', 'Organization')
 );
 
+
+CREATE DOMAIN ClientType AS VARCHAR(25) CHECK (
+    VALUE IN ('User','Admin')
+);
+
 CREATE TABLE IF NOT EXISTS GroupClient (
     group_id UUID DEFAULT uuid_generate_v4 (),
     group_name VARCHAR(80) UNIQUE,
@@ -27,13 +32,17 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 
 CREATE TABLE IF NOT EXISTS Client (
     client_id UUID DEFAULT uuid_generate_v4 (),
-    client_name VARCHAR(120) UNIQUE,
+    client_name VARCHAR(200) UNIQUE,
     client_scope Scope DEFAULT 'SoloDolo',
     group_id UUID DEFAULT NULL,
+    client_type ClientType DEFAULT 'User',
+    issued_for VARCHAR(50) UNIQUE,
+    authenticated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (client_id),
-    FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE
+    FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    CHECK (SELECT COUNT(*) FROM Client WHERE client_type ='Admin') = 1
 );
 
 CREATE TABLE IF NOT EXISTS Challenge (
@@ -80,6 +89,7 @@ BEGIN
         Challenge c
     SET 
         challenge_refresh = secure_random_string(128),
+        authenticated = FALSE,
         created_at_refresh = NOW(),
         expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh)
     WHERE 
@@ -186,3 +196,36 @@ CREATE TRIGGER limit_client
     ON Client
     FOR EACH ROW
     EXECUTE FUNCTION compute_limit_client(2);
+
+
+CREATE OR REPLACE FUNCTION guard_admin_creation RETURNS TRIGGER AS $guard_admin_creation$
+BEGIN
+    SET search_path = security;
+    IF NEW.client_type = 'Admin' THEN
+        IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
+            RAISE NOTICE 'Admin already exists';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+
+CREATE TRIGGER guard_admin_creation
+    BEFORE INSERT OR UPDATE
+    ON Client
+    FOR EACH ROW
+    EXECUTE FUNCTION guard_admin_creation();
+
+CREATE OR REPLACE FUNCTION guard_admin_deletion RETURNS TRIGGER AS $guard_admin_deletion$
+BEGIN
+    SET search_path = security;
+    IF OLD.client_type = 'Admin' THEN
+        RAISE NOTICE 'Admin cannot be deleted'; 
+    END IF;
+    RETURN OLD;
+END;
+
+CREATE TRIGGER guard_admin_deletion
+    BEFORE DELETE
+    ON Client
+    FOR EACH ROW
+    EXECUTE FUNCTION guard_admin_deletion();
