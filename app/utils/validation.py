@@ -26,6 +26,10 @@ def ipv6_validator(ip):
         return False
 
 
+def ipv4_subnet_validator(ip):
+    ...
+
+
 def email_validator(e_mail):
     """
     The function `email_validator` uses a regular expression to validate if an email address is in a
