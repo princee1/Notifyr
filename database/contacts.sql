@@ -105,7 +105,6 @@ CREATE TABLE IF NOT EXISTS Reason (
     reason_count BIGINT DEFAULT 0
 );
 
-
 CREATE TABLE IF NOT EXISTS SubsContent (
     content_id UUID DEFAULT uuid_generate_v4 (),
     content_name VARCHAR(50) UNIQUE,
@@ -113,7 +112,6 @@ CREATE TABLE IF NOT EXISTS SubsContent (
     content_type ContentType DEFAULT 'other',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-
     PRIMARY KEY (content_id)
 );
 
@@ -216,7 +214,7 @@ FROM
     LEFT JOIN SubscriptionContact s ON c.contact_id = s.contact_id
     LEFT JOIN Subscription subs ON c.contact_id = subs.contact_id
     LEFT JOIN SubsContent sub_content ON subs.content_id = sub_content.content_id
-    LEFT JOIN ContentTypeSubscription cts  ON cts.contact_id = c.contact_id
+    LEFT JOIN ContentTypeSubscription cts ON cts.contact_id = c.contact_id
 GROUP BY
     sub_content.content_id,
     cts.updated_at,
@@ -237,6 +235,33 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT cron.schedule('delete_expired_subscontent', '0 0 * * *', 'CALL delete_expired_subscontent();');
+SELECT cron.schedule (
+        'delete_expired_subscontent', '0 0 * * *', 'CALL delete_expired_subscontent();'
+    );
 
--- NOTE or create a schedule for each row using a Trigger
+CREATE OR REPLACE FUNCTION compute_limit(l INT) RETURNS TRIGGER AS $compute_limit$
+DECLARE
+    contact_count INT;
+
+BEGIN
+SELECT 
+    COUNT(*) 
+INTO 
+    contact_count 
+FROM 
+    Contact;
+
+IF contact_count >= l THEN
+    RAISE NOTICE 'Contact Limit Reached';
+    RETURN OLD;
+ELSE
+    RETURN NEW;
+END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE TRIGGER limit_contact
+BEFORE INSERT ON Contact
+FOR EACH ROW
+EXECUTE FUNCTION compute_limit(2);
