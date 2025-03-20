@@ -1,8 +1,11 @@
+from typing import Self
 from tortoise import Tortoise, fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from app.classes.auth_permission import ClientType, Scope
 import uuid
+
+from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 
 
 SCHEMA = 'security'
@@ -73,7 +76,19 @@ class GroupModel(BaseModel):
 ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id'))
 
 class ClientModel(ClientModelBase):
-    ...
+    
+    @model_validator(mode="after")
+    def validate(self)->Self:
+        if self.client_scope == Scope.Organization:
+            if not ipv4_subnet_validator(self.issued_for):
+                raise ValueError('Invalid ipv4 subnet')
+            return self
+        if not ipv4_validator(self.issued_for):
+            raise ValueError('Invalid ipv4 address')
+        return self
+
+
+
 
 
 async def raw_revoke_challenge(client:ClientORM):

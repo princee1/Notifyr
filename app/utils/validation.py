@@ -26,7 +26,7 @@ def ipv6_validator(ip):
         return False
 
 
-def ipv4_subnet_validator(ip):
+def ipv4_subnet_validator(ip): # TODO
     ...
 
 
