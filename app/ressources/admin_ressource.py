@@ -20,6 +20,7 @@ from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHa
 from app.decorators.pipes import AuthPermissionPipe, ForceClientPipe, ForceGroupPipe, RefreshTokenPipe
 from app.utils.validation import ipv4_validator
 from slowapi.util import get_remote_address
+from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
 
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
@@ -143,10 +144,11 @@ class AdminRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}', methods=[HTTPMethod.POST])
     async def blacklist_tokens(self, group: Annotated[GroupClientORM, get_group], client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
         if group == None and client == None:
-            ...
+            raise SecurityIdentityNotResolvedError
+            
 
         if group != None and client != None and client.group_id != group.group_id:
-            ...
+            raise GroupIdNotMatchError(client.group_id, group.group_id)
 
         return await self.adminService.blacklist(client, group)
 
@@ -156,11 +158,11 @@ class AdminRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}',methods=[HTTPMethod.DELETE])
     async def un_blacklist_tokens(self,group: Annotated[GroupClientORM, get_group], client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
         if group == None and client == None:
-            ...
+            raise SecurityIdentityNotResolvedError
 
         if group != None and client != None and client.group_id != group.group_id:
-            ...
-
+            raise GroupIdNotMatchError(client.group_id, group.group_id)
+            
         return await self.adminService.un_blacklist(client, group)
 
         
@@ -256,10 +258,9 @@ class AdminRessource(BaseHTTPRessource):
 
     async def issue_auth(self, client, authPermission):
         challenge = await ChallengeORM.filter(client=client).first()
-        auth_model = self._create_auth_model(authPermission)
-        auth_token, refresh_token = self.adminService.issue_auth(
-            challenge, client, auth_model)
+        auth_model = self._transform_to_auth_model(authPermission)
+        auth_token, refresh_token = self.adminService.issue_auth(challenge, client, auth_model)
         return auth_token, refresh_token
 
-    def _create_auth_model(self, permission: AuthPermission):
+    def _transform_to_auth_model(self, permission: AuthPermission):
         ...

@@ -9,6 +9,7 @@ from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExis
 from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
 from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError,ContactDoubleOptInAlreadySetError,ContactOptInCodeNotMatchError
+from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -190,4 +191,36 @@ class TortoiseHandler(Handler):
 
 
 class SecurityClientHandler(Handler):
-    ...
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        
+        except GroupAlreadyBlacklistedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': f'Group {e.group_id} is already blacklisted',
+                'group_id': e.group_id,
+                'group_name': e.group_name
+            })
+
+        except CouldNotCreateRefreshTokenError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'Could not create refresh token'
+            })
+
+        except CouldNotCreateAuthTokenError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'Could not create auth token'
+            })
+
+        except SecurityIdentityNotResolvedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Both group and client can\'t be None'
+            })
+
+        except GroupIdNotMatchError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Group ID does not match',
+                'client_group_id': e.client_group_id,
+                'group_id': e.group_id
+            })
