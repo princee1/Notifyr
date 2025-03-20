@@ -2,6 +2,8 @@ from typing import Any, List
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.security_model import ClientORM
+from app.services.admin_service import AdminService
 from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
@@ -140,4 +142,35 @@ class RefreshTokenGuard(Guard):
         self.jwtAuthService = jwtAuthService
 
     def guard(self,):
+        # TODO check status
+        # TODO check group id 
+        # check client id and issued_for
+
         ...
+
+
+class AuthenticatedClientGuard(Guard):
+    def __init__(self,reverse=False):
+        super().__init__()
+        self.reverse = reverse
+       
+    def guard(self,client:ClientORM):
+        if self.reverse:
+            if client.authenticated:
+                return False,'Client is authenticated'
+            return True,''
+        
+        if not client.authenticated:
+            return False,'Client is not authenticated'
+        return True,''
+
+
+class BlacklistClientGuard(Guard):
+    def __init__(self):
+        super().__init__()
+        self.adminService = Get(AdminService)
+    
+    async def guard(self,client:ClientORM):
+        if await self.adminService.is_blacklisted(client):
+            return False,'Client is blacklisted'
+        return True,''
