@@ -78,3 +78,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 return self.bkgTaskService.add_task(scheduler.heaviness,x_request_id,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
             
         return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)
+
+    
+    async def verify_domain_hosting(self,):
+        ...
