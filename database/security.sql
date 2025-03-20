@@ -86,6 +86,25 @@ BEGIN
         expired_at_auth <= NOW();
 END; $$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE FUNCTION raw_revoke_challenges(client_id UUID) RETURNS VOID as $$
+BEGIN
+    SET search_path = security;
+    UPDATE 
+        Challenge c
+    SET 
+        challenge_auth = secure_random_string(64),
+        expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
+        created_at_auth = NOW(),
+        challenge_refresh = secure_random_string(128),
+        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh),;
+        created_at_refresh = NOW(),
+    
+    WHERE
+        c.client_id = client_id;
+
+END; $$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
 BEGIN
     SET search_path = security;

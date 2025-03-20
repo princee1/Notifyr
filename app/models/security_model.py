@@ -1,9 +1,9 @@
-from tortoise import fields, models
+from tortoise import Tortoise, fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
-import uuid
 from pydantic import BaseModel, field_validator
-
 from app.classes.auth_permission import Scope
+import uuid
+
 
 SCHEMA = 'security'
 
@@ -70,3 +70,9 @@ ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('
 
 class ClientModel(ClientModelBase):
     ...
+
+
+async def raw_revoke_challenge(client:ClientORM):
+    query = "SELECT security.raw_revoke_challenge($1:UUID);"
+    tortoise_client = Tortoise.get_connection('default')
+    return await tortoise_client.execute_query(query, [client.client_id])
