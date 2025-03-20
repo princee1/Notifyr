@@ -97,6 +97,7 @@ def key_group_id()->str:
 
 @AcceptNone(0)
 async def get_client(client_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
+    # TODO check if client is a user type and if it is admin says it does not exists
     ...
 
 @AcceptNone(0)

@@ -1,6 +1,7 @@
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
 from app.models.contacts_model import ContactORM
+from app.models.security_model import ClientORM
 from app.services.assets_service import DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR, AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
@@ -129,4 +130,11 @@ class JWTContactPermission(Permission):
         
         return True
 
-        
+
+class AdminPermission(Permission):
+
+    def permission(self,authPermission:AuthPermission):
+        if not authPermission['client_type'] == 'Admin':
+            raise 
+
+        return True        

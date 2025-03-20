@@ -1,11 +1,12 @@
 from tortoise import Tortoise, fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, field_validator
-from app.classes.auth_permission import Scope
+from app.classes.auth_permission import ClientType, Scope
 import uuid
 
 
 SCHEMA = 'security'
+
 
 
 class GroupClientORM(models.Model):
@@ -20,8 +21,11 @@ class GroupClientORM(models.Model):
 
 class ClientORM(models.Model):
     client_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    client_name = fields.CharField(max_length=120, unique=True, null=True)
+    client_name = fields.CharField(max_length=200, unique=True, null=True)
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo)
+    authenticated = fields.BooleanField(default=False)
+    client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User)
+    issued_for = fields.CharField(max_length=50, null=False,unique=True)
     group_id = fields.ForeignKeyField("models.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
