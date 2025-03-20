@@ -154,7 +154,10 @@ class ConfigService(_service.Service):
         self.ON_TOP_SECRET_KEY = self.getenv("ON_TOP_SECRET_KEY")
         self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
         self.API_EXPIRATION = ConfigService.parseToInt(self.getenv("API_EXPIRATION"), 360000000)
+
         self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 36000000)
+        self.REFRESH_EXPIRATION = ConfigService.parseToInt(self.getenv("REFRESH_EXPIRATION"), 360000000)
+
         self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
