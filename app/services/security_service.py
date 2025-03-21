@@ -103,7 +103,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             print(e)
         return None
 
-    def set_status(self, authPermission: AuthPermission):
+    def set_status(self, authPermission: AuthPermission | RefreshPermission):
         ...
 
     def encode_ws_token(self, run_id: str, operation_id: str, expiration: float):
@@ -267,3 +267,6 @@ class SecurityService(Service, EncryptDecryptInterface):
         hashed_provided_password = self.hash_value_with_salt(
             provided_password, key, stored_salt)
         return hmac.compare_digest(stored_hash, hashed_provided_password)
+    
+    def verify_admin_signature(self,):
+        ...

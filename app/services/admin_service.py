@@ -39,12 +39,20 @@ class AdminService(Service):
     
 
     async def un_blacklist(self,client:ClientORM,group:GroupClientORM):
-        ...
+        if client!=None and group == None:
+            if not await  self.is_blacklisted(client):
+                ...
+            else:
+                return await BlacklistORM.filter(client=client).delete()
+        
+        if not await BlacklistORM.exists(group=group):
+            ...
+
+        return await BlacklistORM.filter(group=group).delete()
 
     
     def issue_auth(self,challenge,client,authModel):
-        refresh_token = self.jwtAuthService.encode_refresh_token(
-            challenge=challenge.challenge_refresh, issued_for=client.issued_for, group_id=client.group_id)
+        refresh_token = self.jwtAuthService.encode_refresh_token(challenge=challenge.challenge_refresh, issued_for=client.issued_for, group_id=client.group_id)
 
         if refresh_token == None:
             raise CouldNotCreateRefreshTokenError()
