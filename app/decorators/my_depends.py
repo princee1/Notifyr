@@ -1,10 +1,11 @@
 import functools
-from typing import Callable
-from fastapi import Depends, HTTPException, Query, Request,status
+from typing import Annotated, Callable
+from fastapi import Depends, HTTPException, Header, Query, Request,status
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetDependsAttr
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.security_model import ClientORM, GroupClientORM
+from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.dependencies import get_auth_permission
@@ -108,6 +109,13 @@ def key_client_id()->str:
 
 def key_group_id()->str:
     ...
+
+async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
+    configService: ConfigService = Get(ConfigService)
+
+    if x_admin_token == None or x_admin_token != configService.ADMIN_KEY:
+        raise HTTPException(
+            status_code=403, detail="X-Admin-Token header invalid")
 
 def GetClient(bypass:bool=False,accept_admin:bool=False):
         

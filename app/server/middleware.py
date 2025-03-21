@@ -2,6 +2,7 @@ import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, Role
 from app.definition._middleware import MiddleWare, MiddlewarePriority,MIDDLEWARE
+from app.services.admin_service import AdminService
 from app.services.celery_service import BackgroundTaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
@@ -14,6 +15,7 @@ from app.utils.dependencies import get_api_key, get_client_ip,get_bearer_token_f
 from cryptography.fernet import InvalidToken
 
 from app.utils.helper import generateId
+from app.decorators.my_depends import GetClient
 
         
 class ProcessTimeMiddleWare(MiddleWare):
@@ -77,12 +79,21 @@ class JWTAuthMiddleware(MiddleWare):
         super().__init__(app, dispatch)
         self.jwtService:JWTAuthService = Get(JWTAuthService)
         self.configService: ConfigService = Get(ConfigService)
+        self.adminService: AdminService = Get(AdminService)
+        self.get_client = GetClient(True,True)
 
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
             client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
             authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
+
+            client_id = authPermission['client_id']
+            client = await self.get_client(client_id,"id",authPermission)
+
+            if await self.adminService.is_blacklisted(client):
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
+            
             authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
             request.state.authPermission = authPermission
         except HTTPException as e:
