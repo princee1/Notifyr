@@ -2,14 +2,15 @@
 from typing import Annotated
 from fastapi import Depends, Header, Query, Request,status
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import MustHave, Role, TokensModel
+from app.classes.auth_permission import MustHave, RefreshPermission, Role, TokensModel
 from app.container import Get, InjectInMethod
-from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard, RefreshTokenGuard
+from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.my_depends import GetClient, verify_admin_token
-from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, same_client_authPermission
+from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.errors.security_error import ClientDoesNotExistError
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
@@ -34,7 +35,7 @@ async def verify_admin_signature(x_admin_signature:Annotated[str,Header()]):
         ...
 
 @UseHandler(TortoiseHandler)   
-@UsePipe(ForceClientPipe, RefreshTokenPipe)
+@UsePipe(ForceClientPipe)
 @UseHandler(ServiceAvailabilityHandler,SecurityClientHandler)
 @UsePermission(JWTRouteHTTPPermission(True),same_client_authPermission)
 @HTTPRessource(CLIENT_AUTH_PREFIX)
@@ -46,25 +47,31 @@ class ClientAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         IssueAuthInterface.__init__(self,adminService)
 
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
+    @UsePipe(RefreshTokenPipe)
     @UseRoles(roles=[Role.REFRESH])
-    @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard, RefreshTokenGuard)
+    @UsePermission(JWTRefreshTokenPermission)
+    @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard,)
     @BaseHTTPRessource.HTTPRoute('/refresh-auth/', methods=[HTTPMethod.GET, HTTPMethod.POST], deprecated=True)
     async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(GetClient(True,False))], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
+        refreshPermission:RefreshPermission = tokens
         await raw_revoke_auth_token(client)
-        auth_token, _ = await self.issue_auth(client, authPermission)
+        # await raw_revoke_challenges(client)
+        auth_token, refresh_token = await self.issue_auth(client, authPermission)
         client.authenticated = True # NOTE just to make sure
         await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token}, "message": "Tokens successfully refreshed"})
 
 
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
-    @UseGuard(RefreshTokenGuard)
+    @UsePipe(RefreshTokenPipe)
     @UseRoles(roles=[Role.ADMIN],options=[MustHave(Role.ADMIN)])
-    @UsePermission(AdminPermission)
+    @UsePermission(AdminPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/refresh-admin-auth/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_token)], )
     async def refresh_admin_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(GetClient(False,True))], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
+        refreshPermission:RefreshPermission = tokens
         await raw_revoke_auth_token(client)
-        auth_token, _ = await self.issue_auth(client, authPermission)
+        # await raw_revoke_challenges(client)
+        auth_token, refresh_token = await self.issue_auth(client, authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token,}, "message": "Tokens successfully refreshed"})
    
 @UseHandler(TortoiseHandler,ServiceAvailabilityHandler)
@@ -76,8 +83,15 @@ class AdminAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         BaseHTTPRessource.__init__(self,dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
         IssueAuthInterface.__init__(self,adminService)
 
-    def _get_admin_client(self,client_id:str)->ClientORM:
-        ... 
+    async def _get_admin_client(self,client_id:str)->ClientORM:
+        client = await ClientORM.get(client=client_id)
+        if client == None:
+            raise ClientDoesNotExistError()
+        
+        if client.client_type != 'Admin':
+            raise ClientDoesNotExistError()
+        
+        return client
 
     def _create_auth_model(self,):
         ...       
@@ -91,6 +105,7 @@ class AdminAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
   
+
 @HTTPRessource(AUTH_PREFIX,routers=[AdminAuthRessource,ClientAuthRessource])
 class AuthRessource(BaseHTTPRessource):
     ...

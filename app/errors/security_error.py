@@ -1,5 +1,9 @@
 from app.definition._error import BaseError
 
+
+class ClientDoesNotExistError(BaseError):
+    ...
+
 class GroupAlreadyBlacklistedError(BaseError):
     def __init__(self, group_id,group_name) -> None:
         self.group_id = group_id

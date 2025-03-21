@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Request, HTTPException, status
 from fastapi.responses import JSONResponse
-from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard, RefreshTokenGuard
+from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.my_depends import get_group,GetClient as get_client
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, raw_revoke_challenges

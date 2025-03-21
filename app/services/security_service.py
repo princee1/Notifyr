@@ -177,7 +177,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         token = self.decode_token(token)
         permission: AuthPermission = AuthPermission(**token)
         try:
-            if issued_for != permission["issued_for"]:
+            if issued_for != permission["issued_for"]: #TODO issued_for
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
 
@@ -194,6 +194,17 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         except KeyError as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
+
+    def verify_refresh_permission(self,tokens:str):
+        token =self.decode_token(tokens)
+        permission = RefreshPermission(**token)
+        self.set_status(permission)
+
+        if permission['status'] == 'expired':
+            raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
+        
+        return permission
 
     def verify_contact_permission(self, token: str) -> ContactPermission:
 
