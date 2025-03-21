@@ -141,6 +141,8 @@ def GetClient(bypass:bool=False,accept_admin:bool=False):
         
         return _get_client
 
+
+
 @ByPassAdminRole()
 @AcceptNone(0)
 async def get_group(group_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->GroupClientORM:

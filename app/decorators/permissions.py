@@ -8,6 +8,7 @@ from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, ContactPermission, ContactPermissionScope, Role, RoutePermission,FuncMetaData
+from app.utils.dependencies import APIFilterInject
 from app.utils.helper import flatten_dict
 
  
@@ -146,3 +147,11 @@ class TwilioPermission(Permission):
             raise ...
 
         return True  
+    
+
+@APIFilterInject
+def same_client_authPermission(authPermission:AuthPermission,client:ClientORM):
+    if not authPermission['client_id'] == client.client_id:
+        raise ...
+    
+    return True

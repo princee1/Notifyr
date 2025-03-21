@@ -131,7 +131,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
     @staticmethod
     def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST], operation_id: str = None, dependencies:Sequence[Depends]=None, response_model: Any = None, response_description: str = "Successful Response",
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
-                  deprecated: bool | None = None):
+                  deprecated: bool | None = None,mount: bool = True):
         def decorator(func: Callable):
             computed_operation_id = BaseHTTPRessource._build_operation_id(path, None, methods, operation_id)
             
@@ -142,6 +142,9 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             func.meta['options'] =[] 
             func.meta['limit_obj'] =None
             func.meta['limit_exempt']=False
+            
+            if not mount:
+                return func
             
             class_name = get_class_name_from_method(func)
             kwargs = {
@@ -155,7 +158,6 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
                 'response_description': response_description,
                 'responses': responses,
                 'deprecated': deprecated,
-
             }
             if class_name not in ROUTES:
                 ROUTES[class_name] = []

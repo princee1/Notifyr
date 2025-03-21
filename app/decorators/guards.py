@@ -142,10 +142,10 @@ class RefreshTokenGuard(Guard):
         self.jwtAuthService = jwtAuthService
 
     def guard(self,):
-        # TODO check status
-        # TODO check group id 
-        # check client id and issued_for
 
+        # TODO check status,must be active or inactive
+        # TODO check group id
+        # TODO check client id and issued_for
         ...
 
 
