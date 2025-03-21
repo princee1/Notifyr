@@ -2,6 +2,7 @@ import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, Role
 from app.definition._middleware import MiddleWare, MiddlewarePriority,MIDDLEWARE
+from app.models.security_model import ChallengeORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import BackgroundTaskService
 from app.services.config_service import ConfigService
@@ -93,6 +94,12 @@ class JWTAuthMiddleware(MiddleWare):
 
             if await self.adminService.is_blacklisted(client):
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
+
+            challenge = authPermission['challenge']
+            db_challenge= await ChallengeORM.filter(client=client).first()
+
+            if challenge != db_challenge:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
             
             authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
             request.state.authPermission = authPermission
