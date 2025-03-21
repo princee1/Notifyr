@@ -24,7 +24,7 @@ class JWTRouteHTTPPermission(Permission):
         if authPermission == None:
             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Auth Permission not implemented")
         
-        if authPermission['status'] == 'inactive' and not self.accept_inactive:
+        if authPermission['status'] != 'active' and not self.accept_inactive:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
 
         operation_id = func_meta["operation_id"]
