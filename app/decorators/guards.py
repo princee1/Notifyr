@@ -1,29 +1,21 @@
-from typing import List
+from typing import Any, List
+from app.classes.auth_permission import AuthPermission, RefreshPermission
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
+from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.security_model import ClientORM
+from app.services.admin_service import AdminService
 from app.services.assets_service import AssetService
 from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
+from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
-from app.utils.helper import flatten_dict
-
-class TwilioGuard(Guard):
-    
-    def __init__(self,path:str):
-        super().__init__()
-        self.twilioService = Get(TwilioService)
-        self.configService = Get(ConfigService)
-        self.loggerService = Get(LoggerService)
-
-        self.path = path
-    
-    def guard(self,x_twilio_signature:str):
-        ...
-        return True,''
+from app.utils.helper import flatten_dict,b64_encode
+from fastapi import HTTPException, Request,status
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
@@ -75,15 +67,96 @@ class TaskWorkerGuard(Guard):
 
 class RegisteredContactsGuard(Guard):
     """
-    Guard to check if the callee is in the contact list
+    Guard to check if the callee is registered
     """
 
-    def __init__(self,model_keys:List[str]):
+    def __init__(self):
         super().__init__()
-        self.contactsService = Get(ContactsService)
-        self.model_keys = model_keys
+        self.contactsService:ContactsService = Get(ContactsService)
 
+    def guard(self,contact:ContactORM):
+        if contact.app_registered:
+            return True,''
+        return False,'Contact Must be registered to proceed with this actions'
+    
+class ActiveContactGuard(Guard):
+
+    async def guard(self,contact:ContactORM,subs_content:ContentSubscriptionORM=None,relay:str=None):
+
+        subs_content_type = subs_content.content_type
+        if subs_content:
+            if subs_content_type in [ContentType.notification,ContentType.update]:
+                return True,''
+
+        if contact.status != Status.Active:
+            return False,'Contact is not active yet for non alert content type'
+        
+        if relay:
+            subscription = await SubscriptionContactStatusORM.filter(contact=contact).first()
+            relay+='_status'
+            if getattr(subscription,relay) != 'Active':
+                return False,'Contact method is not active'
+            
+        if subs_content:
+            contact_content_type = await ContentTypeSubscriptionORM.filter(contact=contact).first()
+
+            if not getattr(contact_content_type,subs_content_type):
+                return False,'Content Type is not allowed for this user'
+
+        return True,''
+
+class ContactActionCodeGuard(Guard):
+
+    def __init__(self,bypass_content=False):
+        super().__init__()
+        self.bypass = bypass_content
+
+    def guard(self,action_code:str,contact:ContactORM,subsContent:ContentSubscriptionORM=None):
+
+        if self.bypass:
+            if  subsContent.content_type  in [ContentType.notification, ContentType.update]:
+                return True,''
+                # raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contact status is not active and content type is not permitted")
+
+        if not action_code:
+            raise HTTPException(status_code=400, detail="Action code is required")
+        
+        if not contact.action_code:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contact action code is null at the moment")
+
+        action_code = b64_encode(action_code)
+        if action_code != contact.action_code:
+            return False,'Contact action Code is not valid'
+        
+        return True,''
 
 class TwilioLookUpPhoneGuard(Guard):
     def guard(self):
         return super().guard()
+
+
+class AuthenticatedClientGuard(Guard):
+    def __init__(self,reverse=False):
+        super().__init__()
+        self.reverse = reverse
+       
+    def guard(self,client:ClientORM):
+        if self.reverse:
+            if client.authenticated:
+                return False,'Client is authenticated'
+            return True,''
+        
+        if not client.authenticated:
+            return False,'Client is not authenticated'
+        return True,''
+
+
+class BlacklistClientGuard(Guard):
+    def __init__(self):
+        super().__init__()
+        self.adminService = Get(AdminService)
+    
+    async def guard(self,client:ClientORM):
+        if await self.adminService.is_blacklisted(client):
+            return False,'Client is blacklisted'
+        return True,''

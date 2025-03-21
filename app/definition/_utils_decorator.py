@@ -1,12 +1,14 @@
+import asyncio
 from typing import Callable
-from app.utils.dependencies import APIFilterInject
+from app.utils.dependencies import APIFilterInject, AsyncAPIFilterInject
+from asgiref.sync import sync_to_async
 from enum import Enum
 
 class DecoratorPriority(Enum):
     PERMISSION = 1
     HANDLER = 2
-    GUARD = 4
     PIPE = 3
+    GUARD = 4
     INTERCEPTOR = 5
 
 
@@ -19,10 +21,15 @@ class DecoratorObj:
     def __init__(self, ref_callback: Callable, filter=True):
         self.ref = ref_callback
         self.filter = filter
+        self.is_async = asyncio.iscoroutinefunction(self.ref)
 
-    def do(self, *args, **kwargs):
+    async def do(self, *args, **kwargs):
         if self.filter:
+            if self.is_async:
+                return await AsyncAPIFilterInject(self.ref)(*args, **kwargs)
             return APIFilterInject(self.ref)(*args, **kwargs)
+        if self.is_async:
+            return await self.ref(*args, **kwargs)
         return self.ref(*args, **kwargs)
 
 
@@ -43,7 +50,10 @@ class Handler(DecoratorObj):
         super().__init__(self.handle, False)
         self.go_to_default_exception = go_to_default_exception
 
-    def handle(self, function: Callable, *args, **kwargs):
+    async def do(self, *args, **kwargs):
+        return await self.ref(*args, **kwargs)
+
+    async def handle(self, function: Callable, *args, **kwargs):
         ...
 
 class HandlerDefaultException(Exception):

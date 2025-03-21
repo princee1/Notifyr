@@ -28,7 +28,7 @@ class MODE(Enum):
     
     def modeToAddr(mode):
         match mode:
-            case MODE.TEST_MODE:
+            case MODE.DEV_MODE:
                 return "127.0.0.1"
             case _:
                 return "127.0.0.1"
@@ -38,7 +38,7 @@ class ConfigService(_service.Service):
     
     def __init__(self) -> None:
         super().__init__()
-        if not load_dotenv(ENV):
+        if not load_dotenv(ENV,verbose=True):
             path = find_dotenv(ENV)
             load_dotenv(path)
         self.config_json_app:JSONFile = None
@@ -94,7 +94,10 @@ class ConfigService(_service.Service):
     
     def getenv(self,key:str,default:Any=None)-> str | None | Any:
         val = os.getenv(key)
-        if isinstance(val,str) and not val.strip()=="":
+        if val is not None:
+            val = val.strip()
+            val = val.replace('"',"")
+        if isinstance(val,str) and not val=="":
             return val
         return default
 
@@ -110,6 +113,8 @@ class ConfigService(_service.Service):
         self.HTTP_MODE = self.getenv("HTTP_MODE")
         self.HTTPS_CERTIFICATE=self.getenv("HTTPS_CERTIFICATE",'cert.pem')
         self.HTTPS_KEY =self.getenv("HTTPS_KEY",'key.pem')
+
+        self.NGROK_DOMAIN = self.getenv("NGROK_DOMAIN",None)
 
         self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER','oauth_custom') #OAuthFlow | OAuthLib
         self.OAUTH_JSON_KEY_FILE = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
@@ -139,6 +144,9 @@ class ConfigService(_service.Service):
         self.TWILIO_ACCOUNT_SID = self.getenv("TWILIO_ACCOUNT_SID")
         self.TWILIO_AUTH_TOKEN= self.getenv("TWILIO_AUTH_TOKEN")
         self.TWILIO_NUMBER= self.getenv("TWILIO_NUMBER")
+        self.TWILIO_PROD_URL = self.getenv("TWILIO_PROD_URL",None)
+        self.TWILIO_TEST_URL = self.getenv("TWILIO_TEST_URL",None)
+
         
         self.JWT_SECRET_KEY = self.getenv("JWT_SECRET_KEY")
         self.JWT_ALGORITHM = self.getenv("JWT_ALGORITHM")
@@ -146,9 +154,13 @@ class ConfigService(_service.Service):
         self.ON_TOP_SECRET_KEY = self.getenv("ON_TOP_SECRET_KEY")
         self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
         self.API_EXPIRATION = ConfigService.parseToInt(self.getenv("API_EXPIRATION"), 360000000)
+
         self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 36000000)
+        self.REFRESH_EXPIRATION = ConfigService.parseToInt(self.getenv("REFRESH_EXPIRATION"), 360000000)
+
         self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
+        self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
 
         
                                 # CELERY CONFIG #
@@ -171,10 +183,13 @@ class ConfigService(_service.Service):
             ...
 
     def __getitem__(self, key):
-        result = getattr(self, key)
-        if result == None:
+        try:
+            result = getattr(self, key)
+        except AttributeError:
             result = os.getenv(key)
+
         return result
+    
     def get(self, key):
         return self.getenv(key)
     

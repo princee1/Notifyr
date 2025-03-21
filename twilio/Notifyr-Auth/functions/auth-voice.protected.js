@@ -4,6 +4,6 @@ exports.handler = function(context, event, callback) {
   console.log(event)
   console.log(event.request.headers);
   twiml.say('Hello World!');
-  callback(null, twiml);
+  return callback(null, twiml);
 
 };

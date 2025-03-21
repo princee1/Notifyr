@@ -21,7 +21,7 @@ pprinter = pprint.PrettyPrinter()
 
 ########################################################################
 
-text = 'Communication - Service'
+text = '<<<  N o t i f y r >>>'
 justify = 'left'
 
 figlet = pyfiglet.Figlet(font='standard')

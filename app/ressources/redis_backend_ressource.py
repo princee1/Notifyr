@@ -39,7 +39,7 @@ class RedisBackendRessource(BaseHTTPRessource):
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/task/{task_id}')
     def cancel_task(self,task_id:str,authPermission=Depends(get_auth_permission)):
-        self.celeryService.cancel_task(task_id)
+        return self.celeryService.cancel_task(task_id)
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Get('/schedule/{schedule_id}')
@@ -50,7 +50,7 @@ class RedisBackendRessource(BaseHTTPRessource):
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/schedule/{schedule_id}')
     def delete_schedule(self,schedule_id:str,authPermission=Depends(get_auth_permission)):
-        self.celeryService.delete_schedule(schedule_id)
+       return  self.celeryService.delete_schedule(schedule_id)
         
     @PingService([JWTAuthService])
     @UseHandler(WebSocketHandler)

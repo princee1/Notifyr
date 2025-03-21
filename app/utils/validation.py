@@ -4,7 +4,7 @@ import phonenumbers
 from validators import url as validate_url, ipv4 as IPv4Address, ValidationError, ipv6 as IPv6Address, email, mac_address
 from geopy.geocoders import Nominatim
 from bs4 import Tag
-from cerberus import Validator
+from cerberus import Validator,SchemaError
 
 def ipv4_validator(ip):
     """
@@ -26,6 +26,10 @@ def ipv6_validator(ip):
         return False
 
 
+def ipv4_subnet_validator(ip): # TODO
+    ...
+
+
 def email_validator(e_mail):
     """
     The function `email_validator` uses a regular expression to validate if an email address is in a
@@ -41,8 +45,8 @@ def email_validator(e_mail):
 
 def phone_number_validator(phone):
     try:
-        parsed_phone = phonenumbers.parse(phone, None, keep_raw_input=False)
-        return phonenumbers.is_valid_number(parsed_phone)
+        parsed_phone = phonenumbers.parse(phone, None)
+        return phonenumbers.is_valid_number(parsed_phone) and phonenumbers.is_possible_number(parsed_phone)
     except phonenumbers.phonenumberutil.NumberParseException:
         return False
 
@@ -73,6 +77,26 @@ def location_validator(latitude, longitude):
     location = geolocator.reverse((latitude, longitude), exactly_one=True)
     return location is not None
 
+
+def digit_validator(val:int):
+    return val>=0 and val <=9
+
+from datetime import datetime
+
+def date_validator(date: str) -> bool:
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+def time_validator(time: str) -> bool:
+    try:
+        datetime.strptime(time, "%H:%M:%S")
+        return True
+    except ValueError:
+        return False
+
 #######################                      #################################
 class ValidatorType(Enum):
     IPV4= ipv4_validator,"Must be an ipv4 address format"
@@ -82,19 +106,24 @@ class ValidatorType(Enum):
     EMAIL=email_validator,"Must be an email address format"
     LOCATION=location_validator,"Must be an geolocation location format"
     URL=url_validator,"Must be an url address format"
+    DIGIT=digit_validator,"Must be a digit"
+    DATE = date_validator,"Must be a date format Y-M-D"
+    TIME = time_validator,"Must be a time format H:M:S" 
 #######################                      #################################
 
 class CustomValidator(Validator):
     def __init__(self,schema) -> None:
         super().__init__(schema)
 
-    def _validate_custom(self,constraint:Literal["ipv4","ipv6","url","mac","email","phone","location"],field,value):
-        validator_type = ValidatorType.__getitem__(constraint.upper())
+    def _validate_custom(self,constraint:Literal["ipv4","ipv6","url","mac","email","phone","location","digit"],field,value):
+        constraint = constraint.upper()
+        if constraint not in ValidatorType._member_names_:
+            raise SchemaError
+        validator_type = ValidatorType.__getitem__(constraint)
         validationFunc, error_message = validator_type.value
         flag = validationFunc(value)
         if not flag:
             self._error(field, error_message)
-        
-    def _validate_for(self,field,value):
-        pass
+    # ERROR extending :check normal validation 
+    # TODO for  operator
 

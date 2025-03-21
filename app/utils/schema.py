@@ -16,7 +16,7 @@ class SchemaBuilder:
     pass
 
 
-class HtmlSchemaBuilder (SchemaBuilder):
+class MLSchemaBuilder (SchemaBuilder):
     CurrentHashRegistry = {}
     HashSchemaRegistry = {}
 
@@ -25,21 +25,20 @@ class HtmlSchemaBuilder (SchemaBuilder):
         # next_children = self.css_selectorBuilder(CSSLevel.SAME, [ValidationHTMLConstant.VALIDATION_ITEM_BALISE,
         #                                          ValidationHTMLConstant.VALIDATION_VALUES_RULES_BALISE, ValidationHTMLConstant.VALIDATION_KEYS_RULES_BALISE])
         self.schema: dict[str, dict] = self.find(self.root)
-        printJSON(self.schema)
 
     def find(self, validation_item: Tag, css_selector: str | None = None, next_children_css_selector=None):
         schema: dict[str, dict | str] = {}
         # next_children_css_selector = css_selector if next_children_css_selector is None else next_children_css_selector
         for validator in validation_item.find_all(ValidationHTMLConstant.VALIDATION_ITEM_BALISE, recursive=False):
             v: Tag = validator
-            has_noSuccessor = len(v.find_all(
-                ValidationHTMLConstant.VALIDATION_ITEM_BALISE, recursive=False)) == 0
+            has_noSuccessor = len(v.find_all(ValidationHTMLConstant.VALIDATION_ITEM_BALISE, recursive=False)) == 0
+            
             if not v.attrs.__contains__("type"):
                 # TODO find the error element
-                raise TypeError
+                raise TypeError("Specify the type of the value")
             if not v.attrs.__contains__("id") and v.name == ValidationHTMLConstant.VALIDATION_ITEM_BALISE:
                 # TODO find the error element
-                raise NameError
+                raise NameError("Specify the id of the value")
             key = v.attrs["id"]
             # TODO validates arguments
             schema[key] = self.parse(v.attrs)
@@ -47,18 +46,18 @@ class HtmlSchemaBuilder (SchemaBuilder):
             is_struct = v.attrs['type'] in ["list", "dict"]
             if has_noSuccessor:
                 if is_struct:
-                    raise TypeError
+                    raise TypeError("Specify the type of the children of the structure")
 
                 if schema[key].__contains__("schema"):
                     default_schema_registry = schema[key]["schema"]
-                    if type(default_schema_registry) == str and default_schema_registry in HtmlSchemaBuilder.HashSchemaRegistry.keys():
-                        schema[key]["schema"] = HtmlSchemaBuilder.HashSchemaRegistry[default_schema_registry]
+                    if type(default_schema_registry) == str and default_schema_registry in MLSchemaBuilder.HashSchemaRegistry.keys():
+                        schema[key]["schema"] = MLSchemaBuilder.HashSchemaRegistry[default_schema_registry]
                 continue
 
             if not is_struct:
-                print(v.attrs["type"])
+                type_ = v.attrs["type"]
                 # TODO: find the one element that was supposed to be a dict or a list and that has children
-                raise TypeError
+                raise TypeError(f"{key} cannot have defined children because it is not a struct: Type: {type_}")
             
             successor_schema = self.find(v)
             next_key = "schema"  # NOTE might add valuerules

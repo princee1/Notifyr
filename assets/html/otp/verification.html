@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your OTP Code</title>
+    <validation>
+
+        <validation-item id="username" type="string" minlength="10" maxlength="50"></validation-item>
+        <validation-item id="otp"  type="string" minlength="10" maxlength="50"></validation-item>
+        <validation-item id="service" type="string" empty="False" maxlength="50"></validation-item>
+        <validation-item id="expiry" type="integer" min="5" max="120"></validation-item>
+
+    </validation>
+    <style type="text/css"></style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Your One-Time Password</h1>
+        </div>
+        <div class="content">
+            <p>Hello, {{username}}</p>
+            <p>Here is your One-Time Password (OTP) to complete the verification process:</p>
+            <div class="otp-box">
+                <h2>{{otp}}</h2>
+            </div>
+            <p class="instructions">
+                This OTP is valid for {{expiry}} minutes. Please enter it on the login screen. Do not share this code with
+                anyone.
+            </p>
+            <div style="text-align:center;">
+            </div>
+        </div>
+        <div class="footer">
+            <p>This is an automated message from Notifyr for {{service}}. Please do not reply.</p>
+        </div>
+    </div>
+</body>
+
+</html>

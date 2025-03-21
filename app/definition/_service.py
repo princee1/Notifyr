@@ -72,6 +72,9 @@ class ServiceTemporaryNotAvailableError(BuildError):
 class MethodServiceNotAvailableError(BuildError):
     pass
 
+class MethodServiceNotExistsError(BuildError):
+    ...
+
 #################################            #####################################
 
 
@@ -119,7 +122,7 @@ class Service():
         ...
 
     @CheckStatusBeforeHand
-    def pingService(self):
+    async def pingService(self):
         ...
     
     def build(self):
@@ -197,7 +200,9 @@ class Service():
             self.prettyPrinter.wait(0.2, False)
             self.service_status = ServiceStatus.NOT_AVAILABLE
 
-        except :
+        except Exception as e:
+            print(e)
+            print(e.__class__)
             self.prettyPrinter.error(
                 f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
             exit(-1)    

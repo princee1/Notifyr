@@ -11,7 +11,7 @@ from app.services.email_service import EmailSenderService
 from fastapi import  Header, Request, status
 from app.utils.dependencies import Depends, get_auth_permission, get_request_id, get_response_id
 from app.decorators import permissions, handlers,pipes,guards
-from app.classes.celery import  CeleryTask, SchedulerModel
+from app.classes.celery import  CeleryTask, SchedulerModel, TaskType
 
 
 class EmailTemplateSchedulerModel(SchedulerModel):
@@ -49,10 +49,10 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission('html'))
     @UseHandler(handlers.TemplateHandler)
-    @UsePipe(pipes.TemplateParamsPipe('html'))
+    @UsePipe(pipes.TemplateParamsPipe('html','html'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
-    def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, x_request_id:str =Depends(get_request_id) ,authPermission=Depends(get_auth_permission)):
+    async def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, x_request_id:str =Depends(get_request_id) ,authPermission=Depends(get_auth_permission)):
         mail_content = scheduler.content
         meta = mail_content.meta.model_dump(mode='python')
         
@@ -60,7 +60,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
     
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-            if scheduler.task_type == 'now' or scheduler.task_type == 'once':
+            if scheduler.task_type == TaskType.NOW.value:
                 return self.bkgTaskService.add_task( scheduler.heaviness,x_request_id,self.emailService.sendTemplateEmail, data, meta, template.images )
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,data, meta, template.images)
@@ -68,13 +68,18 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10000/minute')
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
-    def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
+    async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
         customEmail_content = scheduler.content
         meta = customEmail_content.meta.model_dump()
         content = (customEmail_content.html_content, customEmail_content.text_content)
        
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-            if scheduler.task_type == 'now' or scheduler.task_type == 'once':
+            if scheduler.task_type == TaskType.NOW.value:
                 return self.bkgTaskService.add_task(scheduler.heaviness,x_request_id,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
             
         return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)
+
+    @UseRoles(options=MustHave(Role.ADMIN))
+    @BaseHTTPRessource.HTTPRoute("/domain/verify",)
+    async def verify_domain_hosting(self,):
+        ...

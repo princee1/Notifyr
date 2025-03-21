@@ -1,4 +1,4 @@
-from .middleware import MIDDLEWARE
+from app.definition._middleware import MIDDLEWARE
 from app.utils.prettyprint import printJSON, show, PrettyPrinter_
 from app.definition._ressource import RESSOURCES
 from app.utils.question import ListInputHandler, ask_question, SimpleInputHandler, NumberInputHandler, ConfirmInputHandler, CheckboxInputHandler, ExpandInputHandler,exactly_one,one_or_more,one_or_more_invalid_message,instruction

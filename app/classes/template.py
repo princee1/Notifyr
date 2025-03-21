@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from app.definition._error import BaseError
-from app.utils.schema import HtmlSchemaBuilder
+from app.utils.schema import MLSchemaBuilder
 from app.utils.helper import strict_parseToBool, flatten_dict
 from app.utils.validation import CustomValidator
 # import fitz as pdf
@@ -18,6 +18,7 @@ from cerberus import schema_registry
 class XMLLikeParser(Enum):
     HTML = "html.parser"
     LXML = "lxml"
+    XML ="xml"
 
 
 # ============================================================================================================
@@ -49,6 +50,7 @@ class Asset():
         # BUG need to replace the path separator
         self.name.replace("\\", ROUTE_SEP)
         self.name.replace("/", ROUTE_SEP)
+        self.ignore=False
 
 
 class Template(Asset):
@@ -57,8 +59,7 @@ class Template(Asset):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
         self.keys: list[str] = []
-        self.translator = Translator(
-            ['translate.google.com', 'translate.google.com'])
+        self.translator = Translator(['translate.google.com', 'translate.google.com'])
         self.load()
 
     def inject(self, data:  dict) -> bool:
@@ -104,10 +105,9 @@ class Template(Asset):
     def routeName(self,): return self.name.replace(os.sep, ROUTE_SEP)
 
 
-class HTMLTemplate(Template):
 
-    ValidatorConstructorParam = [
-        "require_all", "ignore_none_values", "allow_unknown", "purge_unknown", "purge_readonly"]
+class MLTemplate(Template):
+
     DefaultValidatorConstructorParamValues = {
         "require_all": True,
         "ignore_none_values": False,
@@ -116,58 +116,50 @@ class HTMLTemplate(Template):
         "purge_unknown": False,
     }
 
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
-        self.images: list[tuple[str, str]] = []
-        self.image_needed: list[str] = []
+    def __init__(self, filename: str, content: str, dirName: str,extension:str,validation_selector:str) -> None:
         self.content_to_inject = None
+        self.extension = extension
+        self.validation_selector = validation_selector
         super().__init__(filename, content, dirName)
+        self.ignore = self.filename.endswith(f".registry.{self.extension}")
+
+    def _built_template(self,content):
+        ...
 
     def inject(self, data: dict):
         try:
-            if not super().inject(data):
-                # TODO Raise Error
-                pass
             content_html = str(self.content_to_inject)
-            flattened_data = flatten_dict()
+            flattened_data = flatten_dict(data)
             for key in flattened_data:
                 regex = re.compile(rf"{{{{{key}}}}}")
-                content_html = regex.sub(
-                    str(flattened_data[key]), content_html)
-            content_text = self.exportText(data)
-            return content_html, content_text
-        except KeyError as e:
-            pass
-        except:
-            pass
+                content_html = regex.sub( str(flattened_data[key]), content_html)
+
+            return self._built_template(content_html)
+            
+        except Exception as e:
+            print(e.__class__)
+            print(e.__cause__)
+            print(e.args)  
+            raise TemplateBuildError          
 
     def validate(self, document: dict):
         # TODO See: https://docs.python-cerberus.org/errors.html
-        if self.Validator == None:
+        if self.schema == None or self.schema == {}:
             return True,document
-        
+        Validator = CustomValidator(self.schema)
+        for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues.items():
+            Validator.__setattr__(property_, flag)
         try:
-            if not self.Validator.validate(document):
-                raise DocumentError
-            
-            return True, self.Validator.document
+            document = Validator.normalized(document)
+            if not Validator.validate(document):
+                return False, Validator.errors
+            return True, Validator.document
             # return self.Validator.normalized(document)
         except DocumentError as e:
-            # TODO raise a certain error
-            print(self.Validator.errors)
-            return False, self.Validator.errors
-
-    def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
-        style = self.bs4.find("head > style")
-        if style is None:
-            head = self.bs4.find("head")
-            new_style = PageElement()
-            head.append(new_style)
-            return
-        style.replace(style.contents + cssContent)
-
-    def loadImage(self, image_path, imageContent: str):
-        if image_path in self.image_needed:
-            self.images.append((image_path, imageContent))
+            raise TemplateBuildError("Document is not a mapping of corresponding schema")
+               
+    def set_content(self,formatter):
+        self.content_to_inject = self.bs4.prettify(formatter=formatter)
 
     def extractExtraSchemaRegistry(self):
 
@@ -176,63 +168,32 @@ class HTMLTemplate(Template):
         for registry in self.validation_balise.find_all(VALIDATION_REGISTRY_SELECTOR, recursive=False):
             registry: Tag = registry
             registry_key = registry.attrs["id"]
-            schema = HtmlSchemaBuilder(registry).schema
+            schema = MLSchemaBuilder(registry).schema
             _hash = hash(schema)
-            if _hash not in HtmlSchemaBuilder.CurrentHashRegistry.keys():
-                HtmlSchemaBuilder.CurrentHashRegistry[_hash] = registry_key
+            if _hash not in MLSchemaBuilder.CurrentHashRegistry.keys():
+                MLSchemaBuilder.CurrentHashRegistry[_hash] = registry_key
                 schema_registry.add(registry_key, schema)
             else:
-                HtmlSchemaBuilder.HashSchemaRegistry[registry_key] = HtmlSchemaBuilder.CurrentHashRegistry[_hash]
+                MLSchemaBuilder.HashSchemaRegistry[registry_key] = MLSchemaBuilder.CurrentHashRegistry[_hash]
 
     def extractValidation(self,):
         try:
             if self.validation_balise is None:
                 return
-            schema = HtmlSchemaBuilder(self.validation_balise).schema
-            self.Validator = CustomValidator(schema)
-            # for property_ in HTMLTemplate.ValidatorConstructorParam:
-            #     self.set_ValidatorDefaultBehavior(property_)
-            for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues.items():
-                self.Validator.__setattr__(property_, flag)
-            self.keys = schema.keys()
+            self.schema = MLSchemaBuilder(self.validation_balise).schema
+            self.keys = self.schema.keys()
             self.validation_balise.decompose()
-            self.content_to_inject = self.bs4.prettify(formatter="html5")
-            # TODO success
         except SchemaError as e:
             # TODO raise another error and print the name of the template so the route will not be available
             printJSON(e.args[0])
             pass
 
-    def set_ValidatorDefaultBehavior(self, validator_property):
-        try:
-            flag = strict_parseToBool(
-                self.validation_balise.attrs[validator_property])
-            if flag is None:
-                raise ValueError
-            self.Validator.__setattr__(validator_property, flag)
-        except KeyError:
-            self.Validator.__setattr__(
-                validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
-        except ValueError:
-            self.Validator.__setattr__(
-                validator_property, HTMLTemplate.DefaultValidatorConstructorParamValues[validator_property])
-
-    def exportText(self, content: str):
-        bs4 = BeautifulSoup(content, XMLLikeParser.LXML.value)
-        title = bs4.find("title", recursive=False)
-        title.decompose()
-        return bs4.get_text("\n", True)
-
-    def save(self):
-        pass
-
     def load(self):
-        self.bs4 = BeautifulSoup(self.content, XMLLikeParser.LXML.value)
-        self.validation_balise = self.bs4.select_one(VALIDATION_CSS_SELECTOR)
+        self.bs4 = BeautifulSoup(self.content,self.parser)
+        self.validation_balise = self.bs4.select_one(self.validation_selector)
         self.extractExtraSchemaRegistry()
         self.extractValidation()
-        self.extractImageKey()
-
+        
     def translate(self, targetLang: str, text: str):
         if targetLang == Template.LANG:
             return text
@@ -245,11 +206,34 @@ class HTMLTemplate(Template):
         if not is_valid:
             raise TemplateValidationError(data)
         
-        content_html, content_text = self.inject(data)
-        content_html = self.translate(target_lang, content_html)
-        content_text = self.translate(target_lang, content_text)
-        return True, (content_html, content_text)
 
+class HTMLTemplate(MLTemplate):
+
+    def __init__(self,filename:str,content:str,dirname:str):
+        self.parser = XMLLikeParser.LXML.value
+
+        super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
+        self.images: list[tuple[str, str]] = []
+        self.image_needed: list[str] = []
+    
+    def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
+        style = self.bs4.select_one("head > style")
+        if style is None:
+            head = self.bs4.select_one("head")
+            style = Tag(name="style", attrs={"type": "text/css"})
+            head.append(style)
+        
+        if style.string==None:
+            style.string=""
+        
+        style.string += cssContent
+
+    def exportText(self, content: str):
+        bs4 = BeautifulSoup(content, XMLLikeParser.HTML.value)
+        title = bs4.select_one("title")
+        title.decompose()
+        return bs4.get_text("\n", True)
+    
     def extractImageKey(self,):
         img_element: set[Tag] = self.bs4.find_all("img")
         for img in img_element:
@@ -259,10 +243,28 @@ class HTMLTemplate(Template):
                 continue
             self.image_needed.append(src)
 
+    def load(self):
+        super().load()
+        self.extractImageKey()
+    
+    def loadImage(self, image_path, imageContent: str):
+        if image_path in self.image_needed:
+            self.images.append((image_path, imageContent))
 
-class CustomHTMLTemplate(HTMLTemplate):
-    pass
+    def set_content(self,):
+        super().set_content("html5")
 
+    def build(self,data,target_lang):
+        super().build(data,target_lang)
+        content_html, content_text = self.inject(data)
+        content_html = self.translate(target_lang, content_html)
+        content_text = self.translate(target_lang, content_text)
+        return True, (content_html, content_text)
+    
+    def _built_template(self,content):
+        content_text = self.exportText(content)
+        return content, content_text
+    
 
 class PDFTemplate(Template):
     def __init__(self, filename: str, dirName: str) -> None:
@@ -274,15 +276,39 @@ class PDFTemplate(Template):
     def xml_to_pdf(self):
         ...
 
+class TWIMLTemplate(MLTemplate):
+    def _built_template(self,content):
+        return content
+    
+    def set_content(self):
+        response = self.bs4.select_one("Response")
+        self.content_to_inject = response.prettify(formatter="xml")
+
+    def build(self, data, target_lang):
+        super().build(data, target_lang)
+        body = self.inject(data)
+        body = self.translate(target_lang,body)
+        return True,body
+
+class SMSTemplate(TWIMLTemplate):
+    def __init__(self, filename: str, content: str, dirName: str) -> None:
+        self.parser =  XMLLikeParser.XML.value
+        super().__init__(filename, content, dirName,"xml","validation")
     
 
-class SMSTemplate(Template):
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName)
+    def load_media(self, media: list[str]):
+        response = self.bs4.select_one("Response")
+        if response is None:
+            print("error")
+            return
+        for m in media:
+            tag  = Tag(name="Media")
+            tag.string = m
+            response.append(tag)
+        
 
-
-class PhoneTemplate(Template):
+class PhoneTemplate(TWIMLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName)
+        super().__init__(filename, content, dirName,"xm","validation")
 ####################### ########################
 

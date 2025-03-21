@@ -1,0 +1,14 @@
+FROM postgres:15
+
+RUN apt-get update && apt-get install -y curl
+
+RUN apt-get -y install postgresql-15-cron
+
+
+RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample
+
+RUN echo "cron.database_name = 'notifyr'" >> /usr/share/postgresql/postgresql.conf.sample
+
+RUN echo "cron.use_background_workers = on" >> /usr/share/postgresql/postgresql.conf.sample
+
+RUN echo "max_worker_processes = 20" >> /usr/share/postgresql/postgresql.conf.sample

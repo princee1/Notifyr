@@ -109,8 +109,7 @@ class EmailSenderService(BaseEmailService):
         self.hostPort = SMTPConfig.setHostPort(
             self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
 
-        self.emailHost = EmailHostConstant._member_map_[
-            self.configService.SMTP_EMAIL_HOST]
+        self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
     
     def _load_valid_from_email(self):
         config_str:str = ...
@@ -134,8 +133,7 @@ class EmailSenderService(BaseEmailService):
                 connector = smtp.SMTP_SSL(self.hostAddr, self.hostPort)
             else:
                 connector = smtp.SMTP(self.hostAddr, self.hostPort)
-            connector.set_debuglevel(
-                self.configService.SMTP_EMAIL_LOG_LEVEL)
+            connector.set_debuglevel(self.configService.SMTP_EMAIL_LOG_LEVEL)
             return connector
         except (socket.gaierror, ConnectionRefusedError, TimeoutError) as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
@@ -208,7 +206,11 @@ class EmailSenderService(BaseEmailService):
         try:
             emailID, message = email.mail_message
             reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message)
-            return reply_
+
+            return {
+                "emailID":emailID,
+                "status":reply_
+            }
 
         except smtp.SMTPSenderRefused as e:
             self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT
@@ -225,6 +227,7 @@ class EmailSenderService(BaseEmailService):
             # TODO retry getting the access token
             ...
 
+    
 # @_service.ServiceClass
 class EmailReaderService(BaseEmailService):
     def __init__(self, configService: ConfigService, loggerService: LoggerService, trainingService: LLMModelService,) -> None:
@@ -259,4 +262,8 @@ class EmailReaderService(BaseEmailService):
 
 # @_service.ServiceClass
 class EmailAPIService(BaseEmailService):
+    ...
+
+
+class EmailDnsService(_service.Service):
     ...

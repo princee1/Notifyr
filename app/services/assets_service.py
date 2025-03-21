@@ -34,12 +34,12 @@ class Extension(Enum):
     JPEG = "jpg"
     PDF = "pdf"
     TXT = "txt"
-    SMS = "sms"
-    PHONE = "ph"
+    XML= "xml"
 
 
 class AssetType(Enum):
     IMAGES = "images"
+    PDF = "pdf"
     SMS = "sms"
     PHONE = "phone"
     HTML = Extension.HTML.value
@@ -92,9 +92,9 @@ class Reader():
             setTempFile.add(keyName)
             self.values[relpath] = self.asset(keyName, content, dir)
 
-        if issubclass_of(Template, self.asset):  # TODO the part when we can load
-            if self.func != None:
-                self.func(self.values[relpath])
+            if issubclass_of(Template, self.asset):
+                if self.func != None:
+                    self.func(self.values[relpath])
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """
@@ -118,8 +118,7 @@ class ThreadedReader(Reader):
         self.thread: Thread
 
     def read(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
-        self.thread = Thread(target=super().read, args=(
-            ext, flag, rootFlag, encoding))
+        self.thread = Thread(target=super().read, args=(ext, flag, rootFlag, encoding))
         self.thread.start()
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
@@ -157,39 +156,42 @@ class AssetService(_service.Service):
         self.images = Reader()(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
         self.css = Reader()(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
 
-        htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadHTMLData)(
-            Extension.HTML, FDFlag.READ)
-        pdfReader: ThreadedReader = ThreadedReader(
-            PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES)
-        smsReader: ThreadedReader = ThreadedReader(SMSTemplate)(
-            Extension.SMS, FDFlag.READ, AssetType.SMS.value)
-        phoneReader: ThreadedReader = ThreadedReader(PhoneTemplate)(
-            Extension.PHONE, FDFlag.READ, AssetType.PHONE.value)
+        htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.HTML.value)
+        pdfReader: ThreadedReader = ThreadedReader(PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)
+        smsReader: ThreadedReader = ThreadedReader(SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
+        phoneReader: ThreadedReader = ThreadedReader(PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
 
         self.html = htmlReader.join()
         self.pdf = pdfReader.join()
         self.sms = smsReader.join()
-        self.phone = phoneReader.join()
-        
+        self.phone = phoneReader.join() 
+
+        print(self.sms)
+            
         
     def loadHTMLData(self, html: HTMLTemplate):
-        cssInPath = self.fileService.listExtensionPath(
-            html.dirName, Extension.CSS)
+        cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
+        css_content=""
         for cssPath in cssInPath:
+            cssPath = self.asset_rel_path(cssPath,Extension.HTML.value)
+            cssPath = cssPath.replace(Extension.CSS.value+"\\",'')
+            cssPath = cssPath.replace(Extension.HTML.value+"\\"+Extension.HTML.value+"\\",Extension.HTML.value+"\\")
             try:
-                css_content = self.css[cssPath].content
-                html.loadCSS(css_content)
+                css_content += self.css[cssPath].content
+                
             except KeyError as e:
+                print('error')
                 pass
-
-        imagesInPath = self.fileService.listExtensionPath(
-            html.dirName, Extension.JPEG)
+        html.loadCSS(css_content)
+        imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG.value)
         for imagesPath in imagesInPath:
             try:
                 imageContent = self.images[imagesPath].content
                 html.loadImage(imagesPath,imageContent)
             except KeyError as e:
                 pass
+        
+        html.set_content()
 
     def exportRouteName(self,attributeName:RouteAssetType)-> list[str] | None:
         """

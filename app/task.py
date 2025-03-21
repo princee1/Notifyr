@@ -8,6 +8,7 @@ from app.services.config_service import ConfigService
 from app.services.email_service import EmailSenderService
 from app.container import Get, build_container
 from app.services.security_service import JWTAuthService
+from app.services.twilio_service import SMSService, VoiceService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 
@@ -109,5 +110,33 @@ def task_send_custom_mail(content, meta, images, attachment):
 @RegisterTask(TaskHeaviness.VERY_LIGHT)
 def task_blacklist_client(client_id:str):
     jwtAuthService = Get(JWTAuthService)
+
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_custom_sms(messages):
+    smsService:SMSService = Get(SMSService)
+    return smsService.send_custom_sms(messages)
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_template_sms(messages):
+    smsService:SMSService = Get(SMSService)
+    return smsService.send_template_sms(messages)
+
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_template_voice_call(result,content):
+    voiceService:VoiceService = Get(VoiceService)
+    return voiceService.send_template_voice_call(result,content)
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_twiml_voice_call(url,details):
+    voiceService:VoiceService = Get(VoiceService)
+    return voiceService.send_twiml_voice_call(url,details)
+    
+    
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_custom_voice_call(body,details):
+    voiceService:VoiceService = Get(VoiceService)
+    return voiceService.send_custom_voice_call(body,details)
 
 ##############################################           ##################################################

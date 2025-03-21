@@ -3,19 +3,25 @@ from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.template import TemplateBuildError, TemplateNotFoundError, TemplateValidationError
 from app.definition._error import BaseError
 from app.definition._utils_decorator import Handler,HandlerDefaultException,NextHandlerException
-from app.definition._service import ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
+from app.definition._service import MethodServiceNotExistsError, ServiceNotAvailableError,MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError,CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
+from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError,ContactDoubleOptInAlreadySetError,ContactOptInCodeNotMatchError
+from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from app.services.assets_service import AssetNotFoundError
+from twilio.base.exceptions import TwilioRestException
+
+from tortoise.exceptions import OperationalError,DBConnectionError,ValidationError,IntegrityError,DoesNotExist,MultipleObjectsReturned,TransactionManagementError,UnSupportedError,ConfigurationError,ParamsError,BaseORMException
+from requests.exceptions import SSLError,Timeout
 
 
 class ServiceAvailabilityHandler(Handler):
     
-    def handle(self, function:Callable, *args, **kwargs):
+    async def handle(self, function:Callable, *args, **kwargs):
         try:
-            return function(*args, **kwargs)
+            return await function(*args, **kwargs)
         
         except ServiceNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Service not available')
@@ -23,15 +29,19 @@ class ServiceAvailabilityHandler(Handler):
         except MethodServiceNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Method service not available')
 
+        except MethodServiceNotExistsError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Method service does not exists')
+
+
         except ServiceTemporaryNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Service temporary not available')
                   
         
 class TemplateHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-            return function(*args, **kwargs)
+            return await function(*args, **kwargs)
 
         except AssetNotFoundError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail='Asset not found')
@@ -51,9 +61,9 @@ class TemplateHandler(Handler):
         
 class WebSocketHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-           return function(*args, **kwargs)
+           return await function(*args, **kwargs)
         
         except WSPathNotFoundError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={
@@ -63,9 +73,9 @@ class WebSocketHandler(Handler):
 
 class CeleryTaskHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-           return function(*args,**kwargs)
+           return await function(*args,**kwargs)
         
         except CeleryTaskNotFoundError as e:
            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={})
@@ -90,10 +100,127 @@ class CeleryTaskHandler(Handler):
         
 class TwilioHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-            return function(*args, **kwargs)
-        
-        except BaseError as e:
-            raise AttributeError
+            return await function(*args, **kwargs)
     
+        except TwilioRestException as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Twilio REST API error',
+            })
+
+        except SSLError as e:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={
+                'message': 'SSL error',
+            })
+
+        except Timeout as e:
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail={
+                'message': 'Request timed out',
+            })
+    
+
+
+class ContactsHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+
+            return await function(*args, **kwargs)
+        
+        except ContactNotExistsError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={'message':'The user specified does not exists',})
+
+        except ContactAlreadyExistsError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Error could not create the user because info are already used','detail':e.message})
+        
+        except ContactDoubleOptInAlreadySetError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Error could not create the user because info are already used','detail':e.message})
+        
+        except ContactOptInCodeNotMatchError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'Error could not create the user because info are already used','detail':e.message})
+    
+class TortoiseHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except OperationalError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database execution error', 'detail': mess, 'args': e.args})
+
+        except ValidationError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Validation error', 'detail': mess, 'args': e.args})
+
+        except DBConnectionError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database connection error', 'detail': mess, 'args': e.args})
+
+        except IntegrityError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={'message': 'Integrity error', 'detail': mess, 'args': e.args})
+
+        except DoesNotExist as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={'message': 'Record not found', 'detail': mess, 'args': e.args})
+
+        except MultipleObjectsReturned as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Multiple objects returned', 'detail': mess, 'args': e.args})
+
+        except TransactionManagementError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Transaction management error', 'detail': mess, 'args': e.args})
+
+        except UnSupportedError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Unsupported operation', 'detail': mess, 'args': e.args})
+
+        except ConfigurationError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Configuration error', 'detail': mess, 'args': e.args})
+
+        except ParamsError as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Parameters error', 'detail': mess, 'args': e.args})
+
+        except BaseORMException as e:
+            mess = e.args[0]
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'ORM error', 'detail': mess, 'args': e.args})
+
+
+class SecurityClientHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        
+        except GroupAlreadyBlacklistedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': f'Group {e.group_id} is already blacklisted',
+                'group_id': e.group_id,
+                'group_name': e.group_name
+            })
+
+        except CouldNotCreateRefreshTokenError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'Could not create refresh token'
+            })
+
+        except CouldNotCreateAuthTokenError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'Could not create auth token'
+            })
+
+        except SecurityIdentityNotResolvedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Both group and client can\'t be None'
+            })
+
+        except GroupIdNotMatchError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Group ID does not match',
+                'client_group_id': e.client_group_id,
+                'group_id': e.group_id
+            })
