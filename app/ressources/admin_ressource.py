@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from typing import Annotated, Any, List, Optional
-from fastapi import Depends, Header, Query, Request, Response, HTTPException, status
+from fastapi import Depends, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard, RefreshTokenGuard
-from app.decorators.my_depends import get_group,GetClient as get_client
-from app.models.security_model import ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, raw_revoke_challenge
+from app.decorators.my_depends import get_group,GetClient as get_client, verify_admin_token
+from app.interface.issue_auth import IssueAuthInterface
+from app.models.security_model import ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.celery_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
@@ -14,10 +15,10 @@ from app.utils.dependencies import get_auth_permission, get_request_id
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
-from app.classes.auth_permission import AuthPermission, Role, RoutePermission, AssetsPermission, Scope, TokensModel
-from pydantic import BaseModel, RootModel, field_validator
+from app.classes.auth_permission import Role, RoutePermission, AssetsPermission, Scope, TokensModel
+from pydantic import BaseModel,  field_validator
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
-from app.decorators.pipes import AuthPermissionPipe, ForceClientPipe, ForceGroupPipe, RefreshTokenPipe
+from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe, 
 from app.utils.validation import ipv4_validator
 from slowapi.util import get_remote_address
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
@@ -44,15 +45,13 @@ class AuthPermissionModel(BaseModel):
             roles.append(Role.PUBLIC)
         return roles
 
-
 class GenerationModel(BaseModel):
     generation_id: str
 
 
 @UseHandler(TortoiseHandler)
-@UsePermission(AdminPermission)
 @UseRoles([Role.ADMIN])
-@UsePermission(JWTRouteHTTPPermission)
+@UsePermission(JWTRouteHTTPPermission,AdminPermission)
 @UseHandler(ServiceAvailabilityHandler)
 @HTTPRessource(CLIENT_PREFIX)
 class ClientRessource(BaseHTTPRessource):
@@ -113,26 +112,25 @@ class ClientRessource(BaseHTTPRessource):
     async def get_all_group(self, authPermission=Depends(get_auth_permission)):
         ...
 
-
+ 
 @UseHandler(TortoiseHandler)
 @UseRoles([Role.ADMIN])
+@UsePermission(JWTRouteHTTPPermission,AdminPermission)
 @UseHandler(ServiceAvailabilityHandler)
 @HTTPRessource(ADMIN_PREFIX, routers=[ClientRessource])
-class AdminRessource(BaseHTTPRessource):
+class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @InjectInMethod
-    def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService, adminService: AdminService):
-        super().__init__()
+    def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService):
+        BaseHTTPRessource.__init__(self)
+        IssueAuthInterface.__init__(self)
         self.configService = configService
         self.jwtAuthService = jwtAuthService
         self.securityService = securityService
-        self.adminService = adminService
         self.celeryService: CeleryService = Get(CeleryService)
 
     @UseLimiter(limit_value='20/week')
     @UseHandler(SecurityClientHandler)
-    @UsePermission(JWTRouteHTTPPermission)
-    @UsePermission(AdminPermission)
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}', methods=[HTTPMethod.POST])
     async def blacklist_tokens(self, group: Annotated[GroupClientORM, get_group], client: Annotated[ClientORM, Depends(get_client())], request: Request, authPermission=Depends(get_auth_permission)):
         if group is None and client is None:
@@ -147,7 +145,6 @@ class AdminRessource(BaseHTTPRessource):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully blacklisted", "blacklist": blacklist})
 
     @UseLimiter(limit_value='20/week')
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/{client_id}', methods=[HTTPMethod.DELETE])
     async def un_blacklist_tokens(self, group: Annotated[GroupClientORM, get_group], client: Annotated[ClientORM, Depends(get_client())], request: Request, authPermission=Depends(get_auth_permission)):
@@ -161,10 +158,8 @@ class AdminRessource(BaseHTTPRessource):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully un-blacklisted", "un_blacklist": blacklist})
 
     @UseLimiter(limit_value='1/day')
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UseHandler(SecurityClientHandler)
-    @PingService([JWTAuthService])
-    @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE])
+    @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, authPermission=Depends(get_auth_permission)):
         old_generation_id = self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY]
         self.jwtAuthService.set_generation_id(True)
@@ -173,8 +168,7 @@ class AdminRessource(BaseHTTPRessource):
         self.configService.config_json_app.save()
 
         client = await ClientORM.filter(client=authPermission['client_id']).first()
-        auth_token, refresh_token = self.adminService.issue_auth(
-            client, authPermission)
+        auth_token, refresh_token = self.issue_auth(client, authPermission)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
@@ -183,10 +177,8 @@ class AdminRessource(BaseHTTPRessource):
                                                                      "new_generation_id": new_generation_id})
 
     @UseLimiter(limit_value='1/day')
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UseHandler(SecurityClientHandler)
-    @PingService([JWTAuthService])
-    @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
     async def un_revoke_all_tokens(self, request: Request, generation: GenerationModel, authPermission=Depends(get_auth_permission)):
         old_generation_id = self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY]
         self.jwtAuthService.set_generation_id(True)
@@ -196,8 +188,7 @@ class AdminRessource(BaseHTTPRessource):
         self.configService.config_json_app.save()
 
         client = await ClientORM.filter(client=authPermission['client_id']).first()
-        auth_token, refresh_token = self.adminService.issue_auth(
-            client, authPermission)
+        auth_token, refresh_token = self.issue_auth(client, authPermission)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
@@ -207,25 +198,21 @@ class AdminRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10/day')
     @UsePipe(ForceClientPipe)
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UseGuard(AuthenticatedClientGuard)
-    @PingService([JWTAuthService])
     @BaseHTTPRessource.HTTPRoute('/revoke/{client_id}', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client())], authPermission=Depends(get_auth_permission)):
-        await raw_revoke_challenge(client)
+        await raw_revoke_challenges(client)
         client.authenticated = False
         await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client})
 
     @UseLimiter(limit_value='4/day')
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler)
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
-    @PingService([JWTAuthService])
     @BaseHTTPRessource.HTTPRoute('/issue-auth/{client_id}', methods=[HTTPMethod.GET])
     async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client())], authModel: AuthPermissionModel, request: Request, authPermission=Depends(get_auth_permission)):
-        await raw_revoke_challenge(client)  # NOTE reset counter
+        await raw_revoke_challenges(client)  # NOTE reset counter
         challenge = await ChallengeORM.filter(client=client).first()
         auth_token, refresh_token = await self.adminService.issue_auth(challenge, client, authModel)
         client.authenticated = True
@@ -233,26 +220,4 @@ class AdminRessource(BaseHTTPRessource):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
 
-    @UseLimiter(limit_value='1/day')  # VERIFY Once a month
-    @UseRoles(roles=[Role.REFRESH])
-    @UsePermission(JWTRouteHTTPPermission(True))
-    @UseHandler(SecurityClientHandler)
-    @UsePipe(ForceClientPipe, RefreshTokenPipe,AuthPermissionPipe)
-    @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard, RefreshTokenGuard)
-    @BaseHTTPRessource.HTTPRoute('/refresh-auth/{client_id}', methods=[HTTPMethod.GET, HTTPMethod.POST], deprecated=True)
-    async def refresh_auth_token(self, client: Annotated[ClientORM, Depends(get_client(True,True))], request: Request, authPermission=Depends(get_auth_permission)):
-        await raw_revoke_challenge(client)
-        auth_token, refresh_token = await self.issue_auth(client, authPermission)
-        client.authenticated = True
-        await client.save()
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
-            "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully refreshed"})
 
-    async def issue_auth(self, client, authPermission):
-        challenge = await ChallengeORM.filter(client=client).first()
-        auth_model = self._transform_to_auth_model(authPermission)
-        auth_token, refresh_token = self.adminService.issue_auth(challenge, client, auth_model)
-        return auth_token, refresh_token
-
-    def _transform_to_auth_model(self, permission: AuthPermission):
-        ...
