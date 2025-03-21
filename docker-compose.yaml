@@ -34,7 +34,7 @@ services:
   
   postgres:
     build:
-      context: ./Docker/
+      context: ./docker/
       dockerfile: Dockerfile.postgres
     image: postgres:15
     container_name: my-postgres
