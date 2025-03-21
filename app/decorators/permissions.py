@@ -1,13 +1,13 @@
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
 from app.models.contacts_model import ContactORM
-from app.models.security_model import ClientORM
+from app.models.security_model import ChallengeORM, ClientORM
 from app.services.assets_service import DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR, AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, ContactPermission, ContactPermissionScope, Role, RoutePermission,FuncMetaData
+from app.classes.auth_permission import AuthPermission, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
 from app.utils.dependencies import APIFilterInject
 from app.utils.helper import flatten_dict
 
@@ -130,6 +130,44 @@ class JWTContactPermission(Permission):
             raise HTTPException(status=403,detail="")
         
         return True
+    
+
+class JWTRefreshTokenPermission(Permission):
+
+    def __init__(self,accept_inactive=False):
+        super().__init__()
+        self.accept_inactive = accept_inactive
+        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
+    
+    async def permission(self,tokens:TokensModel,authPermission:AuthPermission):
+        permission:RefreshPermission = self.jwtAuthService.verify_refresh_permission(tokens.tokens)
+
+        client_id = permission['client_id']
+
+        if permission['status'] == 'inactive' and not self.accept_inactive:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission not active")
+
+        if client_id != authPermission['client_id']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
+
+        if permission['client_type'] != authPermission['client_type']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client type mismatch")
+
+        if permission['generation_id'] != authPermission['generation_id']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
+
+        if permission['group_id'] != authPermission['group_id']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
+
+        if permission['issued_for'] != authPermission['issued_for']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
+
+        challenge = await ChallengeORM.filter(client=client_id).first()
+        if challenge != permission['challenge']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Challenge not valid")
+        
+        return True
+
 
 
 class AdminPermission(Permission):

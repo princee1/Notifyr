@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import HTTPException,status
+from fastapi import HTTPException, Request,status
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.template import TemplateNotFoundError
@@ -17,6 +17,7 @@ from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.validation import phone_number_validator
+from app.utils.dependencies import get_client_ip
 
 class AuthPermissionPipe(Pipe):
 
@@ -177,9 +178,15 @@ class ForceGroupPipe(Pipe):
 
 class RefreshTokenPipe(Pipe):
 
-    async def pipe(self):
-        return super().pipe()
-
+    def __init__(self,):
+        super().__init__(True)
+        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
+    
+    async def pipe(self,tokens:TokensModel):
+        tokens = tokens.tokens
+        tokens = self.jwtAuthService.verify_refresh_permission(tokens)
+        return {'tokens':tokens}
+    
 class ContactStatusPipe(Pipe):
 
     def pipe(self,next_status:str):

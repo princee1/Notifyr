@@ -1,4 +1,5 @@
 from typing import Any, List
+from app.classes.auth_permission import AuthPermission, RefreshPermission
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
@@ -14,7 +15,7 @@ from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import flatten_dict,b64_encode
-from fastapi import HTTPException,status
+from fastapi import HTTPException, Request,status
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
@@ -132,21 +133,6 @@ class ContactActionCodeGuard(Guard):
 class TwilioLookUpPhoneGuard(Guard):
     def guard(self):
         return super().guard()
-
-
-class RefreshTokenGuard(Guard):
-
-    @InjectInMethod
-    def __init__(self,jwtAuthService:JWTAuthService):
-        super().__init__()
-        self.jwtAuthService = jwtAuthService
-
-    def guard(self,):
-
-        # TODO check status,must be active or inactive
-        # TODO check group id
-        # TODO check client id and issued_for
-        ...
 
 
 class AuthenticatedClientGuard(Guard):
