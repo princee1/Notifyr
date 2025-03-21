@@ -1,6 +1,8 @@
 DROP SCHEMA IF EXISTS contacts CASCADE;
+
 DROP SCHEMA IF EXISTS security CASCADE;
-DROP EXTENSION IF EXISTS public CASCADE;
+
+DELETE SCHEMA IF EXISTS public CASCADE;
 
 CREATE SCHEMA security;
 CREATE SCHEMA contacts;
@@ -27,5 +29,5 @@ $$
 SELECT public.gen_random_bytes(length);
 $$ LANGUAGE sql;
 
--- GRANT USAGE ON SCHEMA cron TO 'test';
--- GRANT USAGE ON SCHEMA cron TO 'postgres';
+GRANT USAGE ON SCHEMA cron TO 'test'; -- need to get in env
+GRANT USAGE ON SCHEMA cron TO 'postgres';
