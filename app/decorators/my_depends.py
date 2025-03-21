@@ -121,11 +121,11 @@ def GetClient(bypass:bool=False,accept_admin:bool=False):
         
         @ByPassAdminRole(bypass)
         @AcceptNone(0)
-        async def _get_client(client_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
-            if idtype == 'id':
+        async def _get_client(client_id:str=Query(''),cid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
+            if cid == 'id':
                 client = await ClientORM.filter(client_id=client_id).first()
             
-            elif idtype == 'name':
+            elif cid == 'name':
                 client = await ClientORM.filter(client_name = client_id).first()
             
             else:
@@ -141,16 +141,14 @@ def GetClient(bypass:bool=False,accept_admin:bool=False):
         
         return _get_client
 
-
-
 @ByPassAdminRole()
 @AcceptNone(0)
-async def get_group(group_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->GroupClientORM:
+async def get_group(group_id:str=Query(''),gid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->GroupClientORM:
     
-    if idtype == 'id':
+    if gid == 'id':
         group = await GroupClientORM.filter(group_id=group_id).first()
     
-    elif idtype == 'name':
+    elif gid == 'name':
         group = await GroupClientORM.filter(group_name = group_id).first()
     
     else:
