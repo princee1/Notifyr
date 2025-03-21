@@ -106,6 +106,7 @@ SMS_INCOMING_PREFIX = "sms-incoming"
 @UseRoles([Role.TWILIO])
 @PingService([SMSService])
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
+#@UsePermission(TwilioPermission)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(SMS_INCOMING_PREFIX )
 class IncomingSMSRessource(BaseHTTPRessource):
@@ -128,7 +129,6 @@ class IncomingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/automate-response/',methods=[HTTPMethod.POST])
     async def sms_automated(self,authPermission=Depends(get_auth_permission)):
         pass
-    
     
     @BaseHTTPRessource.HTTPRoute('/handler_fail/',methods=[HTTPMethod.POST])
     async def sms_primary_handler_fail(self,authPermission=Depends(get_auth_permission)):

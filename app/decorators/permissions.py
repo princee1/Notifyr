@@ -135,6 +135,14 @@ class AdminPermission(Permission):
 
     def permission(self,authPermission:AuthPermission):
         if not authPermission['client_type'] == 'Admin':
-            raise 
+            raise ...
 
         return True        
+
+class TwilioPermission(Permission):
+
+    def permission(self,authPermission:AuthPermission):
+        if not authPermission['client_type'] == 'Twilio':
+            raise ...
+
+        return True  

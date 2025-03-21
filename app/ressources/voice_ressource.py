@@ -5,7 +5,7 @@ from app.classes.celery import SchedulerModel, TaskType
 from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
-from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission
+from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe, TwilioFromPipe
 from app.models.otp_model import OTPModel
 from app.models.voice_model import BaseVoiceCallModel, CallStatusModel,OnGoingTwimlVoiceCallModel,OnGoingCustomVoiceCallModel
@@ -48,7 +48,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         self.celeryService: CeleryService = Get(CeleryService)
         super().__init__()
 
-    @UseRoles([Role.CHAT])
+    @UseRoles([Role.CHAT,Role.ADMIN])
     @BaseHTTPRessource.Get('/balance')
     def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
         return self.voiceService.fetch_balance()
@@ -118,6 +118,7 @@ CALL_INCOMING_PREFIX = "call-incoming"
 @UseRoles([Role.TWILIO])
 @PingService([VoiceService])
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
+#@UsePermission(TwilioPermission)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CALL_INCOMING_PREFIX)
 class IncomingCallRessources(BaseHTTPRessource):
@@ -143,7 +144,6 @@ class IncomingCallRessources(BaseHTTPRessource):
     async def voice_automate_response(self,authPermission=Depends(get_auth_permission)):
         pass
     
-
     @BaseHTTPRessource.HTTPRoute('/handler_fail/',methods=[HTTPMethod.POST])
     async def voice_primary_handler_fail(self,authPermission=Depends(get_auth_permission)):
         pass
