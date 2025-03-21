@@ -1,6 +1,6 @@
 
 from typing import Annotated
-from fastapi import Depends, Header, Request,status
+from fastapi import Depends, Header, Query, Request,status
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import MustHave, Role, TokensModel
 from app.container import Get, InjectInMethod
@@ -48,8 +48,8 @@ class ClientAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
     @UseRoles(roles=[Role.REFRESH])
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard, RefreshTokenGuard)
-    @BaseHTTPRessource.HTTPRoute('/refresh-auth/{client_id}', methods=[HTTPMethod.GET, HTTPMethod.POST], deprecated=True)
-    async def refresh_auth_token(self,client_id:str,tokens:TokensModel, client: Annotated[ClientORM, Depends(GetClient(True,False))], request: Request, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/refresh-auth/', methods=[HTTPMethod.GET, HTTPMethod.POST], deprecated=True)
+    async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(GetClient(True,False))], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
         await raw_revoke_auth_token(client)
         auth_token, _ = await self.issue_auth(client, authPermission)
         client.authenticated = True # NOTE just to make sure
@@ -61,8 +61,8 @@ class ClientAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseGuard(RefreshTokenGuard)
     @UseRoles(roles=[Role.ADMIN],options=[MustHave(Role.ADMIN)])
     @UsePermission(AdminPermission)
-    @BaseHTTPRessource.HTTPRoute('/refresh-admin-auth/{client_id}', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_token)], )
-    async def refresh_admin_token(self,client_id:str,tokens:TokensModel, client: Annotated[ClientORM, Depends(GetClient(False,True))], request: Request, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/refresh-admin-auth/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_token)], )
+    async def refresh_admin_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(GetClient(False,True))], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
         await raw_revoke_auth_token(client)
         auth_token, _ = await self.issue_auth(client, authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token,}, "message": "Tokens successfully refreshed"})
