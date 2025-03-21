@@ -91,7 +91,12 @@ class ClientModel(ClientModelBase):
 
 
 
-async def raw_revoke_challenge(client:ClientORM):
+async def raw_revoke_challenges(client:ClientORM):
     query = "SELECT security.raw_revoke_challenge($1:UUID);"
+    tortoise_client = Tortoise.get_connection('default')
+    return await tortoise_client.execute_query(query, [client.client_id])
+
+async def raw_revoke_auth_token(client:ClientORM):
+    query = "SELECT security.raw_revoke_auth_token($1:UUID);"
     tortoise_client = Tortoise.get_connection('default')
     return await tortoise_client.execute_query(query, [client.client_id])

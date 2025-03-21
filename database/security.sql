@@ -115,6 +115,23 @@ BEGIN
 
 END; $$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE FUNCTION raw_revoke_auth_token(client_id UUID) RETURNS VOID as $$
+BEGIN
+    SET search_path = security;
+    UPDATE 
+        Challenge c
+    SET 
+        challenge_auth = secure_random_string(64),
+        expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
+        created_at_auth = NOW(),
+    WHERE
+        c.client_id = client_id;
+
+END; $$ LANGUAGE plpgsql;
+
+
+
 CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
 BEGIN
     SET search_path = security;
