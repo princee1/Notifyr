@@ -30,6 +30,20 @@ def AcceptNone(pos,key=None ):
     return depends
 
 
+def ByPassAdminRole(bypass=False):
+
+    def depends(func:Callable):
+
+        @functools.wraps(func)
+        async def wrapper(*args,**kwargs):
+            authPermission:AuthPermission = kwargs['authPermission']
+            if Role.ADMIN in authPermission['roles'] and not bypass:
+                raise ...
+            
+            return await func(*args,**kwargs)
+        return wrapper
+    return depends
+
 
 verify_twilio_token:Callable = GetDependsAttr(TwilioService,'verify_twilio_token')
 
@@ -95,11 +109,46 @@ def key_client_id()->str:
 def key_group_id()->str:
     ...
 
-@AcceptNone(0)
-async def get_client(client_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
-    # TODO check if client is a user type and if it is admin says it does not exists
-    ...
+def GetClient(bypass:bool=False,accept_admin:bool=False):
+        
+        @ByPassAdminRole(bypass)
+        @AcceptNone(0)
+        async def _get_client(client_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
+            if idtype == 'id':
+                client = await ClientORM.filter(client_id=client_id).first()
+            
+            elif idtype == 'name':
+                client = await ClientORM.filter(client_name = client_id).first()
+            
+            else:
+                raise ...
+            
+            if not client.exists():
+                raise ...
+            
+            if client.client_type == 'Admin' and not accept_admin:
+                raise ...
+            
+            return client
+        
+        return _get_client
 
+@ByPassAdminRole()
 @AcceptNone(0)
 async def get_group(group_id:str,idtype:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->GroupClientORM:
-    ...
+    
+    if idtype == 'id':
+        group = await GroupClientORM.filter(group_id=group_id).first()
+    
+    elif idtype == 'name':
+        group = await GroupClientORM.filter(group_name = group_id).first()
+    
+    else:
+        raise ...
+    
+    if not group.exists():
+        return None
+    
+    return group
+
+
