@@ -1,7 +1,7 @@
 import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, Role
-from app.definition._middleware import MiddleWare, MiddlewarePriority,MIDDLEWARE
+from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.models.security_model import ChallengeORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import BackgroundTaskService
@@ -49,7 +49,7 @@ class SecurityMiddleWare(MiddleWare):
         self.securityService = Get(SecurityService)
         self.configService = Get(ConfigService)
 
-
+    @BypassOn()
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         current_time = time.time()
         timestamp =  self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY]
@@ -83,6 +83,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.adminService: AdminService = Get(AdminService)
         self.get_client = GetClient(True,True)
 
+    @ExcludeOn(['/auth/admin/*'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
@@ -126,3 +127,15 @@ class BackgroundTaskMiddleware(MiddleWare):
             self.backgroundTaskService._delete_tasks(request_id)
         return response   
         
+class UserAppMiddleware(MiddleWare):
+
+    def __init__(self, app, dispatch = None):
+        super().__init__(app, dispatch)
+        self.adminService = Get(AdminService)
+        self.jwtAuthService = Get(JWTAuthService)
+        self.configService = Get(ConfigService)
+        self.securityService = Get(SecurityService)
+
+    @ApplyOn(['/auth/admin/*'])
+    async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
+        return await super().dispatch(request, call_next)

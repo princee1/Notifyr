@@ -26,6 +26,9 @@ class MiddleWare(BaseHTTPMiddleware):
         MIDDLEWARE[cls.__name__] = cls
         #setattr(cls,'priority',None)
 
+    async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
+        return await call_next(request)
+
 def path_matcher(paths: list[str], url: str) -> bool:
     if not paths:
         return True
@@ -54,7 +57,7 @@ def ApplyOn(paths:list[str]=[],methods:list[METHODS]=[]):
         return wrapper
     return decorator
 
-def Exclude(paths:list[str],methods:list[METHODS]):
+def ExcludeOn(paths:list[str],methods:list[METHODS]):
     def decorator(func:Callable):
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
@@ -72,7 +75,7 @@ def Exclude(paths:list[str],methods:list[METHODS]):
         return wrapper
     return decorator
 
-def OptionsRules(options:list[Callable[[Request],bool]]=[]):
+def OptionsRulesOn(options:list[Callable[[Request],bool]]=[]):
     def decorator(func:Callable):
         
         @functools.wraps(func)
@@ -92,12 +95,14 @@ def OptionsRules(options:list[Callable[[Request],bool]]=[]):
     
     return decorator
 
-def Bypass():
+def BypassOn(bypass=True):
     def decorator(func:Callable):
 
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
-            return await call_next(request)
+            if bypass:
+                return await call_next(request)
+            return await func(self,request,call_next)
         return wrapper
     
     return decorator
