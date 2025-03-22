@@ -75,7 +75,11 @@ class ClientRessource(BaseHTTPRessource):
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Group not found")
 
         client = await ClientORM.create(client_name=name, client_scope=scope, group=group_id)
-        await ChallengeORM.create(client=client)
+        challenge = await ChallengeORM.create(client=client)
+        challenge.expired_at_auth = challenge.created_at_auth + self.configService.AUTH_EXPIRATION
+        challenge.expired_at_refresh = challenge.created_at_refresh + self.configService.REFRESH_EXPIRATION
+        await challenge.save()
+
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client})
 
     @UsePipe(ForceClientPipe)
@@ -111,7 +115,6 @@ class ClientRessource(BaseHTTPRessource):
     async def get_all_group(self, authPermission=Depends(get_auth_permission)):
         ...
 
- 
 @UseHandler(TortoiseHandler)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
@@ -218,5 +221,4 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
-
 

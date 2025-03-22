@@ -83,8 +83,8 @@ class AdminAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         BaseHTTPRessource.__init__(self,dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
         IssueAuthInterface.__init__(self,adminService)
 
-    async def _get_admin_client(self,client_id:str)->ClientORM:
-        client = await ClientORM.get(client=client_id)
+    async def _get_admin_client(self,)->ClientORM:
+        client = await ClientORM.get(client_type ='Admin')
         if client == None:
             raise ClientDoesNotExistError()
         
@@ -96,9 +96,9 @@ class AdminAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     def _create_auth_model(self,):
         ...       
 
-    @BaseHTTPRessource.HTTPRoute('/issue-auth/{client_id}', methods=[HTTPMethod.GET])
-    async def issue_admin_auth(self,client_id:str, request: Request,):
-        admin_client = self._get_admin_client(client_id)
+    @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
+    async def issue_admin_auth(self, request: Request,):
+        admin_client = self._get_admin_client()
         await raw_revoke_challenges(admin_client)
         authModel = self._create_auth_model()
         auth_token, refresh_token = await self.issue_auth(admin_client, authModel)
