@@ -103,9 +103,26 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             print(e)
         return None
 
-    def set_status(self, authPermission: AuthPermission | RefreshPermission):
-        ...
+    def set_status(self, permission: AuthPermission | RefreshPermission):
 
+        now = time.time()
+        expired_at = permission['expired_at']
+
+        diff = expired_at - now
+
+        if diff <0 :
+            permission['status'] = 'expired'
+            return 
+        
+        expiration_diff = self.configService.REFRESH_EXPIRATION if isinstance(permission,RefreshPermission) else self.configService.AUTH_EXPIRATION
+
+        if diff < expiration_diff *0.8:
+            permission['status'] = 'active'
+            return
+        
+        permission['status'] ='inactive'
+        return 
+                
     def encode_ws_token(self, run_id: str, operation_id: str, expiration: float):
         now = time.time()
         expired_at = now + expiration

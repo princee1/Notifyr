@@ -1,5 +1,5 @@
 from app.definition._service import Service, ServiceClass
-from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError
+from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,BlacklistedClientError
 from app.models.security_model import ClientORM, GroupClientORM, BlacklistORM
 from app.services.security_service import JWTAuthService
 
@@ -28,7 +28,7 @@ class AdminService(Service):
 
         if client!=None and group == None:
             if await self.is_blacklisted(client):
-                return None
+                raise BlacklistedClientError()
             else:
                 return await BlacklistORM.create(client=client)
         
@@ -41,12 +41,12 @@ class AdminService(Service):
     async def un_blacklist(self,client:ClientORM,group:GroupClientORM):
         if client!=None and group == None:
             if not await  self.is_blacklisted(client):
-                ...
+                raise BlacklistedClientError(True)
             else:
                 return await BlacklistORM.filter(client=client).delete()
         
         if not await BlacklistORM.exists(group=group):
-            ...
+            raise GroupAlreadyBlacklistedError(group.group_id,group.group_name,True)
 
         return await BlacklistORM.filter(group=group).delete()
 
