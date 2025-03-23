@@ -64,7 +64,7 @@ while True:
             apps_data = createApps()
             configService.config_json_app.load(app_params_to_json(apps_data))
             PrettyPrinter_.success(f"Apps successfully created",position='left')
-            prompt_client_registration(True)
+            #prompt_client_registration(True)
             break
 
         case RunMode.EDIT:
@@ -74,7 +74,7 @@ while True:
             apps_data = editApps(apps_data[ConfigAppConstant.APPS_KEY])
             configService.config_json_app.load(app_params_to_json(apps_data,metadata))
             PrettyPrinter_.success(f"Apps successfully edited")
-            prompt_client_registration()
+            #prompt_client_registration()
             break
 
         case RunMode.FILE:
@@ -84,8 +84,9 @@ while True:
             break
 
         case RunMode.REGISTER:
-            #PrettyPrinter_.error("{EDIT} mode disabled for now")
-            #exit(0) # BUG DISABLED FOR
+            PrettyPrinter_.error("{EDIT} mode disabled for now")
+            exit(0) # BUG DISABLED FOR
+            raise NotImplementedError
             if valid:
                 prompt_client_registration()
                 mode = RunMode.FILE
