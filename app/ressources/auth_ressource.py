@@ -6,7 +6,7 @@ from app.classes.auth_permission import MustHave, RefreshPermission, Role, Token
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
-from app.decorators.my_depends import GetClient, verify_admin_token
+from app.decorators.my_depends import GetClient, verify_admin_signature, verify_admin_token
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
@@ -14,25 +14,12 @@ from app.errors.security_error import ClientDoesNotExistError
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
-from app.services.config_service import ConfigService
-from app.services.security_service import SecurityService
 from app.utils.dependencies import get_auth_permission
 
 CLIENT_AUTH_PREFIX = 'client'   
 ADMIN_AUTH_PREFIX = 'admin'
 AUTH_PREFIX = 'auth'    
 
-
-async def verify_admin_signature(x_admin_signature:Annotated[str,Header()]):
-    adminService:AdminService = Get(AdminService)
-    securityService:SecurityService = Get(SecurityService)
-    configService:ConfigService = Get(ConfigService)
-
-    if x_admin_signature == None:
-        raise ...
-
-    if securityService.verify_admin_signature():
-        ...
 
 @UseHandler(TortoiseHandler)   
 @UsePipe(ForceClientPipe)

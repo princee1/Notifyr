@@ -5,8 +5,9 @@ from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetDependsAttr
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.security_model import ClientORM, GroupClientORM
+from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
-from app.services.security_service import JWTAuthService
+from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import TwilioService
 from app.utils.dependencies import get_auth_permission
 
@@ -116,6 +117,17 @@ async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
     if x_admin_token == None or x_admin_token != configService.ADMIN_KEY:
         raise HTTPException(
             status_code=403, detail="X-Admin-Token header invalid")
+
+async def verify_admin_signature(x_admin_signature:Annotated[str,Header()]):
+    adminService:AdminService = Get(AdminService)
+    securityService:SecurityService = Get(SecurityService)
+    configService:ConfigService = Get(ConfigService)
+
+    if x_admin_signature == None:
+        ...
+
+    if securityService.verify_admin_signature():
+        ...
 
 def GetClient(bypass:bool=False,accept_admin:bool=False):
         
