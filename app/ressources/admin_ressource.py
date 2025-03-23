@@ -33,9 +33,11 @@ class AuthPermissionModel(BaseModel):
     allowed_assets: Optional[dict[str, AssetsPermission]]
     roles: Optional[list[Role]] = [Role.PUBLIC]
     scope: Scope = Scope.SoloDolo
+    issued_for:str
 
     @field_validator('issued_for')
     def check_issued_for(cls, issued_for: str):
+        #TODO add organization check : subnets
         if not ipv4_validator(issued_for):
             raise ValueError('Invalid IP Address')
         return issued_for
@@ -85,7 +87,7 @@ class ClientRessource(BaseHTTPRessource):
 
     @UsePipe(ForceClientPipe)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
-    async def add_client_to_group(self, client: Annotated[ClientORM, Depends(get_client())], group: Annotated[GroupClientORM, Depends(Depends(get_group))]):
+    async def add_client_to_group(self, client: Annotated[ClientORM, Depends(get_client())], group: Annotated[GroupClientORM, Depends(get_group)]):
         client.group_id = group
         await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully added to group", "client": client})
@@ -108,7 +110,7 @@ class ClientRessource(BaseHTTPRessource):
 
     @UsePipe(ForceGroupPipe)
     @BaseHTTPRessource.Delete('/group/')
-    async def delete_group(self, group: Annotated[GroupClientORM, Depends(Depends(get_group))], authPermission=Depends(get_auth_permission)):
+    async def delete_group(self, group: Annotated[GroupClientORM, Depends(get_group)], authPermission=Depends(get_auth_permission)):
         await group.delete()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Group successfully deleted", "group": group})
 
@@ -126,7 +128,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @InjectInMethod
     def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService):
         BaseHTTPRessource.__init__(self)
-        IssueAuthInterface.__init__(self)
+        IssueAuthInterface.__init__(self,Get(AdminService))
         self.configService = configService
         self.jwtAuthService = jwtAuthService
         self.securityService = securityService

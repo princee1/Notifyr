@@ -79,7 +79,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             
         return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)
 
-    @UseRoles(options=MustHave(Role.ADMIN))
+    @UseRoles(options=[MustHave(Role.ADMIN)])
     @BaseHTTPRessource.HTTPRoute("/domain/verify",)
     async def verify_domain_hosting(self,):
         ...

@@ -39,10 +39,10 @@ class ClientORM(models.Model):
 
 class ChallengeORM(models.Model):
     client_id = fields.OneToOneField("models.ClientORM", pk=True, related_name="client", on_delete=fields.CASCADE)
-    challenge_auth = fields.TextField(unique=True)
+    challenge_auth = fields.TextField()
     created_at_auth = fields.DatetimeField(auto_now_add=True)
     expired_at_auth = fields.DatetimeField(null=True)
-    challenge_refresh = fields.TextField(unique=True)
+    challenge_refresh = fields.TextField()
     created_at_refresh = fields.DatetimeField(auto_now_add=True)
     expired_at_refresh = fields.DatetimeField(null=True)
 
