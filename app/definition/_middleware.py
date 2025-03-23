@@ -39,7 +39,7 @@ def exclude_path_matcher(excludes: list[str], url: str) -> bool:
         return True
     return not any(fnmatch(url, pattern) for pattern in excludes)
 
-def ApplyOn(paths:list[str]=[],methods:list[METHODS]=[]):
+def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
     def decorator(func:Callable):
 
         @functools.wraps(func)
@@ -57,7 +57,7 @@ def ApplyOn(paths:list[str]=[],methods:list[METHODS]=[]):
         return wrapper
     return decorator
 
-def ExcludeOn(paths:list[str],methods:list[METHODS]):
+def ExcludeOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
     def decorator(func:Callable):
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):

@@ -77,6 +77,7 @@ class MethodServiceNotExistsError(BuildError):
 
 #################################            #####################################
 
+WAIT_TIME = 0.1
 
 class Service():
 
@@ -167,7 +168,7 @@ class Service():
             self._destroyed = False
             self.prettyPrinter.success(
                 f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
-            self.prettyPrinter.wait(0.2, False)
+            self.prettyPrinter.wait(WAIT_TIME, False)
             self.service_status = ServiceStatus.AVAILABLE
 
         except BuildFailureError as e:
@@ -197,7 +198,7 @@ class Service():
         except BuildNotImplementedError as e:
             self.prettyPrinter.warning( # TODO change color
                 f'[{now}] Service Not Implemented Yet: {self.__class__.__name__} ', saveable=True)
-            self.prettyPrinter.wait(0.2, False)
+            self.prettyPrinter.wait(WAIT_TIME, False)
             self.service_status = ServiceStatus.NOT_AVAILABLE
 
         except Exception as e:

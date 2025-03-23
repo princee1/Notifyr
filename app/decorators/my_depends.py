@@ -3,6 +3,7 @@ from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, Header, Query, Request,status
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetDependsAttr
+from app.errors.security_error import ClientDoesNotExistError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.security_model import ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
@@ -12,12 +13,13 @@ from app.services.twilio_service import TwilioService
 from app.utils.dependencies import get_auth_permission
 
 
-def AcceptNone(pos,key=None ):
+def AcceptNone(pos=0,key=None ):
 
     def depends(func:Callable):
 
-        @functools.warps(func)
+        @functools.wraps(func)
         async def wrapper(*args,**kwargs):
+            # BUG negative error
             if key !=None:
                 param = kwargs[key]
             else:
@@ -40,7 +42,7 @@ def ByPassAdminRole(bypass=False):
         async def wrapper(*args,**kwargs):
             authPermission:AuthPermission = kwargs['authPermission']
             if Role.ADMIN in authPermission['roles'] and not bypass:
-                raise ...
+                raise # TODO 
             
             return await func(*args,**kwargs)
         return wrapper
@@ -141,7 +143,7 @@ def GetClient(bypass:bool=False,accept_admin:bool=False):
                 client = await ClientORM.filter(client_name = client_id).first()
             
             else:
-                raise ...
+                raise 
             
             if not client.exists():
                 raise ...
@@ -154,7 +156,7 @@ def GetClient(bypass:bool=False,accept_admin:bool=False):
         return _get_client
 
 @ByPassAdminRole()
-@AcceptNone(0)
+@AcceptNone()
 async def get_group(group_id:str=Query(''),gid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->GroupClientORM:
     
     if gid == 'id':
