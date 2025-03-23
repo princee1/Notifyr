@@ -28,5 +28,6 @@ $$
 SELECT public.gen_random_bytes(length);
 $$ LANGUAGE sql;
 
-GRANT USAGE ON SCHEMA cron TO 'test'; -- need to get in env
-GRANT USAGE ON SCHEMA cron TO 'postgres';
+GRANT USAGE ON SCHEMA cron TO test; -- need to get in env
+
+-- GRANT USAGE ON SCHEMA cron TO postgres;

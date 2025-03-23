@@ -22,6 +22,7 @@ from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe
 from app.utils.validation import ipv4_validator
 from slowapi.util import get_remote_address
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
+from datetime import datetime, timedelta
 
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
@@ -76,8 +77,8 @@ class ClientRessource(BaseHTTPRessource):
 
         client = await ClientORM.create(client_name=name, client_scope=scope, group=group_id)
         challenge = await ChallengeORM.create(client=client)
-        challenge.expired_at_auth = challenge.created_at_auth + self.configService.AUTH_EXPIRATION
-        challenge.expired_at_refresh = challenge.created_at_refresh + self.configService.REFRESH_EXPIRATION
+        challenge.expired_at_auth = challenge.created_at_auth + timedelta(seconds=self.configService.AUTH_EXPIRATION)
+        challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.configService.REFRESH_EXPIRATION)
         await challenge.save()
 
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client})

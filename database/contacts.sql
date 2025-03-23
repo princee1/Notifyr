@@ -239,7 +239,7 @@ SELECT cron.schedule (
         'delete_expired_subscontent', '0 0 * * *', 'CALL delete_expired_subscontent();'
     );
 
-CREATE OR REPLACE FUNCTION compute_limit(l INT) RETURNS TRIGGER AS $compute_limit$
+CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE
     contact_count INT;
 
@@ -251,14 +251,14 @@ INTO
 FROM 
     Contact;
 
-IF contact_count >= l THEN
+IF contact_count >= 2 THEN
     RAISE NOTICE 'Contact Limit Reached';
     RETURN OLD;
 ELSE
     RETURN NEW;
 END IF;
 END;
-$$ LANGUAGE plpgsql;
+$compute_limit$ LANGUAGE plpgsql;
 
 
 CREATE TRIGGER limit_contact
