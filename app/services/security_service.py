@@ -91,8 +91,6 @@ class JWTAuthService(Service, EncryptDecryptInterface):
 
     def encode_refresh_token(self, issued_for: str, challenge: str, group_id:str):
         try:
-            if data == None:
-                data = {}
             salt = str(self.salt)
             created_time = time.time()
             permission = RefreshPermission(generation_id=self.generation_id, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,

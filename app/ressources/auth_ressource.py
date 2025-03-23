@@ -77,6 +77,7 @@ class AdminAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         self.configService = configService
 
     async def _get_admin_client(self,)->ClientORM:
+        
         client = await ClientORM.filter(client_type =ClientType.Admin).first()
         if client == None:
             raise ClientDoesNotExistError()
@@ -96,7 +97,7 @@ class AdminAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         #TODO Protect requests
         admin_client = await self._get_admin_client()
         await raw_revoke_challenges(admin_client)
-        authPermission = self._create_admin_auth_permission()
+        authPermission = self._create_admin_auth_permission(admin_client)
         auth_token, refresh_token = await self.issue_auth(admin_client,authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})

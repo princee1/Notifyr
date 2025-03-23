@@ -148,47 +148,79 @@ class TortoiseHandler(Handler):
             return await function(*args, **kwargs)
         except OperationalError as e:
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database execution error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database execution error', 'detail': mess, })
 
         except ValidationError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Validation error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Validation error', 'detail': mess, })
 
         except DBConnectionError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database connection error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database connection error', 'detail': mess, })
 
         except IntegrityError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={'message': 'Integrity error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={'message': 'Integrity error', 'detail': mess, })
 
         except DoesNotExist as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={'message': 'Record not found', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={'message': 'Record not found', 'detail': mess, })
 
         except MultipleObjectsReturned as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Multiple objects returned', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Multiple objects returned', 'detail': mess, })
 
         except TransactionManagementError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Transaction management error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Transaction management error', 'detail': mess, })
 
         except UnSupportedError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Unsupported operation', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Unsupported operation', 'detail': mess, })
 
         except ConfigurationError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Configuration error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Configuration error', 'detail': mess, })
 
         except ParamsError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Parameters error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Parameters error', 'detail': mess, })
 
         except BaseORMException as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'ORM error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'ORM error', 'detail': mess, })
 
 
 class SecurityClientHandler(Handler):
