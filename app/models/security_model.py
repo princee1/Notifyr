@@ -38,7 +38,7 @@ class ClientORM(models.Model):
         table = "client"
 
 class ChallengeORM(models.Model):
-    client_id = fields.OneToOneField("models.ClientORM", pk=True, related_name="client", on_delete=fields.CASCADE)
+    client_id = fields.OneToOneField("models.ClientORM", pk=True, related_name="challenge", on_delete=fields.CASCADE)
     challenge_auth = fields.TextField()
     created_at_auth = fields.DatetimeField(auto_now_add=True)
     expired_at_auth = fields.DatetimeField(null=True)
@@ -52,7 +52,7 @@ class ChallengeORM(models.Model):
 
 class BlacklistORM(models.Model):
     blacklist_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    client_id = fields.ForeignKeyField("models.ClientORM", related_name="client", on_delete=fields.CASCADE, null=True)
+    client_id = fields.ForeignKeyField("models.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
     group_id = fields.ForeignKeyField("models.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     expired_at = fields.DatetimeField(null=True)
