@@ -1,8 +1,9 @@
 
+import time
 from typing import Annotated
 from fastapi import Depends, Header, Query, Request,status
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import MustHave, RefreshPermission, Role, TokensModel
+from app.classes.auth_permission import AuthPermission, ClientType, MustHave, RefreshPermission, Role, TokensModel
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
@@ -14,7 +15,9 @@ from app.errors.security_error import ClientDoesNotExistError
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
+from app.services.config_service import ConfigService
 from app.utils.dependencies import get_auth_permission
+from app.utils.constant import ConfigAppConstant
 
 CLIENT_AUTH_PREFIX = 'client'   
 ADMIN_AUTH_PREFIX = 'admin'
@@ -64,35 +67,45 @@ class ClientAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 @UseHandler(TortoiseHandler,ServiceAvailabilityHandler)
 @HTTPRessource(ADMIN_AUTH_PREFIX)
 class AdminAuthRessource(BaseHTTPRessource,IssueAuthInterface):
+    admin_roles = [Role.ADMIN.value,Role.CUSTOM.value,Role.CONTACTS.value,Role.SUBSCRIPTION.value]
 
     @InjectInMethod
-    def __init__(self,adminService:AdminService):
-        BaseHTTPRessource.__init__(self,dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
+    def __init__(self,adminService:AdminService,configService:ConfigService):
+        BaseHTTPRessource.__init__(self)
+        #BaseHTTPRessource.__init__(self,dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
         IssueAuthInterface.__init__(self,adminService)
+        self.configService = configService
 
     async def _get_admin_client(self,)->ClientORM:
-        client = await ClientORM.get(client_type ='Admin')
+        client = await ClientORM.filter(client_type =ClientType.Admin).first()
         if client == None:
             raise ClientDoesNotExistError()
         
-        if client.client_type != 'Admin':
+        if client.client_type != ClientType.Admin:
             raise ClientDoesNotExistError()
         
         return client
 
-    def _create_auth_model(self,):
-        ...       
-
+    def _create_admin_auth_permission(self,admin:ClientORM)->AuthPermission:
+        return AuthPermission(roles=self.admin_roles,scope=admin.client_scope,allowed_assets=[],allowed_routes={}) #TODO add more routes
+    
+    @UseLimiter(limit_value='1/day')
+    @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
     async def issue_admin_auth(self, request: Request,):
-        admin_client = self._get_admin_client()
+        #TODO Protect requests
+        admin_client = await self._get_admin_client()
         await raw_revoke_challenges(admin_client)
-        authModel = self._create_auth_model()
-        auth_token, refresh_token = await self.issue_auth(admin_client, authModel)
+        authPermission = self._create_admin_auth_permission()
+        auth_token, refresh_token = await self.issue_auth(admin_client,authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
   
 
 @HTTPRessource(AUTH_PREFIX,routers=[AdminAuthRessource,ClientAuthRessource])
 class AuthRessource(BaseHTTPRessource):
-    ...
+    
+    @UsePermission(JWTRouteHTTPPermission,AdminPermission,same_client_authPermission)
+    @BaseHTTPRessource.Get('/{client_id}')
+    def route(self,authPermission=Depends(get_auth_permission)):
+        return 

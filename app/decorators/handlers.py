@@ -10,7 +10,7 @@ from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendS
 
 from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError,ContactDoubleOptInAlreadySetError,ContactOptInCodeNotMatchError
 from app.errors.request_error import IdentifierTypeError
-from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
+from app.errors.security_error import ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -224,6 +224,11 @@ class SecurityClientHandler(Handler):
                 'message': 'Group ID does not match',
                 'client_group_id': e.client_group_id,
                 'group_id': e.group_id
+            })
+
+        except ClientDoesNotExistError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
+                'message': 'Client does not exist'
             })
 
 class RequestErrorHandler(Handler):
