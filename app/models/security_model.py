@@ -29,7 +29,7 @@ class ClientORM(models.Model):
     authenticated = fields.BooleanField(default=False)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User)
     issued_for = fields.CharField(max_length=50, null=False,unique=True)
-    group_id = fields.ForeignKeyField("models.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
+    group = fields.ForeignKeyField("models.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
@@ -38,7 +38,7 @@ class ClientORM(models.Model):
         table = "client"
 
 class ChallengeORM(models.Model):
-    client_id = fields.OneToOneField("models.ClientORM", pk=True, related_name="challenge", on_delete=fields.CASCADE)
+    client = fields.OneToOneField("models.ClientORM", pk=True, related_name="challenge", on_delete=fields.CASCADE)
     challenge_auth = fields.TextField()
     created_at_auth = fields.DatetimeField(auto_now_add=True)
     expired_at_auth = fields.DatetimeField(null=True)
@@ -52,8 +52,8 @@ class ChallengeORM(models.Model):
 
 class BlacklistORM(models.Model):
     blacklist_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    client_id = fields.ForeignKeyField("models.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
-    group_id = fields.ForeignKeyField("models.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
+    client = fields.ForeignKeyField("models.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
+    group = fields.ForeignKeyField("models.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     expired_at = fields.DatetimeField(null=True)
 
@@ -92,11 +92,11 @@ class ClientModel(ClientModelBase):
 
 
 async def raw_revoke_challenges(client:ClientORM):
-    query = "SELECT security.raw_revoke_challenge($1:UUID);"
+    query = "SELECT security.raw_revoke_challenges($1::UUID);"
     tortoise_client = Tortoise.get_connection('default')
     return await tortoise_client.execute_query(query, [client.client_id])
 
 async def raw_revoke_auth_token(client:ClientORM):
-    query = "SELECT security.raw_revoke_auth_token($1:UUID);"
+    query = "SELECT security.raw_revoke_auth_token($1::UUID);"
     tortoise_client = Tortoise.get_connection('default')
     return await tortoise_client.execute_query(query, [client.client_id])
