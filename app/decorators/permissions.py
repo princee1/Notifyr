@@ -2,6 +2,7 @@ from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
 from app.models.contacts_model import ContactORM
 from app.models.security_model import ChallengeORM, ClientORM
+from app.services.admin_service import AdminService
 from app.services.assets_service import DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR, AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
@@ -172,7 +173,19 @@ class JWTRefreshTokenPermission(Permission):
 
 class AdminPermission(Permission):
 
-    def permission(self,authPermission:AuthPermission):
+    def __init__(self,ensure_admin=False):
+        super().__init__()
+        self.ensure_admin = ensure_admin
+        self.adminService = Get(AdminService)
+
+    async def permission(self,authPermission:AuthPermission):
+
+        client_id = authPermission['client_id']
+        if self.ensure_admin:
+            client = await ClientORM.get(client=client_id)
+            if client.client_type != 'Admin':
+                raise ...
+
         if not authPermission['client_type'] == 'Admin':
             raise ...
 
