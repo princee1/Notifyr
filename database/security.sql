@@ -96,7 +96,7 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION raw_revoke_challenges(client_id UUID) RETURNS VOID as $$
+CREATE OR REPLACE FUNCTION raw_revoke_challenges(cid UUID) RETURNS VOID as $$
 BEGIN
     SET search_path = security;
     UPDATE 
@@ -110,12 +110,12 @@ BEGIN
         created_at_refresh = NOW()
     
     WHERE
-        c.client_id = client_id;
+        c.client_id = cid;
 
 END; $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION raw_revoke_auth_token(client_id UUID) RETURNS VOID as $$
+CREATE OR REPLACE FUNCTION raw_revoke_auth_token(cid UUID) RETURNS VOID as $$
 BEGIN
     SET search_path = security;
     UPDATE 
@@ -125,7 +125,7 @@ BEGIN
         expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
         created_at_auth = NOW()
     WHERE
-        c.client_id = client_id;
+        c.client_id = cid;
 
 END; $$ LANGUAGE plpgsql;
 
@@ -139,7 +139,7 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'update_challenge_midnight', '0 0 * * *', 'CALL update_challenge();'
+        'update_challenge_midnight', '0 0 * * *', 'CALL security.update_challenge();'
     );
 
 CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
@@ -150,7 +150,7 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'delete_blacklist_midnight', '0 0 * * *', 'CALL delete_blacklist();'
+        'delete_blacklist_midnight', '0 0 * * *', 'CALL security.delete_blacklist();'
     );
 
 CREATE OR REPLACE FUNCTION compute_limit_group() RETURNS TRIGGER AS $compute_limit_group$
