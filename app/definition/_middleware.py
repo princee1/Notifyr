@@ -39,14 +39,18 @@ def exclude_path_matcher(excludes: list[str], url: str) -> bool:
         return True
     return not any(fnmatch(url, pattern) for pattern in excludes)
 
+def get_url(request:Request):
+    base_url = str(request.base_url)
+    url = str(request.url).replace(base_url,"")
+    return "/" + url
+
 def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
     def decorator(func:Callable):
 
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
-            base_url = str(request.base_url)
-            url = str(request.url).replace(base_url,"")
-
+            url = get_url
+            print(url)
             if not path_matcher(paths,url):
                 return await call_next(request)
 
@@ -61,8 +65,8 @@ def ExcludeOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
     def decorator(func:Callable):
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
-            base_url = str(request.base_url)
-            url = str(request.url).replace(base_url,"")
+            url = get_url(request)
+            print(url)
 
             if not exclude_path_matcher(paths,url):
                 return await call_next(request)
@@ -70,7 +74,7 @@ def ExcludeOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
             if methods and request.method not in methods:
                 return await call_next(request)
             
-            return await func(self,request,call_next)
+            return await func(self,request,call_next)       
         
         return wrapper
     return decorator
