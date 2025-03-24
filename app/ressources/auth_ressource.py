@@ -67,7 +67,7 @@ class ClientAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 @UseHandler(TortoiseHandler,ServiceAvailabilityHandler)
 @HTTPRessource(ADMIN_AUTH_PREFIX)
 class AdminAuthRessource(BaseHTTPRessource,IssueAuthInterface):
-    admin_roles = [Role.ADMIN.value,Role.CUSTOM.value,Role.CONTACTS.value,Role.SUBSCRIPTION.value]
+    admin_roles = [Role.ADMIN.value,Role.CUSTOM.value,Role.CONTACTS.value,Role.SUBSCRIPTION.value,Role.REFRESH.value]
 
     @InjectInMethod
     def __init__(self,adminService:AdminService,configService:ConfigService):
