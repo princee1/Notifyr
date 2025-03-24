@@ -183,10 +183,10 @@ class AdminPermission(Permission):
         if self.ensure_admin:
             client = await ClientORM.get(client=client_id)
             if client.client_type != 'Admin':
-                raise ...
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client is not an admin")
 
         if not authPermission['client_type'] == 'Admin':
-            raise ...
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client type is not Admin")
 
         return True        
 
@@ -200,8 +200,8 @@ class TwilioPermission(Permission):
     
 
 @APIFilterInject
-def same_client_authPermission(authPermission:AuthPermission,client:ClientORM):
+def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
     if not authPermission['client_id'] == client.client_id:
-        raise ...
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
     
     return True

@@ -162,13 +162,20 @@ class AuthClientPipe(Pipe):
 
 class ForceClientPipe(Pipe):
 
+    def __init__(self):
+        super().__init__(True)
+
     def pipe(self, client: ClientORM):
-        if client is None:
+
+        if client == None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Client information is missing or invalid.")
 
         return {'client': client}
     
 class ForceGroupPipe(Pipe):
+
+    def __init__(self):
+        super().__init__(True)
 
     def pipe(self, group: GroupClientORM):
         if group is None:
@@ -188,7 +195,10 @@ class RefreshTokenPipe(Pipe):
         return {'tokens':tokens}
     
 class ContactStatusPipe(Pipe):
-
+ 
+    def __init__(self):
+        super().__init__(True)
+        
     def pipe(self,next_status:str):
         allowed_status = Status._member_names_.copy() 
         allowed_status.remove(Status.Active.value)
