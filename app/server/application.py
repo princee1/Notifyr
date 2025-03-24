@@ -102,11 +102,16 @@ class Application(EventInterface):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
         @self.app.exception_handler(TypeError)
-        async def type_error(request, e):
+        async def type_error(request, e:TypeError):
+            print(e)
+            print(e.__cause__)
             return JSONResponse({'message': 'Type Error'}, status_code=500)
 
         @self.app.exception_handler(AttributeError)
         async def attribute_error(request, e):
+            print(e)
+            print(e.__cause__)
+
             return JSONResponse({'message': 'Attribute Error'}, status_code=500)
 
         @self.app.exception_handler(OSError)
@@ -129,6 +134,9 @@ class Application(EventInterface):
 
         @self.app.exception_handler(NameError)
         async def name_error(request, e):
+            print(e)
+            print(e.__cause__)
+
             return JSONResponse({'message': 'Name Error'}, status_code=500)
 
         @self.app.exception_handler(TimeoutError)
@@ -186,7 +194,7 @@ class Application(EventInterface):
                     res.router, responses=res.default_response)
                 self.pretty_printer.success(
                     f"[{now}] Ressource {ressource_type.__name__} added successfully", saveable=True)
-                self.pretty_printer.wait(0.25, press_to_continue=False)
+                self.pretty_printer.wait(0.1, press_to_continue=False)
             except Exception as e:
                 print(e.__class__)
                 print(e)
