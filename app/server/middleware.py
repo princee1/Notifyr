@@ -1,8 +1,8 @@
 import asyncio
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AuthPermission, ClientType, Role
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
-from app.models.security_model import ChallengeORM
+from app.models.security_model import ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import BackgroundTaskService
 from app.services.config_service import ConfigService
@@ -26,10 +26,15 @@ class ProcessTimeMiddleWare(MiddleWare):
 
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
-        response: Response = await call_next(request)
-        process_time = time.time() - start_time
-        response.headers["X-Process-Time"] = str(process_time) + ' (s)'
-        return response
+        try:
+            response: Response = await call_next(request)
+            process_time = time.time() - start_time
+            response.headers["X-Process-Time"] = str(process_time) + ' (s)'
+            return response
+        except HTTPException as e:
+            process_time = time.time() - start_time
+            e.headers["X-Process-Error"] = str(process_time) + ' (s)'
+            raise e
 
 class LoadBalancerMiddleWare(MiddleWare):
     def __init__(self, app, dispatch = None):
@@ -91,17 +96,21 @@ class JWTAuthMiddleware(MiddleWare):
             authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
           
             client_id = authPermission['client_id']
-            client = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
+            client:ClientORM = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
+
+            if not client.authenticated:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
 
             challenge = authPermission['challenge']
             db_challenge= await ChallengeORM.filter(client=client).first()
 
-            if await self.adminService.is_blacklisted(client):
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
-
             if challenge != db_challenge.challenge_auth:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
-            
+
+            if client.client_type != ClientType.Admin: 
+                if await self.adminService.is_blacklisted(client):
+                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
+
             authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
             request.state.authPermission = authPermission
         except HTTPException as e:
