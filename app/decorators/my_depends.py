@@ -20,7 +20,7 @@ def AcceptNone(key):
         @functools.wraps(func)
         async def wrapper(**kwargs):
             param = kwargs[key]
-            if param==None:
+            if not param:
                 return None
             
             return await func(**kwargs)
@@ -35,10 +35,10 @@ def ByPassAdminRole(bypass=False):
 
         @functools.wraps(func)
         async def wrapper(**kwargs):
-            authPermission:AuthPermission = kwargs['authPermission']
+            authPermission: AuthPermission = kwargs['authPermission']
 
             if Role.ADMIN not in authPermission['roles'] and not bypass:
-                raise # TODO 
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
             
             return await func(**kwargs)
         return wrapper
@@ -47,19 +47,18 @@ def ByPassAdminRole(bypass=False):
 
 @ByPassAdminRole()
 @AcceptNone('group_id')
-async def _get_group(group_id:str='',gid:str='id',authPermission:AuthPermission=Depends(get_auth_permission))->GroupClientORM:
-    
+async def _get_group(group_id:str=None,gid:str=None,authPermission:AuthPermission=None)->GroupClientORM:
     if gid == 'id':
         group = await GroupClientORM.filter(group_id=group_id).first()
     
     elif gid == 'name':
-        group = await GroupClientORM.filter(group_name = group_id).first()
+        group = await GroupClientORM.filter(group_name=group_id).first()
     
     else:
-        raise ...
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid GID type")
     
-    if not group.exists():
-        return None
+    if group == None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group does not exist")
     
     return group
 
@@ -175,5 +174,5 @@ async def get_non_admin(client_id:str = Query(''),cid:str=Query(''),authPermissi
     return await GetClient(True,False)(client_id=client_id,cid=cid,authPermission =authPermission)
 
 async def get_group(group_id:str=Query(''),gid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission)):
-    return await _get_group(group_id,gid,authPermission)
+    return await _get_group(group_id=group_id,gid =gid,authPermission=authPermission)
 

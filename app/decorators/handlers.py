@@ -10,7 +10,7 @@ from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendS
 
 from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError,ContactDoubleOptInAlreadySetError,ContactOptInCodeNotMatchError
 from app.errors.request_error import IdentifierTypeError
-from app.errors.security_error import ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
+from app.errors.security_error import AlreadyBlacklistedClientError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -261,6 +261,11 @@ class SecurityClientHandler(Handler):
         except ClientDoesNotExistError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
                 'message': 'Client does not exist'
+            })
+
+        except AlreadyBlacklistedClientError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
+                'message': 'Client is already blacklisted'if not  e.reversed_ else 'Client is not blacklisted yet',
             })
 
 class RequestErrorHandler(Handler):

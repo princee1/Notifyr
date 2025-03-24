@@ -178,7 +178,7 @@ class ForceGroupPipe(Pipe):
         super().__init__(True)
 
     def pipe(self, group: GroupClientORM):
-        if group is None:
+        if group == None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group information is missing or invalid.")
 
         return {'group': group}

@@ -34,8 +34,8 @@ class GroupIdNotMatchError(BaseError):
         super().__init__()
 
 
-class BlacklistedClientError(BaseError):
+class AlreadyBlacklistedClientError(BaseError):
 
-    def __init__(self, reversed=False):
-
-        super().__init__(reversed)
+    def __init__(self, reversed_=False):
+        self.reversed_ = reversed_
+        super().__init__()
