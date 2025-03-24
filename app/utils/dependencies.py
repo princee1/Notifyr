@@ -128,7 +128,7 @@ async def get_request_id(request: Request):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
     return request.state.request_id
 
-def get_query_params(name,default=None):
+def get_query_params(name,default=None)->Callable[[Request],str|None]:
 
     def depends(request:Request):
         return request.query_params.get(name,default)
