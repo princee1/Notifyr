@@ -78,12 +78,21 @@ class BlacklistORM(models.Model):
     client = fields.ForeignKeyField("models.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
     group = fields.ForeignKeyField("models.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
-    expired_at = fields.DatetimeField(null=True)
+    expired_at = fields.DatetimeField(null=False)
 
     class Meta:
         schema = SCHEMA
         table = "blacklist"
 
+    @property
+    def to_json(self):
+        return {
+            "blacklist_id": str(self.blacklist_id),
+            "client_id": str(self.client.client_id) if self.client else None,
+            "group_id": str(self.group.group_id) if self.group else None,
+            "created_at": self.created_at.isoformat(),
+            "expired_at": self.expired_at.isoformat() if self.expired_at else None
+        }
 
 class GroupModel(BaseModel):
     group_name: str
@@ -91,8 +100,8 @@ class GroupModel(BaseModel):
     @field_validator('group_name')
     def parse_name(cls,group_name:str):
         group_name= group_name.strip()
+        return group_name
         group_name=group_name.lower()
-        # TODO add regex remove extra space
         return group_name.capitalize()
     
 

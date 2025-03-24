@@ -1,5 +1,6 @@
+from datetime import timedelta
 from app.definition._service import Service, ServiceClass
-from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,BlacklistedClientError
+from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,AlreadyBlacklistedClientError
 from app.models.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
 from app.services.security_service import JWTAuthService
 
@@ -24,24 +25,32 @@ class AdminService(Service):
         return await BlacklistORM.exists(group=client.group_id)
         
 
-    async def blacklist(self,client: ClientORM,group:GroupClientORM):
+    async def blacklist(self,client: ClientORM,group:GroupClientORM,time:float):
 
         if client!=None and group == None:
             if await self.is_blacklisted(client):
-                raise BlacklistedClientError()
+                raise AlreadyBlacklistedClientError()
             else:
-                return await BlacklistORM.create(client=client)
+                blacklist = await BlacklistORM.create(client=client)
+                blacklist.expired_at = blacklist.created_at + timedelta(seconds=time)
+                await blacklist.save()
+                return blacklist
         
         if await BlacklistORM.exists(group=group):
             raise GroupAlreadyBlacklistedError(group_id=group.group_id,group_name=group.group_name)
 
-        return await BlacklistORM.create(group=group)
+        blacklist = await BlacklistORM.create(group=group)
+        blacklist.expired_at = blacklist.created_at + timedelta(seconds=time)
+        await blacklist.save()
+        return blacklist
+
+
     
 
     async def un_blacklist(self,client:ClientORM,group:GroupClientORM):
         if client!=None and group == None:
-            if not await  self.is_blacklisted(client):
-                raise BlacklistedClientError(True)
+            if not await self.is_blacklisted(client):
+                raise AlreadyBlacklistedClientError(True)
             else:
                 return await BlacklistORM.filter(client=client).delete()
         

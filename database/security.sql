@@ -60,8 +60,8 @@ CREATE TABLE IF NOT EXISTS Blacklist (
     blacklist_id UUID DEFAULT uuid_generate_v4 (),
     client_id UUID UNIQUE DEFAULT NULL,
     group_id UUID UNIQUE DEFAULT NULL,
-    create_at TIMESTAMPTZ DEFAULT NOW(),
-    expired_at TiMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expired_at TiMESTAMPTZ NOT NULL,
     PRIMARY KEY (blacklist_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -170,9 +170,9 @@ BEGIN
 
     IF group_count >= 2 THEN
         RAISE NOTICE 'Group limit reached';
-    RETURN OLD;
+    RETURN NULL;
     ELSE 
-        RETURN NEW;
+        RETURN OLD;
     END IF;
 
 END;
@@ -193,9 +193,9 @@ BEGIN
 
     IF client_count >= 10 THEN
         RAISE NOTICE 'Client limit reached';
-    RETURN OLD;
+    RETURN NULL;
     ELSE 
-        RETURN NEW;
+        RETURN OLD;
     END IF;
 
 END;
@@ -236,11 +236,11 @@ CREATE TRIGGER guard_admin_creation
 CREATE OR REPLACE FUNCTION guard_admin_deletion() RETURNS TRIGGER AS $guard_admin_deletion$
 BEGIN
     SET search_path = security;
-    IF OLD.client_type = 'Admin' THEN
+    IF NEW.client_type = 'Admin' THEN
         RAISE NOTICE 'Admin cannot be deleted';
        RETURN NULL;  
     END IF;
-    RETURN OLD;
+    RETURN NEW;
 END;
 $guard_admin_deletion$ LANGUAGE PLPGSQL
 
