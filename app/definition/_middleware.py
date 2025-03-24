@@ -34,10 +34,10 @@ def path_matcher(paths: list[str], url: str) -> bool:
         return True
     return any(fnmatch(url, pattern) for pattern in paths)
 
-def exclude_path_matcher(excludes: list[str], url: str) -> bool:
-    if not excludes:
+def exclude_path_matcher(paths: list[str], url: str) -> bool:
+    if not paths:
         return True
-    return not any(fnmatch(url, pattern) for pattern in excludes)
+    return not any(fnmatch(url, pattern) for pattern in paths)
 
 def get_url(request:Request):
     base_url = str(request.base_url)
@@ -47,9 +47,13 @@ def get_url(request:Request):
 def parse_urls(paths:list[str]):
     temp = []
     for path in paths:
+        if not path.startswith('/'):
+            path = '/' + path
+
         if path.endswith('/*'):
             path = path[0:-2] + "*"
         temp.append(path)
+    return temp
             
 
 def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
@@ -59,7 +63,8 @@ def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
 
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
-            url = get_url
+
+            url = get_url(request)
 
             if not path_matcher(paths,url):
                 return await call_next(request)

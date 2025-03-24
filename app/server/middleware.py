@@ -137,6 +137,7 @@ class BackgroundTaskMiddleware(MiddleWare):
         return response   
         
 class UserAppMiddleware(MiddleWare):
+    priority = MiddlewarePriority.AUTH
 
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
