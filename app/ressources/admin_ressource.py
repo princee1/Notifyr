@@ -3,7 +3,7 @@ from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.decorators.my_depends import get_group,GetClient as get_client
+from app.decorators.my_depends import get_group, get_client
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
@@ -52,10 +52,9 @@ class GenerationModel(BaseModel):
     generation_id: str
 
 
-@UseHandler(TortoiseHandler)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
-@UseHandler(ServiceAvailabilityHandler)
+@UseHandler(ServiceAvailabilityHandler,TortoiseHandler)
 @HTTPRessource(CLIENT_PREFIX)
 class ClientRessource(BaseHTTPRessource):
 
@@ -87,14 +86,14 @@ class ClientRessource(BaseHTTPRessource):
 
     @UsePipe(ForceClientPipe)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
-    async def add_client_to_group(self, client: Annotated[ClientORM, Depends(get_client())], group: Annotated[GroupClientORM, Depends(get_group)]):
+    async def add_client_to_group(self, client: Annotated[ClientORM, Depends(get_client)], group: Annotated[GroupClientORM, Depends(get_group)]):
         client.group = group
         await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully added to group", "client": client.to_json})
 
     @UsePipe(ForceClientPipe)
     @BaseHTTPRessource.Delete('/')
-    async def delete_client(self, client: Annotated[ClientORM, Depends(get_client())], authPermission=Depends(get_auth_permission)):
+    async def delete_client(self, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         await client.delete()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully deleted", "client": client.to_json})
 
@@ -137,7 +136,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='20/week')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.POST])
-    async def blacklist_tokens(self, group: Annotated[GroupClientORM, Depends(get_group)], client: Annotated[ClientORM, Depends(get_client())], request: Request, authPermission=Depends(get_auth_permission)):
+    async def blacklist_tokens(self, group: Annotated[GroupClientORM, Depends(get_group)], client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
         if group is None and client is None:
             raise SecurityIdentityNotResolvedError
 
@@ -152,7 +151,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='20/week')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.DELETE])
-    async def un_blacklist_tokens(self, group: Annotated[GroupClientORM, Depends(get_group)], client: Annotated[ClientORM, Depends(get_client())], request: Request, authPermission=Depends(get_auth_permission)):
+    async def un_blacklist_tokens(self, group: Annotated[GroupClientORM, Depends(get_group)], client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
         if group is None and client is None:
             raise SecurityIdentityNotResolvedError
 
@@ -205,7 +204,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePipe(ForceClientPipe)
     @UseGuard(AuthenticatedClientGuard)
     @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.DELETE])
-    async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client())], authPermission=Depends(get_auth_permission)):
+    async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         await raw_revoke_challenges(client)
         client.authenticated = False
         await client.save()
@@ -216,7 +215,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseHandler(SecurityClientHandler)
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
-    async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client())], authModel: AuthPermissionModel, request: Request, authPermission=Depends(get_auth_permission)):
+    async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client)], authModel: AuthPermissionModel, request: Request, authPermission=Depends(get_auth_permission)):
         await raw_revoke_challenges(client)  # NOTE reset counter
         challenge = await ChallengeORM.filter(client=client).first()
         auth_token, refresh_token = await self.adminService.issue_auth(challenge, client, authModel)
