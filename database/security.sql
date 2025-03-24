@@ -139,7 +139,7 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'update_challenge_midnight', '0 0 * * *', 'CALL security.update_challenge();'
+        'update_challenge_midnight', '0 0 * * *', 'SELECT security.update_challenge();'
     );
 
 CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
@@ -150,7 +150,7 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'delete_blacklist_midnight', '0 0 * * *', 'CALL security.delete_blacklist();'
+        'delete_blacklist_midnight', '0 0 * * *', 'SELECT security.delete_blacklist();'
     );
 
 CREATE OR REPLACE FUNCTION compute_limit_group() RETURNS TRIGGER AS $compute_limit_group$

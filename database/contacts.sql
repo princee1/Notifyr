@@ -236,7 +236,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'delete_expired_subscontent', '0 0 * * *', 'CALL contacts.delete_expired_subscontent();'
+        'delete_expired_subscontent', '0 0 * * *', 'SELECT contacts.delete_expired_subscontent();'
     );
 
 CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
