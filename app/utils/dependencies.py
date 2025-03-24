@@ -128,6 +128,14 @@ async def get_request_id(request: Request):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
     return request.state.request_id
 
+def get_query_params(name,default=None):
+
+    def depends(request:Request):
+        return request.query_params.get(name,default)
+
+    return depends
+
+
 def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)
 

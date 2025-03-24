@@ -89,17 +89,17 @@ class JWTAuthMiddleware(MiddleWare):
             token = get_bearer_token_from_request(request)
             client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
             authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
-
+          
             client_id = authPermission['client_id']
-            client = await self.get_client(client_id,"id",authPermission)
-
-            if await self.adminService.is_blacklisted(client):
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
+            client = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
 
             challenge = authPermission['challenge']
             db_challenge= await ChallengeORM.filter(client=client).first()
 
-            if challenge != db_challenge:
+            if await self.adminService.is_blacklisted(client):
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
+
+            if challenge != db_challenge.challenge_auth:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
             
             authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]

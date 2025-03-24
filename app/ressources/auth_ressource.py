@@ -108,5 +108,5 @@ class AuthRessource(BaseHTTPRessource):
     
     @UsePermission(JWTRouteHTTPPermission,AdminPermission,same_client_authPermission)
     @BaseHTTPRessource.Get('/{client_id}')
-    def route(self,authPermission=Depends(get_auth_permission)):
+    def route(self,client_id:str,authPermission=Depends(get_auth_permission)):
         return 

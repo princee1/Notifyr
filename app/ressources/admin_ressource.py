@@ -70,33 +70,33 @@ class ClientRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/')
     async def create_client(self, client: ClientModel, authPermission=Depends(get_auth_permission)):
         name = client.client_name
-        scope = client.scope
+        scope = client.client_scope
 
         group_id = client.group_id
         if group_id != None and not await GroupClientORM.exists(group=group_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Group not found")
 
-        client = await ClientORM.create(client_name=name, client_scope=scope, group=group_id)
+        client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group_id,issued_for=client.issued_for)
         challenge = await ChallengeORM.create(client=client)
         challenge.expired_at_auth = challenge.created_at_auth + timedelta(seconds=self.configService.AUTH_EXPIRATION)
         challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.configService.REFRESH_EXPIRATION)
         await challenge.save()
 
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client})
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json})
 
     @UsePipe(ForceClientPipe)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
     async def add_client_to_group(self, client: Annotated[ClientORM, Depends(get_client())], group: Annotated[GroupClientORM, Depends(get_group)]):
-        client.group_id = group
+        client.group = group
         await client.save()
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully added to group", "client": client})
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully added to group", "client": client.to_json})
 
     @UsePipe(ForceClientPipe)
     @BaseHTTPRessource.Delete('/')
     async def delete_client(self, client: Annotated[ClientORM, Depends(get_client())], authPermission=Depends(get_auth_permission)):
         await client.delete()
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully deleted", "client": client})
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully deleted", "client": client.to_json})
 
     @BaseHTTPRessource.Get('/',deprecated=True,mount=False)
     async def get_all_client(self, authPermission=Depends(get_auth_permission)):
@@ -106,13 +106,13 @@ class ClientRessource(BaseHTTPRessource):
     async def create_group(self, group: GroupModel, authPermission=Depends(get_auth_permission)):
         group_name = group.group_name
         group = await GroupClientORM.create(group_name=group_name)
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Group successfully created", "group": group})
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Group successfully created", "group": group.to_json})
 
     @UsePipe(ForceGroupPipe)
     @BaseHTTPRessource.Delete('/group/')
     async def delete_group(self, group: Annotated[GroupClientORM, Depends(get_group)], authPermission=Depends(get_auth_permission)):
         await group.delete()
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Group successfully deleted", "group": group})
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Group successfully deleted", "group": group.to_json})
 
     @BaseHTTPRessource.Get('/group/',deprecated=True,mount=False)
     async def get_all_group(self, authPermission=Depends(get_auth_permission)):
@@ -141,13 +141,13 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         if group is None and client is None:
             raise SecurityIdentityNotResolvedError
 
-        if group is not None and client is not None and client.group_id != group.group_id:
-            raise GroupIdNotMatchError(client.group_id, group.group_id)
+        if group is not None and client is not None and client.group != group.group_id:
+            raise GroupIdNotMatchError(str(client.group), group.group_id)
 
         blacklist = await self.adminService.blacklist(client, group)
         # if blacklist == None:
         #     return JSONResponse(status_code=status.HTTP_204_NO_CONTENT,content={"message":"Client already blacklisted"})
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully blacklisted", "blacklist": blacklist})
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully blacklisted", "blacklist": blacklist.to_json})
 
     @UseLimiter(limit_value='20/week')
     @UseHandler(SecurityClientHandler)
@@ -209,7 +209,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         await raw_revoke_challenges(client)
         client.authenticated = False
         await client.save()
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client})
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
 
     @UseLimiter(limit_value='4/day')
     @UsePipe(ForceClientPipe)
