@@ -13,7 +13,7 @@ import asyncio
 D = TypeVar('D',bound=type)
 
 def APIFilterInject(func:Callable | Type):
-    
+
     if type(func) == type:
         annotations = func.__init__.__annotations__.copy()
     else:
@@ -31,7 +31,7 @@ def APIFilterInject(func:Callable | Type):
 
 
 def AsyncAPIFilterInject(func:Callable | Type):
-    
+
     if type(func) == type:
         annotations = func.__init__.__annotations__.copy()
     else:
@@ -107,8 +107,11 @@ def get_bearer_token(credentials: Annotated[HTTPAuthorizationCredentials, Depend
     #     return credentials.headers['Authorization'].replace('Bearer ','')
     return credentials.credentials
 
-def get_bearer_token_from_request(request:Request):
-     return request.headers['Authorization'].replace('Bearer ','')
+def get_bearer_token_from_request(request: Request):
+    try:
+        return request.headers['Authorization'].replace('Bearer ', '')
+    except KeyError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing")
 
 def get_admin_token(request: Request = None):
     if request:
@@ -124,6 +127,14 @@ async def get_request_id(request: Request):
     if not hasattr(request.state, "request_id") or request.state.request_id is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
     return request.state.request_id
+
+def get_query_params(name,default=None)->Callable[[Request],str|None]:
+
+    def depends(request:Request):
+        return request.query_params.get(name,default)
+
+    return depends
+
 
 def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)

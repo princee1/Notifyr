@@ -22,14 +22,23 @@ class GroupClientORM(models.Model):
         schema = SCHEMA
         table = "groupclient"
 
+    @property
+    def to_json(self):
+        return {
+            "group_id": str(self.group_id),
+            "group_name": self.group_name,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat()
+        }
+
 class ClientORM(models.Model):
     client_id = fields.UUIDField(pk=True, default=uuid.uuid4)
     client_name = fields.CharField(max_length=200, unique=True, null=True)
-    client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo)
+    client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
     authenticated = fields.BooleanField(default=False)
-    client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User)
-    issued_for = fields.CharField(max_length=50, null=False,unique=True)
-    group_id = fields.ForeignKeyField("models.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
+    client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
+    issued_for = fields.CharField(max_length=50, null=False, unique=True)
+    group = fields.ForeignKeyField("models.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
@@ -37,12 +46,26 @@ class ClientORM(models.Model):
         schema = SCHEMA
         table = "client"
 
+    @property
+    def to_json(self):
+        return {
+            "client_id": str(self.client_id),
+            "client_name": self.client_name,
+            "client_scope": self.client_scope.value,
+            "authenticated": self.authenticated,
+            "client_type": self.client_type.value,
+            "issued_for": self.issued_for,
+            "group_id": str(self.group) if self.group else None,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat()
+        }
+
 class ChallengeORM(models.Model):
-    client_id = fields.OneToOneField("models.ClientORM", pk=True, related_name="client", on_delete=fields.CASCADE)
-    challenge_auth = fields.TextField(unique=True)
+    client = fields.OneToOneField("models.ClientORM", pk=True, related_name="challenge", on_delete=fields.CASCADE)
+    challenge_auth = fields.TextField(generated=True)
     created_at_auth = fields.DatetimeField(auto_now_add=True)
     expired_at_auth = fields.DatetimeField(null=True)
-    challenge_refresh = fields.TextField(unique=True)
+    challenge_refresh = fields.TextField(generated=True)
     created_at_refresh = fields.DatetimeField(auto_now_add=True)
     expired_at_refresh = fields.DatetimeField(null=True)
 
@@ -52,15 +75,24 @@ class ChallengeORM(models.Model):
 
 class BlacklistORM(models.Model):
     blacklist_id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    client_id = fields.ForeignKeyField("models.ClientORM", related_name="client", on_delete=fields.CASCADE, null=True)
-    group_id = fields.ForeignKeyField("models.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
+    client = fields.ForeignKeyField("models.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
+    group = fields.ForeignKeyField("models.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
-    expired_at = fields.DatetimeField(null=True)
+    expired_at = fields.DatetimeField(null=False)
 
     class Meta:
         schema = SCHEMA
         table = "blacklist"
 
+    @property
+    def to_json(self):
+        return {
+            "blacklist_id": str(self.blacklist_id),
+            "client_id": str(self.client.client_id) if self.client else None,
+            "group_id": str(self.group.group_id) if self.group else None,
+            "created_at": self.created_at.isoformat(),
+            "expired_at": self.expired_at.isoformat() if self.expired_at else None
+        }
 
 class GroupModel(BaseModel):
     group_name: str
@@ -68,15 +100,18 @@ class GroupModel(BaseModel):
     @field_validator('group_name')
     def parse_name(cls,group_name:str):
         group_name= group_name.strip()
+        return group_name
         group_name=group_name.lower()
-        # TODO add regex remove extra space
         return group_name.capitalize()
     
 
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id'))
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group"))
 
 class ClientModel(ClientModelBase):
     
+    client_scope:Scope
+    group_id:str | None = None
+
     @model_validator(mode="after")
     def validate(self)->Self:
         if self.client_scope == Scope.Organization:
@@ -88,15 +123,12 @@ class ClientModel(ClientModelBase):
         return self
 
 
-
-
-
 async def raw_revoke_challenges(client:ClientORM):
-    query = "SELECT security.raw_revoke_challenge($1:UUID);"
+    query = "SELECT security.raw_revoke_challenges($1::UUID);"
     tortoise_client = Tortoise.get_connection('default')
     return await tortoise_client.execute_query(query, [client.client_id])
 
 async def raw_revoke_auth_token(client:ClientORM):
-    query = "SELECT security.raw_revoke_auth_token($1:UUID);"
+    query = "SELECT security.raw_revoke_auth_token($1::UUID);"
     tortoise_client = Tortoise.get_connection('default')
     return await tortoise_client.execute_query(query, [client.client_id])

@@ -62,7 +62,7 @@ class AuthPermission(TypedDict):
     client_id: str
     client_type:ClientTypeLiteral = 'User'
     #application_id: str = None # TODO
-    roles:list[str]
+    roles:list[str|Role]
     issued_for: str # Subnets
     group_id:str | None = None
     created_at: float

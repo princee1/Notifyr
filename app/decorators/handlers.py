@@ -9,7 +9,8 @@ from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExis
 from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendStoreError,QueueNotFound,NotRegistered
 
 from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError,ContactDoubleOptInAlreadySetError,ContactOptInCodeNotMatchError
-from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
+from app.errors.request_error import IdentifierTypeError
+from app.errors.security_error import AlreadyBlacklistedClientError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -147,47 +148,79 @@ class TortoiseHandler(Handler):
             return await function(*args, **kwargs)
         except OperationalError as e:
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database execution error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database execution error', 'detail': mess, })
 
         except ValidationError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Validation error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Validation error', 'detail': mess, })
 
         except DBConnectionError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database connection error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Database connection error', 'detail': mess, })
 
         except IntegrityError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={'message': 'Integrity error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={'message': 'Integrity error', 'detail': mess, })
 
         except DoesNotExist as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={'message': 'Record not found', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={'message': 'Record not found', 'detail': mess, })
 
         except MultipleObjectsReturned as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Multiple objects returned', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Multiple objects returned', 'detail': mess, })
 
         except TransactionManagementError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Transaction management error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Transaction management error', 'detail': mess, })
 
         except UnSupportedError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Unsupported operation', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Unsupported operation', 'detail': mess, })
 
         except ConfigurationError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Configuration error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'Configuration error', 'detail': mess, })
 
         except ParamsError as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Parameters error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Parameters error', 'detail': mess, })
 
         except BaseORMException as e:
+            print(e.__class__)
+
             mess = e.args[0]
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'ORM error', 'detail': mess, 'args': e.args})
+            mess = str(mess)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={'message': 'ORM error', 'detail': mess, })
 
 
 class SecurityClientHandler(Handler):
@@ -224,3 +257,24 @@ class SecurityClientHandler(Handler):
                 'client_group_id': e.client_group_id,
                 'group_id': e.group_id
             })
+
+        except ClientDoesNotExistError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
+                'message': 'Client does not exist'
+            })
+
+        except AlreadyBlacklistedClientError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
+                'message': 'Client is already blacklisted'if not  e.reversed_ else 'Client is not blacklisted yet',
+            })
+
+class RequestErrorHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except IdentifierTypeError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
+                'message':'Invalid identifier type specified'
+            })
+            

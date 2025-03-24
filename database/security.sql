@@ -5,11 +5,10 @@ CREATE OR REPLACE FUNCTION secure_random_string(length INT) RETURNS TEXT AS $$
 DECLARE
     raw_bytes BYTEA;
     encoded TEXT;
-    result TEXT;
 BEGIN
     raw_bytes := gen_random_bytes(length);
     encoded := encode(raw_bytes, 'base64');
-    RETURN substring(result FROM 1 FOR length);
+    RETURN substring(encoded FROM 1 FOR length);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -41,16 +40,16 @@ CREATE TABLE IF NOT EXISTS Client (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (client_id),
-    FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE,
-    CHECK (SELECT COUNT(*) FROM Client WHERE client_type ='Admin') = 1
+    FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE
+    -- CHECK (SELECT COUNT(*) FROM Client WHERE client_type ='Admin') = 1
 );
 
 CREATE TABLE IF NOT EXISTS Challenge (
     client_id UUID ,
-    challenge_auth TEXT UNIQUE DEFAULT secure_random_string(64),
+    challenge_auth TEXT UNIQUE DEFAULT secure_random_string(128),
     created_at_auth TIMESTAMPTZ DEFAULT NOW(),
     expired_at_auth TIMESTAMPTZ,
-    challenge_refresh TEXT UNIQUE DEFAULT secure_random_string(128),
+    challenge_refresh TEXT UNIQUE DEFAULT secure_random_string(256),
     created_at_refresh TIMESTAMPTZ DEFAULT NOW(),
     expired_at_refresh TIMESTAMPTZ ,
     PRIMARY KEY (client_id),
@@ -61,8 +60,8 @@ CREATE TABLE IF NOT EXISTS Blacklist (
     blacklist_id UUID DEFAULT uuid_generate_v4 (),
     client_id UUID UNIQUE DEFAULT NULL,
     group_id UUID UNIQUE DEFAULT NULL,
-    create_at TIMESTAMPTZ DEFAULT NOW(),
-    expired_at TiMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expired_at TiMESTAMPTZ NOT NULL,
     PRIMARY KEY (blacklist_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -97,7 +96,7 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION raw_revoke_challenges(client_id UUID) RETURNS VOID as $$
+CREATE OR REPLACE FUNCTION raw_revoke_challenges(cid UUID) RETURNS VOID as $$
 BEGIN
     SET search_path = security;
     UPDATE 
@@ -107,16 +106,16 @@ BEGIN
         expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
         created_at_auth = NOW(),
         challenge_refresh = secure_random_string(128),
-        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh),;
-        created_at_refresh = NOW(),
+        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh),
+        created_at_refresh = NOW()
     
     WHERE
-        c.client_id = client_id;
+        c.client_id = cid;
 
 END; $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION raw_revoke_auth_token(client_id UUID) RETURNS VOID as $$
+CREATE OR REPLACE FUNCTION raw_revoke_auth_token(cid UUID) RETURNS VOID as $$
 BEGIN
     SET search_path = security;
     UPDATE 
@@ -124,9 +123,9 @@ BEGIN
     SET 
         challenge_auth = secure_random_string(64),
         expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
-        created_at_auth = NOW(),
+        created_at_auth = NOW()
     WHERE
-        c.client_id = client_id;
+        c.client_id = cid;
 
 END; $$ LANGUAGE plpgsql;
 
@@ -140,7 +139,7 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'update_challenge_midnight', '0 0 * * *', 'CALL update_challenge();'
+        'update_challenge_midnight', '0 0 * * *', 'SELECT security.update_challenge();'
     );
 
 CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
@@ -151,10 +150,10 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'delete_blacklist_midnight', '0 0 * * *', 'CALL delete_blacklist();'
+        'delete_blacklist_midnight', '0 0 * * *', 'SELECT security.delete_blacklist();'
     );
 
-CREATE OR REPLACE FUNCTION compute_limit_group(l INT) RETURNS TRIGGER AS $compute_limit_group$
+CREATE OR REPLACE FUNCTION compute_limit_group() RETURNS TRIGGER AS $compute_limit_group$
 DECLARE
     group_count INT;
 
@@ -169,17 +168,17 @@ BEGIN
     FROM 
         Groupclient;
 
-    IF group_count >= l THEN
+    IF group_count >= 2 THEN
         RAISE NOTICE 'Group limit reached';
-    RETURNS OLD;
+    RETURN NULL;
     ELSE 
-        RETURN NEW;
+        RETURN OLD;
     END IF;
 
 END;
 $compute_limit_group$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION compute_limit_client(l INT) RETURNS TRIGGER AS $compute_limit_client$
+CREATE OR REPLACE FUNCTION compute_limit_client() RETURNS TRIGGER AS $compute_limit_client$
 DECLARE
     client_count INT;
 
@@ -192,11 +191,11 @@ BEGIN
     FROM 
         Client;
 
-    IF client_count >= l THEN
+    IF client_count >= 10 THEN
         RAISE NOTICE 'Client limit reached';
-    RETURNS OLD;
+    RETURN NULL;
     ELSE 
-        RETURN NEW;
+        RETURN OLD;
     END IF;
 
 END;
@@ -206,16 +205,16 @@ CREATE TRIGGER limit_group
     BEFORE INSERT
     ON GroupClient
     FOR EACH ROW
-    EXECUTE FUNCTION compute_limit_group(1);
+    EXECUTE FUNCTION compute_limit_group();
 
 CREATE TRIGGER limit_client
     BEFORE INSERT
     ON Client
     FOR EACH ROW
-    EXECUTE FUNCTION compute_limit_client(2);
+    EXECUTE FUNCTION compute_limit_client();
 
 
-CREATE OR REPLACE FUNCTION guard_admin_creation RETURNS TRIGGER AS $guard_admin_creation$
+CREATE OR REPLACE FUNCTION guard_admin_creation() RETURNS TRIGGER AS $guard_admin_creation$
 BEGIN
     SET search_path = security;
     IF NEW.client_type = 'Admin' THEN
@@ -226,6 +225,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
+$guard_admin_creation$ LANGUAGE PLPGSQL
 
 CREATE TRIGGER guard_admin_creation
     BEFORE INSERT OR UPDATE
@@ -233,15 +233,16 @@ CREATE TRIGGER guard_admin_creation
     FOR EACH ROW
     EXECUTE FUNCTION guard_admin_creation();
 
-CREATE OR REPLACE FUNCTION guard_admin_deletion RETURNS TRIGGER AS $guard_admin_deletion$
+CREATE OR REPLACE FUNCTION guard_admin_deletion() RETURNS TRIGGER AS $guard_admin_deletion$
 BEGIN
     SET search_path = security;
-    IF OLD.client_type = 'Admin' THEN
+    IF NEW.client_type = 'Admin' THEN
         RAISE NOTICE 'Admin cannot be deleted';
        RETURN NULL;  
     END IF;
-    RETURN OLD;
+    RETURN NEW;
 END;
+$guard_admin_deletion$ LANGUAGE PLPGSQL
 
 CREATE TRIGGER guard_admin_deletion
     BEFORE DELETE OR UPDATE

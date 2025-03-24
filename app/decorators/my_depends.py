@@ -3,29 +3,27 @@ from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, Header, Query, Request,status
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetDependsAttr
+from app.errors.security_error import ClientDoesNotExistError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.security_model import ClientORM, GroupClientORM
+from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
-from app.services.security_service import JWTAuthService
+from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import TwilioService
-from app.utils.dependencies import get_auth_permission
+from app.utils.dependencies import get_auth_permission, get_query_params
 
 
-def AcceptNone(pos,key=None ):
+def AcceptNone(key):
 
     def depends(func:Callable):
 
-        @functools.warps(func)
-        async def wrapper(*args,**kwargs):
-            if key !=None:
-                param = kwargs[key]
-            else:
-                param = args[pos]
-            
-            if param==None:
+        @functools.wraps(func)
+        async def wrapper(**kwargs):
+            param = kwargs[key]
+            if not param:
                 return None
             
-            return await func(*args,**kwargs)
+            return await func(**kwargs)
         return wrapper
 
     return depends
@@ -36,18 +34,57 @@ def ByPassAdminRole(bypass=False):
     def depends(func:Callable):
 
         @functools.wraps(func)
-        async def wrapper(*args,**kwargs):
-            authPermission:AuthPermission = kwargs['authPermission']
-            if Role.ADMIN in authPermission['roles'] and not bypass:
-                raise ...
+        async def wrapper(**kwargs):
+            authPermission: AuthPermission = kwargs['authPermission']
+
+            if Role.ADMIN not in authPermission['roles'] and not bypass:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
             
-            return await func(*args,**kwargs)
+            return await func(**kwargs)
         return wrapper
     return depends
 
 
-verify_twilio_token:Callable = GetDependsAttr(TwilioService,'verify_twilio_token')
+@ByPassAdminRole()
+@AcceptNone('group_id')
+async def _get_group(group_id:str=None,gid:str=None,authPermission:AuthPermission=None)->GroupClientORM:
+    if gid == 'id':
+        group = await GroupClientORM.filter(group_id=group_id).first()
+    
+    elif gid == 'name':
+        group = await GroupClientORM.filter(group_name=group_id).first()
+    
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid GID type")
+    
+    if group == None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group does not exist")
+    
+    return group
 
+def GetClient(bypass: bool = False, accept_admin: bool = False):
+    @ByPassAdminRole(bypass)
+    @AcceptNone(key='client_id')
+    async def _get_client(client_id: str | None = None, cid: str = None, authPermission: AuthPermission = None) -> ClientORM:
+        if cid == 'id':
+            client = await ClientORM.filter(client_id=client_id).first()
+        elif cid == 'name':
+            client = await ClientORM.filter(client_name=client_id).first()
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CID type")
+        
+        if client is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client does not exist")
+        
+        if client.client_type == 'Admin' and not accept_admin:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client does not exist")
+        
+        return client
+    
+    return _get_client
+
+
+verify_twilio_token:Callable = GetDependsAttr(TwilioService,'verify_twilio_token')
 
 async def get_contacts(contact_id: str, idtype: str = Query("id"),authPermission:AuthPermission=Depends(get_auth_permission)) -> ContactORM:
 
@@ -97,7 +134,6 @@ async def get_subs_content(content_id:str,content_idtype:str = Query('id'),authP
     if content == None:
         raise HTTPException(404, {"message": "Subscription Content does not exists with those information"})
 
-
 def cost()->int:
     ...
     
@@ -117,46 +153,26 @@ async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
         raise HTTPException(
             status_code=403, detail="X-Admin-Token header invalid")
 
-def GetClient(bypass:bool=False,accept_admin:bool=False):
-        
-        @ByPassAdminRole(bypass)
-        @AcceptNone(0)
-        async def _get_client(client_id:str=Query(''),cid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->ClientORM:
-            if cid == 'id':
-                client = await ClientORM.filter(client_id=client_id).first()
-            
-            elif cid == 'name':
-                client = await ClientORM.filter(client_name = client_id).first()
-            
-            else:
-                raise ...
-            
-            if not client.exists():
-                raise ...
-            
-            if client.client_type == 'Admin' and not accept_admin:
-                raise ...
-            
-            return client
-        
-        return _get_client
+async def verify_admin_signature(x_admin_signature:Annotated[str,Header()]):
+    adminService:AdminService = Get(AdminService)
+    securityService:SecurityService = Get(SecurityService)
+    configService:ConfigService = Get(ConfigService)
 
-@ByPassAdminRole()
-@AcceptNone(0)
-async def get_group(group_id:str=Query(''),gid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission))->GroupClientORM:
-    
-    if gid == 'id':
-        group = await GroupClientORM.filter(group_id=group_id).first()
-    
-    elif gid == 'name':
-        group = await GroupClientORM.filter(group_name = group_id).first()
-    
-    else:
-        raise ...
-    
-    if not group.exists():
-        return None
-    
-    return group
+    if x_admin_signature == None:
+        ...
 
+    if securityService.verify_admin_signature():
+        ...
+
+async def get_client(client_id:str = Depends(get_query_params('client_id')),cid:str= Depends(get_query_params('cid','id')),authPermission:AuthPermission=Depends(get_auth_permission)):
+    return await GetClient()(client_id=client_id,cid=cid,authPermission =authPermission)
+
+async def get_admin(client_id:str = Query(''),cid:str=Query(''),authPermission:AuthPermission=Depends(get_auth_permission)):
+    return await GetClient(False,True)(client_id=client_id,cid=cid,authPermission =authPermission)
+
+async def get_non_admin(client_id:str = Query(''),cid:str=Query(''),authPermission:AuthPermission=Depends(get_auth_permission)):
+    return await GetClient(True,False)(client_id=client_id,cid=cid,authPermission =authPermission)
+
+async def get_group(group_id:str=Query(''),gid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission)):
+    return await _get_group(group_id=group_id,gid =gid,authPermission=authPermission)
 

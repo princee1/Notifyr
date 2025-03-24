@@ -1,5 +1,5 @@
 
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 
 from app.definition._interface import Interface, IsInterface
 from .config_service import ConfigService
@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from app.classes.auth_permission import AuthPermission, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, WSPermission
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
 from app.utils.constant import ConfigAppConstant
@@ -74,28 +74,26 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             self.generation_id = self.configService.config_json_app.data[
                 ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY]
 
-    def encode_auth_token(self, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
+    def encode_auth_token(self,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
         try:
             if data == None:
                 data = {}
             salt = str(self.salt)
             created_time = time.time()
-            permission = AuthPermission(scope=scope, generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
+            permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
                                         expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
-                                        salt=salt, group_id=group_id, challenge=challenge,hostname=hostname)
+                                        salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def encode_refresh_token(self, issued_for: str, challenge: str, group_id:str):
+    def encode_refresh_token(self,client_id:str, issued_for: str, challenge: str, group_id:str):
         try:
-            if data == None:
-                data = {}
             salt = str(self.salt)
             created_time = time.time()
-            permission = RefreshPermission(generation_id=self.generation_id, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
+            permission = RefreshPermission(client_id=client_id, generation_id=self.generation_id, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
                                            expired_at=created_time + self.configService.REFRESH_EXPIRATION,group_id=group_id)
             token = self._encode_token(permission)
             return token
@@ -103,9 +101,27 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             print(e)
         return None
 
-    def set_status(self, authPermission: AuthPermission | RefreshPermission):
-        ...
+    def set_status(self, permission: AuthPermission | RefreshPermission, ptype: Literal['auth', 'refresh']):
+        now = time.time()
+        expired_at = permission['expired_at']
+        created_at = permission['created_at']
 
+        diff = expired_at - now
+
+        if diff < 0:
+            permission['status'] = 'expired'
+            return
+
+        total_lifetime = expired_at - created_at
+        elapsed_time = now - created_at
+
+        if elapsed_time > total_lifetime * 0.8:
+            permission['status'] = 'inactive'
+            return
+
+        permission['status'] = 'active'
+        return
+                
     def encode_ws_token(self, run_id: str, operation_id: str, expiration: float):
         now = time.time()
         expired_at = now + expiration
@@ -181,11 +197,11 @@ class JWTAuthService(Service, EncryptDecryptInterface):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
 
-            self.set_status(permission)
-
-            # if permission['status'] == 'expired':
-            #     raise HTTPException(
-            #         status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
+            self.set_status(permission,'auth')
+            
+            if permission['status'] == 'expired':
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
 
             if permission["generation_id"] != self.generation_id:
                 raise HTTPException(
@@ -198,7 +214,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
     def verify_refresh_permission(self,tokens:str):
         token =self.decode_token(tokens)
         permission = RefreshPermission(**token)
-        self.set_status(permission)
+        self.set_status(permission,'refresh')
 
         if permission['status'] == 'expired':
             raise HTTPException(

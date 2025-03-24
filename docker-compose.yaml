@@ -60,6 +60,27 @@ services:
       - "8080:8088"
     depends_on:
       - postgres
+    
+  # celery:
+  #   image: python:3.10
+  #   build:
+  #     context: ./docker/
+  #     dockerfile: Dockerfile.celery
+  #   restart: always
+  #   depends_on:
+  #     - redis
+  #     - redis-commander
+  
+  # redbeat:
+  #   image: python:3.10
+  #   build:
+  #     context: ./docker/
+  #     dockerfile: Dockerfile.redbeat
+  #   restart: always
+  #   depends_on:
+  #     - redis
+  #     - redis-commander
+    
 
   # adminer:
   #   image: adminer:latest

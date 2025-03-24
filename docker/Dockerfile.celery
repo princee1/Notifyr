@@ -1,15 +1,17 @@
 FROM python:3.10
 
-WORKDIR /the/workdir/path
+WORKDIR /.
 
 RUN apt-get update && apt-get install -y make
 
-COPY ../app .
+COPY ./app ./app
 
 COPY requirements_dev.txt .
 
 COPY MakeFile Makefile
 
 RUN make install
+
+RUN make celery
 
 
