@@ -1,6 +1,6 @@
 from app.definition._service import Service, ServiceClass
 from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,BlacklistedClientError
-from app.models.security_model import ClientORM, GroupClientORM, BlacklistORM
+from app.models.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
 from app.services.security_service import JWTAuthService
 
 
@@ -14,7 +14,7 @@ class AdminService(Service):
     def build(self):
         ...
     
-    async def is_blacklisted(client:ClientORM):
+    async def is_blacklisted(self,client:ClientORM):
         if await BlacklistORM.exists(client=client):
             return True
         
@@ -51,13 +51,13 @@ class AdminService(Service):
         return await BlacklistORM.filter(group=group).delete()
 
     
-    def issue_auth(self,challenge,client,authModel):
-        refresh_token = self.jwtAuthService.encode_refresh_token(challenge=challenge.challenge_refresh, issued_for=client.issued_for, group_id=client.group_id)
+    def issue_auth(self,challenge:ChallengeORM,client:ClientORM,authModel):
+        refresh_token = self.jwtAuthService.encode_refresh_token(client_id=str(client.client_id),challenge=challenge.challenge_refresh, issued_for=client.issued_for, group_id=client.group_id)
 
         if refresh_token == None:
             raise CouldNotCreateRefreshTokenError()
 
-        auth_token = self.jwtAuthService.encode_auth_token(authModel.scope.value,
+        auth_token = self.jwtAuthService.encode_auth_token(client.client_type,str(client.client_id),authModel.scope.value,
             authModel.allowed_routes, challenge.challenge_auth, authModel.roles, client.group_id,  client.issued_for, client.client_name, authModel.allowed_assets)
 
         if auth_token == None:

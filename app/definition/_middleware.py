@@ -44,13 +44,23 @@ def get_url(request:Request):
     url = str(request.url).replace(base_url,"")
     return "/" + url
 
+def parse_urls(paths:list[str]):
+    temp = []
+    for path in paths:
+        if path.endswith('/*'):
+            path = path[0:-2] + "*"
+        temp.append(path)
+            
+
 def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
+    paths = parse_urls(paths)
+
     def decorator(func:Callable):
 
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
             url = get_url
-            print(url)
+
             if not path_matcher(paths,url):
                 return await call_next(request)
 
@@ -62,11 +72,12 @@ def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
     return decorator
 
 def ExcludeOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
+    paths = parse_urls(paths)
+
     def decorator(func:Callable):
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
             url = get_url(request)
-            print(url)
 
             if not exclude_path_matcher(paths,url):
                 return await call_next(request)
