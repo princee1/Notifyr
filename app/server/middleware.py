@@ -1,6 +1,6 @@
 import asyncio
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, ClientType, Role
+from app.classes.auth_permission import AuthPermission, ClientType, Role, Scope
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.models.security_model import ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
@@ -12,7 +12,7 @@ from fastapi import HTTPException, Request, Response, FastAPI,status
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
 from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
-from app.utils.dependencies import get_api_key, get_client_ip,get_bearer_token_from_request, get_response_id
+from app.utils.dependencies import get_api_key, get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
 from cryptography.fernet import InvalidToken
 
 from app.utils.helper import generateId
@@ -33,8 +33,7 @@ class ProcessTimeMiddleWare(MiddleWare):
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
-            e.headers["X-Process-Error"] = str(process_time) + ' (s)'
-            raise e
+            return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)'})
 
 class LoadBalancerMiddleWare(MiddleWare):
     def __init__(self, app, dispatch = None):
@@ -98,20 +97,17 @@ class JWTAuthMiddleware(MiddleWare):
             client_id = authPermission['client_id']
             client:ClientORM = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
 
+            request.state.client = client
+
             if not client.authenticated:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
-
-            challenge = authPermission['challenge']
-            db_challenge= await ChallengeORM.filter(client=client).first()
-
-            if challenge != db_challenge.challenge_auth:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
 
             if client.client_type != ClientType.Admin: 
                 if await self.adminService.is_blacklisted(client):
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
 
             authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+            authPermission['scope'] = Scope._member_map_[authPermission['scope']]
             request.state.authPermission = authPermission
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
@@ -137,7 +133,7 @@ class BackgroundTaskMiddleware(MiddleWare):
         return response   
         
 class UserAppMiddleware(MiddleWare):
-    priority = MiddlewarePriority.AUTH
+    priority = MiddlewarePriority.USER_APP
 
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
@@ -149,3 +145,20 @@ class UserAppMiddleware(MiddleWare):
     @ApplyOn(['/auth/admin/*'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         return await super().dispatch(request, call_next)
+
+
+class ChallengeMatchMiddleware(MiddleWare):
+    priority = MiddlewarePriority.CHALLENGE
+
+    @ExcludeOn(['/auth/client/*','/auth/admin/*'])
+    async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
+        authPermission: AuthPermission = await get_auth_permission(request)
+        client:ClientORM = await get_client_from_request(request)
+
+        challenge = authPermission['challenge']
+        db_challenge= await ChallengeORM.filter(client=client).first()
+
+        if challenge != db_challenge.challenge_auth:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
+        
+        return await call_next(request)
