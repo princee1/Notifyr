@@ -144,7 +144,7 @@ class JWTRefreshTokenPermission(Permission):
 
         client_id = permission['client_id']
 
-        if permission['status'] == 'inactive' and not self.accept_inactive:
+        if permission['status'] != 'active' and not self.accept_inactive:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission not active")
 
         if client_id != authPermission['client_id']:
