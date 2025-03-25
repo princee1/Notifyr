@@ -70,7 +70,7 @@ class ChallengeORM(models.Model):
     challenge_refresh = fields.TextField(generated=True)
     created_at_refresh = fields.DatetimeField(auto_now_add=True)
     expired_at_refresh = fields.DatetimeField(null=True)
-    last_autz_id=fields.UUIDField(generated=True)
+    last_authz_id=fields.UUIDField(generated=True)
 
     class Meta:
         schema = SCHEMA

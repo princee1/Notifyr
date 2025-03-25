@@ -40,3 +40,6 @@ class IssueAuthInterface(Interface):
         await raw_revoke_challenges(client)
         client.authenticated = False
         await client.save()
+    
+    def compare_authz_id(self,challenge:ChallengeORM,authz_id):
+        return challenge.last_authz_id == authz_id

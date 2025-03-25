@@ -12,7 +12,7 @@ from app.decorators.my_depends import GetClient, get_client_by_password,verify_a
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
-from app.errors.security_error import ClientDoesNotExistError,ClientTokenHeaderNotProvidedError
+from app.errors.security_error import AuthzIdMisMatchError, ClientDoesNotExistError,ClientTokenHeaderNotProvidedError
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ChallengeORM, ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
@@ -130,7 +130,12 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         if x_client_token == None:
             raise ClientTokenHeaderNotProvidedError
 
-        authPermission = self._decode_and_verify(client, x_client_token)
+        authPermission:AuthPermission = self._decode_and_verify(client, x_client_token)
+        challenge = await ChallengeORM.filter(client=client).first()
+
+        if not self.compare_authz_id(challenge,authPermission['authz_id']):
+            raise AuthzIdMisMatchError
+        
         await raw_revoke_auth_token(client)
         auth_token, refresh_token = await self.issue_auth(client, authPermission)
         await client.save()

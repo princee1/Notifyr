@@ -227,11 +227,13 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         await self._revoke_client(client)
-
-        challenge = await ChallengeORM.filter(client=client).first()
-        await self.change_authz_id(challenge)
-
+        
         client.can_login = False #QUESTION Can be set to True?
+        if client.can_login:
+            challenge = await ChallengeORM.filter(client=client).first()
+            await self.change_authz_id(challenge)
+        
+        await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
 
     @UseLimiter(limit_value='4/day')

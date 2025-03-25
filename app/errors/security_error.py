@@ -42,3 +42,7 @@ class AlreadyBlacklistedClientError(BaseError):
 
 class ClientTokenHeaderNotProvidedError(BaseError):
     ...
+
+
+class AuthzIdMisMatchError(BaseError):
+    ...
