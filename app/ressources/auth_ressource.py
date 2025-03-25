@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Header, Query, Request,status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, MustHave, RefreshPermission, Role, TokensModel
+from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData, MustHave, RefreshPermission, Role, TokensModel
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
@@ -12,13 +12,13 @@ from app.decorators.my_depends import GetClient, get_client_by_password,verify_a
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
-from app.errors.security_error import ClientDoesNotExistError
+from app.errors.security_error import ClientDoesNotExistError,ClientTokenHeaderNotProvidedError
 from app.interface.issue_auth import IssueAuthInterface
-from app.models.security_model import ClientORM, raw_revoke_auth_token, raw_revoke_challenges
+from app.models.security_model import ChallengeORM, ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
-from app.utils.dependencies import get_auth_permission, get_client_from_request
+from app.utils.dependencies import get_auth_permission, get_client_from_request, get_client_ip
 from app.utils.constant import ConfigAppConstant
 
 
@@ -126,13 +126,14 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseHandler(SecurityClientHandler)
     @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
     @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST],mount=False)
-    async def self_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:Annotated[str,Header(None)]):
+    async def self_issue_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:Annotated[str,Header(None)]):
         if x_client_token == None:
-            ...      
+            raise ClientTokenHeaderNotProvidedError
+
         authPermission = self._decode_and_verify(client, x_client_token)
         await raw_revoke_auth_token(client)
         auth_token, refresh_token = await self.issue_auth(client, authPermission)
-
+        await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
 
@@ -141,8 +142,21 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseHandler(SecurityClientHandler)
     @UseGuard(AuthenticatedClientGuard(reverse=True))
     @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.DELETE],mount=False)
-    async def self_disconnect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)]):
+    async def self_revoke_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:Annotated[str,Header(None)],ip_address:str=Depends(get_client_ip)):
+        if x_client_token == None:
+            raise ClientTokenHeaderNotProvidedError 
+
+        authPermission:AuthPermission = self.jwtAutService.verify_auth_permission(x_client_token,ip_address)
+        jwtAuthPermission = JWTRouteHTTPPermission(accept_inactive=True)
+        challenge = await ChallengeORM.filter(client=client).first()
+
+        if challenge.challenge_auth != authPermission['challenge']:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
+        
+        funcMetaData:FuncMetaData = getattr(self.self_revoke_by_connect,'meta')
+        jwtAuthPermission.permission(self.__class__.__name__,funcMetaData,authPermission)
         await self._revoke_client(client)
+        await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK,content={'message':'Successfully disconnect'})
 
 

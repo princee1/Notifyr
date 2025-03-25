@@ -63,18 +63,22 @@ class ClientRessource(BaseHTTPRessource):
         self.jwtAuthService = jwtAuthService
         self.adminService = adminService
 
+        self.key = self.configService.getenv('CLIENT_PASSWORD_HASH_KEY','test')
+
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/')
     async def create_client(self, client: ClientModel, authPermission=Depends(get_auth_permission)):
         name = client.client_name
         scope = client.client_scope
-
+        password,salt = self.securityService.store_password(client.password,self.key)
+        salt = str(salt)
+        
         group_id = client.group_id
         if group_id != None and not await GroupClientORM.exists(group=group_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Group not found")
 
-        client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group_id,issued_for=client.issued_for)
+        client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group_id,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
         challenge = await ChallengeORM.create(client=client)
         challenge.expired_at_auth = challenge.created_at_auth + timedelta(seconds=self.configService.AUTH_EXPIRATION)
         challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.configService.REFRESH_EXPIRATION)
@@ -223,6 +227,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         await self._revoke_client(client)
+        client.can_login = False #QUESTION Can be set to True?
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
 
     @UseLimiter(limit_value='4/day')
@@ -237,6 +242,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
         auth_token, refresh_token = await self.issue_auth(client, authModel)
         client.authenticated = True
+        client.can_login = True
         await client.save()
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
