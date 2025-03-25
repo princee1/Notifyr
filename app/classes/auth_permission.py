@@ -111,14 +111,14 @@ class WSPathNotFoundError(BaseError):
 def MustHave(role:Role):
 
     def verify(authPermission:AuthPermission):
-        return role.value in authPermission['roles']
+        return role in authPermission['roles']
 
     return verify
 
 def MustNotHave(role:Role):
 
     def verify(authPermission:AuthPermission):
-        return role.value not in authPermission['roles']
+        return role not in authPermission['roles']
 
     return verify
 
