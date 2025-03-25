@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS Challenge (
     challenge_refresh TEXT UNIQUE DEFAULT secure_random_string(256),
     created_at_refresh TIMESTAMPTZ DEFAULT NOW(),
     expired_at_refresh TIMESTAMPTZ ,
+    last_authz_id UUID DEFAULT uuid_generate_v4 (),
     PRIMARY KEY (client_id),
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );

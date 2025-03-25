@@ -227,6 +227,10 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         await self._revoke_client(client)
+
+        challenge = await ChallengeORM.filter(client=client).first()
+        await self.change_authz_id(challenge)
+
         client.can_login = False #QUESTION Can be set to True?
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
 
@@ -240,7 +244,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         authModel = authModel.model_dump()
         authModel['scope'] = client.client_scope
 
-        auth_token, refresh_token = await self.issue_auth(client, authModel)
+        auth_token, refresh_token = await self.issue_auth(client, authModel,True)
         client.authenticated = True
         client.can_login = True
         await client.save()

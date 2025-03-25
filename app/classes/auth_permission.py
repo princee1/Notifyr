@@ -73,6 +73,7 @@ class AuthPermission(TypedDict):
     scope:str
     salt:str
     status:PermissionStatus= 'active'
+    authz_id:str
 
 class RefreshPermission(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
     generation_id: str

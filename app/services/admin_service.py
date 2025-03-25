@@ -66,7 +66,7 @@ class AdminService(Service):
         if refresh_token == None:
             raise CouldNotCreateRefreshTokenError()
 
-        auth_token = self.jwtAuthService.encode_auth_token(client.client_type,str(client.client_id),authModel.scope.value,
+        auth_token = self.jwtAuthService.encode_auth_token(challenge.last_autz_id,client.client_type,str(client.client_id),authModel.scope.value,
             authModel.allowed_routes, challenge.challenge_auth, authModel.roles, client.group_id,  client.issued_for, client.client_name, authModel.allowed_assets)
 
         if auth_token == None:
