@@ -107,7 +107,7 @@ class GroupModel(BaseModel):
         return group_name.capitalize()
     
 
-client_password_validator = PasswordValidator(12,25,)
+client_password_validator = PasswordValidator(12,60,)
 
 ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login"))
 

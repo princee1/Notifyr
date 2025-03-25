@@ -236,7 +236,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
     async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client)], authModel: AuthPermissionModel, request: Request, authPermission=Depends(get_auth_permission)):
-        await raw_revoke_challenges(client)  # NOTE reset counter
+        await raw_revoke_challenges(client)
         authModel = authModel.model_dump()
         authModel['scope'] = client.client_scope
 
