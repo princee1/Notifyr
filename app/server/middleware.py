@@ -87,7 +87,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.adminService: AdminService = Get(AdminService)
         self.get_client = GetClient(True,True)
 
-    @ExcludeOn(['/auth/admin/*'])
+    @ExcludeOn(['/auth/generate/*'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
@@ -96,6 +96,8 @@ class JWTAuthMiddleware(MiddleWare):
           
             client_id = authPermission['client_id']
             client:ClientORM = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
+
+            #TODO check group id
 
             request.state.client = client
 
@@ -142,7 +144,7 @@ class UserAppMiddleware(MiddleWare):
         self.configService = Get(ConfigService)
         self.securityService = Get(SecurityService)
 
-    @ApplyOn(['/auth/admin/*'])
+    @ApplyOn(['/auth/generate/admin/*'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         return await super().dispatch(request, call_next)
 
@@ -150,7 +152,7 @@ class UserAppMiddleware(MiddleWare):
 class ChallengeMatchMiddleware(MiddleWare):
     priority = MiddlewarePriority.CHALLENGE
 
-    @ExcludeOn(['/auth/client/*','/auth/admin/*'])
+    @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         authPermission: AuthPermission = await get_auth_permission(request)
         client:ClientORM = await get_client_from_request(request)

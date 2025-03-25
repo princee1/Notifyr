@@ -1,6 +1,7 @@
 import functools
 from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, Header, Query, Request,status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetDependsAttr
 from app.errors.security_error import ClientDoesNotExistError
@@ -29,16 +30,17 @@ def AcceptNone(key):
     return depends
 
 
-def ByPassAdminRole(bypass=False):
+def ByPassAdminRole(bypass=False,skip=False):
 
     def depends(func:Callable):
 
         @functools.wraps(func)
         async def wrapper(**kwargs):
-            authPermission: AuthPermission = kwargs['authPermission']
+            if skip: # NOTE no need for the authPermission
+                authPermission: AuthPermission = kwargs['authPermission']
 
-            if Role.ADMIN not in authPermission['roles'] and not bypass:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+                if Role.ADMIN not in authPermission['roles'] and not bypass: # NOTE need to have the authPermission
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
             
             return await func(**kwargs)
         return wrapper
@@ -62,8 +64,8 @@ async def _get_group(group_id:str=None,gid:str=None,authPermission:AuthPermissio
     
     return group
 
-def GetClient(bypass: bool = False, accept_admin: bool = False):
-    @ByPassAdminRole(bypass)
+def GetClient(bypass: bool = False, accept_admin: bool = False,skip:bool=False):
+    @ByPassAdminRole(bypass,skip=skip)
     @AcceptNone(key='client_id')
     async def _get_client(client_id: str | None = None, cid: str = None, authPermission: AuthPermission = None) -> ClientORM:
         if cid == 'id':
@@ -170,3 +172,8 @@ async def get_client(client_id:str = Depends(get_query_params('client_id')),cid:
 async def get_group(group_id:str=Query(''),gid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission)):
     return await _get_group(group_id=group_id,gid =gid,authPermission=authPermission)
 
+async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())]):
+    security:SecurityService = Get(SecurityService)
+    client:ClientORM = await GetClient(skip=True)(client_id=credentials.username,cid='id',authPermission=None)
+    # TODO check password match 
+    return client
