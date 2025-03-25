@@ -85,7 +85,7 @@ def get_timezone(request:Request)->str:
     ...
 
 def get_client_ip(request: Request) -> str:
-    ip_address = request.headers.get('X-Forward-For', None)
+    ip_address = request.headers.get('X-Forwarded-For', None)
     if not ip_address:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

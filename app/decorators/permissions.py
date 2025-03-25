@@ -205,7 +205,7 @@ class TwilioPermission(Permission):
 
 @APIFilterInject
 def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
-    if not authPermission['client_id'] == client.client_id:
+    if not authPermission['client_id'] == str(client.client_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
     
     return True

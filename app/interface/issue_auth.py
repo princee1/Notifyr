@@ -42,4 +42,4 @@ class IssueAuthInterface(Interface):
         await client.save()
     
     def compare_authz_id(self,challenge:ChallengeORM,authz_id):
-        return challenge.last_authz_id == authz_id
+        return str(challenge.last_authz_id) == authz_id
