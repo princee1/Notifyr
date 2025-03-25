@@ -134,12 +134,12 @@ END; $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
 BEGIN
     SET search_path = security;
-    CALL set_auth_challenge();
-    CALL set_refresh_challenge();
+    SELECT security.set_auth_challenge();
+    SELECT security.set_refresh_challenge();
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'update_challenge_midnight', '0 0 * * *', 'SELECT security.update_challenge();'
+    'update_challenge_hourly', '0 * * * *', 'SELECT security.update_challenge();'
     );
 
 CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
@@ -150,8 +150,8 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'delete_blacklist_midnight', '0 0 * * *', 'SELECT security.delete_blacklist();'
-    );
+        'delete_blacklist_hourly', '0 * * * *', 'SELECT security.delete_blacklist();'
+        );
 
 CREATE OR REPLACE FUNCTION compute_limit_group() RETURNS TRIGGER AS $compute_limit_group$
 DECLARE
