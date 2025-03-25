@@ -39,3 +39,6 @@ class AlreadyBlacklistedClientError(BaseError):
     def __init__(self, reversed_=False):
         self.reversed_ = reversed_
         super().__init__()
+
+class ClientTokenHeaderNotProvidedError(BaseError):
+    ...

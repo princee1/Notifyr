@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, WSPermission
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
 from app.utils.constant import ConfigAppConstant
@@ -193,12 +193,15 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         token = self.decode_token(token)
         permission: AuthPermission = AuthPermission(**token)
         try:
-            if issued_for != permission["issued_for"]: #TODO issued_for
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            if permission['scope'] == Scope.SoloDolo.value:
+                if issued_for != permission["issued_for"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            else:
+                # TODO verify subnet
+                ...
 
             self.set_status(permission,'auth')
-            
             # if permission['status'] == 'expired': # NOTE might accept expired
             #     raise HTTPException(
             #         status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
@@ -290,6 +293,7 @@ class SecurityService(Service, EncryptDecryptInterface):
 
     def verify_password(self, stored_hash, stored_salt, provided_password, key):
         stored_hash = b64_decode(stored_hash)
+        stored_salt = bytes(stored_salt)
         # stored_salt = b64_decode(stored_salt)
         hashed_provided_password = self.hash_value_with_salt(
             provided_password, key, stored_salt)
