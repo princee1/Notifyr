@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Header, Query, Request,status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData, MustHave, RefreshPermission, Role, TokensModel
+from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData, MustHave, MustHaveRoleSuchAs, RefreshPermission, Role, TokensModel, parse_authPermission_enum
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
@@ -64,11 +64,12 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         await raw_revoke_auth_token(client)
         auth_token, refresh_token = await self.issue_auth(client, authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token,}, "message": "Tokens successfully refreshed"})
-   
+
+@UseRoles([Role.ADMIN])
 @UseHandler(TortoiseHandler,ServiceAvailabilityHandler)
 @HTTPRessource(GENERATE_AUTH_PREFIX)
 class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
-    admin_roles = [Role.ADMIN,Role.CUSTOM,Role.CONTACTS,Role.SUBSCRIPTION,Role.REFRESH]
+    admin_roles = [Role.ADMIN,Role.CUSTOM,Role.CONTACTS,Role.SUBSCRIPTION,Role.REFRESH,Role.CLIENT]
 
     @InjectInMethod
     def __init__(self,adminService:AdminService,configService:ConfigService,jwtAuthService:JWTAuthService):
@@ -95,17 +96,17 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     def _decode_and_verify(self, client: ClientORM, x_client_token):
         authPermission: AuthPermission = self.jwtAutService.decode_token(x_client_token)
         
-        if authPermission["client_id"] != client.client_id:
+        if authPermission["client_id"] != str(client.client_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
 
-        if authPermission['generation_id'] != self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY]:
+        if authPermission['generation_id'] != self.jwtAutService.generation_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
         
         if authPermission["issued_for"] != client.issued_for:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Issued-for mismatch")
         
-        if authPermission['group_id'] != str(client.group.group_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
+        # if authPermission['group_id'] != str(client.group.group_id):
+        #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
 
         return authPermission
     
@@ -124,13 +125,15 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='1/day')
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler)
+    @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
     @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
-    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST],mount=False)
-    async def self_issue_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:Annotated[str,Header(None)]):
+    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST])
+    async def self_issue_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None)):
         if x_client_token == None:
             raise ClientTokenHeaderNotProvidedError
 
         authPermission:AuthPermission = self._decode_and_verify(client, x_client_token)
+        parse_authPermission_enum(authPermission)
         challenge = await ChallengeORM.filter(client=client).first()
 
         if not self.compare_authz_id(challenge,authPermission['authz_id']):
@@ -145,13 +148,16 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePipe(ForceClientPipe)
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler)
-    @UseGuard(AuthenticatedClientGuard(reverse=True))
-    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.DELETE],mount=False)
-    async def self_revoke_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:Annotated[str,Header(None)],ip_address:str=Depends(get_client_ip)):
+    @UseGuard(AuthenticatedClientGuard)
+    @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
+    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.DELETE])
+    async def self_revoke_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None),ip_address:str=Depends(get_client_ip)):
         if x_client_token == None:
             raise ClientTokenHeaderNotProvidedError 
 
         authPermission:AuthPermission = self.jwtAutService.verify_auth_permission(x_client_token,ip_address)
+        parse_authPermission_enum(authPermission)
+
         jwtAuthPermission = JWTRouteHTTPPermission(accept_inactive=True)
         challenge = await ChallengeORM.filter(client=client).first()
 
@@ -161,7 +167,6 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         funcMetaData:FuncMetaData = getattr(self.self_revoke_by_connect,'meta')
         jwtAuthPermission.permission(self.__class__.__name__,funcMetaData,authPermission)
         await self._revoke_client(client)
-        await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK,content={'message':'Successfully disconnect'})
 
 

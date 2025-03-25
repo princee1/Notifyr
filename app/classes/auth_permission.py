@@ -88,6 +88,11 @@ class RefreshPermission(TypedDict): # NOTE if someone from an organization chang
     client_type:ClientTypeLiteral = 'User'
 
 
+def parse_authPermission_enum(authPermission):
+        authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+        authPermission['scope'] = Scope._member_map_[authPermission['scope']]
+        
+
 class ContactPermission(TypedDict):
     expired_at:int
     contact_id:str
