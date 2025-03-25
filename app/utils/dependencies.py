@@ -123,6 +123,11 @@ async def get_auth_permission(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.authPermission
 
+async def get_client_from_request(request:Request):
+    if not hasattr(request.state, "client") or request.state.client is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return request.state.client
+        
 async def get_request_id(request: Request):
     if not hasattr(request.state, "request_id") or request.state.request_id is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
@@ -138,6 +143,8 @@ def get_query_params(name,default=None)->Callable[[Request],str|None]:
 
 def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)
+
+
 
 def get_session_id(request: Request):
     ...
