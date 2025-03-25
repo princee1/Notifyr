@@ -168,6 +168,13 @@ class JSONFile(File):
     def clear(self):
         self.data = {}
         self.save()
+    
+    def __getitem__(self, name):
+        print(name)
+        return self.data[name] if name in self.data else None
+    
+    def __setitem__(self,key,value):
+        self.data[key] = value
 
 
 class ConfigFile(File):

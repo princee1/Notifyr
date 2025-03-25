@@ -12,7 +12,7 @@ from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import TwilioService
 from app.utils.dependencies import get_auth_permission, get_query_params
-
+from tortoise.exceptions import OperationalError
 
 def AcceptNone(key):
 
@@ -36,7 +36,7 @@ def ByPassAdminRole(bypass=False, skip=False):
 
         @functools.wraps(func)
         async def wrapper(**kwargs):
-            if skip:  # NOTE no need for the authPermission
+            if not skip:  # NOTE no need for the authPermission
                 authPermission: AuthPermission = kwargs['authPermission']
 
                 # NOTE need to have the authPermission
@@ -206,26 +206,28 @@ async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, De
     security: SecurityService = Get(SecurityService)
     configService: ConfigService = Get(ConfigService)
     key = configService.getenv('CLIENT_PASSWORD_HASH_KEY', 'test')
-    client: ClientORM = await GetClient(skip=True, raise_=False)(client_id=credentials.username, cid='id', authPermission=None)
-    if client == None:
-        raise HTTPException(
+    error = HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Basic"},
         )
+    
+    try:
+        client: ClientORM = await GetClient(skip=True, raise_=False)(client_id=credentials.username, cid=cid, authPermission=None)
+    except OperationalError:
+        raise error
+
+    if client == None:
+        raise error
     stored_hash, stored_salt = client.password, client.password_salt
 
     if not security.verify_password(stored_hash, stored_salt, credentials.password, key):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid username or password",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+        error
 
     if not client.can_login:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Client cant authenticate right get your token from the admin'
+            detail='Cant authenticate right now... get your token from the admin!'
         )
 
     await client.save()
