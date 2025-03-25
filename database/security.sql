@@ -222,13 +222,14 @@ BEGIN
         IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
             RAISE EXCEPTION 'Admin already exists';
         END IF;
+        RETURN NULL;
     END IF;
     RETURN NEW;
 END;
 $guard_admin_creation$ LANGUAGE PLPGSQL
 
 CREATE TRIGGER guard_admin_creation
-    BEFORE INSERT OR UPDATE
+    BEFORE INSERT
     ON Client
     FOR EACH ROW
     EXECUTE FUNCTION guard_admin_creation();
@@ -240,7 +241,7 @@ BEGIN
         RAISE EXCEPTION 'Admin cannot be deleted or updated';
         RETURN NULL;  
     END IF;
-    RETURN OLD;
+    RETURN NEW;
 END;
 $guard_admin_deletion$ LANGUAGE plpgsql;
 
