@@ -5,11 +5,10 @@ from pydantic import BaseModel, field_validator, model_validator
 from app.classes.auth_permission import ClientType, Scope
 import uuid
 
-from app.utils.validation import ipv4_subnet_validator, ipv4_validator
+from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
 
 
 SCHEMA = 'security'
-
 
 
 class GroupClientORM(models.Model):
@@ -36,6 +35,9 @@ class ClientORM(models.Model):
     client_name = fields.CharField(max_length=200, unique=True, null=True)
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
     authenticated = fields.BooleanField(default=False)
+    password = fields.TextField()
+    password_salt = fields.TextField()
+    can_login = fields.BooleanField(default=False)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     issued_for = fields.CharField(max_length=50, null=False, unique=True)
     group = fields.ForeignKeyField("models.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
@@ -105,7 +107,9 @@ class GroupModel(BaseModel):
         return group_name.capitalize()
     
 
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group"))
+client_password_validator = PasswordValidator(12,25,)
+
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login"))
 
 class ClientModel(ClientModelBase):
     
@@ -121,6 +125,10 @@ class ClientModel(ClientModelBase):
         if not ipv4_validator(self.issued_for):
             raise ValueError('Invalid ipv4 address')
         return self
+
+    @field_validator('password')
+    def check_password(cls,password:str):
+        return client_password_validator(password)
 
 
 async def raw_revoke_challenges(client:ClientORM):

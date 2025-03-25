@@ -82,6 +82,8 @@ def digit_validator(val:int):
     return val>=0 and val <=9
 
 from datetime import datetime
+from functools import wraps
+import re
 
 def date_validator(date: str) -> bool:
     try:
@@ -96,6 +98,22 @@ def time_validator(time: str) -> bool:
         return True
     except ValueError:
         return False
+    
+def PasswordValidator(min_length=8, max_length=128, require_digit=True, require_symbol=True, require_uppercase=True):
+
+        def validator(password: str) -> str:
+            if len(password) < min_length or len(password) > max_length:
+                raise ValueError(f"Password must be between {min_length} and {max_length} characters long.")
+            if require_digit and not any(char.isdigit() for char in password):
+                raise ValueError("Password must contain at least one digit.")
+            if require_symbol and not any(char in "!@#$%^&*()-_=+[]{}|;:'\",.<>?/`~" for char in password):
+                raise ValueError("Password must contain at least one symbol.")
+            if require_uppercase and not any(char.isupper() for char in password):
+                raise ValueError("Password must contain at least one uppercase letter.")
+            return password
+        return validator
+
+    
 
 #######################                      #################################
 class ValidatorType(Enum):
