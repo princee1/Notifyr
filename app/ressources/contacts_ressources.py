@@ -162,7 +162,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
         self.celeryService = celeryService
     
     @UseGuard(RegisteredContactsGuard)
-    @UseRoles(options=[MustHave(Role.TWILIO)])
+    @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.GET],dependencies=[Depends(verify_twilio_token)])
     async def check_password(self,contact: Annotated[ContactORM, Depends(get_contacts)],request:Request, authPermission=Depends(get_auth_permission)):
         ...
