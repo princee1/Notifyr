@@ -134,12 +134,12 @@ END; $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
 BEGIN
     SET search_path = security;
-    SELECT security.set_auth_challenge();
-    SELECT security.set_refresh_challenge();
+    SELECT set_auth_challenge();
+    SELECT set_refresh_challenge();
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-    'update_challenge_hourly', '0 * * * *', 'SELECT security.update_challenge();'
+    'update_challenge_every_5_minutes', '*/5 * * * *', 'SELECT security.update_challenge();'
     );
 
 CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
@@ -147,11 +147,12 @@ BEGIN
     SET search_path = security;
     DELETE FROM Blacklist
     WHERE expired_at <= NOW();
+
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'delete_blacklist_hourly', '0 * * * *', 'SELECT security.delete_blacklist();'
-        );
+    'delete_blacklist_every_5_minutes', '*/5 * * * *', 'SELECT security.delete_blacklist();'
+);
 
 CREATE OR REPLACE FUNCTION compute_limit_group() RETURNS TRIGGER AS $compute_limit_group$
 DECLARE
@@ -172,7 +173,7 @@ BEGIN
         RAISE NOTICE 'Group limit reached';
     RETURN NULL;
     ELSE 
-        RETURN OLD;
+        RETURN NEW;
     END IF;
 
 END;
@@ -192,10 +193,10 @@ BEGIN
         Client;
 
     IF client_count >= 10 THEN
-        RAISE NOTICE 'Client limit reached';
+        RAISE EXCEPTION 'Client limit reached';
     RETURN NULL;
     ELSE 
-        RETURN OLD;
+        RETURN NEW;
     END IF;
 
 END;
@@ -219,8 +220,7 @@ BEGIN
     SET search_path = security;
     IF NEW.client_type = 'Admin' THEN
         IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
-            RAISE NOTICE 'Admin already exists';
-            RETURN NULL;
+            RAISE EXCEPTION 'Admin already exists';
         END IF;
     END IF;
     RETURN NEW;
@@ -236,13 +236,13 @@ CREATE TRIGGER guard_admin_creation
 CREATE OR REPLACE FUNCTION guard_admin_deletion() RETURNS TRIGGER AS $guard_admin_deletion$
 BEGIN
     SET search_path = security;
-    IF NEW.client_type = 'Admin' THEN
-        RAISE NOTICE 'Admin cannot be deleted';
-       RETURN NULL;  
+    IF OLD.client_type = 'Admin' THEN
+        RAISE EXCEPTION 'Admin cannot be deleted or updated';
+        RETURN NULL;  
     END IF;
-    RETURN NEW;
+    RETURN OLD;
 END;
-$guard_admin_deletion$ LANGUAGE PLPGSQL
+$guard_admin_deletion$ LANGUAGE plpgsql;
 
 CREATE TRIGGER guard_admin_deletion
     BEFORE DELETE OR UPDATE
