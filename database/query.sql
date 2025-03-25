@@ -70,6 +70,6 @@ VALUES (
             WHERE
                 client_type = 'Admin'
         ),
-        NOW() + INTERVAL '1 day',
-        NOW() + INTERVAL '100 day'
+        NOW() + INTERVAL '5 minute',
+        NOW() + INTERVAL '1 hour'
     );

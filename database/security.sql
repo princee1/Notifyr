@@ -88,7 +88,7 @@ BEGIN
         Challenge c
     SET 
         challenge_refresh = secure_random_string(128),
-        authenticated = FALSE,
+        -- authenticated = FALSE, TODO should i disconnect the client or nah?
         created_at_refresh = NOW(),
         expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh)
     WHERE 
@@ -134,8 +134,8 @@ END; $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
 BEGIN
     SET search_path = security;
-    SELECT set_auth_challenge();
-    SELECT set_refresh_challenge();
+    PERFORM set_auth_challenge();
+    PERFORM set_refresh_challenge();
 END; $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
@@ -170,7 +170,7 @@ BEGIN
         Groupclient;
 
     IF group_count >= 2 THEN
-        RAISE NOTICE 'Group limit reached';
+        RAISE EXCEPTION 'Group limit reached';
     RETURN NULL;
     ELSE 
         RETURN NEW;

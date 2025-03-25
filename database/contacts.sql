@@ -253,7 +253,7 @@ FROM
     Contact;
 
 IF contact_count >= 2 THEN
-    RAISE NOTICE 'Contact Limit Reached';
+    RAISE EXCEPTION 'Contact Limit Reached';
     RETURN OLD;
 ELSE
     RETURN NEW;
