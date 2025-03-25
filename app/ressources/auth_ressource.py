@@ -92,6 +92,23 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     def _create_admin_auth_permission(self,admin:ClientORM)->AuthPermission:
         return AuthPermission(roles=self.admin_roles,scope=admin.client_scope,allowed_assets=[],allowed_routes={}) #TODO add more routes
     
+    def _decode_and_verify(self, client: ClientORM, x_client_token):
+        authPermission: AuthPermission = self.jwtAutService.decode_token(x_client_token)
+        
+        if authPermission["client_id"] != client.client_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
+
+        if authPermission['generation_id'] != self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
+        
+        if authPermission["issued_for"] != client.issued_for:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Issued-for mismatch")
+        
+        if authPermission['group_id'] != str(client.group.group_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
+
+        return authPermission
+    
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET])
@@ -108,35 +125,25 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler)
     @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
-    @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.POST],mount=False)
-    async def reset_tokens(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:Annotated[str,Header(None)]):
+    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST],mount=False)
+    async def self_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:Annotated[str,Header(None)]):
         if x_client_token == None:
-            ...
-            
-        authPermission = self.decode_and_verify(client, x_client_token)
+            ...      
+        authPermission = self._decode_and_verify(client, x_client_token)
         await raw_revoke_auth_token(client)
         auth_token, refresh_token = await self.issue_auth(client, authPermission)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
 
-    def decode_and_verify(self, client: ClientORM, x_client_token):
-        authPermission: AuthPermission = self.jwtAutService.decode_token(x_client_token)
-        
-        if authPermission["client_id"] != client.client_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
-
-        if authPermission['generation_id'] != self.configService.config_json_app[ConfigAppConstant.GENERATION_ID_KEY]:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
-        
-        if authPermission["issued_for"] != client.issued_for:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Issued-for mismatch")
-        
-        if authPermission['group_id'] != str(client.group.group_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
-
-        return authPermission
-
+    @UsePipe(ForceClientPipe)
+    @UseLimiter(limit_value='1/day')
+    @UseHandler(SecurityClientHandler)
+    @UseGuard(AuthenticatedClientGuard(reverse=True))
+    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.DELETE],mount=False)
+    async def self_disconnect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)]):
+        await self._revoke_client(client)
+        return JSONResponse(status_code=status.HTTP_200_OK,content={'message':'Successfully disconnect'})
 
 
 @HTTPRessource(AUTH_PREFIX,routers=[GenerateAuthRessource,RefreshAuthRessource])

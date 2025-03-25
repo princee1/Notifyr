@@ -222,9 +222,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseGuard(AuthenticatedClientGuard)
     @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
-        await raw_revoke_challenges(client)
-        client.authenticated = False
-        await client.save()
+        await self._revoke_client(client)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
 
     @UseLimiter(limit_value='4/day')

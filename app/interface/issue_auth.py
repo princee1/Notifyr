@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from app.classes.auth_permission import AuthPermission, Role, Scope
 from app.definition._interface import Interface, IsInterface
-from app.models.security_model import ChallengeORM
+from app.models.security_model import ChallengeORM, ClientORM, raw_revoke_challenges
 from app.services.admin_service import AdminService
 
 
@@ -27,3 +27,8 @@ class IssueAuthInterface(Interface):
 
         auth_token, refresh_token = self.adminService.issue_auth(challenge, client, auth_model)
         return auth_token, refresh_token
+
+    async def _revoke_client(self, client:ClientORM):
+        await raw_revoke_challenges(client)
+        client.authenticated = False
+        await client.save()
