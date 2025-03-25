@@ -18,7 +18,10 @@ class MiddlewarePriority(Enum):
     ANALYTICS = 3
     SECURITY = 4
     AUTH = 5
-    BACKGROUND_TASK_SERVICE = 6
+    USER_APP = 5.5
+    CHALLENGE = 6
+    BACKGROUND_TASK_SERVICE = 7
+
 
 class MiddleWare(BaseHTTPMiddleware):
 

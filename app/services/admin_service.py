@@ -61,7 +61,7 @@ class AdminService(Service):
 
     
     def issue_auth(self,challenge:ChallengeORM,client:ClientORM,authModel):
-        refresh_token = self.jwtAuthService.encode_refresh_token(client_id=str(client.client_id),challenge=challenge.challenge_refresh, issued_for=client.issued_for, group_id=client.group_id)
+        refresh_token = self.jwtAuthService.encode_refresh_token(client_id=str(client.client_id),challenge=challenge.challenge_refresh, issued_for=client.issued_for, group_id=client.group_id,client_type=client.client_type)
 
         if refresh_token == None:
             raise CouldNotCreateRefreshTokenError()

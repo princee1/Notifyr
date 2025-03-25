@@ -163,7 +163,7 @@ class JWTRefreshTokenPermission(Permission):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
 
         challenge = await ChallengeORM.filter(client=client_id).first()
-        if challenge != permission['challenge']:
+        if challenge.challenge_refresh != permission['challenge']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Challenge not valid")
         
         return True

@@ -167,12 +167,6 @@ async def verify_admin_signature(x_admin_signature:Annotated[str,Header()]):
 async def get_client(client_id:str = Depends(get_query_params('client_id')),cid:str= Depends(get_query_params('cid','id')),authPermission:AuthPermission=Depends(get_auth_permission)):
     return await GetClient()(client_id=client_id,cid=cid,authPermission =authPermission)
 
-async def get_admin(client_id:str = Query(''),cid:str=Query(''),authPermission:AuthPermission=Depends(get_auth_permission)):
-    return await GetClient(False,True)(client_id=client_id,cid=cid,authPermission =authPermission)
-
-async def get_non_admin(client_id:str = Query(''),cid:str=Query(''),authPermission:AuthPermission=Depends(get_auth_permission)):
-    return await GetClient(True,False)(client_id=client_id,cid=cid,authPermission =authPermission)
-
 async def get_group(group_id:str=Query(''),gid:str=Query('id'),authPermission:AuthPermission=Depends(get_auth_permission)):
     return await _get_group(group_id=group_id,gid =gid,authPermission=authPermission)
 

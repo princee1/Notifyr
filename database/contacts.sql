@@ -231,13 +231,14 @@ GROUP BY
 
 CREATE OR REPLACE FUNCTION delete_expired_subscontent() RETURNS VOID AS $$
 BEGIN
+    SET search_path = contacts;
     DELETE FROM SubsContent WHERE ttl != NULL and ttl < NOW();
 END;
 $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'delete_expired_subscontent', '0 0 * * *', 'SELECT contacts.delete_expired_subscontent();'
-    );
+    'delete_expired_subscontent_every_5_min', '*/5 * * * *', 'SELECT contacts.delete_expired_subscontent();'
+);
 
 CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE
@@ -252,7 +253,7 @@ FROM
     Contact;
 
 IF contact_count >= 2 THEN
-    RAISE NOTICE 'Contact Limit Reached';
+    RAISE EXCEPTION 'Contact Limit Reached';
     RETURN OLD;
 ELSE
     RETURN NEW;

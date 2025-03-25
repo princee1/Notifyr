@@ -18,10 +18,12 @@ class IssueAuthInterface(Interface):
         self.adminService:AdminService =adminService
     
     def _transform_to_auth_model(self, permission: AuthPermission):
+        permission['roles']=[r.value for r in permission['roles']]
         return IssueAuthInterface.AuthModel(permission['scope'],permission['roles'],permission['allowed_routes'],permission['allowed_assets'])
 
     async def issue_auth(self, client, authPermission):
         challenge = await ChallengeORM.filter(client=client).first()
         auth_model = self._transform_to_auth_model(authPermission)
+
         auth_token, refresh_token = self.adminService.issue_auth(challenge, client, auth_model)
         return auth_token, refresh_token
