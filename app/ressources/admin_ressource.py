@@ -42,7 +42,7 @@ class AuthPermissionModel(BaseModel):
     def checks_roles(cls, roles: list[Role]):
         if Role.PUBLIC not in roles:
             roles.append(Role.PUBLIC)
-
+        return roles
         return [r.value for r in roles]
 
 class GenerationModel(BaseModel):
@@ -236,6 +236,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         await raw_revoke_challenges(client)  # NOTE reset counter
         authModel = authModel.model_dump()
         authModel['scope'] = client.client_scope
+
         auth_token, refresh_token = await self.issue_auth(client, authModel)
         client.authenticated = True
         await client.save()
