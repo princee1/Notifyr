@@ -5,13 +5,13 @@ from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.my_depends import get_group, get_client
 from app.interface.issue_auth import IssueAuthInterface
-from app.models.security_model import ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, raw_revoke_challenges
+from app.models.security_model import ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.celery_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant
-from app.utils.dependencies import get_auth_permission, get_request_id
+from app.utils.dependencies import get_auth_permission, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
@@ -19,7 +19,7 @@ from app.classes.auth_permission import Role, RoutePermission, AssetsPermission,
 from pydantic import BaseModel,  field_validator
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe
-from app.utils.validation import ipv4_validator
+from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from slowapi.util import get_remote_address
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from datetime import datetime, timedelta
@@ -53,7 +53,7 @@ class GenerationModel(BaseModel):
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,TortoiseHandler)
 @HTTPRessource(CLIENT_PREFIX)
-class ClientRessource(BaseHTTPRessource):
+class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @InjectInMethod
     def __init__(self, configService: ConfigService, securityService: SecurityService, jwtAuthService: JWTAuthService, adminService: AdminService):
@@ -67,18 +67,17 @@ class ClientRessource(BaseHTTPRessource):
 
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/')
-    async def create_client(self, client: ClientModel, authPermission=Depends(get_auth_permission)):
+    async def create_client(self, client: ClientModel,gid: str = Depends(get_query_params('gid', 'id')), authPermission=Depends(get_auth_permission)):
         name = client.client_name
         scope = client.client_scope
         password,salt = self.securityService.store_password(client.password,self.key)
         salt = str(salt)
         
         group_id = client.group_id
-        if group_id != None and not await GroupClientORM.exists(group=group_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Group not found")
+        if group_id != None :
+            group = await get_group(group_id=group_id,gid=gid,authPermission=authPermission)
 
-        client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group_id,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
+        client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
         challenge = await ChallengeORM.create(client=client)
         challenge.expired_at_auth = challenge.created_at_auth + timedelta(seconds=self.configService.AUTH_EXPIRATION)
         challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.configService.REFRESH_EXPIRATION)
@@ -89,10 +88,17 @@ class ClientRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
-    async def add_client_to_group(self, client: Annotated[ClientORM, Depends(get_client)], group: Annotated[GroupClientORM, Depends(get_group)]):
-        client.group = group
-        await client.save()
+    async def update_client(self, updateClient:UpdateClientModel ,client: Annotated[ClientORM, Depends(get_client)],gid: str = Depends(get_query_params('gid', 'id')),authPermission=Depends(get_auth_permission) ):
+        is_revoked = await self._update_client(updateClient, client, gid, authPermission)
+        
+        if is_revoked:
+            # ERROR Do i need the revoke the possibility to login again?
+            await self._revoke_client(client)
+        else:
+            await client.save()
+
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully added to group", "client": client.to_json})
+
 
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
@@ -137,6 +143,41 @@ class ClientRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Get('/group/', deprecated=True)
     async def get_single_group(self, group: Annotated[GroupClientORM, Depends(get_group)], authPermission=Depends(get_auth_permission)):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"group": group.to_json})
+    
+    async def _update_client(self, updateClient, client, gid, authPermission):
+        is_revoked=False
+
+        if updateClient.group_id:
+            group = await get_group(group_id=updateClient.group_id,gid=gid,authPermission=authPermission)
+            client.group=group
+            is_revoked = True
+
+        if updateClient.password:
+            password,salt = self.securityService.store_password(client.password,self.key)
+            salt = str(salt)
+            client.password = password
+            client.password_salt= salt
+            is_revoked = True
+
+        if updateClient.client_name:
+            client.client_name = updateClient.client_name
+        
+        if updateClient.client_scope:
+            client.client_scope = updateClient.client_scope
+            is_revoked = True
+        
+        if updateClient.issued_for:
+            client.issued_for = updateClient.issued_for
+            is_revoked = True
+
+        else:
+            if client.client_scope == Scope.SoloDolo:
+                if not ipv4_validator(client.issued_for):
+                    raise ...
+            else :
+                if not ipv4_subnet_validator(client.issued_for):
+                    raise ...
+        return is_revoked
 
 @UseHandler(TortoiseHandler)
 @UseRoles([Role.ADMIN])

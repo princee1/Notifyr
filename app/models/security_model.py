@@ -118,7 +118,7 @@ class ClientModel(ClientModelBase):
     group_id:str | None = None
 
     @model_validator(mode="after")
-    def validate(self)->Self:
+    def validate_ip_issuance(self)->Self:
         if self.client_scope == Scope.Organization:
             if not ipv4_subnet_validator(self.issued_for):
                 raise ValueError('Invalid ipv4 subnet')
@@ -130,6 +130,30 @@ class ClientModel(ClientModelBase):
     @field_validator('password')
     def check_password(cls,password:str):
         return client_password_validator(password)
+
+class UpdateClientModel(ClientModel):
+    client_scope:Scope|None = None
+    password:str|None = None
+    client_name:str | None = None
+    issued_for:str | None = None
+
+    @model_validator(mode="after")
+    def validate_ip_issuance(self)->Self:
+        if self.client_scope != None and self.issued_for!=None:
+            return super().validate_ip_issuance
+        return self
+    
+    @field_validator('password')
+    def check_password(cls, password):
+        if password!=None:
+            return super().check_password(password)
+        return password
+    
+    @model_validator(mode="after")
+    def final_validate(self) -> Self:
+        if all([not self.client_scope, not self.password, not self.client_name, not self.issued_for]):
+            raise ValueError('At least one field must be provided for update.')
+        return self
 
 
 async def raw_revoke_challenges(client:ClientORM):
