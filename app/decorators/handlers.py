@@ -10,7 +10,7 @@ from celery.exceptions import AlreadyRegistered,MaxRetriesExceededError,BackendS
 
 from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError,ContactDoubleOptInAlreadySetError,ContactOptInCodeNotMatchError
 from app.errors.request_error import IdentifierTypeError
-from app.errors.security_error import AlreadyBlacklistedClientError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
+from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError,ClientTokenHeaderNotProvidedError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -267,6 +267,17 @@ class SecurityClientHandler(Handler):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
                 'message': 'Client is already blacklisted'if not  e.reversed_ else 'Client is not blacklisted yet',
             })
+        
+        except ClientTokenHeaderNotProvidedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Client token header not provided',
+            })
+
+        except AuthzIdMisMatchError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
+                'message': 'Authorization ID mismatch',
+            })
+
 
 class RequestErrorHandler(Handler):
 
@@ -278,3 +289,11 @@ class RequestErrorHandler(Handler):
                 'message':'Invalid identifier type specified'
             })
             
+class ValueErrorHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except ValueError as e:
+            mess = e.args[0] if e else ''
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,detail=mess)

@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, status
 import time
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, WSPermission
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
 from app.utils.constant import ConfigAppConstant
@@ -74,7 +74,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             self.generation_id = self.configService.config_json_app.data[
                 ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY]
 
-    def encode_auth_token(self,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
+    def encode_auth_token(self,authz_id,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
         try:
             if data == None:
                 data = {}
@@ -82,7 +82,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             created_time = time.time()
             permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
                                         expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
-                                        salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id)
+                                        salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id,authz_id=authz_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
@@ -193,12 +193,15 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         token = self.decode_token(token)
         permission: AuthPermission = AuthPermission(**token)
         try:
-            if issued_for != permission["issued_for"]: #TODO issued_for
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            if permission['scope'] == Scope.SoloDolo.value:
+                if issued_for != permission["issued_for"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            else:
+                # TODO verify subnet
+                ...
 
             self.set_status(permission,'auth')
-            
             # if permission['status'] == 'expired': # NOTE might accept expired
             #     raise HTTPException(
             #         status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
@@ -290,6 +293,7 @@ class SecurityService(Service, EncryptDecryptInterface):
 
     def verify_password(self, stored_hash, stored_salt, provided_password, key):
         stored_hash = b64_decode(stored_hash)
+        stored_salt = bytes(stored_salt.encode())
         # stored_salt = b64_decode(stored_salt)
         hashed_provided_password = self.hash_value_with_salt(
             provided_password, key, stored_salt)

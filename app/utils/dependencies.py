@@ -85,7 +85,17 @@ def get_timezone(request:Request)->str:
     ...
 
 def get_client_ip(request: Request) -> str:
+    ip_address = request.headers.get('X-Forwarded-For', None)
+    if not ip_address:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Client IP address not found in the request headers"
+        )
+    return ip_address
+
+def get_balancer_ip(request: Request) -> str:
     return request.client.host
+
 
 def get_response_id(r:Response = None)-> str | None:
     try:

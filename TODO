@@ -27,3 +27,4 @@
 25. Verify Email before sending, and deactivate bounced contacts
 26. Always verify status before sending a promotion, subscription status , and active user or other with FilterPipe
 27. Ensure security with admin token and client role and check expiration time
+28. For now only one set of access for each client, check if i can add multiple tokens issuance for each client later

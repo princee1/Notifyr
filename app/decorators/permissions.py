@@ -15,18 +15,22 @@ from app.utils.helper import flatten_dict
  
 class JWTRouteHTTPPermission(Permission):
     
-    def __init__(self,accept_inactive=False):
+    def __init__(self,accept_inactive=False,accept_expired=False):
         super().__init__()
         self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
         self.accept_inactive = accept_inactive
+        self.accept_expired = accept_expired
     
     def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission):
         
         if authPermission == None:
             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Auth Permission not implemented")
         
-        if authPermission['status'] != 'active' and not self.accept_inactive:
+        if authPermission['status'] == 'inactive' and not self.accept_inactive:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
+        
+        if authPermission['status'] == 'expired' and not self.accept_expired:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
 
         operation_id = func_meta["operation_id"]
         roles= func_meta['roles']
@@ -201,7 +205,7 @@ class TwilioPermission(Permission):
 
 @APIFilterInject
 def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
-    if not authPermission['client_id'] == client.client_id:
+    if not authPermission['client_id'] == str(client.client_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
     
     return True

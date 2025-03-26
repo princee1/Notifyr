@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS Client (
     client_scope Scope DEFAULT 'SoloDolo',
     group_id UUID DEFAULT NULL,
     client_type ClientType DEFAULT 'User',
+    password TEXT DEFAULT NULL,
+    password_salt TEXT DEFAULT NULL,
+    can_login BOOLEAN DEFAULT NULL,
     issued_for VARCHAR(50) UNIQUE,
     authenticated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -52,6 +55,7 @@ CREATE TABLE IF NOT EXISTS Challenge (
     challenge_refresh TEXT UNIQUE DEFAULT secure_random_string(256),
     created_at_refresh TIMESTAMPTZ DEFAULT NOW(),
     expired_at_refresh TIMESTAMPTZ ,
+    last_authz_id UUID DEFAULT uuid_generate_v4 (),
     PRIMARY KEY (client_id),
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -92,7 +96,7 @@ BEGIN
         created_at_refresh = NOW(),
         expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh)
     WHERE 
-        expired_at_auth <= NOW();
+        expired_at_refresh <= NOW();
 END; $$ LANGUAGE plpgsql;
 
 

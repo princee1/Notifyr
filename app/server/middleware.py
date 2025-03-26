@@ -1,6 +1,6 @@
 import asyncio
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, ClientType, Role, Scope
+from app.classes.auth_permission import AuthPermission, ClientType, Role, Scope, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.models.security_model import ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
@@ -108,14 +108,14 @@ class JWTAuthMiddleware(MiddleWare):
                 if await self.adminService.is_blacklisted(client):
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
 
-            authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
-            authPermission['scope'] = Scope._member_map_[authPermission['scope']]
+            parse_authPermission_enum(authPermission)
             request.state.authPermission = authPermission
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
         return await call_next(request)
-        
+
+    
 class BackgroundTaskMiddleware(MiddleWare):
     priority = MiddlewarePriority.BACKGROUND_TASK_SERVICE
     def __init__(self, app, dispatch = None):

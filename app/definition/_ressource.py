@@ -137,7 +137,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             
             setattr(func,'meta', FuncMetaData())
             func.meta['operation_id'] = computed_operation_id
-            func.meta['roles'] = set()
+            func.meta['roles'] = set() # QUESTION by default are routes public ?
             func.meta['excludes'] = set()
             func.meta['options'] =[] 
             func.meta['limit_obj'] =None
@@ -582,7 +582,7 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
         cls = common_class_decorator(func, UseRoles,None,roles=roles)
         if cls != None:
             return cls
-
+        # TODO by default route is public check the todo in BaseHTTPRessource concerning this
         roles_ = set(roles)
         excludes_ = set(excludes).difference(roles_)
 
