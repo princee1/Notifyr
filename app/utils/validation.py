@@ -5,6 +5,11 @@ from validators import url as validate_url, ipv4 as IPv4Address, ValidationError
 from geopy.geocoders import Nominatim
 from bs4 import Tag
 from cerberus import Validator,SchemaError
+from datetime import datetime
+from functools import wraps
+import re
+import ipaddress
+
 
 def ipv4_validator(ip):
     """
@@ -26,8 +31,19 @@ def ipv6_validator(ip):
         return False
 
 
-def ipv4_subnet_validator(ip): # TODO
-    ...
+def ipv4_subnet_validator(ip):
+    """
+    The function `ipv4_subnet_validator` checks if a given input is a valid IPv4 subnet.
+    """
+    try:
+        ipaddress.IPv4Network(ip, strict=False)
+        return True
+    except ValueError:
+        return False
+    except ipaddress.NetmaskValueError:
+        return False
+    except:
+        return False
 
 
 def email_validator(e_mail):
@@ -81,9 +97,6 @@ def location_validator(latitude, longitude):
 def digit_validator(val:int):
     return val>=0 and val <=9
 
-from datetime import datetime
-from functools import wraps
-import re
 
 def date_validator(date: str) -> bool:
     try:
