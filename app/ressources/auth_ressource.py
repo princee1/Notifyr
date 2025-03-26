@@ -105,7 +105,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         if authPermission["issued_for"] != client.issued_for:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Issued-for mismatch")
         
-        # if authPermission['group_id'] != str(client.group.group_id):
+        # if authPermission['group_id'] != str(client.group_id):  # VERIFY if works
         #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
 
         return authPermission

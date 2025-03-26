@@ -17,7 +17,7 @@ from app.definition._ressource import PingService, UseGuard, UseHandler, UsePerm
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import Role, RoutePermission, AssetsPermission, Scope, TokensModel
 from pydantic import BaseModel,  field_validator
-from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
+from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe
 from app.utils.helper import parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
@@ -88,7 +88,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
-    @UseHandler(ValueError)
+    @UseHandler(ValueErrorHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
     async def update_client(self, updateClient:UpdateClientModel ,client: Annotated[ClientORM, Depends(get_client)],gid: str = Depends(get_query_params('gid', 'id')),rmgrp: str = Depends(get_query_params('rmgrp', False)),authPermission=Depends(get_auth_permission) ):
         
@@ -104,7 +104,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         else:
             await client.save()
 
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully added to group", "client": client.to_json})
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully updated", "client": client.to_json})
 
 
     @UsePermission(AdminPermission)
@@ -214,8 +214,8 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         if group is None and client is None:
             raise SecurityIdentityNotResolvedError
 
-        if group is not None and client is not None and client.group != group.group_id:
-            raise GroupIdNotMatchError(str(client.group), group.group_id)
+        if group is not None and client is not None and client.group_id != group.group_id:
+            raise GroupIdNotMatchError(str(client.group_id), group.group_id)
 
         blacklist = await self.adminService.blacklist(client, group,time)
         # if blacklist == None:
@@ -230,7 +230,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
             raise SecurityIdentityNotResolvedError
 
         if group is not None and client is not None and client.group_id != group.group_id:
-            raise GroupIdNotMatchError(client.group_id, group.group_id)
+            raise GroupIdNotMatchError(str(client.group_id), str(group.group_id))
 
         blacklist = await self.adminService.un_blacklist(client, group)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully un-blacklisted", "un_blacklist": blacklist})

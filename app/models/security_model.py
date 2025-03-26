@@ -57,7 +57,7 @@ class ClientORM(models.Model):
             "authenticated": self.authenticated,
             "client_type": self.client_type.value,
             "issued_for": self.issued_for,
-            "group_id": str(self.group) if self.group else None,
+            "group_id": str(self.group_id) if self.group else None,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
         }
@@ -91,8 +91,8 @@ class BlacklistORM(models.Model):
     def to_json(self):
         return {
             "blacklist_id": str(self.blacklist_id),
-            "client_id": str(self.client.client_id) if self.client else None,
-            "group_id": str(self.group.group_id) if self.group else None,
+            "client_id": str(self.client_id) if self.client else None,
+            "group_id": str(self.group_id) if self.group else None,
             "created_at": self.created_at.isoformat(),
             "expired_at": self.expired_at.isoformat() if self.expired_at else None
         }
@@ -149,11 +149,11 @@ class UpdateClientModel(ClientModel):
             return super().check_password(password)
         return password
     
-    @model_validator(mode="after")
-    def final_validate(self) -> Self:
-        if all([not self.client_scope, not self.password, not self.client_name, not self.issued_for]):
-            raise ValueError('At least one field must be provided for update.')
-        return self
+    # @model_validator(mode="after")
+    # def final_validate(self) -> Self:
+    #     if all([self.client_scope is None, self.password is None, self.client_name is None, self.issued_for is None,self.group_id]):
+    #         raise ValueError('At least one field must be provided for update.')
+    #     return self
 
 
 async def raw_revoke_challenges(client:ClientORM):

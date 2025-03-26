@@ -195,11 +195,23 @@ async def verify_admin_signature(x_admin_signature: Annotated[str, Header()]):
 
 
 async def get_client(client_id: str = Depends(get_query_params('client_id')), cid: str = Depends(get_query_params('cid', 'id')), authPermission: AuthPermission = Depends(get_auth_permission)):
-    return await GetClient()(client_id=client_id, cid=cid, authPermission=authPermission)
+    try:
+        return await GetClient()(client_id=client_id, cid=cid, authPermission=authPermission)
+    except OperationalError as e :
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e.args[0])
+        )
 
 
 async def get_group(group_id: str = Query(''), gid: str = Query('id'), authPermission: AuthPermission = Depends(get_auth_permission)):
-    return await _get_group(group_id=group_id, gid=gid, authPermission=authPermission)
+    try:
+        return await _get_group(group_id=group_id, gid=gid, authPermission=authPermission)
+    except OperationalError as e :
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e.args[0])
+            )
 
 
 async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())], cid: str = Depends(get_query_params('cid', 'id'))):
