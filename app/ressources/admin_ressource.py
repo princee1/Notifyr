@@ -77,6 +77,8 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         group_id = client.group_id
         if group_id != None :
             group = await get_group(group_id=group_id,gid=gid,authPermission=authPermission)
+        else:
+            group = None
 
         client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
         challenge = await ChallengeORM.create(client=client)

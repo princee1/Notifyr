@@ -20,7 +20,7 @@ def AcceptNone(key):
 
         @functools.wraps(func)
         async def wrapper(**kwargs):
-            if param not in kwargs:
+            if key not in kwargs:
                 #TODO Raise Warning
                 return None
             param = kwargs[key]
