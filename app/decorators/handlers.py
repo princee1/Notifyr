@@ -289,3 +289,11 @@ class RequestErrorHandler(Handler):
                 'message':'Invalid identifier type specified'
             })
             
+class ValueErrorHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except ValueError as e:
+            mess = e.args[0] if e else ''
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,detail=mess)

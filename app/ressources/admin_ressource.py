@@ -19,6 +19,7 @@ from app.classes.auth_permission import Role, RoutePermission, AssetsPermission,
 from pydantic import BaseModel,  field_validator
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe
+from app.utils.helper import parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from slowapi.util import get_remote_address
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
@@ -87,10 +88,16 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
+    @UseHandler(ValueError)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
-    async def update_client(self, updateClient:UpdateClientModel ,client: Annotated[ClientORM, Depends(get_client)],gid: str = Depends(get_query_params('gid', 'id')),authPermission=Depends(get_auth_permission) ):
-        is_revoked = await self._update_client(updateClient, client, gid, authPermission)
+    async def update_client(self, updateClient:UpdateClientModel ,client: Annotated[ClientORM, Depends(get_client)],gid: str = Depends(get_query_params('gid', 'id')),rmgrp: str = Depends(get_query_params('rmgrp', False)),authPermission=Depends(get_auth_permission) ):
         
+        if not isinstance(rmgrp,bool):
+            rmgrp_ = parseToBool(rmgrp)
+            if rmgrp_ == None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f'Could not parse {rmgrp} as a bool')
+
+        is_revoked = await self._update_client(updateClient, client, gid, authPermission,rmgrp_)
         if is_revoked:
             # ERROR Do i need the revoke the possibility to login again?
             await self._revoke_client(client)
@@ -144,13 +151,17 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     async def get_single_group(self, group: Annotated[GroupClientORM, Depends(get_group)], authPermission=Depends(get_auth_permission)):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"group": group.to_json})
     
-    async def _update_client(self, updateClient, client, gid, authPermission):
+    async def _update_client(self, updateClient:UpdateClientModel, client:ClientORM, gid:str, authPermission,rm_group:bool):
         is_revoked=False
 
         if updateClient.group_id:
             group = await get_group(group_id=updateClient.group_id,gid=gid,authPermission=authPermission)
             client.group=group
             is_revoked = True
+        else :
+            if rm_group:
+                client.group = None
+                is_revoked = True
 
         if updateClient.password:
             password,salt = self.securityService.store_password(client.password,self.key)
@@ -162,21 +173,22 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         if updateClient.client_name:
             client.client_name = updateClient.client_name
         
-        if updateClient.client_scope:
+        if updateClient.client_scope and client.client_scope != updateClient.client_scope:
             client.client_scope = updateClient.client_scope
             is_revoked = True
         
-        if updateClient.issued_for:
+        if updateClient.issued_for and client.issued_for != updateClient.issued_for:
             client.issued_for = updateClient.issued_for
             is_revoked = True
 
         else:
             if client.client_scope == Scope.SoloDolo:
                 if not ipv4_validator(client.issued_for):
-                    raise ...
-            else :
+                    raise ValueError(f"Invalid IPv4 address: {client.issued_for}")
+            else:
                 if not ipv4_subnet_validator(client.issued_for):
-                    raise ...
+                    raise ValueError(f"Invalid IPv4 subnet: {client.issued_for}")
+                
         return is_revoked
 
 @UseHandler(TortoiseHandler)
