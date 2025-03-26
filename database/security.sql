@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS Blacklist (
     client_id UUID UNIQUE DEFAULT NULL,
     group_id UUID UNIQUE DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    expired_at TiMESTAMPTZ NOT NULL,
+    expired_at TiMESTAMPTZ,
     PRIMARY KEY (blacklist_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE

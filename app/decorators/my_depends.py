@@ -6,7 +6,7 @@ from app.classes.auth_permission import AuthPermission, ClientType, ContactPermi
 from app.container import Get, GetDependsAttr
 from app.errors.security_error import ClientDoesNotExistError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
-from app.models.security_model import ClientORM, GroupClientORM
+from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
@@ -20,9 +20,16 @@ def AcceptNone(key):
 
         @functools.wraps(func)
         async def wrapper(**kwargs):
-            param = kwargs[key]
-            if not param:
+            if param not in kwargs:
+                #TODO Raise Warning
                 return None
+            param = kwargs[key]
+            if isinstance(param,str):
+                if not param:
+                    return None
+            else:
+                if param == None:
+                    return None
 
             return await func(**kwargs)
         return wrapper
@@ -245,3 +252,14 @@ async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, De
     await client.save()
 
     return client
+
+@ByPassAdminRole()
+@AcceptNone('blacklist_id')
+async def _get_blacklist(blacklist_id:str=None):
+    blacklist = await BlacklistORM.filter(blacklist_id=blacklist_id).first()
+    if blacklist == None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail='Blacklist does not exists')
+    return blacklist
+
+async def get_blacklist(blacklist_id:str=Depends(get_query_params('blacklist_id', None))):
+    return await _get_blacklist(blacklist_id=blacklist_id)

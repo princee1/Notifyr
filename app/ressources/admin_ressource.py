@@ -3,9 +3,9 @@ from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Query, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.decorators.my_depends import get_group, get_client
+from app.decorators.my_depends import get_blacklist, get_group, get_client
 from app.interface.issue_auth import IssueAuthInterface
-from app.models.security_model import ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
+from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.celery_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
@@ -225,7 +225,11 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='20/week')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.DELETE])
-    async def un_blacklist_tokens(self, group: Annotated[GroupClientORM, Depends(get_group)], client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
+    async def un_blacklist_tokens(self, group: Annotated[GroupClientORM, Depends(get_group)], client: Annotated[ClientORM, Depends(get_client)], blacklist:Annotated[BlacklistORM,Depends(get_blacklist)], request: Request, authPermission=Depends(get_auth_permission)):
+        if blacklist is not None:
+            await blacklist.delete()
+            return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Blacklist entry successfully removed"})
+
         if group is None and client is None:
             raise SecurityIdentityNotResolvedError
 
