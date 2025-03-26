@@ -96,7 +96,7 @@ BEGIN
         created_at_refresh = NOW(),
         expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh)
     WHERE 
-        expired_at_auth <= NOW();
+        expired_at_refresh <= NOW();
 END; $$ LANGUAGE plpgsql;
 
 
