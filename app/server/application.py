@@ -206,10 +206,10 @@ class Application(EventInterface):
             pause_before=1, clear_stack=True, space_line=False)
 
     def add_middlewares(self):
+        self.app.add_middleware(SlowAPIMiddleware)
         
         for middleware in sorted(self.appParameter.middlewares, key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
-        self.app.add_middleware(SlowAPIMiddleware)
         
     def register_tortoise(self):
         pg_user = self.configService.getenv('POSTGRES_USER')

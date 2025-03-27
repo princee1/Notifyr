@@ -43,6 +43,7 @@ class FuncMetaData(TypedDict):
     roles:set[Role]
     excludes:set[Role]
     options: list[Callable]
+    shared:bool
     limit_obj:dict
     limit_exempt:bool=False
 

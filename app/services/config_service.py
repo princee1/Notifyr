@@ -162,15 +162,22 @@ class ConfigService(_service.Service):
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
 
+                                # REDIS CONFIG #
         
+        self.REDIS_URL = self.getenv("REDIS_URL")
+
+                                # SLOW API CONFIG #
+
+        self.SLOW_API_REDIS_URL = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL",'/1')
+
                                 # CELERY CONFIG #
 
-        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL")
-        self.CELERY_BACKEND_URL = self.getenv("CELERY_BACKEND_URL")
-        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT",1)
-        self.REDBEAT_REDIS_URL = self.getenv("REDBEAT_REDIS_URL",self.CELERY_MESSAGE_BROKER_URL)
-        self.CELERY_RESULT_EXPIRES=ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"),60*60*24)
+        self.CELERY_MESSAGE_BROKER_URL = self.REDIS_URL+self.getenv("CELERY_MESSAGE_BROKER_URL",'/0')
+        self.CELERY_BACKEND_URL =  self.REDIS_URL+self.getenv("CELERY_BACKEND_URL",'/0')
+        self.REDBEAT_REDIS_URL =  self.REDIS_URL+self.getenv("REDBEAT_REDIS_URL",self.CELERY_MESSAGE_BROKER_URL)
 
+        self.CELERY_RESULT_EXPIRES=ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"),60*60*24)
+        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT",1)
 
                                 # CHAT CONFIG #
         

@@ -46,7 +46,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseRoles(roles=[Role.REFRESH])
     @UsePermission(JWTRefreshTokenPermission)
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard,)
-    @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST], deprecated=True)
+    @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST])
     async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
         refreshPermission:RefreshPermission = tokens
         async with in_transaction():    
@@ -129,7 +129,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
     
-    @UseLimiter(limit_value='1/day')
+    @UseLimiter(limit_value='1/day',per_method=True)
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler)
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
@@ -154,7 +154,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
 
     @UsePipe(ForceClientPipe)
-    @UseLimiter(limit_value='1/day')
+    @UseLimiter(limit_value='1/day',per_method=True)
     @UseHandler(SecurityClientHandler)
     @UseGuard(AuthenticatedClientGuard)
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise

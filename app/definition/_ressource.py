@@ -5,6 +5,7 @@ instance imported from `container`.
 from inspect import isclass
 from typing import Any, Callable,Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 from app.definition._ws import W
+from app.services.config_service import ConfigService
 from app.utils.helper import issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
@@ -19,12 +20,17 @@ from enum import Enum
 from ._utils_decorator import *
 from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_remote_address,get_ipaddr
 import asyncio
 from asgiref.sync import sync_to_async
 
+
+configService:ConfigService = Get(ConfigService)
+storage_uri = configService.SLOW_API_REDIS_URL
+#storage_uri = None
+
 PATH_SEPARATOR = "/"
-GlobalLimiter = Limiter(get_remote_address) # BUG Need to change the datastructure to have more limiter
+GlobalLimiter = Limiter(get_ipaddr,storage_uri=storage_uri,headers_enabled=True) # BUG Need to change the datastructure to have more limiter
 RequestLimit =0
 
 
@@ -142,6 +148,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             func.meta['options'] =[] 
             func.meta['limit_obj'] =None
             func.meta['limit_exempt']=False
+            func.meta['shared']=None
             
             if not mount:
                 return func
@@ -238,13 +245,19 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             meta:FuncMetaData = getattr(func_attr,'meta')
 
             limit_obj = meta['limit_obj']
+            shared= meta['shared']
+
             if meta['limit_exempt']:
                 func_attr= GlobalLimiter.exempt(func_attr)
                 setattr(self,func_name,func_attr)
                 return
             
             if limit_obj:
-                func_attr = GlobalLimiter.limit(**limit_obj)(func_attr)
+                if not shared:
+                    func_attr = GlobalLimiter.limit(**limit_obj)(func_attr)
+                else:
+                    func_attr = GlobalLimiter.shared_limit(**limit_obj)(func_attr)
+
                 setattr(self,func_name,func_attr)
 
     def __init_subclass__(cls: Type) -> None:
@@ -611,6 +624,7 @@ def UseLimiter(**kwargs): #TODO
         if meta is not None:
             meta['limit_obj'] = kwargs
             limit_value:str = kwargs['limit_value']
+            meta['shared']=False
             try:
                 limit_value = int(limit_value.split('/')[0])
                 global RequestLimit
@@ -619,6 +633,19 @@ def UseLimiter(**kwargs): #TODO
                 ...
         return func
     return decorator
+
+@functools.wraps(GlobalLimiter.shared_limit)
+def UseSharingLimiter(**kwargs):
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, UseLimiter,None,**kwargs)
+        if cls != None:
+            return cls
+        meta:FuncMetaData | None = getattr(func,'meta',None)
+        if meta is not None:
+            meta['limit_obj'] = kwargs
+            meta['shared']=True
+
+        return func
 
 def ExemptLimiter():
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
