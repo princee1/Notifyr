@@ -62,7 +62,8 @@ services:
       - postgres
     
   # celery:
-  #   image: python:3.10
+  #   image: python:3.11
+  #   command: ["make", "celery"]
   #   build:
   #     context: ./docker/
   #     dockerfile: Dockerfile.celery
@@ -70,16 +71,20 @@ services:
   #   depends_on:
   #     - redis
   #     - redis-commander
+  #   deploy:
+  #     replicas: 5
   
   # redbeat:
-  #   image: python:3.10
+  #   image: python:3.11
   #   build:
   #     context: ./docker/
-  #     dockerfile: Dockerfile.redbeat
+  #     dockerfile: Dockerfile.celery
   #   restart: always
   #   depends_on:
   #     - redis
   #     - redis-commander
+    
+  #   command: ["make ", "redbeat"]
     
 
   # adminer:
@@ -92,6 +97,20 @@ services:
   #     - postgres
   #   environment:
   #     ADMINER_DEFAULT_SERVER: postgres
+
+  flower:
+    image: python:3.10
+    command: ["make", "flower"]
+    build:
+      context: ./docker/
+      dockerfile: Dockerfile.celery
+    restart: always
+    depends_on:
+      - redis
+      - redis-commander
+    ports:
+      - "5555:5555"
+
 
 volumes:
   mongo-data:

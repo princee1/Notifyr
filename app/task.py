@@ -11,6 +11,7 @@ from app.services.security_service import JWTAuthService
 from app.services.twilio_service import SMSService, VoiceService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
+from flower import VERSION
 
 
 ##############################################           ##################################################
