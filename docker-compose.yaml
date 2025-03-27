@@ -80,10 +80,10 @@ services:
   #     context: ./docker/
   #     dockerfile: Dockerfile.celery
   #   restart: always
+      
   #   depends_on:
   #     - redis
   #     - redis-commander
-    
   #   command: ["make ", "redbeat"]
     
 
@@ -96,15 +96,19 @@ services:
   #   depends_on:
   #     - postgres
   #   environment:
-  #     ADMINER_DEFAULT_SERVER: postgres
+  #     ADMINER_DEFAULT_SERVER: 
+      
 
   flower:
-    image: python:3.10
+    image: python:3.11
     command: ["make", "flower"]
+    container_name: flower
     build:
-      context: ./docker/
-      dockerfile: Dockerfile.celery
+      context: ./
+      dockerfile: Dockerfile
     restart: always
+    env_file:
+      - .env
     depends_on:
       - redis
       - redis-commander
