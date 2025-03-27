@@ -8,7 +8,7 @@ Deprecated==1.2.14
 discord_webhook==1.4.1
 emoji==2.14.0
 fastapi==0.115.11
-firebase_admin==6.6.0
+flower==2.0.1
 geopy==2.4.1
 git_clone==1.0.6
 google_api_python_client==2.156.0
