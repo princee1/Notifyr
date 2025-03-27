@@ -81,7 +81,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             salt = str(self.salt)
             created_time = time.time()
             permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
-                                        expired_at=created_time + self.configService.AUTH_EXPIRATION, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
+                                        expired_at=created_time + self.configService.AUTH_EXPIRATION*0.5, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
                                         salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id,authz_id=authz_id)
             token = self._encode_token(permission)
             return token
@@ -94,7 +94,7 @@ class JWTAuthService(Service, EncryptDecryptInterface):
             salt = str(self.salt)
             created_time = time.time()
             permission = RefreshPermission(client_id=client_id, generation_id=self.generation_id, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
-                                           expired_at=created_time + self.configService.REFRESH_EXPIRATION,group_id=group_id,client_type=client_type.value)
+                                           expired_at=created_time + self.configService.REFRESH_EXPIRATION*0.5,group_id=group_id,client_type=client_type.value)
             token = self._encode_token(permission)
             return token
         except Exception as e:
