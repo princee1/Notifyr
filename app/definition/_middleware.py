@@ -59,7 +59,7 @@ def parse_urls(paths:list[str]):
     return temp
             
 
-def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
+def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[],bypass:bool = False):
     paths = parse_urls(paths)
 
     def decorator(func:Callable):
@@ -67,6 +67,9 @@ def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
 
+            if bypass:
+                return await call_next(request)
+            
             url = get_url(request)
 
             if not path_matcher(paths,url):
@@ -79,12 +82,16 @@ def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
         return wrapper
     return decorator
 
-def ExcludeOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
+def ExcludeOn(paths:list[str]=['/*'],methods:list[METHODS]=[],bypass:bool = False):
     paths = parse_urls(paths)
 
     def decorator(func:Callable):
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
+
+            if bypass:
+                return await call_next(request)
+
             url = get_url(request)
 
             if not exclude_path_matcher(paths,url):
@@ -98,11 +105,15 @@ def ExcludeOn(paths:list[str]=['/*'],methods:list[METHODS]=[]):
         return wrapper
     return decorator
 
-def OptionsRulesOn(options:list[Callable[[Request],bool]]=[]):
+def OptionsRulesOn(options:list[Callable[[Request],bool]]=[],bypass:bool = False):
     def decorator(func:Callable):
         
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
+
+            if bypass:
+                return await call_next(request)
+
 
             for option in options:
                 if asyncio.iscoroutinefunction(option):

@@ -24,6 +24,7 @@ class ProcessTimeMiddleWare(MiddleWare):
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
 
+    @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
         try:
@@ -41,6 +42,7 @@ class LoadBalancerMiddleWare(MiddleWare):
         self.configService: ConfigService = Get(ConfigService)
         self.securityService: SecurityService = Get(SecurityService)
     
+    @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request:Request, call_next:Callable[...,Response]):
         response = await call_next(request)
         # TODO add headers like application id, notifyr-service id, Signature-Service, myb generation id 
@@ -88,6 +90,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.get_client = GetClient(True,True)
 
     @ExcludeOn(['/auth/generate/*'])
+    @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
@@ -120,6 +123,7 @@ class BackgroundTaskMiddleware(MiddleWare):
         super().__init__(app, dispatch)
         self.backgroundTaskService:BackgroundTaskService = Get(BackgroundTaskService)
     
+    @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request:Request, call_next):
         request_id = generateId(25)
         self.backgroundTaskService._register_tasks(request_id)
@@ -142,6 +146,7 @@ class UserAppMiddleware(MiddleWare):
         self.configService = Get(ConfigService)
         self.securityService = Get(SecurityService)
 
+    @ExcludeOn(['/docs/*','/openapi.json'])
     @ApplyOn(['/auth/generate/admin/*'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         return await super().dispatch(request, call_next)
@@ -150,6 +155,7 @@ class UserAppMiddleware(MiddleWare):
 class ChallengeMatchMiddleware(MiddleWare):
     priority = MiddlewarePriority.CHALLENGE
 
+    @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         authPermission: AuthPermission = await get_auth_permission(request)
