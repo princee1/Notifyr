@@ -12,3 +12,5 @@ RUN echo "cron.database_name = 'notifyr'" >> /usr/share/postgresql/postgresql.co
 RUN echo "cron.use_background_workers = on" >> /usr/share/postgresql/postgresql.conf.sample
 
 RUN echo "max_worker_processes = 20" >> /usr/share/postgresql/postgresql.conf.sample
+
+# RUN echo "max_connections = 300" >> /usr/share/postgresql/postgresql.conf.sample

@@ -23,7 +23,7 @@ CREATE DOMAIN ClientType AS VARCHAR(25) CHECK (
 
 CREATE TABLE IF NOT EXISTS GroupClient (
     group_id UUID DEFAULT uuid_generate_v4 (),
-    group_name VARCHAR(80) UNIQUE,
+    group_name VARCHAR(50) UNIQUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (group_id)
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 
 CREATE TABLE IF NOT EXISTS Client (
     client_id UUID DEFAULT uuid_generate_v4 (),
-    client_name VARCHAR(200) UNIQUE,
+    client_name VARCHAR(50) UNIQUE,
     client_scope Scope DEFAULT 'SoloDolo',
     group_id UUID DEFAULT NULL,
     client_type ClientType DEFAULT 'User',
@@ -49,10 +49,10 @@ CREATE TABLE IF NOT EXISTS Client (
 
 CREATE TABLE IF NOT EXISTS Challenge (
     client_id UUID ,
-    challenge_auth TEXT UNIQUE DEFAULT secure_random_string(128),
+    challenge_auth VARCHAR(128) UNIQUE DEFAULT secure_random_string(128),
     created_at_auth TIMESTAMPTZ DEFAULT NOW(),
     expired_at_auth TIMESTAMPTZ,
-    challenge_refresh TEXT UNIQUE DEFAULT secure_random_string(256),
+    challenge_refresh VARCHAR(256) UNIQUE DEFAULT secure_random_string(256),
     created_at_refresh TIMESTAMPTZ DEFAULT NOW(),
     expired_at_refresh TIMESTAMPTZ ,
     last_authz_id UUID DEFAULT uuid_generate_v4 (),

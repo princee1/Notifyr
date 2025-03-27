@@ -24,6 +24,7 @@ from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from slowapi.util import get_remote_address
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from datetime import datetime, timedelta
+from tortoise.transactions import in_transaction
 
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
@@ -79,12 +80,12 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             group = await get_group(group_id=group_id,gid=gid,authPermission=authPermission)
         else:
             group = None
-
-        client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
-        challenge = await ChallengeORM.create(client=client)
-        challenge.expired_at_auth = challenge.created_at_auth + timedelta(seconds=self.configService.AUTH_EXPIRATION)
-        challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.configService.REFRESH_EXPIRATION)
-        await challenge.save()
+        async with in_transaction():
+            client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
+            challenge = await ChallengeORM.create(client=client)
+            challenge.expired_at_auth = challenge.created_at_auth + timedelta(seconds=self.configService.AUTH_EXPIRATION)
+            challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.configService.REFRESH_EXPIRATION)
+            await challenge.save()
 
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json})
     
@@ -98,13 +99,13 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             rmgrp_ = parseToBool(rmgrp)
             if rmgrp_ == None:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f'Could not parse {rmgrp} as a bool')
-
-        is_revoked = await self._update_client(updateClient, client, gid, authPermission,rmgrp_)
-        if is_revoked:
-            # ERROR Do i need the revoke the possibility to login again?
-            await self._revoke_client(client)
-        else:
-            await client.save()
+        async with in_transaction():
+            is_revoked = await self._update_client(updateClient, client, gid, authPermission,rmgrp_)
+            if is_revoked:
+                # ERROR Do i need the revoke the possibility to login again?
+                await self._revoke_client(client)
+            else:
+                await client.save()
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully updated", "client": client.to_json})
 
@@ -131,8 +132,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/group/')
     async def create_group(self, group: GroupModel, authPermission=Depends(get_auth_permission)):
-        group_name = group.group_name
-        group:GroupClientORM = await GroupClientORM.create(group_name=group_name) # BUG supposed to return an erro
+        group:GroupClientORM = await GroupClientORM.create(group_name=group.group_name)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Group successfully created", "group": group.to_json})
 
     @UsePermission(AdminPermission)
@@ -281,14 +281,14 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseGuard(AuthenticatedClientGuard)
     @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
-        await self._revoke_client(client)
-        
-        client.can_login = False #QUESTION Can be set to True?
-        if client.can_login:
-            challenge = await ChallengeORM.filter(client=client).first()
-            await self.change_authz_id(challenge)
-        
-        await client.save()
+        async with in_transaction():    
+            await self._revoke_client(client)
+            client.can_login = False #QUESTION Can be set to True?
+            if client.can_login:
+                challenge = await ChallengeORM.filter(client=client).first()
+                await self.change_authz_id(challenge)
+            
+            await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
 
     @UseLimiter(limit_value='4/day')
@@ -297,14 +297,16 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
     async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client)], authModel: AuthPermissionModel, request: Request, authPermission=Depends(get_auth_permission)):
-        await raw_revoke_challenges(client)
-        authModel = authModel.model_dump()
-        authModel['scope'] = client.client_scope
+        
+        async with in_transaction():    
+            await raw_revoke_challenges(client)
+            authModel = authModel.model_dump()
+            authModel['scope'] = client.client_scope
 
-        auth_token, refresh_token = await self.issue_auth(client, authModel,True)
-        client.authenticated = True
-        client.can_login = True
-        await client.save()
+            auth_token, refresh_token = await self.issue_auth(client, authModel,True)
+            client.authenticated = True
+            client.can_login = True
+            await client.save()
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})

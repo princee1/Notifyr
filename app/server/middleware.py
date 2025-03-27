@@ -98,9 +98,6 @@ class JWTAuthMiddleware(MiddleWare):
             client:ClientORM = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
 
             #TODO check group id
-
-            request.state.client = client
-
             if not client.authenticated:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
 
@@ -108,6 +105,7 @@ class JWTAuthMiddleware(MiddleWare):
                 if await self.adminService.is_blacklisted(client):
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
 
+            request.state.client = client
             parse_authPermission_enum(authPermission)
             request.state.authPermission = authPermission
         except HTTPException as e:

@@ -20,6 +20,8 @@ from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
 from app.utils.dependencies import get_auth_permission, get_client_from_request, get_client_ip
 from app.utils.constant import ConfigAppConstant
+from tortoise.transactions import in_transaction
+
 
 
 REFRESH_AUTH_PREFIX = 'refresh'   
@@ -47,10 +49,12 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST], deprecated=True)
     async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
         refreshPermission:RefreshPermission = tokens
-        await raw_revoke_auth_token(client)
-        auth_token, refresh_token = await self.issue_auth(client, authPermission)
-        client.authenticated = True # NOTE just to make sure
-        await client.save()
+        async with in_transaction():    
+
+            await raw_revoke_auth_token(client)
+            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            client.authenticated = True # NOTE just to make sure
+            await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token}, "message": "Tokens successfully refreshed"})
 
 
@@ -60,9 +64,11 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePermission(AdminPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_token)], )
     async def refresh_admin_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
-        refreshPermission:RefreshPermission = tokens
-        await raw_revoke_auth_token(client)
-        auth_token, refresh_token = await self.issue_auth(client, authPermission)
+        async with in_transaction():    
+
+            refreshPermission:RefreshPermission = tokens
+            await raw_revoke_auth_token(client)
+            auth_token, refresh_token = await self.issue_auth(client, authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token,}, "message": "Tokens successfully refreshed"})
 
 @UseRoles([Role.ADMIN])
@@ -115,10 +121,11 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET])
     async def issue_admin_auth(self, request: Request,):
         #TODO Protect requests
-        admin_client = await self._get_admin_client()
-        await raw_revoke_challenges(admin_client)
-        authPermission = self._create_admin_auth_permission(admin_client)
-        auth_token, refresh_token = await self.issue_auth(admin_client,authPermission)
+        async with in_transaction():    
+            admin_client = await self._get_admin_client()
+            await raw_revoke_challenges(admin_client)
+            authPermission = self._create_admin_auth_permission(admin_client)
+            auth_token, refresh_token = await self.issue_auth(admin_client,authPermission)
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
     
@@ -134,14 +141,15 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 
         authPermission:AuthPermission = self._decode_and_verify(client, x_client_token)
         parse_authPermission_enum(authPermission)
-        challenge = await ChallengeORM.filter(client=client).first()
+        async with in_transaction():    
 
-        if not self.compare_authz_id(challenge,authPermission['authz_id']):
-            raise AuthzIdMisMatchError
-        
-        await raw_revoke_auth_token(client)
-        auth_token, refresh_token = await self.issue_auth(client, authPermission)
-        await client.save()
+            challenge = await ChallengeORM.filter(client=client).first()
+            if not self.compare_authz_id(challenge,authPermission['authz_id']):
+                raise AuthzIdMisMatchError
+            
+            await raw_revoke_auth_token(client)
+            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
 
@@ -158,15 +166,16 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         authPermission:AuthPermission = self.jwtAutService.verify_auth_permission(x_client_token,ip_address)
         parse_authPermission_enum(authPermission)
 
-        jwtAuthPermission = JWTRouteHTTPPermission(accept_inactive=True)
-        challenge = await ChallengeORM.filter(client=client).first()
+        async with in_transaction():    
+            jwtAuthPermission = JWTRouteHTTPPermission(accept_inactive=True)
+            challenge = await ChallengeORM.filter(client=client).first()
 
-        if challenge.challenge_auth != authPermission['challenge']:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
-        
-        funcMetaData:FuncMetaData = getattr(self.self_revoke_by_connect,'meta')
-        jwtAuthPermission.permission(self.__class__.__name__,funcMetaData,authPermission)
-        await self._revoke_client(client)
+            if challenge.challenge_auth != authPermission['challenge']:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
+            
+            funcMetaData:FuncMetaData = getattr(self.self_revoke_by_connect,'meta')
+            jwtAuthPermission.permission(self.__class__.__name__,funcMetaData,authPermission)
+            await self._revoke_client(client)
         return JSONResponse(status_code=status.HTTP_200_OK,content={'message':'Successfully disconnect'})
 
 
