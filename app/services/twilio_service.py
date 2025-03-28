@@ -28,6 +28,7 @@ class TwilioService(_service.Service):
     def __init__(self, configService: ConfigService,) -> None:
         super().__init__()
         self.configService = configService
+        self.SERVICE_ID = self.configService.getenv('TWILIO_SERVICE_ID')
 
     def build(self):
         self.client = Client(self.configService.TWILIO_ACCOUNT_SID,
@@ -56,6 +57,13 @@ class TwilioService(_service.Service):
         if not validator.validate(full_url, params, twilio_signature):
             raise HTTPException(
                 status_code=403, detail="Invalid Twilio Signature")
+
+    async def update_env_variable(self,auth_token,refresh_token):
+        
+        response = ...
+        status_code:int = ...
+        
+        return status_code
 
 
 @_service.AbstractServiceClass
