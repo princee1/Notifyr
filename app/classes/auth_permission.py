@@ -36,6 +36,7 @@ class Scope(Enum):
 class ClientType(Enum):
     User = 'User'
     Admin = 'Admin'
+    Twilio = 'Twilio'
 
 
 class FuncMetaData(TypedDict):

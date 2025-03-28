@@ -107,8 +107,7 @@ def GetClient(bypass: bool = False, accept_admin: bool = False, skip: bool = Fal
     return _get_client
 
 
-verify_twilio_token: Callable = GetDependsAttr(
-    TwilioService, 'verify_twilio_token')
+verify_twilio_token: Callable = GetDependsAttr(TwilioService, 'verify_twilio_token')
 
 
 async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(get_auth_permission)) -> ContactORM:

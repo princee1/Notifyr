@@ -1,3 +1,4 @@
+from abc import ABCMeta, abstractmethod
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
 from app.models.contacts_model import ContactORM
@@ -8,7 +9,7 @@ from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
 from app.utils.dependencies import APIFilterInject
 from app.utils.helper import flatten_dict
 
@@ -172,35 +173,42 @@ class JWTRefreshTokenPermission(Permission):
         
         return True
 
+class ClientTypePermission(Permission, metaclass=ABCMeta):
 
-
-class AdminPermission(Permission):
-
-    def __init__(self,ensure_admin=False):
+    def __init__(self,client_type:ClientType,ensure=False):
         super().__init__()
-        self.ensure_admin = ensure_admin
-        self.adminService = Get(AdminService)
+        self.ensure =ensure
+        self.client_type = client_type
 
+    @abstractmethod
     async def permission(self,authPermission:AuthPermission):
 
         client_id = authPermission['client_id']
-        if self.ensure_admin:
+        if self.ensure:
             client = await ClientORM.get(client=client_id)
-            if client.client_type != 'Admin':
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client is not an admin")
+            if client.client_type != self.client_type:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not an {self.client_type.value}")
 
-        if not authPermission['client_type'] == 'Admin':
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client type is not Admin")
+        if not authPermission['client_type'] == self.client_type.value:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client type is not {self.client_type.value}")
 
-        return True        
+        return True     
+class AdminPermission(ClientTypePermission):
+    # only because theres 3 type of client otherwise there would be only the ClientTypePermission class
 
-class TwilioPermission(Permission):
+     def __init__(self, ensure=False):
+        super().__init__(ClientType.Admin, ensure)
 
-    def permission(self,authPermission:AuthPermission):
-        if not authPermission['client_type'] == 'Twilio':
-            raise ...
+class TwilioPermission(ClientTypePermission):
 
-        return True  
+    def __init__(self,ensure=False):
+        super().__init__(ClientType.Twilio, ensure)
+
+class UserPermission(ClientTypePermission):
+
+    def __init__(self,ensure=False):
+        super().__init__(ClientType.User, ensure)
+
     
 
 @APIFilterInject
