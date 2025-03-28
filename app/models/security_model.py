@@ -12,7 +12,7 @@ SCHEMA = 'security'
 
 
 class GroupClientORM(models.Model):
-    group_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    group_id = fields.UUIDField(pk=True, generated=True)
     group_name = fields.CharField(max_length=80, unique=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
@@ -31,7 +31,7 @@ class GroupClientORM(models.Model):
         }
 
 class ClientORM(models.Model):
-    client_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    client_id = fields.UUIDField(pk=True, generated=True)
     client_name = fields.CharField(max_length=200, unique=True, null=True)
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
     authenticated = fields.BooleanField(default=False)
@@ -77,7 +77,7 @@ class ChallengeORM(models.Model):
         table = "challenge"
 
 class BlacklistORM(models.Model):
-    blacklist_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    blacklist_id = fields.UUIDField(pk=True, generated=True)
     client = fields.ForeignKeyField("models.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
     group = fields.ForeignKeyField("models.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)

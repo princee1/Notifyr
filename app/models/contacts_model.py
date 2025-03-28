@@ -55,7 +55,7 @@ def table_builder (name:str):
     return f"{CONTACTS_SCHEMA}.{name}"
 
 class ContactORM(Model):
-    contact_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    contact_id = fields.UUIDField(pk=True, generated=True)
     first_name = fields.CharField(max_length=50)
     last_name = fields.CharField(max_length=50)
     email = fields.CharField(max_length=50, null=True, unique=True)
@@ -96,7 +96,7 @@ class ContactORM(Model):
         table = table_builder("contact")
 
 class SecurityContactORM(Model):
-    security_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    security_id = fields.UUIDField(pk=True, generated=True)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     security_code = fields.TextField(null=True)
     security_code_salt = fields.CharField(64,null=True)
@@ -115,7 +115,7 @@ class SecurityContactORM(Model):
         table = table_builder("securitycontact")
 
 class SubscriptionContactStatusORM(Model):
-    subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    subscription_id = fields.UUIDField(pk=True, generated=True)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions_status', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
     email_status = fields.CharEnumField(enum_type=SubscriptionStatus,max_length=20)
     sms_status = fields.CharEnumField(enum_type=SubscriptionStatus,max_length=20)
@@ -130,7 +130,7 @@ class SubscriptionContactStatusORM(Model):
         schema = CONTACTS_SCHEMA
 
 class ReasonORM(Model):
-    reason_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    reason_id = fields.UUIDField(pk=True, generated=True)
     reason_description = fields.TextField(null=True)
     reason_name = fields.CharField(max_length=255, unique=True)
     reason_count = fields.BigIntField(default=0)
@@ -140,7 +140,7 @@ class ReasonORM(Model):
         schema = CONTACTS_SCHEMA
 
 class ContentSubscriptionORM(Model):
-    content_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    content_id = fields.UUIDField(pk=True, generated=True)
     content_name = fields.CharField(max_length=50, unique=True)
     content_description = fields.TextField(null=True)
     content_type = fields.CharEnumField(max_length=20,enum_type=ContentType)
@@ -154,7 +154,7 @@ class ContentSubscriptionORM(Model):
         schema = CONTACTS_SCHEMA
 
 class SubscriptionORM(Model):
-    subs_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    subs_id = fields.UUIDField(pk=True, generated=True)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscription', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     content = fields.ForeignKeyField('models.ContentSubscriptionORM', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     subs_status = fields.CharEnumField(max_length=20, enum_type=SubscriptionStatus, default=SubscriptionStatus.Active)
