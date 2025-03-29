@@ -22,7 +22,7 @@ class MODE(Enum):
             case MODE.PROD_MODE.value:
                 return MODE.PROD_MODE
             case MODE.TEST_MODE:
-                return MODE.TEST_MODE.value
+                return MODE.TEST_MODE
             case _:
                 return MODE.DEV_MODE
     

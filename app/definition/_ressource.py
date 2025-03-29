@@ -5,7 +5,7 @@ instance imported from `container`.
 from inspect import isclass
 from typing import Any, Callable,Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 from app.definition._ws import W
-from app.services.config_service import ConfigService
+from app.services.config_service import MODE, ConfigService
 from app.utils.helper import issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
@@ -26,8 +26,10 @@ from asgiref.sync import sync_to_async
 
 
 configService:ConfigService = Get(ConfigService)
-storage_uri = configService.SLOW_API_REDIS_URL
-#storage_uri = None
+if configService.MODE == MODE.DEV_MODE:
+    storage_uri = None
+else:
+    storage_uri = configService.SLOW_API_REDIS_URL
 
 PATH_SEPARATOR = "/"
 GlobalLimiter = Limiter(get_ipaddr,storage_uri=storage_uri,headers_enabled=True) # BUG Need to change the datastructure to have more limiter
