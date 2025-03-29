@@ -173,14 +173,13 @@ class JWTRefreshTokenPermission(Permission):
         
         return True
 
-class ClientTypePermission(Permission, metaclass=ABCMeta):
+class ClientTypePermission(Permission):
 
     def __init__(self,client_type:ClientType,ensure=False):
         super().__init__()
         self.ensure =ensure
         self.client_type = client_type
 
-    @abstractmethod
     async def permission(self,authPermission:AuthPermission):
 
         client_id = authPermission['client_id']
