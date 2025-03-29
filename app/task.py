@@ -1,10 +1,11 @@
 import functools
 import sys
 from typing import Any, Callable
+from typing_extensions import Literal
 from celery import Celery, shared_task
 from celery.result import AsyncResult
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService,CeleryEnv
 from app.services.email_service import EmailSenderService
 from app.container import Get, build_container
 from app.services.security_service import JWTAuthService
@@ -20,11 +21,15 @@ IS_SERVER_SCOPE=True
 exe_path = shutil.which("celery").replace(".EXE", "")
 ##############################################           ##################################################
 
+c_env:CeleryEnv = 'none'
 if sys.argv[0] == exe_path:
     PrettyPrinter_.message('Building container for the celery worker')
     IS_SERVER_SCOPE = False
+    c_env = sys.argv[3]
+    ConfigService.set_celery_env(c_env)
+    PrettyPrinter_.message(c_env)
     build_container(False)
-
+        
 ##############################################           ##################################################
 
 CELERY_MODULE_NAME = __name__
@@ -108,11 +113,6 @@ def task_send_custom_mail(content, meta, images, attachment):
     emailService: EmailSenderService = Get(EmailSenderService)
     return emailService.sendCustomEmail(content, meta, images, attachment)
 
-@RegisterTask(TaskHeaviness.VERY_LIGHT)
-def task_blacklist_client(client_id:str):
-    jwtAuthService = Get(JWTAuthService)
-
-
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_custom_sms(messages):
     smsService:SMSService = Get(SMSService)
@@ -122,7 +122,6 @@ def task_send_custom_sms(messages):
 def task_send_template_sms(messages):
     smsService:SMSService = Get(SMSService)
     return smsService.send_template_sms(messages)
-
 
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_template_voice_call(result,content):

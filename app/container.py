@@ -408,10 +408,10 @@ class Container():
 
 CONTAINER: Container = None #Container(__DEPENDENCY)
 
-def build_container(quiet=False):
+def build_container(quiet=False,dep=__DEPENDENCY):
     PrettyPrinter_.quiet=quiet
     global CONTAINER
-    CONTAINER = Container(__DEPENDENCY)
+    CONTAINER = Container(dep)
 
 def InjectInFunction(func: Callable):
     """

@@ -1,7 +1,7 @@
 from fastapi import HTTPException,status
 
 from app.definition._error import BaseError
-from .config_service import ConfigService
+from .config_service import CeleryMode, ConfigService
 from app.utils.fileIO import FDFlag
 from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
 from .security_service import SecurityService
@@ -153,6 +153,9 @@ class AssetService(_service.Service):
 
     def build(self):
         Reader.fileService = self.fileService
+        if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
+            return 
+        
         self.images = Reader()(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
         self.css = Reader()(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
 

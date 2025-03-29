@@ -1,5 +1,6 @@
 import os
 from typing import Any
+from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from app.utils.fileIO import JSONFile
@@ -33,9 +34,19 @@ class MODE(Enum):
             case _:
                 return "127.0.0.1"
 
+class CeleryMode(Enum):
+    flower = 'flower'
+    worker = 'worker'
+    beat ='beat'
+    none = 'none'
+
+
+CeleryEnv = Literal['flower','worker','beat','none']
+    
 @_service.ServiceClass           
 class ConfigService(_service.Service):
-    
+    _celery_env = CeleryMode.none
+
     def __init__(self) -> None:
         super().__init__()
         if not load_dotenv(ENV,verbose=True):
@@ -206,6 +217,13 @@ class ConfigService(_service.Service):
         config_file = config_file if config_json_app.exists else None
         #apps_data = config_json_app.data
         self.config_json_app = config_json_app
-    
+
+    def set_celery_env(env:CeleryEnv):
+        ConfigService._celery_env = CeleryMode._member_map_[env]
+
+    @property
+    def celery_env(self)->CeleryMode:
+        return self._celery_env
+
     def destroy(self):
         return super().destroy()
