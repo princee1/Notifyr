@@ -225,8 +225,9 @@ BEGIN
     IF NEW.client_type = 'Admin' THEN
         IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
             RAISE EXCEPTION 'Admin already exists';
+            RETURN NULL;
         END IF;
-        RETURN NULL;
+        RETURN NEW;
     END IF;
     RETURN NEW;
 END;
