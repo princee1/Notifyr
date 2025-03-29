@@ -18,7 +18,6 @@ RUN make install
 
 RUN pip show celery
 
-ENV PATH="/celery/.local/bin:${PATH}"
+ENV PATH="/home/celery/.local/bin:${PATH}"
 
-# Verify that celery is available in the PATH
 RUN celery --version
