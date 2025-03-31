@@ -4,6 +4,6 @@
         <validation-item id="otp" type="string" empty="false" maxlength="10"></validation-item>
     </validation>
     <Response>
-        <Message>You're verification code is: {otp}</Message>
+        <Message>You're verification code is: {{otp}}</Message>
     </Response>
 </Template>
