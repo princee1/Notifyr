@@ -12,6 +12,7 @@ from fastapi import  Header, Request, status
 from app.utils.dependencies import Depends, get_auth_permission, get_request_id, get_response_id
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import  CeleryTask, SchedulerModel, TaskType
+from app.decorators.my_depends import populate_response_with_request_id
 
 
 class EmailTemplateSchedulerModel(SchedulerModel):
@@ -39,7 +40,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,bkgTaskService:BackgroundTaskService):
-        super().__init__(dependencies=[Depends(BackgroundTaskService.populate_response_with_request_id)])
+        super().__init__(dependencies=[populate_response_with_request_id])
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService

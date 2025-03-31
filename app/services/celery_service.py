@@ -1,10 +1,11 @@
 import asyncio
-from typing import Any, Callable, ParamSpec, TypedDict
+from typing import Any, Callable, Coroutine, ParamSpec, TypedDict
 import typing
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES, TaskHeaviness
 from app.classes.celery import  CeleryTask, SchedulerModel
 from app.definition._service import Service, ServiceClass, ServiceStatus
 from app.interface.timers import IntervalInterface
+from app.services.database_service import RedisService
 from app.utils.constant import HTTPHeaderConstant
 from .config_service import ConfigService
 from app.utils.helper import generateId
@@ -21,16 +22,19 @@ P = ParamSpec("P")
 
 
 class TaskConfig(TypedDict):
-        task:BackgroundTask
+        task:BackgroundTask | Coroutine
         heaviness:TaskHeaviness
+        save_result:bool 
+        ttl:int
 
 
 @ServiceClass
 class BackgroundTaskService(BackgroundTasks,Service):
 
    
-    def __init__(self,configService:ConfigService):
+    def __init__(self,configService:ConfigService,redisService:RedisService):
         self.configService = configService
+        self.redisService = redisService
         self.running_tasks_count = 0
         self.sharing_task: dict[str,list[TaskConfig]] = {}
         self.task_lock = asyncio.Lock()
@@ -47,16 +51,31 @@ class BackgroundTaskService(BackgroundTasks,Service):
         except:
             ...
 
-    def add_task(self,heaviness:TaskHeaviness, request_id:str,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
+    def add_async_task(self,heaviness:TaskHeaviness,task:Coroutine[Any,Any,None],request_id:str,save_result:bool,ttl:int|None):
+        now = dt.datetime.now()
+
+        self.sharing_task[request_id].append(TaskConfig(
+            task=task,
+            heaviness=heaviness,       
+            save_result=save_result,
+            ttl=ttl
+        ))
+        return {'data':now,
+            'message': f"[{task.__qualname__}] - Task added successfully",'heaviness':heaviness,'handler':'BackgroundTask'}
+        
+    def add_task(self,heaviness:TaskHeaviness, request_id:str,save_result:bool,ttl:int|None,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
         task = BackgroundTask(func, *args, **kwargs)
         self.sharing_task[request_id].append(TaskConfig(
             task=task,
-            heaviness=heaviness
+            heaviness=heaviness,
+            save_result=save_result,
+            ttl=ttl
         ))
         now = dt.datetime.now()
 
         return {'data':now,
             'message': f"[{func.__qualname__}] - Task added successfully",'heaviness':heaviness,'handler':'BackgroundTask'}
+    
     def build(self):
         ...
 
@@ -73,19 +92,28 @@ class BackgroundTaskService(BackgroundTasks,Service):
                 heaviness = t_config['heaviness']
                 self.server_load[heaviness] +=1
 
+        data=[]
         for t in self.sharing_task[request_id]:
             task = t['task']
             heaviness_ = t['heaviness']
             await asyncio.sleep(0)
-            await task()
+            if isinstance(task,BackgroundTask):
+                result = await task()
+            else:
+                result = await task
+            
+            if t['save_result']:
+                data.append(result)
+
             async with self.task_lock:
                 self.running_tasks_count -= 1  # Decrease count after tasks complete
                 self.server_load[heaviness_]-=1
-
+        if data:
+            self.redisService.store_bkg_result(data,request_id)
         #async with self.task_lock:
         self._delete_tasks(request_id)
     
-    async def pingService(self,count=None):
+    async def pingService(self,count=None):# TODO
         response_count = await self.global_task_count
         load = self.server_load.copy()
 
@@ -98,8 +126,7 @@ class BackgroundTaskService(BackgroundTasks,Service):
     def check_system_ram():
         ...
 
-    @staticmethod
-    def populate_response_with_request_id(request:Request, response: Response):
+    def populate_response_with_request_id(self,request:Request, response: Response):
         response.headers[HTTPHeaderConstant.REQUEST_ID] = request.state.request_id
 
 @ServiceClass

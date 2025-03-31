@@ -31,3 +31,23 @@ class MongooseService(DatabaseService): # Chat data
         super().__init__(configService,fileService)
     
 
+@ServiceClass
+class RedisService(Service):
+    
+    def __init__(self,configService:ConfigService):
+        super().__init__()
+        self.configService = configService
+
+    def build(self):
+        ...
+
+    def refund(self, limit_request_id:str):
+        ...
+
+    def store(self,):
+        ...
+    
+    def store_bkg_result(data,key):
+        ...
+
+    
