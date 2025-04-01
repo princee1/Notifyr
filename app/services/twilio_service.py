@@ -3,7 +3,7 @@ https://www.youtube.com/watch?v=-AChTCBoTUM
 """
 
 import functools
-from typing import Annotated, Callable
+from typing import Annotated, Callable, Coroutine
 from fastapi import HTTPException, Header, Request
 from app.classes.template import SMSTemplate
 from app.definition import _service
@@ -21,6 +21,7 @@ from twilio.rest.api.v2010.account.message import MessageInstance
 from twilio.rest.api.v2010.account.call import CallInstance
 from twilio.twiml.voice_response import VoiceResponse
 from twilio.twiml.messaging_response import MessagingResponse
+import asyncio
 
 
 
@@ -79,8 +80,25 @@ class BaseTwilioCommunication(_service.Service):
         self.url =  self.configService.TWILIO_PROD_URL if mode == "prod" else self.configService.TWILIO_TEST_URL
         self.url+="/auth-logs"
         
+    @staticmethod
+    def parse_message_to_json(func:Callable):
 
+        @functools.wraps(func)
+        def wrapper(*args,**kwargs) -> dict | Coroutine:
+            self:BaseTwilioCommunication = args[0]
+            message:MessageInstance|Coroutine = func(*args,**kwargs)
+            if asyncio.iscoroutine(message): 
+                @functools.wraps(func)
+                async def callback():
+                    r = await message
+                    return self.response_extractor(r)
+                return callback
+            else:
+                return self.response_extractor(message)
+        return wrapper
 
+    def response_extractor(self,res)->dict:
+        ...
    
 
 
@@ -91,38 +109,38 @@ class SMSService(BaseTwilioCommunication):
         super().__init__(configService, twilioService,assetService)
         self.status_callback = self.url + '?type=sms'
 
-    @staticmethod
-    def parse_message_to_json(func:Callable):
-
-        @functools.wraps(func)
-        def wrapper(*args,**kwargs):
-            message:MessageInstance = func(*args,**kwargs)
-            return {
-                'date_created':message.date_created,
-                'date_sent':message.date_sent,
-                'data_updated':message.date_updated,
-                'price':message.price,
-                'price_unit':message.price_unit,
-                'status':message.status,
-                'sid':message.sid,
-                'message_service_sid':message.messaging_service_sid,
+    def response_extractor(self,message:MessageInstance)->dict:
+        return {
+                'date_created': str(message.date_created),
+                'date_sent': str(message.date_sent),
+                'date_updated': str(message.date_updated),
+                'price': str(message.price) if message.price is not None else None,
+                'price_unit': message.price_unit,
+                'status': message.status,
+                'sid': message.sid,
+                'message_service_sid': message.messaging_service_sid,
             }
-        return wrapper
 
-    @parse_message_to_json
-    def send_otp(self, otpModel: OTPModel,body:str): #TODO otp template
-        return self.messages.create(send_as_mms=True,provide_feedback=True,to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=body)
+    @BaseTwilioCommunication.parse_message_to_json
+    def send_otp(self, otpModel: OTPModel,body:str,as_async:bool = False): #TODO otp template
+        as_async = False
+        func = self.messages.create_async if as_async else self.messages.create
+        return func(send_as_mms=True,provide_feedback=True,to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=body)
      
     def build(self):
         self.messages = self.twilioService.client.messages
 
-    @parse_message_to_json
-    def send_custom_sms(self, messageData: dict):
-        return self.messages.create(provide_feedback=True,send_as_mms=True, status_callback=self.status_callback, **messageData)
+    @BaseTwilioCommunication.parse_message_to_json
+    def send_custom_sms(self, messageData: dict,as_async:bool = False):
+        as_async = False
+        func = self.messages.create_async if as_async else self.messages.create
+        return func(provide_feedback=True,send_as_mms=True, status_callback=self.status_callback, **messageData)
 
-    @parse_message_to_json
-    def send_template_sms(self, message):
-        return self.messages.create(provide_feedback=True,send_as_mms=True, status_callback=self.status_callback, **message)
+    @BaseTwilioCommunication.parse_message_to_json
+    def send_template_sms(self, message,as_async:bool = False):
+        as_async = False
+        func = self.messages.create_async if as_async else self.messages.create
+        return func(provide_feedback=True,send_as_mms=True, status_callback=self.status_callback, **message)
 
     def get_message(self,to:str):
         self.messages
@@ -202,13 +220,11 @@ class VoiceService(BaseTwilioCommunication):
     def _to_twiml(self,result:str):
         return ...
         
-
 @_service.ServiceClass
 class FaxService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService,assetService: AssetService):
         super().__init__(configService, twilioService,assetService)
-
 
 class ConversationService(BaseTwilioCommunication):
     def __init__(self, configService: ConfigService, twilioService: TwilioService,assetService: AssetService):

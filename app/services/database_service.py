@@ -72,7 +72,7 @@ class RedisService(DatabaseService):
     def store(self,):
         ...
     
-    def store_bkg_result(data,key):
+    def store_bkg_result(self,data,key):
         ...
 
 @ServiceClass

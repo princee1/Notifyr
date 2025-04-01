@@ -131,7 +131,8 @@ class BackgroundTaskMiddleware(MiddleWare):
         response = await call_next(request)
         rq_response_id = get_response_id(response) #NOTE if theres no rq_response_id in the response this means we can safely remove the referencece
         if rq_response_id:
-            asyncio.create_task(self.backgroundTaskService(rq_response_id)) 
+            if len(self.backgroundTaskService.sharing_task[rq_response_id])>0:
+                asyncio.create_task(self.backgroundTaskService(rq_response_id)) 
         else: 
             self.backgroundTaskService._delete_tasks(request_id)
         return response   

@@ -16,17 +16,16 @@ import datetime as dt
 from fastapi import BackgroundTasks, Request, Response
 from starlette.background import BackgroundTask
 from redis import Redis
+from humanize import naturaltime,naturaldelta
 
 P = ParamSpec("P")
-
-
 
 class TaskConfig(TypedDict):
         task:BackgroundTask | Coroutine
         heaviness:TaskHeaviness
         save_result:bool 
         ttl:int
-
+        ttd:float
 
 @ServiceClass
 class BackgroundTaskService(BackgroundTasks,Service):
@@ -51,59 +50,65 @@ class BackgroundTaskService(BackgroundTasks,Service):
         except:
             ...
 
-    def add_async_task(self,heaviness:TaskHeaviness,task:Coroutine[Any,Any,None],request_id:str,save_result:bool,ttl:int|None):
-        now = dt.datetime.now()
+    async def add_async_task(self,heaviness:TaskHeaviness,task:Coroutine[Any,Any,None],request_id:str,save_result:bool,ttl:int|None):
+        return await self._create_task_(heaviness, task, request_id, save_result, ttl)
 
+    async def _create_task_(self, heaviness, task, request_id, save_result, ttl):
+        now = str(dt.datetime.now())
+        async with self.task_lock:
+            self.running_tasks_count += len(self.sharing_task[request_id])  # Increase count based on new tasks
+            for t_config in self.sharing_task[request_id]: # TODO with numpy
+                heaviness = t_config['heaviness']
+                self.server_load[heaviness] +=1
+            ttd = self._compute_ttd()
+
+        if isinstance(task,BackgroundTask):
+            name = task.func.__qualname__
+        else:
+            name = task.__qualname__
         self.sharing_task[request_id].append(TaskConfig(
             task=task,
             heaviness=heaviness,       
             save_result=save_result,
-            ttl=ttl
+            ttl=ttl,
+            ttd=ttd
         ))
-        return {'data':now,
-            'message': f"[{task.__qualname__}] - Task added successfully",'heaviness':heaviness,'handler':'BackgroundTask'}
+        return {'date':now,
+            'message': f"[{name}] - Task added successfully",'heaviness':str(heaviness),'handler':'BackgroundTask','estimate_tbd':naturaldelta(ttd)}
         
-    def add_task(self,heaviness:TaskHeaviness, request_id:str,save_result:bool,ttl:int|None,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
+    async def add_task(self,heaviness:TaskHeaviness, request_id:str,save_result:bool,ttl:int|None,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
         task = BackgroundTask(func, *args, **kwargs)
-        self.sharing_task[request_id].append(TaskConfig(
-            task=task,
-            heaviness=heaviness,
-            save_result=save_result,
-            ttl=ttl
-        ))
-        now = dt.datetime.now()
-
-        return {'data':now,
-            'message': f"[{func.__qualname__}] - Task added successfully",'heaviness':heaviness,'handler':'BackgroundTask'}
-    
+        return await self._create_task_(heaviness, task, request_id, save_result, ttl)
+          
     def build(self):
         ...
+    
+    def _compute_ttd(self,):
+        return 60
 
     @property
     async def global_task_count(self):
         async with self.task_lock:
             return self.running_tasks_count
     
-    async def __call__(self,request_id:str) -> None:
-        
-        async with self.task_lock:
-            self.running_tasks_count += len(self.sharing_task[request_id])  # Increase count based on new tasks
-            for t_config in self.sharing_task[request_id]:
-                heaviness = t_config['heaviness']
-                self.server_load[heaviness] +=1
-
+    async def __call__(self,request_id:str) -> None:        
         data=[]
         for t in self.sharing_task[request_id]:
             task = t['task']
             heaviness_ = t['heaviness']
-            await asyncio.sleep(0)
-            if isinstance(task,BackgroundTask):
-                result = await task()
-            else:
-                result = await task
-            
-            if t['save_result']:
-                data.append(result)
+            ttd = t['ttd']
+            await asyncio.sleep(ttd)
+            is_saving_result = t['save_result']
+            try:
+                if not asyncio.iscoroutine(task):
+                    result = await task()
+                else:
+                    result = await task
+                if is_saving_result:
+                    data.append(result)
+            except Exception as e:
+                if is_saving_result:
+                    data.append(str(e))
 
             async with self.task_lock:
                 self.running_tasks_count -= 1  # Decrease count after tasks complete
@@ -127,8 +132,8 @@ class BackgroundTaskService(BackgroundTasks,Service):
         ...
 
     def populate_response_with_request_id(self,request:Request, response: Response):
-        response.headers[HTTPHeaderConstant.REQUEST_ID] = request.state.request_id
-
+        response.headers.append(HTTPHeaderConstant.REQUEST_ID,request.state.request_id)
+        
 @ServiceClass
 class CeleryService(Service, IntervalInterface):
     _celery_app = celery_app
