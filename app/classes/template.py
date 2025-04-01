@@ -308,7 +308,8 @@ class SMSTemplate(TWIMLTemplate):
     
     def set_content(self):
         message = self.bs4.select_one("Message")
-        self.content_to_inject = message.prettify(formatter="html")
+        self.content_to_inject:str = message.text
+        self.content_to_inject = self.content_to_inject.strip()
 
     def load_media(self, media: list[str]):
         raise NotImplementedError

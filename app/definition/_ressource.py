@@ -278,8 +278,8 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             prefix = PATH_SEPARATOR + prefix
         
         self.router = APIRouter(prefix=prefix, on_shutdown=[self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
-        self._set_rate_limit()
         self._stack_callback()
+        self._set_rate_limit()
 
         self._add_routes()
         self._add_handcrafted_routes()
@@ -503,7 +503,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
                     if type(guard) == type :
                         flag, message = await guard().do(*args, **kwargs)
                     
-                    elif issubclass_of(Guard,type(guard)):
+                    elif isinstance(guard,Guard):
                         flag, message = await guard.do(*args, **kwargs)
                     else:
                         flag, message = await guard(*args, **kwargs)
@@ -555,11 +555,11 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                         result = await function(*args, **kwargs)
                         for pipe in pipe_function:
                             if type(pipe) == type:
-                                result = await pipe(before=False).do(result)
+                                result = await pipe(before=False).do(result,**kwargs)
                             elif isinstance(pipe, Pipe):
-                                result = await pipe.do(result)
+                                result = await pipe.do(result,**kwargs)
                             else:
-                                result = await pipe(result)
+                                result = await pipe(result,**kwargs)
 
                         return result
                 
@@ -648,6 +648,7 @@ def UseSharingLimiter(**kwargs):
             meta['shared']=True
 
         return func
+    return decorator
 
 def ExemptLimiter():
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:

@@ -62,7 +62,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             if scheduler.task_type == TaskType.NOW.value:
-                return self.bkgTaskService.add_task( scheduler.heaviness,x_request_id,self.emailService.sendTemplateEmail, data, meta, template.images )
+                return await self.bkgTaskService.add_task( scheduler.heaviness,x_request_id,True,3600, self.emailService.sendTemplateEmail, data, meta, template.images )
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,data, meta, template.images)
     
@@ -76,7 +76,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
        
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             if scheduler.task_type == TaskType.NOW.value:
-                return self.bkgTaskService.add_task(scheduler.heaviness,x_request_id,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
+                return await self.bkgTaskService.add_task(scheduler.heaviness,x_request_id,True,3600,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
             
         return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)
 

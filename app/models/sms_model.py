@@ -1,7 +1,6 @@
-
 from typing import List
-from pydantic import BaseModel
-
+from pydantic import BaseModel, field_validator
+from app.utils.validation import url_validator
 
 class OnGoingBaseSMSModel(BaseModel):
     from_:str = None
@@ -13,8 +12,12 @@ class OnGoingTemplateSMSModel(OnGoingBaseSMSModel):
 class OnGoingSMSModel(OnGoingBaseSMSModel):
     body:str
     media_url:List[str] = []
- 
 
+    @field_validator('media_url')
+    def check_url(cls,media_url:list[str]):
+        media_url = media_url[0:10]
+        return [url for url in media_url if url_validator(url)]
+ 
 ###############################################             ################################################
 
 class SMSStatusModel(BaseModel):
