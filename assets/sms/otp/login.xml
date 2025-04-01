@@ -8,7 +8,7 @@
     </validation>
         <Response>
             <Message>
-            Your login OTP for {{company}} is {{otp}}. It will expire in {{expiry}} minutes. Do not share it.
+            Your login OTP for {{company}} is "{{otp}}". It will expire in {{expiry}} minutes. Do not share it.
             </Message>
         </Response>
 </Template>
