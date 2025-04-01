@@ -104,7 +104,7 @@ def strict_parseToValue(value: str):
         return None
 
 
-def parse_value(value) -> Any | str:
+def parse_value(value,return_none=False) -> Any | str:
     """
     Parse a string value into the appropriate Python type.
     """
@@ -120,6 +120,8 @@ def parse_value(value) -> Any | str:
     if parsed_value is not None:
         return parsed_value
 
+    if return_none:
+        return None
     # Default: return the string itself
     return value
 

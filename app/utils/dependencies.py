@@ -6,7 +6,7 @@ from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request, Response,status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from .constant import HTTPHeaderConstant
-from .helper import reverseDict
+from .helper import parse_value, reverseDict
 import asyncio
 
 
@@ -98,6 +98,7 @@ def get_balancer_ip(request: Request) -> str:
 
 
 def get_response_id(r:Response = None)-> str | None:
+
     try:
         if r:
             return r.headers[HTTPHeaderConstant.REQUEST_ID]
@@ -143,11 +144,14 @@ async def get_request_id(request: Request):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
     return request.state.request_id
 
-def get_query_params(name,default=None)->Callable[[Request],str|None]:
-
+def get_query_params(name,default=None,parse=False,return_none=False,raise_except=False)->Callable[[Request],str|None]:
+    """ return_none: only if parsing was failed choose wether to return None or the string
+    """
     def depends(request:Request):
-        return request.query_params.get(name,default)
-
+        value = request.query_params.get(name,default)
+        if parse and value != None:
+            return parse_value(value,return_none)
+        return value
     return depends
 
 

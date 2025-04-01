@@ -71,7 +71,10 @@ def url_validator(url):
     """
     The function `url_validator` takes a URL as input and validates the URL format
     """
-    return validate_url(url)
+    try:
+        return validate_url(url)
+    except:
+        return False
 
 
 def mac_address_validator(mac):
