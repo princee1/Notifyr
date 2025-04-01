@@ -18,7 +18,7 @@ CREATE DOMAIN Scope AS VARCHAR(25) CHECK (
 
 
 CREATE DOMAIN ClientType AS VARCHAR(25) CHECK (
-    VALUE IN ('User','Admin')
+    VALUE IN ('User','Admin','Twilio')
 );
 
 CREATE TABLE IF NOT EXISTS GroupClient (
@@ -196,7 +196,7 @@ BEGIN
     FROM 
         Client;
 
-    IF client_count >= 10 THEN
+    IF client_count >= 11 THEN
         RAISE EXCEPTION 'Client limit reached';
     RETURN NULL;
     ELSE 
