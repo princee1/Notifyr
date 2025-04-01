@@ -63,7 +63,7 @@ class HandlerDefaultException(Exception):
 class Pipe(DecoratorObj):
     def __init__(self, before: bool):
         self.before = before
-        super().__init__(self.pipe, filter=before)
+        super().__init__(self.pipe, filter=True)
 
     def pipe(self):
         ...

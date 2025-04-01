@@ -1,6 +1,7 @@
-from typing import Literal
+from typing import Coroutine, Literal
 
-from fastapi import HTTPException, Request,status
+from fastapi import HTTPException, Request, Response,status
+from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.template import TemplateNotFoundError
@@ -209,3 +210,24 @@ class ContactStatusPipe(Pipe):
 
         next_status:Status = Status._member_map_[next_status]
         return {'next_status':next_status}
+    
+
+class OffloadedTaskResponsePipe(Pipe):
+
+    def __init__(self, before):
+        super().__init__(before) 
+        
+    def pipe(self,result:dict|Coroutine,response:Response,scheduler:SchedulerModel=None,otpModel:OTPModel=None,as_async:bool = False,):
+
+        if scheduler and scheduler.task_type != TaskType.NOW:
+            return JSONResponse(status_code=201,content=result,headers=response.headers)
+
+        if otpModel and as_async:
+            return JSONResponse(status_code=201,content=result,headers=response.headers)
+    
+        if as_async:
+            return JSONResponse(status_code=201,content=result,headers=response.headers)
+        
+        return JSONResponse(status_code=200,content=result,headers=response.headers)
+
+        
