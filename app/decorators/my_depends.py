@@ -109,6 +109,7 @@ def GetClient(bypass: bool = False, accept_admin: bool = False, skip: bool = Fal
 
 
 verify_twilio_token: Callable = GetDependsAttr(TwilioService, 'verify_twilio_token')
+
 populate_response_with_request_id: Callable = GetDependsAttr(BackgroundTaskService,'populate_response_with_request_id')
 
 async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(get_auth_permission)) -> ContactORM:
@@ -263,3 +264,5 @@ async def _get_blacklist(blacklist_id:str=None):
 
 async def get_blacklist(blacklist_id:str=Depends(get_query_params('blacklist_id', None))):
     return await _get_blacklist(blacklist_id=blacklist_id)
+
+as_async_query = get_query_params('background','false',True)
