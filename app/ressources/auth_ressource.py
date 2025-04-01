@@ -24,9 +24,6 @@ from app.utils.constant import ConfigAppConstant
 from tortoise.transactions import in_transaction
 
 
-
-
-
 REFRESH_AUTH_PREFIX = 'refresh'   
 GENERATE_AUTH_PREFIX = 'generate'
 AUTH_PREFIX = 'auth'    
@@ -54,7 +51,6 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
         refreshPermission:RefreshPermission = tokens
         async with in_transaction():    
-
             await raw_revoke_auth_token(client)
             auth_token, refresh_token = await self.issue_auth(client, authPermission)
             client.authenticated = True # NOTE just to make sure
@@ -180,7 +176,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseHandler(SecurityClientHandler)
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
     @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
-    @UsePermission(UserPermission)
+    @UsePermission(UserPermission(accept_none_auth=True))
     @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST])
     async def self_issue_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None)):
         if x_client_token == None:
@@ -204,7 +200,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='1/day',per_method=True)
     @UseHandler(SecurityClientHandler)
     @UseGuard(AuthenticatedClientGuard)
-    @UsePermission(UserPermission)
+    @UsePermission(UserPermission(accept_none_auth=True))
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
     @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.DELETE])
     async def self_revoke_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None),ip_address:str=Depends(get_client_ip)):

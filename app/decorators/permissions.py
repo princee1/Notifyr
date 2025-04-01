@@ -205,8 +205,14 @@ class TwilioPermission(ClientTypePermission):
 
 class UserPermission(ClientTypePermission):
 
-    def __init__(self,ensure=False):
+    def __init__(self,ensure=False,accept_none_auth=False):
         super().__init__(ClientType.User, ensure)
+        self.accept_none_auth = accept_none_auth
+    
+    def permission(self, authPermission:None=None):
+        if authPermission == None:
+            return self.accept_none_auth
+        return super().permission(authPermission)
 
     
 

@@ -5,7 +5,7 @@ from app.classes.auth_permission import Role
 from app.classes.celery import SchedulerModel, TaskType
 from app.classes.template import SMSTemplate
 from app.decorators.guards import CeleryTaskGuard
-from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TwilioHandler
+from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, TemplateParamsPipe, TwilioFromPipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
@@ -52,9 +52,10 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value="10000/minutes")
     @UseRoles([Role.MFA_OTP])
-    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
     @UsePipe(_to_otp_path)
-    @UsePermission(JWTAssetPermission('sms'))
+    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
+    @UseHandler(TemplateHandler)
+    #@UsePermission(JWTAssetPermission('sms'))
     @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST])
     async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
         smsTemplate:SMSTemplate = self.assetService.sms[template]
@@ -77,7 +78,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
-    @UseHandler(CeleryTaskHandler)
+    @UseHandler(CeleryTaskHandler,TemplateHandler)
     @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CeleryTaskGuard([' task_send_template_sms']))

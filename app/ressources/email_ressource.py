@@ -40,7 +40,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,bkgTaskService:BackgroundTaskService):
-        super().__init__(dependencies=[populate_response_with_request_id])
+        super().__init__(dependencies=[Depends(populate_response_with_request_id)])
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
