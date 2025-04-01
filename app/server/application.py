@@ -23,6 +23,7 @@ from app.definition._ressource import RESSOURCES, BaseHTTPRessource, GlobalLimit
 from app.interface.events import EventInterface
 from tortoise.contrib.fastapi import register_tortoise
 import ngrok
+import traceback
 
 
 AppParameterKey = Literal['title', 'summary', 'description',
@@ -144,9 +145,10 @@ class Application(EventInterface):
             return JSONResponse({'message': 'Timeout Error'}, status_code=500)
 
         @self.app.exception_handler(Exception)
-        async def base_exception(request, e):
+        async def base_exception(request, e:Exception):
             print(e)
             print(e.__class__)
+            traceback.print_exc()  
             return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={'message': 'An unexpected error occurred!'})
 
     def set_httpMode(self):
