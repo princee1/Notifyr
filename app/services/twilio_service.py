@@ -20,6 +20,7 @@ from datetime import timedelta
 from twilio.rest.api.v2010.account.message import MessageInstance
 from twilio.rest.api.v2010.account.call import CallInstance
 from twilio.twiml.voice_response import VoiceResponse
+from twilio.twiml.messaging_response import MessagingResponse
 
 
 
@@ -110,7 +111,6 @@ class SMSService(BaseTwilioCommunication):
 
     @parse_message_to_json
     def send_otp(self, otpModel: OTPModel,body:str): #TODO otp template
-       
         return self.messages.create(send_as_mms=True,provide_feedback=True,to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=body)
      
     def build(self):

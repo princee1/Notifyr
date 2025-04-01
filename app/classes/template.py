@@ -137,7 +137,6 @@ class MLTemplate(Template):
                 regex = re.compile(rf"{{{{{key}}}}}")
                 content_html = regex.sub( str(flattened_data[key]), content_html)
 
-            print(content_html)
             return self._built_template(content_html)
             
         except Exception as e:
@@ -307,8 +306,12 @@ class SMSTemplate(TWIMLTemplate):
         self.parser =  XMLLikeParser.XML.value
         super().__init__(filename, content, dirName,"xml","validation")
     
+    def set_content(self):
+        message = self.bs4.select_one("Message")
+        self.content_to_inject = message.prettify(formatter="html")
 
     def load_media(self, media: list[str]):
+        raise NotImplementedError
         response = self.bs4.select_one("Response")
         if response is None:
             print("error")
