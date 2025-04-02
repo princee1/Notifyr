@@ -18,13 +18,20 @@ class PingPongRessource(BaseHTTPRessource):
         self.jwtAuthService = jwtAuthService
 
     @UseHandler(WebSocketHandler)
-    @BaseHTTPRessource.Get('/health-permission/{ws_path}')
+    @BaseHTTPRessource.Get('/permission/{ws_path}')
     def issue_ping_permission(self,ws_path:str):
-        
         self._check_ws_path(ws_path)
         run_id = self.websockets[PingPongWebSocket.__name__].run_id
         token = self.jwtAuthService.encode_ws_token(run_id,ws_path,3600)
         
+    
+    @BaseHTTPRessource.Get('/')
+    def check_health(self,):
+        ...
+    
+    @BaseHTTPRessource.Post('/')
+    def set_health_config(self,):
+        ...
 
 
 
