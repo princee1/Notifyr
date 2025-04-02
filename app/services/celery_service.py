@@ -93,13 +93,25 @@ class BackgroundTaskService(BackgroundTasks,Service):
             return self.running_tasks_count
     
     async def __call__(self,request_id:str) -> None:        
-        data=[]
-        for t in self.sharing_task[request_id]:
+        task_len = len(self.sharing_task[request_id])
+        #data = [None]*task_len
+        data = []
+        for i,t in enumerate(self.sharing_task[request_id]):
             task = t['task']
             heaviness_ = t['heaviness']
             ttd = t['ttd']
             await asyncio.sleep(ttd)
             is_saving_result = t['save_result']
+
+            if False:
+                async def callback():
+                    if i+1 == task_len:
+                        if data:
+                            self.redisService.store_bkg_result(data,request_id)
+                        self._delete_tasks(request_id)
+                
+                asyncio.create_task(callback())
+                
             try:
                 if not asyncio.iscoroutine(task):
                     result = await task()
