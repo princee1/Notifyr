@@ -1,6 +1,7 @@
-from typing import Literal
+from typing import Coroutine, Literal
 
-from fastapi import HTTPException, Request,status
+from fastapi import HTTPException, Request, Response,status
+from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.template import TemplateNotFoundError
@@ -162,16 +163,23 @@ class AuthClientPipe(Pipe):
 
 class ForceClientPipe(Pipe):
 
+    def __init__(self):
+        super().__init__(True)
+
     def pipe(self, client: ClientORM):
-        if client is None:
+
+        if client == None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Client information is missing or invalid.")
 
         return {'client': client}
     
 class ForceGroupPipe(Pipe):
 
+    def __init__(self):
+        super().__init__(True)
+
     def pipe(self, group: GroupClientORM):
-        if group is None:
+        if group == None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group information is missing or invalid.")
 
         return {'group': group}
@@ -188,7 +196,10 @@ class RefreshTokenPipe(Pipe):
         return {'tokens':tokens}
     
 class ContactStatusPipe(Pipe):
-
+ 
+    def __init__(self):
+        super().__init__(True)
+        
     def pipe(self,next_status:str):
         allowed_status = Status._member_names_.copy() 
         allowed_status.remove(Status.Active.value)
@@ -199,3 +210,24 @@ class ContactStatusPipe(Pipe):
 
         next_status:Status = Status._member_map_[next_status]
         return {'next_status':next_status}
+    
+
+class OffloadedTaskResponsePipe(Pipe):
+
+    def __init__(self, before):
+        super().__init__(before) 
+        
+    def pipe(self,result:dict|Coroutine,response:Response,scheduler:SchedulerModel=None,otpModel:OTPModel=None,as_async:bool = False,):
+
+        if scheduler and scheduler.task_type != TaskType.NOW:
+            return JSONResponse(status_code=201,content=result,headers=response.headers)
+
+        if otpModel and as_async:
+            return JSONResponse(status_code=201,content=result,headers=response.headers)
+    
+        if as_async:
+            return JSONResponse(status_code=201,content=result,headers=response.headers)
+        
+        return JSONResponse(status_code=200,content=result,headers=response.headers)
+
+        

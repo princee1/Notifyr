@@ -37,6 +37,9 @@ class TemplateBuildError(BaseError):
 
 class TemplateValidationError(BaseError):
     ...
+
+class SchemaValidationError(BaseError):
+    ...
 # ============================================================================================================
 
 
@@ -155,6 +158,8 @@ class MLTemplate(Template):
                 return False, Validator.errors
             return True, Validator.document
             # return self.Validator.normalized(document)
+        except SchemaError as e:
+            raise SchemaValidationError('Error of our document schema')
         except DocumentError as e:
             raise TemplateBuildError("Document is not a mapping of corresponding schema")
                
@@ -277,17 +282,23 @@ class PDFTemplate(Template):
         ...
 
 class TWIMLTemplate(MLTemplate):
+
+    def __init__(self, filename, content, dirName, extension, validation_selector):
+        super().__init__(filename, content, dirName, extension, validation_selector)
+        self.set_content()
+
     def _built_template(self,content):
         return content
     
     def set_content(self):
         response = self.bs4.select_one("Response")
-        self.content_to_inject = response.prettify(formatter="xml")
-
+        self.content_to_inject = response.prettify(formatter="html")
+    
     def build(self, data, target_lang):
         super().build(data, target_lang)
         body = self.inject(data)
-        body = self.translate(target_lang,body)
+        if False: 
+            body = self.translate(target_lang,body) # TODO
         return True,body
 
 class SMSTemplate(TWIMLTemplate):
@@ -295,8 +306,13 @@ class SMSTemplate(TWIMLTemplate):
         self.parser =  XMLLikeParser.XML.value
         super().__init__(filename, content, dirName,"xml","validation")
     
+    def set_content(self):
+        message = self.bs4.select_one("Message")
+        self.content_to_inject:str = message.text
+        self.content_to_inject = self.content_to_inject.strip()
 
     def load_media(self, media: list[str]):
+        raise NotImplementedError
         response = self.bs4.select_one("Response")
         if response is None:
             print("error")
@@ -309,6 +325,6 @@ class SMSTemplate(TWIMLTemplate):
 
 class PhoneTemplate(TWIMLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName,"xm","validation")
+        super().__init__(filename, content, dirName,"xml","validation")
 ####################### ########################
 

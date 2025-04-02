@@ -63,7 +63,7 @@ class HandlerDefaultException(Exception):
 class Pipe(DecoratorObj):
     def __init__(self, before: bool):
         self.before = before
-        super().__init__(self.pipe, filter=before)
+        super().__init__(self.pipe, filter=True)
 
     def pipe(self):
         ...
@@ -88,14 +88,21 @@ class PermissionDefaultException(Exception):
 class Interceptor(DecoratorObj):
 
     def __init__(self,):
-        super().__init__(self.intercept_before, True)
+        super().__init__(self.intercept, True)
 
-    def intercept_before(self):
+    def _intercept_before(self):
         ...
     
-    def intercept_after(self):
+    def _intercept_after(self):
         ...
     
+    async def intercept(self,function:Callable,*args,**kwargs):
+        kwargs = self._intercept_before(*args,**kwargs)
+        result = await function(*args,**kwargs)
+        return self._intercept_after(result)
+    
+    async def do(self,function:Callable, *args, **kwargs):
+        return await self.intercept(function,*args,**kwargs)
 
 class InterceptorDefaultException(Exception):
     ...

@@ -5,6 +5,7 @@ instance imported from `container`.
 from inspect import isclass
 from typing import Any, Callable,Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 from app.definition._ws import W
+from app.services.config_service import MODE, ConfigService
 from app.utils.helper import issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
@@ -19,12 +20,19 @@ from enum import Enum
 from ._utils_decorator import *
 from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_remote_address,get_ipaddr
 import asyncio
 from asgiref.sync import sync_to_async
 
+
+configService:ConfigService = Get(ConfigService)
+if configService.MODE == MODE.DEV_MODE:
+    storage_uri = None
+else:
+    storage_uri = configService.SLOW_API_REDIS_URL
+
 PATH_SEPARATOR = "/"
-GlobalLimiter = Limiter(get_remote_address) # BUG Need to change the datastructure to have more limiter
+GlobalLimiter = Limiter(get_ipaddr,storage_uri=storage_uri,headers_enabled=True) # BUG Need to change the datastructure to have more limiter
 RequestLimit =0
 
 
@@ -137,11 +145,12 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             
             setattr(func,'meta', FuncMetaData())
             func.meta['operation_id'] = computed_operation_id
-            func.meta['roles'] = set()
+            func.meta['roles'] = set() # QUESTION by default are routes public ?
             func.meta['excludes'] = set()
             func.meta['options'] =[] 
             func.meta['limit_obj'] =None
             func.meta['limit_exempt']=False
+            func.meta['shared']=None
             
             if not mount:
                 return func
@@ -238,13 +247,19 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             meta:FuncMetaData = getattr(func_attr,'meta')
 
             limit_obj = meta['limit_obj']
+            shared= meta['shared']
+
             if meta['limit_exempt']:
                 func_attr= GlobalLimiter.exempt(func_attr)
                 setattr(self,func_name,func_attr)
                 return
             
             if limit_obj:
-                func_attr = GlobalLimiter.limit(**limit_obj)(func_attr)
+                if not shared:
+                    func_attr = GlobalLimiter.limit(**limit_obj)(func_attr)
+                else:
+                    func_attr = GlobalLimiter.shared_limit(**limit_obj)(func_attr)
+
                 setattr(self,func_name,func_attr)
 
     def __init_subclass__(cls: Type) -> None:
@@ -263,8 +278,8 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             prefix = PATH_SEPARATOR + prefix
         
         self.router = APIRouter(prefix=prefix, on_shutdown=[self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
-        self._set_rate_limit()
         self._stack_callback()
+        self._set_rate_limit()
 
         self._add_routes()
         self._add_handcrafted_routes()
@@ -488,7 +503,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
                     if type(guard) == type :
                         flag, message = await guard().do(*args, **kwargs)
                     
-                    elif issubclass_of(Guard,type(guard)):
+                    elif isinstance(guard,Guard):
                         flag, message = await guard.do(*args, **kwargs)
                     else:
                         flag, message = await guard(*args, **kwargs)
@@ -540,11 +555,11 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                         result = await function(*args, **kwargs)
                         for pipe in pipe_function:
                             if type(pipe) == type:
-                                result = await pipe(before=False).do(result)
+                                result = await pipe(before=False).do(result,**kwargs)
                             elif isinstance(pipe, Pipe):
-                                result = await pipe.do(result)
+                                result = await pipe.do(result,**kwargs)
                             else:
-                                result = await pipe(result)
+                                result = await pipe(result,**kwargs)
 
                         return result
                 
@@ -582,7 +597,7 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
         cls = common_class_decorator(func, UseRoles,None,roles=roles)
         if cls != None:
             return cls
-
+        # TODO by default route is public check the todo in BaseHTTPRessource concerning this
         roles_ = set(roles)
         excludes_ = set(excludes).difference(roles_)
 
@@ -611,12 +626,27 @@ def UseLimiter(**kwargs): #TODO
         if meta is not None:
             meta['limit_obj'] = kwargs
             limit_value:str = kwargs['limit_value']
+            meta['shared']=False
             try:
                 limit_value = int(limit_value.split('/')[0])
                 global RequestLimit
                 RequestLimit+= limit_value
             except:
                 ...
+        return func
+    return decorator
+
+@functools.wraps(GlobalLimiter.shared_limit)
+def UseSharingLimiter(**kwargs):
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, UseLimiter,None,**kwargs)
+        if cls != None:
+            return cls
+        meta:FuncMetaData | None = getattr(func,'meta',None)
+        if meta is not None:
+            meta['limit_obj'] = kwargs
+            meta['shared']=True
+
         return func
     return decorator
 

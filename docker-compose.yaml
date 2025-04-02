@@ -7,7 +7,6 @@ services:
     ports:
       - 6379:6379
   
-
   redis-commander:
     container_name: redis-commander
     hostname: redis-commander
@@ -60,17 +59,68 @@ services:
       - "8080:8088"
     depends_on:
       - postgres
-
-  # adminer:
-  #   image: adminer:latest
-  #   container_name: my-adminer
+    
+  # celery:
+  #   image: python:3.11
+  #   command: ["make", "celery"]
+  #   container_name: worker
+  #   build:
+  #     context: ./
+  #     dockerfile: Dockerfile
   #   restart: always
-  #   ports:
-  #     - "8080:8080"
   #   depends_on:
-  #     - postgres
-  #   environment:
-  #     ADMINER_DEFAULT_SERVER: postgres
+  #     - redis
+  #     - redis-commander
+  #   deploy:
+  #     replicas: 5
+    
+  redbeat:
+    container_name: redbeat
+    image: python:3.11
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      - redis
+      - redis-commander
+    command: ["make ", "redbeat"]
+    
+  flower:
+    image: python:3.11
+    command: ["make", "flower"]
+    container_name: flower
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - redis-commander
+    ports:
+      - "5555:5555"
+
+  neo4j:
+    image: neo4j:5.15
+    container_name: neo4j
+    restart: unless-stopped
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    environment:
+      - NEO4J_AUTH=${NEO4J_AUTH}
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=1G
+      - NEO4J_dbms_memory_pagecache_size=512m
+      - NEO4J_dbms_default__database=${NEO4J_DATABASE}
+
+    volumes:
+        - neo4j_data:/data
+        - neo4j_logs:/logs
+        - neo4j_conf:/conf
+
 
 volumes:
   mongo-data:
@@ -78,3 +128,10 @@ volumes:
 
   postgres-data:
     driver: local
+
+  assets-data:
+    driver: local
+
+  neo4j_data:
+  neo4j_logs:
+  neo4j_conf:

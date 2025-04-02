@@ -5,9 +5,10 @@ class ClientDoesNotExistError(BaseError):
     ...
 
 class GroupAlreadyBlacklistedError(BaseError):
-    def __init__(self, group_id,group_name) -> None:
+    def __init__(self, group_id,group_name,reversed_ =False) -> None:
         self.group_id = group_id
         self.group_name = group_name
+        self.reversed = reversed_
         super().__init__(f'Group {group_id} is already blacklisted')
 
 class CouldNotCreateRefreshTokenError(BaseError):
@@ -31,3 +32,17 @@ class GroupIdNotMatchError(BaseError):
         self.client_group_id = client_group_id
         self.group_id = group_id
         super().__init__()
+
+
+class AlreadyBlacklistedClientError(BaseError):
+
+    def __init__(self, reversed_=False):
+        self.reversed_ = reversed_
+        super().__init__()
+
+class ClientTokenHeaderNotProvidedError(BaseError):
+    ...
+
+
+class AuthzIdMisMatchError(BaseError):
+    ...

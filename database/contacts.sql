@@ -38,7 +38,7 @@ CREATE DOMAIN ContentType AS VARCHAR(30) CHECK (
 );
 
 CREATE TABLE IF NOT EXISTS Contact (
-    contact_id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    contact_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc (),
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
     email VARCHAR(50) UNIQUE NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS Contact (
 );
 
 CREATE TABLE IF NOT EXISTS SecurityContact (
-    security_id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    security_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc (),
     contact_id UUID,
     security_code TEXT DEFAULT NULL,
     security_code_salt VARCHAR(64) DEFAULT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS SecurityContact (
 
 -- TODO Combine the SubscriptionContact and Content Type Later ...
 CREATE TABLE IF NOT EXISTS SubscriptionContact (
-    subscription_id UUID DEFAULT uuid_generate_v4 (),
+    subscription_id UUID DEFAULT uuid_generate_v1mc (),
     contact_id UUID UNIQUE,
     email_status SubscriptionStatus NOT NULL,
     sms_status SubscriptionStatus NOT NULL,
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS Reason (
 );
 
 CREATE TABLE IF NOT EXISTS SubsContent (
-    content_id UUID DEFAULT uuid_generate_v4 (),
+    content_id UUID DEFAULT uuid_generate_v1mc (),
     content_name VARCHAR(50) UNIQUE,
     content_description TEXT DEFAULT NULL,
     content_type ContentType DEFAULT 'other',
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS SubsContent (
 ALTER TABLE Subscontent ADD COLUMN ttl TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS Subscription (
-    subs_id UUID UNIQUE DEFAULT uuid_generate_v4 (),
+    subs_id UUID UNIQUE DEFAULT uuid_generate_v1mc (),
     contact_id UUID,
     content_id UUID,
     subs_status SubscriptionStatus DEFAULT 'Active',
@@ -231,15 +231,16 @@ GROUP BY
 
 CREATE OR REPLACE FUNCTION delete_expired_subscontent() RETURNS VOID AS $$
 BEGIN
+    SET search_path = contacts;
     DELETE FROM SubsContent WHERE ttl != NULL and ttl < NOW();
 END;
 $$ LANGUAGE plpgsql;
 
 SELECT cron.schedule (
-        'delete_expired_subscontent', '0 0 * * *', 'CALL delete_expired_subscontent();'
-    );
+    'delete_expired_subscontent_every_5_min', '*/5 * * * *', 'SELECT contacts.delete_expired_subscontent();'
+);
 
-CREATE OR REPLACE FUNCTION compute_limit(l INT) RETURNS TRIGGER AS $compute_limit$
+CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE
     contact_count INT;
 
@@ -251,14 +252,14 @@ INTO
 FROM 
     Contact;
 
-IF contact_count >= l THEN
-    RAISE NOTICE 'Contact Limit Reached';
+IF contact_count >= 2 THEN
+    RAISE EXCEPTION 'Contact Limit Reached';
     RETURN OLD;
 ELSE
     RETURN NEW;
 END IF;
 END;
-$$ LANGUAGE plpgsql;
+$compute_limit$ LANGUAGE plpgsql;
 
 
 CREATE TRIGGER limit_contact

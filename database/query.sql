@@ -47,14 +47,15 @@ INSERT INTO
         client_name,
         client_type,
         issued_for,
-        authenticated,
+        authenticated
     )
 VALUES (
         'Notifyr ADMIN',
         'Admin',
         '127.0.0.1',
-        True,
+        True
     );
+
 
 INSERT INTO
     security.Challenge (
@@ -69,6 +70,6 @@ VALUES (
             WHERE
                 client_type = 'Admin'
         ),
-        created_at_auth + INTERVAL '1 day',
-        created_at_refresh + INTERVAL '100 day',
+        NOW() + INTERVAL '5 minute',
+        NOW() + INTERVAL '1 hour'
     );

@@ -23,6 +23,7 @@ from app.definition._ressource import RESSOURCES, BaseHTTPRessource, GlobalLimit
 from app.interface.events import EventInterface
 from tortoise.contrib.fastapi import register_tortoise
 import ngrok
+import traceback
 
 
 AppParameterKey = Literal['title', 'summary', 'description',
@@ -102,11 +103,16 @@ class Application(EventInterface):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
         @self.app.exception_handler(TypeError)
-        async def type_error(request, e):
+        async def type_error(request, e:TypeError):
+            print(e)
+            print(e.__cause__)
             return JSONResponse({'message': 'Type Error'}, status_code=500)
 
         @self.app.exception_handler(AttributeError)
         async def attribute_error(request, e):
+            print(e)
+            print(e.__cause__)
+
             return JSONResponse({'message': 'Attribute Error'}, status_code=500)
 
         @self.app.exception_handler(OSError)
@@ -129,6 +135,9 @@ class Application(EventInterface):
 
         @self.app.exception_handler(NameError)
         async def name_error(request, e):
+            print(e)
+            print(e.__cause__)
+
             return JSONResponse({'message': 'Name Error'}, status_code=500)
 
         @self.app.exception_handler(TimeoutError)
@@ -136,9 +145,10 @@ class Application(EventInterface):
             return JSONResponse({'message': 'Timeout Error'}, status_code=500)
 
         @self.app.exception_handler(Exception)
-        async def base_exception(request, e):
+        async def base_exception(request, e:Exception):
             print(e)
             print(e.__class__)
+            traceback.print_exc()  
             return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={'message': 'An unexpected error occurred!'})
 
     def set_httpMode(self):
@@ -186,7 +196,7 @@ class Application(EventInterface):
                     res.router, responses=res.default_response)
                 self.pretty_printer.success(
                     f"[{now}] Ressource {ressource_type.__name__} added successfully", saveable=True)
-                self.pretty_printer.wait(0.25, press_to_continue=False)
+                self.pretty_printer.wait(0.1, press_to_continue=False)
             except Exception as e:
                 print(e.__class__)
                 print(e)
@@ -199,9 +209,10 @@ class Application(EventInterface):
 
     def add_middlewares(self):
         self.app.add_middleware(SlowAPIMiddleware)
+        
         for middleware in sorted(self.appParameter.middlewares, key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
-
+        
     def register_tortoise(self):
         pg_user = self.configService.getenv('POSTGRES_USER')
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')

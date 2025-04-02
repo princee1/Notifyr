@@ -1,5 +1,6 @@
 import os
 from typing import Any
+from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from app.utils.fileIO import JSONFile
@@ -22,7 +23,7 @@ class MODE(Enum):
             case MODE.PROD_MODE.value:
                 return MODE.PROD_MODE
             case MODE.TEST_MODE:
-                return MODE.TEST_MODE.value
+                return MODE.TEST_MODE
             case _:
                 return MODE.DEV_MODE
     
@@ -33,9 +34,19 @@ class MODE(Enum):
             case _:
                 return "127.0.0.1"
 
+class CeleryMode(Enum):
+    flower = 'flower'
+    worker = 'worker'
+    beat ='beat'
+    none = 'none'
+
+
+CeleryEnv = Literal['flower','worker','beat','none']
+    
 @_service.ServiceClass           
 class ConfigService(_service.Service):
-    
+    _celery_env = CeleryMode.none
+
     def __init__(self) -> None:
         super().__init__()
         if not load_dotenv(ENV,verbose=True):
@@ -155,22 +166,29 @@ class ConfigService(_service.Service):
         self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
         self.API_EXPIRATION = ConfigService.parseToInt(self.getenv("API_EXPIRATION"), 360000000)
 
-        self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 36000000)
-        self.REFRESH_EXPIRATION = ConfigService.parseToInt(self.getenv("REFRESH_EXPIRATION"), 360000000)
+        self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 3600*2)
+        self.REFRESH_EXPIRATION = ConfigService.parseToInt(self.getenv("REFRESH_EXPIRATION"), 3600 *20)
 
         self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
 
+                                # REDIS CONFIG #
         
+        self.REDIS_URL = self.getenv("REDIS_URL")
+
+                                # SLOW API CONFIG #
+
+        self.SLOW_API_REDIS_URL = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL",'/1')
+
                                 # CELERY CONFIG #
 
-        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL")
-        self.CELERY_BACKEND_URL = self.getenv("CELERY_BACKEND_URL")
-        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT",1)
-        self.REDBEAT_REDIS_URL = self.getenv("REDBEAT_REDIS_URL",self.CELERY_MESSAGE_BROKER_URL)
-        self.CELERY_RESULT_EXPIRES=ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"),60*60*24)
+        self.CELERY_MESSAGE_BROKER_URL = self.REDIS_URL+self.getenv("CELERY_MESSAGE_BROKER_URL",'/0')
+        self.CELERY_BACKEND_URL =  self.REDIS_URL+self.getenv("CELERY_BACKEND_URL",'/0')
+        self.REDBEAT_REDIS_URL =  self.REDIS_URL+self.getenv("REDBEAT_REDIS_URL",self.CELERY_MESSAGE_BROKER_URL)
 
+        self.CELERY_RESULT_EXPIRES=ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"),60*60*24)
+        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT",1)
 
                                 # CHAT CONFIG #
         
@@ -199,6 +217,13 @@ class ConfigService(_service.Service):
         config_file = config_file if config_json_app.exists else None
         #apps_data = config_json_app.data
         self.config_json_app = config_json_app
-    
+
+    def set_celery_env(env:CeleryEnv):
+        ConfigService._celery_env = CeleryMode._member_map_[env]
+
+    @property
+    def celery_env(self)->CeleryMode:
+        return self._celery_env
+
     def destroy(self):
         return super().destroy()

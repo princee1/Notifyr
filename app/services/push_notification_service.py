@@ -1,7 +1,7 @@
 
 from .config_service import ConfigService
 from app.definition._service import Service, ServiceClass, AbstractServiceClass
-import firebase_admin
+#import firebase_admin
 
 @AbstractServiceClass
 class PushNotificationService(Service):

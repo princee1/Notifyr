@@ -1,7 +1,7 @@
 from inspect import getmro
 from abc import ABC
 from random import choice, seed
-from string import hexdigits, digits, ascii_letters
+from string import hexdigits, digits, ascii_letters,punctuation
 import time
 from inspect import currentframe, getargvalues
 from typing import Any, Callable
@@ -11,9 +11,21 @@ from str2bool import str2bool
 import ast
 from enum import Enum
 import base64
-
 import urllib
+import uuid
+import hashlib
+import socket
 
+def stable_mac():
+    """Generate a stable pseudo-MAC address based on the machine's hostname."""
+    hostname = socket.gethostname()
+    hash_bytes = hashlib.sha1(hostname.encode()).digest()
+    mac = int.from_bytes(hash_bytes[:6], 'big') | 0x010000000000  # Set multicast bit
+    return mac & 0xFFFFFFFFFFFF  # Ensure 48-bit value
+
+def uuid_v1_mc():
+    """Generate a UUIDv1 with a stable, modified MAC address."""
+    return uuid.uuid1(node=stable_mac())
 
 
 class SkipCode(Exception):
@@ -92,7 +104,7 @@ def strict_parseToValue(value: str):
         return None
 
 
-def parse_value(value) -> Any | str:
+def parse_value(value,return_none=False) -> Any | str:
     """
     Parse a string value into the appropriate Python type.
     """
@@ -108,6 +120,8 @@ def parse_value(value) -> Any | str:
     if parsed_value is not None:
         return parsed_value
 
+    if return_none:
+        return None
     # Default: return the string itself
     return value
 

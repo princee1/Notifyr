@@ -36,6 +36,7 @@ class Scope(Enum):
 class ClientType(Enum):
     User = 'User'
     Admin = 'Admin'
+    Twilio = 'Twilio'
 
 
 class FuncMetaData(TypedDict):
@@ -43,6 +44,7 @@ class FuncMetaData(TypedDict):
     roles:set[Role]
     excludes:set[Role]
     options: list[Callable]
+    shared:bool
     limit_obj:dict
     limit_exempt:bool=False
 
@@ -62,7 +64,7 @@ class AuthPermission(TypedDict):
     client_id: str
     client_type:ClientTypeLiteral = 'User'
     #application_id: str = None # TODO
-    roles:list[str]
+    roles:list[str|Role]
     issued_for: str # Subnets
     group_id:str | None = None
     created_at: float
@@ -73,6 +75,7 @@ class AuthPermission(TypedDict):
     scope:str
     salt:str
     status:PermissionStatus= 'active'
+    authz_id:str
 
 class RefreshPermission(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
     generation_id: str
@@ -86,6 +89,11 @@ class RefreshPermission(TypedDict): # NOTE if someone from an organization chang
     status:PermissionStatus= 'active'
     client_type:ClientTypeLiteral = 'User'
 
+
+def parse_authPermission_enum(authPermission):
+        authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+        authPermission['scope'] = Scope._member_map_[authPermission['scope']]
+        
 
 class ContactPermission(TypedDict):
     expired_at:int
@@ -111,14 +119,14 @@ class WSPathNotFoundError(BaseError):
 def MustHave(role:Role):
 
     def verify(authPermission:AuthPermission):
-        return role.value in authPermission['roles']
+        return role in authPermission['roles']
 
     return verify
 
 def MustNotHave(role:Role):
 
     def verify(authPermission:AuthPermission):
-        return role.value not in authPermission['roles']
+        return role not in authPermission['roles']
 
     return verify
 

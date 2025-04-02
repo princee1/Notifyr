@@ -23,12 +23,10 @@ from app.decorators.pipes import ContactStatusPipe, RelayPipe
 
 CONTACTS_PREFIX = 'contacts'
 CONTACTS_SECURITY_PREFIX = 'security'
-CONTACTS_SUBSCRIPTION_PREFIX = 'subscription'
+CONTACTS_SUBSCRIPTION_PREFIX = 'subscribe'
+SUBSCRIPTION_PREFIX = 'subscription'
        
 ##############################################                   ##################################################
-
-
-SUBSCRIPTION_PREFIX = 'subscription'
 
 @UseHandler(TortoiseHandler)
 @UsePermission(JWTRouteHTTPPermission)
@@ -164,7 +162,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
         self.celeryService = celeryService
     
     @UseGuard(RegisteredContactsGuard)
-    @UseRoles(options=[MustHave(Role.TWILIO)])
+    @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.GET],dependencies=[Depends(verify_twilio_token)])
     async def check_password(self,contact: Annotated[ContactORM, Depends(get_contacts)],request:Request, authPermission=Depends(get_auth_permission)):
         ...
@@ -211,7 +209,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([ContactsService])
-@HTTPRessource(CONTACTS_PREFIX, routers=[ContactSecurityRessource, ContactsSubscriptionRessource])
+@HTTPRessource(CONTACTS_PREFIX, routers=[ContactSecurityRessource,ContentSubscriptionRessource, ContactsSubscriptionRessource])
 class ContactsRessource(BaseHTTPRessource):
 
     @InjectInMethod
@@ -253,11 +251,11 @@ class ContactsRessource(BaseHTTPRessource):
         row_affected, result = await get_all_contact_summary()
         return JSONResponse(content={"detail": "All contacts retrieved", "contacts": result}, status_code=status.HTTP_200_OK)
 
-    @BaseHTTPRessource.Get('/file')
+    @BaseHTTPRessource.Get('/file',mount=False)
     async def import_contacts(self,authPermission=Depends(get_auth_permission)):
         raise NotImplementedError
      
-    @BaseHTTPRessource.Post('/file')
+    @BaseHTTPRessource.Post('/file',mount=False)
     async def export_contacts(self,authPermission=Depends(get_auth_permission)):
         raise NotImplementedError
 

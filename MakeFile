@@ -53,7 +53,10 @@ docker:
 celery:
 	celery -A ${celery_app} worker --pool=solo --loglevel=info
 
-celery_beat:
+flower:
+	celery -A ${celery_app} flower --port=5555
+
+redbeat:
 	celery -A ${celery_app} beat -S redbeat.RedBeatScheduler --max-interval 30 --loglevel=info
 
 purge:

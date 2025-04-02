@@ -1,10 +1,12 @@
 import asyncio
-from typing import Any, Callable, ParamSpec, TypedDict
+from sched import scheduler
+from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict
 import typing
-from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES, TaskHeaviness
+from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES, TaskHeaviness, TaskType
 from app.classes.celery import  CeleryTask, SchedulerModel
 from app.definition._service import Service, ServiceClass, ServiceStatus
 from app.interface.timers import IntervalInterface
+from app.services.database_service import RedisService
 from app.utils.constant import HTTPHeaderConstant
 from .config_service import ConfigService
 from app.utils.helper import generateId
@@ -15,22 +17,24 @@ import datetime as dt
 from fastapi import BackgroundTasks, Request, Response
 from starlette.background import BackgroundTask
 from redis import Redis
+from humanize import naturaltime,naturaldelta
 
 P = ParamSpec("P")
 
-
-
 class TaskConfig(TypedDict):
-        task:BackgroundTask
+        task:BackgroundTask | Coroutine
         heaviness:TaskHeaviness
-
+        save_result:bool 
+        ttl:int
+        ttd:float
 
 @ServiceClass
 class BackgroundTaskService(BackgroundTasks,Service):
 
    
-    def __init__(self,configService:ConfigService):
+    def __init__(self,configService:ConfigService,redisService:RedisService):
         self.configService = configService
+        self.redisService = redisService
         self.running_tasks_count = 0
         self.sharing_task: dict[str,list[TaskConfig]] = {}
         self.task_lock = asyncio.Lock()
@@ -47,45 +51,87 @@ class BackgroundTaskService(BackgroundTasks,Service):
         except:
             ...
 
-    def add_task(self,heaviness:TaskHeaviness, request_id:str,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
-        task = BackgroundTask(func, *args, **kwargs)
+    async def add_async_task(self,heaviness:TaskHeaviness,task:Coroutine[Any,Any,None],request_id:str,save_result:bool,ttl:int|None):
+        return await self._create_task_(heaviness, task, request_id, save_result, ttl)
+
+    async def _create_task_(self, heaviness, task, request_id, save_result, ttl):
+        now = str(dt.datetime.now())
+        async with self.task_lock:
+            self.running_tasks_count += len(self.sharing_task[request_id])  # Increase count based on new tasks
+            for t_config in self.sharing_task[request_id]: # TODO with numpy
+                heaviness = t_config['heaviness']
+                self.server_load[heaviness] +=1
+            ttd = self._compute_ttd()
+
+        if isinstance(task,BackgroundTask):
+            name = task.func.__qualname__
+        else:
+            name = task.__qualname__
         self.sharing_task[request_id].append(TaskConfig(
             task=task,
-            heaviness=heaviness
+            heaviness=heaviness,       
+            save_result=save_result,
+            ttl=ttl,
+            ttd=ttd
         ))
-        now = dt.datetime.now()
-
-        return {'data':now,
-            'message': f"[{func.__qualname__}] - Task added successfully",'heaviness':heaviness,'handler':'BackgroundTask'}
+        return {'date':now,
+            'message': f"[{name}] - Task added successfully",'heaviness':str(heaviness),'handler':'BackgroundTask','estimate_tbd':naturaldelta(ttd)}
+        
+    async def add_task(self,heaviness:TaskHeaviness, request_id:str,save_result:bool,ttl:int|None,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
+        task = BackgroundTask(func, *args, **kwargs)
+        return await self._create_task_(heaviness, task, request_id, save_result, ttl)
+          
     def build(self):
         ...
+    
+    def _compute_ttd(self,):
+        return 60
 
     @property
     async def global_task_count(self):
         async with self.task_lock:
             return self.running_tasks_count
     
-    async def __call__(self,request_id:str) -> None:
-        
-        async with self.task_lock:
-            self.running_tasks_count += len(self.sharing_task[request_id])  # Increase count based on new tasks
-            for t_config in self.sharing_task[request_id]:
-                heaviness = t_config['heaviness']
-                self.server_load[heaviness] +=1
-
-        for t in self.sharing_task[request_id]:
+    async def __call__(self,request_id:str) -> None:        
+        task_len = len(self.sharing_task[request_id])
+        #data = [None]*task_len
+        data = []
+        for i,t in enumerate(self.sharing_task[request_id]):
             task = t['task']
             heaviness_ = t['heaviness']
-            await asyncio.sleep(0)
-            await task()
+            ttd = t['ttd']
+            await asyncio.sleep(ttd)
+            is_saving_result = t['save_result']
+
+            if False:
+                async def callback():
+                    if i+1 == task_len:
+                        if data:
+                            self.redisService.store_bkg_result(data,request_id)
+                        self._delete_tasks(request_id)
+                
+                asyncio.create_task(callback())
+                
+            try:
+                if not asyncio.iscoroutine(task):
+                    result = await task()
+                else:
+                    result = await task
+                if is_saving_result:
+                    data.append(result)
+            except Exception as e:
+                if is_saving_result:
+                    data.append(str(e))
+
             async with self.task_lock:
                 self.running_tasks_count -= 1  # Decrease count after tasks complete
                 self.server_load[heaviness_]-=1
-
+        if data:
+            self.redisService.store_bkg_result(data,request_id)
         #async with self.task_lock:
         self._delete_tasks(request_id)
     
-    async def pingService(self,count=None):
+    async def pingService(self,count=None):# TODO
         response_count = await self.global_task_count
         load = self.server_load.copy()
 
@@ -98,10 +144,9 @@ class BackgroundTaskService(BackgroundTasks,Service):
     def check_system_ram():
         ...
 
-    @staticmethod
-    def populate_response_with_request_id(request:Request, response: Response):
-        response.headers[HTTPHeaderConstant.REQUEST_ID] = request.state.request_id
-
+    def populate_response_with_request_id(self,request:Request, response: Response):
+        response.headers.append(HTTPHeaderConstant.REQUEST_ID,request.state.request_id)
+        
 @ServiceClass
 class CeleryService(Service, IntervalInterface):
     _celery_app = celery_app
@@ -254,3 +299,32 @@ class CeleryService(Service, IntervalInterface):
 
     def callback(self):
         asyncio.create_task(self._check_workers_status())
+
+@ServiceClass
+class OffloadTaskService(Service):
+
+    Algorithm= Literal['normal','worker_focus']
+
+    def __init__(self,configService:ConfigService,celeryService:CeleryService,backgroundService:BackgroundTaskService):
+        super().__init__()
+        self.configService = configService
+        self.celeryService = celeryService
+        self.backgroundService = backgroundService
+    
+    def build(self):
+        ...
+
+    async def offload_task(self,algorithm:Algorithm,scheduler:SchedulerModel,save_result:bool,ttl:int,x_request_id:str,as_async:bool,callback:Callable,*args,**kwargs):
+        # TODO choose algorightm
+        if algorithm =='normal':
+            ...
+        return await  self._normal_offload(scheduler,save_result,ttl,x_request_id,as_async,callback,*args,**kwargs)
+    
+    async def _normal_offload(self,scheduler:SchedulerModel,save_result:bool,ttl:int,x_request_id:str,as_async:bool,callback:Callable,*args,**kwargs):
+        # TODO check celery worker, 
+        if scheduler.task_type == TaskType.NOW.value:
+            if as_async:
+                return await self.backgroundService.add_task(scheduler.heaviness,x_request_id,save_result,ttl,callback,*args,**kwargs)
+            else:
+                return callback(*args,**kwargs)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,*args,**kwargs)
