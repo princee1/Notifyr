@@ -1,7 +1,8 @@
 import asyncio
-from typing import Any, Callable, Coroutine, ParamSpec, TypedDict
+from sched import scheduler
+from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict
 import typing
-from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES, TaskHeaviness
+from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError,SCHEDULER_RULES, TaskHeaviness, TaskType
 from app.classes.celery import  CeleryTask, SchedulerModel
 from app.definition._service import Service, ServiceClass, ServiceStatus
 from app.interface.timers import IntervalInterface
@@ -76,7 +77,7 @@ class BackgroundTaskService(BackgroundTasks,Service):
         return {'date':now,
             'message': f"[{name}] - Task added successfully",'heaviness':str(heaviness),'handler':'BackgroundTask','estimate_tbd':naturaldelta(ttd)}
         
-    async def add_task(self,heaviness:TaskHeaviness, request_id:str,save_result:bool,ttl:int|None,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs) -> None:
+    async def add_task(self,heaviness:TaskHeaviness, request_id:str,save_result:bool,ttl:int|None,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
         task = BackgroundTask(func, *args, **kwargs)
         return await self._create_task_(heaviness, task, request_id, save_result, ttl)
           
@@ -286,3 +287,32 @@ class CeleryService(Service, IntervalInterface):
 
     def callback(self):
         asyncio.create_task(self._check_workers_status())
+
+@ServiceClass
+class OffloadTaskService(Service):
+
+    Algorithm= Literal['normal','worker_focus']
+
+    def __init__(self,configService:ConfigService,celeryService:CeleryService,backgroundService:BackgroundTaskService):
+        super().__init__()
+        self.configService = configService
+        self.celeryService = celeryService
+        self.backgroundService = backgroundService
+    
+    def build(self):
+        ...
+
+    async def offload_task(self,algorithm:Algorithm,scheduler:SchedulerModel,save_result:bool,ttl:int,x_request_id:str,as_async:bool,callback:Callable,*args,**kwargs):
+        # TODO choose algorightm
+        if algorithm =='normal':
+            ...
+        return await  self._normal_offload(scheduler,save_result,ttl,x_request_id,as_async,callback,*args,**kwargs)
+    
+    async def _normal_offload(self,scheduler:SchedulerModel,save_result:bool,ttl:int,x_request_id:str,as_async:bool,callback:Callable,*args,**kwargs):
+        # TODO check celery worker, 
+        if scheduler.task_type == TaskType.NOW.value:
+            if as_async:
+                return await self.backgroundService.add_task(scheduler.heaviness,x_request_id,save_result,ttl,callback,*args,**kwargs)
+            else:
+                return callback(*args,**kwargs)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,*args,**kwargs)

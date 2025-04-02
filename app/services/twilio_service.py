@@ -81,7 +81,7 @@ class BaseTwilioCommunication(_service.Service):
         self.url+="/auth-logs"
         
     @staticmethod
-    def parse_message_to_json(func:Callable):
+    def parse_to_json(func:Callable):
 
         @functools.wraps(func)
         def wrapper(*args,**kwargs) -> dict | Coroutine:
@@ -121,7 +121,7 @@ class SMSService(BaseTwilioCommunication):
                 'message_service_sid': message.messaging_service_sid,
             }
 
-    @BaseTwilioCommunication.parse_message_to_json
+    @BaseTwilioCommunication.parse_to_json
     def send_otp(self, otpModel: OTPModel,body:str,as_async:bool = False): #TODO otp template
         as_async = False
         func = self.messages.create_async if as_async else self.messages.create
@@ -130,13 +130,13 @@ class SMSService(BaseTwilioCommunication):
     def build(self):
         self.messages = self.twilioService.client.messages
 
-    @BaseTwilioCommunication.parse_message_to_json
+    @BaseTwilioCommunication.parse_to_json
     def send_custom_sms(self, messageData: dict,as_async:bool = False):
         as_async = False
         func = self.messages.create_async if as_async else self.messages.create
         return func(provide_feedback=True,send_as_mms=True, status_callback=self.status_callback, **messageData)
 
-    @BaseTwilioCommunication.parse_message_to_json
+    @BaseTwilioCommunication.parse_to_json
     def send_template_sms(self, message,as_async:bool = False):
         as_async = False
         func = self.messages.create_async if as_async else self.messages.create
@@ -168,47 +168,41 @@ class VoiceService(BaseTwilioCommunication):
     def calls(self):
         return self.call.calls
     
-    @staticmethod
-    def parse_call_to_json(func:Callable):
-
-        @functools.wraps(func)
-        def wrapper(*args,**kwargs):
-            result:CallInstance = func(*args,**kwargs)
-            return {
-                'caller_name':result.caller_name,
-                'date_created':result.date_created,
-                'date_updated':result.date_updated,
-                'end_time':result.end_time,
-                'duration':result.duration,
-                'answered_by':result.answered_by,
-                'price':result.price,
-                'price_unit':result.price_unit,
-                'sid':result.sid,
-                'direction':result.direction,
-                'status':result.status,
-                'start_time':result.start_time
-            }
-        return wrapper
+    
+    def response_extractor(self, result: CallInstance):
+        return {
+            'caller_name': result.caller_name,
+            'date_created': str(result.date_created) if result.date_created else None,
+            'date_updated': str(result.date_updated) if result.date_updated else None,
+            'end_time': str(result.end_time) if result.end_time else None,
+            'duration': int(result.duration) if result.duration is not None else None,
+            'answered_by': result.answered_by,
+            'price': str(result.price) if result.price is not None else None,
+            'price_unit': result.price_unit,
+            'sid': result.sid,
+            'direction': result.direction,
+            'status': result.status,
+            'start_time': str(result.start_time) if result.start_time else None
+        }
 
     def send_otp_voice_call(self):
         ...
 
-    @parse_call_to_json
+    @BaseTwilioCommunication.parse_to_json
     def send_custom_voice_call(self,body:str,call:dict):
         voice = VoiceResponse()
         voice.say(body)
         call['twiml']= voice
         return self._create_call(call)
     
-    @parse_call_to_json
+    @BaseTwilioCommunication.parse_to_json
     def send_twiml_voice_call(self, url:str,call_details:dict):
         call_details['url']= url
         return self._create_call(call_details)
         
-    @parse_call_to_json
+    @BaseTwilioCommunication.parse_to_json
     def send_template_voice_call(self,result:str,call_details:dict):
-        voiceRes = self._to_twiml(result)
-        call_details['twiml'] = voiceRes
+        call_details['twiml'] = result
         return self._create_call(call_details)
     
     def _create_call(self, details:dict):

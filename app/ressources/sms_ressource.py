@@ -1,7 +1,4 @@
-from typing import Annotated, Any, List
 from fastapi import Depends, Header, Request, Response
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from app.classes.auth_permission import Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
 from app.classes.template import SMSTemplate
@@ -13,7 +10,7 @@ from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, Us
 from app.container import Get, GetDependsAttr, InjectInMethod, InjectInFunction
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
-from app.services.celery_service import BackgroundTaskService, CeleryService
+from app.services.celery_service import BackgroundTaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
@@ -43,14 +40,13 @@ async def _to_otp_path(template:str):
 @HTTPRessource(SMS_ONGOING_PREFIX)
 class OnGoingSMSRessource(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self, smsService: SMSService,chatService:ChatService,contactService:ContactsService,configService:ConfigService,celeryService:CeleryService) -> None:
+    def __init__(self, smsService: SMSService,chatService:ChatService,contactService:ContactsService,configService:ConfigService,offloadService:OffloadTaskService) -> None:
         super().__init__()
         self.smsService: SMSService = smsService
         self.chatService: ChatService = chatService
         self.contactService: ContactsService = contactService
         self.configService:ConfigService = configService
-        self.celeryService: CeleryService = celeryService
-        self.backgroundService:BackgroundTaskService = Get(BackgroundTaskService)
+        self.offloadService= offloadService
 
     @UseLimiter(limit_value="10000/minutes")
     @UseRoles([Role.MFA_OTP])
@@ -76,17 +72,8 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,authPermission=Depends(get_auth_permission),x_request_id:str= Depends(get_request_id),as_async:bool=Depends(as_async_query)):
         message = scheduler.content.model_dump()
-        if scheduler.task_type == TaskType.NOW.value:
-            if as_async:
-                result = await self.backgroundService.add_task(TaskHeaviness.LIGHT,x_request_id,True,3600,self.smsService.send_custom_sms,message)
-            else:
-                result =  self.smsService.send_custom_sms(message)
-        else:
-            result=self.celeryService.trigger_task_from_scheduler(scheduler,message)
-
-        return result
-
-    
+        return await self.offloadService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.smsService.send_custom_sms,message)
+        
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
     @UseHandler(CeleryTaskHandler,TemplateHandler)
@@ -100,16 +87,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         smsTemplate:SMSTemplate = self.assetService.sms[template]
         _,result=smsTemplate.build(self.configService.ASSET_LANG,sms_data.data)
         message = {'body':result,'to':sms_data.to,'from_':sms_data.from_}
-
-        if scheduler.task_type == TaskType.NOW:
-            if as_async:
-                result = await self.backgroundService.add_task(TaskHeaviness.LIGHT,x_request_id,True,3600,self.smsService.send_template_sms,message)
-            else:
-                result =  self.smsService.send_template_sms(message)
-
-        else:
-            result = self.celeryService.trigger_task_from_scheduler(scheduler,message)
-        return result
+        return await self.offloadService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.smsService.send_template_sms,message)
 
 
     async def sms_get_message(self,):
