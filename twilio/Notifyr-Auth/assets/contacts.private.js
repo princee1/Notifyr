@@ -13,6 +13,9 @@ class Contact {
     authenticate(headers){
     }
 
+    updatePassword(headers){
+
+    }
 
 }
 

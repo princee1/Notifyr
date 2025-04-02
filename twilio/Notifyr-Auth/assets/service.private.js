@@ -27,7 +27,7 @@ class NotifyrAuthService {
     this.refreshToken = this.context.REFRESH_KEY;
     
     this.headers = {
-      "Authorization": set_auth_token(this.context.AUTH_KEY),
+      "Authorization": set_auth_token(this.context.AUTH_KEY??'Test'),
     };
   }
 
