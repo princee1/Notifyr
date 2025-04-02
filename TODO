@@ -24,3 +24,4 @@
 22. Verify Email before sending, and deactivate bounced contacts
 23. Always verify status before sending a promotion, subscription status , and active user or other with FilterPipe
 24. ADOPT RCS (Rich Communication Service) when it is available !
+25. Automate Wrapper in UseLimiter
