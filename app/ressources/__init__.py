@@ -1,8 +1,9 @@
-from app.services.celery_service import CeleryService,BackgroundTaskService
+from app.services.celery_service import CeleryService,BackgroundTaskService,OffloadTaskService
 from app.container import Register
 
 Register(BackgroundTaskService)
 Register(CeleryService)
+Register(OffloadTaskService)
 
 
 from .support_ressource import *
