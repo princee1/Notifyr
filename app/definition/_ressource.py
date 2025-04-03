@@ -4,9 +4,11 @@ instance imported from `container`.
 """
 from inspect import isclass
 from typing import Any, Callable,Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
+
+from fastapi.responses import JSONResponse, PlainTextResponse
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
-from app.utils.helper import issubclass_of
+from app.utils.helper import copy_response, issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
 from app.container import Get, Need
@@ -616,6 +618,29 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
         return func
     return decorator
 
+def response_decorator(func:Callable):
+
+    @functools.wraps(func)
+    async def wrapper(*args,**kwargs):
+        if asyncio.iscoroutinefunction(func):
+            result = await func(*args,**kwargs)
+        else:
+            result = func(*args,**kwargs)
+        response:Response = kwargs['response'] if 'response' in kwargs else None
+        
+        if isinstance(result,Response):
+            ...
+        elif isinstance(result,(dict,list,set)):
+            result = JSONResponse(result,)
+
+        elif isinstance(result,(int,str,float,bool)):
+            result = PlainTextResponse(str(result))
+
+        return copy_response(result,response)
+
+    return wrapper
+
+
 @functools.wraps(GlobalLimiter.limit)
 def UseLimiter(**kwargs): #TODO
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -633,7 +658,9 @@ def UseLimiter(**kwargs): #TODO
                 RequestLimit+= limit_value
             except:
                 ...
-        return func
+            
+        return response_decorator(func)
+    
     return decorator
 
 @functools.wraps(GlobalLimiter.shared_limit)
@@ -647,7 +674,7 @@ def UseSharingLimiter(**kwargs):
             meta['limit_obj'] = kwargs
             meta['shared']=True
 
-        return func
+        return response_decorator(func)
     return decorator
 
 def ExemptLimiter():

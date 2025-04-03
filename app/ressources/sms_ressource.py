@@ -56,7 +56,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe,before=False)
     #@UsePermission(JWTAssetPermission('sms'))
     @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST])
-    async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
+    async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
         smsTemplate:SMSTemplate = self.assetService.sms[template]
         _,body= smsTemplate.build(otpModel.content,...)
         result = self.smsService.send_otp(otpModel,body)

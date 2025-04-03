@@ -48,27 +48,27 @@ class OnGoingCallRessource(BaseHTTPRessource):
         self.offloadTaskService:OffloadTaskService = Get(OffloadTaskService)
         super().__init__()
 
-    @UseLimiter('100/day')
+    @UseLimiter(limit_value= '100/day')
     @UseRoles([Role.CHAT,Role.ADMIN])
-    @BaseHTTPRessource.Get('/balance')
+    @BaseHTTPRessource.Get('/balance/')
     def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
         return self.voiceService.fetch_balance()
 
-    @UseLimiter('100/day')
+    @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @BaseHTTPRessource.Post('/otp/')
-    def voice_relay_otp(self,otpModel:OTPModel,authPermission=Depends(get_auth_permission)):
+    def voice_relay_otp(self,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
         pass
     
-    @UseLimiter('100/day')
+    @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @BaseHTTPRessource.Get('/otp/')
-    async def enter_digit_otp(self,otpModel:OTPModel,authPermission=Depends(get_auth_permission)):
+    async def enter_digit_otp(self,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
         ...
     
-    @UseLimiter('100/day')
+    @UseLimiter(limit_value='100/day')
     @UseRoles([Role.RELAY])
     @UsePermission(JWTAssetPermission('phone'))
     @UseHandler(TemplateHandler,CeleryTaskHandler)
@@ -83,7 +83,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
         return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_template_voice_call,result,content)
     
-    @UseLimiter('50/day')
+    @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
     @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']))
@@ -97,7 +97,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_twiml_voice_call,url,details)
 
 
-    @UseLimiter('50/day')
+    @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
     @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']))
@@ -110,11 +110,11 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
         return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_custom_voice_call,body,details)
     
-    @UseLimiter('50/day')
+    @UseLimiter(limit_value='50/day')
     @UseRoles([Role.MFA_OTP])
     @UseGuard(RegisteredContactsGuard)
     @BaseHTTPRessource.HTTPRoute('/authenticate/',methods=[HTTPMethod.GET])
-    async def voice_authenticate(self,authPermission=Depends(get_auth_permission)):
+    async def voice_authenticate(self,request:Request,authPermission=Depends(get_auth_permission)):
         ...
     
 

@@ -209,10 +209,10 @@ class UserPermission(ClientTypePermission):
         super().__init__(ClientType.User, ensure)
         self.accept_none_auth = accept_none_auth
     
-    def permission(self, authPermission:None=None):
+    async def permission(self, authPermission:None=None):
         if authPermission == None:
             return self.accept_none_auth
-        return super().permission(authPermission)
+        return await super().permission(authPermission)
 
     
 
