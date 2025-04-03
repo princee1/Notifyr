@@ -1,4 +1,4 @@
-from typing import Coroutine, Literal
+from typing import Any, Coroutine, Literal
 
 from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
@@ -17,6 +17,7 @@ from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, task_name
 from app.services.twilio_service import TwilioService
+from app.utils.helper import copy_response
 from app.utils.validation import phone_number_validator
 from app.utils.dependencies import get_client_ip
 
@@ -217,17 +218,19 @@ class OffloadedTaskResponsePipe(Pipe):
     def __init__(self, before):
         super().__init__(before) 
         
-    def pipe(self,result:dict|Coroutine,response:Response,scheduler:SchedulerModel=None,otpModel:OTPModel=None,as_async:bool = False,):
+    def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,as_async:bool = False,):
 
-        if scheduler and scheduler.task_type != TaskType.NOW:
-            return JSONResponse(status_code=201,content=result,headers=response.headers)
+        if not isinstance(result,Response):
+            result = JSONResponse(content=result)
 
-        if otpModel and as_async:
-            return JSONResponse(status_code=201,content=result,headers=response.headers)
-    
-        if as_async:
-            return JSONResponse(status_code=201,content=result,headers=response.headers)
+        response = copy_response(result,response)
+
+        if (scheduler and scheduler.task_type != TaskType.NOW)  or (otpModel and as_async ) or  (as_async):
+            response.status_code = 201
+        else:
+            response.status_code = 200
         
-        return JSONResponse(status_code=200,content=result,headers=response.headers)
+        return response
 
+    
         

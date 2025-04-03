@@ -6,6 +6,7 @@ import time
 from inspect import currentframe, getargvalues
 from typing import Any, Callable
 import urllib.parse
+from fastapi import Response
 from namespace import Namespace
 from str2bool import str2bool
 import ast
@@ -15,6 +16,17 @@ import urllib
 import uuid
 import hashlib
 import socket
+
+
+
+def copy_response(result:Response,response:Response):
+    if not response:
+        return result
+    result.raw_headers.extend(response.raw_headers)
+    result.status_code = response.status_code
+    return result
+
+
 
 def stable_mac():
     """Generate a stable pseudo-MAC address based on the machine's hostname."""
