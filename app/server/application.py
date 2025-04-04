@@ -106,6 +106,8 @@ class Application(EventInterface):
         async def type_error(request, e:TypeError):
             print(e)
             print(e.__cause__)
+            traceback.print_exc()  
+
             return JSONResponse({'message': 'Type Error'}, status_code=500)
 
         @self.app.exception_handler(AttributeError)

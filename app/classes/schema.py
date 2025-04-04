@@ -1,9 +1,10 @@
-from ..utils.constant import ValidationHTMLConstant
-from ..utils.helper import parse_value, parseToDataStruct,key_builder,default_flattenReducer
+from app.utils.constant import ValidationHTMLConstant
+from app.utils.helper import parse_value, parseToDataStruct,key_builder,default_flattenReducer
 from bs4 import Tag
 from enum import Enum
 from typing import Any, Literal
-from ..utils.prettyprint import printJSON
+from app.utils.prettyprint import printJSON
+from app.utils.transformer import coerce,transform
 
 
 class CSSLevel(Enum):
@@ -14,15 +15,6 @@ class CSSLevel(Enum):
 
 class SchemaBuilder:
     pass
-
-
-coerce = {
-
-}
-
-transform = {
-
-}
 
 
 class MLSchemaBuilder (SchemaBuilder):
@@ -54,16 +46,25 @@ class MLSchemaBuilder (SchemaBuilder):
             # TODO validates arguments
             schema[key] = self.parse(v.attrs)
 
-            if 'coerce' in schema:
+            if 'coerce' in schema[key]:
                 try:
-                    value = schema["coerce"]
+                    value = schema[key]["coerce"]
                     value = self._parse_to_direct_values(value,coerce)
 
-                    schema['coerce'] = value
+                    schema[key]['coerce'] = value
                 except:
-                    del schema['coerce']
+                    del schema[key]['coerce']
 
             is_struct = v.attrs['type'] in ["list", "dict"]
+
+            if 'transform' in schema[key]:
+                print('allo')
+                if not is_struct:
+                    value = schema[key]['transform']
+                    value = self._parse_to_direct_values(value,transform)
+                    abs_key = key if parent_key == '' else default_flattenReducer(key_builder(parent_key),key)
+                    self.transform[abs_key] = value
+                
 
             if has_noSuccessor:
                 if is_struct:
@@ -73,13 +74,7 @@ class MLSchemaBuilder (SchemaBuilder):
                     default_schema_registry = schema[key]["schema"]
                     if type(default_schema_registry) == str and default_schema_registry in MLSchemaBuilder.HashSchemaRegistry.keys():
                         schema[key]["schema"] = MLSchemaBuilder.HashSchemaRegistry[default_schema_registry]
-                
-                if 'transform' in schema:
-                    value = schema['transform']
-                    value = self._parse_to_direct_values(value,transform)
-                    abs_key = key if parent_key == '' else default_flattenReducer(key_builder(parent_key),key)
-                    self.transform[abs_key] = value
-                
+                                
                 continue
 
             if not is_struct:
@@ -96,9 +91,9 @@ class MLSchemaBuilder (SchemaBuilder):
         return schema
 
     def _parse_to_direct_values(self, value,data):
-        if type(value,dict):
+        if isinstance(value,dict):
             raise ValueError
-        elif type(value,(list,tuple)):
+        elif isinstance(value,(list,tuple)):
             value = [data[v] for v in value]
         else:
             value = data[value]

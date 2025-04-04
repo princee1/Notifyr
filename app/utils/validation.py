@@ -9,6 +9,7 @@ from datetime import datetime
 from functools import wraps
 import re
 import ipaddress
+from .transformer import transform
 
 
 def ipv4_validator(ip):
@@ -160,8 +161,11 @@ class CustomValidator(Validator):
             self._error(field, error_message)
     
     def _validate_transform(self,constraint:str,field,value):
-        if not value:
+        if not constraint:
             self._error(field,'Must be a valid string')
+        
+        if constraint not in transform:
+            self._error(field,'Transformer does not exists')
 
     # ERROR extending :check normal validation 
     # TODO for  operator

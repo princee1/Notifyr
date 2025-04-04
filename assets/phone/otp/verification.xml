@@ -6,16 +6,22 @@
         <validation-item id="language" type="string" default="en-US" empty="false">  </validation-item>
         <validation-item id="firstname" type="string" empty="false" required="true"></validation-item>
         <validation-item id="pause" type="integer" min="0" max="10" default="0"></validation-item>
+        <validation-item id="expiry" type="integer" min="60" max="3600" default="60" transform="naturaltime"></validation-item>
         <validation-item id="service" type="string" empty="false" required="true" minlength="2" maxlength="100"></validation-item>
+        <validation-item id="code" type="integer" min="100000" max="999999" transform="split_by_ "></validation-item>
     </validation>
-    
     <Response>
-        <Say language="{{language}}" voice="{{voice}}">Hi,{{firstname}}!</Say>
+        <Say language="{{language}}" voice="{{voice}}">Hello, {{firstname}}!</Say>
         <Pause length="1"></Pause>
-        <Say language="{{language}}" voice="{{voice}}">Here's the verification code for the service {{service}}</Say>
+        <Say language="{{language}}" voice="{{voice}}">You are receiving this call regarding the {{service}} service.</Say>
+        <Pause length="1"></Pause>
+        <Say language="{{language}}" voice="{{voice}}">Your verification code is:</Say>
+        <Pause length="1"></Pause>
+        <Say language="{{language}}" voice="{{voice}}" loop="{{otp-loop}}">{{code}}</Say>
         <Pause length="{{pause}}"></Pause>
-        <Say language="{{language}}" voice="{{voice}}" loop="{{otp-loop}}"></Say>
-         <Say voice="{{voice}}" language="{{language}}">Please enter this code. Goodbye!</Say>
+        <Say language="{{language}}" voice="{{voice}}">Please enter this code to proceed. Note that it will expire in {{expiry}}.</Say>
+        <Pause length="1"></Pause>
+        <Say language="{{language}}" voice="{{voice}}">Thank you for using {{service}}. Goodbye!</Say>
     </Response>
 
 </Template>

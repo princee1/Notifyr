@@ -336,6 +336,10 @@ class PhoneTemplate(TWIMLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         self.parser =  XMLLikeParser.XML.value
         super().__init__(filename, content, dirName,"xml","validation")
+    
+    def set_content(self):
+        super().set_content()
+        self.content_to_inject='''<?xml version="1.0" encoding="UTF-8"?>\n'''+self.content_to_inject
         
 ####################### ########################
 
