@@ -49,7 +49,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         super().__init__()
 
     @UseLimiter(limit_value= '100/day')
-    @UseRoles([Role.CHAT,Role.ADMIN])
+    @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.Get('/balance/')
     def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
         return self.voiceService.fetch_balance()
@@ -93,7 +93,6 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_twilio_twiml(self,scheduler:CallTwimlSchedulerModel,request:Request,response:Response,authPermission=Depends(get_auth_permission),x_request_id:str= Depends(get_request_id),as_async:bool=Depends(as_async_query)):
         details = scheduler.content.model_dump(exclude={'url'})
         url = scheduler.content.url
-
         return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_twiml_voice_call,url,details)
 
 
@@ -117,7 +116,6 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_authenticate(self,request:Request,authPermission=Depends(get_auth_permission)):
         ...
     
-
 CALL_INCOMING_PREFIX = "call-incoming"
 
 @UseRoles([Role.TWILIO])
