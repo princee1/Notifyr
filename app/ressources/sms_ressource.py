@@ -5,7 +5,7 @@ from app.classes.template import SMSTemplate
 from app.decorators.guards import CeleryTaskGuard
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
-from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe
+from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsAttr, InjectInMethod, InjectInFunction
 from app.models.otp_model import OTPModel
@@ -29,10 +29,6 @@ class SMSCustomSchedulerModel(SchedulerModel):
 class SMSTemplateSchedulerModel(SchedulerModel):
     content: OnGoingTemplateSMSModel
 
-@APIFilterInject
-async def _to_otp_path(template:str):
-    template = "otp\\"+template
-    return {'template':template}
 
 #@PingService([SMSService])
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
@@ -53,7 +49,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(_to_otp_path)
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
     @UseHandler(TemplateHandler)
-    @UsePipe(OffloadedTaskResponsePipe,before=False)
+    #@UsePipe(OffloadedTaskResponsePipe,before=False)
     #@UsePermission(JWTAssetPermission('sms'))
     @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST])
     async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,response:Response,authPermission=Depends(get_auth_permission)):

@@ -185,8 +185,12 @@ class VoiceService(BaseTwilioCommunication):
             'start_time': str(result.start_time) if result.start_time else None
         }
 
-    def send_otp_voice_call(self):
-        ...
+    @BaseTwilioCommunication.parse_to_json
+    def send_otp_voice_call(self,body:str,otp:OTPModel):
+        call = {}
+        call.update(otp.model_dump(exclude=('content')))
+        call['twiml'] =body
+        return self._create_call(call)
 
     @BaseTwilioCommunication.parse_to_json
     def send_custom_voice_call(self,body:str,call:dict):
@@ -210,9 +214,6 @@ class VoiceService(BaseTwilioCommunication):
 
     def update_voice_call(self):
         ...
-
-    def _to_twiml(self,result:str):
-        return ...
         
 @_service.ServiceClass
 class FaxService(BaseTwilioCommunication):

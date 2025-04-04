@@ -6,7 +6,7 @@ from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
-from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe
+from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
 from app.models.otp_model import OTPModel
 from app.models.voice_model import BaseVoiceCallModel, CallStatusModel,OnGoingTwimlVoiceCallModel,OnGoingCustomVoiceCallModel
 from app.services.celery_service import BackgroundTaskService, CeleryService, OffloadTaskService
@@ -56,10 +56,14 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
-    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
-    @BaseHTTPRessource.Post('/otp/')
-    def voice_relay_otp(self,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
-        pass
+    @UseHandler(TemplateHandler)
+    @UsePipe(_to_otp_path)
+    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('phone','xml'))
+    @BaseHTTPRessource.Post('/otp/{template}')
+    def voice_relay_otp(self,template:str,otpModel:OTPModel,request:Request,authPermission=Depends(get_auth_permission)):
+        phoneTemplate:PhoneTemplate = self.assetService.phone[template]
+        _,body= phoneTemplate.build(otpModel.content,...)
+        return self.voiceService.send_otp_voice_call(body,otpModel)
     
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
@@ -80,7 +84,6 @@ class OnGoingCallRessource(BaseHTTPRessource):
         content = scheduler.content.model_dump()
         phoneTemplate:PhoneTemplate = self.assetService.phone[template]
         _,result = phoneTemplate.build(content,...)
-
         return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_template_voice_call,result,content)
     
     @UseLimiter(limit_value='50/day')

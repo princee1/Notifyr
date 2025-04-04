@@ -23,7 +23,7 @@ def copy_response(result:Response,response:Response):
     if not response:
         return result
     result.raw_headers.extend(response.raw_headers)
-    result.status_code = response.status_code
+    result.status_code = response.status_code if response.status_code else result.status_code
     return result
 
 

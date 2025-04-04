@@ -19,7 +19,12 @@ from app.services.celery_service import CeleryService, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.helper import copy_response
 from app.utils.validation import phone_number_validator
-from app.utils.dependencies import get_client_ip
+from app.utils.dependencies import APIFilterInject, get_client_ip
+
+@APIFilterInject
+async def _to_otp_path(template:str):
+    template = "otp\\"+template
+    return {'template':template}
 
 class AuthPermissionPipe(Pipe):
 
@@ -220,6 +225,7 @@ class OffloadedTaskResponsePipe(Pipe):
         
     def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,as_async:bool = False,):
 
+        print(response)
         if not isinstance(result,Response):
             result = JSONResponse(content=result)
 
