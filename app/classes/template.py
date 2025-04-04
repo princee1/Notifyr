@@ -40,6 +40,9 @@ class TemplateValidationError(BaseError):
 
 class SchemaValidationError(BaseError):
     ...
+
+class SkipTemplateCreationError(BaseError):
+    ...
 # ============================================================================================================
 
 
@@ -185,7 +188,11 @@ class MLTemplate(Template):
         try:
             if self.validation_balise is None:
                 return
-            self.schema = MLSchemaBuilder(self.validation_balise).schema
+            builder = MLSchemaBuilder(self.validation_balise)
+            self.schema = builder.schema
+            self.transform = builder.transform
+
+            print(self.transform)
             self.keys = self.schema.keys()
             self.validation_balise.decompose()
         except SchemaError as e:
@@ -292,6 +299,8 @@ class TWIMLTemplate(MLTemplate):
     
     def set_content(self):
         response = self.bs4.select_one("Response")
+        if not response:
+            raise SkipTemplateCreationError('Response tag not given')
         self.content_to_inject = response.prettify(formatter="html")
     
     def build(self, data, target_lang):
@@ -325,6 +334,8 @@ class SMSTemplate(TWIMLTemplate):
 
 class PhoneTemplate(TWIMLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
+        self.parser =  XMLLikeParser.XML.value
         super().__init__(filename, content, dirName,"xml","validation")
+        
 ####################### ########################
 

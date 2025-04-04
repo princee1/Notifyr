@@ -3,7 +3,7 @@ from fastapi import HTTPException,status
 from app.definition._error import BaseError
 from .config_service import CeleryMode, ConfigService
 from app.utils.fileIO import FDFlag
-from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
+from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .security_service import SecurityService
 from .file_service import FileService, FTPService
 from app.definition import _service
@@ -90,7 +90,10 @@ class Reader():
                 relpath, flag, encoding)
             keyName = filename if not setTempFile else file
             setTempFile.add(keyName)
-            self.values[relpath] = self.asset(keyName, content, dir)
+            try:
+                self.values[relpath] = self.asset(keyName, content, dir)
+            except SkipTemplateCreationError as e:
+                ...
 
             if issubclass_of(Template, self.asset):
                 if self.func != None:
@@ -169,8 +172,8 @@ class AssetService(_service.Service):
         self.sms = smsReader.join()
         self.phone = phoneReader.join() 
 
-        print(self.sms)
-            
+        print(self.phone)
+        self.prettyPrinter.wait(0)
         
     def loadHTMLData(self, html: HTMLTemplate):
         cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)

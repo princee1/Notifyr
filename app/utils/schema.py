@@ -1,5 +1,5 @@
 from .constant import ValidationHTMLConstant
-from .helper import parse_value
+from .helper import parse_value, parseToDataStruct,key_builder,default_flattenReducer
 from bs4 import Tag
 from enum import Enum
 from typing import Any, Literal
@@ -16,6 +16,15 @@ class SchemaBuilder:
     pass
 
 
+coerce = {
+
+}
+
+transform = {
+
+}
+
+
 class MLSchemaBuilder (SchemaBuilder):
     CurrentHashRegistry = {}
     HashSchemaRegistry = {}
@@ -24,9 +33,11 @@ class MLSchemaBuilder (SchemaBuilder):
         self.root: Tag = root
         # next_children = self.css_selectorBuilder(CSSLevel.SAME, [ValidationHTMLConstant.VALIDATION_ITEM_BALISE,
         #                                          ValidationHTMLConstant.VALIDATION_VALUES_RULES_BALISE, ValidationHTMLConstant.VALIDATION_KEYS_RULES_BALISE])
+        self.transform: dict[str,str] = {}
         self.schema: dict[str, dict] = self.find(self.root)
+       
 
-    def find(self, validation_item: Tag, css_selector: str | None = None, next_children_css_selector=None):
+    def find(self, validation_item: Tag, parent_key="",css_selector: str | None = None, next_children_css_selector=None):
         schema: dict[str, dict | str] = {}
         # next_children_css_selector = css_selector if next_children_css_selector is None else next_children_css_selector
         for validator in validation_item.find_all(ValidationHTMLConstant.VALIDATION_ITEM_BALISE, recursive=False):
@@ -43,7 +54,17 @@ class MLSchemaBuilder (SchemaBuilder):
             # TODO validates arguments
             schema[key] = self.parse(v.attrs)
 
+            if 'coerce' in schema:
+                try:
+                    value = schema["coerce"]
+                    value = self._parse_to_direct_values(value,coerce)
+
+                    schema['coerce'] = value
+                except:
+                    del schema['coerce']
+
             is_struct = v.attrs['type'] in ["list", "dict"]
+
             if has_noSuccessor:
                 if is_struct:
                     raise TypeError("Specify the type of the children of the structure")
@@ -52,17 +73,36 @@ class MLSchemaBuilder (SchemaBuilder):
                     default_schema_registry = schema[key]["schema"]
                     if type(default_schema_registry) == str and default_schema_registry in MLSchemaBuilder.HashSchemaRegistry.keys():
                         schema[key]["schema"] = MLSchemaBuilder.HashSchemaRegistry[default_schema_registry]
+                
+                if 'transform' in schema:
+                    value = schema['transform']
+                    value = self._parse_to_direct_values(value,transform)
+                    abs_key = key if parent_key == '' else default_flattenReducer(key_builder(parent_key),key)
+                    self.transform[abs_key] = value
+                
                 continue
 
             if not is_struct:
                 type_ = v.attrs["type"]
                 # TODO: find the one element that was supposed to be a dict or a list and that has children
                 raise TypeError(f"{key} cannot have defined children because it is not a struct: Type: {type_}")
-            
-            successor_schema = self.find(v)
+
+            if 'transform' in schema:
+                raise TypeError('Transform cant be in a schema')     
+                   
+            successor_schema = self.find(v,key)
             next_key = "schema"  # NOTE might add valuerules
             schema[key][next_key] = successor_schema
         return schema
+
+    def _parse_to_direct_values(self, value,data):
+        if type(value,dict):
+            raise ValueError
+        elif type(value,(list,tuple)):
+            value = [data[v] for v in value]
+        else:
+            value = data[value]
+        return value
 
     def parse(self, attrs: dict[str, Any]):
         schema: dict[str, Any] = {}

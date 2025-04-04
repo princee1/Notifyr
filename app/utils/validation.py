@@ -158,6 +158,11 @@ class CustomValidator(Validator):
         flag = validationFunc(value)
         if not flag:
             self._error(field, error_message)
+    
+    def _validate_transform(self,constraint:str,field,value):
+        if not value:
+            self._error(field,'Must be a valid string')
+
     # ERROR extending :check normal validation 
     # TODO for  operator
 
