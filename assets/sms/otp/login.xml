@@ -4,7 +4,6 @@
     <validation-item id="company" type="string" empty="false" maxlength="40"></validation-item>
     <validation-item id="otp" type="string" empty="false" maxlength="10"></validation-item>
     <validation-item id="expiry" type="integer" min="5" max ="120"></validation-item>
-
     </validation>
         <Response>
             <Message>

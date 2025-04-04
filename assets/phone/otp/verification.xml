@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Template>
+    <validation>
+        <validation-item id="otp-loop" type="integer" min="1" max="5" default="1"></validation-item>
+        <validation-item id="voice" type="string" default="Polly.Joanna" empty="false">  </validation-item>
+        <validation-item id="language" type="string" default="en-US" empty="false">  </validation-item>
+        <validation-item id="firstname" type="string" empty="false" required="true"></validation-item>
+        <validation-item id="pause" type="integer" min="0" max="10" default="0"></validation-item>
+        <validation-item id="service" type="string" empty="false" required="true" minlength="2" maxlength="100"></validation-item>
+    </validation>
+    
+    <Response>
+        <Say language="{{language}}" voice="{{voice}}">Hi,{{firstname}}!</Say>
+        <Pause length="1"></Pause>
+        <Say language="{{language}}" voice="{{voice}}">Here's the verification code for the service {{service}}</Say>
+        <Pause length="{{pause}}"></Pause>
+        <Say language="{{language}}" voice="{{voice}}" loop="{{otp-loop}}"></Say>
+         <Say voice="{{voice}}" language="{{language}}">Please enter this code. Goodbye!</Say>
+    </Response>
+
+</Template>
