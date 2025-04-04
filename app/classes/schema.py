@@ -58,7 +58,6 @@ class MLSchemaBuilder (SchemaBuilder):
             is_struct = v.attrs['type'] in ["list", "dict"]
 
             if 'transform' in schema[key]:
-                print('allo')
                 if not is_struct:
                     value = schema[key]['transform']
                     value = self._parse_to_direct_values(value,transform)

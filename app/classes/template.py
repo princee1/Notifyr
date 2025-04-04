@@ -132,13 +132,21 @@ class MLTemplate(Template):
     def _built_template(self,content):
         ...
 
-    def inject(self, data: dict):
+    def inject(self, data: dict)->str:
         try:
             content_html = str(self.content_to_inject)
             flattened_data = flatten_dict(data)
             for key in flattened_data:
                 regex = re.compile(rf"{{{{{key}}}}}")
-                content_html = regex.sub( str(flattened_data[key]), content_html)
+                value = str(flattened_data[key])
+                if key in self.transform:
+                    transformers = self.transform[key]
+                    if isinstance(transformers,list):
+                        for t in transformers:
+                            value = t(value)
+                    else:
+                        value=transformers(value)
+                content_html = regex.sub(value, content_html)
 
             return self._built_template(content_html)
             
@@ -192,7 +200,6 @@ class MLTemplate(Template):
             self.schema = builder.schema
             self.transform = builder.transform
 
-            print(self.transform)
             self.keys = self.schema.keys()
             self.validation_balise.decompose()
         except SchemaError as e:
