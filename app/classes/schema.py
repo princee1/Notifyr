@@ -1,9 +1,9 @@
-from .constant import ValidationHTMLConstant
-from .helper import parse_value, parseToDataStruct,key_builder,default_flattenReducer
+from ..utils.constant import ValidationHTMLConstant
+from ..utils.helper import parse_value, parseToDataStruct,key_builder,default_flattenReducer
 from bs4 import Tag
 from enum import Enum
 from typing import Any, Literal
-from .prettyprint import printJSON
+from ..utils.prettyprint import printJSON
 
 
 class CSSLevel(Enum):

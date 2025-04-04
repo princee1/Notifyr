@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from app.definition._error import BaseError
-from app.utils.schema import MLSchemaBuilder
+from app.classes.schema import MLSchemaBuilder
 from app.utils.helper import strict_parseToBool, flatten_dict
 from app.utils.validation import CustomValidator
 # import fitz as pdf
