@@ -6,7 +6,7 @@ class BaseVoiceCallModel(BaseModel):
     from_:str =None
     timeout:int
     record:bool = True
-    time_limit:int
+    time_limit:int = 60
 
 
 class OnGoingCustomVoiceCallModel(BaseVoiceCallModel):
