@@ -10,6 +10,7 @@ from functools import wraps
 import re
 import ipaddress
 from .transformer import transform
+from langcodes import Language
 
 
 def ipv4_validator(ip):
@@ -109,6 +110,7 @@ def date_validator(date: str) -> bool:
     except ValueError:
         return False
 
+
 def time_validator(time: str) -> bool:
     try:
         datetime.strptime(time, "%H:%M:%S")
@@ -116,6 +118,7 @@ def time_validator(time: str) -> bool:
     except ValueError:
         return False
     
+
 def PasswordValidator(min_length=8, max_length=128, require_digit=True, require_symbol=True, require_uppercase=True):
 
         def validator(password: str) -> str:
@@ -131,6 +134,11 @@ def PasswordValidator(min_length=8, max_length=128, require_digit=True, require_
         return validator
 
     
+def language_code_validator(language):
+    try:
+        return Language.get(language).is_valid()
+    except:
+        return False
 
 #######################                      #################################
 class ValidatorType(Enum):
@@ -143,7 +151,8 @@ class ValidatorType(Enum):
     URL=url_validator,"Must be an url address format"
     DIGIT=digit_validator,"Must be a digit"
     DATE = date_validator,"Must be a date format Y-M-D"
-    TIME = time_validator,"Must be a time format H:M:S" 
+    TIME = time_validator,"Must be a time format H:M:S"
+    LANG = language_code_validator,"Must be a valid language code format" 
 #######################                      #################################
 
 class CustomValidator(Validator):

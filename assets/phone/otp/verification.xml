@@ -3,7 +3,7 @@
     <validation>
         <validation-item id="loop" type="integer" min="1" max="5" default="1"></validation-item>
         <validation-item id="voice" type="string" default="alice"></validation-item>
-        <validation-item id="language" type="string" default="en-US" empty="false">  </validation-item>
+        <validation-item id="language" type="string" default="en-US" custom="lang">  </validation-item>
         <validation-item id="firstname" type="string" empty="false" required="true"></validation-item>
         <validation-item id="pause" type="integer" min="0" max="10" default="4"></validation-item>
         <validation-item id="expiry" type="integer" min="60" max="3600" default="60" transform="naturaltime"></validation-item>

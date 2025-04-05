@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from app.utils.validation import url_validator
+from app.utils.validation import url_validator,language_code_validator
 
 class BaseVoiceCallModel(BaseModel):
     to:str
@@ -10,7 +10,16 @@ class BaseVoiceCallModel(BaseModel):
 
 
 class OnGoingCustomVoiceCallModel(BaseVoiceCallModel):
-    body:str    
+    body:str
+    voice:str="alice"
+    language:str = "en-US"
+    loop:int = 1
+
+    @field_validator('language')
+    def validate_language(cls, language: str):
+        if not language_code_validator(language):
+            raise ValueError(f"Invalid language code: {language}")
+        return language
 
 class OnGoingTwimlVoiceCallModel(BaseVoiceCallModel):
     url:str

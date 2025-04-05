@@ -193,10 +193,10 @@ class VoiceService(BaseTwilioCommunication):
         return self._create_call(call)
 
     @BaseTwilioCommunication.parse_to_json
-    def send_custom_voice_call(self,body:str,call:dict):
-        voice = VoiceResponse()
-        voice.say(body)
-        call['twiml']= voice
+    def send_custom_voice_call(self,body:str,voice:str,lang:str,loop:int,call:dict):
+        voiceResponse = VoiceResponse()
+        voiceResponse.say(body,voice,loop,lang)
+        call['twiml']= voiceResponse
         return self._create_call(call)
     
     @BaseTwilioCommunication.parse_to_json

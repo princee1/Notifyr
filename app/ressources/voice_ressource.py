@@ -107,10 +107,13 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def voice_custom(self,scheduler: CallCustomSchedulerModel,request:Request,response:Response,authPermission=Depends(get_auth_permission),x_request_id:str= Depends(get_request_id),as_async:bool=Depends(as_async_query)):
-        details = scheduler.content.model_dump(exclude={'body'})
+        details = scheduler.content.model_dump(exclude={'body','voice','language','loop'})
         body = scheduler.content.body
+        voice=scheduler.content.voice
+        lang=scheduler.content.language
+        loop= scheduler.content.loop
 
-        return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_custom_voice_call,body,details)
+        return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_custom_voice_call,body,voice,lang,loop,details)
     
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.MFA_OTP])
