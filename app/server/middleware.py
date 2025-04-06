@@ -28,18 +28,19 @@ class ProcessTimeMiddleWare(MiddleWare):
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
-        self.taskService.connection_count.inc()
+        #self.taskService.connection_count.inc()
         try:
             response: Response = await call_next(request)
             process_time = time.time() - start_time
             response.headers["X-Process-Time"] = str(process_time) + ' (s)'
-            self.taskService.request_latency.observe(process_time)
+            #self.taskService.request_latency.observe(process_time)
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
             return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)'})
         finally:
-            self.taskService.connection_count.dec()
+            #self.taskService.connection_count.dec()
+            ...
 
 class LoadBalancerMiddleWare(MiddleWare):
     def __init__(self, app, dispatch = None):

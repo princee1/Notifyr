@@ -4,7 +4,7 @@ from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict
 import typing
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, TaskHeaviness, TaskType
 from app.classes.celery import CeleryTask, SchedulerModel
-from app.definition._service import Service, ServiceClass, ServiceStatus
+from app.definition._service import Service, ServiceClass, ServiceStatus,BuildWarningError
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.database_service import RedisService
 from app.utils.constant import HTTPHeaderConstant
@@ -51,9 +51,6 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         super().__init__(None)
         Service.__init__(self)
 
-        self.connection_count = Gauge('http_connections','Active Connection Count')
-        self.request_latency = Histogram("http_request_duration_seconds", "Request duration in seconds")
-
     def _register_tasks(self, request_id: str):
         self.sharing_task[request_id] = {
             'meta':{},
@@ -97,7 +94,12 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         return await self._create_task_(heaviness, task, request_id, save_result, ttl)
 
     def build(self):
-        ...
+        try:
+            self.connection_count = Gauge('http_connections','Active Connection Count')
+            self.request_latency = Histogram("http_request_duration_seconds", "Request duration in seconds")
+        except:
+            raise BuildWarningError
+
 
     def _compute_ttd(self,):
         return 0
