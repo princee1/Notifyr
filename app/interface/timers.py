@@ -10,9 +10,19 @@ class SchedulerInterface(Interface):
     def __init__(self):
         self._scheduler = sched.scheduler(time.time, time.sleep)
 
-    def schedule(self, delay: float, priority: int, action, argument=()) -> sched.Event:
-        """Schedule a task with a delay and priority."""
-        event = self._scheduler.enter(delay, priority, action, argument)
+    def schedule(self, delay: float, priority: int, action, argument=(), kwargs={}) -> sched.Event:
+        """Schedule a task with a delay and priority. Supports async functions."""
+        if asyncio.iscoroutinefunction(action):
+            async def async_wrapper():
+                await action(*argument, **kwargs)
+            action = lambda: asyncio.run(async_wrapper())
+        elif asyncio.iscoroutine(action):
+            async def async_wrapper():
+                await action
+            action = lambda: asyncio.run(async_wrapper())
+        else:
+            ...
+        event = self._scheduler.enter(delay, priority, action, argument, kwargs)
         return event
 
     async def run(self) -> None:

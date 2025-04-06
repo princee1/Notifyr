@@ -31,6 +31,9 @@ class TaskConfig(TypedDict):
     ttd: float
     running_type:Literal['parallel','concurrent'] = 'concurrent'
 
+class Task(TypedDict):
+    meta:dict
+    taskConfig:list[TaskConfig]
 
 @ServiceClass
 class TaskService(BackgroundTasks, Service, SchedulerInterface):
@@ -40,7 +43,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         self.redisService = redisService
         self.running_background_tasks_count = 0
         self.running_route_handler = 0
-        self.sharing_task: dict[str, list[TaskConfig]] = {}
+        self.sharing_task: dict[str, Task] = {}
         self.task_lock = asyncio.Lock()
         self.route_lock = asyncio.Lock()
         self.server_load: dict[TaskHeaviness, int] = {
@@ -52,7 +55,10 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         self.request_latency = Histogram("http_request_duration_seconds", "Request duration in seconds")
 
     def _register_tasks(self, request_id: str):
-        self.sharing_task[request_id] = []
+        self.sharing_task[request_id] = {
+            'meta':{},
+            'taskConfig':[]
+        }
 
     def _delete_tasks(self, request_id: str):
         try:
@@ -60,10 +66,10 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         except:
             ...
 
-    async def add_async_task(self, heaviness: TaskHeaviness, task: Coroutine[Any, Any, None], request_id: str, save_result: bool, ttl: int | None,running_type:RunType='concurrent'):
+    async def add_async_task(self, heaviness: TaskHeaviness, task: Coroutine[Any, Any, None], request_id: str, save_result: bool, ttl: int | None,running_type='concurrent'):
         return await self._create_task_(heaviness, task, request_id, save_result, ttl,running_type)
 
-    async def _create_task_(self, heaviness, task, request_id, save_result, ttl,running_type:RunType):
+    async def _create_task_(self, heaviness, task, request_id, save_result, ttl,running_type:RunType='concurrent'):
         now = str(dt.datetime.now())
         ttd = self._compute_ttd()
         async with self.task_lock:
@@ -74,7 +80,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
             name = task.func.__qualname__
         else:
             name = task.__qualname__
-        self.sharing_task[request_id].append(TaskConfig(
+        self.sharing_task[request_id]['taskConfig'].append(TaskConfig(
             task=task,
             heaviness=heaviness,
             save_result=save_result,
@@ -86,7 +92,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                 'message': f"[{name}] - Task added successfully", 'heaviness': str(heaviness), 'handler': 'BackgroundTask', 'estimate_tbd': naturaldelta(ttd),
                 'request_id': request_id}
 
-    async def add_task(self, heaviness: TaskHeaviness, request_id: str, save_result: bool, ttl: int | None, func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
+    async def add_task(self, heaviness: TaskHeaviness, request_id: str, save_result: bool, ttl: int | None,running_type:RunType, func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
         task = BackgroundTask(func, *args, **kwargs)
         return await self._create_task_(heaviness, task, request_id, save_result, ttl)
 
@@ -94,7 +100,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         ...
 
     def _compute_ttd(self,):
-        return 60
+        return 0
 
     @property
     async def global_task_count(self):
@@ -106,17 +112,22 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         async with self.route_lock:
             return self.running_route_handler
 
-    async def __call__(self, request_id: str) -> None:
-        task_len = len(self.sharing_task[request_id])
-        task_group=[]
-        
-        for i, t in enumerate(self.sharing_task[request_id]):
+    def __call__(self, request_id: str) -> None:
+        meta = self.sharing_task[request_id]['meta']
+        schedule= lambda: asyncio.create_task(self._run_task_in_background(request_id))
+        #self.schedule(0,1,action=schedule)
+        schedule()
 
+    async def _run_task_in_background(self, request_id):
+        task_len = len(self.sharing_task['taskConfig'][request_id])
+        for i, t in enumerate(self.sharing_task['taskConfig'][request_id]):
             task = t['task']
             heaviness_ = t['heaviness']
             ttd = t['ttd']
             runtype = t['running_type']
-            await asyncio.sleep(ttd)
+            if ttd and ttd>0:
+                await asyncio.sleep(ttd)
+
             is_saving_result = t['save_result']
             data=None if runtype == 'parallel' else []
 
@@ -131,9 +142,11 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                             data.append(result)
                         else:
                             await self.redisService.store_bkg_result(result, request_id)
-                            async with self.task_lock:
-                                self.running_background_tasks_count -= 1  # Decrease count after tasks complete
-                                self.server_load[heaviness_] -= 1
+                    
+                    if runtype=='parallel':
+                        async with self.task_lock:
+                            self.running_background_tasks_count -= 1  # Decrease count after tasks complete
+                            self.server_load[heaviness_] -= 1
                 
                     return result
                 except Exception as e:
@@ -156,16 +169,14 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
             if runtype=='concurrent':
                 await callback()
             else:
-                task_group.append(callback)
+                asyncio.create_task(callback)
 
         if runtype  == 'concurrent':
             await self.redisService.store_bkg_result(data, request_id)
-        
-        async with self.task_lock:
-            self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
-            self.server_load[heaviness_] -= 1
+            async with self.task_lock:
+                self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
+                self.server_load[heaviness_] -= 1
 
-        # async with self.task_lock:
         self._delete_tasks(request_id)
 
     async def pingService(self, count=None):  # TODO
