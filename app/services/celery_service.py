@@ -173,12 +173,12 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                             self.server_load[heaviness_] -= 1
                     return result
 
-            if runType=='concurrent':
+            if runType=='concurrent': 
                 await callback()
             else:
                 asyncio.create_task(callback())
 
-        if runType  == 'concurrent':
+        if self.sharing_task[request_id]['taskConfig'][0]['running_type']  == 'concurrent': # TODO refractor put in meta
             await self.redisService.store_bkg_result(data, request_id,ttl)
             async with self.task_lock:
                 self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
