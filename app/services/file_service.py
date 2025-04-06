@@ -1,5 +1,6 @@
+from app.interface.timers import IntervalInterface
 from .config_service import ConfigService
-from app.definition._service import Service,ServiceClass
+from app.definition._service import Service,ServiceClass,AbstractServiceClass
 from app.utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
@@ -7,7 +8,7 @@ import git_clone as git
 # TODO refresh template
 
 @ServiceClass
-class FileService(Service):
+class FileService(Service,):
     # TODO add security layer on some file: encription,decryption
     # TODO add file watcher
     def __init__(self,configService:ConfigService) -> None:
@@ -47,13 +48,19 @@ class FileService(Service):
         
     pass
 
-@ServiceClass
-class FTPService(Service):
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
-        super().__init__()
 
+@AbstractServiceClass
+class BaseFileRetrieverService(Service,IntervalInterface):
+    
+    def __init__(self,configService:ConfigService,fileService:FileService):
+        super().__init__()
         self.configService = configService
         self.fileService = fileService
+    
+@ServiceClass
+class FTPService(BaseFileRetrieverService):
+    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+        super().__init__(configService,fileService)
         self.ftpClient: FTP
         pass
 
@@ -73,12 +80,17 @@ class FTPService(Service):
     pass
 
 @ServiceClass
-class GitCloneRepoService(Service):
+class GitCloneRepoService(BaseFileRetrieverService):
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__()
-        self.configService = configService
-        self.fileService = fileService
+        super().__init__(configService,fileService)
     
     def destroy(self):
         return super().destroy()
     pass
+
+@ServiceClass
+class AmazonS3BucketService(BaseFileRetrieverService):
+    
+    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
+        super().__init__(configService,fileService)
+

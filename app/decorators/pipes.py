@@ -225,7 +225,6 @@ class OffloadedTaskResponsePipe(Pipe):
         
     def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,as_async:bool = False,):
 
-        print(response)
         if not isinstance(result,Response):
             result = JSONResponse(content=result)
 

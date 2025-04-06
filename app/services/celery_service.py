@@ -16,9 +16,9 @@ from app.utils.helper import generateId
 import datetime as dt
 from fastapi import BackgroundTasks, Request, Response
 from starlette.background import BackgroundTask
-from redis import Redis
 from humanize import naturaltime, naturaldelta
 from prometheus_client import Counter,Histogram,Gauge
+from random import randint
 
 P = ParamSpec("P")
 RunType = Literal['parallel','concurrent']
@@ -50,6 +50,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
             t: 0 for t in TaskHeaviness._value2member_map_.values()}
         super().__init__(None)
         Service.__init__(self)
+        SchedulerInterface.__init__(self)
 
     def _register_tasks(self, request_id: str):
         self.sharing_task[request_id] = {
@@ -91,7 +92,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
 
     async def add_task(self, heaviness: TaskHeaviness, request_id: str, save_result: bool, ttl: int | None,running_type:RunType, func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
         task = BackgroundTask(func, *args, **kwargs)
-        return await self._create_task_(heaviness, task, request_id, save_result, ttl)
+        return await self._create_task_(heaviness, task, request_id, save_result, ttl,running_type)
 
     def build(self):
         try:
@@ -117,14 +118,18 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
     def __call__(self, request_id: str) -> None:
         meta = self.sharing_task[request_id]['meta']
         schedule= lambda: asyncio.create_task(self._run_task_in_background(request_id))
-        #self.schedule(0,1,action=schedule)
+        random_delay = randint(0, 60)
+        random_priority = randint(1, 5)
+        print(f"Scheduled task with a random delay of {random_delay} seconds and a priority level of {random_priority}.")
+        #self.schedule(random_delay,random_priority,action=schedule)
         schedule()
 
     async def _run_task_in_background(self, request_id):
-        task_len = len(self.sharing_task['taskConfig'][request_id])
-        for i, t in enumerate(self.sharing_task['taskConfig'][request_id]):
+        task_len = len(self.sharing_task[request_id]['taskConfig'])
+        for i, t in enumerate(self.sharing_task[request_id]['taskConfig']):
             task = t['task']
             heaviness_ = t['heaviness']
+            ttl=t['ttl']
             ttd = t['ttd']
             runType = t['running_type']
             if ttd and ttd>0:
@@ -143,7 +148,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                         if runType == 'concurrent':
                             data.append(result)
                         else:
-                            await self.redisService.store_bkg_result(result, request_id)
+                            await self.redisService.store_bkg_result(result, request_id,ttl)
                     
                     if runType=='parallel':
                         async with self.task_lock:
@@ -160,7 +165,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                         if runType == 'concurrent':
                             data.append(result)
                         else:
-                            await self.redisService.store_bkg_result(result, request_id)
+                            await self.redisService.store_bkg_result(result, request_id,ttl)
                     
                     if runType =='parallel':
                         async with self.task_lock:
@@ -171,10 +176,10 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
             if runType=='concurrent':
                 await callback()
             else:
-                asyncio.create_task(callback)
+                asyncio.create_task(callback())
 
         if runType  == 'concurrent':
-            await self.redisService.store_bkg_result(data, request_id)
+            await self.redisService.store_bkg_result(data, request_id,ttl)
             async with self.task_lock:
                 self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
                 self.server_load[heaviness_] -= 1
@@ -380,7 +385,7 @@ class OffloadTaskService(Service):
         # TODO choose algorightm
         if algorithm == 'normal':
             ...
-        return await self._normal_offload(scheduler, save_result, ttl, x_request_id, as_async, callback, *args, **kwargs)
+        return await self._normal_offload(scheduler, save_result, ttl, x_request_id, as_async, runType,callback, *args, **kwargs)
 
     async def _normal_offload(self, scheduler: SchedulerModel, save_result: bool, ttl: int, x_request_id: str, as_async: bool,runType:RunType, callback: Callable, *args, **kwargs):
         # TODO check celery worker,

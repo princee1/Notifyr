@@ -11,6 +11,7 @@ import pandas as pd
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from redis.asyncio import Redis
+import json
 
 
 
@@ -76,20 +77,22 @@ class RedisService(DatabaseService):
     def check_db(func:Callable):
 
         @functools.wraps(func)
-        async def wrapper(self:RedisService,database:int|str,*args,**kwargs):
-            if not kwargs['redis'] or  not isinstance(kwargs['redis'],Redis):
+        async def wrapper(self,database:int|str,*args,**kwargs):
+            if 'redis' in kwargs and (not kwargs['redis'] or  not isinstance(kwargs['redis'],Redis)):
                 ... # TODO if should keep the instance passed
 
-            if database not in self.db[database]:
+            if database not in self.db:
                 raise RedisDatabaseDoesNotExistsError(database)
             kwargs['redis'] = self.db[database]
+            #return await None# ERROR
             return await func(self,database,*args,**kwargs)
 
         return wrapper
 
     def build(self):
-        self.redis_celery = Redis(host=self.configService.REDIS_URL,db=0)
-        self.redis_limiter = Redis(host=self.configService.REDIS_URL,db=1)
+        host = self.configService.REDIS_URL.split('//')[1]
+        self.redis_celery = Redis(host=host,db=0)
+        self.redis_limiter = Redis(host=host,db=1)
         #self.redis_cache = Redis(host=self.configService.REDIS_URL,db=2)
         self.db:dict[int,Redis] = {
             0:self.redis_celery,
@@ -107,21 +110,27 @@ class RedisService(DatabaseService):
 
     @check_db
     async def store(self,database:int|str,key:str,value:Any,expiry,redis:Redis=None):
+        if isinstance(value,(dict,list)):
+            value = json.dumps(value)
         return await redis.set(key,value,ex=expiry)
     
     @check_db
     async def retrieve(self,database:int|str,key:str,redis:Redis=None):
-        return await redis.get(key)
+        value = await redis.get(key)
+        if not isinstance(value,str):
+            return value
+        value = json.loads(value)
+        return value
     
     @check_db
     async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):
         return await redis.append(key,data)
     
-    async def store_bkg_result(self,data,key):
+    async def store_bkg_result(self,data,key,expiry):
         if not await self.retrieve(0,key):
-            response = await self.store(0,key,[data])
+            response = await self.store(0,key,[data],expiry)
         else:
-            response = await self.append(0,key,data)
+            response = await self.append(0,key,data,expiry)
         return response
             
             
