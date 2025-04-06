@@ -84,7 +84,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         content = scheduler.content.model_dump()
         phoneTemplate:PhoneTemplate = self.assetService.phone[template]
         _,result = phoneTemplate.build(content,...)
-        return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_template_voice_call,result,content)
+        return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,'concurrent',self.voiceService.send_template_voice_call,result,content)
     
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
@@ -96,7 +96,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_twilio_twiml(self,scheduler:CallTwimlSchedulerModel,request:Request,response:Response,authPermission=Depends(get_auth_permission),x_request_id:str= Depends(get_request_id),as_async:bool=Depends(as_async_query)):
         details = scheduler.content.model_dump(exclude={'url'})
         url = scheduler.content.url
-        return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_twiml_voice_call,url,details)
+        return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,'concurrent',self.voiceService.send_twiml_voice_call,url,details)
 
 
     @UseLimiter(limit_value='50/day')
@@ -113,7 +113,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         lang=scheduler.content.language
         loop= scheduler.content.loop
 
-        return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.voiceService.send_custom_voice_call,body,voice,lang,loop,details)
+        return await self.offloadTaskService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,'concurrent',self.voiceService.send_custom_voice_call,body,voice,lang,loop,details)
     
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.MFA_OTP])

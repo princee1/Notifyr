@@ -68,7 +68,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,authPermission=Depends(get_auth_permission),x_request_id:str= Depends(get_request_id),as_async:bool=Depends(as_async_query)):
         message = scheduler.content.model_dump()
-        return await self.offloadService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.smsService.send_custom_sms,message)
+        return await self.offloadService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,'parallel',self.smsService.send_custom_sms,message)
         
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
@@ -83,7 +83,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         smsTemplate:SMSTemplate = self.assetService.sms[template]
         _,result=smsTemplate.build(self.configService.ASSET_LANG,sms_data.data)
         message = {'body':result,'to':sms_data.to,'from_':sms_data.from_}
-        return await self.offloadService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,self.smsService.send_template_sms,message)
+        return await self.offloadService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,'parallel',self.smsService.send_template_sms,message)
 
 
     async def sms_get_message(self,):

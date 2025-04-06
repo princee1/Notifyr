@@ -126,12 +126,12 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
             task = t['task']
             heaviness_ = t['heaviness']
             ttd = t['ttd']
-            runtype = t['running_type']
+            runType = t['running_type']
             if ttd and ttd>0:
                 await asyncio.sleep(ttd)
 
             is_saving_result = t['save_result']
-            data=None if runtype == 'parallel' else []
+            data=None if runType == 'parallel' else []
 
             async def callback():
                 try:
@@ -140,12 +140,12 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                     else:
                         result = await task
                     if is_saving_result:
-                        if runtype == 'concurrent':
+                        if runType == 'concurrent':
                             data.append(result)
                         else:
                             await self.redisService.store_bkg_result(result, request_id)
                     
-                    if runtype=='parallel':
+                    if runType=='parallel':
                         async with self.task_lock:
                             self.running_background_tasks_count -= 1  # Decrease count after tasks complete
                             self.server_load[heaviness_] -= 1
@@ -157,23 +157,23 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                         'args':str(e.args)
                     }
                     if is_saving_result:
-                        if runtype == 'concurrent':
+                        if runType == 'concurrent':
                             data.append(result)
                         else:
                             await self.redisService.store_bkg_result(result, request_id)
                     
-                    if runtype =='parallel':
+                    if runType =='parallel':
                         async with self.task_lock:
                             self.running_background_tasks_count -= 1  # Decrease count after tasks complete
                             self.server_load[heaviness_] -= 1
                     return result
 
-            if runtype=='concurrent':
+            if runType=='concurrent':
                 await callback()
             else:
                 asyncio.create_task(callback)
 
-        if runtype  == 'concurrent':
+        if runType  == 'concurrent':
             await self.redisService.store_bkg_result(data, request_id)
             async with self.task_lock:
                 self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
@@ -376,17 +376,17 @@ class OffloadTaskService(Service):
     def build(self):
         ...
 
-    async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel, save_result: bool, ttl: int, x_request_id: str, as_async: bool, callback: Callable, *args, **kwargs):
+    async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel, save_result: bool, ttl: int, x_request_id: str, as_async: bool,runType:RunType, callback: Callable, *args, **kwargs):
         # TODO choose algorightm
         if algorithm == 'normal':
             ...
         return await self._normal_offload(scheduler, save_result, ttl, x_request_id, as_async, callback, *args, **kwargs)
 
-    async def _normal_offload(self, scheduler: SchedulerModel, save_result: bool, ttl: int, x_request_id: str, as_async: bool, callback: Callable, *args, **kwargs):
+    async def _normal_offload(self, scheduler: SchedulerModel, save_result: bool, ttl: int, x_request_id: str, as_async: bool,runType:RunType, callback: Callable, *args, **kwargs):
         # TODO check celery worker,
         if scheduler.task_type == TaskType.NOW.value:
             if as_async:
-                return await self.taskService.add_task(scheduler.heaviness, x_request_id, save_result, ttl, callback, *args, **kwargs)
+                return await self.taskService.add_task(scheduler.heaviness, x_request_id, save_result, ttl,runType, callback, *args, **kwargs)
             else:
                 return callback(*args, **kwargs)
         return self.celeryService.trigger_task_from_scheduler(scheduler, *args, **kwargs)
