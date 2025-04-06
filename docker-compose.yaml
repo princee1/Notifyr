@@ -120,6 +120,15 @@ services:
         - neo4j_data:/data
         - neo4j_logs:/logs
         - neo4j_conf:/conf
+  
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
 
 
 volumes:
