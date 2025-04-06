@@ -4,7 +4,7 @@ from app.classes.auth_permission import AuthPermission, ClientType, Role, Scope,
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.models.security_model import ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
-from app.services.celery_service import BackgroundTaskService
+from app.services.celery_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod
@@ -23,7 +23,7 @@ class ProcessTimeMiddleWare(MiddleWare):
     priority = MiddlewarePriority.PROCESS_TIME
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
-        self.backgroundService:BackgroundTaskService = Get(BackgroundTaskService)
+        self.backgroundService:TaskService = Get(TaskService)
 
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
@@ -126,7 +126,7 @@ class BackgroundTaskMiddleware(MiddleWare):
     priority = MiddlewarePriority.BACKGROUND_TASK_SERVICE
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
-        self.backgroundTaskService:BackgroundTaskService = Get(BackgroundTaskService)
+        self.backgroundTaskService:TaskService = Get(TaskService)
     
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request:Request, call_next):

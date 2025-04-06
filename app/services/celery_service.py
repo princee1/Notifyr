@@ -33,7 +33,7 @@ class TaskConfig(TypedDict):
 
 
 @ServiceClass
-class BackgroundTaskService(BackgroundTasks, Service, SchedulerInterface):
+class TaskService(BackgroundTasks, Service, SchedulerInterface):
 
     def __init__(self, configService: ConfigService, redisService: RedisService):
         self.configService = configService
@@ -191,7 +191,7 @@ class CeleryService(Service, IntervalInterface):
     _celery_app = celery_app
     _task_registry = TASK_REGISTRY
 
-    def __init__(self, configService: ConfigService, bTaskService: BackgroundTaskService):
+    def __init__(self, configService: ConfigService, bTaskService: TaskService):
         Service.__init__(self)
         IntervalInterface.__init__(self)
         self.configService = configService
@@ -354,7 +354,7 @@ class OffloadTaskService(Service):
 
     Algorithm = Literal['normal', 'worker_focus']
 
-    def __init__(self, configService: ConfigService, celeryService: CeleryService, backgroundService: BackgroundTaskService):
+    def __init__(self, configService: ConfigService, celeryService: CeleryService, backgroundService: TaskService):
         super().__init__()
         self.configService = configService
         self.celeryService = celeryService

@@ -9,7 +9,7 @@ from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermissio
 from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
 from app.models.otp_model import OTPModel
 from app.models.voice_model import BaseVoiceCallModel, CallStatusModel,OnGoingTwimlVoiceCallModel,OnGoingCustomVoiceCallModel
-from app.services.celery_service import BackgroundTaskService, CeleryService, OffloadTaskService
+from app.services.celery_service import TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService

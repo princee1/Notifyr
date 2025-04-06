@@ -8,7 +8,7 @@ from app.errors.security_error import ClientDoesNotExistError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
-from app.services.celery_service import BackgroundTaskService
+from app.services.celery_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import TwilioService
@@ -110,7 +110,7 @@ def GetClient(bypass: bool = False, accept_admin: bool = False, skip: bool = Fal
 
 verify_twilio_token: Callable = GetDependsAttr(TwilioService, 'verify_twilio_token')
 
-populate_response_with_request_id: Callable = GetDependsAttr(BackgroundTaskService,'populate_response_with_request_id')
+populate_response_with_request_id: Callable = GetDependsAttr(TaskService,'populate_response_with_request_id')
 
 async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(get_auth_permission)) -> ContactORM:
 

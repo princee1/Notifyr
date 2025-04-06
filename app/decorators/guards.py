@@ -6,7 +6,7 @@ from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscr
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.assets_service import AssetService
-from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
+from app.services.celery_service import TaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
@@ -57,7 +57,7 @@ class TaskWorkerGuard(Guard):
     def __init__(self, heaviness:TaskHeaviness=None):
         super().__init__()
         self.celeryService = Get(CeleryService)
-        self.bckgroundTaskService = Get(BackgroundTaskService)
+        self.bckgroundTaskService = Get(TaskService)
         self.heaviness = heaviness
     
     def guard(self,scheduler:SchedulerModel):

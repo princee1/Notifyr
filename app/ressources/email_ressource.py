@@ -2,7 +2,7 @@ from app.classes.auth_permission import MustHave, Role
 from app.classes.template import HTMLTemplate
 from app.definition._service import ServiceStatus
 from app.models.email_model import CustomEmailModel, EmailTemplateModel
-from app.services.celery_service import BackgroundTaskService, CeleryService
+from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
 from app.container import GetDepends, InjectInMethod
@@ -39,13 +39,13 @@ DEFAULT_RESPONSE = {
 class EmailTemplateRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,bkgTaskService:BackgroundTaskService):
+    def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,bkgTaskService:TaskService):
         super().__init__(dependencies=[Depends(populate_response_with_request_id)])
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
         self.celeryService:CeleryService = celeryService
-        self.bkgTaskService: BackgroundTaskService = bkgTaskService
+        self.bkgTaskService: TaskService = bkgTaskService
 
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])

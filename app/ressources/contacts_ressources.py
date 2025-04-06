@@ -11,7 +11,7 @@ from app.decorators.my_depends import get_contact_permission, get_contacts, get_
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
 from app.models.contacts_model import ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
-from app.services.celery_service import BackgroundTaskService, CeleryService
+from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
 from app.services.email_service import EmailSenderService
@@ -213,7 +213,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 class ContactsRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: BackgroundTaskService, emailService: EmailSenderService, smsService: SMSService):
+    def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: TaskService, emailService: EmailSenderService, smsService: SMSService):
         super().__init__()
         self.contactsService = contactsService
         self.celeryService = celeryService

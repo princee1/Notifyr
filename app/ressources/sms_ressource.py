@@ -10,7 +10,7 @@ from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, Us
 from app.container import Get, GetDependsAttr, InjectInMethod, InjectInFunction
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
-from app.services.celery_service import BackgroundTaskService, CeleryService, OffloadTaskService
+from app.services.celery_service import TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
