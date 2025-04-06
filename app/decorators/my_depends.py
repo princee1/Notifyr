@@ -266,3 +266,4 @@ async def get_blacklist(blacklist_id:str=Depends(get_query_params('blacklist_id'
     return await _get_blacklist(blacklist_id=blacklist_id)
 
 as_async_query = get_query_params('background','false',True)
+runtype_query=get_query_params('runtype','concurrent',False,checker=lambda v: v in ['parallel','concurrent'])
