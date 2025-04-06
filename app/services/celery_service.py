@@ -18,9 +18,10 @@ from fastapi import BackgroundTasks, Request, Response
 from starlette.background import BackgroundTask
 from redis import Redis
 from humanize import naturaltime, naturaldelta
+from prometheus_client import Counter,Histogram,Gauge
 
 P = ParamSpec("P")
-
+RunType = Literal['parallel','concurrent']
 
 class TaskConfig(TypedDict):
     task: BackgroundTask | Coroutine
@@ -28,6 +29,7 @@ class TaskConfig(TypedDict):
     save_result: bool
     ttl: int
     ttd: float
+    running_type:Literal['parallel','concurrent'] = 'concurrent'
 
 
 @ServiceClass
@@ -36,13 +38,18 @@ class BackgroundTaskService(BackgroundTasks, Service, SchedulerInterface):
     def __init__(self, configService: ConfigService, redisService: RedisService):
         self.configService = configService
         self.redisService = redisService
-        self.running_tasks_count = 0
+        self.running_background_tasks_count = 0
+        self.running_route_handler = 0
         self.sharing_task: dict[str, list[TaskConfig]] = {}
         self.task_lock = asyncio.Lock()
+        self.route_lock = asyncio.Lock()
         self.server_load: dict[TaskHeaviness, int] = {
             t: 0 for t in TaskHeaviness._value2member_map_.values()}
         super().__init__(None)
         Service.__init__(self)
+
+        self.connection_count = Gauge('http_connections','Active Connection Count')
+        self.request_latency = Histogram("http_request_duration_seconds", "Request duration in seconds")
 
     def _register_tasks(self, request_id: str):
         self.sharing_task[request_id] = []
@@ -53,18 +60,15 @@ class BackgroundTaskService(BackgroundTasks, Service, SchedulerInterface):
         except:
             ...
 
-    async def add_async_task(self, heaviness: TaskHeaviness, task: Coroutine[Any, Any, None], request_id: str, save_result: bool, ttl: int | None):
-        return await self._create_task_(heaviness, task, request_id, save_result, ttl)
+    async def add_async_task(self, heaviness: TaskHeaviness, task: Coroutine[Any, Any, None], request_id: str, save_result: bool, ttl: int | None,running_type:RunType='concurrent'):
+        return await self._create_task_(heaviness, task, request_id, save_result, ttl,running_type)
 
-    async def _create_task_(self, heaviness, task, request_id, save_result, ttl):
+    async def _create_task_(self, heaviness, task, request_id, save_result, ttl,running_type:RunType):
         now = str(dt.datetime.now())
+        ttd = self._compute_ttd()
         async with self.task_lock:
-            # Increase count based on new tasks
-            self.running_tasks_count += len(self.sharing_task[request_id])
-            for t_config in self.sharing_task[request_id]:  # TODO with numpy
-                heaviness = t_config['heaviness']
-                self.server_load[heaviness] += 1
-            ttd = self._compute_ttd()
+            self.server_load[heaviness] += 1
+            self.running_background_tasks_count+=1
 
         if isinstance(task, BackgroundTask):
             name = task.func.__qualname__
@@ -75,7 +79,8 @@ class BackgroundTaskService(BackgroundTasks, Service, SchedulerInterface):
             heaviness=heaviness,
             save_result=save_result,
             ttl=ttl,
-            ttd=ttd
+            ttd=ttd,
+            running_type=running_type
         ))
         return {'date': now,
                 'message': f"[{name}] - Task added successfully", 'heaviness': str(heaviness), 'handler': 'BackgroundTask', 'estimate_tbd': naturaldelta(ttd),
@@ -94,44 +99,72 @@ class BackgroundTaskService(BackgroundTasks, Service, SchedulerInterface):
     @property
     async def global_task_count(self):
         async with self.task_lock:
-            return self.running_tasks_count
+            return self.running_background_tasks_count
+
+    @property    
+    async def global_route_handler_count(self):
+        async with self.route_lock:
+            return self.running_route_handler
 
     async def __call__(self, request_id: str) -> None:
         task_len = len(self.sharing_task[request_id])
-        # data = [None]*task_len
-        data = []
+        task_group=[]
+        
         for i, t in enumerate(self.sharing_task[request_id]):
+
             task = t['task']
             heaviness_ = t['heaviness']
             ttd = t['ttd']
+            runtype = t['running_type']
             await asyncio.sleep(ttd)
             is_saving_result = t['save_result']
+            data=None if runtype == 'parallel' else []
 
-            if False:
-                async def callback():
-                    # TODO
-                    if i+1 == task_len:
-                        if data:
-                            self.redisService.store_bkg_result(
-                                data, request_id)
-                        self._delete_tasks(request_id)
+            async def callback():
+                try:
+                    if not asyncio.iscoroutine(task):
+                        result = await task()
+                    else:
+                        result = await task
+                    if is_saving_result:
+                        if runtype == 'concurrent':
+                            data.append(result)
+                        else:
+                            await self.redisService.store_bkg_result(result, request_id)
+                            async with self.task_lock:
+                                self.running_background_tasks_count -= 1  # Decrease count after tasks complete
+                                self.server_load[heaviness_] -= 1
+                
+                    return result
+                except Exception as e:
+                    result = {
+                        'error_class':e.__class__,
+                        'args':str(e.args)
+                    }
+                    if is_saving_result:
+                        if runtype == 'concurrent':
+                            data.append(result)
+                        else:
+                            await self.redisService.store_bkg_result(result, request_id)
+                    
+                    if runtype =='parallel':
+                        async with self.task_lock:
+                            self.running_background_tasks_count -= 1  # Decrease count after tasks complete
+                            self.server_load[heaviness_] -= 1
+                    return result
 
-            try:
-                if not asyncio.iscoroutine(task):
-                    result = await task()
-                else:
-                    result = await task
-                if is_saving_result:
-                    data.append(result)
-            except Exception as e:
-                if is_saving_result:
-                    data.append(str(e))
+            if runtype=='concurrent':
+                await callback()
+            else:
+                task_group.append(callback)
 
-            async with self.task_lock:
-                self.running_tasks_count -= 1  # Decrease count after tasks complete
-                self.server_load[heaviness_] -= 1
-        if data:
-            self.redisService.store_bkg_result(data, request_id)
+        if runtype  == 'concurrent':
+            await self.redisService.store_bkg_result(data, request_id)
+        
+        async with self.task_lock:
+            self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
+            self.server_load[heaviness_] -= 1
+
         # async with self.task_lock:
         self._delete_tasks(request_id)
 

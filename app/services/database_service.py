@@ -1,5 +1,8 @@
-from typing import Any
+import functools
+from typing import Any, Callable
 from typing_extensions import Literal
+
+from app.definition._error import BaseError
 from .config_service import ConfigService
 from .file_service import FileService
 from app.definition._service import Service,AbstractServiceClass,ServiceClass
@@ -7,6 +10,12 @@ import sqlite3
 import pandas as pd
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
+from redis.asyncio import Redis
+
+
+
+class RedisDatabaseDoesNotExistsError(BaseError):
+    ...
 
 @AbstractServiceClass
 class DatabaseService(Service): 
@@ -62,18 +71,60 @@ class RedisService(DatabaseService):
     def __init__(self,configService:ConfigService):
         super().__init__(configService,None)
         self.configService = configService
+        
+    @staticmethod
+    def check_db(func:Callable):
+
+        @functools.wraps(func)
+        async def wrapper(self:RedisService,database:int|str,*args,**kwargs):
+            if not kwargs['redis'] or  not isinstance(kwargs['redis'],Redis):
+                ... # TODO if should keep the instance passed
+
+            if database not in self.db[database]:
+                raise RedisDatabaseDoesNotExistsError(database)
+            kwargs['redis'] = self.db[database]
+            return await func(self,database,*args,**kwargs)
+
+        return wrapper
 
     def build(self):
-        ...
+        self.redis_celery = Redis(host=self.configService.REDIS_URL,db=0)
+        self.redis_limiter = Redis(host=self.configService.REDIS_URL,db=1)
+        #self.redis_cache = Redis(host=self.configService.REDIS_URL,db=2)
+        self.db:dict[int,Redis] = {
+            0:self.redis_celery,
+            1:self.redis_limiter,
+            #2:self.redis_cache,
+            'celery':self.redis_celery,
+            'limiter':self.redis_limiter,
+        }
 
-    def refund(self, limit_request_id:str):
-        ...
+    async def refund(self, limit_request_id:str):
+        redis = self.db[1]
+        if not await self.retrieve(1,limit_request_id):
+            return
+        return await redis.decr(limit_request_id)
 
-    def store(self,):
-        ...
+    @check_db
+    async def store(self,database:int|str,key:str,value:Any,expiry,redis:Redis=None):
+        return await redis.set(key,value,ex=expiry)
     
-    def store_bkg_result(self,data,key):
-        ...
+    @check_db
+    async def retrieve(self,database:int|str,key:str,redis:Redis=None):
+        return await redis.get(key)
+    
+    @check_db
+    async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):
+        return await redis.append(key,data)
+    
+    async def store_bkg_result(self,data,key):
+        if not await self.retrieve(0,key):
+            response = await self.store(0,key,[data])
+        else:
+            response = await self.append(0,key,data)
+        return response
+            
+            
 
 @ServiceClass
 class TortoiseConnectionService(DatabaseService):

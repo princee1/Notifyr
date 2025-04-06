@@ -23,18 +23,23 @@ class ProcessTimeMiddleWare(MiddleWare):
     priority = MiddlewarePriority.PROCESS_TIME
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
+        self.backgroundService:BackgroundTaskService = Get(BackgroundTaskService)
 
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
+        self.backgroundService.connection_count.inc()
         try:
             response: Response = await call_next(request)
             process_time = time.time() - start_time
             response.headers["X-Process-Time"] = str(process_time) + ' (s)'
+            self.backgroundService.request_latency.observe(process_time)
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
             return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)'})
+        finally:
+            self.backgroundService.connection_count.dec()
 
 class LoadBalancerMiddleWare(MiddleWare):
     def __init__(self, app, dispatch = None):
