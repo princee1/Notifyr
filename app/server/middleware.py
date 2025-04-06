@@ -23,23 +23,23 @@ class ProcessTimeMiddleWare(MiddleWare):
     priority = MiddlewarePriority.PROCESS_TIME
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
-        self.backgroundService:TaskService = Get(TaskService)
+        self.taskService:TaskService = Get(TaskService)
 
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
-        self.backgroundService.connection_count.inc()
+        self.taskService.connection_count.inc()
         try:
             response: Response = await call_next(request)
             process_time = time.time() - start_time
             response.headers["X-Process-Time"] = str(process_time) + ' (s)'
-            self.backgroundService.request_latency.observe(process_time)
+            self.taskService.request_latency.observe(process_time)
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
             return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)'})
         finally:
-            self.backgroundService.connection_count.dec()
+            self.taskService.connection_count.dec()
 
 class LoadBalancerMiddleWare(MiddleWare):
     def __init__(self, app, dispatch = None):
@@ -126,20 +126,20 @@ class BackgroundTaskMiddleware(MiddleWare):
     priority = MiddlewarePriority.BACKGROUND_TASK_SERVICE
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
-        self.backgroundTaskService:TaskService = Get(TaskService)
+        self.taskService:TaskService = Get(TaskService)
     
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request:Request, call_next):
         request_id = generateId(25)
-        self.backgroundTaskService._register_tasks(request_id)
+        self.taskService._register_tasks(request_id)
         request.state.request_id = request_id
         response = await call_next(request)
         rq_response_id = get_response_id(response) #NOTE if theres no rq_response_id in the response this means we can safely remove the referencece
         if rq_response_id:
-            if len(self.backgroundTaskService.sharing_task[rq_response_id])>0:
-                asyncio.create_task(self.backgroundTaskService(rq_response_id)) 
+            if len(self.taskService.sharing_task[rq_response_id])>0:
+                asyncio.create_task(self.taskService(rq_response_id)) 
         else: 
-            self.backgroundTaskService._delete_tasks(request_id)
+            self.taskService._delete_tasks(request_id)
         return response   
         
 class UserAppMiddleware(MiddleWare):

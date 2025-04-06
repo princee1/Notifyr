@@ -75,10 +75,10 @@ class CeleryRessource(BaseHTTPRessource):
 @HTTPRessource(prefix=BACKGROUND_PREFIX)
 class BackgroundTaskRessource(BaseHTTPRessource):
     
-    def __init__(self,redisService:RedisService,configService:ConfigService,backgroundTaskService:TaskService):
+    def __init__(self,redisService:RedisService,configService:ConfigService,taskService:TaskService):
         self.redisService = redisService
         self.configService = configService
-        self.backgroundTask = backgroundTaskService
+        self.backgroundTask = taskService
     
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.Get('/{task_id}')

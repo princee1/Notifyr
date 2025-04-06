@@ -354,11 +354,11 @@ class OffloadTaskService(Service):
 
     Algorithm = Literal['normal', 'worker_focus']
 
-    def __init__(self, configService: ConfigService, celeryService: CeleryService, backgroundService: TaskService):
+    def __init__(self, configService: ConfigService, celeryService: CeleryService, taskService: TaskService):
         super().__init__()
         self.configService = configService
         self.celeryService = celeryService
-        self.backgroundService = backgroundService
+        self.taskService = taskService
 
     def build(self):
         ...
@@ -373,7 +373,7 @@ class OffloadTaskService(Service):
         # TODO check celery worker,
         if scheduler.task_type == TaskType.NOW.value:
             if as_async:
-                return await self.backgroundService.add_task(scheduler.heaviness, x_request_id, save_result, ttl, callback, *args, **kwargs)
+                return await self.taskService.add_task(scheduler.heaviness, x_request_id, save_result, ttl, callback, *args, **kwargs)
             else:
                 return callback(*args, **kwargs)
         return self.celeryService.trigger_task_from_scheduler(scheduler, *args, **kwargs)
