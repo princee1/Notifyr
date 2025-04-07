@@ -321,3 +321,13 @@ def phone_parser(phone_number:str):
     formatted_number = f"+{cleaned_number}"
     return formatted_number
     
+def filter_paths(paths):
+        paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
+        results = []
+
+        for path in paths:
+            if not any(path.startswith(d + "\\") for d in results):
+                results.append(path)
+
+
+        return ['assets/'+ p for p in results ]
