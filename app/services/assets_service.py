@@ -95,7 +95,7 @@ class Reader():
                 self.values[relpath] = self.asset(keyName, content, dir)
             except SkipTemplateCreationError as e:
                 print(e.args[0])
-                printJSON(e.args[1])
+                #printJSON(e.args[1])
             except Exception:
                 ...
 
