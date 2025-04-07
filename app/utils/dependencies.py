@@ -152,8 +152,8 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
         if parse and value != None:
             value = parse_value(value,return_none)
         if checker:
-            value=checker(value)
-        
+            if not checker(value):
+                raise HTTPException(400,detail='Error in params') # TODO raise a better error
         return value
     return depends
 

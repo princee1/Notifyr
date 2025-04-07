@@ -270,9 +270,11 @@ runtype_query=get_query_params('runtype','concurrent',False,checker=lambda v: v 
 save_results_query=get_query_params('save','false',True)
 ttl_query=get_query_params('ttl','0',True)
 
-async def get_task(request_id:str=Depends(get_request_id),as_async:bool=Depends(as_async_query),runtype:RunType=Depends(runtype_query),ttl=Depends(ttl_query),save=Depends(save_results_query)):
+get_task_results= get_query_params('get_task_results','true',True)
+
+async def get_task(request_id:str=Depends(get_request_id),as_async:bool=Depends(as_async_query),runtype:RunType=Depends(runtype_query),ttl=Depends(ttl_query),save=Depends(save_results_query),return_results=Depends(get_task_results)):
     taskService:TaskService = Get(TaskService)
     offload_task:Callable=GetAttr(OffloadTaskService,'offload_task')
     if offload_task == None:
         raise HTTPException(503)
-    return taskService._register_tasks(request_id,as_async,runtype,offload_task,ttl,save)
+    return taskService._register_tasks(request_id,as_async,runtype,offload_task,ttl,save,return_results)

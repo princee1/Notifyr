@@ -1,50 +1,40 @@
-import sched
-import time
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from typing import Callable, Any
 import asyncio
 from app.definition._interface import Interface, IsInterface
 from abc import abstractmethod
 
-
 @IsInterface
 class SchedulerInterface(Interface):
     def __init__(self):
-        self._scheduler = sched.scheduler(time.time, time.sleep)
-
-    def schedule(self, delay: float, priority: int, action, argument=(), kwargs={}) -> sched.Event:
-        """Schedule a task with a delay and priority. Supports async functions."""
+        self._scheduler = AsyncIOScheduler()
+        
+    def schedule(
+        self,
+        delay: float,
+        action: Callable[..., Any],
+        *args,
+        **kwargs
+    ):
+        """Schedule a task with a delay. Supports async and sync functions."""
+        trigger = IntervalTrigger(seconds=delay)
         if asyncio.iscoroutinefunction(action):
-            async def async_wrapper():
-                await action(*argument, **kwargs)
-            action = lambda: asyncio.run(async_wrapper())
-        elif asyncio.iscoroutine(action):
-            async def async_wrapper():
-                await action
-            action = lambda: asyncio.run(async_wrapper())
+            self._scheduler.add_job(action, trigger, args=args, kwargs=kwargs)
         else:
-            ...
-        event = self._scheduler.enter(delay, priority, action, argument, kwargs)
-        return event
+            self._scheduler.add_job(self._run_sync, trigger, args=(action, *args), kwargs=kwargs)
 
-    async def run(self) -> None:
-        """Run the scheduled tasks asynchronously."""
+    def start(self):
+        self._scheduler.start()
+
+    async def _run_sync(self, func: Callable[..., Any], *args, **kwargs):
+        """Run a synchronous function asynchronously."""
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._scheduler.run)
+        await loop.run_in_executor(None, func, *args, **kwargs)
 
-    def __cancel(self, event: sched.Event) -> None:
-        """Cancel a scheduled task."""
-        try:
-            self._scheduler.cancel(event)
-        except ValueError:
-            pass  # Event may have already been executed or canceled
-
-    def _is_empty(self) -> bool:
-        """Check if the scheduler has any pending tasks."""
-        return not self._scheduler.queue
-
-    def clear(self) -> None:
-        """Cancel all scheduled tasks."""
-        for event in list(self._scheduler.queue):
-            self.__cancel(event)
+    def shutdown(self):
+        """Shut down the scheduler."""
+        self._scheduler.shutdown()
 
 
 @IsInterface

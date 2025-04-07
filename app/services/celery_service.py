@@ -38,11 +38,13 @@ class TaskMeta(TypedDict):
     runtype:RunType
     save_result:bool
     ttl:float
+    delay:float=0
 
 @dataclass        
 class TaskManager():
     meta: TaskMeta
     offloadTask: Callable
+    return_results:bool
     taskConfig: list[TaskConfig] = field(default_factory=list)
     task_result: list[dict] = field(default_factory=list)
 
@@ -52,6 +54,8 @@ class TaskManager():
 
     @property
     def results(self):
+        if not self.return_results:
+            return {}
         meta = self.meta.copy()
         return {
             'meta': meta,
@@ -76,9 +80,9 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         Service.__init__(self)
         SchedulerInterface.__init__(self)
 
-    def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool)->TaskManager:
+    def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool)->TaskManager:
         meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl)
-        task = TaskManager(meta=meta,offloadTask=offloadTask)
+        task = TaskManager(meta=meta,offloadTask=offloadTask,return_results=return_results)
         self.sharing_task[request_id] = task
         return task
 
@@ -147,9 +151,8 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         meta = task.meta
         schedule= lambda: asyncio.create_task(self._run_task_in_background(request_id))
         random_delay = randint(0, 60)
-        random_priority = randint(1, 5)
-        print(f"Scheduled task with a random delay of {random_delay} seconds and a priority level of {random_priority}.")
-        #self.schedule(random_delay,random_priority,action=schedule)
+        print(f"Scheduled task with a random delay of {random_delay} seconds")
+        #self.schedule(random_delay,action=schedule) # FIXME later 
         schedule()
 
     async def _run_task_in_background(self, request_id):

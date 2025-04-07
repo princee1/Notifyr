@@ -235,6 +235,9 @@ class Application(EventInterface):
         jwtService = Get(JWTAuthService)
         jwtService.set_generation_id(False)
 
+        taskService:TaskService =  Get(TaskService)
+        #taskService.start()
+
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(60*60)
 
