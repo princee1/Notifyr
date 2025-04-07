@@ -56,8 +56,6 @@ def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None)
     #     for 
     return 
 
-# TODO: Check if we can raise exception if some header value are not present
-
 def get_user_language(request: Request) -> str:
     """
     Retrieve the preferred language of the user from the request object.

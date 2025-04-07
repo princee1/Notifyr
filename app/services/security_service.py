@@ -253,7 +253,6 @@ class SecurityService(Service, EncryptDecryptInterface):
     def verify_server_access(self, token: str, sent_ip_addr) -> bool:
         token = self._decode_value(token, self.configService.API_ENCRYPT_TOKEN)
         token = token.split("|")
-        # TODO invalidate with generation id
 
         if len(token) != 3:
             return False
