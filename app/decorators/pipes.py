@@ -15,7 +15,7 @@ from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
-from app.services.celery_service import CeleryService, task_name
+from app.services.celery_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.helper import copy_response
 from app.utils.validation import phone_number_validator
@@ -223,7 +223,11 @@ class OffloadedTaskResponsePipe(Pipe):
     def __init__(self, before):
         super().__init__(before) 
         
-    def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,as_async:bool = False,):
+    def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,taskManager:TaskManager=None,):
+        as_async = taskManager.meta['as_async']
+        
+        if result == None and taskManager !=None:
+            result = taskManager.results
 
         if not isinstance(result,Response):
             result = JSONResponse(content=result)

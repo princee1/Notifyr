@@ -113,7 +113,8 @@ class Application(EventInterface):
         @self.app.exception_handler(AttributeError)
         async def attribute_error(request, e):
             print(e)
-            print(e.__cause__)
+            traceback.print_exc()  
+
 
             return JSONResponse({'message': 'Attribute Error'}, status_code=500)
 
@@ -124,6 +125,8 @@ class Application(EventInterface):
         @self.app.exception_handler(KeyError)
         async def key_error(request, e):
             print(e)
+            traceback.print_exc()  
+
             return JSONResponse({'message': 'Error while retrieving an important key '}, status_code=status.HTTP_400_BAD_REQUEST)
 
         @self.app.exception_handler(NotImplementedError)

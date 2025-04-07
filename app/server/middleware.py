@@ -131,12 +131,11 @@ class BackgroundTaskMiddleware(MiddleWare):
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request:Request, call_next):
         request_id = generateId(25)
-        self.taskService._register_tasks(request_id)
         request.state.request_id = request_id
         response = await call_next(request)
         rq_response_id = get_response_id(response) 
-        if rq_response_id:
-            if len(self.taskService.sharing_task[rq_response_id])>0:
+        if rq_response_id in self.taskService.sharing_task:
+            if len(self.taskService.sharing_task[rq_response_id].taskConfig)>0:
                 self.taskService(rq_response_id) 
         else: 
             self.taskService._delete_tasks(request_id) #NOTE if theres no rq_response_id in the response this means we can safely remove the reference

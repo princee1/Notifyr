@@ -1,3 +1,4 @@
+from typing import Annotated
 from fastapi import Depends, Header, Request, Response
 from app.classes.auth_permission import Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
@@ -7,16 +8,16 @@ from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandle
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
-from app.container import Get, GetDependsAttr, InjectInMethod, InjectInFunction
+from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
-from app.services.celery_service import TaskService, CeleryService, OffloadTaskService
+from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.twilio_service import SMSService
 from app.utils.dependencies import APIFilterInject, get_auth_permission, get_query_params, get_request_id
-from app.decorators.my_depends import verify_twilio_token,populate_response_with_request_id,as_async_query
+from app.decorators.my_depends import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
 
 
 SMS_ONGOING_PREFIX = 'sms-ongoing'
@@ -66,9 +67,10 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe,before=False)
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
-    async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,authPermission=Depends(get_auth_permission),x_request_id:str= Depends(get_request_id),as_async:bool=Depends(as_async_query)):
+    async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission),):
         message = scheduler.content.model_dump()
-        return await self.offloadService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,'parallel',self.smsService.send_custom_sms,message)
+        await taskManager.offload_task('normal',scheduler,0,None,self.smsService.send_custom_sms,message)
+        return taskManager.results
         
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
@@ -78,12 +80,13 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CeleryTaskGuard(['task_send_template_sms']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
-    async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,authPermission=Depends(get_auth_permission),x_request_id:str= Depends(get_request_id),as_async:bool=Depends(as_async_query)):
+    async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
         sms_data = scheduler.content
         smsTemplate:SMSTemplate = self.assetService.sms[template]
         _,result=smsTemplate.build(self.configService.ASSET_LANG,sms_data.data)
         message = {'body':result,'to':sms_data.to,'from_':sms_data.from_}
-        return await self.offloadService.offload_task('normal',scheduler,True,3600,x_request_id,as_async,'parallel',self.smsService.send_template_sms,message)
+        await taskManager.offload_task('normal',scheduler,0,None,self.smsService.send_template_sms,message)
+        return taskManager.results
 
 
     async def sms_get_message(self,):
