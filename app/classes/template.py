@@ -203,9 +203,7 @@ class MLTemplate(Template):
             self.keys = self.schema.keys()
             self.validation_balise.decompose()
         except SchemaError as e:
-            # TODO raise another error and print the name of the template so the route will not be available
-            printJSON(e.args[0])
-            pass
+            raise SkipTemplateCreationError(self.filename,e.args[0])
 
     def load(self):
         self.bs4 = BeautifulSoup(self.content,self.parser)

@@ -1,6 +1,7 @@
 from fastapi import HTTPException,status
 
 from app.definition._error import BaseError
+from app.utils.prettyprint import printJSON
 from .config_service import CeleryMode, ConfigService
 from app.utils.fileIO import FDFlag
 from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
@@ -93,6 +94,9 @@ class Reader():
             try:
                 self.values[relpath] = self.asset(keyName, content, dir)
             except SkipTemplateCreationError as e:
+                print(e.args[0])
+                printJSON(e.args[1])
+            except Exception:
                 ...
 
             if issubclass_of(Template, self.asset):
