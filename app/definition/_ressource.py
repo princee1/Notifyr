@@ -25,6 +25,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address,get_ipaddr
 import asyncio
 from asgiref.sync import sync_to_async
+import warnings
+
+
 
 
 configService:ConfigService = Get(ConfigService)
@@ -46,6 +49,9 @@ class ClassMetaData(TypedDict):
     prefix:str
     routers:list
     websockets:list[W]
+
+class NoFunctionProvidedWarning(UserWarning):
+    pass
 
 
 
@@ -147,12 +153,14 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             
             setattr(func,'meta', FuncMetaData())
             func.meta['operation_id'] = computed_operation_id
-            func.meta['roles'] = set() # QUESTION by default are routes public ?
+            func.meta['roles'] = {Role.PUBLIC}
             func.meta['excludes'] = set()
             func.meta['options'] =[] 
             func.meta['limit_obj'] =None
             func.meta['limit_exempt']=False
             func.meta['shared']=None
+            func.meta['default_role'] =True
+            
             
             if not mount:
                 return func
@@ -227,7 +235,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             return
         return self.events[event](data)
 
-    def _stack_callback(self): # TODO sync to async if necessary
+    def _stack_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
             return
         M = DECORATOR_METADATA[self.__class__.__name__]
@@ -388,6 +396,9 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
 
 
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams =None):
+    empty_decorator = len(permission_function) == 0
+    if empty_decorator:
+        warnings.warn("No Permission function or object was provided.", NoFunctionProvidedWarning)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UsePermission, permission_function)
@@ -401,6 +412,9 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
             @functools.wraps(function)
             async def callback(*args, **kwargs):
+
+                if empty_decorator:
+                    return await function(*args,**kwargs)
 
                 if len(kwargs) < 1:
                     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
@@ -440,7 +454,11 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
 def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Handler] | Handler, default_error: HTTPExceptionParams =None):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
+    empty_decorator = len(handler_function) == 0
+    if empty_decorator:
+        warnings.warn("No Handler function or object was provided.", NoFunctionProvidedWarning)
 
+    
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseHandler, handler_function)
         if cls != None:
@@ -450,8 +468,7 @@ def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Ha
 
             @functools.wraps(function)
             async def callback(*args, **kwargs): # Function that will be called 
-                if len(handler_function) == 0:
-                    # TODO print a warning
+                if empty_decorator == 0:
                     return await function(*args, **kwargs)
 
                 def handler_proxy(handler,f:Callable):
@@ -487,8 +504,12 @@ def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Ha
 def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Guard, default_error: HTTPExceptionParams =None):
     # INFO guards only purpose is to validate the request
     # NOTE:  be mindful of the order
+    empty_decorator = len(guard_function) == 0
+    if empty_decorator:
+        warnings.warn("No Guard function or object was provided.", NoFunctionProvidedWarning)
 
-    # BUG notify the developper if theres no guard_function mentioned
+
+
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
         cls = common_class_decorator(func, UseGuard, guard_function)
         if cls != None:
@@ -498,23 +519,29 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
             @functools.wraps(target_function)
             async def callback(*args, **kwargs):
+                if empty_decorator ==0:
+                    return await target_function(*args, **kwargs)
+                
+                try:
+                    for guard in guard_function:
+                        if type(guard) == type :
+                            flag, message = await guard().do(*args, **kwargs)
+                        
+                        elif isinstance(guard,Guard):
+                            flag, message = await guard.do(*args, **kwargs)
+                        else:
+                            flag, message = await guard(*args, **kwargs)
+                        
+                        if not isinstance(flag,bool) or not isinstance(message,str):
+                            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
-                for guard in guard_function:
-
-                    # BUG check annotations of the guard function
-                    if type(guard) == type :
-                        flag, message = await guard().do(*args, **kwargs)
-                    
-                    elif isinstance(guard,Guard):
-                        flag, message = await guard.do(*args, **kwargs)
-                    else:
-                        flag, message = await guard(*args, **kwargs)
-
-                    if not flag:
-                        if default_error == None:   
-                            raise HTTPException(
-                                status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
-                        raise HTTPException(**default_error)
+                        if not flag:
+                            raise HTTPException( status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
+                        
+                except GuardDefaultException as e:
+                    if default_error == None:
+                        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Request Validation Aborted')
+                    raise HTTPException(**default_error)
 
                 return await target_function(*args, **kwargs)
             return callback
@@ -525,6 +552,11 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
 def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]]| Any] | Type[Pipe] | Pipe, before: bool = True, default_error: HTTPExceptionParams =None):
     # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
+
+    empty_decorator = len(pipe_function) == 0
+    if empty_decorator:
+        warnings.warn("No Pipe function or object was provided.", NoFunctionProvidedWarning)
+
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UsePipe, pipe_function, before=before)
@@ -571,7 +603,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                     raise HTTPException(**default_error)
             return callback
 
-        appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE,touch=0 if before else 0.5)  # TODO 3 or 3.5 if before
+        appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE,touch=0 if before else 0.5)
         return func
     return decorator
 
@@ -599,10 +631,9 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
         cls = common_class_decorator(func, UseRoles,None,roles=roles)
         if cls != None:
             return cls
-        # TODO by default route is public check the todo in BaseHTTPRessource concerning this
         roles_ = set(roles)
         excludes_ = set(excludes).difference(roles_)
-
+        
         try:
             roles_.remove(Role.CUSTOM)
         except KeyError:
@@ -610,6 +641,10 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
 
         meta:FuncMetaData | None = getattr(func,'meta',None)
         if meta is not None:
+            if meta['default_role']:
+                meta['roles'].clear()
+                meta['default_role'] = False
+
             meta['roles'].update(roles_)
             roles_ = meta['roles']
             meta['excludes'].update(excludes_.difference(roles_))

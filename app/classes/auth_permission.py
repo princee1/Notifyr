@@ -47,6 +47,7 @@ class FuncMetaData(TypedDict):
     shared:bool
     limit_obj:dict
     limit_exempt:bool=False
+    default_role:bool =True
 
 
 class RoutePermission(TypedDict):
