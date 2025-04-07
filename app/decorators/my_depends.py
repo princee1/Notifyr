@@ -268,7 +268,7 @@ async def get_blacklist(blacklist_id:str=Depends(get_query_params('blacklist_id'
 as_async_query = get_query_params('background','false',True)
 runtype_query=get_query_params('runtype','concurrent',False,checker=lambda v: v in ['parallel','concurrent'])
 save_results_query=get_query_params('save','false',True)
-ttl_query=get_query_params('ttl','0',True)
+ttl_query=get_query_params('ttl','60',True)
 
 get_task_results= get_query_params('get_task_results','true',True)
 
@@ -277,4 +277,6 @@ async def get_task(request_id:str=Depends(get_request_id),as_async:bool=Depends(
     offload_task:Callable=GetAttr(OffloadTaskService,'offload_task')
     if offload_task == None:
         raise HTTPException(503)
+    if ttl<=0:
+        raise HTTPException(400,'ttl cant be zero or negative')
     return taskService._register_tasks(request_id,as_async,runtype,offload_task,ttl,save,return_results)

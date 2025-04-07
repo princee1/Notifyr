@@ -37,7 +37,7 @@ class TaskMeta(TypedDict):
     as_async:bool
     runtype:RunType
     save_result:bool
-    ttl:float
+    ttl:float=3600
     delay:float=0
 
 @dataclass        
@@ -151,7 +151,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         meta = task.meta
         schedule= lambda: asyncio.create_task(self._run_task_in_background(request_id))
         random_delay = randint(0, 60)
-        print(f"Scheduled task with a random delay of {random_delay} seconds")
+        #print(f"Scheduled task with a random delay of {random_delay} seconds")
         #self.schedule(random_delay,action=schedule) # FIXME later 
         schedule()
 
