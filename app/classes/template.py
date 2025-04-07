@@ -196,7 +196,7 @@ class MLTemplate(Template):
         try:
             if self.validation_balise is None:
                 return
-            builder = MLSchemaBuilder(self.validation_balise)
+            builder = MLSchemaBuilder(self.validation_balise,self.filename)
             self.schema = builder.schema
             self.transform = builder.transform
 
