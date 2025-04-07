@@ -271,6 +271,7 @@ class CeleryService(Service, IntervalInterface):
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
         now = dt.datetime.now()
+        now = str(now)
         result = {
             'date': now,
             'offloaded':True,

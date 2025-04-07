@@ -45,7 +45,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
         self.celeryService:CeleryService = celeryService
-        self.bkgTaskService: TaskService = bkgTaskService
+        self.taskService: TaskService = bkgTaskService
 
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])
@@ -64,9 +64,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             if scheduler.task_type == TaskType.NOW.value:
-                return await self.bkgTaskService.add_task( scheduler.heaviness,x_request_id,True,3600,'parallel',self.emailService.sendTemplateEmail, data, meta, template.images )
+                return await self.taskService.add_task( scheduler.heaviness,x_request_id,0,None,self.emailService.sendTemplateEmail, data, meta, template.images )
 
-        return self.celeryService.trigger_task_from_scheduler(scheduler,data, meta, template.images)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,None,data, meta, template.images)
     
     @UseLimiter(limit_value='10000/minutes')
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
@@ -77,11 +77,11 @@ class EmailTemplateRessource(BaseHTTPRessource):
         meta = customEmail_content.meta.model_dump()
         content = (customEmail_content.html_content, customEmail_content.text_content)
        
-        if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-            if scheduler.task_type == TaskType.NOW.value:
-                return await self.bkgTaskService.add_task(scheduler.heaviness,x_request_id,True,3600,'parallel',self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
+        #if self.celeryService.service_status != ServiceStatus.AVAILABLE:
+        if scheduler.task_type == TaskType.NOW.value:
+                return await self.taskService.add_task(scheduler.heaviness,x_request_id,0,None,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
             
-        return self.celeryService.trigger_task_from_scheduler(scheduler,content,meta,customEmail_content.images, customEmail_content.attachments)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,None,content,meta,customEmail_content.images, customEmail_content.attachments)
 
     @UseRoles(options=[MustHave(Role.ADMIN)])
     @BaseHTTPRessource.HTTPRoute("/domain/",methods=[HTTPMethod.GET],mount=False)
