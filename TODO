@@ -25,3 +25,5 @@
 23. Always verify status before sending a promotion, subscription status , and active user or other with FilterPipe
 24. ADOPT RCS (Rich Communication Service) when it is available !
 25. Automate Wrapper in UseLimiter
+26. Features for emails: verify email, monitoring email, hosting email (postfix,dovecot and more), read email
+27. Have a distributed implementation for subject subscribing using redis and rxPy
