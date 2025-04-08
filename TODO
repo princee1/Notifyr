@@ -27,3 +27,4 @@
 25. Automate Wrapper in UseLimiter
 26. Features for emails: verify email(potentially implement our own or using a tools), monitoring email( with return path and image), hosting email (postfix,dovecot and more), read email, try to improve deliverability, rotate proxys when sending emails
 27. Have a distributed implementation for subject subscribing using redis and rxPy
+28. Have landing page and a better workflow for contacts and campaings...
