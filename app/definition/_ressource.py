@@ -37,7 +37,7 @@ else:
     storage_uri = configService.SLOW_API_REDIS_URL
 
 PATH_SEPARATOR = "/"
-GlobalLimiter = Limiter(get_ipaddr,storage_uri=storage_uri,headers_enabled=True) # BUG Need to change the datastructure to have more limiter
+GlobalLimiter = Limiter(get_ipaddr,storage_uri=storage_uri,headers_enabled=True)
 RequestLimit =0
 
 
@@ -390,7 +390,7 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
                 if handling_func == None:
                     setattr(cls, attr, decorator(**kwargs)(handler))
                 else:
-                    setattr(cls, attr, decorator(*handling_func, **kwargs)(handler))  # BUG can be an source of error if not a tuple
+                    setattr(cls, attr, decorator(*handling_func, **kwargs)(handler))
         return cls
     return None
 
