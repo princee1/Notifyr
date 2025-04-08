@@ -61,11 +61,10 @@ class EmailTemplateRessource(BaseHTTPRessource):
         
         template: HTMLTemplate = self.assetService.html[template]
         _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
-    
-        if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-            if scheduler.task_type == TaskType.NOW.value:
-                return await self.taskService.add_task( scheduler.heaviness,x_request_id,0,None,self.emailService.sendTemplateEmail, data, meta, template.images )
-
+        
+        # if self.celeryService.service_status != ServiceStatus.AVAILABLE:
+            # if scheduler.task_type == TaskType.NOW.value:
+            #     return await self.taskService.add_task( scheduler.heaviness,x_request_id,0,None,self.emailService.sendTemplateEmail, data, meta, template.images )
         return self.celeryService.trigger_task_from_scheduler(scheduler,None,data, meta, template.images)
     
     @UseLimiter(limit_value='10000/minutes')
@@ -76,11 +75,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
         customEmail_content = scheduler.content
         meta = customEmail_content.meta.model_dump()
         content = (customEmail_content.html_content, customEmail_content.text_content)
-       
         #if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-        if scheduler.task_type == TaskType.NOW.value:
-                return await self.taskService.add_task(scheduler.heaviness,x_request_id,0,None,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
-            
+        # if scheduler.task_type == TaskType.NOW.value:
+        #         return await self.taskService.add_task(scheduler.heaviness,x_request_id,0,None,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
         return self.celeryService.trigger_task_from_scheduler(scheduler,None,content,meta,customEmail_content.images, customEmail_content.attachments)
 
     @UseRoles(options=[MustHave(Role.ADMIN)])
