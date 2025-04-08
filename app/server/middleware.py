@@ -29,6 +29,7 @@ class ProcessTimeMiddleWare(MiddleWare):
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
         self.taskService.connection_count.inc()
+        self.taskService.connection_total.inc()
         try:
             response: Response = await call_next(request)
             process_time = time.time() - start_time
@@ -37,6 +38,7 @@ class ProcessTimeMiddleWare(MiddleWare):
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
+            self.taskService.request_latency.observe(process_time)
             return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)'})
         finally:
             self.taskService.connection_count.dec()
