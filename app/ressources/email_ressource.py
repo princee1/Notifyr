@@ -9,10 +9,10 @@ from app.container import GetDepends, InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailSenderService
 from fastapi import  Header, Request, Response, status
-from app.utils.dependencies import Depends, get_auth_permission, get_request_id, get_response_id
+from app.depends.dependencies import Depends, get_auth_permission, get_request_id, get_response_id
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import  CeleryTask, SchedulerModel, TaskType
-from app.decorators.my_depends import populate_response_with_request_id
+from app.depends.my_depends import populate_response_with_request_id
 
 
 class EmailTemplateSchedulerModel(SchedulerModel):

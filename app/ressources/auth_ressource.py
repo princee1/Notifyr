@@ -8,7 +8,7 @@ from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
-from app.decorators.my_depends import GetClient, get_client_by_password,verify_admin_signature, verify_admin_token,verify_twilio_token
+from app.depends.my_depends import GetClient, get_client_by_password,verify_admin_signature, verify_admin_token,verify_twilio_token
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, TwilioPermission, UserPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
@@ -19,7 +19,7 @@ from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
-from app.utils.dependencies import get_auth_permission, get_client_from_request, get_client_ip
+from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip
 from app.utils.constant import ConfigAppConstant
 from tortoise.transactions import in_transaction
 

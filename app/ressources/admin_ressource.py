@@ -3,7 +3,7 @@ from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Query, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.decorators.my_depends import get_blacklist, get_group, get_client
+from app.depends.my_depends import get_blacklist, get_group, get_client
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
@@ -11,7 +11,7 @@ from app.services.celery_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant
-from app.utils.dependencies import get_auth_permission, get_query_params, get_request_id
+from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission

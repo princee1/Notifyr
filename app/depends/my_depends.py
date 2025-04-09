@@ -12,7 +12,7 @@ from app.services.celery_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import TwilioService
-from app.utils.dependencies import get_auth_permission, get_query_params, get_request_id
+from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from tortoise.exceptions import OperationalError
 
 def AcceptNone(key):

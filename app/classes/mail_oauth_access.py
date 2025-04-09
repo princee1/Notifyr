@@ -15,7 +15,7 @@ import time
 import pickle
 from app.utils.helper import format_url_params
 from app.utils.constant import EmailHostConstant
-from app.utils.dependencies import APIFilterInject
+from app.utils.helper import APIFilterInject
 
 class OAuthError(Exception):
     """Base class for all OAuth-related errors."""

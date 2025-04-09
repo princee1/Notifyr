@@ -9,7 +9,7 @@ from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.security_service import JWTAuthService
-from app.utils.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission
 from app.classes.auth_permission import AuthPermission, MustHave, Role
 from app.websockets.redis_backend_ws  import RedisBackendWebSocket
 from pydantic.fields import Field

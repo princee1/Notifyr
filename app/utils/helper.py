@@ -4,7 +4,7 @@ from random import choice, seed
 from string import hexdigits, digits, ascii_letters,punctuation
 import time
 from inspect import currentframe, getargvalues
-from typing import Any, Callable
+from typing import Any, Callable, Literal, Type
 import urllib.parse
 from fastapi import Response
 from namespace import Namespace
@@ -17,6 +17,49 @@ import uuid
 import hashlib
 import socket
 
+def APIFilterInject(func:Callable | Type):
+
+    if type(func) == type:
+        annotations = func.__init__.__annotations__.copy()
+    else:
+        annotations = func.__annotations__.copy()
+        annotations.pop('return',None)
+
+    def wrapper(*args,**kwargs):
+        filtered_kwargs = {
+            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
+            for key, value in kwargs.items()
+            if key in annotations
+        }
+        return func(*args, **filtered_kwargs)
+    return wrapper
+
+
+def AsyncAPIFilterInject(func:Callable | Type):
+
+    if type(func) == type:
+        annotations = func.__init__.__annotations__.copy()
+    else:
+        annotations = func.__annotations__.copy()
+        annotations.pop('return',None)
+
+    async def wrapper(*args,**kwargs):
+        filtered_kwargs = {
+            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
+            for key, value in kwargs.items()
+            if key in annotations
+        }
+        return await func(*args, **filtered_kwargs)
+    return wrapper
+
+
+def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None):
+    reversed_kwargs = reverseDict(kwargs)
+    if key == None and cls == None:
+        raise KeyError
+    # if cls:
+    #     for 
+    return 
 
 
 def copy_response(result:Response,response:Response):

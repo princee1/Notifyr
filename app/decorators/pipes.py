@@ -19,7 +19,7 @@ from app.services.celery_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.helper import copy_response
 from app.utils.validation import phone_number_validator
-from app.utils.dependencies import APIFilterInject, get_client_ip
+from app.utils.helper import APIFilterInject
 
 @APIFilterInject
 async def _to_otp_path(template:str):

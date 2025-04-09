@@ -16,8 +16,10 @@ from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.twilio_service import SMSService
-from app.utils.dependencies import APIFilterInject, get_auth_permission, get_query_params, get_request_id
-from app.decorators.my_depends import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
+from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
+from app.depends.my_depends import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
+from app.utils.helper import APIFilterInject
+
 
 
 SMS_ONGOING_PREFIX = 'sms-ongoing'

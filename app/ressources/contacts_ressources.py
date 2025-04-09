@@ -7,7 +7,7 @@ from app.classes.auth_permission import MustHave, MustHaveRoleSuchAs, Role
 from app.container import Get,InjectInMethod
 from app.decorators.guards import ActiveContactGuard, ContactActionCodeGuard, RegisteredContactsGuard
 from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler
-from app.decorators.my_depends import get_contact_permission, get_contacts, get_subs_content,verify_twilio_token
+from app.depends.my_depends import get_contact_permission, get_contacts, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
 from app.models.contacts_model import ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
@@ -17,7 +17,7 @@ from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, Cont
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import SMSService, VoiceService
-from app.utils.dependencies import get_auth_permission, get_contact_token
+from app.depends.dependencies import get_auth_permission, get_contact_token
 from app.decorators.pipes import ContactStatusPipe, RelayPipe
 
 

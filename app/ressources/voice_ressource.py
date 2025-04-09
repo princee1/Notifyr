@@ -16,8 +16,8 @@ from app.services.logger_service import LoggerService
 from app.services.twilio_service import  VoiceService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
-from app.utils.dependencies import get_auth_permission, get_request_id
-from app.decorators.my_depends import get_task, verify_twilio_token,as_async_query,populate_response_with_request_id
+from app.depends.dependencies import get_auth_permission, get_request_id
+from app.depends.my_depends import get_task, verify_twilio_token,as_async_query,populate_response_with_request_id
 
 
 

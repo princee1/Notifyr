@@ -10,7 +10,7 @@ from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
-from app.utils.dependencies import APIFilterInject
+from app.utils.helper import APIFilterInject
 from app.utils.helper import flatten_dict
 
  

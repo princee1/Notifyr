@@ -1,6 +1,6 @@
 import asyncio
 from typing import Callable
-from app.utils.dependencies import APIFilterInject, AsyncAPIFilterInject
+from app.utils.helper import APIFilterInject,AsyncAPIFilterInject
 from asgiref.sync import sync_to_async
 from enum import Enum
 
