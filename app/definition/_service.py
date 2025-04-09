@@ -233,6 +233,10 @@ class Service():
 
         finally:
             self.destroyReport()
+    
+    @property
+    def services_status(self):
+        return {s:s.service_status for s in self.service_list}
 
 
 S = TypeVar('S', bound=Service)
@@ -292,14 +296,11 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
     """
     def decorator(cls: Type[S]) -> Type[S]:
         if not AbstractServiceClasses.__contains__(baseClass):
-            pass
-            # TODO ABORT error
+            raise BuildAbortError(f'Base class {baseClass} not an abstract service')
         if not issubclass_of(Service, baseClass):
-            pass
-            # TODO ABORT error
+            raise BuildAbortError(f'Base class {baseClass} is not class of Service')
         if not issubclass_of(Service, cls):
-            pass
-            # TODO  ABORT error
+            raise BuildAbortError(f'Class {cls} is not class of Service')
         AbstractDependency[cls.__name__] = {baseClass.__name__: {DependencyConstant.RESOLVED_FUNC_KEY: resolvedClass,
                                                                  DependencyConstant.RESOLVED_PARAMETER_KEY: None,
                                                                  DependencyConstant.RESOLVED_DEPS_KEY: None,
