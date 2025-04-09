@@ -202,7 +202,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         if self.bypass_auth:
             return True
             
-        auth_token = websocket.headers.get(HTTPHeaderConstant.WS_KEY) # TODO find a key name
+        auth_token = websocket.headers.get(HTTPHeaderConstant.WS_KEY)
         if auth_token == None:
             return False
         try:

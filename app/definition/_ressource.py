@@ -426,7 +426,6 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                 kwargs_prime[SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
                 kwargs_prime[SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER] = func.meta
                 
-                # TODO use the prefix here
                 for permission in permission_function:
                     try:
                         if type(permission) == type:

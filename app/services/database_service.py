@@ -64,7 +64,8 @@ class MongooseService(DatabaseService): # Chat data
                 'engine':self.chat_engine,
                 'db':AsyncIOMotorDatabase(self.client,chatDB_name)
             }
-        except: # TODO 
+        except Exception as e: # TODO
+            print(e) 
             raise ...    
 @ServiceClass
 class RedisService(DatabaseService):

@@ -417,7 +417,7 @@ class CeleryService(Service, IntervalInterface):
         if count:
             # TODO check in which interval the ratio is in
             ...
-        await super().pingService()
+        await Service.pingService(self)
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
     def callback(self):

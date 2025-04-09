@@ -33,15 +33,20 @@ class CeleryTaskGuard(Guard):
         return True,''
 
 class AssetGuard(Guard):
-    #TODO If a route allowed a certain type asset
-    def __init__(self,content_keys=[],allowed_path=[],options=[]):
+    
+    def __init__(self,content_keys=[],allowed_path=[],options=[],accepted_type=None):
         super().__init__()
         self.assetService = Get(AssetService)       
         self.configService = Get(ConfigService)
         self.options = options
         self.allowed_path = [self.configService.ASSET_DIR +p for p in  allowed_path]
         self.content_keys = content_keys
+        self.accepted_type = accepted_type
 
+    def _filter_allowed(self):
+        if self.accepted_type != None:
+            ...
+            #TODO If a route allowed a certain type asset
     def guard(self,scheduler:SchedulerModel):
         if scheduler == None:
             return True,_
@@ -53,16 +58,18 @@ class AssetGuard(Guard):
         return True,''
                 
 class TaskWorkerGuard(Guard):
-    #TODO Check before hand if the background task and the workers are available to do some job
     def __init__(self, heaviness:TaskHeaviness=None):
         super().__init__()
         self.celeryService = Get(CeleryService)
-        self.bckgroundTaskService = Get(TaskService)
+        self.taskService = Get(TaskService)
         self.heaviness = heaviness
     
-    def guard(self,scheduler:SchedulerModel):
+    async def guard(self,scheduler:SchedulerModel):
         task_heaviness:TaskHeaviness = scheduler.heaviness
         ...
+    #TODO Check before hand if the background task and the workers are available to do some job
+    # NOTE Already have a pingService
+
 
 
 class RegisteredContactsGuard(Guard):

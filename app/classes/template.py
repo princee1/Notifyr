@@ -157,7 +157,7 @@ class MLTemplate(Template):
             raise TemplateBuildError          
 
     def validate(self, document: dict):
-        # TODO See: https://docs.python-cerberus.org/errors.html
+        """See: https://docs.python-cerberus.org/errors.html"""
         if self.schema == None or self.schema == {}:
             return True,document
         Validator = CustomValidator(self.schema)
