@@ -19,7 +19,7 @@ from app.classes.auth_permission import Role, RoutePermission, AssetsPermission,
 from pydantic import BaseModel,  field_validator
 from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe
-from app.utils.helper import parseToBool
+from app.utils.helper import filter_paths, parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from slowapi.util import get_remote_address
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
@@ -32,9 +32,13 @@ CLIENT_PREFIX = 'client'
 
 class AuthPermissionModel(BaseModel):
     allowed_routes: dict[str, RoutePermission] = []
-    allowed_assets: Optional[dict[str, AssetsPermission]] ={}
+    allowed_assets: list[str] =[]
     roles: Optional[list[Role]] = [Role.PUBLIC]
     scope: Scope = None
+
+    @field_validator('allowed_assets')
+    def filter_assets_paths(cls,allowed_assets):
+        return filter_paths(allowed_assets)
 
     @field_validator('scope')
     def enforce_scope(cls,scope):

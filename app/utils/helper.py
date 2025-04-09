@@ -209,8 +209,8 @@ def issubclass_of(bCls, kCls):
 def isextends_of(obj,bCls):
     return issubclass_of(bCls,type(obj))
     
-
-def is_abstract(cls: type, bClass: type):  # BUG
+# WARNING deprecated
+def is_abstract(cls: type, bClass: type):
     try:
         x = list(getmro(cls))
         x.remove(cls)
@@ -218,7 +218,7 @@ def is_abstract(cls: type, bClass: type):  # BUG
         x.remove(bClass)
         return x.pop(i) == ABC
     except TypeError as e:
-        pass  # TODO raise an error, make sure to extends the ABC class last
+        pass 
     except ValueError as e:
         pass
     except:
@@ -321,3 +321,13 @@ def phone_parser(phone_number:str):
     formatted_number = f"+{cleaned_number}"
     return formatted_number
     
+def filter_paths(paths):
+        paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
+        results = []
+
+        for path in paths:
+            if not any(path.startswith(d + "\\") for d in results):
+                results.append(path)
+
+
+        return ['assets/'+ p for p in results ]

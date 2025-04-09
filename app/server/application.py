@@ -239,7 +239,7 @@ class Application(EventInterface):
         #taskService.start()
 
         celery_service: CeleryService = Get(CeleryService)
-        celery_service.start_interval(60*60)
+        celery_service.start_interval(10)
 
     def on_shutdown(self):
         # for thread in threading.enumerate():

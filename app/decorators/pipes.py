@@ -223,8 +223,16 @@ class OffloadedTaskResponsePipe(Pipe):
     def __init__(self, before):
         super().__init__(before) 
         
-    def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,taskManager:TaskManager=None,):
-        as_async = taskManager.meta['as_async']
+    def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,taskManager:TaskManager=None,as_async:bool=None):
+        if taskManager == None and as_async == None:
+            as_async = False
+        elif taskManager != None:
+            as_async = taskManager.meta['as_async']
+        elif as_async != None:
+            ...
+        else:
+            as_async = False
+
         
         if result == None and taskManager !=None:
             result = taskManager.results
