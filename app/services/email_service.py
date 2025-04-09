@@ -9,6 +9,7 @@ from typing import Callable
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from app.classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
+from app.utils.tools import Time
 
 from .model_service import LLMModelService
 from app.utils.constant import EmailHostConstant
@@ -124,11 +125,10 @@ class EmailSenderService(BaseEmailService):
             connector.close()
         except:
             ...
-
+    
     def connect(self):
         try:
-            self.hostAddr = SMTPConfig.setHostAddr(
-                self.configService.SMTP_EMAIL_HOST)
+            self.hostAddr = SMTPConfig.setHostAddr(self.configService.SMTP_EMAIL_HOST)
             if self.connMethod == 'ssl':
                 connector = smtp.SMTP_SSL(self.hostAddr, self.hostPort)
             else:
@@ -150,7 +150,6 @@ class EmailSenderService(BaseEmailService):
         if self.configService.SMTP_EMAIL_HOST not in EmailHostConstant._member_names_:
             raise _service.BuildFailureError
         
-
 
     def sendAutomaticMessage(self): pass
 
@@ -201,6 +200,7 @@ class EmailSenderService(BaseEmailService):
         #send_custom_email(content, meta, images, attachment)
         return self._send_message(email)
 
+    @Time
     @BaseEmailService.task_lifecycle
     def _send_message(self, email: EmailBuilder,connector:smtp.SMTP):
         try:

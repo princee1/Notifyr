@@ -129,6 +129,8 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         try:
             self.connection_count = Gauge('http_connections','Active Connection Count')
             self.request_latency = Histogram("http_request_duration_seconds", "Request duration in seconds")
+            self.connection_total = Counter('total_http_connections','Total Request Received')
+            self.background_task_count = Gauge('background_task','Active Background Working Task')
         except:
             raise BuildWarningError
 
@@ -172,7 +174,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                 await asyncio.sleep(ttd)
 
             data=None if runType == 'parallel' else []
-
+            self.background_task_count.inc()
             async def callback():
                 try:
                     if not asyncio.iscoroutine(task):
@@ -188,7 +190,9 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                     if runType=='parallel':
                         async with self.task_lock:
                             self.running_background_tasks_count -= 1  # Decrease count after tasks complete
-                            self.server_load[heaviness_] -= 1
+                            self.server_load[heaviness_] -= 1 # TODO better estimate
+                        self.background_task_count.dec()
+
                 
                     return result
                 except Exception as e:
@@ -205,7 +209,9 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
                     if runType =='parallel':
                         async with self.task_lock:
                             self.running_background_tasks_count -= 1  # Decrease count after tasks complete
-                            self.server_load[heaviness_] -= 1
+                            self.server_load[heaviness_] -= 1 # TODO better estimate
+                        self.background_task_count.dec()
+                        
                     return result
 
             if runType=='concurrent': 
@@ -213,11 +219,13 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
             else:
                 asyncio.create_task(callback())
 
-        if runType == 'concurrent': # TODO refractor put in meta
+        if runType == 'concurrent':
             await self.redisService.store_bkg_result(data, request_id,ttl)
             async with self.task_lock:
                 self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
-                self.server_load[heaviness_] -= 1
+                self.server_load[heaviness_] -= 1 # TODO better estimate
+            self.background_task_count.dec(task_len)
+            
 
         self._delete_tasks(request_id)
 
@@ -245,7 +253,7 @@ class CeleryService(Service, IntervalInterface):
 
     def __init__(self, configService: ConfigService, bTaskService: TaskService):
         Service.__init__(self)
-        IntervalInterface.__init__(self)
+        IntervalInterface.__init__(self,False)
         self.configService = configService
         self.bTaskService = bTaskService
         self.available_workers_count = -1
@@ -253,6 +261,7 @@ class CeleryService(Service, IntervalInterface):
 
         self.timeout_count = 0
         self.task_lock = asyncio.Lock()
+        # NOTE if i cant connect to the redis server there's a problem, if i can connect i can add task to the message broker
 
         # self.redis_client = Redis(host='localhost', port=6379, db=0)# set from config
 
@@ -271,6 +280,7 @@ class CeleryService(Service, IntervalInterface):
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
         now = dt.datetime.now()
+        now = str(now)
         result = {
             'date': now,
             'offloaded':True,
@@ -407,7 +417,7 @@ class CeleryService(Service, IntervalInterface):
         if count:
             # TODO check in which interval the ratio is in
             ...
-        await super().pingService()
+        await Service.pingService(self)
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
     def callback(self):

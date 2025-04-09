@@ -122,7 +122,7 @@ class SMSService(BaseTwilioCommunication):
             }
 
     @BaseTwilioCommunication.parse_to_json
-    def send_otp(self, otpModel: OTPModel,body:str,as_async:bool = False): #TODO otp template
+    def send_otp(self, otpModel: OTPModel,body:str,as_async:bool = False):
         as_async = False
         func = self.messages.create_async if as_async else self.messages.create
         return func(send_as_mms=True,provide_feedback=True,to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=body)

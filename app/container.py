@@ -7,12 +7,12 @@ from app.utils.constant import DependencyConstant
 from app.utils.helper import issubclass_of, SkipCode
 from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
-from deprecated import deprecated
 from ordered_set import OrderedSet
 from app.definition._service import S, MethodServiceNotExistsError, Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
+not_allowed_types=(list,str,float,bytearray,bool,bytes,int,dict,set)
 
 
 class ContainerError(BaseException):
@@ -73,9 +73,9 @@ def isabstract(cls):
 
 class Container():
 
-    def __init__(self, D: list[type],quiet=False) -> None:  # TODO add the scope option
+    def __init__(self, D: list[type],quiet=False,scopes:list[Any]=None) -> None:  # TODO add the scope option
         self.__app = injector.Injector()
-
+        self.quiet_print = quiet
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
 
@@ -88,16 +88,19 @@ class Container():
         PrettyPrinter_.space_line()
 
         self.__buildContainer()
-        # TODO print success  in building the app
 
     def __bind(self, type_:type, obj:Any, scope=None):
         self.__app.binder.bind(type_, to=obj, scope=scope)
 
     def bind(self, type_:type, obj:Any, scope=None):
-        # self.__bind(type_, obj, scope)
-        # TODO bind other dependency that are not in the dependency list
-        ...
-
+        if isinstance(obj,Service):
+            raise ValueError('Use Register Instead')
+        if isinstance(obj,not_allowed_types):
+            raise ValueError
+        if type_ in not_allowed_types:
+            raise ValueError
+        self.__bind(type_, to=obj, scope=scope)
+        
     def get(self, typ: Type[S], scope=None, all=False) -> dict[type, Type[S]] | Type[S]:
         if not all and isabstract(typ.__name__):
             raise InvalidDependencyError
@@ -391,8 +394,8 @@ class Container():
         self.__inject(typ.__name__)
     
     @property
-    def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
-                                                  for x in self.DEPENDENCY_MetaData.values()]  # TODO avoid to compute this everytime we call this function
+    def dependencies(self) -> list[Service]: return [x[DependencyConstant.TYPE_KEY]
+                                                  for x in self.DEPENDENCY_MetaData.values()]
 
     @property
     def objectDependencies(self):
@@ -405,6 +408,10 @@ class Container():
     @property
     def seek_bindings(self):
         return self.__app.binder._bindings
+
+    @property
+    def services_status(self):
+        return {s:s.service_status for s in self.dependencies}
 
 CONTAINER: Container = None #Container(__DEPENDENCY)
 
@@ -547,6 +554,9 @@ def Need(typ: Type[S]) -> Type[S]:
     """
     return CONTAINER.need(typ)
 
+
+def Bind(type_:type, obj:Any, scope=None):
+    return CONTAINER.bind(type_,obj,scope)
 
 def GetDepends(typ:type[S])->Type[S] | dict[str,Type[S]]:
     def depends():

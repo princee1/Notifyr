@@ -21,8 +21,9 @@ class MLSchemaBuilder (SchemaBuilder):
     CurrentHashRegistry = {}
     HashSchemaRegistry = {}
 
-    def __init__(self, root) -> None:
+    def __init__(self, root,filename:str) -> None:
         self.root: Tag = root
+        self.filename = filename
         # next_children = self.css_selectorBuilder(CSSLevel.SAME, [ValidationHTMLConstant.VALIDATION_ITEM_BALISE,
         #                                          ValidationHTMLConstant.VALIDATION_VALUES_RULES_BALISE, ValidationHTMLConstant.VALIDATION_KEYS_RULES_BALISE])
         self.transform: dict[str,str] = {}
@@ -36,14 +37,13 @@ class MLSchemaBuilder (SchemaBuilder):
             v: Tag = validator
             has_noSuccessor = len(v.find_all(ValidationHTMLConstant.VALIDATION_ITEM_BALISE, recursive=False)) == 0
             
-            if not v.attrs.__contains__("type"):
-                # TODO find the error element
-                raise TypeError("Specify the type of the value")
+            if not v.attrs.__contains__("type"):                
+                raise TypeError(f"Specify the type of the value in the file: {self.filename} at \n{v.prettify(formatter='html')}")
             if not v.attrs.__contains__("id") and v.name == ValidationHTMLConstant.VALIDATION_ITEM_BALISE:
-                # TODO find the error element
-                raise NameError("Specify the id of the value")
+                raise NameError(f"Specify the id of the value in the file: {self.filename} at \n{v.prettify(formatter='html')}")
             key = v.attrs["id"]
             # TODO validates arguments
+
             schema[key] = self.parse(v.attrs)
 
             if 'coerce' in schema[key]:
@@ -67,7 +67,7 @@ class MLSchemaBuilder (SchemaBuilder):
 
             if has_noSuccessor:
                 if is_struct:
-                    raise TypeError("Specify the type of the children of the structure")
+                    raise TypeError(f"Specify the type of the children of the structure in the file: {self.filename} at id: {key}")
 
                 if schema[key].__contains__("schema"):
                     default_schema_registry = schema[key]["schema"]
@@ -78,11 +78,10 @@ class MLSchemaBuilder (SchemaBuilder):
 
             if not is_struct:
                 type_ = v.attrs["type"]
-                # TODO: find the one element that was supposed to be a dict or a list and that has children
-                raise TypeError(f"{key} cannot have defined children because it is not a struct: Type: {type_}")
+                raise TypeError(f"Element with id {key} in the file: {self.filename} cannot have defined children because it is not a struct: Type: {type_}")
 
             if 'transform' in schema:
-                raise TypeError('Transform cant be in a schema')     
+                raise TypeError(f'Transform cant be in a schema in the file: {self.filename} at id: {key}')     
                    
             successor_schema = self.find(v,key)
             next_key = "schema"  # NOTE might add valuerules
@@ -97,6 +96,9 @@ class MLSchemaBuilder (SchemaBuilder):
         else:
             value = data[value]
         return value
+
+    def _validate_keys():
+        ...
 
     def parse(self, attrs: dict[str, Any]):
         schema: dict[str, Any] = {}

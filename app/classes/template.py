@@ -157,7 +157,7 @@ class MLTemplate(Template):
             raise TemplateBuildError          
 
     def validate(self, document: dict):
-        # TODO See: https://docs.python-cerberus.org/errors.html
+        """See: https://docs.python-cerberus.org/errors.html"""
         if self.schema == None or self.schema == {}:
             return True,document
         Validator = CustomValidator(self.schema)
@@ -196,16 +196,14 @@ class MLTemplate(Template):
         try:
             if self.validation_balise is None:
                 return
-            builder = MLSchemaBuilder(self.validation_balise)
+            builder = MLSchemaBuilder(self.validation_balise,self.filename)
             self.schema = builder.schema
             self.transform = builder.transform
 
             self.keys = self.schema.keys()
             self.validation_balise.decompose()
         except SchemaError as e:
-            # TODO raise another error and print the name of the template so the route will not be available
-            printJSON(e.args[0])
-            pass
+            raise SkipTemplateCreationError(self.filename,e.args[0])
 
     def load(self):
         self.bs4 = BeautifulSoup(self.content,self.parser)
