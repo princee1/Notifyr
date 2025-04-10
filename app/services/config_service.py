@@ -58,6 +58,7 @@ class ConfigService(_service.Service):
     def relative_path(self, path):
         return self.BASE_DIR +path
 
+    @staticmethod
     def parseToBool(value:str,default:bool | None = None):
         try:
             return parseToBool(value)
@@ -115,8 +116,8 @@ class ConfigService(_service.Service):
     def set_config_value(self):
         self.BASE_DIR= self.getenv("BASE_DIR",'./')	
         self.ASSET_DIR= self.getenv("ASSETS_DIR",'assets/')	
-
-
+        self.SECURITY_FLAG:bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'),True)
+        
         self.MODE = MODE.toMode(self.getenv('MODE'))
         self.PORT_PUBLIC = ConfigService.parseToInt(self.getenv("PORT_PUBLIC"),3000)
         self.PORT_PRIVATE = ConfigService.parseToInt(self.getenv("PORT_PRIVATE"),5000)

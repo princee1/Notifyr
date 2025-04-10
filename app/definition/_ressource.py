@@ -26,6 +26,7 @@ from slowapi.util import get_remote_address,get_ipaddr
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
+from app.depends.dependencies import SECURITY_FLAG
 
 
 
@@ -413,6 +414,9 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
             @functools.wraps(function)
             async def callback(*args, **kwargs):
 
+                if not SECURITY_FLAG:
+                    return await function(*args,**kwargs)
+
                 if empty_decorator:
                     return await function(*args,**kwargs)
 
@@ -673,7 +677,6 @@ def response_decorator(func:Callable):
         return copy_response(result,response)
 
     return wrapper
-
 
 @functools.wraps(GlobalLimiter.limit)
 def UseLimiter(**kwargs): #TODO

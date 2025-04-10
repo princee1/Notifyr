@@ -12,7 +12,7 @@ from fastapi import HTTPException, Request, Response, FastAPI,status
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
 from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
-from app.depends.dependencies import get_api_key, get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
+from app.depends.dependencies import get_api_key, get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id,SECURITY_FLAG
 from cryptography.fernet import InvalidToken
 
 from app.utils.helper import generateId
@@ -96,6 +96,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.adminService: AdminService = Get(AdminService)
         self.get_client = GetClient(True,True)
 
+    @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
@@ -162,6 +163,7 @@ class UserAppMiddleware(MiddleWare):
 class ChallengeMatchMiddleware(MiddleWare):
     priority = MiddlewarePriority.CHALLENGE
 
+    @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
