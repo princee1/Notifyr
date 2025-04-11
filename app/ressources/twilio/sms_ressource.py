@@ -145,8 +145,8 @@ class IncomingSMSRessource(BaseHTTPRessource):
         
 
 SMS_PREFIX = "sms"
-@HTTPRessource(SMS_PREFIX)
 @IncludeRessource(IncomingSMSRessource,OnGoingSMSRessource)
+@HTTPRessource(SMS_PREFIX)
 class SMSRessource(BaseHTTPRessource):
 
     @UsePermission(JWTRouteHTTPPermission)
@@ -154,4 +154,5 @@ class SMSRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.OPTIONS])
     def options(self,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
-        pass
+        response.status_code = 200
+        return

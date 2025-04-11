@@ -3,6 +3,7 @@ The `BaseResource` class initializes with a `container` attribute assigned from 
 instance imported from `container`.
 """
 from inspect import isclass
+from types import NoneType
 from typing import Any, Callable,Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -668,12 +669,15 @@ def response_decorator(func:Callable):
         
         if isinstance(result,Response):
             ...
-        elif isinstance(result,(dict,list,set)):
+        elif isinstance(result,(dict,list,set,tuple)):
             result = JSONResponse(result,)
 
         elif isinstance(result,(int,str,float,bool)):
             result = PlainTextResponse(str(result))
-
+        
+        elif result == None:
+            result = JSONResponse({},)
+                
         return copy_response(result,response)
 
     return wrapper
