@@ -7,7 +7,7 @@ from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
-from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
+from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
@@ -22,7 +22,7 @@ from app.utils.helper import APIFilterInject
 
 
 
-SMS_ONGOING_PREFIX = 'sms-ongoing'
+SMS_ONGOING_PREFIX = 'ongoing'
 
 
 
@@ -101,7 +101,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
 
 
-SMS_INCOMING_PREFIX = "sms-incoming"
+SMS_INCOMING_PREFIX = "incoming"
 
 @UseRoles([Role.TWILIO])
 @PingService([SMSService])
@@ -140,4 +140,18 @@ class IncomingSMSRessource(BaseHTTPRessource):
 
     @BaseHTTPRessource.HTTPRoute('/error/',methods=[HTTPMethod.POST])
     async def sms_error(self,authPermission=Depends(get_auth_permission)):
+        pass
+
+        
+
+SMS_PREFIX = "sms"
+@HTTPRessource(SMS_PREFIX)
+@IncludeRessource(IncomingSMSRessource,OnGoingSMSRessource)
+class SMSRessource(BaseHTTPRessource):
+
+    @UsePermission(JWTRouteHTTPPermission)
+    @UseLimiter(limit_value="1/hour")
+    @UseRoles([Role.ADMIN])
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.OPTIONS])
+    def options(self,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
         pass

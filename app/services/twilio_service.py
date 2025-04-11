@@ -85,6 +85,7 @@ class TwilioService(_service.Service):
         basic_auth = BasicAuth(account_sid, auth_token)
         async with aiohttp.ClientSession(auth=basic_auth) as session:
             async with session.get(f'https://lookups.twilio.com/v2/PhoneNumbers/{phone_number}?Fields={query}') as response:
+                print(response)
                 data = await response.json()
                 status_code = response.status
                 return status_code,data
@@ -182,7 +183,8 @@ class VoiceService(BaseTwilioCommunication):
         balance = self.call.balance.fetch()
         return {
             'balance': balance.balance,
-            'currency': balance.currency
+            'currency': balance.currency,
+            'solution': balance._solution,
         }
 
     @property

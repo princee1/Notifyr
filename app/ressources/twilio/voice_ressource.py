@@ -14,14 +14,14 @@ from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
 from app.services.twilio_service import  VoiceService
-from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.my_depends import get_task, verify_twilio_token,as_async_query,populate_response_with_request_id
 
 
 
-CALL_ONGOING_PREFIX = 'call-ongoing'
+CALL_ONGOING_PREFIX = 'ongoing'
 
 
 
@@ -47,12 +47,6 @@ class OnGoingCallRessource(BaseHTTPRessource):
         self.contactsService = contactsService
         self.offloadTaskService:OffloadTaskService = Get(OffloadTaskService)
         super().__init__()
-
-    @UseLimiter(limit_value= '100/day')
-    @UseRoles([Role.PUBLIC])
-    @BaseHTTPRessource.Get('/balance/')
-    def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
-        return self.voiceService.fetch_balance()
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
@@ -123,7 +117,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_authenticate(self,request:Request,authPermission=Depends(get_auth_permission)):
         ...
     
-CALL_INCOMING_PREFIX = "call-incoming"
+CALL_INCOMING_PREFIX = "incoming"
 
 @UseRoles([Role.TWILIO])
 @PingService([VoiceService])
@@ -166,3 +160,16 @@ class IncomingCallRessources(BaseHTTPRessource):
     async def voice_error(self,authPermission=Depends(get_auth_permission)):
         pass
 
+
+
+CALL_PREFIX = "call"
+@HTTPRessource(CALL_PREFIX)
+@IncludeRessource(IncomingCallRessources,OnGoingCallRessource)
+class CallRessource(BaseHTTPRessource):
+
+    @UsePermission(JWTRouteHTTPPermission)
+    @UseLimiter(limit_value="1/hour")
+    @UseRoles([Role.ADMIN])
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.OPTIONS])
+    def options(self,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
+        pass
