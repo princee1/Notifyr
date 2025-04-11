@@ -1,3 +1,4 @@
+from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 from app.classes.auth_permission import Role
 from app.container import InjectInMethod
@@ -11,7 +12,6 @@ from app.ressources.twilio.sms_ressource import SMSRessource
 from app.ressources.twilio.voice_ressource import CallRessource
 #from app.ressources.fax_ressource import FaxRessource
 from app.services.twilio_service import TwilioService, VoiceService
-from app.utils.helper import APIFilterInject
 
 
 @UsePermission(JWTRouteHTTPPermission)
@@ -35,8 +35,11 @@ class TwilioRessource(BaseHTTPRessource):
     @UseLimiter(limit_value= '10/day')
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/lookup/{phone_number}',methods=[HTTPMethod.GET])
-    async def phone_lookup(self,phone_number:str,request:Request,authPermission=Depends(get_auth_permission),carrier:bool=Depends(carrier_info),callee:bool=Depends(callee_info)):
-        if not carrier and not carrier:
+    async def phone_lookup(self,phone_number:str,request:Request,carrier:Annotated[bool,Depends(carrier_info)],callee:Annotated[bool,Depends(callee_info)],authPermission=Depends(get_auth_permission)):
+        if not carrier and not callee:
             raise HTTPException(status_code=400,detail="At least one of carrier or callee must be true")
         
-        return await self.twilioService.phone_lookup(phone_number,carrier,callee)
+        status_code, body = await self.twilioService.async_phone_lookup(phone_number,True,True)
+        if status_code != 200:
+            raise HTTPException(status_code=status_code, detail=body)
+        return body

@@ -68,7 +68,20 @@ class TwilioService(_service.Service):
 
         return status_code
 
-    async def phone_lookup(self, phone_number: str,carrier=True,caller_name=False) -> tuple[int, dict]:
+    async def async_phone_lookup(self, phone_number: str,carrier=True,caller_name=False) -> tuple[int, dict]:
+        phone_number, query = self._parse_phone_and_query(phone_number, carrier, caller_name)    
+        query = ','.join(query)
+
+        account_sid = self.configService.TWILIO_ACCOUNT_SID
+        auth_token = self.configService.TWILIO_AUTH_TOKEN
+        basic_auth = BasicAuth(account_sid, auth_token)
+        async with aiohttp.ClientSession(auth=basic_auth) as session:
+            async with session.get(f'https://lookups.twilio.com/v1/PhoneNumbers/{phone_number}?Type={query}') as response:
+                body = await response.json()
+                status_code = response.status
+                return status_code,body
+
+    def _parse_phone_and_query(self, phone_number, carrier, caller_name):
         phone_number = self.parse_to_phone_format(phone_number)
 
         query = []
@@ -78,18 +91,22 @@ class TwilioService(_service.Service):
         if caller_name:
             query.append('caller_name')
 
-        query = ','.join(query)    
-    
-        account_sid = self.configService.TWILIO_ACCOUNT_SID
-        auth_token = self.configService.TWILIO_AUTH_TOKEN
-        basic_auth = BasicAuth(account_sid, auth_token)
-        async with aiohttp.ClientSession(auth=basic_auth) as session:
-            async with session.get(f'https://lookups.twilio.com/v2/PhoneNumbers/{phone_number}?Fields={query}') as response:
-                print(response)
-                data = await response.json()
-                status_code = response.status
-                return status_code,data
+        # if adds_ons:
+        #     query.append('add_ons')
 
+        return phone_number,query
+
+    def phone_lookup(self, phone_number: str, carrier=True, caller_name=False) -> tuple[int, dict]:
+        phone_number, query = self._parse_phone_and_query(phone_number, carrier, caller_name)
+        phone_number_instance = self.client.lookups.phone_numbers(phone_number).fetch(type=query)
+        return {
+            'phone_number': phone_number_instance.phone_number,
+            'country_code': phone_number_instance.country_code,
+            'national_format': phone_number_instance.national_format,
+            'carrier': phone_number_instance.carrier,
+            'caller_name': phone_number_instance.caller_name,
+            'adds_ons': phone_number_instance.add_ons,
+        }
 
 @_service.AbstractServiceClass
 class BaseTwilioCommunication(_service.Service):

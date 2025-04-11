@@ -53,7 +53,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
     @UseHandler(TemplateHandler)
     @UsePermission(JWTAssetPermission('sms'))
-    @UseGuard(CarrierTypeGuard(False))
+    @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST])
     async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
         smsTemplate:SMSTemplate = self.assetService.sms[template]
@@ -67,7 +67,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseHandler(CeleryTaskHandler)
     @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(OffloadedTaskResponsePipe,before=False)
-    @UseGuard(CarrierTypeGuard(False))
+    @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission),):
@@ -81,7 +81,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(OffloadedTaskResponsePipe,before=False)
     @UsePermission(JWTAssetPermission('sms'))
-    @UseGuard(CarrierTypeGuard(False))
+    @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UseGuard(CeleryTaskGuard(['task_send_template_sms']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
