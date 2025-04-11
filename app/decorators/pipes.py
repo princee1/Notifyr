@@ -17,9 +17,10 @@ from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioService
-from app.utils.helper import copy_response
+from app.utils.helper import AsyncAPIFilterInject, copy_response
 from app.utils.validation import phone_number_validator
 from app.utils.helper import APIFilterInject
+from app.depends.variables import parse_to_phone_format
 
 @APIFilterInject
 async def _to_otp_path(template:str):
@@ -250,4 +251,11 @@ class OffloadedTaskResponsePipe(Pipe):
         return response
 
     
-        
+
+@AsyncAPIFilterInject
+async def parse_phone_number(phone_number:str) -> str:
+    """
+    Parse the phone number to the E.164 format.
+    """
+    twilioService:TwilioService = Get(TwilioService)
+    return twilioService.parse_to_phone_format(phone_number)        
