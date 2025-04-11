@@ -258,4 +258,8 @@ async def parse_phone_number(phone_number:str) -> str:
     Parse the phone number to the E.164 format.
     """
     twilioService:TwilioService = Get(TwilioService)
-    return twilioService.parse_to_phone_format(phone_number)        
+    phone_number= twilioService.parse_to_phone_format(phone_number)       
+    return {
+        'phone_number':phone_number
+    }
+

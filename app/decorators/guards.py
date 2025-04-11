@@ -187,7 +187,7 @@ class CarrierTypeGuard(Guard):
         else:
             phone_number = scheduler.content.to
 
-        status_code,data = await self.twilioService.phone_lookup(phone_number,True)
+        status_code,data = await self.twilioService.async_phone_lookup(phone_number,True)
         if status_code != 200:
             return False,'Callee Information not found'
         
@@ -196,6 +196,9 @@ class CarrierTypeGuard(Guard):
             return False,'Carrier Information not found'
 
         carrier_type = carrier.get('type','unknown')
+        if carrier_type ==None:
+            carrier_type = 'unknown'
+            
 
         if carrier_type == 'voip' and not self.accept_voip:
             return False,'Carrier Type is Voip'

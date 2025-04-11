@@ -1,5 +1,7 @@
 
 from typing import Callable
+
+from fastapi import Request
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
 from app.services.celery_service import TaskService
@@ -27,6 +29,8 @@ ttl_query:Callable=get_query_params('ttl','60',True)
 
 get_task_results:Callable= get_query_params('get_task_results','true',True)
 
-carrier_info:Callable=get_query_params('carrier_info','true',True,False)
+carrier_info:Callable[[Request],bool]=get_query_params('carrier_info','true',True)
 
-callee_info:Callable=get_query_params('callee_info','false',False,False)
+callee_info:Callable[[Request],bool]=get_query_params('callee_info','false',True)
+
+add_ons:Callable[[Request],bool]=get_query_params('add_ons','false',True)
