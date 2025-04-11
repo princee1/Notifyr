@@ -54,6 +54,8 @@ exports.handler = async function (context, event, callback) {
   
   let url = String(service.url);
   let body;
+  
+  console.log(event);
 
   if (type === CALL_TYPE) {
     url += "/call-incoming/status";
@@ -64,8 +66,8 @@ exports.handler = async function (context, event, callback) {
   } else {
 
   }
-  console.log(body);
-  await service.sendLogStatus(body, url);
+ 
+  // await service.sendLogStatus(body, url);
 
   // return callback(null,{})
 };
