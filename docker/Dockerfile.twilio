@@ -1,0 +1,32 @@
+FROM node:20.19.0-slim
+
+RUN apt-get update && apt-get install -y make
+
+RUN useradd -m twilio_usr
+
+USER twilio_usr
+
+RUN wget -qO- https://twilio-cli-prod.s3.amazonaws.com/twilio_pub.asc | sudo apt-key add -
+
+RUN sudo touch /etc/apt/sources.list.d/twilio.list
+
+RUN echo 'deb https://twilio-cli-prod.s3.amazonaws.com/apt/ /' | sudo tee /etc/apt/sources.list.d/twilio.list
+
+RUN sudo apt update
+
+RUN sudo apt install -y twilio
+
+RUN twilio --version
+
+WORKDIR /usr/src/
+
+COPY ./twilio ./twilio/
+
+
+RUN wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip
+
+RUN sudo apt install unzip -y
+
+RUN unzip ngrok-stable-linux-amd64.zip
+
+RUN sudo mv ngrok /usr/local/bin
