@@ -3,7 +3,7 @@ from fastapi import Depends, Header, Request, Response
 from app.classes.auth_permission import Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
 from app.classes.template import SMSTemplate
-from app.decorators.guards import CeleryTaskGuard
+from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
@@ -52,8 +52,8 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(_to_otp_path)
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
     @UseHandler(TemplateHandler)
-    #@UsePipe(OffloadedTaskResponsePipe,before=False)
-    #@UsePermission(JWTAssetPermission('sms'))
+    @UsePermission(JWTAssetPermission('sms'))
+    @UseGuard(CarrierTypeGuard(False))
     @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST])
     async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
         smsTemplate:SMSTemplate = self.assetService.sms[template]
@@ -67,6 +67,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseHandler(CeleryTaskHandler)
     @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(OffloadedTaskResponsePipe,before=False)
+    @UseGuard(CarrierTypeGuard(False))
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission),):
@@ -80,6 +81,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(OffloadedTaskResponsePipe,before=False)
     @UsePermission(JWTAssetPermission('sms'))
+    @UseGuard(CarrierTypeGuard(False))
     @UseGuard(CeleryTaskGuard(['task_send_template_sms']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):

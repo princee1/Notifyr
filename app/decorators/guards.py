@@ -3,6 +3,7 @@ from app.classes.auth_permission import AuthPermission, RefreshPermission
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.assets_service import AssetService
@@ -166,4 +167,40 @@ class BlacklistClientGuard(Guard):
     async def guard(self,client:ClientORM):
         if await self.adminService.is_blacklisted(client):
             return False,'Client is blacklisted'
+        return True,''
+    
+
+class CarrierTypeGuard(Guard):
+
+    def __init__(self,accept_landline:bool,accept_voip:bool=False,accept_unknown:bool=False,):
+        super().__init__()
+        self.twilioService:TwilioService = Get(TwilioService)
+        self.accept_voip = accept_voip
+        self.accept_unknown = accept_unknown
+        self.accept_landline = accept_landline
+    
+    async def guard(self,otpModel:OTPModel=None,contact:ContactORM=None,scheduler:SchedulerModel=None):
+        if otpModel != None:
+            phone_number = otpModel.to
+        elif contact != None:
+            phone_number = contact.phone
+        else:
+            phone_number = scheduler.content.to
+
+        status_code,data = await self.twilioService.phone_lookup(phone_number,True)
+        if status_code != 200:
+            return False,'Callee Information not found'
+        
+        carrier= data.get('carrier',None)
+        if carrier == None:
+            return False,'Carrier Information not found'
+
+        carrier_type = carrier.get('type','unknown')
+
+        if carrier_type == 'voip' and not self.accept_voip:
+            return False,'Carrier Type is Voip'
+        if carrier_type == 'landline' and not self.accept_landline:
+            return False,'Carrier Type is Landline'
+        if carrier_type == 'unknown' and not self.accept_unknown:
+            return False,'Carrier Type is Unknown'
         return True,''
