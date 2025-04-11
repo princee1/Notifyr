@@ -29,8 +29,19 @@ ttl_query:Callable=get_query_params('ttl','60',True)
 
 get_task_results:Callable= get_query_params('get_task_results','true',True)
 
+# ----------------------------------------------                                    ---------------------------------- #
+
 carrier_info:Callable[[Request],bool]=get_query_params('carrier_info','true',True)
 
 callee_info:Callable[[Request],bool]=get_query_params('callee_info','false',True)
 
 add_ons:Callable[[Request],bool]=get_query_params('add_ons','false',True)
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+verify_otp:Callable[[Request],bool]=get_query_params('verify_otp','false',True)
+"""
+    Allow twilio to Verify the user input
+"""
+
+keep_connection:Callable[[Request],bool]=get_query_params('keep_connection','false',True)

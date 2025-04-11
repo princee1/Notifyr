@@ -7,7 +7,7 @@ from typing import Annotated, Callable, Coroutine
 from fastapi import HTTPException, Header, Request
 from app.classes.template import SMSTemplate
 from app.definition import _service
-from app.models.otp_model import OTPModel
+from app.models.otp_model import GatherDtmfOTPModel, OTPModel
 from app.services.assets_service import AssetService
 from app.services.logger_service import LoggerService
 from .config_service import ConfigService
@@ -117,8 +117,11 @@ class BaseTwilioCommunication(_service.Service):
         self.assetService = assetService
 
         mode = self.configService['TWILIO_MODE']
-        self.url = self.configService.TWILIO_PROD_URL if mode == "prod" else self.configService.TWILIO_TEST_URL
-        self.url += "/logs"
+        self.twilio_url = self.configService.TWILIO_PROD_URL if mode == "prod" else self.configService.TWILIO_TEST_URL
+        
+        self.logs_url = self.twilio_url + "status/logs"
+        self.partial_results_url = self.twilio_url + "status/partial-results"
+
 
     @staticmethod
     def parse_to_json(func: Callable):
@@ -146,7 +149,7 @@ class SMSService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
         super().__init__(configService, twilioService, assetService)
-        self.status_callback = self.url + '?type=sms'
+        self.status_callback = self.logs_url + '?type=sms'
 
     def response_extractor(self, message: MessageInstance) -> dict:
         return {
@@ -191,7 +194,8 @@ class VoiceService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
         super().__init__(configService, twilioService, assetService)
-        self.status_callback = self.url + '?type=call'
+        self.status_callback = self.logs_url + '?type=call'
+        self.gather_url = self.twilio_url + 'gather'
 
     def build(self):
         self.call = self.twilioService.client
@@ -225,39 +229,79 @@ class VoiceService(BaseTwilioCommunication):
         }
 
     @BaseTwilioCommunication.parse_to_json
-    def send_otp_voice_call(self, body: str, otp: OTPModel):
+    def send_otp_voice_call(self, body: str, otp: OTPModel,as_async: bool = False):
         call = {}
         call.update(otp.model_dump(exclude=('content')))
         call['twiml'] = body
-        return self._create_call(call)
+        return self._create_call(call,as_async)
 
     @BaseTwilioCommunication.parse_to_json
-    def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict):
+    def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,as_async: bool = False):
         voiceResponse = VoiceResponse()
         voiceResponse.say(body, voice, loop, lang)
         call['twiml'] = voiceResponse
-        return self._create_call(call)
+        return self._create_call(call,as_async)
 
     @BaseTwilioCommunication.parse_to_json
-    def send_twiml_voice_call(self, url: str, call_details: dict):
+    def send_twiml_voice_call(self, url: str, call_details: dict,as_async: bool = False):
         call_details['url'] = url
-        return self._create_call(call_details)
+        return self._create_call(call_details,as_async)
 
     @BaseTwilioCommunication.parse_to_json
-    def send_template_voice_call(self, result: str, call_details: dict):
+    def send_template_voice_call(self, result: str, call_details: dict,as_async: bool = False):
         call_details['twiml'] = result
-        return self._create_call(call_details)
+        return self._create_call(call_details,as_async)
 
-    def _create_call(self, details: dict):
+    def _create_call(self, details: dict,as_async: bool = False):
         return self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=self.status_callback, status_callback_event=VoiceService.status_callback_event)
 
     def update_voice_call(self):
         ...
 
-    def gather_dtmf(self, otpModel: OTPModel):
-        ...
+    def gather_dtmf(self, otpModel: GatherDtmfOTPModel,verify:bool=False):
+        
+        otp = otpModel.otp
+        service = otpModel.service if otpModel.service else '-1'
+        content = otpModel.content.model_dump(exclude={'remove_base_instruction','add_instructions','add_finish_key_phrase','no_input_instruction'})
+        input_='dtmf'
+        response = VoiceResponse()
+        result_url:str =''
+        if verify:
+            result_url += f'?service={service}&otp={otp}&return_url=-1'
+        
+        gather = Gather(action=self.gather_url+f'/{input_}'+result_url, method='POST',input=input_,**content)
+        
+        if otpModel.content.add_instructions:
+            for instruction in otpModel.content.add_instructions:
+                type_,value = instruction.type,instruction.value
+                if type_ == 'say':
+                    gather.say(message=value,language=otpModel.content.language)
+                elif type_ == 'play':
+                    gather.play(url=value)
+                elif type_ == 'pause':
+                    gather.pause(length=value)
 
+        base_instructions = ""
+        if not otpModel.content.remove_base_instruction:
+            base_instructions += "Hi, please enter the digits of your OTP for the service {service}."
 
+        if otpModel.content.add_finish_key_phrase:
+            base_instructions += f"Press {otpModel.content.finishOnKey} when finished entered the digits."
+        
+        if len(base_instructions)>1:
+            gather.say(message=base_instructions,language=otpModel.content.language)
+
+        response.append(gather)
+        if otpModel.content.no_input_instruction:
+            say = Say(message=otpModel.content.no_input_instruction,language=otpModel.content.language)
+        
+        else:
+            say = Say(message='Please enter your OTP',language=otpModel.content.language)
+        response.append(say)
+
+        return response
+    
+    
 @_service.ServiceClass
 class FaxService(BaseTwilioCommunication):
 
