@@ -5,15 +5,12 @@ Module to easily manage retrieving user information from the request object.
 from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request, Response,status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
+from app.services.config_service import ConfigService
 from app.utils.constant import HTTPHeaderConstant
 from app.utils.helper import parse_value, reverseDict
-from app.container import GetAttr
-from app.services.config_service import ConfigService
-import asyncio
+from app.container import Get
 
-
-SECURITY_FLAG=GetAttr(ConfigService,'SECURITY_FLAG')
-
+configService:ConfigService = Get(ConfigService)
 
 D = TypeVar('D',bound=type)
 
@@ -88,14 +85,14 @@ def get_admin_token(request: Request = None):
     return APIKeyHeader(name=HTTPHeaderConstant.ADMIN_KEY)
 
 async def get_auth_permission(request: Request):
-    if not SECURITY_FLAG:
+    if not configService.SECURITY_FLAG:
         return None
     if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.authPermission
 
 async def get_client_from_request(request:Request):
-    if not SECURITY_FLAG:
+    if not configService.SECURITY_FLAG:
         return None
 
     if not hasattr(request.state, "client") or request.state.client is None:

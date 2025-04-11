@@ -26,7 +26,7 @@ from slowapi.util import get_remote_address,get_ipaddr
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
-from app.depends.dependencies import SECURITY_FLAG
+from app.depends.variables import SECURITY_FLAG
 
 
 

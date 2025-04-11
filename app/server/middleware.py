@@ -12,9 +12,9 @@ from fastapi import HTTPException, Request, Response, FastAPI,status
 from typing import Any, Awaitable, Callable, MutableMapping
 import time
 from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
-from app.depends.dependencies import get_api_key, get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id,SECURITY_FLAG
+from app.depends.dependencies import get_api_key, get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
 from cryptography.fernet import InvalidToken
-
+from app.depends.variables import SECURITY_FLAG
 from app.utils.helper import generateId
 from app.depends.my_depends import GetClient
 

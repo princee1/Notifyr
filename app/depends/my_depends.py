@@ -1,19 +1,18 @@
 import functools
 from typing import Annotated, Callable
-from fastapi import Depends, HTTPException, Header, Query, Request, status
+from fastapi import Depends, HTTPException, Header, Query,status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role
-from app.container import Get, GetAttr, GetDependsFunc
-from app.errors.security_error import ClientDoesNotExistError
+from app.classes.auth_permission import AuthPermission, ContactPermission, Role
+from app.container import Get, GetAttr
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.services.twilio_service import TwilioService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from tortoise.exceptions import OperationalError
+from .variables import *
 
 def AcceptNone(key):
 
@@ -108,9 +107,6 @@ def GetClient(bypass: bool = False, accept_admin: bool = False, skip: bool = Fal
     return _get_client
 
 
-verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_token')
-
-populate_response_with_request_id: Callable = GetDependsFunc(TaskService,'populate_response_with_request_id')
 
 async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(get_auth_permission)) -> ContactORM:
 
@@ -265,12 +261,6 @@ async def _get_blacklist(blacklist_id:str=None):
 async def get_blacklist(blacklist_id:str=Depends(get_query_params('blacklist_id', None))):
     return await _get_blacklist(blacklist_id=blacklist_id)
 
-as_async_query = get_query_params('background','false',True)
-runtype_query=get_query_params('runtype','concurrent',False,checker=lambda v: v in ['parallel','concurrent'])
-save_results_query=get_query_params('save','false',True)
-ttl_query=get_query_params('ttl','60',True)
-
-get_task_results= get_query_params('get_task_results','true',True)
 
 async def get_task(request_id:str=Depends(get_request_id),as_async:bool=Depends(as_async_query),runtype:RunType=Depends(runtype_query),ttl=Depends(ttl_query),save=Depends(save_results_query),return_results=Depends(get_task_results)):
     taskService:TaskService = Get(TaskService)

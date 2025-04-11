@@ -359,7 +359,7 @@ def phone_parser(phone_number:str):
     cleaned_number = ''.join(filter(str.isdigit, converted_number))
 
     if not cleaned_number.startswith('1'):
-        cleaned_number = '1' + cleaned_number
+        cleaned_number = '1' + cleaned_number # ERROR Assuming US OR CA country code
 
     formatted_number = f"+{cleaned_number}"
     return formatted_number
