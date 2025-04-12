@@ -6,6 +6,7 @@ from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
+from app.depends.my_depends import KeepAliveQuery
 from app.models.contacts_model import Status
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
@@ -250,6 +251,15 @@ class OffloadedTaskResponsePipe(Pipe):
         
         return response
 
+
+class KeepAliveResponsePipe(Pipe):
+    def __init__(self, before):
+        super().__init__(before)
+    
+    def pipe(self, result:Any|Response,keepAliveQuery:KeepAliveQuery):
+        keepAliveQuery.dispose()
+        # TODO add headers and status code
+        return result
     
 
 @AsyncAPIFilterInject

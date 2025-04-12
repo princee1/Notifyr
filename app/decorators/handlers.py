@@ -1,6 +1,8 @@
+from asyncio import CancelledError
 from typing import Callable
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateNotFoundError, TemplateValidationError
+from app.container import InjectInMethod
 from app.definition._error import BaseError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
 from app.definition._service import MethodServiceNotExistsError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
@@ -17,6 +19,8 @@ from twilio.base.exceptions import TwilioRestException
 
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
 from requests.exceptions import SSLError, Timeout
+
+from app.services.logger_service import LoggerService
 
 
 class ServiceAvailabilityHandler(Handler):
@@ -348,3 +352,24 @@ class ValueErrorHandler(Handler):
 
 class MotorErrorHandler(Handler):
     ...
+
+
+class AsyncIOHandler(Handler):
+
+    @InjectInMethod
+    def __init__(self, loggerService: LoggerService):
+        super().__init__()
+        self.loggerService = loggerService
+        self.prettyPrinter = self.loggerService.prettyPrinter
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        
+        except CancelledError as e:
+            ...
+    
+        except TimeoutError as e:
+            raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail={
+                'message': 'Request timed out',
+            })
