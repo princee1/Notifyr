@@ -288,15 +288,15 @@ class KeepAliveQuery:
         self.subscription = None
         self.start_time = perf_counter()
 
+        self.reactiveService: ReactiveService = Get(ReactiveService)
+
     def create_subject(self, reactiveType: ReactiveType):
 
         if self.keep_alive:
-            reactiveService: ReactiveService = Get(ReactiveService)
-            rx_subject = reactiveService.create_subject(
-                self.x_request_id, reactiveType)
+            rx_subject = self.reactiveService.create_subject(self.x_request_id, reactiveType)
             rx_id = rx_subject.id_
 
-            self.subscription = reactiveService.subscribe(
+            self.subscription = self.reactiveService.subscribe(
                 rx_id,
                 on_next=self.on_next,
                 on_error=self.on_error,
@@ -314,17 +314,21 @@ class KeepAliveQuery:
         self.error = e
         setattr(self.error, 'process_time', self.process_time)
 
+    def register_lock(self):
+        self.rx_subject.register_lock(self.x_request_id)
+
     def dispose(self):
 
         if self.subscription:
             self.subscription.dispose()
             self.subscription = None
-
+        
         self.process_time = perf_counter() - self.start_time
+        self.rx_subject.dispose_lock(self.x_request_id)
 
     async def wait_for(self, result_to_return: Any = None, coerce: str = None):
         if self.keep_alive:
-            await self.rx_subject.wait_for(self.timeout, result_to_return)
+            await self.rx_subject.wait_for(self.x_request_id,self.timeout, result_to_return)
             if self.error != None:
                 raise self.error
             key = 'value' if coerce == None else coerce

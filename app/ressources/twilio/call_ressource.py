@@ -74,11 +74,15 @@ class OnGoingCallRessource(BaseHTTPRessource):
         if not otpModel.otp:
             raise HTTPException(status_code=400, detail="OTP is required")
 
-        rx_subject = keepAliveConn.create_subject('HTTP')
-        result = self.callService.gather_dtmf(otpModel, rx_subject.id_, keepAliveConn.x_request_id)
-        call_results = self.callService.send_template_voice_call(result, {})
-        results = await keepAliveConn.wait_for(call_results, 'verified')
-        return results
+        rx_id = keepAliveConn.create_subject('HTTP')
+        keepAliveConn.register_lock()
+        
+        result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
+        call_details = otpModel.model_dump(exclude={'otp', 'content','service'})
+        call_results = self.callService.send_template_voice_call(result, call_details)
+
+        return await keepAliveConn.wait_for(call_results, 'verified')
+   
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.RELAY])
@@ -132,12 +136,14 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseHandler(AsyncIOHandler)
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], dependencies=[Depends(populate_response_with_request_id)],mount=False)
     async def voice_authenticate(self, request: Request, response: Response, client: Annotated[ClientORM, Depends(get_client)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
+
         rx_id = keepAliveConn.create_subject('HTTP')
+        keepAliveConn.register_lock()
+
         result = self.callService.gather_speech(rx_id)
         call_results = self.callService.send_template_voice_call(result, {})
-        results = await keepAliveConn.wait_for(call_results,'verified')
-        return results
 
+        return await keepAliveConn.wait_for(call_results,'verified')
 
 
 CALL_INCOMING_PREFIX = "incoming"
