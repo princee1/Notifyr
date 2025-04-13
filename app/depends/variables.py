@@ -25,8 +25,6 @@ runtype_query:Callable=get_query_params('runtype','concurrent',False,checker=lam
 
 save_results_query:Callable=get_query_params('save','false',True)
 
-ttl_query:Callable=get_query_params('ttl','60',True)
-
 get_task_results:Callable= get_query_params('get_task_results','true',True)
 
 # ----------------------------------------------                                    ---------------------------------- #
