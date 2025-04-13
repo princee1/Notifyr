@@ -277,7 +277,7 @@ async def get_task(request_id: str = Depends(get_request_id), as_async: bool = D
 
 class KeepAliveQuery:
 
-    def __init__(self, response: Response, x_request_id: Annotated[str, Depends(get_request_id)], keep_alive: Annotated[bool, Depends(keep_connection)], timeout: int = Query(5, description="Time in seconds to delay the response", ge=5, le=60)):
+    def __init__(self, response: Response, x_request_id: Annotated[str, Depends(get_request_id)], keep_alive: Annotated[bool, Depends(keep_connection)], timeout: int = Query(5, description="Time in seconds to delay the response", ge=5, le=60*3)):
         self.timeout = timeout
         self.response = response
         self.x_request_id = x_request_id

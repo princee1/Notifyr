@@ -195,7 +195,7 @@ class CallService(BaseTwilioCommunication):
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
         super().__init__(configService, twilioService, assetService)
         self.status_callback = self.logs_url + '?type=call'
-        self.gather_url = self.twilio_url + 'gather'
+        self.gather_url = self.twilio_url + '/gather'
 
     def build(self):
         self.call = self.twilioService.client
@@ -263,8 +263,8 @@ class CallService(BaseTwilioCommunication):
         service = otpModel.service if otpModel.service else '-1'
         content = otpModel.content.model_dump(exclude={'remove_base_instruction','add_instructions','add_finish_key_phrase','no_input_instruction'})
         response = VoiceResponse()
-        result_url= f'?service={service}&otp={otp}&return_url=-1&subject_id={subject_id}&contact=-1'
-        gather = Gather(action=self.gather_url+f'/dtmf'+result_url, method='POST',input='dtmf',**content)
+        action_url = self.gather_url+f'/dtmf'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}'
+        gather = Gather(action=action_url, method='GET',input='dtmf',**content)
         
         if otpModel.content.add_instructions:
             for instruction in otpModel.content.add_instructions:

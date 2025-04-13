@@ -294,8 +294,7 @@ class SecurityService(Service, EncryptDecryptInterface):
         stored_hash = b64_decode(stored_hash)
         stored_salt = bytes(stored_salt.encode())
         # stored_salt = b64_decode(stored_salt)
-        hashed_provided_password = self.hash_value_with_salt(
-            provided_password, key, stored_salt)
+        hashed_provided_password = self.hash_value_with_salt(provided_password, key, stored_salt)
         return hmac.compare_digest(stored_hash, hashed_provided_password)
     
     def verify_admin_signature(self,):
