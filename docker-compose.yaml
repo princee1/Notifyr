@@ -129,8 +129,23 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  
 
-
+  twilio:
+    image: node:20.19.0-slim
+    container_name: local-twilio
+    restart: always
+    build:
+      context: ./docker/
+      dockerfile: Dockerfile.twilio
+    ports:
+      - "3000:3000"
+  
+    environment:
+      - NGROK_TOKEN=${NGROK_TOKEN}
+      - NGROK_URL=${NGROK_URL}
+    
+    
 volumes:
   mongo-data:
     driver: local

@@ -18,11 +18,6 @@ RUN sudo apt install -y twilio
 
 RUN twilio --version
 
-WORKDIR /usr/src/
-
-COPY ./twilio ./twilio/
-
-
 RUN wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip
 
 RUN sudo apt install unzip -y
@@ -30,3 +25,14 @@ RUN sudo apt install unzip -y
 RUN unzip ngrok-stable-linux-amd64.zip
 
 RUN sudo mv ngrok /usr/local/bin
+
+RUN twilio --version
+
+WORKDIR /usr/src/
+
+COPY ./twilio/ ./
+
+RUN make install
+
+RUN make serve
+

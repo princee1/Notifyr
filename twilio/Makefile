@@ -5,3 +5,6 @@ deploy:
 
 serve:
 	cd ${service} && twilio serverless:start
+
+install:
+	cd ${service} && npm install
