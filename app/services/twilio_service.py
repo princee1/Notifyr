@@ -259,7 +259,6 @@ class CallService(BaseTwilioCommunication):
         ...
 
     def gather_dtmf(self, otpModel: GatherDtmfOTPModel,subject_id:str,request_id:str):
-        # TODO make it more general
         otp = otpModel.otp
         service = otpModel.service if otpModel.service else '-1'
         content = otpModel.content.model_dump(exclude={'remove_base_instruction','add_instructions','add_finish_key_phrase','no_input_instruction'})
@@ -277,22 +276,20 @@ class CallService(BaseTwilioCommunication):
                 elif type_ == 'pause':
                     gather.pause(length=value)
 
-        base_instructions = ""
         if not otpModel.content.remove_base_instruction:
-            base_instructions += f"Hi, please enter the digits of your OTP for the service {service}."
+            base_instructions = f"Hi, please enter the digits of your OTP for the service {service}."
+            gather.say(message=base_instructions,language=otpModel.content.language)
 
         if otpModel.content.add_finish_key_phrase:
-            base_instructions += f"Press {otpModel.content.finishOnKey} when finished entered the digits."
-        
-        if len(base_instructions)>1:
+            base_instructions = f"Press {otpModel.content.finishOnKey} when finished entered the digits."
             gather.say(message=base_instructions,language=otpModel.content.language)
 
         response.append(gather)
         if otpModel.content.no_input_instruction:
             say = Say(message=otpModel.content.no_input_instruction,language=otpModel.content.language)
-        
         else:
-            say = Say(message='Please enter your OTP',language=otpModel.content.language)
+            say = Say(message='We could not verify the otp at the given please retry later',language=otpModel.content.language)
+            
         response.append(say)
 
         return response

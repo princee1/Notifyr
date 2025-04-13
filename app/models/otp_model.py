@@ -57,6 +57,7 @@ class GatherDtmfContent(DTMFConfig):
     add_finish_key_phrase:bool = True
     no_input_instruction:str = None
 
+    @field_validator("no_input_instruction")
     def check_instructions_len(cls, instructions:str) -> str:
         if len(instructions) > 500:
             raise ValueError("Instructions length should not exceed 500 characters")
@@ -64,5 +65,11 @@ class GatherDtmfContent(DTMFConfig):
     
 class GatherDtmfOTPModel(OTPModel):
     content:GatherDtmfContent
-    otp:str=None
+    otp:str
     service:str = None
+
+    @model_validator(mode="after")
+    def check_len_otp(self) -> Self:
+        if len(self.otp) > self.content.numDigits:
+            raise ValueError(f"OTP length should not exceed {self.content.numDigits} characters")
+        return self
