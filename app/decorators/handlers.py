@@ -11,7 +11,7 @@ from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
 
-from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError
+from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
@@ -395,3 +395,14 @@ class AsyncIOHandler(Handler):
                 'message': 'Request timed out',
                 'result':result
             })
+    
+class ReactiveHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except ReactiveSubjectNotFoundError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={
+                'message':'subject id not found'
+            })
+
