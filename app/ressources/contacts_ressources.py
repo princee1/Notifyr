@@ -16,7 +16,7 @@ from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.services.twilio_service import SMSService, VoiceService
+from app.services.twilio_service import SMSService, CallService
 from app.depends.dependencies import get_auth_permission, get_contact_token
 from app.decorators.pipes import ContactStatusPipe, RelayPipe
 
@@ -177,7 +177,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 
     @UsePermission(JWTContactPermission('create'))
     @UseGuard(RegisteredContactsGuard)
-    @PingService([CeleryService,VoiceService,EmailSenderService])
+    @PingService([CeleryService,CallService,EmailSenderService])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
     async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
         # TODO Request from the user

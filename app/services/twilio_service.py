@@ -189,7 +189,7 @@ class SMSService(BaseTwilioCommunication):
 
 
 @_service.ServiceClass
-class VoiceService(BaseTwilioCommunication):
+class CallService(BaseTwilioCommunication):
     status_callback_event = ['initiated', 'ringing', 'answered', 'completed']
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
@@ -253,7 +253,7 @@ class VoiceService(BaseTwilioCommunication):
         return self._create_call(call_details,as_async)
 
     def _create_call(self, details: dict,as_async: bool = False):
-        return self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=self.status_callback, status_callback_event=VoiceService.status_callback_event)
+        return self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=self.status_callback, status_callback_event=CallService.status_callback_event)
 
     def update_voice_call(self):
         ...

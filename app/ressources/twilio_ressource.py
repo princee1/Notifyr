@@ -9,9 +9,9 @@ from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource
 from app.depends.dependencies import get_auth_permission
 from app.depends.variables import parse_to_phone_format,carrier_info,callee_info
 from app.ressources.twilio.sms_ressource import SMSRessource
-from app.ressources.twilio.voice_ressource import CallRessource
+from app.ressources.twilio.call_ressource import CallRessource
 #from app.ressources.fax_ressource import FaxRessource
-from app.services.twilio_service import TwilioService, VoiceService
+from app.services.twilio_service import TwilioService, CallService
 
 
 @UsePermission(JWTRouteHTTPPermission)
@@ -20,16 +20,16 @@ from app.services.twilio_service import TwilioService, VoiceService
 class TwilioRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self,twilioService:TwilioService,voiceService:VoiceService) -> None:
+    def __init__(self,twilioService:TwilioService,callService:CallService) -> None:
         super().__init__()
         self.twilioService = twilioService
-        self.voiceService = voiceService
+        self.callService = callService
 
     @UseLimiter(limit_value= '1000/day')
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/balance/',methods=[HTTPMethod.GET])
     def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
-        return self.voiceService.fetch_balance()
+        return self.callService.fetch_balance()
     
     @UsePipe(parse_phone_number)
     @UseLimiter(limit_value= '10/day')

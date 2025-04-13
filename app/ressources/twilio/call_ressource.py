@@ -16,7 +16,7 @@ from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService
-from app.services.twilio_service import VoiceService
+from app.services.twilio_service import CallService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
@@ -38,15 +38,15 @@ class CallCustomSchedulerModel(SchedulerModel):
     content: OnGoingCustomVoiceCallModel
 
 
-@PingService([VoiceService])
+@PingService([CallService])
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CALL_ONGOING_PREFIX)
 class OnGoingCallRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, voiceService: VoiceService, chatService: ChatService, contactsService: ContactsService) -> None:
-        self.voiceService = voiceService
+    def __init__(self, callService: CallService, chatService: ChatService, contactsService: ContactsService) -> None:
+        self.callService = callService
         self.chatService = chatService
         self.contactsService = contactsService
         self.offloadTaskService: OffloadTaskService = Get(OffloadTaskService)
@@ -62,7 +62,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     def voice_relay_otp(self, template: str, otpModel: OTPModel, request: Request, authPermission=Depends(get_auth_permission)):
         phoneTemplate: PhoneTemplate = self.assetService.phone[template]
         _, body = phoneTemplate.build(otpModel.content, ...)
-        return self.voiceService.send_otp_voice_call(body, otpModel)
+        return self.callService.send_otp_voice_call(body, otpModel)
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
@@ -75,8 +75,8 @@ class OnGoingCallRessource(BaseHTTPRessource):
             raise HTTPException(status_code=400, detail="OTP is required")
 
         rx_subject = keepAliveConn.create_subject('HTTP')
-        result = self.voiceService.gather_dtmf(otpModel, rx_subject.id_, keepAliveConn.x_request_id)
-        call_results = self.voiceService.send_template_voice_call(result, {})
+        result = self.callService.gather_dtmf(otpModel, rx_subject.id_, keepAliveConn.x_request_id)
+        call_results = self.callService.send_template_voice_call(result, {})
         results = await keepAliveConn.wait_for(call_results, 'verified')
         return results
 
@@ -92,7 +92,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         content = scheduler.content.model_dump()
         phoneTemplate: PhoneTemplate = self.assetService.phone[template]
         _, result = phoneTemplate.build(content, ...)
-        await taskManager.offload_task('normal', scheduler, 0, None, self.voiceService.send_template_voice_call, result, content)
+        await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_template_voice_call, result, content)
         return taskManager.results
 
     @UseLimiter(limit_value='50/day')
@@ -105,7 +105,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel, request: Request, response: Response, taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         details = scheduler.content.model_dump(exclude={'url'})
         url = scheduler.content.url
-        await taskManager.offload_task('normal', scheduler, 0, None, self.voiceService.send_twiml_voice_call, url, details)
+        await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_twiml_voice_call, url, details)
         return taskManager.results
 
     @UseLimiter(limit_value='50/day')
@@ -122,7 +122,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         voice = scheduler.content.voice
         lang = scheduler.content.language
         loop = scheduler.content.loop
-        await taskManager.offload_task('normal', scheduler, 0, None, self.voiceService.send_custom_voice_call, body, voice, lang, loop, details)
+        await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_custom_voice_call, body, voice, lang, loop, details)
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.MFA_OTP])
@@ -133,8 +133,8 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], dependencies=[Depends(populate_response_with_request_id)],mount=False)
     async def voice_authenticate(self, request: Request, response: Response, client: Annotated[ClientORM, Depends(get_client)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
         rx_id = keepAliveConn.create_subject('HTTP')
-        result = self.voiceService.gather_speech(rx_id)
-        call_results = self.voiceService.send_template_voice_call(result, {})
+        result = self.callService.gather_speech(rx_id)
+        call_results = self.callService.send_template_voice_call(result, {})
         results = await keepAliveConn.wait_for(call_results,'verified')
         return results
 
@@ -144,15 +144,15 @@ CALL_INCOMING_PREFIX = "incoming"
 
 
 @UseRoles([Role.TWILIO])
-@PingService([VoiceService])
+@PingService([CallService])
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
 # @UsePermission(TwilioPermission)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CALL_INCOMING_PREFIX)
 class IncomingCallRessources(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self, voiceService: VoiceService, chatService: ChatService, contactsService: ContactsService, loggerService: LoggerService) -> None:
-        self.voiceService = voiceService
+    def __init__(self, callService: CallService, chatService: ChatService, contactsService: ContactsService, loggerService: LoggerService) -> None:
+        self.callService = callService
         self.chatService = chatService
         self.contactsService = contactsService
         self.loggerService = loggerService

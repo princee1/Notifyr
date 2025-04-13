@@ -9,7 +9,7 @@ from app.services.config_service import ConfigService,CeleryEnv
 from app.services.email_service import EmailSenderService
 from app.container import Get, build_container
 from app.services.security_service import JWTAuthService
-from app.services.twilio_service import SMSService, VoiceService
+from app.services.twilio_service import SMSService, CallService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 from flower import VERSION
@@ -125,18 +125,18 @@ def task_send_template_sms(messages):
 
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_template_voice_call(result,content):
-    voiceService:VoiceService = Get(VoiceService)
-    return voiceService.send_template_voice_call(result,content)
+    callService:CallService = Get(CallService)
+    return callService.send_template_voice_call(result,content)
 
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_twiml_voice_call(url,details):
-    voiceService:VoiceService = Get(VoiceService)
-    return voiceService.send_twiml_voice_call(url,details)
+    callService:CallService = Get(CallService)
+    return callService.send_twiml_voice_call(url,details)
     
     
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_custom_voice_call(body,details):
-    voiceService:VoiceService = Get(VoiceService)
-    return voiceService.send_custom_voice_call(body,details)
+    callService:CallService = Get(CallService)
+    return callService.send_custom_voice_call(body,details)
 
 ##############################################           ##################################################
