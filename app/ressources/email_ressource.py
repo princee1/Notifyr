@@ -33,7 +33,6 @@ DEFAULT_RESPONSE = {
 @UseRoles([Role.RELAY])
 @UseHandler(handlers.ServiceAvailabilityHandler,handlers.CeleryTaskHandler)
 @UsePermission(permissions.JWTRouteHTTPPermission)
-@UsePipe(pipes.CeleryTaskPipe)
 @PingService([EmailSenderService])
 @HTTPRessource(EMAIL_PREFIX)
 class EmailTemplateRessource(BaseHTTPRessource):
@@ -47,10 +46,25 @@ class EmailTemplateRessource(BaseHTTPRessource):
         self.celeryService:CeleryService = celeryService
         self.taskService: TaskService = bkgTaskService
 
+    
+    @UseLimiter(limit_value="10/minutes")
+    @UseRoles([Role.PUBLIC])
+    @UsePipe(pipes.TemplateParamsPipe('html','html',True))
+    @UseHandler(handlers.TemplateHandler)
+    @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
+    def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str=''):
+        print(template)
+        schemas = self.assetService.get_schema('html')
+        if template in schemas:
+            return schemas[template]
+        return schemas
+
+
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission('html'))
     @UseHandler(handlers.TemplateHandler)
+    @UsePipe(pipes.CeleryTaskPipe)
     @UsePipe(pipes.OffloadedTaskResponsePipe,before=False)
     @UsePipe(pipes.TemplateParamsPipe('html','html'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
@@ -68,6 +82,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         return self.celeryService.trigger_task_from_scheduler(scheduler,None,data, meta, template.images)
     
     @UseLimiter(limit_value='10000/minutes')
+    @UsePipe(pipes.CeleryTaskPipe)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @UsePipe(pipes.OffloadedTaskResponsePipe,before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)

@@ -110,7 +110,7 @@ class HTTPMethod(Enum):
     PUT = 'PUT'
     PATCH = 'PATCH'
     OPTIONS = 'OPTIONS'
-    ALL = 'ALL'
+    HEAD = 'HEAD'
 
     @staticmethod
     def to_strs(methods: list[Any] | Any):

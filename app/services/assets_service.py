@@ -4,7 +4,7 @@ from app.definition._error import BaseError
 from app.utils.prettyprint import printJSON
 from .config_service import CeleryMode, ConfigService
 from app.utils.fileIO import FDFlag
-from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
+from app.classes.template import Asset, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .security_service import SecurityService
 from .file_service import FileService, FTPService
 from app.definition import _service
@@ -22,6 +22,9 @@ REQUEST_DIRECTORY_SEPARATOR = ':'
 def path(x): return ROOT_PATH+x
 
 class AssetNotFoundError(BaseError):
+    ...
+
+class AssetTypeNotFoundError(BaseError):
     ...
 
 class Extension(Enum):
@@ -261,4 +264,11 @@ class AssetService(_service.Service):
             raise AssetNotFoundError(asset)
         
         return asset in allowed_assets
+    
+    def get_schema(self,asset:RouteAssetType):
+        try:
+            schemas:dict[str,MLTemplate] =getattr(self,asset)
+        except AttributeError:
+            raise AssetTypeNotFoundError
+        return {key:value.schema for key,value in schemas.items() }
             

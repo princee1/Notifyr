@@ -1,6 +1,6 @@
 from typing import Annotated
-from fastapi import Depends, Header, Request, Response
-from app.classes.auth_permission import Role
+from fastapi import Depends, Header, Query, Request, Response
+from app.classes.auth_permission import AuthPermission, Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
 from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
@@ -46,6 +46,19 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         self.contactService: ContactsService = contactService
         self.configService:ConfigService = configService
         self.offloadService= offloadService
+
+    @UseLimiter(limit_value="10/minutes")
+    @UseRoles([Role.PUBLIC])
+    @UsePipe(TemplateParamsPipe('sms','xml',True))
+    @UseHandler(TemplateHandler)
+    @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
+    def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission),template:str=''):
+        
+        schemas = self.assetService.get_schema('sms')
+        if template and template in schemas:
+            return schemas[template]
+        return schemas
+
 
     @UseLimiter(limit_value="10000/minutes")
     @UseRoles([Role.MFA_OTP])
@@ -152,7 +165,7 @@ class SMSRessource(BaseHTTPRessource):
     @UsePermission(JWTRouteHTTPPermission)
     @UseLimiter(limit_value="1/hour")
     @UseRoles([Role.ADMIN])
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.OPTIONS])
-    def options(self,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
-        response.status_code = 200
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.HEAD])
+    def weird_head(self,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
+        response.status_code = 204
         return

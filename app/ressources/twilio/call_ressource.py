@@ -53,6 +53,18 @@ class OnGoingCallRessource(BaseHTTPRessource):
         self.reactiveService: ReactiveService = Get(ReactiveService)
         super().__init__()
 
+    @UseLimiter(limit_value="10/minutes")
+    @UseRoles([Role.PUBLIC])
+    @UsePipe(TemplateParamsPipe('phone','xml',True))
+    @UseHandler(TemplateHandler)
+    @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
+    def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str=''):
+        
+        schemas = self.assetService.get_schema('phone')
+        if template in schemas:
+            return schemas[template]
+        return schemas
+
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
     @UseHandler(TemplateHandler)
@@ -200,8 +212,9 @@ class CallRessource(BaseHTTPRessource):
     @UsePermission(JWTRouteHTTPPermission)
     @UseLimiter(limit_value="1/hour")
     @UseRoles([Role.ADMIN])
-    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.OPTIONS])
-    def options(self, request: Request, response: Response, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.HEAD])
+    def weird_head(self, request: Request, response: Response, authPermission=Depends(get_auth_permission)):
+        response.status_code = 204
         pass
 
     
