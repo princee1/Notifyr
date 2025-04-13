@@ -1,4 +1,5 @@
 from asyncio import CancelledError
+import asyncio
 from typing import Callable
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateNotFoundError, TemplateValidationError
@@ -10,6 +11,7 @@ from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
 
+from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
@@ -366,10 +368,30 @@ class AsyncIOHandler(Handler):
         try:
             return await function(*args, **kwargs)
         
-        except CancelledError as e:
+        except asyncio.CancelledError as e:
             ...
-    
+
+        except LockNotFoundError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'Could not wait for the data input',
+            })
         except TimeoutError as e:
+            result = e.args[0] if len(e.args) >0 else None
+
+            raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail={
+                'message': 'Timeout error',
+                'result':result
+            })
+        except asyncio.TimeoutError as e:
+            result = e.args[0] if len(e.args) >0 else None
             raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail={
                 'message': 'Request timed out',
+                'result':result
+            })
+        
+        except KeepAliveTimeoutError as e:
+            result = e.args[0] 
+            raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail={
+                'message': 'Request timed out',
+                'result':result
             })
