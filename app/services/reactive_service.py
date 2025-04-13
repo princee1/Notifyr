@@ -75,6 +75,9 @@ class ReactiveService(Service,IntervalInterface):
     def publish(self):
         ...
     
+    def build(self):
+        ...
+    
 
     
     
