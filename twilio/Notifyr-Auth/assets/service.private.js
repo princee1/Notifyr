@@ -1,7 +1,7 @@
 const axios = require("axios");
 
 const set_auth_token = (token) => "Bearer " + token;
-const set_http_basic_auth = (username,password) => {};
+const set_http_basic_auth = (username, password) => { };
 
 
 const assets = Runtime.getAssets();
@@ -9,7 +9,7 @@ const { Contact } = require(assets["/contacts.js"].path);
 
 class NotifyrAuthService {
 
-  constructor(context,event) {
+  constructor(context, event) {
     this.context = context;
     this.event = event;
     this.mode = this.context.MODE;
@@ -25,46 +25,57 @@ class NotifyrAuthService {
 
     this.authToken = this.context.AUTH_KEY;
     this.refreshToken = this.context.REFRESH_KEY;
-    
+
     this.headers = {
-      "Authorization": set_auth_token(this.context.AUTH_KEY??'Test'),
+      "Authorization": set_auth_token(this.context.AUTH_KEY ?? 'Test'),
     };
   }
 
-  setUrl(){
+  setUrl() {
     switch (this.mode) {
       case 'prod':
         this.url = this.context.URL_PROD;
         break;
-      
+
       case 'test':
-        this.url =  this.context.URL_TEST;
+        this.url = this.context.URL_TEST;
         break;
-      
+
       case 'dev':
         this.url = this.context.URL_DEV;
         break;
       default:
-        this.url =  this.context.URL_TEST;
+        this.url = this.context.URL_TEST;
         break;
     };
-    
+
   }
 
-  async sendLogStatus(body,url) {
-    const result = await axios.post(url,{headers:this.headers,body});
-    console.log("Result",result.status);
-    console.log("Result",result.data);
+  async sendLogStatus(body, url) {
+    const result = await axios.post(url, { headers: this.headers, body });
+    console.log("Result", result.status);
+    console.log("Result", result.data);
   }
 
-  async login(){
+  async login() {
     const url = null
     const result = await axios.post(url)
     const tokens = result['data']['tokens']
 
   }
 
-  async refresh(){
+  async send_gather_result(body) {
+    const url = this.url + '/twilio/call/ongoing/gather-result/'
+    const result = await axios.post(url, body)
+    const response_body = result.data
+    const { message } = response_body
+    return {
+      message,
+      "status_code": result.status
+    }
+  }
+
+  async refresh() {
 
   }
 
