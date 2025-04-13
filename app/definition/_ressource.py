@@ -472,7 +472,7 @@ def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Ha
 
             @functools.wraps(function)
             async def callback(*args, **kwargs): # Function that will be called 
-                if empty_decorator == 0:
+                if empty_decorator:
                     return await function(*args, **kwargs)
 
                 def handler_proxy(handler,f:Callable):

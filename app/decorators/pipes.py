@@ -256,8 +256,8 @@ class KeepAliveResponsePipe(Pipe):
     def __init__(self, before):
         super().__init__(before)
     
-    def pipe(self, result:Any|Response,keepAliveQuery:KeepAliveQuery):
-        keepAliveQuery.dispose()
+    def pipe(self, result:Any|Response,keepAliveConn:KeepAliveQuery):
+        keepAliveConn.dispose()
         # TODO add headers and status code
         return result
     
