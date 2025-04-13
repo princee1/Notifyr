@@ -258,18 +258,14 @@ class VoiceService(BaseTwilioCommunication):
     def update_voice_call(self):
         ...
 
-    def gather_dtmf(self, otpModel: GatherDtmfOTPModel,verify:bool=False):
-        
+    def gather_dtmf(self, otpModel: GatherDtmfOTPModel,subject_id:str,request_id:str):
+        # TODO make it more general
         otp = otpModel.otp
         service = otpModel.service if otpModel.service else '-1'
         content = otpModel.content.model_dump(exclude={'remove_base_instruction','add_instructions','add_finish_key_phrase','no_input_instruction'})
-        input_='dtmf'
         response = VoiceResponse()
-        result_url:str =''
-        if verify:
-            result_url += f'?service={service}&otp={otp}&return_url=-1'
-        
-        gather = Gather(action=self.gather_url+f'/{input_}'+result_url, method='POST',input=input_,**content)
+        result_url= f'?service={service}&otp={otp}&return_url=-1&subject_id={subject_id}&contact=-1'
+        gather = Gather(action=self.gather_url+f'/dtmf'+result_url, method='POST',input='dtmf',**content)
         
         if otpModel.content.add_instructions:
             for instruction in otpModel.content.add_instructions:
@@ -283,7 +279,7 @@ class VoiceService(BaseTwilioCommunication):
 
         base_instructions = ""
         if not otpModel.content.remove_base_instruction:
-            base_instructions += "Hi, please enter the digits of your OTP for the service {service}."
+            base_instructions += f"Hi, please enter the digits of your OTP for the service {service}."
 
         if otpModel.content.add_finish_key_phrase:
             base_instructions += f"Press {otpModel.content.finishOnKey} when finished entered the digits."
@@ -301,7 +297,9 @@ class VoiceService(BaseTwilioCommunication):
 
         return response
     
-    
+    def gather_speech(self,subject_id:str,request_id:str):
+        ...
+
 @_service.ServiceClass
 class FaxService(BaseTwilioCommunication):
 

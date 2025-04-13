@@ -5,7 +5,8 @@ const { NotifyrAuthService } = require(assets["/service.js"].path);
 exports.handler = async function (context, event, callback) {
 
     const service = new NotifyrAuthService(context, event);
-    
+    console.log(event);
 
+    
 };
   
