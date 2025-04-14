@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 from app.definition._error import BaseError
 from app.definition._service import Service, ServiceClass
-from app.errors.async_error import LockNotFoundError
+from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundError
 from app.interface.timers import IntervalInterface
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
@@ -31,7 +31,6 @@ class ReactiveSubject():
             try:
                 lock = self.lock.get(x_request_id,None)
                 if lock is None:
-
                     raise LockNotFoundError(f"Lock not found for x_request_id: {x_request_id}")
                 return await asyncio.wait_for(lock.acquire(),timeout=timeout)
             except asyncio.TimeoutError as e:
@@ -89,7 +88,7 @@ class ReactiveService(Service,IntervalInterface):
     def subscribe(self,rxId:str,on_next:Callable[[Any],None],on_error:Callable=None,on_completed:Callable=None):
         rxSub= self._subscriptions.get(rxId,None)
         if rxSub is None:
-            raise ValueError(f"Reactive object with id {rxId} not found.")
+            raise ReactiveSubjectNotFoundError(f"Reactive object with id {rxId} not found.")
         disposable = rxSub.subject.subscribe(
             on_next=on_next,
             on_error=on_error,

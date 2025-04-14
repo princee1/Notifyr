@@ -69,7 +69,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(KeepAliveResponsePipe, before=False)
-    @UseHandler(AsyncIOHandler)
+    @UseHandler(AsyncIOHandler,ReactiveHandler)
     @BaseHTTPRessource.Get('/otp/', dependencies=[Depends(populate_response_with_request_id)])
     async def enter_digit_otp(self, otpModel: GatherDtmfOTPModel, request: Request, response: Response, keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
         if not otpModel.otp:
@@ -135,7 +135,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseGuard(RegisteredContactsGuard)
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(KeepAliveResponsePipe, before=False)
-    @UseHandler(AsyncIOHandler)
+    @UseHandler(AsyncIOHandler,ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], dependencies=[Depends(populate_response_with_request_id)],mount=False)
     async def voice_authenticate(self, request: Request, response: Response, client: Annotated[ClientORM, Depends(get_client)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
 
