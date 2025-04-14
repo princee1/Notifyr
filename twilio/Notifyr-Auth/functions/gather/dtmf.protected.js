@@ -25,7 +25,9 @@ class DTMFConfig {
             throw new Error("Missing return_url in the event object.");
         }
 
-        this.max_digits = this.event.max_digits ?? null;
+        this.max_digits = this.event.maxDigits ?? null;
+        if (this.max_digits !== null)
+            this.max_digits = Number.parseInt(this.max_digits)
 
         this.subject_id = this.event.subject_id ?? null;
         this.request_id = this.event.request_id ?? null;
@@ -85,17 +87,18 @@ function verify(dtmf, twiml, contact) {
     } catch (error) {
         _error_message = error.message;
         console.error("Error deconstructing query:", error.message);
-        body = dtmf.to_body(_error_message, null, true);
+        body = dtmf.to_body(_error_message, false, true);
         twiml.say("There was an error processing your request. Please try again later.");
 
     }
 
-    if (_deconstruct_error) {
-
+    if (!_deconstruct_error) {
         try {
             if (dtmf.contact_id === null) {
                 dtmf.verify_digits();
-                body = dtmf.to_body(null, true, false);
+                body = dtmf.to_body('User enter the Valid OTP', true, false);
+                twiml.say("You entered the valid digit. You should be ok!");
+                
             }
             else {
                 dtmf.verify_contact_dtmf_code(contact);
@@ -118,10 +121,10 @@ exports.handler = async function (context, event, callback) {
 
     const dtmf = new DTMFConfig(event);
     const body = verify(dtmf, twiml, contact);
-
-    const {message,status_code }= await service.send_gather_result(body)
+    const {message,status_code }= await service.sendGatherResult(body)
 
     if (dtmf.hangup) {
+        twiml.pause(1)
         twiml.say("Goodbye!");
         twiml.hangup();
     }   
