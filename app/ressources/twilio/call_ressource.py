@@ -169,7 +169,8 @@ class IncomingCallRessources(BaseHTTPRessource):
         self.contactsService = contactsService
         self.loggerService = loggerService
         self.reactiveService = reactiveService
-        super().__init__(dependencies=[Depends(verify_twilio_token)])
+        # super().__init__(dependencies=[Depends(verify_twilio_token)]) # TODO need to the signature
+        super().__init__()
 
     @BaseHTTPRessource.HTTPRoute('/menu/', methods=[HTTPMethod.POST])
     async def voice_menu(self, authPermission=Depends(get_auth_permission)):
@@ -196,7 +197,6 @@ class IncomingCallRessources(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
     async def voice_call_status(self, status: CallStatusModel, response:Response,authPermission=Depends(get_auth_permission)):
         status = status.model_dump()
-        print(status)
         
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
