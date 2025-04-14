@@ -59,7 +59,7 @@ class NotifyrAuthService {
       console.log("Result", result.data);
       
     } catch (error) {
-      console.log(error.response.data)
+      console.log(error.response.data.detail[0])
     }
   }
 

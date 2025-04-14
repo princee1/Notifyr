@@ -41,7 +41,7 @@ class DTMFConfig {
         this.hangup = this.event.hangup;
     }
 
-    to_body(message,result,error){
+    to_body(message,result){
         return {
             "subject_id":this.subject_id,
             "request_id":this.request_id,
@@ -49,8 +49,6 @@ class DTMFConfig {
             "To":this.To,
             message,
             result,
-            error
-
         }
     }
 
@@ -87,7 +85,7 @@ function verify(dtmf, twiml, contact) {
     } catch (error) {
         _error_message = error.message;
         console.error("Error deconstructing query:", error.message);
-        body = dtmf.to_body(_error_message, false, true);
+        body = dtmf.to_body(_error_message, false);
         twiml.say("There was an error processing your request. Please try again later.");
 
     }
@@ -96,7 +94,7 @@ function verify(dtmf, twiml, contact) {
         try {
             if (dtmf.contact_id === null) {
                 dtmf.verify_digits();
-                body = dtmf.to_body('User enter the Valid OTP', true, false);
+                body = dtmf.to_body('User enter the Valid OTP', true);
                 twiml.say("You entered the valid digit. You should be ok!");
                 
             }
@@ -106,7 +104,7 @@ function verify(dtmf, twiml, contact) {
         } catch (error) {
             _error_message = error.message;
             console.error("Error verifying digits:", error.message);
-            body = dtmf.to_body(_error_message, false, true);
+            body = dtmf.to_body(_error_message, false);
             twiml.say("The digits you entered are incorrect. Please try again.");
         }
     }

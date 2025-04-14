@@ -53,7 +53,6 @@ class GatherResultModel(BaseModel):
     subject_id:str
     request_id:str
     message:str
-    error:bool
     result:bool
     CallSid:str
     To:str
