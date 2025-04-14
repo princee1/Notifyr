@@ -9,7 +9,8 @@ from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveH
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path
 from app.errors.async_error import ReactiveSubjectNotFoundError
-from app.models.otp_model import GatherDtmfOTPModel, OTPModel
+from app.models.contacts_model import ContactORM
+from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.security_model import ClientORM
 from app.models.voice_model import BaseVoiceCallModel, CallStatusModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
@@ -21,7 +22,7 @@ from app.services.twilio_service import CallService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
-from app.depends.my_depends import KeepAliveQuery, get_client, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
+from app.depends.my_depends import KeepAliveQuery, get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
 
 
 CALL_ONGOING_PREFIX = 'ongoing'
@@ -72,19 +73,16 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseHandler(AsyncIOHandler,ReactiveHandler)
     @BaseHTTPRessource.Get('/otp/', dependencies=[Depends(populate_response_with_request_id)])
     async def enter_digit_otp(self, otpModel: GatherDtmfOTPModel, request: Request, response: Response, keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
-        if not otpModel.otp:
-            raise HTTPException(status_code=400, detail="OTP is required")
 
         rx_id = keepAliveConn.create_subject('HTTP')
         keepAliveConn.register_lock()
         
         result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
-        call_details = otpModel.model_dump(exclude={'otp', 'content','service'})
+        call_details = otpModel.model_dump(exclude={'otp', 'config','service','instruction'})
         call_results = self.callService.send_template_voice_call(result, call_details,keepAliveConn.rx_subject.id_)
 
-        res = await keepAliveConn.wait_for(call_results, 'otp_result')
-        res['otp_result']
-        return res
+        return await keepAliveConn.wait_for(call_results, 'otp_result')
+      
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.RELAY])
@@ -137,15 +135,21 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(KeepAliveResponsePipe, before=False)
     @UseHandler(AsyncIOHandler,ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], dependencies=[Depends(populate_response_with_request_id)],mount=False)
-    async def voice_authenticate(self, request: Request, response: Response, client: Annotated[ClientORM, Depends(get_client)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
+    async def voice_authenticate(self, request: Request, otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
 
+        if contact.phone != otpModel.to:
+            raise HTTPException(status_code=400,detail='Contact phone number mismatch')
+            
         rx_id = keepAliveConn.create_subject('HTTP')
         keepAliveConn.register_lock()
+        call_details = otpModel.model_dump(exclude={'otp', 'config','service','instruction'})
 
-        result = self.callService.gather_speech(rx_id)
-        call_results = self.callService.send_template_voice_call(result, {})
+        call_details['record'] = True
+        
+        result = self.callService.gather_speech(otpModel,rx_id,keepAliveConn.x_request_id)
+        call_results = self.callService.send_template_voice_call(result, call_details,rx_id)
 
-        return await keepAliveConn.wait_for(call_results,'verified')
+        return await keepAliveConn.wait_for(call_results,'otp_result')
 
 
 CALL_INCOMING_PREFIX = "incoming"

@@ -1,6 +1,10 @@
 from typing import Any, List, Self
 from pydantic import BaseModel, field_validator, model_validator
 from app.utils.validation import language_code_validator,url_validator
+from string import digits
+from app.utils.helper import letter_to_number
+
+parse = lambda v: v if v in digits else letter_to_number[v.upper()]
 
 class Verbs(BaseModel):
     type:str
@@ -42,7 +46,11 @@ class DTMFConfig(GatherConfig):
     numDigits:int |None = 6
 
 class SpeechConfig(GatherConfig):
-    ...
+    speechTimeout:int|None=None
+    profanityFilter:bool=True
+    hints:str=""
+    speechModel:str|None=None
+    
 
 class OTPModel(BaseModel):
     to:str
@@ -51,7 +59,7 @@ class OTPModel(BaseModel):
     # otp:str
     # brand:str = None
 
-class GatherDtmfContent(DTMFConfig):
+class GatherInstruction():
     remove_base_instruction:bool = False
     add_instructions:List[Verbs] = []
     add_finish_key_phrase:bool = True
@@ -63,13 +71,27 @@ class GatherDtmfContent(DTMFConfig):
             raise ValueError("Instructions length should not exceed 500 characters")
         return instructions
     
-class GatherDtmfOTPModel(OTPModel):
-    content:GatherDtmfContent
+
+class GatherOTPBaseModel(OTPModel):
+    config:GatherConfig
     otp:str
     service:str = None
+    instruction:GatherInstruction
 
+class GatherDtmfOTPModel(GatherOTPBaseModel):
+    config:DTMFConfig
+    
     @model_validator(mode="after")
     def check_len_otp(self) -> Self:
-        if len(self.otp) > self.content.numDigits:
-            raise ValueError(f"OTP length should not exceed {self.content.numDigits} characters")
+        try:
+            self.otp = "".join([ parse(l)  for l in self.otp])
+        except KeyError:
+            raise ValueError("Symbol not permitted")
+        
+        if len(self.otp) != self.config.numDigits:
+            raise ValueError(f"OTP length should not exceed {self.config.numDigits} characters")
         return self
+    
+class GatherSpeechOTPModel(GatherOTPBaseModel):
+    config: SpeechConfig
+
