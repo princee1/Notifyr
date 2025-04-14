@@ -119,8 +119,8 @@ class BaseTwilioCommunication(_service.Service):
         mode = self.configService['TWILIO_MODE']
         self.twilio_url = self.configService.TWILIO_PROD_URL if mode == "prod" else self.configService.TWILIO_TEST_URL
         
-        self.logs_url = self.twilio_url + "status/logs"
-        self.partial_results_url = self.twilio_url + "status/partial-results"
+        self.logs_url = self.twilio_url + "/status/logs"
+        self.partial_results_url = self.twilio_url + "/status/partial-results"
 
 
     @staticmethod
@@ -190,7 +190,7 @@ class SMSService(BaseTwilioCommunication):
 
 @_service.ServiceClass
 class CallService(BaseTwilioCommunication):
-    status_callback_event = ['initiated', 'ringing', 'answered', 'completed']
+    status_callback_event = ['initiated', 'ringing', 'answered', 'completed','busy','failed','no-answer']
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
         super().__init__(configService, twilioService, assetService)
@@ -248,12 +248,15 @@ class CallService(BaseTwilioCommunication):
         return self._create_call(call_details,as_async)
 
     @BaseTwilioCommunication.parse_to_json
-    def send_template_voice_call(self, result: str, call_details: dict,as_async: bool = False):
+    def send_template_voice_call(self, result: str, call_details: dict,as_async: bool = False,subject_id=None):
         call_details['twiml'] = result
-        return self._create_call(call_details,as_async)
+        return self._create_call(call_details,as_async,subject_id)
 
-    def _create_call(self, details: dict,as_async: bool = False):
-        return self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=self.status_callback, status_callback_event=CallService.status_callback_event)
+    def _create_call(self, details: dict,as_async: bool = False,subject_id:str=None):
+        url = self.status_callback
+        if subject_id!=None:
+            url +=f'&subject_id={subject_id}'
+        return self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
 
     def update_voice_call(self):
         ...
@@ -263,7 +266,7 @@ class CallService(BaseTwilioCommunication):
         service = otpModel.service if otpModel.service else '-1'
         content = otpModel.content.model_dump(exclude={'remove_base_instruction','add_instructions','add_finish_key_phrase','no_input_instruction'})
         response = VoiceResponse()
-        action_url = self.gather_url+f'/dtmf'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}'
+        action_url = self.gather_url+f'/dtmf'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}&maxDigits={otpModel.content.numDigits}'
         gather = Gather(action=action_url, method='GET',input='dtmf',**content)
         
         if otpModel.content.add_instructions:

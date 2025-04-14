@@ -16,7 +16,7 @@ from app.services.celery_service import TaskManager, TaskService, CeleryService,
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
-from app.services.reactive_service import ReactiveService
+from app.services.reactive_service import ReactiveService, ReactiveSubject
 from app.services.twilio_service import CallService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
@@ -80,10 +80,11 @@ class OnGoingCallRessource(BaseHTTPRessource):
         
         result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
         call_details = otpModel.model_dump(exclude={'otp', 'content','service'})
-        call_results = self.callService.send_template_voice_call(result, call_details)
+        call_results = self.callService.send_template_voice_call(result, call_details,keepAliveConn.rx_subject.id_)
 
-        return await keepAliveConn.wait_for(call_results, 'otp_result')
-   
+        res = await keepAliveConn.wait_for(call_results, 'otp_result')
+        res['otp_result']
+        return res
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.RELAY])
@@ -183,18 +184,20 @@ class IncomingCallRessources(BaseHTTPRessource):
     async def voice_primary_handler_fail(self, authPermission=Depends(get_auth_permission)):
         pass
 
-    @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
-    async def voice_call_status(self, status: CallStatusModel, authPermission=Depends(get_auth_permission)):
-        ...
-
     @BaseHTTPRessource.HTTPRoute('/error/', methods=[HTTPMethod.POST])
     async def voice_error(self, authPermission=Depends(get_auth_permission)):
         pass
-    
+
+    @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
+    async def voice_call_status(self, status: CallStatusModel, authPermission=Depends(get_auth_permission)):
+        print(status)
+        ...
+        
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
     async def gather_result(self,gatherResult:GatherResultModel, response:Response,authPermission=Depends(get_auth_permission)):
-        subject = self.reactiveService._subscriptions.get(gatherResult.subject_id,None)
+        subject:ReactiveSubject  | None = self.reactiveService._subscriptions.get(gatherResult.subject_id,None)
+        print(gatherResult.model_dump())
         if subject == None:
             raise ReactiveSubjectNotFoundError(gatherResult.subject_id)
         result =gatherResult.model_dump(include=('result','message','error'))
