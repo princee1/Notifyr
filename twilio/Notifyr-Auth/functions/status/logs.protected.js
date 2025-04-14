@@ -5,6 +5,8 @@ const CALL_TYPE = "call";
 const SMS_TYPE = "sms";
 
 function setCallLog(params) {
+  subject_id=params.subject_id ?? null
+
   const {
     CallSid,
     RecordingSid,
@@ -16,7 +18,6 @@ function setCallLog(params) {
     AccountSid,
     CallStatus,
     ToCity,
-    SipResponse,
     To,
     From,
     SequenceNumber,
@@ -31,12 +32,16 @@ function setCallLog(params) {
     CallStatus,
     SequenceNumber,
     ToCity,
-    SipResponse,
     To,
     From,
+    subject_id,
   };
+
+  if (temp.RecordingSid === undefined)
+      temp.RecordingSid = null;
+
   if (CallStatus === "completed") {
-    return { Duration, CallDuration, RecordingDuration, ...temp };
+    return { Duration, CallDuration, "RecordingDuration":RecordingDuration??null, ...temp };
   }
   return temp;
 }
@@ -50,24 +55,20 @@ function setSmsLog(params) {
 exports.handler = async function (context, event, callback) {
   
   const service = new NotifyrAuthService(context, event);
-  const type = service.type;
-  
-  let url = String(service.url);
   let body;
-  
-  console.log(event);
 
-  if (type === CALL_TYPE) {
-    url += "/call-incoming/status";
+  if (service.type === CALL_TYPE) {
+    url = "/twilio/call/incoming/status";
     body = setCallLog(event);
-  } else if (type === SMS_TYPE) {
-    url += "/sms-incoming/status";
+  } else if (service.type === SMS_TYPE) {
+    url = "/twilio/sms/incoming/status";
     body = setSmsLog(event);
   } else {
 
   }
- 
-  // await service.sendLogStatus(body, url);
+  
+  console.log(body)
+  await service.sendLogStatus(body, url);
 
   // return callback(null,{})
 };

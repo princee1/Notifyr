@@ -4,11 +4,13 @@ from fastapi import Depends, HTTPException, Header, Query, Response, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetAttr
+from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
+from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService, ReactiveType
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
@@ -277,7 +279,7 @@ async def get_task(request_id: str = Depends(get_request_id), as_async: bool = D
 
 class KeepAliveQuery:
 
-    def __init__(self, response: Response, x_request_id: Annotated[str, Depends(get_request_id)], keep_alive: Annotated[bool, Depends(keep_connection)], timeout: int = Query(5, description="Time in seconds to delay the response", ge=5, le=60*3)):
+    def __init__(self, response: Response, x_request_id: Annotated[str, Depends(get_request_id)], keep_alive: Annotated[bool, Depends(keep_connection)], timeout: int = Query(0, description="Time in seconds to delay the response", ge=0, le=60*3)):
         self.timeout = timeout
         self.response = response
         self.x_request_id = x_request_id
@@ -287,8 +289,10 @@ class KeepAliveQuery:
         self.error = None
         self.subscription = None
         self.start_time = perf_counter()
+        self.rx_subject = None
 
         self.reactiveService: ReactiveService = Get(ReactiveService)
+        self.loggerService: LoggerService = Get(LoggerService)
 
     def create_subject(self, reactiveType: ReactiveType):
 
@@ -300,6 +304,7 @@ class KeepAliveQuery:
                 rx_id,
                 on_next=self.on_next,
                 on_error=self.on_error,
+                on_completed=self.on_complete
             )
             self.rx_subject = rx_subject
             return rx_subject.id_
@@ -314,8 +319,18 @@ class KeepAliveQuery:
         self.error = e
         setattr(self.error, 'process_time', self.process_time)
 
-    def register_lock(self):
-        self.rx_subject.register_lock(self.x_request_id)
+    def on_complete(self,):
+        print(f'{self.rx_subject.id_} - {self.x_request_id} Done')
+
+    def register_lock(self,subject_id=None):
+        if subject_id == None:
+            self.rx_subject.register_lock(self.x_request_id)
+        else:
+            rx_sub = self.reactiveService._subscriptions.get(subject_id,None)
+            if rx_sub != None:
+                rx_sub.register_lock(self.x_request_id)
+            else:
+                raise ReactiveSubjectNotFoundError(subject_id)
 
     def dispose(self):
 
@@ -326,9 +341,18 @@ class KeepAliveQuery:
         self.process_time = perf_counter() - self.start_time
         self.rx_subject.dispose_lock(self.x_request_id)
 
-    async def wait_for(self, result_to_return: Any = None, coerce: str = None):
+    async def wait_for(self, result_to_return: Any = None, coerce: str = None,subject_id=None):
         if self.keep_alive:
-            await self.rx_subject.wait_for(self.x_request_id,self.timeout, result_to_return)
+            if subject_id == None:
+                rx_sub = self.rx_subject
+            else:
+                rx_sub = self.reactiveService._subscriptions.get(subject_id,None)
+                if rx_sub != None:
+                    rx_sub.register_lock(self.x_request_id)
+                else:
+                    raise ReactiveSubjectNotFoundError(subject_id)
+
+            await rx_sub.wait_for(self.x_request_id,self.timeout, result_to_return)
             if self.error != None:
                 raise self.error
             key = 'value' if coerce == None else coerce
@@ -338,3 +362,8 @@ class KeepAliveQuery:
             }
         else:
             return result_to_return
+
+    def __repr__(self):
+        subj_id = None if self.rx_subject == None else self.rx_subject.id_
+        return f'KeepAliveQuery(timeout={self.timeout}, subject_id={subj_id}, request_id={self.x_request_id})'
+    

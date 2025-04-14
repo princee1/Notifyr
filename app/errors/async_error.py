@@ -5,3 +5,6 @@ class LockNotFoundError(BaseError):
 
 class KeepAliveTimeoutError(BaseError):
     ...
+
+class ReactiveSubjectNotFoundError(BaseError):
+    ... 
