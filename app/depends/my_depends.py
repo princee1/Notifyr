@@ -341,9 +341,18 @@ class KeepAliveQuery:
         self.process_time = perf_counter() - self.start_time
         self.rx_subject.dispose_lock(self.x_request_id)
 
-    async def wait_for(self, result_to_return: Any = None, coerce: str = None):
+    async def wait_for(self, result_to_return: Any = None, coerce: str = None,subject_id=None):
         if self.keep_alive:
-            await self.rx_subject.wait_for(self.x_request_id,self.timeout, result_to_return)
+            if subject_id == None:
+                rx_sub = self.rx_subject
+            else:
+                rx_sub = self.reactiveService._subscriptions.get(subject_id,None)
+                if rx_sub != None:
+                    rx_sub.register_lock(self.x_request_id)
+                else:
+                    raise ReactiveSubjectNotFoundError(subject_id)
+
+            await rx_sub.wait_for(self.x_request_id,self.timeout, result_to_return)
             if self.error != None:
                 raise self.error
             key = 'value' if coerce == None else coerce
