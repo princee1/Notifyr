@@ -95,7 +95,7 @@ function verify(dtmf, twiml, contact) {
             if (dtmf.contact_id === null) {
                 dtmf.verify_digits();
                 body = dtmf.to_body('User enter the Valid OTP', true);
-                twiml.say("You entered the valid digit. You should be ok!");
+                twiml.say("You entered the valid digit.");
                 
             }
             else {
@@ -105,7 +105,7 @@ function verify(dtmf, twiml, contact) {
             _error_message = error.message;
             console.error("Error verifying digits:", error.message);
             body = dtmf.to_body(_error_message, false);
-            twiml.say("The digits you entered are incorrect. Please try again.");
+            twiml.say("The digits you entered are incorrect. Please try again Later.");
         }
     }
     return body;
