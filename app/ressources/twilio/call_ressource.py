@@ -7,7 +7,7 @@ from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
-from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
+from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.otp_model import GatherDtmfOTPModel, OTPModel
 from app.models.security_model import ClientORM
@@ -187,17 +187,17 @@ class IncomingCallRessources(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/error/', methods=[HTTPMethod.POST])
     async def voice_error(self, authPermission=Depends(get_auth_permission)):
         pass
-
+    
+    @UsePipe(TwilioResponseStatusPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
-    async def voice_call_status(self, status: CallStatusModel, authPermission=Depends(get_auth_permission)):
+    async def voice_call_status(self, status: CallStatusModel, response:Response,authPermission=Depends(get_auth_permission)):
+        status = status.model_dump()
         print(status)
-        ...
         
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
     async def gather_result(self,gatherResult:GatherResultModel, response:Response,authPermission=Depends(get_auth_permission)):
         subject:ReactiveSubject  | None = self.reactiveService._subscriptions.get(gatherResult.subject_id,None)
-        print(gatherResult.model_dump())
         if subject == None:
             raise ReactiveSubjectNotFoundError(gatherResult.subject_id)
         result =gatherResult.model_dump(include=('result','message','error'))
