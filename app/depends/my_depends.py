@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, Header, Query, Response, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetAttr
+from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
@@ -288,6 +289,7 @@ class KeepAliveQuery:
         self.error = None
         self.subscription = None
         self.start_time = perf_counter()
+        self.rx_subject = None
 
         self.reactiveService: ReactiveService = Get(ReactiveService)
         self.loggerService: LoggerService = Get(LoggerService)
@@ -320,8 +322,15 @@ class KeepAliveQuery:
     def on_complete(self,):
         print(f'{self.rx_subject.id_} - {self.x_request_id} Done')
 
-    def register_lock(self):
-        self.rx_subject.register_lock(self.x_request_id)
+    def register_lock(self,subject_id=None):
+        if subject_id == None:
+            self.rx_subject.register_lock(self.x_request_id)
+        else:
+            rx_sub = self.reactiveService._subscriptions.get(subject_id,None)
+            if rx_sub != None:
+                rx_sub.register_lock(self.x_request_id)
+            else:
+                raise ReactiveSubjectNotFoundError(subject_id)
 
     def dispose(self):
 
@@ -344,3 +353,8 @@ class KeepAliveQuery:
             }
         else:
             return result_to_return
+
+    def __repr__(self):
+        subj_id = None if self.rx_subject == None else self.rx_subject.id_
+        return f'KeepAliveQuery(timeout={self.timeout}, subject_id={subj_id}, request_id={self.x_request_id})'
+    
