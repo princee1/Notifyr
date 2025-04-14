@@ -59,7 +59,7 @@ class OTPModel(BaseModel):
     # otp:str
     # brand:str = None
 
-class GatherInstruction():
+class GatherInstruction(BaseModel):
     remove_base_instruction:bool = False
     add_instructions:List[Verbs] = []
     add_finish_key_phrase:bool = True
@@ -73,13 +73,13 @@ class GatherInstruction():
     
 
 class GatherOTPBaseModel(OTPModel):
-    config:GatherConfig
+    content:GatherConfig
     otp:str
     service:str = None
     instruction:GatherInstruction
 
 class GatherDtmfOTPModel(GatherOTPBaseModel):
-    config:DTMFConfig
+    content:DTMFConfig
     
     @model_validator(mode="after")
     def check_len_otp(self) -> Self:
@@ -88,10 +88,10 @@ class GatherDtmfOTPModel(GatherOTPBaseModel):
         except KeyError:
             raise ValueError("Symbol not permitted")
         
-        if len(self.otp) != self.config.numDigits:
-            raise ValueError(f"OTP length should not exceed {self.config.numDigits} characters")
+        if len(self.otp) != self.content.numDigits:
+            raise ValueError(f"OTP length should not exceed {self.content.numDigits} characters")
         return self
     
 class GatherSpeechOTPModel(GatherOTPBaseModel):
-    config: SpeechConfig
+    content: SpeechConfig
 

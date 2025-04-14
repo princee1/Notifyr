@@ -380,10 +380,10 @@ class KeepAliveQuery:
                 else:
                     raise ReactiveSubjectNotFoundError(subject_id)
             #while True:
-                await rx_sub.wait_for(self.x_request_id,self.timeout, result_to_return) # TODO add while to wait the correct value
-                if self.error != None:
-                    raise self.error
-                key = 'value' if coerce == None else coerce
+            await rx_sub.wait_for(self.x_request_id,self.timeout, result_to_return) # TODO add while to wait the correct value
+            if self.error != None:
+                raise self.error
+            key = 'value' if coerce == None else coerce
                 # TODO relock the lock before coming in the iteration
                 # TODO wheter the subscription still holds
 

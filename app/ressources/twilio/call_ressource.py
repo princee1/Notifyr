@@ -78,7 +78,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         keepAliveConn.register_lock()
         
         result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
-        call_details = otpModel.model_dump(exclude={'otp', 'config','service','instruction'})
+        call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
         call_results = self.callService.send_template_voice_call(result, call_details,keepAliveConn.rx_subject.id_)
 
         return await keepAliveConn.wait_for(call_results, 'otp_result')
@@ -142,7 +142,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             
         rx_id = keepAliveConn.create_subject('HTTP')
         keepAliveConn.register_lock()
-        call_details = otpModel.model_dump(exclude={'otp', 'config','service','instruction'})
+        call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
 
         call_details['record'] = True
         

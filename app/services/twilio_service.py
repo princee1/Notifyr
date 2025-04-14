@@ -264,12 +264,12 @@ class CallService(BaseTwilioCommunication):
     def gather_dtmf(self, otpModel: GatherDtmfOTPModel,subject_id:str,request_id:str):
         otp = otpModel.otp
         service = otpModel.service if otpModel.service else '-1'
-        config = otpModel.config.model_dump(exclude={'instruction'})
+        config = otpModel.content.model_dump(exclude={'instruction'})
         response = VoiceResponse()
-        action_url = self.gather_url+f'/dtmf'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}&maxDigits={otpModel.config.numDigits}'
+        action_url = self.gather_url+f'/dtmf'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}&maxDigits={otpModel.content.numDigits}'
         gather = Gather(action=action_url, method='GET',input='dtmf',**config)
 
-        self._add_instruction_when_gather(otpModel, service, response, gather)
+        self._add_instruction_when_gather(otpModel, service, response, gather,'dtmf')
 
         return response
 
@@ -280,32 +280,32 @@ class CallService(BaseTwilioCommunication):
             for instruction in model_instruction.add_instructions:
                 type_,value = instruction.type,instruction.value
                 if type_ == 'say':
-                    gather.say(message=value,language=otpModel.config.language)
+                    gather.say(message=value,language=otpModel.content.language)
                 elif type_ == 'play':
                     gather.play(url=value)
                 elif type_ == 'pause':
                     gather.pause(length=value)
 
         if not model_instruction.remove_base_instruction:
-            base_instructions = f"Hi, please {'say the phrase provided' if input_type == 'speech' else "enter the digits of your OTP"} for the service {service}."
-            gather.say(message=base_instructions,language=otpModel.config.language)
+            base_instructions = f"Hi, please {'say the phrase provided' if input_type == 'speech' else 'enter the digits of your OTP'} for the service {service}."
+            gather.say(message=base_instructions,language=otpModel.content.language)
 
         if model_instruction.add_finish_key_phrase:
-            base_instructions = f"Press {otpModel.config.finishOnKey} when finished {"saying the otp phrase"if input_type == 'dtmf' else "entered the digits."}"
-            gather.say(message=base_instructions,language=otpModel.config.language)
+            base_instructions = f"Press {otpModel.content.finishOnKey} when finished {'saying the otp phrase'if input_type == 'dtmf' else 'entered the digits.'}"
+            gather.say(message=base_instructions,language=otpModel.content.language)
 
         response.append(gather)
         if model_instruction.no_input_instruction:
-            say = Say(message=model_instruction.no_input_instruction,language=otpModel.config.language)
+            say = Say(message=model_instruction.no_input_instruction,language=otpModel.content.language)
         else:
-            say = Say(message='We could not verify the otp at the given please retry later',language=otpModel.config.language)
+            say = Say(message='We could not verify the otp at the given please retry later',language=otpModel.content.language)
             
         response.append(say)
     
     def gather_speech(self,otpModel:GatherSpeechOTPModel,subject_id:str,request_id:str):
         otp = otpModel.otp
         service = otpModel.service if otpModel.service else '-1'
-        config = otpModel.config.model_dump(exclude={'instruction'})
+        config = otpModel.content.model_dump(exclude={'instruction'})
         config['partialResultCallback'] = self.partial_results_url
         config['partialResultCallbackMethod'] = 'POST'
 
