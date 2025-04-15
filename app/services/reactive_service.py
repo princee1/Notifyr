@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 from app.definition._error import BaseError
 from app.definition._service import Service, ServiceClass
-from app.errors.async_error import LockNotFoundError
+from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundError
 from app.interface.timers import IntervalInterface
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
@@ -31,7 +31,6 @@ class ReactiveSubject():
             try:
                 lock = self.lock.get(x_request_id,None)
                 if lock is None:
-
                     raise LockNotFoundError(f"Lock not found for x_request_id: {x_request_id}")
                 return await asyncio.wait_for(lock.acquire(),timeout=timeout)
             except asyncio.TimeoutError as e:
@@ -39,6 +38,12 @@ class ReactiveSubject():
             except TimeoutError as e:
                 raise asyncio.TimeoutError(default_result)
     
+    def lock_lock(self,x_request_id):
+        lock = self.lock.get(x_request_id,None)
+        if lock is None:
+            raise LockNotFoundError(f"Lock not found for x_request_id: {x_request_id}")
+        lock._locked = True
+
     def register_lock(self,x_request_id) -> asyncio.Lock:
         lock = asyncio.Lock()
         lock._locked = True
@@ -85,17 +90,29 @@ class ReactiveService(Service,IntervalInterface):
         rxSub= ReactiveSubject(name=name,type_=type_)
         self._subscriptions[rxSub.id_]=rxSub
         return rxSub
+    
+    def delete_subject(self,subject_id:str):
+        rx_subject = self[subject_id]
+        rx_subject.on_completed()
+        del self._subscriptions[subject_id]
+
         
     def subscribe(self,rxId:str,on_next:Callable[[Any],None],on_error:Callable=None,on_completed:Callable=None):
         rxSub= self._subscriptions.get(rxId,None)
         if rxSub is None:
-            raise ValueError(f"Reactive object with id {rxId} not found.")
+            raise ReactiveSubjectNotFoundError(f"Reactive object with id {rxId} not found.")
         disposable = rxSub.subject.subscribe(
             on_next=on_next,
             on_error=on_error,
             on_completed=on_completed
         )
         return disposable
+
+    def __getitem__(self,subject_id):
+        subject:ReactiveSubject  | None = self._subscriptions.get(subject_id,None)
+        if subject == None:
+            raise ReactiveSubjectNotFoundError(subject_id)
+        return subject
 
     def publish(self):
         ...

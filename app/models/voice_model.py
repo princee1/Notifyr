@@ -34,7 +34,7 @@ class OnGoingTwimlVoiceCallModel(BaseVoiceCallModel):
 
 class CallStatusModel(BaseModel):
     CallSid:str
-    RecordingSid:str
+    RecordingSid:str|None = None
     Duration:int|None=None
     CallDuration:int|None=None
     RecordingDuration:int|None=None
@@ -48,12 +48,14 @@ class CallStatusModel(BaseModel):
     SequenceNumber:str
     subject_id:str|None = None
 
+class GatherDataModel(BaseModel):
+    message:str
+    result:bool
 
 class GatherResultModel(BaseModel):
     subject_id:str
     request_id:str
-    message:str
-    error:bool
-    result:bool
     CallSid:str
     To:str
+    data:GatherDataModel
+    state:str

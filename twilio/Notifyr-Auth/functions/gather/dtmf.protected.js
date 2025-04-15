@@ -41,16 +41,17 @@ class DTMFConfig {
         this.hangup = this.event.hangup;
     }
 
-    to_body(message,result,error){
+    to_body(message, result) {
         return {
-            "subject_id":this.subject_id,
-            "request_id":this.request_id,
-            "CallSid":this.CallSid,
-            "To":this.To,
-            message,
-            result,
-            error
-
+            "subject_id": this.subject_id,
+            "request_id": this.request_id,
+            "CallSid": this.CallSid,
+            "To": this.To,
+            'state':'dtmf-result',
+            'data': {
+                message,
+                result,
+            }
         }
     }
 
@@ -75,7 +76,7 @@ class DTMFConfig {
 }
 
 function verify(dtmf, twiml, contact) {
-    
+
 
     let _deconstruct_error = true;
     let _error_message;
@@ -87,7 +88,7 @@ function verify(dtmf, twiml, contact) {
     } catch (error) {
         _error_message = error.message;
         console.error("Error deconstructing query:", error.message);
-        body = dtmf.to_body(_error_message, false, true);
+        body = dtmf.to_body(_error_message, false);
         twiml.say("There was an error processing your request. Please try again later.");
 
     }
@@ -96,9 +97,9 @@ function verify(dtmf, twiml, contact) {
         try {
             if (dtmf.contact_id === null) {
                 dtmf.verify_digits();
-                body = dtmf.to_body('User enter the Valid OTP', true, false);
-                twiml.say("You entered the valid digit. You should be ok!");
-                
+                body = dtmf.to_body('User enter the Valid OTP', true);
+                twiml.say("You entered the valid digit.");
+
             }
             else {
                 dtmf.verify_contact_dtmf_code(contact);
@@ -106,8 +107,8 @@ function verify(dtmf, twiml, contact) {
         } catch (error) {
             _error_message = error.message;
             console.error("Error verifying digits:", error.message);
-            body = dtmf.to_body(_error_message, false, true);
-            twiml.say("The digits you entered are incorrect. Please try again.");
+            body = dtmf.to_body(_error_message, false);
+            twiml.say("The digits you entered are incorrect. Please try again Later.");
         }
     }
     return body;
@@ -121,13 +122,13 @@ exports.handler = async function (context, event, callback) {
 
     const dtmf = new DTMFConfig(event);
     const body = verify(dtmf, twiml, contact);
-    const {message,status_code }= await service.sendGatherResult(body)
+    const { message, status_code } = await service.sendGatherResult(body)
 
     if (dtmf.hangup) {
         twiml.pause(1)
         twiml.say("Goodbye!");
         twiml.hangup();
-    }   
+    }
 
     return callback(null, twiml);
 };

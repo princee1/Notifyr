@@ -54,12 +54,9 @@ class NotifyrAuthService {
   async sendLogStatus(body, url) {
     const status_url = this.url + url
     try {
-      const result = await axios.post(status_url, { headers: this.headers, body });
-      console.log("Result", result.status);
-      console.log("Result", result.data);
-      
+      const result = await axios.post(status_url, { ...body },);
     } catch (error) {
-      console.log(error.response.data)
+      console.error(error.response)
     }
   }
 
@@ -90,7 +87,6 @@ class NotifyrAuthService {
       };
     }
   }
-
 
   async refresh() {
 

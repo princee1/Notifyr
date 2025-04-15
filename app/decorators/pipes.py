@@ -266,6 +266,15 @@ class KeepAliveResponsePipe(Pipe):
         return result
     
 
+class TwilioResponseStatusPipe(Pipe):
+    def __init__(self,before=False,status_code=status.HTTP_204_NO_CONTENT):
+        super().__init__(before)
+        self.status_code=status_code
+
+    def pipe(self,result:Any|Response,response:Response):
+        response.status_code = self.status_code
+        return result    
+
 @AsyncAPIFilterInject
 async def parse_phone_number(phone_number:str) -> str:
     """

@@ -2,6 +2,7 @@ from asyncio import CancelledError
 import asyncio
 from typing import Callable
 from app.classes.auth_permission import WSPathNotFoundError
+from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
 from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
 from app.definition._error import BaseError
@@ -413,3 +414,33 @@ class ReactiveHandler(Handler):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={
                 'message':'subject id not found'
             })
+
+
+class StreamDataParserHandler(Handler):
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except SequentialStateError as e:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Sequential state error during data stream: {str(e)}"
+            )
+
+        except ContinuousStateError as e:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Continuous state error during data stream: {str(e)}"
+            )
+
+        except DataParsingError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Error parsing stream data: {str(e)}"
+            )
+
+        except ValidationDataError as e:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Validation error in stream data: {str(e)}"
+            )

@@ -1,3 +1,4 @@
+import asyncio
 from threading import Thread
 import injector
 from inspect import signature, getmro
@@ -569,9 +570,14 @@ def GetDependsFunc(typ:type[S],func_name:str)->Callable:
     if not func:
         raise MethodServiceNotExistsError
     
-    @functools.wraps(func)
-    def depends(**kwargs):
-        return func(**kwargs)
+    if asyncio.iscoroutinefunction(func):
+        @functools.wraps(func)
+        async def depends(**kwargs):
+            return await func(**kwargs)
+    else:
+        @functools.wraps(func)
+        def depends(**kwargs):
+            return func(**kwargs)
     
     return depends
 

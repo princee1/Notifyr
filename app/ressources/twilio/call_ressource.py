@@ -3,13 +3,15 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException, Request, Response
 from app.classes.auth_permission import Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
+from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard
-from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
+from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
-from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
+from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path
 from app.errors.async_error import ReactiveSubjectNotFoundError
-from app.models.otp_model import GatherDtmfOTPModel, OTPModel
+from app.models.contacts_model import ContactORM
+from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.security_model import ClientORM
 from app.models.voice_model import BaseVoiceCallModel, CallStatusModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
@@ -21,7 +23,7 @@ from app.services.twilio_service import CallService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
-from app.depends.my_depends import KeepAliveQuery, get_client, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
+from app.depends.my_depends import KeepAliveQuery, get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
 
 
 CALL_ONGOING_PREFIX = 'ongoing'
@@ -81,22 +83,20 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(KeepAliveResponsePipe, before=False)
-    @UseHandler(AsyncIOHandler)
+    @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
     @BaseHTTPRessource.Get('/otp/', dependencies=[Depends(populate_response_with_request_id)])
     async def enter_digit_otp(self, otpModel: GatherDtmfOTPModel, request: Request, response: Response, keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
-        if not otpModel.otp:
-            raise HTTPException(status_code=400, detail="OTP is required")
 
         rx_id = keepAliveConn.create_subject('HTTP')
         keepAliveConn.register_lock()
+        keepAliveConn.set_stream_parser(StreamSequentialDataParser(['completed','dtmf-result']))
         
         result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
-        call_details = otpModel.model_dump(exclude={'otp', 'content','service'})
-        call_results = self.callService.send_template_voice_call(result, call_details,keepAliveConn.rx_subject.id_)
+        call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
+        call_results = self.callService.send_template_voice_call(result, call_details,False,keepAliveConn.rx_subject.id_)
 
-        res = await keepAliveConn.wait_for(call_results, 'otp_result')
-        res['otp_result']
-        return res
+        return await keepAliveConn.wait_for(call_results, 'otp_result')
+      
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.RELAY])
@@ -147,17 +147,25 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseGuard(RegisteredContactsGuard)
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(KeepAliveResponsePipe, before=False)
-    @UseHandler(AsyncIOHandler)
+    @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], dependencies=[Depends(populate_response_with_request_id)],mount=False)
-    async def voice_authenticate(self, request: Request, response: Response, client: Annotated[ClientORM, Depends(get_client)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
+    async def voice_authenticate(self, request: Request, otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
 
+        if contact.phone != otpModel.to:
+            raise HTTPException(status_code=400,detail='Contact phone number mismatch')
+            
         rx_id = keepAliveConn.create_subject('HTTP')
         keepAliveConn.register_lock()
+        keepAliveConn.set_stream_parser(StreamContinuousDataParser(['phrase-result','voice-result']))
 
-        result = self.callService.gather_speech(rx_id)
-        call_results = self.callService.send_template_voice_call(result, {})
+        call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
 
-        return await keepAliveConn.wait_for(call_results,'verified')
+        call_details['record'] = True
+        
+        result = self.callService.gather_speech(otpModel,rx_id,keepAliveConn.x_request_id)
+        call_results = self.callService.send_template_voice_call(result, call_details,False,rx_id)
+
+        return await keepAliveConn.wait_for(call_results,'otp_result')
 
 
 CALL_INCOMING_PREFIX = "incoming"
@@ -177,7 +185,8 @@ class IncomingCallRessources(BaseHTTPRessource):
         self.contactsService = contactsService
         self.loggerService = loggerService
         self.reactiveService = reactiveService
-        super().__init__(dependencies=[Depends(verify_twilio_token)])
+        # super().__init__(dependencies=[Depends(verify_twilio_token)]) # TODO need to the signature
+        super().__init__()
 
     @BaseHTTPRessource.HTTPRoute('/menu/', methods=[HTTPMethod.POST])
     async def voice_menu(self, authPermission=Depends(get_auth_permission)):
@@ -199,23 +208,28 @@ class IncomingCallRessources(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/error/', methods=[HTTPMethod.POST])
     async def voice_error(self, authPermission=Depends(get_auth_permission)):
         pass
-
+    
+    @UseHandler(ReactiveHandler)
+    @UsePipe(TwilioResponseStatusPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
-    async def voice_call_status(self, status: CallStatusModel, authPermission=Depends(get_auth_permission)):
-        print(status)
-        ...
+    async def voice_call_status(self, status: CallStatusModel, response:Response,authPermission=Depends(get_auth_permission)):
+        
+        if status.subject_id != None:
+            subject = self.reactiveService[status.subject_id]
+            value = {
+                'state':status.CallStatus,
+                'data':status.model_dump(include=('CallSid','RecordingSid','Duration','CallDuration','RecordingDuration'))
+            }
+
+            subject.on_next(value)
         
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
     async def gather_result(self,gatherResult:GatherResultModel, response:Response,authPermission=Depends(get_auth_permission)):
-        subject:ReactiveSubject  | None = self.reactiveService._subscriptions.get(gatherResult.subject_id,None)
-        print(gatherResult.model_dump())
-        if subject == None:
-            raise ReactiveSubjectNotFoundError(gatherResult.subject_id)
-        result =gatherResult.model_dump(include=('result','message','error'))
-
+        subject = self.reactiveService[gatherResult.subject_id]
+        result =gatherResult.model_dump(include=('data','state'))
         subject.on_next(result)
-        subject.on_completed()
+        #subject.on_completed()
         
         
     @BaseHTTPRessource.HTTPRoute('/partial-result/', methods=[HTTPMethod.POST])
