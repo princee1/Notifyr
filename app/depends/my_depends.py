@@ -3,6 +3,7 @@ from typing import Annotated, Any, Callable
 from fastapi import Depends, HTTPException, Header, Query, Response, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
+from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
 from app.container import Get, GetAttr
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
@@ -16,7 +17,7 @@ from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from tortoise.exceptions import OperationalError
 from .variables import *
-from time import perf_counter
+from time import perf_counter,time
 
 
 def AcceptNone(key):
@@ -285,26 +286,21 @@ class KeepAliveQuery:
         self.x_request_id = x_request_id
         self.keep_alive = keep_alive
 
-        self.value = None
+        self.value = {}
         self.error = None
         self.subscription = None
 
         self.start_time = perf_counter()
         self.rx_subject = None
 
-        self.satisfaction_callback:Callable[[],bool|Exception] = None
-
         self.reactiveService: ReactiveService = Get(ReactiveService)
         self.loggerService: LoggerService = Get(LoggerService)
 
         self.subject_list:list[str] = []
+        self.parser:StreamContinuousDataParser|StreamSequentialDataParser= None
 
-    def register_satisfaction_callback(self,callback:Callable[...,bool|Exception]):
-
-        def wrapper():
-            return callback(self.value)
-
-        self.satisfaction_callback = wrapper
+    def set_stream_parser(self,parser):
+        self.parser = parser
 
     def register_subject(self,subject_id:str,only_subject:bool):
         self.subscription = self.reactiveService.subscribe(
@@ -334,16 +330,27 @@ class KeepAliveQuery:
         else:
             return None
 
-    def on_next(self, v: Any):
-        self.value = v
+    def on_next(self, v: dict):
+        try:
+            state = v['state']
+            if state in self.parser.state:
+                value = {state:v['data']}
+                self.value.update(value)
+
+            self.parser.up_state(state)
+
+            self.on_error(None)
+        except Exception as e:
+            self.on_error(e)
 
     def on_error(self, e: Exception):
         self.process_time = perf_counter() - self.start_time
         self.error = e
-        setattr(self.error, 'process_time', self.process_time)
+        if self.error !=None:
+            setattr(self.error, 'process_time', self.process_time)
 
     def on_complete(self,):
-        print(f'{self.rx_subject.id_} - {self.x_request_id} Done')
+        self.parser._completed = True
 
     def register_lock(self,subject_id=None):
         if subject_id == None:
@@ -362,12 +369,15 @@ class KeepAliveQuery:
             self.subscription = None
         
         self.process_time = perf_counter() - self.start_time
-        self.rx_subject.dispose_lock(self.x_request_id)
+        
         for rx_sub in self.subject_list:
             rx_sub = self.reactiveService._subscriptions.get(rx_sub,None)
             if rx_sub==None:
                 continue
             rx_sub.dispose_lock(self.x_request_id)
+
+        if self.rx_subject !=None:
+            self.reactiveService.delete_subject(self.rx_subject.id_)
             
     async def wait_for(self, result_to_return: Any = None, coerce: str = None,subject_id=None):
         if self.keep_alive:
@@ -379,22 +389,36 @@ class KeepAliveQuery:
                     rx_sub.register_lock(self.x_request_id)
                 else:
                     raise ReactiveSubjectNotFoundError(subject_id)
-            #while True:
-            await rx_sub.wait_for(self.x_request_id,self.timeout, result_to_return) # TODO add while to wait the correct value
-            if self.error != None:
-                raise self.error
-            key = 'value' if coerce == None else coerce
-                # TODO relock the lock before coming in the iteration
-                # TODO wheter the subscription still holds
+            current_timeout = self.timeout
+            current_time = time()
 
-                # self.satisfaction_callback()
-                # break
+            while True:
+                await rx_sub.wait_for(self.x_request_id,current_timeout, result_to_return)
+                if self.error != None:
+                    raise self.error
+                
+                if self.parser.completed:
+                    break
+                rx_sub.lock_lock(self.x_request_id)
+
+                delta = self._compute_delta(current_timeout, current_time)
+                current_time= time()
+                current_timeout -=delta 
+
+            key = 'value' if coerce == None else coerce
             return {
                 key: self.value,
                 'results': result_to_return,
             }
         else:
             return result_to_return
+
+    def _compute_delta(self, current_timeout, current_time):
+        delta= time() - current_time
+
+        if delta> current_timeout:
+            raise TimeoutError
+        return delta
 
     def __repr__(self):
         subj_id = None if self.rx_subject == None else self.rx_subject.id_

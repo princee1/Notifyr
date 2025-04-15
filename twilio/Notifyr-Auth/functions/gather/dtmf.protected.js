@@ -41,14 +41,17 @@ class DTMFConfig {
         this.hangup = this.event.hangup;
     }
 
-    to_body(message,result){
+    to_body(message, result) {
         return {
-            "subject_id":this.subject_id,
-            "request_id":this.request_id,
-            "CallSid":this.CallSid,
-            "To":this.To,
-            message,
-            result,
+            "subject_id": this.subject_id,
+            "request_id": this.request_id,
+            "CallSid": this.CallSid,
+            "To": this.To,
+            'state':'dtmf-result',
+            'data': {
+                message,
+                result,
+            }
         }
     }
 
@@ -73,7 +76,7 @@ class DTMFConfig {
 }
 
 function verify(dtmf, twiml, contact) {
-    
+
 
     let _deconstruct_error = true;
     let _error_message;
@@ -96,7 +99,7 @@ function verify(dtmf, twiml, contact) {
                 dtmf.verify_digits();
                 body = dtmf.to_body('User enter the Valid OTP', true);
                 twiml.say("You entered the valid digit.");
-                
+
             }
             else {
                 dtmf.verify_contact_dtmf_code(contact);
@@ -119,13 +122,13 @@ exports.handler = async function (context, event, callback) {
 
     const dtmf = new DTMFConfig(event);
     const body = verify(dtmf, twiml, contact);
-    const {message,status_code }= await service.sendGatherResult(body)
+    const { message, status_code } = await service.sendGatherResult(body)
 
     if (dtmf.hangup) {
         twiml.pause(1)
         twiml.say("Goodbye!");
         twiml.hangup();
-    }   
+    }
 
     return callback(null, twiml);
 };

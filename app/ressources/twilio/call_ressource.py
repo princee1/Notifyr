@@ -3,9 +3,10 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException, Request, Response
 from app.classes.auth_permission import Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
+from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard
-from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
+from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path
 from app.errors.async_error import ReactiveSubjectNotFoundError
@@ -70,16 +71,17 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(KeepAliveResponsePipe, before=False)
-    @UseHandler(AsyncIOHandler,ReactiveHandler)
+    @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
     @BaseHTTPRessource.Get('/otp/', dependencies=[Depends(populate_response_with_request_id)])
     async def enter_digit_otp(self, otpModel: GatherDtmfOTPModel, request: Request, response: Response, keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
 
         rx_id = keepAliveConn.create_subject('HTTP')
         keepAliveConn.register_lock()
+        keepAliveConn.set_stream_parser(StreamSequentialDataParser(['completed','dtmf-result']))
         
         result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
         call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
-        call_results = self.callService.send_template_voice_call(result, call_details,keepAliveConn.rx_subject.id_)
+        call_results = self.callService.send_template_voice_call(result, call_details,False,keepAliveConn.rx_subject.id_)
 
         return await keepAliveConn.wait_for(call_results, 'otp_result')
       
@@ -133,7 +135,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseGuard(RegisteredContactsGuard)
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(KeepAliveResponsePipe, before=False)
-    @UseHandler(AsyncIOHandler,ReactiveHandler)
+    @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], dependencies=[Depends(populate_response_with_request_id)],mount=False)
     async def voice_authenticate(self, request: Request, otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)], authPermission=Depends(get_auth_permission)):
 
@@ -142,12 +144,14 @@ class OnGoingCallRessource(BaseHTTPRessource):
             
         rx_id = keepAliveConn.create_subject('HTTP')
         keepAliveConn.register_lock()
+        keepAliveConn.set_stream_parser(StreamContinuousDataParser(['phrase-result','voice-result']))
+
         call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
 
         call_details['record'] = True
         
         result = self.callService.gather_speech(otpModel,rx_id,keepAliveConn.x_request_id)
-        call_results = self.callService.send_template_voice_call(result, call_details,rx_id)
+        call_results = self.callService.send_template_voice_call(result, call_details,False,rx_id)
 
         return await keepAliveConn.wait_for(call_results,'otp_result')
 
@@ -193,21 +197,27 @@ class IncomingCallRessources(BaseHTTPRessource):
     async def voice_error(self, authPermission=Depends(get_auth_permission)):
         pass
     
+    @UseHandler(ReactiveHandler)
     @UsePipe(TwilioResponseStatusPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
     async def voice_call_status(self, status: CallStatusModel, response:Response,authPermission=Depends(get_auth_permission)):
-        status = status.model_dump()
+        
+        if status.subject_id != None:
+            subject = self.reactiveService[status.subject_id]
+            value = {
+                'state':status.CallStatus,
+                'data':status.model_dump(include=('CallSid','RecordingSid','Duration','CallDuration','RecordingDuration'))
+            }
+
+            subject.on_next(value)
         
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
     async def gather_result(self,gatherResult:GatherResultModel, response:Response,authPermission=Depends(get_auth_permission)):
-        subject:ReactiveSubject  | None = self.reactiveService._subscriptions.get(gatherResult.subject_id,None)
-        if subject == None:
-            raise ReactiveSubjectNotFoundError(gatherResult.subject_id)
-        result =gatherResult.model_dump(include=('result','message','error'))
-
+        subject = self.reactiveService[gatherResult.subject_id]
+        result =gatherResult.model_dump(include=('data','state'))
         subject.on_next(result)
-        subject.on_completed()
+        #subject.on_completed()
         
         
     @BaseHTTPRessource.HTTPRoute('/partial-result/', methods=[HTTPMethod.POST])

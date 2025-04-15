@@ -48,11 +48,14 @@ class CallStatusModel(BaseModel):
     SequenceNumber:str
     subject_id:str|None = None
 
+class GatherDataModel(BaseModel):
+    message:str
+    result:bool
 
 class GatherResultModel(BaseModel):
     subject_id:str
     request_id:str
-    message:str
-    result:bool
     CallSid:str
     To:str
+    data:GatherDataModel
+    state:str
