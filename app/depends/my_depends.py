@@ -12,7 +12,7 @@ from app.services.admin_service import AdminService
 from app.services.celery_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
-from app.services.reactive_service import ReactiveService, ReactiveSubject, ReactiveType
+from app.services.reactive_service import ReactiveService, ReactiveSubject, ReactiveType,Disposable
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from tortoise.exceptions import OperationalError
@@ -288,7 +288,8 @@ class KeepAliveQuery:
 
         self.value = {}
         self.error = None
-        self.subscription = None
+        self.subscription:dict[str,Disposable] = {}
+
 
         self.start_time = perf_counter()
         self.rx_subject = None
@@ -303,7 +304,7 @@ class KeepAliveQuery:
         self.parser = parser
 
     def register_subject(self,subject_id:str,only_subject:bool):
-        self.subscription = self.reactiveService.subscribe(
+        subscription = self.reactiveService.subscribe(
             subject_id,
             on_next= self.on_next,
             on_completed=self.on_complete,
@@ -311,7 +312,12 @@ class KeepAliveQuery:
         )
         
         if only_subject:
-            self.rx_subject = self.reactiveService._subscriptions[subject_id]
+            self.rx_subject = self.reactiveService[subject_id]
+        else:
+            self.subject_list.append(subject_id)
+        
+        self.subscription[subject_id] = subscription
+
 
     def create_subject(self, reactiveType: ReactiveType):
 
@@ -319,13 +325,14 @@ class KeepAliveQuery:
             rx_subject = self.reactiveService.create_subject(self.x_request_id, reactiveType)
             rx_id = rx_subject.id_
 
-            self.subscription = self.reactiveService.subscribe(
+            subscription = self.reactiveService.subscribe(
                 rx_id,
                 on_next=self.on_next,
                 on_error=self.on_error,
                 on_completed=self.on_complete
             )
             self.rx_subject = rx_subject
+            self.subscription[rx_id] =subscription
             return rx_subject.id_
         else:
             return None
@@ -364,19 +371,18 @@ class KeepAliveQuery:
 
     def dispose(self):
 
-        if self.subscription:
-            self.subscription.dispose()
-            self.subscription = None
-        
         self.process_time = perf_counter() - self.start_time
         
-        for rx_sub in self.subject_list:
-            rx_sub = self.reactiveService._subscriptions.get(rx_sub,None)
+        for rx_sub_id in self.subject_list:
+            rx_sub = self.reactiveService._subscriptions.get(rx_sub_id,None)
             if rx_sub==None:
                 continue
             rx_sub.dispose_lock(self.x_request_id)
+            if rx_sub_id in self.subscription:
+                self.subscription[rx_sub_id].dispose()
 
         if self.rx_subject !=None:
+            self.subscription[self.rx_subject.id_].dispose()
             self.reactiveService.delete_subject(self.rx_subject.id_)
             
     async def wait_for(self, result_to_return: Any = None, coerce: str = None,subject_id=None):

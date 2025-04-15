@@ -10,6 +10,7 @@ from app.services.logger_service import LoggerService
 from app.utils.helper import generateId
 import asyncio
 from reactivex import Subject
+from reactivex.disposable import Disposable
 
 
 ReactiveType= Literal['HTTP','Celery','BackgroundTask','RedisPubSub','RedisStream','RedisQueue']
