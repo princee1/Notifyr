@@ -58,10 +58,10 @@ exports.handler = async function (context, event, callback) {
   let body;
 
   if (service.type === CALL_TYPE) {
-    url = "/twilio/call/incoming/status";
+    url = "/twilio/call/incoming/status/";
     body = setCallLog(event);
   } else if (service.type === SMS_TYPE) {
-    url = "/twilio/sms/incoming/status";
+    url = "/twilio/sms/incoming/status/";
     body = setSmsLog(event);
   } else {
 

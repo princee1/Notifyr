@@ -14,3 +14,4 @@ from .redis_backend_ressource import *
 from .contacts_ressources import ContactsRessource
 from .auth_ressource import AuthRessource
 from .twilio_ressource import TwilioRessource
+from .app_ressource import AppRessource

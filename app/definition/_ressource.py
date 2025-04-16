@@ -285,8 +285,9 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         prefix:str = self.__class__.meta['prefix']
+        add_prefix:bool = self.__class__.meta['add_prefix']
         #prefix = 
-        if not prefix.startswith(PATH_SEPARATOR):
+        if not prefix.startswith(PATH_SEPARATOR) and add_prefix:
             prefix = PATH_SEPARATOR + prefix
         
         self.router = APIRouter(prefix=prefix, on_shutdown=[self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
@@ -374,12 +375,14 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
 R = TypeVar('R', bound=BaseHTTPRessource)
 
 
-def HTTPRessource(prefix:str,routers:list[Type[R]]=[],websockets:list[Type[W]]=[]):
+def HTTPRessource(prefix:str,routers:list[Type[R]]=[],websockets:list[Type[W]]=[],add_prefix=True):
     def class_decorator(cls:Type[R]) ->Type[R]:
         # TODO: support module-level injection 
         cls.meta['prefix'] = prefix
         cls.meta['routers'] = routers
         cls.meta['websockets'] = websockets
+        cls.meta['add_prefix'] = add_prefix
+
         return cls
     return class_decorator
 
