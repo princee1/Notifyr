@@ -99,6 +99,7 @@ class JWTAuthMiddleware(MiddleWare):
     @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
+    @ExcludeOn(['/'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
@@ -132,6 +133,7 @@ class BackgroundTaskMiddleware(MiddleWare):
         self.taskService:TaskService = Get(TaskService)
     
     @ExcludeOn(['/docs/*','/openapi.json'])
+    @ExcludeOn(['/'])
     async def dispatch(self, request:Request, call_next):
         request_id = generateId(25)
         request.state.request_id = request_id
@@ -156,6 +158,7 @@ class UserAppMiddleware(MiddleWare):
 
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ApplyOn(['/auth/generate/admin/*'])
+    @ExcludeOn(['/'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         return await super().dispatch(request, call_next)
 
@@ -166,6 +169,7 @@ class ChallengeMatchMiddleware(MiddleWare):
     @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
+    @ExcludeOn(['/'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         authPermission: AuthPermission = await get_auth_permission(request)
         client:ClientORM = await get_client_from_request(request)
