@@ -42,4 +42,5 @@ class TwilioRessource(BaseHTTPRessource):
         status_code, body = await self.twilioService.async_phone_lookup(phone_number,True,True)
         if status_code != 200:
             raise HTTPException(status_code=status_code, detail=body)
+        
         return body
