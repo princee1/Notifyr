@@ -6,6 +6,7 @@ const set_http_basic_auth = (username, password) => { };
 
 const assets = Runtime.getAssets();
 const { Contact } = require(assets["/contacts.js"].path);
+const { generateTwilioSignature } = require(assets["/security.js"].path)
 
 class NotifyrAuthService {
 
@@ -23,11 +24,13 @@ class NotifyrAuthService {
     this.type = this.event.type ?? null;
     this.setUrl();
 
-    this.authToken = this.context.AUTH_KEY;
-    this.refreshToken = this.context.REFRESH_KEY;
+    this.notifyr_authToken = this.context.AUTH_KEY
+    this.notifyr_refreshToken = this.context.REFRESH_KEY;
+
+    this.twilio_auth_token=this.context.AUTH_TOKEN;
 
     this.headers = {
-      "Authorization": set_auth_token(this.context.AUTH_KEY ?? 'Test'),
+      "Authorization": set_auth_token(this.notifyr_authToken ?? 'Test'),
     };
   }
 
@@ -53,8 +56,14 @@ class NotifyrAuthService {
 
   async sendLogStatus(body, url) {
     const status_url = this.url + url
+    const signature = generateTwilioSignature(this.twilio_auth_token, status_url)
+    const headers = {
+      //'X-Twilio-Signature': signature
+    }
     try {
-      const result = await axios.post(status_url, { ...body },);
+      const result = await axios.post(status_url, { ...body }, {
+        headers
+      });
     } catch (error) {
       console.error(error.response)
     }
@@ -71,7 +80,13 @@ class NotifyrAuthService {
     try {
 
       const url = `${this.url}/twilio/call/incoming/gather-result/`;
-      const response = await axios.post(url, body);
+      const signature = generateTwilioSignature(this.twilio_auth_token, url)
+      const headers = {
+        //'X-Twilio-Signature': signature
+      }
+      const response = await axios.post(url, body,{
+        headers,
+      });
       const { message } = response.data;
       console.log(response)
 

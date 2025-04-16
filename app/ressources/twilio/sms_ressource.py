@@ -128,7 +128,8 @@ class IncomingSMSRessource(BaseHTTPRessource):
         self.smsService: SMSService = smsService
         self.contactsService: ContactsService = contactsService
         self.chatService: ChatService = chatService
-        super().__init__(dependencies=[Depends(verify_twilio_token)])
+        #super().__init__(dependencies=[Depends(verify_twilio_token)])
+        super().__init__()
 
     @BaseHTTPRessource.HTTPRoute('/menu/',methods=[HTTPMethod.POST])
     async def sms_menu(self,authPermission=Depends(get_auth_permission)):
