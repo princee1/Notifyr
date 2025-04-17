@@ -60,26 +60,28 @@ services:
     depends_on:
       - postgres
     
-  # celery:
-  #   image: python:3.11
-  #   command: ["make", "celery"]
-  #   container_name: worker
-  #   build:
-  #     context: ./
-  #     dockerfile: Dockerfile
-  #   restart: always
-  #   depends_on:
-  #     - redis
-  #     - redis-commander
-  #   deploy:
-  #     replicas: 5
-    
-  redbeat:
-    container_name: redbeat
-    image: python:3.11
+  celery:
+    image: python:3.11-slim
+    command: ["./spawn_celery_worker.sh", "5" ]
+    container_name: worker
     build:
       context: ./
       dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - redis-commander
+    
+  redbeat:
+    container_name: redbeat
+    image: python:3.11-slim
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    env_file:
+      - .env
     restart: always
     depends_on:
       - redis
@@ -87,7 +89,7 @@ services:
     command: ["make ", "redbeat"]
     
   flower:
-    image: python:3.11
+    image: python:3.11-slim
     command: ["make", "flower"]
     container_name: flower
     build:
@@ -140,9 +142,8 @@ services:
       dockerfile: Dockerfile.twilio
     ports:
       - "3000:3000"
-  
     environment:
-      - NGROK_TOKEN=${NGROK_TOKEN}
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
       - NGROK_URL=${NGROK_URL}
     
     

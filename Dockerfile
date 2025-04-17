@@ -14,6 +14,10 @@ COPY ./requirements_dev.txt .
 
 COPY ./Makefile .
 
+COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
+
+#RUN chmod +x ./spawn_celery_worker.sh
+
 RUN make install
 
 RUN pip show celery
