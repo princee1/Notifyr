@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
+<html lang="en" data-theme="dark"> <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Notifyr - Modern Communication Relay Platform</title>
@@ -8,18 +7,45 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* CSS Variables for Theme */
+        /* CSS Variables for Themes */
         :root {
-            --bg-dark: #111827; /* Darker blue-gray */
-            --bg-medium: #1f2937; /* Medium blue-gray */
-            --bg-light: #374151; /* Lighter blue-gray */
+            /* Light Theme (Default) */
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9fafb; /* Slightly off-white for sections */
+            --bg-tertiary: #f3f4f6;  /* For cards */
+            --text-primary: #1f2937; /* Dark gray */
+            --text-secondary: #4b5563; /* Medium gray */
+            --text-muted: #6b7280;  /* Lighter gray */
+            --accent-primary: #2563eb; /* Standard blue */
+            --accent-secondary: #3b82f6; /* Brighter blue */
+            --border-color: #e5e7eb; /* Light gray border */
+            --shadow-color: rgba(0, 0, 0, 0.05);
+            --code-bg: #e5e7eb;
+            --code-text: #111827;
+            --hero-gradient-start: #f9fafb;
+            --hero-gradient-end: #f3f4f6;
+            --font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+            /* Transitions */
+            --theme-transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+
+        html[data-theme='dark'] {
+            /* Dark Theme Overrides */
+            --bg-primary: #111827; /* Darker blue-gray */
+            --bg-secondary: #1f2937; /* Medium blue-gray */
+            --bg-tertiary: #374151; /* Lighter blue-gray */
             --text-primary: #f9fafb; /* Off-white */
             --text-secondary: #d1d5db; /* Light gray */
             --text-muted: #9ca3af; /* Medium gray */
             --accent-primary: #3b82f6; /* Bright blue */
             --accent-secondary: #60a5fa; /* Lighter blue */
+            --border-color: #4b5563; /* Darker border */
             --shadow-color: rgba(0, 0, 0, 0.2);
-            --font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --code-bg: #374151;
+            --code-text: #fcd34d; /* Amber/yellow */
+            --hero-gradient-start: #1f2937;
+            --hero-gradient-end: #111827;
         }
 
         /* Basic Reset */
@@ -36,68 +62,133 @@
         body {
             font-family: var(--font-family);
             line-height: 1.7;
-            background-color: var(--bg-dark);
+            background-color: var(--bg-primary);
             color: var(--text-secondary);
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            transition: var(--theme-transition);
+        }
+
+        /* Theme Toggle Button */
+        #theme-toggle {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px; /* Padding around SVG */
+            box-shadow: 0 2px 5px var(--shadow-color);
+            z-index: 100;
+            transition: var(--theme-transition), transform 0.2s ease;
+        }
+
+        #theme-toggle:hover {
+             transform: scale(1.1);
+             border-color: var(--accent-primary);
+        }
+
+        #theme-toggle svg {
+             width: 20px; /* Adjust size as needed */
+             height: 20px;
+             fill: currentColor; /* Inherit button color */
         }
 
         /* Container */
         .container {
             width: 90%;
-            max-width: 1100px; /* Slightly wider */
-            margin: 0 auto; /* Remove top/bottom margin here */
+            max-width: 1100px;
+            margin: 0 auto;
             padding: 2rem 1.5rem;
             flex-grow: 1;
+            position: relative; /* Needed for absolute positioning of toggle */
         }
 
         /* Header / Hero Section */
         header.hero {
             text-align: center;
-            padding: 4rem 1rem 3rem 1rem; /* More padding */
-            background: linear-gradient(135deg, var(--bg-medium), var(--bg-dark)); /* Subtle gradient */
+            padding: 5rem 1rem 4rem 1rem; /* Adjusted padding */
+            background: linear-gradient(135deg, var(--hero-gradient-start), var(--hero-gradient-end));
             margin-bottom: 3rem;
-            border-bottom: 1px solid var(--bg-light);
+            border-bottom: 1px solid var(--border-color);
+            transition: var(--theme-transition);
         }
 
         header.hero h1 {
-            font-size: 3rem; /* Larger title */
+            font-size: 3rem;
             font-weight: 700;
             color: var(--text-primary);
             margin-bottom: 0.75rem;
             letter-spacing: -1px;
+            transition: color 0.3s ease;
         }
 
          header.hero h1 span {
-             color: var(--accent-secondary); /* Accent color for part of the title */
+             color: var(--accent-secondary);
+             transition: color 0.3s ease;
          }
 
         header.hero p.tagline {
             font-size: 1.2rem;
             color: var(--text-muted);
             max-width: 600px;
-            margin: 0 auto; /* Center tagline */
+            margin: 0 auto 1.5rem auto;
             font-weight: 300;
+            transition: color 0.3s ease;
+        }
+
+        /* Call-to-Action Button Style */
+        .cta-button {
+            display: inline-block;
+            background-color: var(--accent-primary);
+            color: #ffffff; /* Keep text white on button */
+            padding: 0.75rem 1.75rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 10px var(--shadow-color);
+            margin-top: 1rem;
+            border: none; /* Remove border */
+        }
+
+        .cta-button:hover {
+            background-color: var(--accent-secondary);
+            color: #ffffff;
+            transform: translateY(-2px);
+            text-decoration: none;
+            box-shadow: 0 6px 15px var(--shadow-color);
         }
 
         /* Sections */
         section {
-            margin-bottom: 3.5rem; /* Increased spacing */
+            margin-bottom: 3.5rem;
             padding: 2rem;
-            background-color: var(--bg-medium);
-            border-radius: 12px; /* Softer corners */
+            background-color: var(--bg-secondary);
+            border-radius: 12px;
             box-shadow: 0 5px 20px var(--shadow-color);
+            border: 1px solid var(--border-color);
+            transition: var(--theme-transition), box-shadow 0.3s ease;
         }
 
         section h2 {
-            font-size: 2rem; /* Slightly larger section titles */
+            font-size: 2rem;
             font-weight: 600;
             color: var(--accent-secondary);
             margin-bottom: 1.5rem;
             padding-bottom: 0.5rem;
-            border-bottom: 1px solid var(--bg-light);
+            border-bottom: 1px solid var(--border-color);
             letter-spacing: -0.5px;
+            transition: color 0.3s ease, border-color 0.3s ease;
         }
 
         p {
@@ -107,15 +198,17 @@
         strong {
             color: var(--accent-primary);
             font-weight: 600;
+            transition: color 0.3s ease;
         }
 
         code {
-            background-color: var(--bg-light);
+            background-color: var(--code-bg);
             padding: 0.2em 0.5em;
             border-radius: 4px;
             font-family: "SF Mono", "Courier New", Courier, monospace;
-            color: #fcd34d; /* Amber/yellow for code */
+            color: var(--code-text);
             font-size: 0.9em;
+            transition: var(--theme-transition);
         }
 
         a {
@@ -125,7 +218,7 @@
             transition: color 0.2s ease;
         }
 
-        a:hover {
+        a:hover:not(.cta-button) {
             color: var(--accent-secondary);
             text-decoration: underline;
         }
@@ -133,28 +226,28 @@
         /* Features Section - Card Layout */
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Responsive grid */
-            gap: 1.5rem; /* Space between cards */
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
         }
 
         .feature-card {
-            background-color: var(--bg-light);
+            background-color: var(--bg-tertiary);
             padding: 1.75rem;
             border-radius: 10px;
-            border: 1px solid #4b5563; /* Subtle border */
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid var(--border-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease, var(--theme-transition);
         }
 
         .feature-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 8px 25px var(--shadow-color);
         }
 
         .feature-card .icon {
-            display: inline-block; /* Keep icon flow */
+            display: inline-block;
             color: var(--accent-primary);
             margin-bottom: 1rem;
-            /* SVG size defined inline or via width/height attributes */
+            transition: color 0.3s ease;
         }
 
          .feature-card .icon svg {
@@ -167,15 +260,17 @@
             font-weight: 600;
             color: var(--text-primary);
             margin-bottom: 0.75rem;
+            transition: color 0.3s ease;
         }
 
         .feature-card p {
             font-size: 0.95rem;
             color: var(--text-secondary);
-            margin-bottom: 0; /* Remove bottom margin for card paragraph */
+            margin-bottom: 0;
+             transition: color 0.3s ease;
         }
 
-        /* Simple List for Use Cases/Technology */
+        /* Simple List */
          ul.simple-list {
             list-style: none;
             padding-left: 0;
@@ -188,12 +283,13 @@
          }
 
          ul.simple-list li::before {
-             content: '✓'; /* Checkmark */
+             content: '✓';
              position: absolute;
              left: 0;
              top: 1px;
              color: var(--accent-primary);
              font-weight: bold;
+             transition: color 0.3s ease;
          }
 
         /* Footer */
@@ -203,21 +299,42 @@
             padding: 1.5rem;
             font-size: 0.9rem;
             color: var(--text-muted);
-            background-color: var(--bg-medium);
-            border-top: 1px solid var(--bg-light);
+            background-color: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
             width: 100%;
+            transition: var(--theme-transition);
+        }
+
+        footer a {
+            color: var(--text-muted);
+            font-weight: 400;
+            transition: color 0.3s ease;
+        }
+
+        footer a:hover {
+            color: var(--accent-secondary);
+            text-decoration: underline;
         }
 
         /* Responsive adjustments */
         @media (max-width: 768px) {
+            #theme-toggle {
+                top: 1rem;
+                right: 1rem;
+            }
             header.hero {
-                padding: 3rem 1rem 2rem 1rem;
+                padding: 4rem 1rem 3rem 1rem; /* Adjust padding */
             }
             header.hero h1 {
                 font-size: 2.5rem;
             }
             header.hero p.tagline {
                 font-size: 1.1rem;
+                margin-bottom: 1rem;
+            }
+            .cta-button {
+                padding: 0.6rem 1.5rem;
+                font-size: 0.95rem;
             }
             section h2 {
                 font-size: 1.75rem;
@@ -235,16 +352,18 @@
 </head>
 <body>
 
-    <header class="hero">
-        <div class="container">
+    <button id="theme-toggle" aria-label="Toggle theme">
+        </button>
+
+    <div class="container">
+        <header class="hero">
             <h1>Welcome to <span>Notifyr</span></h1>
             <p class="tagline">
                 The unified, secure, and developer-friendly platform for relaying SMS, Voice, and Email notifications.
             </p>
-        </div>
-    </header>
+            <a href="/docs" target="_blank" class="cta-button">Explore API Docs</a>
+        </header>
 
-    <div class="container">
         <main>
             <section id="about">
                 <h2>What is Notifyr?</h2>
@@ -252,7 +371,7 @@
                     Notifyr streamlines your application's communication needs by providing a robust backend service to relay critical messages. Effortlessly integrate <strong>SMS & Voice Calls</strong> using Twilio, and send <strong>Emails</strong> via standard SMTP, all managed through a single, secure interface.
                 </p>
                 <p>
-                    Designed for developers and system administrators, Notifyr simplifies notification workflows, enhances security with Role-Based Access Control, and provides essential contact management features.
+                    Designed for developers and system administrators, Notifyr simplifies notification workflows, enhances security with Role-Based Access Control, and provides essential contact management features. Access the interactive <a href="/docs" target="_blank">API documentation</a> to get started.
                 </p>
             </section>
 
@@ -261,7 +380,7 @@
                 <div class="features-grid">
                     <div class="feature-card">
                         <div class="icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                               <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-2.138a1.126 1.126 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
                             </svg>
                         </div>
@@ -271,7 +390,7 @@
 
                     <div class="feature-card">
                          <div class="icon">
-                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
                             </svg>
                         </div>
@@ -281,7 +400,7 @@
 
                     <div class="feature-card">
                          <div class="icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                               <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
                             </svg>
                         </div>
@@ -291,9 +410,9 @@
 
                      <div class="feature-card">
                          <div class="icon">
-                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 6.75Z" />
-                             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 7.5h.008v.008h-.008v-.008Zm1.5 3h.008v.008h-.008v-.008Zm1.5 3h.008v.008h-.008v-.008Z"/> /* Adding dots like Twilio logo */
+                             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 7.5h.008v.008h-.008v-.008Zm1.5 3h.008v.008h-.008v-.008Zm1.5 3h.008v.008h-.008v-.008Z"/>
                             </svg>
                         </div>
                         <h3>Twilio Integration</h3>
@@ -302,7 +421,7 @@
 
                      <div class="feature-card">
                          <div class="icon">
-                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                               <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                             </svg>
                         </div>
@@ -312,7 +431,7 @@
 
                      <div class="feature-card">
                          <div class="icon">
-                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                               <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
                             </svg>
                         </div>
@@ -328,7 +447,7 @@
                  <ul class="simple-list">
                      <li><strong>Twilio API:</strong> Powering programmable SMS & Voice functionalities.</li>
                      <li><strong>SMTP Protocol:</strong> Standard email relay for maximum compatibility.</li>
-                     <li><strong>Secure Backend Framework:</strong> Built upon [Mention Your Backend Tech, e.g., Node.js, Python/Django, Go] with security best practices.</li>
+                     <li><strong>Secure Backend Framework:</strong> Built upon FastAPI (Python) with security best practices.</li>
                      <li><strong>Database:</strong> Securely stores configuration and contact data (e.g., PostgreSQL, MySQL).</li>
                      <li><strong>RBAC Implementation:</strong> Custom or library-based Role-Based Access Control logic.</li>
                  </ul>
@@ -351,8 +470,71 @@
     </div>
 
     <footer>
-        <p>&copy; 2025 Notifyr Project. All Rights Reserved. Served securely by the backend.</p>
+        <p>&copy; <span id="current-year"></span> Notifyr Project. All Rights Reserved. | <a href="/docs" target="_blank">API Docs</a> | Served securely by the backend.</p>
     </footer>
+
+    <script>
+        const themeToggle = document.getElementById('theme-toggle');
+        const htmlElement = document.documentElement; // Get the <html> element
+        const currentYearSpan = document.getElementById('current-year');
+
+        // Define SVG icons
+        const sunIcon = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+            </svg>
+        `;
+        const moonIcon = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+            </svg>
+        `;
+
+        // Function to set the theme
+        const setTheme = (theme) => {
+            htmlElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            // Update button icon and aria-label
+            if (theme === 'dark') {
+                themeToggle.innerHTML = sunIcon;
+                themeToggle.setAttribute('aria-label', 'Switch to light theme');
+            } else {
+                themeToggle.innerHTML = moonIcon;
+                themeToggle.setAttribute('aria-label', 'Switch to dark theme');
+            }
+        };
+
+        // Function to get the initial theme
+        const getInitialTheme = () => {
+            const storedTheme = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+            if (storedTheme) {
+                return storedTheme; // Use stored theme if available
+            }
+            // Default to dark if OS prefers dark, otherwise light
+            // return prefersDark ? 'dark' : 'light';
+             // Or default to dark initially as set in the <html> tag:
+             return htmlElement.getAttribute('data-theme') || (prefersDark ? 'dark' : 'light');
+        };
+
+        // Set initial theme on load
+        const initialTheme = getInitialTheme();
+        setTheme(initialTheme);
+
+        // Add event listener for the toggle button
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = htmlElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+        });
+
+        // Set current year in footer
+        if (currentYearSpan) {
+            currentYearSpan.textContent = new Date().getFullYear();
+        }
+
+    </script>
 
 </body>
 </html>
