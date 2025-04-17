@@ -2,11 +2,14 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y make
 
+
 RUN useradd -m celery
 
 USER celery
 
 WORKDIR /usr/src/
+
+COPY ./assets ./assets/
 
 COPY ./app ./app/
 

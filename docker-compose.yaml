@@ -62,7 +62,7 @@ services:
     
   celery:
     image: python:3.11-slim
-    command: ["./spawn_celery_worker.sh", "5" ]
+    command: ["./spawn_celery_worker.sh", "30" ]
     container_name: worker
     build:
       context: ./

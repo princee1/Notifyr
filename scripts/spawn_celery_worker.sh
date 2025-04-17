@@ -9,7 +9,7 @@ NUM_PROCESSES=$1
 echo "Spawning $NUM_PROCESSES processes..."
 
 for i in $(seq 1 $NUM_PROCESSES); do
-    sleep 1
+    sleep 5
     $COMMAND &  # Run in background
 done
 

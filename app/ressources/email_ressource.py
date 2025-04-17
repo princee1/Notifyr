@@ -1,4 +1,5 @@
 from app.classes.auth_permission import MustHave, Role
+from app.classes.email import EmailInvalidFormatError
 from app.classes.template import HTMLTemplate
 from app.definition._service import ServiceStatus
 from app.models.email_model import CustomEmailModel, EmailTemplateModel
@@ -13,6 +14,7 @@ from app.depends.dependencies import Depends, get_auth_permission, get_request_i
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import  CeleryTask, SchedulerModel, TaskType
 from app.depends.my_depends import populate_response_with_request_id
+from app.utils.validation import email_validator
 
 
 class EmailTemplateSchedulerModel(SchedulerModel):
@@ -100,6 +102,19 @@ class EmailTemplateRessource(BaseHTTPRessource):
     async def verify_domain_hosting(self,):
         ...
 
-    @BaseHTTPRessource.HTTPRoute("/verify",methods=[HTTPMethod.POST],mount=False)
-    async def verify_email(self):
+
+    @UseLimiter(limit_value='10/day')
+    @UseRoles([Role.PUBLIC])
+    @UseHandler(handlers.EmailRelatedHandler)
+    @BaseHTTPRessource.HTTPRoute("/verify/{email}",methods=[HTTPMethod.GET],mount=False)
+    async def verify_email_email(self,email:str,request:Request):
         ...
+
+    
+    @UseRoles([Role.PUBLIC])
+    @UseHandler(handlers.EmailRelatedHandler)
+    @BaseHTTPRessource.HTTPRoute("/verify-smtp/{email}",methods=[HTTPMethod.GET],mount=False)
+    def verify_email_email(self,email:str):
+        if not email_validator(email):
+            raise EmailInvalidFormatError(email)
+        return self.emailService.verify_same_domain_email(email)

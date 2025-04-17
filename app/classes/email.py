@@ -6,7 +6,15 @@ from email.mime.image import MIMEImage
 from email.utils import make_msgid
 from email.utils import formatdate
 from typing import List, Optional, Literal
+from app.definition._error import BaseError
 from app.utils.fileIO import getFilenameOnly
+
+
+class NotSameDomainEmailError(BaseError):
+    ...
+
+class EmailInvalidFormatError(BaseError):
+    ...
 
 
 class EmailMetadata:

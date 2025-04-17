@@ -2,6 +2,7 @@ from asyncio import CancelledError
 import asyncio
 from typing import Callable
 from app.classes.auth_permission import WSPathNotFoundError
+from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
 from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
@@ -444,3 +445,15 @@ class StreamDataParserHandler(Handler):
                 status_code=422,
                 detail=f"Validation error in stream data: {str(e)}"
             )
+        
+class EmailRelatedHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        
+        try:
+            await super().handle(function, *args, **kwargs)
+        except NotSameDomainEmailError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,)
+
+        except EmailInvalidFormatError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,)

@@ -13,7 +13,7 @@ from app.utils.tools import Time
 
 from .model_service import LLMModelService
 from app.utils.constant import EmailHostConstant
-from app.classes.email import EmailBuilder, EmailMetadata
+from app.classes.email import EmailBuilder, EmailMetadata, NotSameDomainEmailError
 
 from .logger_service import LoggerService
 from app.definition import _service
@@ -46,6 +46,7 @@ class BaseEmailService(_service.Service):
                 return
             kwargs['connector'] = connector # BUG if the name changes it will not work
             result = func(*args, **kwargs)
+            print(result)
             self.logout(connector)
             return result
         return wrapper
@@ -228,6 +229,17 @@ class EmailSenderService(BaseEmailService):
             ...
 
     
+    @BaseEmailService.task_lifecycle
+    def verify_same_domain_email(self,email:str,connector:smtp.SMTP):
+        domain = email.split['@'][1]
+        our_domain = self.configService.SMTP_EMAIL.split['@'][1]
+        if our_domain != domain:
+            raise NotSameDomainEmailError
+        
+        return connector.verify(email)
+
+        
+
 # @_service.ServiceClass
 class EmailReaderService(BaseEmailService):
     def __init__(self, configService: ConfigService, loggerService: LoggerService, trainingService: LLMModelService,) -> None:
