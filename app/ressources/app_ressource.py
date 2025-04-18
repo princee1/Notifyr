@@ -16,3 +16,12 @@ class AppRessource(BaseHTTPRessource):
             "Cache-Control": f"public, max-age={cache_duration}, immutable"
         }
         return FileResponse('app/static/index.html',headers=headers)
+
+    @UseLimiter(limit_value='10000/day')
+    @BaseHTTPRessource.HTTPRoute('/landing-page',[HTTPMethod.GET],deprecated=True,mount=True,)
+    def landing_page(self,request:Request):
+        cache_duration = int(timedelta(days=365).total_seconds())
+        headers = {
+            "Cache-Control": f"public, max-age={cache_duration}, immutable"
+        }
+        return FileResponse('app/static/landing-page/index.html')
