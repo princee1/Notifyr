@@ -66,7 +66,7 @@ class ContactORM(Model):
     frequency = fields.CharEnumField(max_length=20,enum_type=Frequency,default=Frequency.always)
     action_code = fields.TextField(null=True)
     status = fields.CharEnumField(max_length=20,enum_type=Status,default=Status.Active)
-    lang = fields.CharField(max_length=20,default="en")
+    lang = fields.CharEnumField(max_length=20,enum_type=Lang, default=Lang.en)
     created_at = fields.DatetimeField(auto_now=True,use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
 
@@ -227,7 +227,7 @@ class ContactModel(BaseModel):
     last_name:str
     email:str =None
     phone:str=None
-    app_registered:bool
+    app_registered:bool # BUG because in the landing someone set it to true and access Registered user 
     lang:Lang
     frequency:Frequency
 
@@ -247,12 +247,6 @@ class ContactModel(BaseModel):
         if not phone_number_validator(phone):
             raise ValueError("Value is not the correct phone format")
         return phone  
-
-    @field_validator('lang')
-    def  check_language(cls,lang):
-        if lang not in ('en','fr'):
-            raise ValueError('Value lang is not supported yet only en or fr')
-        return lang
 
     @model_validator(mode="after")
     def check_email_phone(self)->Self:

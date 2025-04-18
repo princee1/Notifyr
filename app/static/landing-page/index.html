@@ -625,7 +625,34 @@
                     console.log("Nom:", nom || "Non fourni");
                     console.log("Email:", email);
                     console.log("Téléphone:", telephone || "Non fourni"); // Affiche "Non fourni" si vide
-
+                    
+                    fetch('/contacts/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            "first_name": prenom,
+                            "last_name": nom,
+                            email,
+                            "phone": telephone || null,
+                            "app_registered": true,
+                            "lang": "en",
+                            "frequency": 'always'
+                        }),
+                        keepalive: true
+                    }).catch((reason) => {
+                        console.error(reason);
+                    }).then((response) => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    }).then((data) => {
+                        console.log(data);
+                    }).finally(() => {
+                        console.log('Fetch operation completed.');
+                    });
                     // Afficher message de succès
                     displayMessage("Merci ! Votre inscription a bien été prise en compte.", "success");
 

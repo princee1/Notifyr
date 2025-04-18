@@ -13,8 +13,8 @@ from random import randint
 from app.utils.helper import generateId, b64_encode
 
 
-MIN_OPT_IN_CODE = 10000000000000
-MAX_OPT_IN_CODE = 99999999999999
+MIN_OPT_IN_CODE = 100000000
+MAX_OPT_IN_CODE = 999999999
 
 
 @ServiceClass
