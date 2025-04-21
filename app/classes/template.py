@@ -281,6 +281,15 @@ class HTMLTemplate(MLTemplate):
     def _built_template(self,content):
         content_text = self.exportText(content)
         return content, content_text
+
+    def add_tracking_pixel(self,url):
+        ...
+    
+    def add_unsubscribe_footer(self,urls):
+        ...
+    
+    
+    
     
 
 class PDFTemplate(Template):
