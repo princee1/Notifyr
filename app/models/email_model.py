@@ -1,6 +1,6 @@
-from typing import Any, List, Literal, Optional
-from pydantic import BaseModel
-
+from typing import Any, List, Literal, Optional, Self
+from pydantic import BaseModel, model_validator
+from enum import Enum
 
 class EmailMetaModel(BaseModel):
     Subject: str
@@ -9,7 +9,6 @@ class EmailMetaModel(BaseModel):
     CC: Optional[str] = None
     Bcc: Optional[str] = None
     replyTo: Optional[str] = None
-    Return_Path: Optional[str] = None
     Priority: Literal['1', '3', '5'] = '1'
 
 class EmailTemplateModel(BaseModel):
@@ -23,3 +22,20 @@ class CustomEmailModel(BaseModel):
     html_content: str
     attachments: Optional[List[tuple[str, str]]] = []
     images: Optional[List[tuple[str, str]]] = []
+
+
+class EmailSpamDetectionModel(BaseModel):
+    recipient:str |List[str] | None
+    body_plain:str |None
+    body_html:str | None
+    subject:str
+
+    @model_validator(mode="after")
+    def body_validator(self)->Self:
+        if self.body_html == None and self.body_plain == None:
+            raise ValueError('Plain body and Html body cannot both be null')
+        return self
+
+
+# =========================================================================         =======================================================
+
