@@ -145,11 +145,16 @@ class ConfigService(_service.Service):
         self.SMTP_EMAIL_CONN_METHOD= self.getenv("SMTP_EMAIL_CONN_METHOD")
         self.SMTP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"),0)
 
-        # self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST").upper()
-        # self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))
-        # self.IMAP_EMAIL = self.getenv("IMAP_EMAIL")
-        # self.IMAP_EMAIL_PASS = self.getenv("IMAP_EMAIL_PASS")
-        # self.IMAP_EMAIL_CONN_METHOD= self.getenv("IMAP_EMAIL_CONN_METHOD")
+
+        self.READ_MAIL_METHOD = self.getenv("READ_MAIL_METHOD",'IMAP')
+        self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST",self.SMTP_EMAIL_HOST).upper()
+        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))
+        self.IMAP_EMAIL = self.getenv("IMAP_EMAIL",self.SMTP_EMAIL)
+        self.IMAP_ADDR_SERVER  = self.getenv('IMAP_ADDR_SERVER')
+        self.IMAP_PASS = self.getenv("IMAP_EMAIL_PASS",self.SMTP_PASS)
+        self.IMAP_EMAIL_CONN_METHOD= self.getenv("IMAP_EMAIL_CONN_METHOD",self.SMTP_EMAIL_CONN_METHOD)
+        self.IMAP_EMAIL_LOG_LEVEL= ConfigService.parseToInt(self.getenv("IMAP_EMAIL_LOG_LEVEL"),self.SMTP_EMAIL_LOG_LEVEL)
+
 
         self.ASSET_LANG = self.getenv("ASSET_LANG")
 

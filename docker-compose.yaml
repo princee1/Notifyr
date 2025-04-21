@@ -18,6 +18,13 @@ services:
       - REDIS_HOSTS=local:redis:6379
     ports:
       - 8081:8081
+
+  reacherhq:
+    image: reacherhq/backend
+    container_name: reacherhq
+    ports:
+      - "8080:8080"
+      
     
   mongodb:
     image: mongo:latest
