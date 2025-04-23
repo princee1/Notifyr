@@ -40,23 +40,23 @@ services:
   
   postgres:
     build:
-      context: ./docker/
-      dockerfile: Dockerfile.postgres
+      context: .
+      dockerfile: docker/Dockerfile.postgres
     image: postgres:15
-    container_name: my-postgres
+    container_name: notifyr-postgres
     restart: always
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_USER: ${POSTGRES_USER} 
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: pgadmin
+    container_name: notifyr-pgadmin
     restart: always
     hostname: pgadmin
     environment:
@@ -70,7 +70,7 @@ services:
   celery:
     image: python:3.11-slim
     command: ["./spawn_celery_worker.sh", "30" ]
-    container_name: worker
+    container_name: notifyr-worker
     build:
       context: ./
       dockerfile: Dockerfile

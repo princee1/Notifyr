@@ -231,7 +231,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$guard_admin_creation$ LANGUAGE PLPGSQL
+$guard_admin_creation$ LANGUAGE PLPGSQL;
 
 CREATE TRIGGER guard_admin_creation
     BEFORE INSERT

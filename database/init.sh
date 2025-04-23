@@ -1,34 +1,20 @@
-#!/bin/bash
+!/bin/bash
 
-# Start original entrypoint in the background
-docker-entrypoint.sh postgres &
+echo "📦 Setting up the Notifyr DB - Running custom setup.sh script..."
 
-# Wait for Postgres to be ready
-until pg_isready -U "$POSTGRES_USER"; do
-  echo "⏳ Waiting for Postgres..."
-  sleep 1
-done
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/setup.sql
 
-echo "🚀 Postgres is ready, running custom command..."
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/security.sql
 
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/contacts.sql
 
-echo "Setting up the Notifyr DB - Running custom setup.sh script..."
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/emails.sql
 
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/setup.sql
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/links.sql
 
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/security.sql
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/cron.sql
 
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/contacts.sql
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/data.sql
 
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/emails.sql
+echo "✅ setup.sh completed."
 
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/links.sql
-
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/cron.sql
-
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/data.sql
-
-
-echo "setup.sh completed."
-
-wait

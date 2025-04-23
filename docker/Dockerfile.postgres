@@ -6,7 +6,21 @@ RUN apt-get -y install postgresql-15-cron
 
 RUN apt install postgresql-15-pgvector
 
-# COPY ../database /usr/src/
+COPY database/setup.sql /database/setup.sql
+
+COPY database/cron.sql /database/cron.sql
+
+COPY database/emails.sql /database/emails.sql
+
+COPY database/data.sql /database/data.sql
+
+COPY database/contacts.sql /database/contacts.sql
+
+COPY database/links.sql /database/links.sql
+
+COPY database/security.sql /database/security.sql
+
+COPY --chmod=755 database/init.sh /docker-entrypoint-initdb.d/init.sh
 
 RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample
 
@@ -17,4 +31,5 @@ RUN echo "cron.use_background_workers = on" >> /usr/share/postgresql/postgresql.
 RUN echo "max_worker_processes = 20" >> /usr/share/postgresql/postgresql.conf.sample
 
 # RUN echo "max_connections = 300" >> /usr/share/postgresql/postgresql.conf.sample
+
 
