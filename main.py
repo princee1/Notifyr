@@ -2,7 +2,6 @@ from argparse import ArgumentParser
 from enum import Enum
 from typing import Any
 from app.container import Get
-from app.signal_handler import SignalHandler_
 from app.utils.prettyprint import PrettyPrinter_
 
 # Define RunMode Enum
@@ -114,7 +113,6 @@ if __name__ == '__main__':
     PrettyPrinter_.info('Starting applications...')
     PrettyPrinter_.space_line()
     app_parameter:AppParameter = apps_data[app_name]
-    server = bootstrap_fastapi_server(app_parameter)
+    bootstrap_fastapi_server(app_parameter).start()
 
-    server.start()
     # uvicorn.run('main:server',port = app_parameter.port,loop='asyncio')
