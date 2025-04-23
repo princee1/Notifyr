@@ -26,7 +26,7 @@ parser.add_argument('--config', '-c', default='./config.app.json',
 
 if sys.argv[0] == exe_path:
     args=None
-    #args = parser.parse_args(['file','Notifyr','./config.app.json','uvicorn'])
+    args = parser.parse_args(['-m=file','-n=Notifyr','-c./config.app.json',])
 else:
     args = parser.parse_args()
 
@@ -113,9 +113,10 @@ def app_params_to_json(params: dict[str, Any], metadata={}):
 # Main entry point
 
 PrettyPrinter_.show(1, print_stack=False)
-mode = RunMode(args.mode) if args!=None else RunMode.FILE
-config_file:str = args.config if args!=None else './config.app.json'
-app_name:str = args.name if args!=None else 'Notifyr'
+
+mode = RunMode(args.mode)
+config_file:str = args.config 
+app_name:str = args.name
 
 config_service = initialize_config_service(config_file)
 mode, apps_data, valid = validate_config(config_service, config_file, app_name)
