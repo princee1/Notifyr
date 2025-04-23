@@ -91,6 +91,5 @@ def editApps(json_file_app_data: list[dict]) -> list[AppParameter]:
     return [AppParameter.fromJSON(data) for data in json_file_app_data]
 
 
-def start_applications(applications:list[AppParameter]):
-    for app in applications:
-        Application(appParameter=app).start()
+def bootstrap_fastapi_server(app: AppParameter):
+    return Application(appParameter=app).app

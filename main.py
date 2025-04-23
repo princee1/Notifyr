@@ -27,7 +27,7 @@ from app.container import build_container, Get
 build_container()
 ########################################################################
 from app.server.application import AppParameter, RESSOURCES
-from app.server.apps_registration import createApps, editApps,start_applications
+from app.server.apps_registration import createApps, editApps,bootstrap_fastapi_server
 from app.server.access_registration import prompt_client_registration
 from app.server.middleware import MIDDLEWARE
 from app.utils.constant import ConfigAppConstant
@@ -103,5 +103,5 @@ while True:
 PrettyPrinter_.show(0, pause_before=1)
 PrettyPrinter_.info('Starting applications...')
 PrettyPrinter_.space_line()
-start_applications(apps_data)
+server=bootstrap_fastapi_server(apps_data)
 ########################################################################
