@@ -113,4 +113,8 @@ if __name__ == '__main__':
 
     PrettyPrinter_.info('Starting applications...')
     PrettyPrinter_.space_line()
-    server = bootstrap_fastapi_server(apps_data[app_name])
+    app_parameter:AppParameter = apps_data[app_name]
+    server = bootstrap_fastapi_server(app_parameter)
+
+    server.start()
+    # uvicorn.run('main:server',port = app_parameter.port,loop='asyncio')

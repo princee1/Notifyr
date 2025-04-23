@@ -86,4 +86,4 @@ def editApps(json_file_app_data: dict[str, dict]) -> dict[str, AppParameter]:
 
 
 def bootstrap_fastapi_server(app: AppParameter):
-    return Application(appParameter=app).app
+    return Application(appParameter=app)
