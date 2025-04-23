@@ -1,6 +1,7 @@
 src_dir = .
 config_dir = config.app.json
 celery_app = app.task.celery_app
+app_name = main
 
 install	:
 	pip install -r requirements_dev.txt
@@ -36,16 +37,16 @@ https_pem:
 	 openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
 
 run:
-	python ${src_dir}/main.py --config=${config_dir}
+	python ${src_dir}/main.py --config=${config_dir} --name=${app_name}
 
 create :
-	python ${src_dir}/main.py --config=${config_dir} --mode=create
+	python ${src_dir}/main.py --config=${config_dir} --mode=create --name=${app_name}
 
 edit:
-	python ${src_dir}/main.py --config=${config_dir} --mode=edit
+	python ${src_dir}/main.py --config=${config_dir} --mode=edit --name=${app_name}
 
 register:
-	python ${src_dir}/main.py --config=${config_dir} --mode=register
+	python ${src_dir}/main.py --config=${config_dir} --mode=register --name=${app_name}
 
 docker:
 	docker-compose up --build
