@@ -26,7 +26,7 @@ parser.add_argument('--config', '-c', default='./config.app.json',
 
 if sys.argv[0] == exe_path:
     args=None
-    args = parser.parse_args(['-m=file','-n=Notifyr','-c./config.app.json',])
+    args = parser.parse_args(['-m=file','-n=Notifyr','-c=./config.app.json',])
 else:
     args = parser.parse_args()
 
