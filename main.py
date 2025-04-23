@@ -16,7 +16,7 @@ parser = ArgumentParser(description="Communication Service Application")
 parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunMode.__members__.values()],
                     default='file', type=str, help='Running Mode')
 
-parser.add_argument('--name','-m',required=True,type=str,help='The name of configuration to use')
+parser.add_argument('--name','-n',required=True,type=str,help='The name of configuration to use')
 
 parser.add_argument('--config', '-c', required=True, default=None,
                     type=str, help='Path to the config file')
@@ -42,7 +42,9 @@ from app.utils.question import ask_question,ConfirmInputHandler
 ########################################################################
 configService:ConfigService = Get(ConfigService)
 configService.load_configApp(config_file)
-apps_data: dict[str, Any] = configService.config_json_app
+apps_data: dict[str, Any] = configService.config_json_app.data
+
+print(apps_data)
 
 valid = True
 if not apps_data or ConfigAppConstant.META_KEY not in apps_data or ConfigAppConstant.APPS_KEY not in apps_data or not apps_data[ConfigAppConstant.APPS_KEY]:
@@ -116,6 +118,5 @@ if __name__ == '__main__':
     PrettyPrinter_.show(0, pause_before=1)
     PrettyPrinter_.info('Starting applications...')
     PrettyPrinter_.space_line()
-    app_config = apps_data[ConfigAppConstant.APPS_KEY][app_name]
-    server=bootstrap_fastapi_server(app_config)
+    server=bootstrap_fastapi_server(apps_data[app_name])
 ########################################################################
