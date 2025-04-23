@@ -95,12 +95,15 @@ class RedisService(DatabaseService):
         self.redis_celery = Redis(host=host,db=0)
         self.redis_limiter = Redis(host=host,db=1)
         #self.redis_cache = Redis(host=self.configService.REDIS_URL,db=2)
+        self.redis_links=Redis(host=host,db=2)
         self.db:dict[int,Redis] = {
             0:self.redis_celery,
             1:self.redis_limiter,
+            2:self.redis_links,
             #2:self.redis_cache,
             'celery':self.redis_celery,
             'limiter':self.redis_limiter,
+            'links': self.redis_links
         }
 
     async def refund(self, limit_request_id:str):

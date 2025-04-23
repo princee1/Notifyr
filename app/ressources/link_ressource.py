@@ -1,6 +1,7 @@
 from fastapi import Query, Request
 from app.container import InjectInMethod
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseLimiter
+from app.decorators.handlers import TortoiseHandler
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseHandler, UseLimiter
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService
@@ -18,7 +19,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
         self.redisService = redisService
         self.linkService = linkService
 
-
+    @UseHandler(TortoiseHandler)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     def add_link(self,):
         ...

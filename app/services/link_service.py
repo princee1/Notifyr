@@ -12,6 +12,14 @@ class LinkService(Service):
         self.configService = configService
         self.base_url = self.configService
         self.reactiveService = reactiveService
+        self.redisService = redisService
     
     def build(self):
+        ...
+    
+
+    def verify_safe_domain(self,):
+        ...
+    
+    def verify_server_well_know(self,):
         ...
