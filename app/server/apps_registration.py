@@ -17,9 +17,8 @@ def existing_title(title): return title not in app_titles
 
 
 
-def createApps() -> list[AppParameter]:
-
-    _results = []
+def createApps() -> dict[str, AppParameter]:
+    _results = {}
 
     apps_counts = ask_question([NumberInputHandler('Enter the number of applications: ',
                                name='apps_counts', default=1, min_allowed=1, max_allowed=1)])['apps_counts']
@@ -27,7 +26,6 @@ def createApps() -> list[AppParameter]:
     PrettyPrinter_.info(f'Creating {apps_counts} applications')
     print()
     for i in range(int(apps_counts)):
-
         result = ask_question([SimpleInputHandler(f'Enter the title of application {i+1} : ', name='title', default='', validate=existing_title, invalid_message='Title already exists'),
                                SimpleInputHandler(
             f'Enter the summary of application {i+1} : ', name='summary', default=''),
@@ -45,27 +43,23 @@ def createApps() -> list[AppParameter]:
         ],)
         ressources_key.difference_update(result['ressources'])
         result['port'] = int(result['port'])
-        _results.append(AppParameter.fromJSON(result, RESSOURCES, MIDDLEWARE))
+        _results[result['title']] = AppParameter.fromJSON(result, RESSOURCES, MIDDLEWARE)
         show(1)
-        #printJSON(_results)
 
     return _results
 
 
-def editApps(json_file_app_data: list[dict]) -> list[AppParameter]:
-    
-    titles = [json_file_app_data[i]['title']
-              for i in range(len(json_file_app_data))]
+def editApps(json_file_app_data: dict[str, dict]) -> dict[str, AppParameter]:
+    titles = list(json_file_app_data.keys())
     app_titles.clear()
     app_titles.extend(titles)
     available_ports.clear()
-    available_ports.extend([json_file_app_data[i]['port']
-                            for i in range(len(json_file_app_data))])
+    available_ports.extend([json_file_app_data[title]['port'] for title in titles])
 
     show(1)
     PrettyPrinter_.info('Editing Applications')
     print()
-    selected_title = ask_question([ListInputHandler('Select the application to edit: ', default=titles[0],choices=titles, name='selected_app',
+    selected_title = ask_question([ListInputHandler('Select the application to edit: ', default=titles[0], choices=titles, name='selected_app',
                                   validate=exactly_one, invalid_message='Should be exactly one selection', instruction=instruction)])['selected_app']
     index = titles.index(selected_title)
     title = titles[index]
@@ -73,22 +67,22 @@ def editApps(json_file_app_data: list[dict]) -> list[AppParameter]:
     print()
     result = ask_question([SimpleInputHandler(f'Enter the title of application {index+1} : ', name='title', default=title, validate=existing_title, invalid_message='Title already exists'),
                            SimpleInputHandler(
-        f'Enter the summary of application {index+1} : ', name='summary', default=json_file_app_data[index]['summary']),
+        f'Enter the summary of application {index+1} : ', name='summary', default=json_file_app_data[title]['summary']),
         SimpleInputHandler(
-        f'Enter the description of application {index+1} : ', name='description', default=json_file_app_data[index]['description']),
+        f'Enter the description of application {index+1} : ', name='description', default=json_file_app_data[title]['description']),
         CheckboxInputHandler(
         f'Select the ressources of application {index+1} that will be used once per application: ', choices=ressources_key, name='ressources', validate=one_or_more, invalid_message=one_or_more_invalid_message, instruction=instruction
     ),
         CheckboxInputHandler(
         f'Select the middlewares of application {index+1} : ', choices=middlewares_key, name='middlewares', validate=one_or_more, invalid_message=one_or_more_invalid_message, instruction=instruction),
         NumberInputHandler(
-        f'Enter the port of application {index+1} : ', name='port', default=json_file_app_data[index]['port'], min_allowed=4000, max_allowed=65535),
+        f'Enter the port of application {index+1} : ', name='port', default=json_file_app_data[title]['port'], min_allowed=4000, max_allowed=65535),
         SimpleInputHandler(
-        f'Enter the log level of application {index+1} : ', name='log_level', default=json_file_app_data[index]['log_level']),
+        f'Enter the log level of application {index+1} : ', name='log_level', default=json_file_app_data[title]['log_level']),
     ],)
     result['port'] = int(result['port'])
-    json_file_app_data[index] = result
-    return [AppParameter.fromJSON(data) for data in json_file_app_data]
+    json_file_app_data[title] = result
+    return {title: AppParameter.fromJSON(data, RESSOURCES, MIDDLEWARE) for title, data in json_file_app_data.items()}
 
 
 def bootstrap_fastapi_server(app: AppParameter):
