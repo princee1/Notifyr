@@ -2,7 +2,7 @@
 
 SET search_path = contacts;
 
-CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr', 'en'))
+CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr', 'en'));
 
 CREATE DOMAIN SubscriptionStatus AS VARCHAR(20) CHECK (
     VALUE IN ('Active', 'Inactive')

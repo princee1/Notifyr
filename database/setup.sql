@@ -1,3 +1,4 @@
+-- Active: 1740679093248@@localhost@5432@notifyr
 DROP SCHEMA IF EXISTS contacts CASCADE;
 
 DROP SCHEMA IF EXISTS security CASCADE;
