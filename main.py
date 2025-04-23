@@ -3,6 +3,10 @@ from enum import Enum
 from typing import Any
 from app.container import Get
 from app.utils.prettyprint import PrettyPrinter_
+import shutil
+import sys
+
+exe_path = shutil.which("uvicorn").replace(".EXE", "")
 
 # Define RunMode Enum
 class RunMode(Enum):
@@ -14,10 +18,17 @@ class RunMode(Enum):
 parser = ArgumentParser(description="Communication Service Application")
 parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunMode.__members__.values()],
                         default='file', type=str, help='Running Mode')
-parser.add_argument('--name', '-n', required=True, type=str, help='The name of configuration to use')
-parser.add_argument('--config', '-c', required=True, default=None,
+parser.add_argument('--name', '-n', type=str, default='Notifyr', help='The name of configuration to use')
+parser.add_argument('--config', '-c', default='./config.app.json',
                         type=str, help='Path to the config file')
-args = parser.parse_args()
+
+#parser.add_argument('--server-context','-s', default='uvicorn',choices=['python-main','uvicorn','guvicorn'],help='The scripts that will start the server')
+
+if sys.argv[0] == exe_path:
+    args=None
+    args = parser.parse_args(['-m=file','-n=Notifyr','-c./config.app.json',])
+else:
+    args = parser.parse_args()
 
 from app.container import build_container, Get
 build_container()
@@ -100,19 +111,24 @@ def app_params_to_json(params: dict[str, Any], metadata={}):
     }
 
 # Main entry point
+
+PrettyPrinter_.show(1, print_stack=False)
+
+mode = RunMode(args.mode)
+config_file:str = args.config 
+app_name:str = args.name
+
+config_service = initialize_config_service(config_file)
+mode, apps_data, valid = validate_config(config_service, config_file, app_name)
+apps_data = handle_run_mode(mode, config_service, apps_data, config_file, valid)
+
+PrettyPrinter_.info('Starting applications...')
+PrettyPrinter_.space_line()
+app_parameter:AppParameter = apps_data[app_name]
+
 if __name__ == '__main__':
-    PrettyPrinter_.show(1, print_stack=False)
-    mode = RunMode(args.mode)
-    config_file = args.config
-    app_name = args.name
-
-    config_service = initialize_config_service(config_file)
-    mode, apps_data, valid = validate_config(config_service, config_file, app_name)
-    apps_data = handle_run_mode(mode, config_service, apps_data, config_file, valid)
-
-    PrettyPrinter_.info('Starting applications...')
-    PrettyPrinter_.space_line()
-    app_parameter:AppParameter = apps_data[app_name]
     bootstrap_fastapi_server(app_parameter).start()
+    
+else:
+    app = bootstrap_fastapi_server(app_parameter).app
 
-    # uvicorn.run('main:server',port = app_parameter.port,loop='asyncio')
