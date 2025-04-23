@@ -1,4 +1,4 @@
-from fastapi import Request
+from fastapi import Query, Request
 from app.container import InjectInMethod
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseLimiter
 from app.services.config_service import ConfigService
@@ -12,29 +12,34 @@ LINK_MANAGER_PREFIX = 'manage'
 class CRUDLinkRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self,configService:ConfigService,redisService:RedisService):
+    def __init__(self,configService:ConfigService,redisService:RedisService,linkService:LinkService):
         super().__init__()
         self.configService = configService
         self.redisService = redisService
+        self.linkService = linkService
 
-    
+
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    def create_link(self,):
+    def add_link(self,):
         ...
     
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
-    def read_link(self,):
+    def read_link(self,request:Request,all:bool=Query(False)):
         ...
 
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE])
-    def delete_link(self,):
+    def delete_link(self,archive:bool=Query(False)):
         ...
 
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
     def update_link(self,):
         ...
     
+    @BaseHTTPRessource.HTTPRoute('/code',methods=[HTTPMethod.GET])
+    def get_qrcode(self,):
+        ...
 
+    
 LINK_PREFIX='link'
 @HTTPRessource(LINK_PREFIX,routers=[CRUDLinkRessource])
 class LinkRessource(BaseHTTPRessource):
@@ -48,16 +53,16 @@ class LinkRessource(BaseHTTPRessource):
     
 
     @UseLimiter(limit_value='10000/min')
-    @BaseHTTPRessource.HTTPRoute('/{url}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
+    @BaseHTTPRessource.HTTPRoute('/visits/{url}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def visit_url(self,request:Request,url:str):
         
         ... 
 
+    @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/email-track/{url}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_email(self,request:Request,url):
         ...
 
-    
 
     
     

@@ -5,19 +5,38 @@ CREATE TABLE IF NOT EXISTS Link (
     link_id UUID DEFAULT uuid_generate_v1mc(),
     link_name VARCHAR(100),
     link_url VARCHAR(150),
+    expiration TIMESTAMPTZ DEFAULT NULL,
     total_visit_count INT DEFAULT 0,
+    public BOOLEAN DEFAULT TRUE,
+    verified BOOLEAN DEFAULT FALSE,
+    archived BOOLEAN DEFAULT FALSE  
 )
 
-CREATE TABLE IF NOT EXISTS VisitEvents(
+CREATE TABLE IF NOT EXISTS LinkEvent(
     event_id UUID DEFAULT uuid_generate_v1mc(),
     link_id UUID NOT NULL,
     contact_id UUID DEFAULT NULL,
+    email_id UUID DEFAULT NULL,
+    user_agent VARCHAR(150) DEFAULT NULL,
     ip_address VARCHAR(50),
     geo_lat FLOAT DEFAULT NULL,
     geo_long FLOAT DEFAULT NULL,
     country VARCHAR(60),
     city VARCHAR(100,)
-    date_cliCked TIMESTAMPTZ DEFAULT NOW(),
+    date_clicked TIMESTAMPTZ DEFAULT NOW(),
+    expiring_date TIMESTAMPTZ,
     PRIMARY KEY (event_id),
-    Foreign Key (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
+    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
+    FOREIGN KEY (email_id) REFERENCES emails.EmailTracking(email_id) ON UPDATE CASCADE ON DELETE SET NULL
+)
+
+CREATE TABLE IF NOT EXISTS LinkSession(
+    session_id UUID DEFAULT uuid_generate_v1mc(),
+    contact_id UUID DEFAULT NULL,
+    link_id UUID NOT NULL,
+    converted BOOLEAN DEFAULT NULL,
+    PRIMARY KEY (session_id),
+    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 )

@@ -19,7 +19,7 @@ CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
 
 CREATE TABLE IF NOT EXISTS EmailTracking (
     email_id UUID DEFAULT uuid_generate_v1mc (),
-    mail_id VARCHAR(150) NOT NULL,
+    message_id VARCHAR(150) UNIQUE NOT NULL,
     recipient VARCHAR(100) NOT NULL,
     date_sent TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW(),
