@@ -52,9 +52,9 @@ CREATE TABLE IF NOT EXISTS Contact (
     auth_token TEXT UNIQUE DEFAULT NULL, --NONCE
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT chk_opt_in_code CHECK (
-        opt_in_code >= 10000000000000
-        AND opt_in_code <= 99999999999999
+    CONSTRAINT opt_in_code CHECK (
+        opt_in_code >= 100000000
+        AND opt_in_code <= 999999999
     )
 );
 
@@ -245,6 +245,7 @@ DECLARE
     contact_count INT;
 
 BEGIN
+SET search_path = contacts;
 SELECT 
     COUNT(*) 
 INTO 

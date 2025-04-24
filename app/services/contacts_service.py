@@ -154,13 +154,14 @@ class ContactsService(Service):
         user = await ContactORM.create(**contact_info)
         if user.app_registered:
             user.auth_token = self.jwtService.encode_contact_token(
-                user.contact_id, self.expiration, 'create')
+                str(user.contact_id), self.expiration, 'create')
+            
 
         await user.save()
 
         if user.app_registered:
             d = user.to_json.copy()
-            d.update({'auth_token', user.auth_token})
+            d.update({'auth_token': user.auth_token})
             return d
 
         return user.to_json

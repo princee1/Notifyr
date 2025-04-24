@@ -83,7 +83,7 @@ class ContactORM(Model):
         'phone': self.phone,
         'app_registered': self.app_registered,
         'opt_in_code':self.opt_in_code,
-        'lang': self.lang,
+        'lang': self.lang.value,
         'created_at': self.created_at.isoformat(),
     }
 
@@ -93,7 +93,7 @@ class ContactORM(Model):
 
     class Meta:
         schema = CONTACTS_SCHEMA
-        table = table_builder("contact")
+        table = "contact"
 
 class SecurityContactORM(Model):
     security_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -112,7 +112,7 @@ class SecurityContactORM(Model):
 
     class Meta:
         schema = CONTACTS_SCHEMA
-        table = table_builder("securitycontact")
+        table = "securitycontact"
 
 class SubscriptionContactStatusORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -126,7 +126,7 @@ class SubscriptionContactStatusORM(Model):
         return f"{self.subscription_id} {self.contact}"
 
     class Meta:
-        table = table_builder("subscriptioncontact")
+        table = "subscriptioncontact"
         schema = CONTACTS_SCHEMA
 
 class ReasonORM(Model):
