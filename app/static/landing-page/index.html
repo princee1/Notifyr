@@ -595,6 +595,8 @@
             // Vérifier si tous les éléments nécessaires existent
             if (newsletterForm && prenomInput && nomInput && emailInput && telephoneInput && formMessage) {
 
+                let error=false;
+
                 newsletterForm.addEventListener('submit', function (event) {
                     event.preventDefault(); // Empêche l'envoi classique
 
@@ -625,7 +627,7 @@
                     console.log("Nom:", nom || "Non fourni");
                     console.log("Email:", email);
                     console.log("Téléphone:", telephone || "Non fourni"); // Affiche "Non fourni" si vide
-                    
+
                     fetch('/contacts/', {
                         method: 'POST',
                         headers: {
@@ -645,6 +647,7 @@
                         console.error(reason);
                     }).then((response) => {
                         if (!response.ok) {
+                            error=true;
                             throw new Error('Network response was not ok');
                         }
                         return response.json();
@@ -654,7 +657,10 @@
                         console.log('Fetch operation completed.');
                     });
                     // Afficher message de succès
-                    displayMessage("Merci ! Votre inscription a bien été prise en compte.", "success");
+                    if (! error)
+                        displayMessage("Merci ! Votre inscription a bien été prise en compte.", "success");
+                    else
+                        displayMessage("Une erreur s'est produite lors de l'inscription, veuillez ressayer plus tard",'error')
 
                     // Vider les champs du formulaire
                     prenomInput.value = '';
@@ -668,10 +674,10 @@
                         submitButton.disabled = true;
                         submitButton.textContent = 'Inscription Réussie !';
                         // Réactiver après un délai si nécessaire
-                        // setTimeout(() => {
-                        //     submitButton.disabled = false;
-                        //     submitButton.textContent = 'Rejoindre la Communauté !';
-                        // }, 5000);
+                        setTimeout(() => {
+                            submitButton.disabled = false;
+                            submitButton.textContent = 'Rejoindre la Communauté !';
+                        }, 5000);
                     }
 
                     // Simuler un échec (pour tester)
