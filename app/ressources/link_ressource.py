@@ -1,4 +1,5 @@
-from fastapi import Query, Request
+from typing import Literal
+from fastapi import Depends, Query, Request
 from app.container import InjectInMethod
 from app.decorators.handlers import TortoiseHandler
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseHandler, UseLimiter
@@ -6,9 +7,11 @@ from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService
 from fastapi.responses import RedirectResponse
+from app.depends.variables import  verify_url
 
 LINK_MANAGER_PREFIX = 'manage'
  
+@UseHandler(TortoiseHandler)
 @HTTPRessource(LINK_MANAGER_PREFIX)
 class CRUDLinkRessource(BaseHTTPRessource):
 
@@ -38,6 +41,10 @@ class CRUDLinkRessource(BaseHTTPRessource):
     
     @BaseHTTPRessource.HTTPRoute('/code',methods=[HTTPMethod.GET])
     def get_qrcode(self,):
+        ...
+    
+    @BaseHTTPRessource.HTTPRoute('/verify',methods=[HTTPMethod.PATCH])
+    def verify(self,request:Request,verify_type:Literal['well-known','domain']=Depends(verify_url)):
         ...
 
     

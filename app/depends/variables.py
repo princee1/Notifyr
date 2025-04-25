@@ -45,3 +45,7 @@ verify_otp:Callable[[Request],bool]=get_query_params('verify_otp','false',True)
 keep_connection:Callable[[Request],bool]=get_query_params('keep_connection','false',True)
 
 track_email:Callable[[Request],bool] = get_query_params('track','false',True)
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+verify_url:Callable[[Request],bool] = get_query_params('verify_strategy',None,False,raise_except=True,checker=lambda v: v in ['domain','well-known'])

@@ -111,6 +111,10 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
         value = request.query_params.get(name,default)
         if parse and value != None:
             value = parse_value(value,return_none)
+        
+        if value == None and raise_except:
+            raise HTTPException(400,detail=f'Query {name} not specified')
+
         if checker:
             if not checker(value):
                 raise HTTPException(400,detail='Error in params') # TODO raise a better error
