@@ -4,6 +4,7 @@ from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
+from app.classes.email import EmailInvalidFormatError
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.depends.my_depends import KeepAliveQuery
@@ -19,7 +20,7 @@ from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.helper import AsyncAPIFilterInject, copy_response
-from app.utils.validation import phone_number_validator
+from app.utils.validation import email_validator, phone_number_validator
 from app.utils.helper import APIFilterInject
 from app.depends.variables import parse_to_phone_format
 
@@ -286,3 +287,12 @@ async def parse_phone_number(phone_number:str) -> str:
         'phone_number':phone_number
     }
 
+
+
+@APIFilterInject
+def verify_email_pipe(email:str):
+    if not email_validator(email):
+            raise EmailInvalidFormatError(email)
+    return {
+        'email':email
+    }

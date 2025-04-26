@@ -49,3 +49,5 @@ track_email:Callable[[Request],bool] = get_query_params('track','false',True)
 # ----------------------------------------------                                    ---------------------------------- #
 
 verify_url:Callable[[Request],bool] = get_query_params('verify_strategy',None,False,raise_except=True,checker=lambda v: v in ['domain','well-known'])
+
+email_verifier:Callable[[Request],bool] = get_query_params('email_verifier',None,False,raise_except=True,checker=lambda v:v in ['smtp','reacherhq'])

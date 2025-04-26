@@ -1,20 +1,20 @@
+from typing import Literal
+import aiohttp
 from app.classes.auth_permission import MustHave, Role
-from app.classes.email import EmailInvalidFormatError
 from app.classes.template import HTMLTemplate
 from app.definition._service import ServiceStatus
 from app.models.email_model import CustomEmailModel, EmailSpamDetectionModel, EmailTemplateModel
 from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
-from app.container import GetDepends, InjectInMethod
+from app.container import InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailSenderService
-from fastapi import  Header, Request, Response, status
-from app.depends.dependencies import Depends, get_auth_permission, get_request_id, get_response_id
+from fastapi import   Request, Response, status
+from app.depends.dependencies import Depends, get_auth_permission, get_request_id
 from app.decorators import permissions, handlers,pipes,guards
-from app.classes.celery import  CeleryTask, SchedulerModel, TaskType
-from app.depends.variables import populate_response_with_request_id,track_email
-from app.utils.validation import email_validator
+from app.classes.celery import SchedulerModel
+from app.depends.variables import populate_response_with_request_id,track_email,email_verifier
 
 
 class EmailTemplateSchedulerModel(SchedulerModel):
@@ -30,7 +30,6 @@ DEFAULT_RESPONSE = {
     status.HTTP_202_ACCEPTED: {
         'message': 'email task received successfully'}
 }
-
 
 @UseRoles([Role.RELAY])
 @UseHandler(handlers.ServiceAvailabilityHandler,handlers.CeleryTaskHandler)
@@ -114,16 +113,15 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10/day')
     @UseRoles([Role.PUBLIC])
     @UseHandler(handlers.EmailRelatedHandler)
+    @UsePipe(pipes.verify_email_pipe)
     @BaseHTTPRessource.HTTPRoute("/verify/{email}",methods=[HTTPMethod.GET],mount=False)
-    async def verify_email(self,email:str,request:Request):
-        if not email_validator(email):
-            raise EmailInvalidFormatError(email)
-
-    
-    @UseRoles([Role.PUBLIC])
-    @UseHandler(handlers.EmailRelatedHandler)
-    @BaseHTTPRessource.HTTPRoute("/verify-smtp/{email}",methods=[HTTPMethod.GET],mount=False)
-    def verify_email_smtp(self,email:str):
-        if not email_validator(email):
-            raise EmailInvalidFormatError(email)
-        return self.emailService.verify_same_domain_email(email)
+    async def verify_email(self,email:str,request:Request,verifier:Literal['smtp','reacherhq']=Depends(email_verifier)):
+        if verifier == 'smtp':
+            return self.emailService.verify_same_domain_email(email)
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f'http://localhost:8088/verify/{email}') as resp:
+                if resp.status == 200:
+                    return await resp.json()
+            return {"error": f"Failed to verify email. Status code: {resp.status}"}
+        
