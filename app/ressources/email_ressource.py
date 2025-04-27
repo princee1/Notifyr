@@ -70,8 +70,14 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
     async def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,x_request_id:str =Depends(get_request_id) ,authPermission=Depends(get_auth_permission)):
         mail_content = scheduler.content
+
+        emailMetaData=scheduler.content.meta
+        emailMetaData.Disposition_Notification_To = emailMetaData.From
+        emailMetaData.Return_Receipt_To = emailMetaData.From
+
         meta = mail_content.meta.model_dump(mode='python')
-        
+
+
         template: HTMLTemplate = self.assetService.html[template]
         _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
         
@@ -87,8 +93,13 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
     async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
         customEmail_content = scheduler.content
-        meta = customEmail_content.meta.model_dump()
         content = (customEmail_content.html_content, customEmail_content.text_content)
+
+        emailMetaData=scheduler.content.meta
+        emailMetaData.Disposition_Notification_To = emailMetaData.From
+        emailMetaData.Return_Receipt_To = emailMetaData.From
+    
+        meta = customEmail_content.meta.model_dump()
 
         #if self.celeryService.service_status != ServiceStatus.AVAILABLE:
         # if scheduler.task_type == TaskType.NOW.value:

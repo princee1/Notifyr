@@ -10,6 +10,15 @@ class EmailMetaModel(BaseModel):
     Bcc: Optional[str] = None
     replyTo: Optional[str] = None
     Priority: Literal['1', '3', '5'] = '1'
+    Disposition_Notification_To:str|None = None
+    Return_Receipt_To:str|None = None
+
+    @model_validator(mode="after")
+    def meta_validator(self)->Self:
+        self.Disposition_Notification_To = None
+        self.Return_Receipt_To = None
+        return self
+
 
 class EmailTemplateModel(BaseModel):
     meta: EmailMetaModel

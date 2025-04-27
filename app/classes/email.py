@@ -27,7 +27,9 @@ class EmailMetadata:
         Bcc: Optional[str] = None,
         replyTo: Optional[str] = None,
         Return_Path: Optional[str] = None,
-        Priority: Literal['1', '3', '5'] = '1'
+        Priority: Literal['1', '3', '5'] = '1',
+        Disposition_Notification_To:str = None,
+        Return_Receipt_To:str = None
     ):
         self.Subject = Subject
         self.From = From
@@ -37,6 +39,8 @@ class EmailMetadata:
         self.replyTo = replyTo
         self.Return_Path = Return_Path
         self.Priority = Priority
+        self.Disposition_Notification_To = Disposition_Notification_To
+        self.Return_Receipt_To = Return_Receipt_To
 
     def __str__(self):
         return (
@@ -60,12 +64,20 @@ class EmailBuilder():
         self.message["Subject"] = emailMetaData.Subject
         self.multiple_dest(emailMetaData.To, "To")
         self.multiple_dest(emailMetaData.CC, "Cc",False)
+        
         self.id = make_msgid()
         self.message['Message-ID'] = self.id
         self.message['Date'] = formatdate(localtime=True)
         self.message['Reply-To'] = emailMetaData.replyTo
         self.message['Return-Path'] = emailMetaData.Return_Path
         self.message['X-Priority'] = emailMetaData.Priority
+
+        if emailMetaData.Disposition_Notification_To:
+            self.message['Disposition-Notification-To'] = emailMetaData.Disposition_Notification_To
+
+        if emailMetaData.Return_Receipt_To:
+            self.message['Return-Receipt-To'] = emailMetaData.Return_Receipt_To
+        
         self.init_email_content(attachments, images, content)
 
     def __str__(self):
