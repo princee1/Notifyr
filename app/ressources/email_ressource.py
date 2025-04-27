@@ -72,11 +72,10 @@ class EmailTemplateRessource(BaseHTTPRessource):
         mail_content = scheduler.content
 
         emailMetaData=scheduler.content.meta
-        emailMetaData.Disposition_Notification_To = emailMetaData.From
-        emailMetaData.Return_Receipt_To = emailMetaData.From
+        emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
+        emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
 
         meta = mail_content.meta.model_dump(mode='python')
-
 
         template: HTMLTemplate = self.assetService.html[template]
         _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
@@ -96,8 +95,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
         content = (customEmail_content.html_content, customEmail_content.text_content)
 
         emailMetaData=scheduler.content.meta
-        emailMetaData.Disposition_Notification_To = emailMetaData.From
-        emailMetaData.Return_Receipt_To = emailMetaData.From
+        emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
+        emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
     
         meta = customEmail_content.meta.model_dump()
 
