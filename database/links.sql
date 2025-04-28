@@ -3,8 +3,9 @@ SET search_path = links;
 
 CREATE TABLE IF NOT EXISTS Link (
     link_id UUID DEFAULT uuid_generate_v1mc(),
-    link_name VARCHAR(100),
-    link_url VARCHAR(150),
+    link_name VARCHAR(100) UNIQUE NOT NULL,
+    link_short_id VARCHAR(20) UNIQUE NOT NULL,
+    link_url VARCHAR(150) UNIQUE NOT NULL,
     expiration TIMESTAMPTZ DEFAULT NULL,
     total_visit_count INT DEFAULT 0,
     public BOOLEAN DEFAULT TRUE,

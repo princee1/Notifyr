@@ -39,7 +39,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
     def update_link(self,):
         ...
     
-    @BaseHTTPRessource.HTTPRoute('/code',methods=[HTTPMethod.GET])
+    @BaseHTTPRessource.HTTPRoute('/code/',methods=[HTTPMethod.GET])
     def get_qrcode(self,):
         ...
     
