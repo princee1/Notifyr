@@ -5,7 +5,6 @@ from app.definition._service import Service, ServiceClass
 from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundError
 from app.interface.timers import IntervalInterface
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
 from app.services.logger_service import LoggerService
 from app.utils.helper import generateId
 import asyncio
@@ -78,11 +77,10 @@ class ReactiveSubject():
 @ServiceClass
 class ReactiveService(Service,IntervalInterface):
     
-    def __init__(self,configService:ConfigService,redisService:RedisService,loggerService:LoggerService):
+    def __init__(self,configService:ConfigService,loggerService:LoggerService):
         Service.__init__(self)
         IntervalInterface.__init__(self,start_now=True, interval=0.10)
         self.configService = configService
-        self.redisService = redisService
         self.loggerService = loggerService
         self._subscriptions:dict[str,ReactiveSubject] = {}
         

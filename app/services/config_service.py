@@ -114,6 +114,9 @@ class ConfigService(_service.Service):
         return default
 
     def set_config_value(self):
+
+        self.INSTANCE_ID=self.getenv('INSTANCE_ID',0)
+
         self.BASE_DIR= self.getenv("BASE_DIR",'./')	
         self.ASSET_DIR= self.getenv("ASSETS_DIR",'assets/')	
         self.SECURITY_FLAG:bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'),True)

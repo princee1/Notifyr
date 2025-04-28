@@ -15,6 +15,7 @@ from app.services.celery_service import TaskManager, TaskService, CeleryService,
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
+from app.services.database_service import RedisService
 from app.services.twilio_service import SMSService
 from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
 from app.depends.my_depends import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
@@ -124,10 +125,11 @@ SMS_INCOMING_PREFIX = "incoming"
 @HTTPRessource(SMS_INCOMING_PREFIX )
 class IncomingSMSRessource(BaseHTTPRessource):
     @InjectInMethod
-    def __init__(self,smsService:SMSService,contactsService:ContactsService,chatService:ChatService) -> None:
+    def __init__(self,smsService:SMSService,contactsService:ContactsService,chatService:ChatService,redisService:RedisService) -> None:
         self.smsService: SMSService = smsService
         self.contactsService: ContactsService = contactsService
         self.chatService: ChatService = chatService
+        self.redisService:RedisService = redisService
         #super().__init__(dependencies=[Depends(verify_twilio_token)])
         super().__init__()
 

@@ -17,6 +17,7 @@ from app.models.voice_model import BaseVoiceCallModel, CallStatusModel, GatherRe
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
+from app.services.database_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService, ReactiveSubject
 from app.services.twilio_service import CallService
@@ -54,6 +55,8 @@ class OnGoingCallRessource(BaseHTTPRessource):
         self.contactsService = contactsService
         self.offloadTaskService: OffloadTaskService = Get(OffloadTaskService)
         self.reactiveService: ReactiveService = Get(ReactiveService)
+        self.redisService:RedisService = Get(RedisService)
+
         super().__init__()
 
     @UseLimiter(limit_value="10/minutes")
@@ -185,6 +188,7 @@ class IncomingCallRessources(BaseHTTPRessource):
         self.contactsService = contactsService
         self.loggerService = loggerService
         self.reactiveService = reactiveService
+        self.redisService:RedisService = Get(RedisService)
         # super().__init__(dependencies=[Depends(verify_twilio_token)]) # TODO need to the signature
         super().__init__()
 
