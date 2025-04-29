@@ -23,3 +23,4 @@
 21. Features for emails: verify email(potentially implement our own or using a tools), monitoring email( with return path and image), hosting email (postfix,dovecot and more), read email, try to improve deliverability, rotate proxys when sending emails
 22. Have a distributed implementation for subject subscribing using redis and rxPy and finish all type of subscriptions
 23. Have landing page and a better workflow for contacts and campaings...
+24. Each notify instance will have a persistance on their subject
