@@ -46,13 +46,17 @@ CREATE TABLE IF NOT EXISTS TrackedLinks (
 
 CREATE OR REPLACE FUNCTION delete_expired_email_tracking() RETURNS VOID AS $$
 BEGIN
-    DELETE FROM EmailTracking
-    WHERE expired_tracking_date <= NOW();
+    SET search_path = emails;
+
+    DELETE FROM EmailTracking e
+    WHERE e.expired_tracking_date <= NOW();
 END;
 $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION set_email_delivered() RETURNS VOID AS $$
 BEGIN
+    SET search_path = emails;
+
     UPDATE EmailTracking e
     SET email_current_status = 'DELIVERED'
     WHERE e.email_current_status = 'SENT' AND NOW() - e.date_sent >= INTERVAL '5 hours';

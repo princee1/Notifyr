@@ -266,4 +266,4 @@ $compute_limit$ LANGUAGE plpgsql;
 CREATE TRIGGER limit_contact
 BEFORE INSERT ON Contact
 FOR EACH ROW
-EXECUTE FUNCTION compute_limit(2);
+EXECUTE FUNCTION compute_limit();
