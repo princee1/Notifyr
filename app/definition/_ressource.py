@@ -660,6 +660,39 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
         return func
     return decorator
 
+
+def HTTPStatusCode(code:int|str):
+    if isinstance(code,str):
+        if code not in status.__all__:
+            raise ...
+        else:
+            code = status.__getattr__(code)
+    elif isinstance(code,int):
+        ...
+    else:
+        raise
+
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, HTTPStatusCode, code)
+        if cls != None:
+            return cls
+
+        @functools.wraps(func)
+        async def wrapper(*args,**kwargs):
+            if 'response' in kwargs and isinstance(kwargs['response'],Response):
+                kwargs['response'].status_code = code
+
+            if asyncio.iscoroutinefunction(func):
+                return await func(*args,**kwargs)
+            else:
+                return func(*args,**kwargs)
+        
+        return wrapper
+
+    return decorator
+
+        
+
 def response_decorator(func:Callable):
 
     @functools.wraps(func)

@@ -7,6 +7,7 @@ from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDat
 from app.container import Get, GetAttr
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
+from app.models.link_model import LinkORM
 from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import OffloadTaskService, RunType, TaskService
@@ -268,6 +269,26 @@ async def _get_blacklist(blacklist_id: str = None):
 
 async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_id', None))):
     return await _get_blacklist(blacklist_id=blacklist_id)
+
+async def get_link(lid:str = Depends(get_query_params('lid','id',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
+    link =None
+    match lid:
+        case 'id':
+            link = await LinkORM.filter().first()
+        
+        case 'name':
+            link = await LinkORM.filter().first()
+
+        case 'sid':
+            link = await LinkORM.filter().first()
+
+        case _:
+            link = None
+    
+    if link == None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail='Link does not exists with the this lid provided')
+    return link
 
 
 async def get_task(request_id: str = Depends(get_request_id), as_async: bool = Depends(as_async_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save=Depends(save_results_query), return_results=Depends(get_task_results)):

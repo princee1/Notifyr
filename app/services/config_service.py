@@ -66,8 +66,7 @@ class ConfigService(_service.Service):
             ...
         except TypeError:
             ...
-        
-        return default
+        return bool(default)
     
     @staticmethod
     def parseToInt(value:str, default:int | None = None,positive = True): # TODO need to add the build error level
@@ -122,8 +121,6 @@ class ConfigService(_service.Service):
         self.SECURITY_FLAG:bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'),True)
         
         self.MODE = MODE.toMode(self.getenv('MODE'))
-        self.PORT_PUBLIC = ConfigService.parseToInt(self.getenv("PORT_PUBLIC"),3000)
-        self.PORT_PRIVATE = ConfigService.parseToInt(self.getenv("PORT_PRIVATE"),5000)
         self.LOG_LEVEL = ConfigService.parseToInt(self.getenv("LOG_LEVEL"), 2)
         self.HTTP_MODE = self.getenv("HTTP_MODE")
         self.HTTPS_CERTIFICATE=self.getenv("HTTPS_CERTIFICATE",'cert.pem')

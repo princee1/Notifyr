@@ -1,16 +1,23 @@
+from datetime import datetime,timedelta
+from typing import Self
 from tortoise import fields, models
-from app.utils.helper import uuid_v1_mc
+from app.utils.helper import uuid_v1_mc,generateId
+from tortoise.contrib.pydantic import pydantic_model_creator
+from pydantic import field_validator, model_validator
+from app.utils.validation import url_validator
 
 SCHEMA = 'links'
 
 class LinkORM(models.Model):
     link_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     link_name = fields.CharField(max_length=100, unique=True)
-    link_short_id = fields.CharField(max_length=20, unique=True)
+    link_short_id = fields.CharField(max_length=20, unique=True, default=lambda: generateId(20))
     link_url = fields.CharField(max_length=150, unique=True)
     expiration = fields.DatetimeField(null=True)
+    expiration_verification = fields.DatetimeField(null=True)
     total_visit_count = fields.IntField(default=0)
     public = fields.BooleanField(default=True)
+    ownership_key = fields.CharField(max_length=150, null=True)
     verified = fields.BooleanField(default=False)
     archived = fields.BooleanField(default=False)
 
@@ -26,8 +33,10 @@ class LinkORM(models.Model):
             "link_short_id": self.link_short_id,
             "link_url": self.link_url,
             "expiration": self.expiration.isoformat() if self.expiration else None,
+            "expiration_verification": self.expiration_verification.isoformat() if self.expiration_verification else None,
             "total_visit_count": self.total_visit_count,
             "public": self.public,
+            "ownership_key": self.ownership_key,
             "verified": self.verified,
             "archived": self.archived
         }
@@ -85,3 +94,67 @@ class LinkSessionORM(models.Model):
             "link_id": str(self.link_id),
             "converted": self.converted
         }
+    
+LinkModelBase = pydantic_model_creator(LinkORM,name="LinkORM",include=('link_url','expiration','link_name','public'))
+
+class LinkModel(LinkModelBase):
+    link_url:str
+    expiration: datetime | None | float | int = None
+
+    @field_validator('link_name')
+    def check_link_name(cls, link_name):
+        if not link_name:
+            raise ValueError('Link name cannot be empty.')
+
+        if len(link_name) >= 200:
+            raise ValueError('Link name must be less than 200 characters.')
+    
+        return link_name
+
+    @field_validator('expiration')
+    def check_expiration(cls,expiration):
+        if isinstance(expiration(float,int)):
+            if expiration<0:
+                raise ValueError('Expiration cannot be negative')
+            if expiration==0:
+                return None
+        return expiration
+               
+    @field_validator('link_url')
+    def check_url(cls,link_url:str):
+        if not url_validator(link_url):
+            raise ValueError('url domain format not valid')
+        return link_url
+    
+
+class UpdateLinkModel(LinkModel):
+
+    link_name:str |None =None
+    expiration: datetime | None | float | int = None
+
+    @field_validator("link_name")
+    def check_link_name(cls, link_name):
+        if link_name==None:
+            return None
+        return super().check_link_name(link_name)
+
+
+    @field_validator("link_url")
+    def check_url(cls, link_url):
+        return None
+
+    @model_validator(mode="after")
+    def check_model(self)->Self:
+        self.link_url = None
+        self.public =None
+
+        if self.expiration == None and self.link_name ==None:
+            raise ValueError()
+
+        return self
+
+    @field_validator('expiration')
+    def check_expiration(cls,expiration):
+        if  expiration == None:
+            return None
+        return super().check_expiration(expiration)
