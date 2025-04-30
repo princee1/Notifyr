@@ -58,7 +58,7 @@ BEGIN
     SET search_path = emails;
 
     UPDATE EmailTracking e
-    SET email_current_status = 'DELIVERED'
+    SET e.email_current_status = 'DELIVERED'
     WHERE e.email_current_status = 'SENT' AND NOW() - e.date_sent >= INTERVAL '5 hours';
 END;
 $$ LANGUAGE PLPGSQL;
