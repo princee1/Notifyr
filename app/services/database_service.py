@@ -6,7 +6,7 @@ from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
 from .config_service import ConfigService
 from .file_service import FileService
-from app.definition._service import Service,AbstractServiceClass,ServiceClass,BuildWarningError
+from app.definition._service import BuildFailureError, Service,AbstractServiceClass,ServiceClass,BuildWarningError
 import sqlite3
 import pandas as pd
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
@@ -15,7 +15,7 @@ from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 import json
 import asyncio
-
+from tortoise import Tortoise
 
 class RedisStreamDoesNotExistsError(BaseError):
     ...
@@ -183,6 +183,14 @@ class RedisService(DatabaseService):
             'limiter':self.redis_limiter,
             'events': self.redis_events
         }
+
+        try:
+            pong = asyncio.run(self.redis_events.ping())
+            if pong != "PONG":
+                raise ConnectionError("Redis ping failed")
+        except Exception as e:
+            
+            raise BuildFailureError
  
     async def refund(self, limit_request_id:str):
         redis = self.db[1]
@@ -223,6 +231,9 @@ class TortoiseConnectionService(DatabaseService):
         super().__init__(configService,None)
 
     def build(self):
-        ...
+        try:
+            Tortoise.get_connection('default')
+        except:
+            raise BuildFailureError
     
     

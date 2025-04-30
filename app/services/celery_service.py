@@ -5,7 +5,7 @@ from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict
 import typing
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, TaskHeaviness, TaskType
 from app.classes.celery import CeleryTask, SchedulerModel
-from app.definition._service import Service, ServiceClass, ServiceStatus,BuildWarningError
+from app.definition._service import BuildFailureError, Service, ServiceClass, ServiceStatus,BuildWarningError
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.database_service import RedisService
 from app.utils.constant import HTTPHeaderConstant
@@ -251,11 +251,13 @@ class CeleryService(Service, IntervalInterface):
     _celery_app = celery_app
     _task_registry = TASK_REGISTRY
 
-    def __init__(self, configService: ConfigService, bTaskService: TaskService):
+    def __init__(self, configService: ConfigService, bTaskService: TaskService,redisService:RedisService):
         Service.__init__(self)
         IntervalInterface.__init__(self,False)
         self.configService = configService
         self.bTaskService = bTaskService
+
+        self.redisService = redisService
         self.available_workers_count = -1
         self.worker_not_available_count = 0
 
@@ -377,7 +379,8 @@ class CeleryService(Service, IntervalInterface):
                 f'celery-task-meta-{scheduler.task_name}', 3600)  # Expire in 1 hour
 
     def build(self):
-        ...
+        if self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
+            raise BuildFailureError
 
     @property
     def set_next_timeout(self):
