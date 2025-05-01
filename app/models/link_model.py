@@ -11,7 +11,7 @@ SCHEMA = 'links'
 class LinkORM(models.Model):
     link_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     link_name = fields.CharField(max_length=100, unique=True)
-    link_short_id = fields.CharField(max_length=20, unique=True, default=lambda: generateId(20))
+    link_short_id = fields.CharField(max_length=20, unique=True, default=lambda: generateId(5))
     link_url = fields.CharField(max_length=150, unique=True)
     expiration = fields.DatetimeField(null=True)
     expiration_verification = fields.DatetimeField(null=True)
@@ -129,6 +129,7 @@ class LinkModel(LinkModelBase):
 
 class UpdateLinkModel(LinkModel):
 
+    archived:bool| None = None
     link_name:str |None =None
     expiration: datetime | None | float | int = None
 
@@ -144,12 +145,12 @@ class UpdateLinkModel(LinkModel):
         return None
 
     @model_validator(mode="after")
-    def check_model(self)->Self:
+    def check_model(self) -> Self:
         self.link_url = None
-        self.public =None
+        self.public = None
 
-        if self.expiration == None and self.link_name ==None:
-            raise ValueError()
+        if self.expiration is None and self.link_name is None and self.archived is None:
+            raise ValueError("At least one of 'expiration', 'link_name', or 'archived' must be provided.")
 
         return self
 

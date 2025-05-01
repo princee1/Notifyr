@@ -4,7 +4,7 @@ SET search_path = links;
 CREATE TABLE IF NOT EXISTS Link (
     link_id UUID DEFAULT uuid_generate_v1mc(),
     link_name VARCHAR(100) UNIQUE NOT NULL,
-    link_short_id VARCHAR(20) UNIQUE NOT NULL,
+    link_short_id VARCHAR(7) UNIQUE NOT NULL,
     link_url VARCHAR(150) UNIQUE NOT NULL,
     expiration TIMESTAMPTZ DEFAULT NULL,
     expiration_verification TIMESTAMPTZ DEFAULT NOW() + "1 week",

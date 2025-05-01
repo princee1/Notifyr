@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,
     email_current_status EmailStatus,
+    subject VARCHAR(150),
     spam_label VARCHAR(50),
     spam_detection_confidence FLOAT,
     PRIMARY KEY (email_id)
