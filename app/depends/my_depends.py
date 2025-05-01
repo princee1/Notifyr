@@ -270,17 +270,18 @@ async def _get_blacklist(blacklist_id: str = None):
 async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_id', None))):
     return await _get_blacklist(blacklist_id=blacklist_id)
 
-async def get_link(lid:str = Depends(get_query_params('lid','id',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
+
+async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','id',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
     link =None
     match lid:
         case 'id':
-            link = await LinkORM.filter().first()
+            link = await LinkORM.filter(link_id=link_id).first()
         
         case 'name':
-            link = await LinkORM.filter().first()
+            link = await LinkORM.filter(link_name=link_id).first()
 
         case 'sid':
-            link = await LinkORM.filter().first()
+            link = await LinkORM.filter(link_short_id=link_id).first()
 
         case _:
             link = None

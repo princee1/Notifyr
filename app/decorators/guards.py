@@ -3,6 +3,7 @@ from app.classes.auth_permission import AuthPermission, RefreshPermission
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.link_model import LinkORM
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
@@ -207,3 +208,17 @@ class CarrierTypeGuard(Guard):
         if carrier_type == 'unknown' and not self.accept_unknown:
             return False,'Carrier Type is Unknown'
         return True,''
+
+
+class AccessLinkGuard(Guard):
+
+    def guard(self,link:LinkORM):
+        link_short_id = link.link_short_id
+
+        if link.archived:
+            return False,f'Link with short_id: {link_short_id} is currently archived'
+    
+        if not link.verified:
+            return False, f'Link with short_id: {link_short_id} is not verified'
+
+        return True,""
