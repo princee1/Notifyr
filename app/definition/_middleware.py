@@ -13,7 +13,7 @@ METHODS = Literal['GET','POST','PATCH','PUT','DELETE','HEAD','OPTION']
 MIDDLEWARE: dict[str, type] = {}
 class MiddlewarePriority(Enum):
 
-    PROCESS_TIME = 1
+    METADATA = 1
     LOAD_BALANCER= 2
     ANALYTICS = 3
     SECURITY = 4

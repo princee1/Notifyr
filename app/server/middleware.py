@@ -19,27 +19,33 @@ from app.utils.helper import generateId
 from app.depends.my_depends import GetClient
 
         
-class ProcessTimeMiddleWare(MiddleWare):
-    priority = MiddlewarePriority.PROCESS_TIME
+class MetaDataMiddleWare(MiddleWare):
+    priority = MiddlewarePriority.METADATA
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
         self.taskService:TaskService = Get(TaskService)
+        self.configService:ConfigService = Get(ConfigService)
+
+        self.instance_id = str(self.configService.INSTANCE_ID)
+
 
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
         self.taskService.connection_count.inc()
         self.taskService.connection_total.inc()
+
         try:
             response: Response = await call_next(request)
             process_time = time.time() - start_time
             response.headers["X-Process-Time"] = str(process_time) + ' (s)'
+            response.headers["X-Instance-Id"]= self.instance_id
             self.taskService.request_latency.observe(process_time)
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
             self.taskService.request_latency.observe(process_time)
-            return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)'})
+            return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)','X-Instance-Id':self.instance_id})
         finally:
             self.taskService.connection_count.dec()
 
