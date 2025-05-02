@@ -1,4 +1,5 @@
 from typing import Annotated, Literal
+from urllib.parse import urlparse
 from fastapi import Depends, Query, Request, Response
 from app.classes.auth_permission import Role
 from app.container import InjectInMethod
@@ -7,11 +8,11 @@ from app.decorators.handlers import TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
-from app.depends.my_depends import get_link
+from app.depends.my_depends import LinkArgs, get_link
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from app.depends.variables import  verify_url
 from app.models.link_model import LinkORM,LinkModel, UpdateLinkModel
 
@@ -74,14 +75,14 @@ class CRUDLinkRessource(BaseHTTPRessource):
 
     @UseGuard(AccessLinkGuard)
     @UseRoles([Role.PUBLIC])
-    @BaseHTTPRessource.HTTPRoute('/code/{link_id}/',methods=[HTTPMethod.GET])
-    def get_qrcode(self,link_id:str,link:Annotated[LinkORM,Depends(get_link)],):
+    @BaseHTTPRessource.HTTPRoute('/code/{link_id}/{path}',methods=[HTTPMethod.GET])
+    def get_qrcode(self,link_id:str,path:str,link:Annotated[LinkORM,Depends(get_link)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
         ...
     
     @UseRoles([Role.ADMIN])
     @BaseHTTPRessource.HTTPRoute('/verify',methods=[HTTPMethod.PATCH])
     def verify(self,request:Request,link:Annotated[LinkORM,Depends(get_link)],verify_type:Literal['well-known','domain']=Depends(verify_url)):
-        ...
+        domain = urlparse(link.link_url).hostname
 
     
 LINK_PREFIX='link'
@@ -95,16 +96,19 @@ class LinkRessource(BaseHTTPRessource):
         self.redisService = redisService
         self.linkService = linkService
     
-
     @UseLimiter(limit_value='10000/min')
-    @BaseHTTPRessource.HTTPRoute('/{link_id}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    def visit_url(self,request:Request,link:Annotated[LinkORM,Depends(get_link)]):
-        
+    @BaseHTTPRessource.HTTPRoute('visits/{link_id}/{path}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
+    def visit_url(self,request:Request,path:str,link:Annotated[LinkORM,Depends(get_link)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+        flag,_=AccessLinkGuard().do(**{'link':link})
+        redirect_link = link_args.create_link(link,path)
+
+        if not flag:
+            return FileResponse('app/static/error-404-page/index.html')
         ... 
 
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/email-track/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    def track_email(self,request:Request):
+    def track_email(self,request:Request,link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
         ...
 
 

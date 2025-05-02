@@ -104,6 +104,7 @@ class JWTAuthMiddleware(MiddleWare):
 
     @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*'])
+    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
@@ -164,6 +165,7 @@ class UserAppMiddleware(MiddleWare):
 
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ApplyOn(['/auth/generate/admin/*'])
+    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         return await super().dispatch(request, call_next)
@@ -175,6 +177,7 @@ class ChallengeMatchMiddleware(MiddleWare):
     @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
+    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/'])
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         authPermission: AuthPermission = await get_auth_permission(request)

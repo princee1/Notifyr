@@ -1,5 +1,5 @@
 import functools
-from typing import Annotated, Any, Callable
+from typing import Annotated, Any, Callable, TypedDict
 from fastapi import Depends, HTTPException, Header, Query, Response, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
@@ -12,6 +12,7 @@ from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
+from app.services.link_service import LinkService
 from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService, ReactiveSubject, ReactiveType,Disposable
 from app.services.security_service import JWTAuthService, SecurityService
@@ -271,7 +272,7 @@ async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_
     return await _get_blacklist(blacklist_id=blacklist_id)
 
 
-async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','id',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
+async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
     link =None
     match lid:
         case 'id':
@@ -298,6 +299,51 @@ async def get_task(request_id: str = Depends(get_request_id), as_async: bool = D
     if offload_task == None:
         raise HTTPException(500, detail='Offload task is not available')
     return taskService._register_tasks(request_id, as_async, runtype, offload_task, ttl, save, return_results)
+
+
+class ServerScopedParams(TypedDict):
+    client_id:str | None
+    group_id:str|None
+    contact_id:str|None
+    session_id:str|None
+    message_id:str|None
+
+
+class LinkArgs:
+    server_scoped_params = ["client_id", "group_id", "contact_id", "session_id","message_id"]
+    filtered_out = ["cid","gid","lid","ctid","cid"]
+    
+    def __init__(self, request: Request):
+        self.request = request
+        self._filter_params()
+        self.configService:ConfigService = Get(ConfigService)
+        self.linkService:LinkService = Get(LinkService)
+
+    def _filter_params(self) -> dict:
+        scoped_params ={}
+        self._link_params = {}
+        for key,value in self.request.items():
+            if key in self.filtered_out:
+                continue
+            if key in self.server_scoped_params:
+                scoped_params[key]=value
+            else:
+                scoped_params[key]=None
+                self._link_params[key] =value
+
+        self.server_scoped:ServerScopedParams = ServerScopedParams(**scoped_params) 
+
+    @property
+    def all_params(self):
+        return self.request._query_params.__str__()
+
+    @property
+    def raw_link_params(self):
+        return "&".join([ f'{key}={value}' for key,value in self._link_params.items()])
+    
+    def create_link(self,link:LinkORM,path:str,):
+        ...
+    
 
 
 class KeepAliveQuery:
