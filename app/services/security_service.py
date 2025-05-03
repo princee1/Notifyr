@@ -1,6 +1,7 @@
 
 from typing import Any, Dict, Literal
 
+from app.classes.rsa import RSA
 from app.definition._interface import Interface, IsInterface
 from .config_service import ConfigService
 from dataclasses import dataclass
@@ -299,3 +300,9 @@ class SecurityService(Service, EncryptDecryptInterface):
     
     def verify_admin_signature(self,):
         ...
+
+    def generate_key_pair(self,key_size=512):
+        rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
+        return RSA(key_size=key_size,password=rsa_secret_pwd)
+        
+    

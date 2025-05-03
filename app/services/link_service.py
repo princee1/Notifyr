@@ -1,5 +1,6 @@
 from typing import Callable
 from fastapi import HTTPException,status
+from app.classes.rsa import RSA
 from app.definition._service import Service, ServiceClass
 from app.models.link_model import LinkORM
 from app.services.config_service import ConfigService
@@ -8,7 +9,7 @@ from app.services.reactive_service import ReactiveService
 import qrcode as qr
 import io
 from app.services.security_service import SecurityService
-from app.utils.helper import b64_encode
+from app.utils.helper import b64_encode, generateId
 import aiohttp
 
 @ServiceClass
@@ -26,12 +27,24 @@ class LinkService(Service):
     
     def build(self):
         ...
-    
 
-    def verify_safe_domain(self,):
+    async def generate_public_signature(self,link:LinkORM):
+        if link.public:
+            return 
+        rsa:RSA =  self.securityService.generate_key_pair()
+        message= generateId(100)
+        signature= ...
+        
+        await link.save()
+        return signature,str(rsa.public_key)
+
+    async def verify_public_signature(self,link:LinkORM,signature,public_key):
+        ...
+
+    def verify_safe_domain(self,domain:str):
         ...
     
-    async def verify_server_well_know(self, link: LinkORM):
+    async def get_server_well_know(self, link: LinkORM):
 
         link_url = link.link_url
         async with aiohttp.ClientSession() as session:

@@ -26,10 +26,9 @@ LINK_MANAGER_PREFIX = 'manage'
 class CRUDLinkRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self,configService:ConfigService,redisService:RedisService,linkService:LinkService):
+    def __init__(self,configService:ConfigService,linkService:LinkService):
         super().__init__()
         self.configService = configService
-        self.redisService = redisService
         self.linkService = linkService
 
     @UseRoles([Role.ADMIN])
@@ -37,7 +36,13 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
     async def add_link(self, request: Request, linkModel: LinkModel, response: Response,authPermission=Depends(get_auth_permission)):
         link = linkModel.model_dump()
+        domain = urlparse(link['link_url']).hostname
+
+        if not linkModel.public:
+            self.linkService.verify_safe_domain(domain)
+
         link = await LinkORM.create(**link)
+        signature, public_key = await self.linkService.generate_public_signature(link)
         return {"data": link.to_json, "message": "Link created successfully"}
 
     @UseRoles([Role.PUBLIC])
@@ -81,8 +86,12 @@ class CRUDLinkRessource(BaseHTTPRessource):
     
     @UseRoles([Role.ADMIN])
     @BaseHTTPRessource.HTTPRoute('/verify',methods=[HTTPMethod.PATCH])
-    def verify(self,request:Request,link:Annotated[LinkORM,Depends(get_link)],verify_type:Literal['well-known','domain']=Depends(verify_url)):
+    async def verify(self,request:Request,link:Annotated[LinkORM,Depends(get_link)],verify_type:Literal['well-known','domain']=Depends(verify_url)):
         domain = urlparse(link.link_url).hostname
+        await self.linkService.get_server_well_know(link)
+        await self.linkService.verify_public_signature(link)
+        
+
 
     
 LINK_PREFIX='link'

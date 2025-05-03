@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS Link (
     expiration_verification TIMESTAMPTZ DEFAULT NOW() + "1 week",
     total_visit_count INT DEFAULT 0,
     public BOOLEAN DEFAULT TRUE,
-    ownership_key VARCHAR(150) DEFAULT NULL,
+    -- ownership_public_key TEXT DEFAULT NULL,
+    -- ownership_private_key TEXT DEFAULT NULL,
+    ownership_signature VARCHAR(150) DEFAULT NULL,
     verified BOOLEAN DEFAULT FALSE,
     archived BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (link_id)

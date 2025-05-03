@@ -17,7 +17,9 @@ class LinkORM(models.Model):
     expiration_verification = fields.DatetimeField(null=True)
     total_visit_count = fields.IntField(default=0)
     public = fields.BooleanField(default=True)
-    ownership_key = fields.CharField(max_length=150, null=True)
+    # ownership_public_key = fields.TextField()
+    # ownership_private_key = fields.TextField()
+    ownership_signature = fields.CharField(max_length=150, null=True)
     verified = fields.BooleanField(default=False)
     archived = fields.BooleanField(default=False)
 
@@ -36,7 +38,6 @@ class LinkORM(models.Model):
             "expiration_verification": self.expiration_verification.isoformat() if self.expiration_verification else None,
             "total_visit_count": self.total_visit_count,
             "public": self.public,
-            "ownership_key": self.ownership_key,
             "verified": self.verified,
             "archived": self.archived
         }
