@@ -86,7 +86,13 @@ class RedisService(DatabaseService):
         self.streams = {
             'links':{
                 'count':100,
-                'wait':5000,
+                'wait':1000*5,
+                'stream':True
+            },
+            'emails':{
+                'count':10,
+                'wait':1000*10,
+                'stream':True
             }
         }
 
@@ -132,12 +138,16 @@ class RedisService(DatabaseService):
                 else:
                     ...
 
-    def register_stream_consumer(self):
+    def register_consumer(self,):
         for stream_name,config in self.streams.items():
             count = config['count']
             wait = config['wait']
-            asyncio.create_task(self._consume_stream(stream_name,count,wait))
-
+            is_stream = config['stream']
+            asyncio.create_task(self._consume_channel(stream_name,lambda v:v))
+            
+            if is_stream:
+                asyncio.create_task(self._consume_stream(stream_name,count,wait))
+    
     async def _consume_stream(self,stream_name,count,wait):
         while True:
             try:
@@ -227,13 +237,15 @@ class RedisService(DatabaseService):
 @ServiceClass
 class TortoiseConnectionService(DatabaseService):
 
-    def __init__(self, configService:ConfigService):
-        super().__init__(configService,None)
+    def __init__(self, configService: ConfigService):
+        super().__init__(configService, None)
 
     def build(self):
         try:
-            Tortoise.get_connection('default')
-        except:
-            raise BuildFailureError
+            connection = Tortoise.get_connection('default')
+            if not connection.is_connected():
+                raise ConnectionError("Tortoise ORM is not connected to the database")
+        except Exception as e:
+            raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
     
     

@@ -1,5 +1,5 @@
 import functools
-from typing import Annotated, Any, Callable, TypedDict
+from typing import Annotated, Any, Callable, Literal, TypedDict
 from fastapi import Depends, HTTPException, Header, Query, Response, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
@@ -302,36 +302,50 @@ async def get_task(request_id: str = Depends(get_request_id), as_async: bool = D
 
 
 class ServerScopedParams(TypedDict):
-    client_id:str | None
-    group_id:str|None
-    contact_id:str|None
-    session_id:str|None
-    message_id:str|None
+    client_id:str | None = None
+    group_id:str|None = None
+    contact_id:str|None = None
+    session_id:str|None = None
+    message_id:str|None = None
 
+class IdsTypeParams(TypedDict):
+    cid:str |None = None
+    gid:str |None = None
+    lid:str |None = None
+    ctid:str |None = None
+
+    cid_type :Literal['client','contact']
 
 class LinkArgs:
     server_scoped_params = ["client_id", "group_id", "contact_id", "session_id","message_id","link_id"]
-    filtered_out = ["cid","gid","lid","ctid","cid"]
+    ids_type = ["cid","gid","lid","ctid",]
     
     def __init__(self, request: Request):
         self.request = request
         self._filter_params()
         self.configService:ConfigService = Get(ConfigService)
         self.linkService:LinkService = Get(LinkService)
+    
+    def __getitem__(self,params)->str|None:
+        return self.request.query_params.get(params,None)
 
     def _filter_params(self) -> dict:
         scoped_params ={}
+        ids_type_params = {}
         self._link_params = {}
+
         for key,value in self.request.items():
-            if key in self.filtered_out:
-                continue
-            if key in self.server_scoped_params:
+
+            if key in self.ids_type:
+                ids_type_params[key] = value
+
+            elif key in self.server_scoped_params:
                 scoped_params[key]=value
             else:
-                scoped_params[key]=None
                 self._link_params[key] =value
 
         self.server_scoped:ServerScopedParams = ServerScopedParams(**scoped_params) 
+        self.ids_type_params:IdsTypeParams = IdsTypeParams(**ids_type_params)
 
     @property
     def all_params(self):
@@ -341,17 +355,23 @@ class LinkArgs:
     def raw_link_params(self):
         return "&".join([ f'{key}={value}' for key,value in self._link_params.items()])
     
-    def raw_scoped_out_params(self,include=()):
-        return "&".join([ f'{key}={value}' for key,value in self.server_scoped.items() if key in include])
+    def raw_filtered_out_params(self,attr,include=()):
+        return "&".join([ f'{key}={value}' for key,value in getattr(self,attr).items() if key in include])
     
-    def create_link(self,link:LinkORM,path:str,include_scoped_out=()):
-        url = link.link_url
+    def create_link(self,link:LinkORM,path:str,include_scoped_out=(),include_ids_type=()):
+        if link == None:
+            url = self.request.url.hostname
+        else:
+            url = link.link_url
+            
         if not url.endswith("/"):
             url+="/"
         
         url+=path
+        url+="?"
         url+=self.raw_link_params
-        url+=self.raw_scoped_out_params(include_scoped_out)
+        url+=self.raw_filtered_out_params('server_scoped',include_scoped_out)
+        url+=self.raw_filtered_out_params('ids_type_params',include_ids_type)
         return url
     
 

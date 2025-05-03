@@ -231,9 +231,14 @@ class Application(EventInterface):
             add_exception_handlers=True,    
         )
 
-    def on_startup(self):
+    async def on_startup(self):
         jwtService = Get(JWTAuthService)
         jwtService.set_generation_id(False)
+
+        redisService = Get(RedisService)
+        
+        #await redisService.create_group()
+        #redisService.register_consumer()
 
         taskService:TaskService =  Get(TaskService)
         #taskService.start()
