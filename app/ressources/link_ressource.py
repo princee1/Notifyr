@@ -14,7 +14,7 @@ from app.services.database_service import RedisService
 from app.services.link_service import LinkService
 from fastapi.responses import FileResponse, RedirectResponse
 from app.depends.variables import  verify_url
-from app.models.link_model import LinkORM,LinkModel, UpdateLinkModel
+from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkModel
 
 
 LINK_MANAGER_PREFIX = 'manage'
@@ -80,9 +80,12 @@ class CRUDLinkRessource(BaseHTTPRessource):
 
     @UseGuard(AccessLinkGuard)
     @UseRoles([Role.PUBLIC])
-    @BaseHTTPRessource.HTTPRoute('/code/{link_id}/{path}',methods=[HTTPMethod.GET])
-    def get_qrcode(self,link_id:str,path:str,link:Annotated[LinkORM,Depends(get_link)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
-        ...
+    @BaseHTTPRessource.HTTPRoute('/code/{link_id}/{path}', methods=[HTTPMethod.GET])
+    async def get_qrcode(self, link_id: str, path: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_args: Annotated[LinkArgs, Depends(LinkArgs)]):
+        url = link_args.create_link(link, path, ("contact_id", "message_id", "session_id"))
+        img_data = await self.linkService.generate_qr_code(url, qrModel)
+        return Response(content=img_data, media_type="image/png")
+        
     
     @UseRoles([Role.ADMIN])
     @BaseHTTPRessource.HTTPRoute('/verify',methods=[HTTPMethod.PATCH])

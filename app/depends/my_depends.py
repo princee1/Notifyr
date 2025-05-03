@@ -310,7 +310,7 @@ class ServerScopedParams(TypedDict):
 
 
 class LinkArgs:
-    server_scoped_params = ["client_id", "group_id", "contact_id", "session_id","message_id"]
+    server_scoped_params = ["client_id", "group_id", "contact_id", "session_id","message_id","link_id"]
     filtered_out = ["cid","gid","lid","ctid","cid"]
     
     def __init__(self, request: Request):
@@ -341,8 +341,18 @@ class LinkArgs:
     def raw_link_params(self):
         return "&".join([ f'{key}={value}' for key,value in self._link_params.items()])
     
-    def create_link(self,link:LinkORM,path:str,):
-        ...
+    def raw_scoped_out_params(self,include=()):
+        return "&".join([ f'{key}={value}' for key,value in self.server_scoped.items() if key in include])
+    
+    def create_link(self,link:LinkORM,path:str,include_scoped_out=()):
+        url = link.link_url
+        if not url.endswith("/"):
+            url+="/"
+        
+        url+=path
+        url+=self.raw_link_params
+        url+=self.raw_scoped_out_params(include_scoped_out)
+        return url
     
 
 

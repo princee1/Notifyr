@@ -3,7 +3,7 @@ from typing import Self
 from tortoise import fields, models
 from app.utils.helper import uuid_v1_mc,generateId
 from tortoise.contrib.pydantic import pydantic_model_creator
-from pydantic import field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from app.utils.validation import url_validator
 
 SCHEMA = 'links'
@@ -160,3 +160,8 @@ class UpdateLinkModel(LinkModel):
         if  expiration == None:
             return None
         return super().check_expiration(expiration)
+
+class QRCodeModel(BaseModel):
+    version: int = 1
+    box_size: int = 10
+    border: int = 4

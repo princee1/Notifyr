@@ -2,7 +2,7 @@ from typing import Callable
 from fastapi import HTTPException,status
 from app.classes.rsa import RSA
 from app.definition._service import Service, ServiceClass
-from app.models.link_model import LinkORM
+from app.models.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
@@ -34,7 +34,7 @@ class LinkService(Service):
         rsa:RSA =  self.securityService.generate_key_pair()
         message= generateId(100)
         signature= ...
-        
+
         await link.save()
         return signature,str(rsa.public_key)
 
@@ -59,14 +59,29 @@ class LinkService(Service):
         
         ...
 
-    async def generate_qr_code(self,):
-        
-        qr_code = qr.QRCode(
-            version = 1,
+    async def generate_qr_code(self, full_url: str, qr_config:QRCodeModel):
+        """
+        Generate a QR code for the given URL with optional configuration.
 
+        Args:
+            full_url (str): The URL to encode in the QR code.
+            qr_config (dict, optional): Configuration for the QR code (e.g., version, box_size, border).
+
+        Returns:
+            str: Base64-encoded QR code image.
+        """
+
+        qr_code = qr.QRCode(
+            version=qr_config.version,
+            box_size=qr_config.box_size,
+            border=qr_config.border,
         )
+        qr_code.add_data(full_url)
+        qr_code.make(fit=True)
+
+        img = qr_code.make_image(fill_color="black", back_color="white")
         img_io = io.BytesIO()
-        qr.save(img_io, 'PNG')
+        img.save(img_io, 'PNG')
         img_io.seek(0)
 
         base64_img = b64_encode(img_io.read())
