@@ -16,14 +16,14 @@ class FileService(Service,):
     def loadJSON(self):
         pass
 
-    def readFileDetail(self, path, flag, enc="utf-8"):
+    def readFileDetail(self, path, flag:FDFlag, enc="utf-8"):
 
         filename  = getFilenameOnly(path)
         content = readFileContent(path, flag, enc)
         dirName = getFileDir(path)
         return filename,content,dirName
     
-    def readFile(self, path,flag,enc= "utf-8"):
+    def readFile(self, path,flag:FDFlag,enc= "utf-8"):
         return readFileContent(path, flag, enc)
     
     def writeFile(self,):

@@ -6,6 +6,7 @@ from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessour
 from datetime import timedelta
 
 from app.services.file_service import FileService
+from app.utils.fileIO import FDFlag
 
 APP_PREFIX=''
 
@@ -18,8 +19,8 @@ class AppRessource(BaseHTTPRessource):
         self.fileService = fileService
 
     def on_startup(self):
-        self.app_route_html_content = self.fileService.readFile('app/static/index.html')
-        self.landing_page_html_content = self.fileService.readFile('app/static/landing-page/index.html')
+        self.app_route_html_content = self.fileService.readFile('app/static/index.html',FDFlag.READ)
+        self.landing_page_html_content = self.fileService.readFile('app/static/landing-page/index.html',FDFlag.READ)
 
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.HTTPRoute('/',[HTTPMethod.GET],deprecated=True,mount=True,)

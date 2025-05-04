@@ -2,7 +2,6 @@ from typing import Callable
 from fastapi import HTTPException, Request,status
 from app.classes.rsa import RSA
 from app.definition._service import Service, ServiceClass
-from app.depends.dependencies import get_client_ip
 from app.models.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
@@ -47,7 +46,7 @@ class LinkService(Service):
     
     def parse_info(self,request:Request,link_id:str,path:str):
         user_agent = request.headers.get('user-agent')
-        client_ip = get_client_ip(request)
+        client_ip = ...
 
 
         #await ...

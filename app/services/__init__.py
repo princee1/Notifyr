@@ -14,3 +14,4 @@ from .twilio_service import *
 from .contacts_service import *
 from .admin_service import AdminService
 from .reactive_service import ReactiveService
+from .link_service import LinkService
