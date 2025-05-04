@@ -1,3 +1,4 @@
+-- Active: 1740679093248@@localhost@5432@notifyr@links
 SET search_path = links;
 
 
@@ -7,7 +8,7 @@ CREATE TABLE IF NOT EXISTS Link (
     link_short_id VARCHAR(7) UNIQUE NOT NULL,
     link_url VARCHAR(150) UNIQUE NOT NULL,
     expiration TIMESTAMPTZ DEFAULT NULL,
-    expiration_verification TIMESTAMPTZ DEFAULT NOW() + "1 week",
+    expiration_verification TIMESTAMPTZ DEFAULT NOW() + INTERVAL '1 week',
     total_visit_count INT DEFAULT 0,
     public BOOLEAN DEFAULT TRUE,
     -- ownership_public_key TEXT DEFAULT NULL,
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS Link (
 CREATE TABLE IF NOT EXISTS LinkEvent (
     event_id UUID DEFAULT uuid_generate_v1mc(),
     link_id UUID NOT NULL,
-    link_path VARCHAR(100) DEFAULT "/",
+    link_path VARCHAR(100) DEFAULT NULL,
     contact_id UUID DEFAULT NULL,
     email_id UUID DEFAULT NULL,
     user_agent VARCHAR(150) DEFAULT NULL,
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS LinkEvent (
     country VARCHAR(60),
     city VARCHAR(100),
     date_clicked TIMESTAMPTZ,
-    expiring_date TIMESTAMPTZ NOW() + "1 week",
+    expiring_date TIMESTAMPTZ DEFAULT NOW() +INTERVAL '1 week',
     PRIMARY KEY (event_id),
     FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL,
@@ -54,7 +55,7 @@ BEGIN
     DELETE FROM Link
     WHERE expiration <= NOW()
     OR 
-        expiration_validation <= NOW ();
+        expiration_verification <= NOW ();
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -85,7 +86,7 @@ $compute_limit$ LANGUAGE plpgsql;
 
 
 
-CREATE TRIGGER links_contact
+CREATE TRIGGER limit_links
 BEFORE INSERT ON Link
 FOR EACH ROW
 EXECUTE FUNCTION compute_limit();

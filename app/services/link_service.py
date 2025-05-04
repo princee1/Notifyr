@@ -29,8 +29,6 @@ class LinkService(Service):
         ...
 
     async def generate_public_signature(self,link:LinkORM):
-        if link.public:
-            return 
         rsa:RSA =  self.securityService.generate_key_pair()
         message= generateId(100)
         signature= ...

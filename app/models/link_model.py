@@ -114,7 +114,7 @@ class LinkModel(LinkModelBase):
 
     @field_validator('expiration')
     def check_expiration(cls,expiration):
-        if isinstance(expiration(float,int)):
+        if isinstance(expiration,(float,int)):
             if expiration<0:
                 raise ValueError('Expiration cannot be negative')
             if expiration==0:

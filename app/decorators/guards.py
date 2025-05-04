@@ -221,6 +221,9 @@ class AccessLinkGuard(Guard):
     def guard(self,link:LinkORM):
         link_short_id = link.link_short_id
 
+        if link.public:
+            return True,""
+
         if link.archived:
             if not self.return_file:
                 return False,f'Link with short_id: {link_short_id} is currently archived'

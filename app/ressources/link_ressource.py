@@ -17,9 +17,21 @@ from fastapi import status
 from fastapi.responses import FileResponse, RedirectResponse
 from app.depends.variables import  verify_url
 from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkModel
-
+from app.utils.helper import APIFilterInject
 
 LINK_MANAGER_PREFIX = 'manage'
+
+@APIFilterInject
+def verify_link_guard(link:LinkORM):
+
+    if link.public:
+        return False,'Cannot verify public domain'
+    if link.archived:
+        return False, 'Cannot verify archived domain'
+    if link.verified:
+        return False, 'Already verified'
+
+    return True
 
 @UseRoles([Role.LINK])
 @UsePermission(JWTRouteHTTPPermission)
@@ -43,13 +55,19 @@ class CRUDLinkRessource(BaseHTTPRessource):
         if not linkModel.public:
             self.linkService.verify_safe_domain(domain)
 
+        public_security = {}
         link = await LinkORM.create(**link)
-        signature, public_key = await self.linkService.generate_public_signature(link)
-        return {"data": link.to_json, "message": "Link created successfully"}
+
+        if not link.public:
+            signature, public_key = await self.linkService.generate_public_signature(link)
+            public_security['signature'] = signature
+            public_security['public_key'] = public_key
+
+        return {"data": {**link.to_json}, "message": "Link created successfully"}
 
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
-    def read_link(self, request: Request, link: Annotated[LinkORM, Depends(get_link)],authPermission=Depends(get_auth_permission)):
+    async def read_link(self, request: Request, link: Annotated[LinkORM, Depends(get_link)],authPermission=Depends(get_auth_permission)):
         return {"data": link.to_json, "message": "Link retrieved successfully"}
 
     @UseRoles([Role.ADMIN])
@@ -80,25 +98,18 @@ class CRUDLinkRessource(BaseHTTPRessource):
         await link.save()
         return {"data": link.to_json(), "message": "Link updated successfully"}
 
-    @UseGuard(AccessLinkGuard)
-    @UseRoles([Role.PUBLIC])
-    @BaseHTTPRessource.HTTPRoute('/code/{link_id}/{path}', methods=[HTTPMethod.GET])
-    async def get_qrcode(self, link_id: str, path: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_args: Annotated[LinkArgs, Depends(LinkArgs)]):
-        url = link_args.create_link(link, path, ("contact_id", "message_id", "session_id"))
-        img_data = await self.linkService.generate_qr_code(url, qrModel)
-        return Response(content=img_data, media_type="image/png")
-        
     
     @UseRoles([Role.ADMIN])
+    @UseGuard(verify_link_guard)
+    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/verify',methods=[HTTPMethod.PATCH])
-    async def verify(self,request:Request,link:Annotated[LinkORM,Depends(get_link)],verify_type:Literal['well-known','domain']=Depends(verify_url)):
+    async def verify(self,request:Request,link:Annotated[LinkORM,Depends(get_link)],response:Response,verify_type:Literal['well-known','domain']=Depends(verify_url)):
+        
         domain = urlparse(link.link_url).hostname
         await self.linkService.get_server_well_know(link)
         await self.linkService.verify_public_signature(link)
         
 
-
-    
 LINK_PREFIX='link'
 @HTTPRessource(LINK_PREFIX,routers=[CRUDLinkRessource])
 class LinkRessource(BaseHTTPRessource):
@@ -148,8 +159,14 @@ class LinkRessource(BaseHTTPRessource):
 
         return ''
 
-
-
+    @UsePermission(JWTRouteHTTPPermission)
+    @UseGuard(AccessLinkGuard)
+    @UseRoles([Role.PUBLIC])
+    @BaseHTTPRessource.HTTPRoute('/code/{link_id}/{path}', methods=[HTTPMethod.GET])
+    async def get_qrcode(self, link_id: str, path: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_args: Annotated[LinkArgs, Depends(LinkArgs)],authPermission=Depends(get_auth_permission)):
+        url = link_args.create_link(link, path, ("contact_id", "message_id", "session_id"))
+        img_data = await self.linkService.generate_qr_code(url, qrModel)
+        return Response(content=img_data, media_type="image/png")
     
     
 
