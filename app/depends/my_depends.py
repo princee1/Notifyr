@@ -5,6 +5,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
 from app.container import Get, GetAttr
+from app.definition._error import ServerFileError
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
@@ -288,8 +289,7 @@ async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',ra
             link = None
     
     if link == None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail='Link does not exists with the this lid provided')
+        raise ServerFileError('app/static/error-404-page/index.html')
     return link
 
 

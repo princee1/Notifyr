@@ -1,5 +1,6 @@
 from typing import Any, List
 from app.classes.auth_permission import AuthPermission, RefreshPermission
+from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
@@ -211,14 +212,25 @@ class CarrierTypeGuard(Guard):
 
 
 class AccessLinkGuard(Guard):
+    error_file = 'app/static/error-404-page/index.html'
+
+    def __init__(self,return_file:bool):
+        super().__init__()
+        self.return_file = return_file
 
     def guard(self,link:LinkORM):
         link_short_id = link.link_short_id
 
         if link.archived:
-            return False,f'Link with short_id: {link_short_id} is currently archived'
+            if not self.return_file:
+                return False,f'Link with short_id: {link_short_id} is currently archived'
+            else:
+                raise ServerFileError(self.error_file)
     
         if not link.verified:
-            return False, f'Link with short_id: {link_short_id} is not verified'
-
+            if not self.return_file:
+                return False, f'Link with short_id: {link_short_id} is not verified'
+            else:
+                raise ServerFileError(self.error_file)
+            
         return True,""

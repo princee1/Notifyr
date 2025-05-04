@@ -2,7 +2,10 @@
 Contains the FastAPI app
 """
 from dataclasses import dataclass
+
+from fastapi.staticfiles import StaticFiles
 from app.container import Get
+from app.definition._error import ServerFileError
 from app.ressources import *
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
@@ -102,6 +105,15 @@ class Application(EventInterface):
     def add_exception_handlers(self):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+        self.add_builtin_exception_handler()
+
+        @self.app.exception_handler(ServerFileError)
+        async def serve_file_error(request:Request,e:ServerFileError):
+            return StaticFiles(e.filename,html=True)
+            return HTMLResponse()
+
+    def add_builtin_exception_handler(self,):
         @self.app.exception_handler(TypeError)
         async def type_error(request, e:TypeError):
             print(e)
@@ -148,13 +160,14 @@ class Application(EventInterface):
         @self.app.exception_handler(TimeoutError)
         async def timeout_error(request, e):
             return JSONResponse({'message': 'Timeout Error'}, status_code=500)
-
+  
         @self.app.exception_handler(Exception)
         async def base_exception(request, e:Exception):
             print(e)
             print(e.__class__)
             traceback.print_exc()  
             return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={'message': 'An unexpected error occurred!'})
+
 
     def set_httpMode(self):
         self.mode = self.configService.HTTP_MODE

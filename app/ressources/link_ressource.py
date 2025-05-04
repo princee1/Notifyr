@@ -1,6 +1,7 @@
 from typing import Annotated, Literal
 from urllib.parse import urlparse
 from fastapi import BackgroundTasks, Depends, Query, Request, Response
+from fastapi.staticfiles import StaticFiles
 from app.classes.auth_permission import Role
 from app.container import InjectInMethod
 from app.decorators.guards import AccessLinkGuard
@@ -109,22 +110,21 @@ class LinkRessource(BaseHTTPRessource):
         self.redisService = redisService
         self.linkService = linkService
     
+    @UseGuard(AccessLinkGuard(True))
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('visits/{link_id}/{path}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     async def visit_url(self,request:Request,path:str,backgroundTask: BackgroundTasks,link:Annotated[LinkORM,Depends(get_link)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
-        flag,_=AccessLinkGuard().do(**{'link':link})
         redirect_link = link_args.create_link(link,path,("session_id"))
-
-        if not flag:
-            return FileResponse('app/static/error-404-page/index.html')
         
         contact_id = link_args.server_scoped["contact_id"]
         session_id= link_args.server_scoped['session_id']
         message_id = link_args.server_scoped["message_id"]
         
         data = {**link_args.server_scoped}        
+        parsed_info = self.linkService.parse_info(request,link.link_short_id,path)
+        
         backgroundTask.add_task(self.redisService.publish_data,'links',data)
-        backgroundTask.add_task(self.redisService.stream_data,'links',data)
+        backgroundTask.add_task(self.redisService.stream_data,'links',{**data,**parsed_info})
 
         return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT)
 
