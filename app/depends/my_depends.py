@@ -367,7 +367,7 @@ class LinkArgs:
         if not url.endswith("/"):
             url+="/"
         
-        url+=path
+        url+=path if path else ""
         url+="?"
         url+=self.raw_link_params
         url+=self.raw_filtered_out_params('server_scoped',include_scoped_out)

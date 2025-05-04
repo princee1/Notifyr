@@ -123,14 +123,11 @@ class LinkRessource(BaseHTTPRessource):
     
     @UseGuard(AccessLinkGuard(True))
     @UseLimiter(limit_value='10000/min')
-    @BaseHTTPRessource.HTTPRoute('visits/{link_id}/{path}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    async def visit_url(self,request:Request,path:str,backgroundTask: BackgroundTasks,link:Annotated[LinkORM,Depends(get_link)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+    @BaseHTTPRessource.HTTPRoute('/{link_id}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
+    async def visit_url(self,request:Request,backgroundTask: BackgroundTasks,link:Annotated[LinkORM,Depends(get_link)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+        path = None
         redirect_link = link_args.create_link(link,path,("session_id"))
-        
-        contact_id = link_args.server_scoped["contact_id"]
-        session_id= link_args.server_scoped['session_id']
-        message_id = link_args.server_scoped["message_id"]
-        
+                
         data = {**link_args.server_scoped}        
         parsed_info = self.linkService.parse_info(request,link.link_short_id,path)
         
@@ -140,7 +137,7 @@ class LinkRessource(BaseHTTPRessource):
         return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT)
 
     @UseLimiter(limit_value='10000/min')
-    @BaseHTTPRessource.HTTPRoute('/email-track/{path}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
+    @BaseHTTPRessource.HTTPRoute('/email-track/{path}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_email(self,request:Request,backgroundTask: BackgroundTasks,path:str,link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
 
         message_id = link_args.server_scoped["message_id"]
@@ -162,8 +159,9 @@ class LinkRessource(BaseHTTPRessource):
     @UsePermission(JWTRouteHTTPPermission)
     @UseGuard(AccessLinkGuard)
     @UseRoles([Role.PUBLIC])
-    @BaseHTTPRessource.HTTPRoute('/code/{link_id}/{path}', methods=[HTTPMethod.GET])
-    async def get_qrcode(self, link_id: str, path: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_args: Annotated[LinkArgs, Depends(LinkArgs)],authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/code/{link_id}/', methods=[HTTPMethod.GET],mount=True)
+    async def get_qrcode(self, link_id: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_args: Annotated[LinkArgs, Depends(LinkArgs)],authPermission=Depends(get_auth_permission)):
+        path: str = None
         url = link_args.create_link(link, path, ("contact_id", "message_id", "session_id"))
         img_data = await self.linkService.generate_qr_code(url, qrModel)
         return Response(content=img_data, media_type="image/png")
