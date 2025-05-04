@@ -1,7 +1,8 @@
 from typing import Callable
-from fastapi import HTTPException,status
+from fastapi import HTTPException, Request,status
 from app.classes.rsa import RSA
 from app.definition._service import Service, ServiceClass
+from app.depends.dependencies import get_client_ip
 from app.models.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
@@ -21,7 +22,7 @@ class LinkService(Service):
         self.configService = configService
         self.reactiveService = reactiveService
         self.redisService = redisService
-        self.securityService: SecurityService = securityService
+        self.securityService = securityService
 
         self.BASE_URL:Callable[[str],str] = lambda v: self.configService.getenv('PROD_URL',"")+v
     
@@ -44,6 +45,19 @@ class LinkService(Service):
     def verify_safe_domain(self,domain:str):
         ...
     
+    def parse_info(self,request:Request,link_id:str,path:str):
+        user_agent = request.headers.get('user-agent')
+        client_ip = get_client_ip(request)
+
+
+        #await ...
+
+        return {
+
+        }
+
+    
+
     async def get_server_well_know(self, link: LinkORM):
 
         link_url = link.link_url
