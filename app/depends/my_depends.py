@@ -289,7 +289,7 @@ async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',ra
             link = None
     
     if link == None:
-        raise ServerFileError('app/static/error-404-page/index.html')
+        raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
     return link
 
 

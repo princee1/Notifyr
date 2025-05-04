@@ -1,15 +1,25 @@
 from fastapi import Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from app.container import InjectInMethod
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseLimiter
 from datetime import timedelta
+
+from app.services.file_service import FileService
 
 APP_PREFIX=''
 
 @HTTPRessource(APP_PREFIX,add_prefix=False)
 class AppRessource(BaseHTTPRessource):
 
+    @InjectInMethod
+    def __init__(self,fileService:FileService):
+        super().__init__()
+        self.fileService = fileService
 
+    def on_startup(self):
+        self.app_route_html_content = self.fileService.readFile('app/static/index.html')
+        self.landing_page_html_content = self.fileService.readFile('app/static/landing-page/index.html')
 
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.HTTPRoute('/',[HTTPMethod.GET],deprecated=True,mount=True,)
@@ -18,14 +28,14 @@ class AppRessource(BaseHTTPRessource):
         headers = {
             "Cache-Control": f"public, max-age={cache_duration}, immutable"
         }
-        return StaticFiles('app/static/index.html',html=True)
+        return HTMLResponse(self.app_route_html_content,headers=headers)
 
     @UseLimiter(limit_value='10000/day')
-    @BaseHTTPRessource.HTTPRoute('/example-landing-page',[HTTPMethod.GET],deprecated=True,mount=True,)
+    @BaseHTTPRessource.HTTPRoute('/landing-page',[HTTPMethod.GET],deprecated=True,mount=True,)
     def landing_page(self,request:Request):
         cache_duration = int(timedelta(days=365).total_seconds())
         headers = {
             "Cache-Control": f"public, max-age={cache_duration}, immutable"
         }
-        return StaticFiles('app/static/landing-page/index.html',html=True)
+        return HTMLResponse(self.landing_page_html_content,headers=headers)
         #return HTMLResponse()

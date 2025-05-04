@@ -225,12 +225,12 @@ class AccessLinkGuard(Guard):
             if not self.return_file:
                 return False,f'Link with short_id: {link_short_id} is currently archived'
             else:
-                raise ServerFileError(self.error_file)
+                raise ServerFileError(self.error_file,status.HTTP_410_GONE)
     
         if not link.verified:
             if not self.return_file:
                 return False, f'Link with short_id: {link_short_id} is not verified'
             else:
-                raise ServerFileError(self.error_file)
+                raise ServerFileError(self.error_file,status.HTTP_410_GONE)
             
         return True,""

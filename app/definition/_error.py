@@ -27,6 +27,8 @@ class BaseError(Exception):
 
 class ServerFileError(BaseError):
     
-    def __init__(self, filename):
+    def __init__(self, filename,status_code,headers=None):
         self.filename = filename
-        super().__init__(filename)
+        self.status_code = status_code
+        self.headers = headers
+        super().__init__((filename,status_code,headers))
