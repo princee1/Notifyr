@@ -4,9 +4,10 @@ instance imported from `container`.
 """
 from inspect import isclass
 from types import NoneType
-from typing import Any, Callable,Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
+from typing import Any, Callable,Dict, Iterable, List, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import copy_response, issubclass_of
@@ -46,11 +47,17 @@ RequestLimit =0
 def get_class_name_from_method(func: Callable) -> str:
     return func.__qualname__.split('.')[0]
 
+class MountMetaData(TypedDict):
+    app:StaticFiles
+    name:str
+    path:str
 
 class ClassMetaData(TypedDict):
     prefix:str
     routers:list
+    add_prefix:bool
     websockets:list[W]
+    mount:List[MountMetaData]
 
 class NoFunctionProvidedWarning(UserWarning):
     pass
@@ -382,6 +389,7 @@ def HTTPRessource(prefix:str,routers:list[Type[R]]=[],websockets:list[Type[W]]=[
         cls.meta['routers'] = routers
         cls.meta['websockets'] = websockets
         cls.meta['add_prefix'] = add_prefix
+        cls.meta['mount'] = []
 
         return cls
     return class_decorator
@@ -797,6 +805,24 @@ def PingService(services:list[S|dict]):
 
 def Exclude():
     ...
+
+
+def MountStaticFiles(path:str,app:StaticFiles,name:str):
+    def class_decorator(cls:Type[R]) ->Type[R]:
+        if type(cls)!=HTTPRessourceMetaClass:
+            return
+        meta:ClassMetaData =cls.meta
+        meta['mount'].append(
+            {
+                'app':app,
+                'name':name,
+                'path':path
+            }
+        )
+
+        return cls
+    return class_decorator
+        
     
 def IncludeRessource(*ressources: Type[R]| R):
     def class_decorator(cls:Type[R]) ->Type[R]:

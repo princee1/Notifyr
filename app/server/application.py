@@ -3,6 +3,7 @@ Contains the FastAPI app
 """
 from dataclasses import dataclass
 
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from app.container import Get
 from app.definition._error import ServerFileError
@@ -22,7 +23,7 @@ import multiprocessing
 import threading
 import sys
 import datetime as dt
-from app.definition._ressource import RESSOURCES, BaseHTTPRessource, GlobalLimiter
+from app.definition._ressource import RESSOURCES, BaseHTTPRessource, ClassMetaData, GlobalLimiter
 from app.interface.events import EventInterface
 from tortoise.contrib.fastapi import register_tortoise
 import ngrok
@@ -105,13 +106,13 @@ class Application(EventInterface):
     def add_exception_handlers(self):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-
         self.add_builtin_exception_handler()
 
         @self.app.exception_handler(ServerFileError)
         async def serve_file_error(request:Request,e:ServerFileError):
-            return StaticFiles(e.filename,html=True)
-            return HTMLResponse()
+            #return StaticFiles(e.filename,html=True)
+            #return HTMLResponse()
+            return FileResponse(e.filename,e.status_code,e.headers)# TODO change to html_response
 
     def add_builtin_exception_handler(self,):
         @self.app.exception_handler(TypeError)
@@ -203,6 +204,15 @@ class Application(EventInterface):
     def run(self) -> None:
         self.start_server()
 
+    def _mount_directories(self,ress_type:type[BaseHTTPRessource]):
+        meta:ClassMetaData = ress_type.meta
+        for mount in meta['mount']:
+            path = mount['path']
+            app = mount['app']
+            name = mount['name']
+
+            self.app.mount(path,app,name)
+
     def add_ressources(self):
         self.pretty_printer.show(
             pause_before=1, clear_stack=True, space_line=True)
@@ -212,6 +222,7 @@ class Application(EventInterface):
                 res = ressource_type()
                 self.app.include_router(
                     res.router, responses=res.default_response)
+                self._mount_directories(ressource_type)
                 self.pretty_printer.success(
                     f"[{now}] Ressource {ressource_type.__name__} added successfully", saveable=True)
                 self.pretty_printer.wait(0.1, press_to_continue=False)
