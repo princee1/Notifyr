@@ -80,7 +80,6 @@ services:
       - .env
     depends_on:
       - redis
-      - redis-commander
     
   redbeat:
     container_name: redbeat
@@ -93,7 +92,6 @@ services:
     restart: always
     depends_on:
       - redis
-      - redis-commander
     command: ["make ", "redbeat"]
     
   flower:
@@ -108,7 +106,6 @@ services:
       - .env
     depends_on:
       - redis
-      - redis-commander
     ports:
       - "5555:5555"
 
