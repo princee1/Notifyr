@@ -1,5 +1,5 @@
 import functools
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, TypedDict
 from typing_extensions import Literal
 
 from app.definition._error import BaseError
@@ -12,6 +12,8 @@ import pandas as pd
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from redis.asyncio import Redis
+from redis import Redis as SyncRedis
+
 from redis.exceptions import ResponseError
 import json
 import asyncio
@@ -76,6 +78,14 @@ class MongooseService(DatabaseService): # Chat data
 @ServiceClass
 class RedisService(DatabaseService):
 
+    class StreamConfig(TypedDict):
+        count:int
+        wait:int
+        stream:bool
+        channel_tasks:asyncio.Task | None = None
+        stream_tasks: asyncio.Task | None = None
+
+
     GROUP = 'NOTIFYR-GROUP'
     
     def __init__(self,configService:ConfigService,reactiveService:ReactiveService):
@@ -83,17 +93,17 @@ class RedisService(DatabaseService):
         self.configService = configService
         self.reactiveService = reactiveService
         
-        self.streams = {
-            'links':{
+        self.streams:Dict[str,RedisService.StreamConfig] = {
+            'links':self.StreamConfig(**{
                 'count':100,
                 'wait':1000*5,
                 'stream':True
-            },
-            'emails':{
+            }),
+            'emails':self.StreamConfig(**{
                 'count':10,
                 'wait':1000*10,
                 'stream':True
-            }
+            })
         }
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
@@ -105,14 +115,18 @@ class RedisService(DatabaseService):
         await self.redis_events.xadd(stream,data)
 
     async def publish_data(self,channel:str,data:Any):
-        data = json.dumps(data)
-        return await self.redis_events.publish(channel,data)
+        if channel not in self.streams.keys():
+            return
+        if data:   
+            data = json.dumps(data)
+            return await self.redis_events.publish(channel,data)
     
     async def _consume_channel(self,channels,handler:Callable[[Any],Any]):
         pubsub = self.redis_events.pubsub()
 
         def handler_wrapper(message):
             if message is None:
+                print('No message')
                 return
             if message["type"] == "message":
                 try:
@@ -121,7 +135,7 @@ class RedisService(DatabaseService):
                 except json.JSONDecodeError:
                     print(f"[Handler] Bad JSON: {message['data']}")
 
-        await pubsub.subscribe(channels)
+        await pubsub.subscribe(**{channels:handler_wrapper})
 
         while True:
             await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
@@ -134,7 +148,7 @@ class RedisService(DatabaseService):
                 await self.redis_events.xgroup_create(stream, RedisService.GROUP, id='0-0', mkstream=True)
             except ResponseError as e:
                 if "BUSYGROUP" in str(e):
-                    print("Group already exists")
+                    ...
                 else:
                     ...
 
@@ -143,11 +157,16 @@ class RedisService(DatabaseService):
             count = config['count']
             wait = config['wait']
             is_stream = config['stream']
-            asyncio.create_task(self._consume_channel(stream_name,lambda v:v))
+            config.update ({
+                'channel_tasks':None,
+                'stream_tasks':None
+            })
+
+            config['channel_tasks']= asyncio.create_task(self._consume_channel(stream_name,lambda v:print(v)))
             
             if is_stream:
-                asyncio.create_task(self._consume_stream(stream_name,count,wait))
-    
+               config['stream_tasks'] =asyncio.create_task(self._consume_stream(stream_name,count,wait))           
+
     async def _consume_stream(self,stream_name,count,wait):
         while True:
             try:
@@ -179,7 +198,8 @@ class RedisService(DatabaseService):
         return wrapper
 
     def build(self):
-        host = self.configService.REDIS_URL.split('//')[1]
+        host = self.configService.REDIS_URL
+        host = "localhost"
         self.redis_celery = Redis(host=host,db=0)
         self.redis_limiter = Redis(host=host,db=1)
         #self.redis_cache = Redis(host=self.configService.REDIS_URL,db=2)
@@ -195,12 +215,13 @@ class RedisService(DatabaseService):
         }
 
         try:
-            pong = asyncio.run(self.redis_events.ping())
-            if pong != "PONG":
+            temp_redis = SyncRedis()
+            pong = temp_redis.ping()
+            if not pong:
                 raise ConnectionError("Redis ping failed")
+            temp_redis.close()
         except Exception as e:
-            
-            raise BuildFailureError
+            raise BuildFailureError(e.args)
  
     async def refund(self, limit_request_id:str):
         redis = self.db[1]
@@ -232,7 +253,18 @@ class RedisService(DatabaseService):
         else:
             response = await self.append(0,key,data,expiry)
         return response
+        
+    async def close_connections(self,):
+        for config in self.streams.values():
+            if config['channel_tasks']:
+                config['channel_tasks'].cancel()
+            if config['stream_tasks']:
+                config['stream_tasks'].cancel()
             
+        len_db = len(self.db.keys())//2
+        for i in range(len_db):
+            await self.db[i].close()
+
             
 @ServiceClass
 class TortoiseConnectionService(DatabaseService):

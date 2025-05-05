@@ -9,7 +9,7 @@ from app.decorators.handlers import TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
-from app.depends.my_depends import LinkArgs, get_link
+from app.depends.my_depends import LinkArgs, GetLink
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService
@@ -20,6 +20,9 @@ from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkMode
 from app.utils.helper import APIFilterInject
 
 LINK_MANAGER_PREFIX = 'manage'
+
+get_link_serve = GetLink(True)
+get_link = GetLink(False)
 
 @APIFilterInject
 def verify_link_guard(link:LinkORM):
@@ -52,7 +55,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
         link = linkModel.model_dump()
         domain = urlparse(link['link_url']).hostname
 
-        if not linkModel.public:
+        if linkModel.public:
             self.linkService.verify_safe_domain(domain)
 
         public_security = {}
@@ -123,8 +126,8 @@ class LinkRessource(BaseHTTPRessource):
     
     @UseGuard(AccessLinkGuard(True))
     @UseLimiter(limit_value='10000/min')
-    @BaseHTTPRessource.HTTPRoute('/{link_id}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    async def visit_url(self,request:Request,backgroundTask: BackgroundTasks,link:Annotated[LinkORM,Depends(get_link)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+    @BaseHTTPRessource.HTTPRoute('/v/{link_id}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
+    async def visit_url(self,request:Request,backgroundTask: BackgroundTasks,link:Annotated[LinkORM,Depends(get_link_serve)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
         path = None
         redirect_link = link_args.create_link(link,path,("session_id"))
                 

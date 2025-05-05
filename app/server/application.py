@@ -261,8 +261,8 @@ class Application(EventInterface):
 
         redisService = Get(RedisService)
         
-        #await redisService.create_group()
-        #redisService.register_consumer()
+        await redisService.create_group()
+        redisService.register_consumer()
 
         taskService:TaskService =  Get(TaskService)
         #taskService.start()
@@ -270,7 +270,8 @@ class Application(EventInterface):
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(10)
 
-    def on_shutdown(self):
-        ...
+    async def on_shutdown(self):
+        redisService = Get(RedisService)
+        await redisService.close_connections()
 
 #######################################################                          #####################################################

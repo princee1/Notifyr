@@ -273,24 +273,31 @@ async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_
     return await _get_blacklist(blacklist_id=blacklist_id)
 
 
-async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
-    link =None
-    match lid:
-        case 'id':
-            link = await LinkORM.filter(link_id=link_id).first()
+def GetLink(raise_file_error:bool):
+
+    async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
+        link =None
+        match lid:
+            case 'id':
+                link = await LinkORM.filter(link_id=link_id).first()
+            
+            case 'name':
+                link = await LinkORM.filter(link_name=link_id).first()
+
+            case 'sid':
+                link = await LinkORM.filter(link_short_id=link_id).first()
+
+            case _:
+                link = None
         
-        case 'name':
-            link = await LinkORM.filter(link_name=link_id).first()
-
-        case 'sid':
-            link = await LinkORM.filter(link_short_id=link_id).first()
-
-        case _:
-            link = None
+        if link == None:
+            if raise_file_error:
+                raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
+            else:
+                raise HTTPException(status.HTTP_404_NOT_FOUND,"links not found")
+        return link
     
-    if link == None:
-        raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
-    return link
+    return get_link
 
 
 async def get_task(request_id: str = Depends(get_request_id), as_async: bool = Depends(as_async_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save=Depends(save_results_query), return_results=Depends(get_task_results)):
