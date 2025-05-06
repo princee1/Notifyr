@@ -68,7 +68,8 @@ exports.handler = async function (context, event, callback) {
   }
   
   console.log(body)
-  await service.sendLogStatus(body, url);
+  const {subject_id} = body;
+  await service.sendLogStatus(body, url,{subject_id});
 
   // return callback(null,{})
 };

@@ -54,7 +54,7 @@ class NotifyrAuthService {
 
   }
 
-  async sendLogStatus(body, url) {
+  async sendLogStatus(body, url,params={}) {
     const status_url = this.url + url
     const signature = generateTwilioSignature(this.twilio_auth_token, status_url)
     const headers = {
@@ -62,11 +62,14 @@ class NotifyrAuthService {
     }
     try {
       const result = await axios.post(status_url, { ...body }, {
-        headers
+        headers,
+        params,
+
       });
     } catch (error) {
       console.error(error.response)
     }
+    
   }
 
   async login() {
@@ -76,7 +79,7 @@ class NotifyrAuthService {
 
   }
 
-  async sendGatherResult(body) {
+  async sendGatherResult(body,params={}) {
     try {
 
       const url = `${this.url}/twilio/call/incoming/gather-result/`;
@@ -86,6 +89,7 @@ class NotifyrAuthService {
       }
       const response = await axios.post(url, body,{
         headers,
+        params,
       });
       const { message } = response.data;
       console.log(response)

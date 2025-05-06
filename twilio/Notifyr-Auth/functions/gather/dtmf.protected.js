@@ -122,7 +122,8 @@ exports.handler = async function (context, event, callback) {
 
     const dtmf = new DTMFConfig(event);
     const body = verify(dtmf, twiml, contact);
-    const { message, status_code } = await service.sendGatherResult(body)
+    const {subject_id} = body
+    const { message, status_code } = await service.sendGatherResult(body,{subject_id})
 
     if (dtmf.hangup) {
         twiml.pause(1)
