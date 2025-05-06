@@ -271,7 +271,8 @@ class Application(EventInterface):
         celery_service.start_interval(10)
 
     async def on_shutdown(self):
-        redisService = Get(RedisService)
+        redisService:RedisService = Get(RedisService)
+        redisService.to_shutdown = True
         await redisService.close_connections()
 
 #######################################################                          #####################################################

@@ -92,6 +92,7 @@ class RedisService(DatabaseService):
         super().__init__(configService,None)
         self.configService = configService
         self.reactiveService = reactiveService
+        self.to_shutdown = False
         
         self.streams:Dict[str,RedisService.StreamConfig] = {
             'links':self.StreamConfig(**{
@@ -117,9 +118,9 @@ class RedisService(DatabaseService):
     async def publish_data(self,channel:str,data:Any):
         if channel not in self.streams.keys():
             return
-        if data:   
-            data = json.dumps(data)
-            return await self.redis_events.publish(channel,data)
+        #if data:   
+        data = json.dumps(data)
+        return await self.redis_events.publish(channel,data)
     
     async def _consume_channel(self,channels,handler:Callable[[Any],Any]):
         pubsub = self.redis_events.pubsub()
@@ -140,6 +141,8 @@ class RedisService(DatabaseService):
         while True:
             await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
             await asyncio.sleep(0.01)
+            if self.to_shutdown:
+                return
 
     async def create_group(self):
 
@@ -180,6 +183,9 @@ class RedisService(DatabaseService):
                             await self.redis_events.xdel(stream_name, entry_id)
             except:
                 ...
+            finally:
+                if self.to_shutdown:
+                    return
 
     @staticmethod
     def check_db(func:Callable):
