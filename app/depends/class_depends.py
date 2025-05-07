@@ -17,11 +17,10 @@ from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDat
 
 class SubjectParams:
 
-    def __init__(self,subject_id= Depends(subject_id_params),sid_type=Depends(sid_type_params)):
-        self.subject_id = subject_id,
+    def __init__(self,request:Request,sid_type:Annotated[str|None,Depends(sid_type_params)],subject_id:Annotated[str|None,Depends(subject_id_params)]):
         self.sid_type = sid_type
-    
-
+        self.subject_id = subject_id,
+        self.subject_id = list(self.subject_id)[0]
 
 class ServerScopedParams(TypedDict):
     client_id:str | None = None

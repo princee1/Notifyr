@@ -56,6 +56,6 @@ email_verifier:Callable[[Request],bool] = get_query_params('email_verifier',None
 
 # ----------------------------------------------                                    ---------------------------------- #
 
-subject_id_params:Callable[[Request],bool] = get_query_params("subject_id",None,)
+subject_id_params:Callable[[Request],str] = get_query_params('subject_id',None)
 
 sid_type_params:Callable[[Request],str] = get_query_params("sid_type","plain",checker=lambda v:v in get_args(SubjectType))
