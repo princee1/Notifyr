@@ -14,7 +14,6 @@ from app.errors.async_error import ReactiveSubjectNotFoundError
 from time import perf_counter,time
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
 
-
 class SubjectParams:
 
     def __init__(self,request:Request,sid_type:Annotated[str|None,Depends(sid_type_params)],subject_id:Annotated[str|None,Depends(subject_id_params)]):
@@ -59,7 +58,7 @@ class LinkArgs:
         ids_type_params = {}
         self._link_params = {}
 
-        for key,value in self.request.items():
+        for key,value in self.request.query_params.items():
 
             if key in self.ids_type:
                 ids_type_params[key] = value

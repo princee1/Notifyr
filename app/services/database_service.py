@@ -109,9 +109,15 @@ class RedisService(DatabaseService):
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
 
-    async def stream_data(self,stream:str,data:Any):
+    async def stream_data(self,stream:str,data:dict):
         if stream not in self.streams.keys():
             raise RedisStreamDoesNotExistsError(stream)
+        
+        if not isinstance(data,dict):
+            return 
+        
+        if not data:
+            return 
         
         await self.redis_events.xadd(stream,data)
 
@@ -133,6 +139,7 @@ class RedisService(DatabaseService):
                 try:
                     message_broker = json.loads(message["data"])
                     message_broker = MessageBroker(**message_broker)
+
                     if handler != None:
                         handler(message_broker)
                     subject_id = message_broker['subject_id']
@@ -191,14 +198,15 @@ class RedisService(DatabaseService):
 
     async def _consume_stream(self,stream_name,count,wait,handler:Callable[[Any],Any]=None):
         while True:
+            await asyncio.sleep(0.001)
             try:
-                response = await self.redis_events.xreadgroup(RedisService.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=wait)
+                response = await self.redis_events.xreadgroup(self.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=wait)
                 if response:
                     for stream, entries in response:
                         for entry_id, data in entries:
 
                             print(entry_id,data)
-                            await self.redis_events.xack(stream_name, RedisService.GROUP, entry_id)
+                            await self.redis_events.xack(stream_name, self.GROUP, entry_id)
                             await self.redis_events.xdel(stream_name, entry_id)
             except:
                 ...
@@ -227,16 +235,17 @@ class RedisService(DatabaseService):
         host = "localhost"
         self.redis_celery = Redis(host=host,db=0)
         self.redis_limiter = Redis(host=host,db=1)
-        #self.redis_cache = Redis(host=self.configService.REDIS_URL,db=2)
+        self.redis_cache = Redis(host=host,db=3)
         self.redis_events=Redis(host=host,db=2,decode_responses=True)
-        self.db:Dict[Literal['celery','limiter','events',0,1,2],Redis] = {
+        self.db:Dict[Literal['celery','limiter','events',0,1,2,3],Redis] = {
             0:self.redis_celery,
             1:self.redis_limiter,
             2:self.redis_events,
-            #2:self.redis_cache,
+            3:self.redis_cache,
             'celery':self.redis_celery,
             'limiter':self.redis_limiter,
-            'events': self.redis_events
+            'events': self.redis_events,
+            'cache':self.redis_cache,
         }
 
         try:

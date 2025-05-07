@@ -50,6 +50,7 @@ class LinkService(Service):
         #await ...
 
         return {
+            'user_agent':user_agent
 
         }
 

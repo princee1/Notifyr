@@ -129,9 +129,10 @@ class LinkRessource(BaseHTTPRessource):
     @UseGuard(AccessLinkGuard(True))
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/v/{link_id}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    async def visit_url(self,request:Request,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_serve)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+    async def visit_url(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_serve)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
         path = None
         redirect_link = link_args.create_link(link,path,("session_id"))
+        
         sid_type,subject_id = link_args.subject_id
         parsed_info = self.linkService.parse_info(request,link.link_short_id,path)
         data = {**parsed_info,**link_args.server_scoped}
@@ -139,11 +140,11 @@ class LinkRessource(BaseHTTPRessource):
         broker.publish(sid_type,subject_id,data,'links')
         broker.stream('links',data)
 
-        return  RedirectResponse(redirect_link,status.HTTP_307_TEMPORARY_REDIRECT)
+        return  RedirectResponse(redirect_link,status.HTTP_307_TEMPORARY_REDIRECT,)
 
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/t/{path}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=False)
-    def track_email(self,request:Request,path:str,broker:Annotated[Broker,Depends(Broker)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+    def track_email(self,request:Request,response:Response,path:str,broker:Annotated[Broker,Depends(Broker)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
 
         message_id = link_args.server_scoped["message_id"]
         contact_id = link_args.server_scoped["contact_id"]
