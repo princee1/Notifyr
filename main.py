@@ -1,7 +1,6 @@
 from argparse import ArgumentParser
 from enum import Enum
 from typing import Any
-from app.container import Get
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 import sys
@@ -21,17 +20,30 @@ parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunMode.__me
 parser.add_argument('--name', '-n', type=str, default='Notifyr', help='The name of configuration to use')
 parser.add_argument('--config', '-c', default='./config.app.json',
                         type=str, help='Path to the config file')
+parser.add_argument('--pool','-p',type=str,default='solo',choices=['solo','team'],help="Whether there's other instance running too")
+
+uvicorn_parser = ArgumentParser(description="Run a Uvicorn server.")
+uvicorn_parser.add_argument("app", help="App location in format module:app")
+uvicorn_parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
+uvicorn_parser.add_argument("--port", type=int, default=8000, help="Port to bind to")
+uvicorn_parser.add_argument("--reload", action="store_true", help="Enable auto-reload",default=False)
+uvicorn_parser.add_argument("--workers", type=int, help="Number of workers",default=0)
+uvicorn_parser.add_argument("--log-level", default="info", choices=["critical", "error", "warning", "info", "debug", "trace"])
 
 #parser.add_argument('--server-context','-s', default='uvicorn',choices=['python-main','uvicorn','guvicorn'],help='The scripts that will start the server')
+uvicorn_args = None
 
 if sys.argv[0] == exe_path:
     args=None
     args = parser.parse_args(['-m=file','-n=Notifyr','-c=./config.app.json',])
+    uvicorn_args = uvicorn_parser.parse_args()
+    
 else:
     args = parser.parse_args()
 
 from app.container import build_container, Get
 build_container()
+
 ########################################################################
 from app.server.application import AppParameter, RESSOURCES
 from app.server.apps_registration import createApps, editApps,bootstrap_fastapi_server
@@ -40,12 +52,12 @@ from app.server.middleware import MIDDLEWARE
 from app.utils.constant import ConfigAppConstant
 from app.services.config_service import ConfigService
 from app.utils.question import ask_question,ConfirmInputHandler
-import uvicorn
 
 
 # Initialize configuration service and load configuration
 def initialize_config_service(config_file):
     config_service = Get(ConfigService)
+    config_service.set_server_config(uvicorn_args)
     config_service.load_configApp(config_file)
     return config_service
 
