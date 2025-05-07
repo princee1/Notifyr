@@ -9,7 +9,8 @@ from app.decorators.handlers import TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
-from app.depends.my_depends import LinkArgs, GetLink
+from app.depends.my_depends import GetLink
+from app.depends.class_depends import Broker, LinkArgs
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService
@@ -18,6 +19,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from app.depends.variables import  verify_url
 from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkModel
 from app.utils.helper import APIFilterInject
+from app.classes.broker import MessageBroker,MessageError
 
 LINK_MANAGER_PREFIX = 'manage'
 
@@ -127,20 +129,21 @@ class LinkRessource(BaseHTTPRessource):
     @UseGuard(AccessLinkGuard(True))
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/v/{link_id}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    async def visit_url(self,request:Request,backgroundTask: BackgroundTasks,link:Annotated[LinkORM,Depends(get_link_serve)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+    async def visit_url(self,request:Request,backgroundTask: BackgroundTasks, broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_serve)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
         path = None
         redirect_link = link_args.create_link(link,path,("session_id"))
-                
-        data = {**link_args.server_scoped}        
+        sid_type,subject_id = link_args.subject_id
         parsed_info = self.linkService.parse_info(request,link.link_short_id,path)
-        
-        backgroundTask.add_task(self.redisService.publish_data,'links',data)
-        backgroundTask.add_task(self.redisService.stream_data,'links',{**data,**parsed_info})
+        data = {**parsed_info,**link_args.server_scoped}
 
-        return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT)
+        broker(sid_type,subject_id,data,'links')
+        
+        backgroundTask.add_task(self.redisService.stream_data,'links',data)
+
+        return  RedirectResponse(redirect_link,status.HTTP_307_TEMPORARY_REDIRECT)
 
     @UseLimiter(limit_value='10000/min')
-    @BaseHTTPRessource.HTTPRoute('/email-track/{path}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
+    @BaseHTTPRessource.HTTPRoute('/t/{path}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=False)
     def track_email(self,request:Request,backgroundTask: BackgroundTasks,path:str,link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
 
         message_id = link_args.server_scoped["message_id"]
@@ -149,9 +152,9 @@ class LinkRessource(BaseHTTPRessource):
         data = {"message_id":message_id,"contact_id":contact_id}
 
         backgroundTask.add_task(self.redisService.publish_data,'emails',data)
-        backgroundTask.add_task(self.redisService.stream_data,'emails',data)
-
         backgroundTask.add_task(self.redisService.publish_data,'links',{**link_args.server_scoped})
+
+        backgroundTask.add_task(self.redisService.stream_data,'emails',data)
 
         if path:
             redirect_url = link_args.create_link(None,path,('contact_id'),('cid'))

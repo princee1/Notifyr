@@ -1,5 +1,5 @@
 
-from typing import Callable
+from typing import Callable,get_args
 
 from fastapi import Request
 from app.container import GetAttr, GetDependsFunc
@@ -7,6 +7,8 @@ from app.depends.dependencies import get_query_params
 from app.services.celery_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.twilio_service import TwilioService
+
+from app.classes.broker import SubjectType
 
 
 SECURITY_FLAG=GetAttr(ConfigService,'SECURITY_FLAG')
@@ -55,3 +57,5 @@ email_verifier:Callable[[Request],bool] = get_query_params('email_verifier',None
 # ----------------------------------------------                                    ---------------------------------- #
 
 subject_id_params:Callable[[Request],bool] = get_query_params("subject_id",None,)
+
+sid_type_params:Callable[[Request],str] = get_query_params("sid_type","plain",checker=lambda v:v in get_args(SubjectType))

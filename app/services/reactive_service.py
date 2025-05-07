@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
+from app.classes.broker import SubjectType
 from app.definition._error import BaseError
 from app.definition._service import Service, ServiceClass
 from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundError
@@ -18,8 +19,9 @@ ReactiveType= Literal['HTTP','Celery','BackgroundTask','RedisPubSub','RedisStrea
 @dataclass
 class ReactiveSubject():
     name:str
-    type_:ReactiveType
-    id_:str = field(default_factory=lambda:generateId(60))
+    reactive_type:ReactiveType
+    subject_id:str
+    sid_type:SubjectType
     lock:dict[str,asyncio.Lock] = field(default_factory=dict) 
     subject:Subject = field(default_factory=Subject)
 
@@ -85,9 +87,15 @@ class ReactiveService(Service,IntervalInterface):
         self._subscriptions:dict[str,ReactiveSubject] = {}
         
 
-    def create_subject(self,name:str,type_:ReactiveType) -> ReactiveSubject:
-        rxSub= ReactiveSubject(name=name,type_=type_)
-        self._subscriptions[rxSub.id_]=rxSub
+    def create_subject(self,name:str,type_:ReactiveType,subject_id=None,sid_type:SubjectType='plain') -> ReactiveSubject:
+        if sid_type == 'plain':
+            subject_id = generateId(20)
+        else:
+            if subject_id == None:
+                raise ...
+        
+        rxSub= ReactiveSubject(name=name,reactive_type=type_,subject_id=subject_id,sid_type=sid_type)
+        self._subscriptions[rxSub.subject_id]=rxSub
         return rxSub
     
     def delete_subject(self,subject_id:str):

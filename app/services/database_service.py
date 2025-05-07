@@ -2,22 +2,21 @@ import functools
 from typing import Any, Callable, Dict, TypedDict
 from typing_extensions import Literal
 
+from app.classes.broker import MessageBroker, json_to_exception
 from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
 from .config_service import ConfigService
 from .file_service import FileService
 from app.definition._service import BuildFailureError, Service,AbstractServiceClass,ServiceClass,BuildWarningError
-import sqlite3
-import pandas as pd
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from redis.asyncio import Redis
 from redis import Redis as SyncRedis
-
 from redis.exceptions import ResponseError
 import json
 import asyncio
 from tortoise import Tortoise
+from app.errors.async_error import ReactiveSubjectNotFoundError
 
 class RedisStreamDoesNotExistsError(BaseError):
     ...
@@ -79,8 +78,8 @@ class MongooseService(DatabaseService): # Chat data
 class RedisService(DatabaseService):
 
     class StreamConfig(TypedDict):
-        count:int
-        wait:int
+        count:int|None = None
+        wait:int|None=None
         stream:bool
         channel_tasks:asyncio.Task | None = None
         stream_tasks: asyncio.Task | None = None
@@ -104,7 +103,8 @@ class RedisService(DatabaseService):
                 'count':10,
                 'wait':1000*10,
                 'stream':True
-            })
+            }),
+            'twilio':self.StreamConfig(**{'stream':False})
         }
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
@@ -122,7 +122,7 @@ class RedisService(DatabaseService):
         data = json.dumps(data)
         return await self.redis_events.publish(channel,data)
     
-    async def _consume_channel(self,channels,handler:Callable[[Any],Any]):
+    async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker]):
         pubsub = self.redis_events.pubsub()
 
         def handler_wrapper(message):
@@ -131,10 +131,28 @@ class RedisService(DatabaseService):
                 return
             if message["type"] == "message":
                 try:
-                    data = json.loads(message["data"])
-                    return handler(data)
+                    message_broker = json.loads(message["data"])
+                    message_broker = MessageBroker(**message_broker)
+                    if handler != None:
+                        handler(message_broker)
+                    subject_id = message_broker['subject_id']
+                    state = message_broker['state']
+                    value = message_broker['value']
+                    error = message_broker['error']
+                    subject = self.reactiveService[subject_id]
+                    match state:
+                        case 'completed':
+                            self.reactiveService.delete_subject(subject_id)
+                        case 'error':
+                            error  = json_to_exception(error)
+                            subject.on_error(error)
+                        case 'next':
+                            subject.on_next(value)
+                                                            
                 except json.JSONDecodeError:
                     print(f"[Handler] Bad JSON: {message['data']}")
+                except ReactiveSubjectNotFoundError:
+                    ...
 
         await pubsub.subscribe(**{channels:handler_wrapper})
 
@@ -155,11 +173,12 @@ class RedisService(DatabaseService):
                 else:
                     ...
 
-    def register_consumer(self,):
+    def register_consumer(self,callbacks={}):
         for stream_name,config in self.streams.items():
-            count = config['count']
-            wait = config['wait']
             is_stream = config['stream']
+            if is_stream:
+                count = config['count']
+                wait = config['wait']
             config.update ({
                 'channel_tasks':None,
                 'stream_tasks':None
@@ -170,7 +189,7 @@ class RedisService(DatabaseService):
             if is_stream:
                config['stream_tasks'] =asyncio.create_task(self._consume_stream(stream_name,count,wait))           
 
-    async def _consume_stream(self,stream_name,count,wait):
+    async def _consume_stream(self,stream_name,count,wait,handler:Callable[[Any],Any]=None):
         while True:
             try:
                 response = await self.redis_events.xreadgroup(RedisService.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=wait)

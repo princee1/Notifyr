@@ -1,7 +1,8 @@
 import asyncio
 from typing import Annotated, Any
-from fastapi import Depends, HTTPException, Request, Response
+from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response
 from app.classes.auth_permission import Role
+from app.classes.broker import exception_to_json
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.classes.template import PhoneTemplate
@@ -24,7 +25,8 @@ from app.services.twilio_service import CallService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
-from app.depends.my_depends import KeepAliveQuery, get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
+from app.depends.my_depends import get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
+from app.depends.class_depends import Broker, KeepAliveQuery, SubjectParams
 
 
 CALL_ONGOING_PREFIX = 'ongoing'
@@ -96,7 +98,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         
         result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
         call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
-        call_results = self.callService.send_template_voice_call(result, call_details,False,keepAliveConn.rx_subject.id_)
+        call_results = self.callService.send_template_voice_call(result, call_details,False,keepAliveConn.rx_subject.subject_id)
 
         return await keepAliveConn.wait_for(call_results, 'otp_result')
       
@@ -216,24 +218,24 @@ class IncomingCallRessources(BaseHTTPRessource):
     @UseHandler(ReactiveHandler)
     @UsePipe(TwilioResponseStatusPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
-    async def voice_call_status(self, status: CallStatusModel, response:Response,authPermission=Depends(get_auth_permission)):
-        
-        if status.subject_id != None:
-            subject = self.reactiveService[status.subject_id]
-            value = {
+    async def voice_call_status(self, status: CallStatusModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)], authPermission=Depends(get_auth_permission),):
+        subject_id = subject_params.subject_id
+        value = {
                 'state':status.CallStatus,
                 'data':status.model_dump(include=('CallSid','RecordingSid','Duration','CallDuration','RecordingDuration'))
             }
+        broker('plain',subject_id,value,'twilio',)
+        return 
 
-            subject.on_next(value)
         
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
-    async def gather_result(self,gatherResult:GatherResultModel, response:Response,authPermission=Depends(get_auth_permission)):
-        subject = self.reactiveService[gatherResult.subject_id]
-        result =gatherResult.model_dump(include=('data','state'))
-        subject.on_next(result)
+    async def gather_result(self,gatherResult:GatherResultModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],authPermission=Depends(get_auth_permission)):
+        value =gatherResult.model_dump(include=('data','state'))
+        broker('plain',subject_params.subject_id,value,'twilio',)
+
         #subject.on_completed()
+        return
         
         
     @BaseHTTPRessource.HTTPRoute('/partial-result/', methods=[HTTPMethod.POST])
