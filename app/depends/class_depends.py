@@ -20,7 +20,8 @@ class SubjectParams:
     def __init__(self,request:Request,sid_type:Annotated[str|None,Depends(sid_type_params)],subject_id:Annotated[str|None,Depends(subject_id_params)]):
         self.sid_type = sid_type
         self.subject_id = subject_id,
-        self.subject_id = list(self.subject_id)[0]
+        if isinstance(self.subject_id,tuple):
+            self.subject_id = list(self.subject_id)[0]
 
 class ServerScopedParams(TypedDict):
     client_id:str | None = None
@@ -124,8 +125,7 @@ class Broker:
         self.request = request
         self.response = response
 
-    
-    def __call__(self,sid_type:SubjectType,subject_id:str, value:Any,channel:str,state:Literal['next','complete']='next'):
+    def publish(self,sid_type:SubjectType,subject_id:str, value:Any,channel:str,state:Literal['next','complete']='next'):
 
         if self.configService.pool:
             subject = self.reactiveService[subject_id]
@@ -145,14 +145,9 @@ class Broker:
 
             self.backgroundTasks.add_task(self.redisService.publish_data,channel,message_broker)
 
-
-
-
+    def stream(self,channel,value):
+        self.backgroundTasks.add_task(self.redisService.stream_data,channel,value)
         
-
-
-
-
 class KeepAliveQuery:
 
     def __init__(self, response: Response, x_request_id: Annotated[str, Depends(get_request_id)], keep_alive: Annotated[bool, Depends(keep_connection)], timeout: int = Query(0, description="Time in seconds to delay the response", ge=0, le=60*3)):
@@ -192,7 +187,6 @@ class KeepAliveQuery:
             self.subject_list.append(subject_id)
         
         self.subscription[subject_id] = subscription
-
 
     def create_subject(self, reactiveType: ReactiveType):
 

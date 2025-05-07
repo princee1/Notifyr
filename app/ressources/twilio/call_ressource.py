@@ -224,7 +224,7 @@ class IncomingCallRessources(BaseHTTPRessource):
                 'state':status.CallStatus,
                 'data':status.model_dump(include=('CallSid','RecordingSid','Duration','CallDuration','RecordingDuration'))
             }
-        broker('plain',subject_id,value,'twilio',)
+        broker.publish('plain',subject_id,value,'twilio',)
         return 
 
         
@@ -232,7 +232,7 @@ class IncomingCallRessources(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
     async def gather_result(self,gatherResult:GatherResultModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],authPermission=Depends(get_auth_permission)):
         value =gatherResult.model_dump(include=('data','state'))
-        broker('plain',subject_params.subject_id,value,'twilio',)
+        broker.publish('plain',subject_params.subject_id,value,'twilio',)
 
         #subject.on_completed()
         return
