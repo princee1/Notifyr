@@ -16,7 +16,7 @@ from app.depends.dependencies import get_api_key, get_auth_permission, get_clien
 from cryptography.fernet import InvalidToken
 from app.depends.variables import SECURITY_FLAG
 from app.utils.helper import generateId
-from app.depends.my_depends import GetClient
+from app.depends.funcs import GetClient
 
         
 class MetaDataMiddleWare(MiddleWare):

@@ -9,8 +9,8 @@ from app.decorators.handlers import TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
-from app.depends.my_depends import GetLink
-from app.depends.class_depends import Broker, LinkArgs
+from app.depends.funcs import GetLink
+from app.depends.classes import Broker, LinkArgs
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService

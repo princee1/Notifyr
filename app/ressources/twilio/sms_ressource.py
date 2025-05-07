@@ -18,7 +18,7 @@ from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
 from app.services.twilio_service import SMSService
 from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
-from app.depends.my_depends import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
+from app.depends.funcs import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
 from app.utils.helper import APIFilterInject
 
 

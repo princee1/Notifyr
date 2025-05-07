@@ -25,8 +25,8 @@ from app.services.twilio_service import CallService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
-from app.depends.my_depends import get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
-from app.depends.class_depends import Broker, KeepAliveQuery, SubjectParams
+from app.depends.funcs import get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
+from app.depends.classes import Broker, KeepAliveQuery, SubjectParams
 
 
 CALL_ONGOING_PREFIX = 'ongoing'
