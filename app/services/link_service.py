@@ -78,7 +78,7 @@ class LinkService(Service):
             **ip_data
         }
     
-    #@Cache(10)
+    @Cache(10)
     async def ip_lookup(self,ip_address):
         headers = {
             "Accept": "application/json",
