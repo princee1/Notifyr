@@ -18,7 +18,8 @@ from fastapi import status
 from fastapi.responses import FileResponse, RedirectResponse
 from app.depends.variables import  verify_url
 from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkModel
-from app.utils.helper import APIFilterInject
+from app.utils.constant import StreamConstant
+from app.utils.helper import APIFilterInject, uuid_v1_mc
 from app.classes.broker import MessageBroker,MessageError
 
 LINK_MANAGER_PREFIX = 'manage'
@@ -132,34 +133,28 @@ class LinkRessource(BaseHTTPRessource):
     async def visit_url(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_serve)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
         path = None
         redirect_link = link_args.create_link(link,path,("session_id"))
-        
         sid_type,subject_id = link_args.subject_id
-        parsed_info = self.linkService.parse_info(request,link.link_short_id,path)
-        data = {**parsed_info,**link_args.server_scoped}
 
-        broker.publish(sid_type,subject_id,data,'links')
-        broker.stream('links',data)
+        parsed_info = self.linkService.parse_info(request,link.link_id,path,link_args)
+        data = {**parsed_info,**{'event_id':uuid_v1_mc()}}
 
-        return  RedirectResponse(redirect_link,status.HTTP_307_TEMPORARY_REDIRECT,)
+        broker.publish(sid_type,subject_id,data,StreamConstant.LINKS_EVENT_STREAM)
+        broker.stream(StreamConstant.LINKS_EVENT_STREAM,data)
+
+        return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT,)
 
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/t/{path}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=False)
     def track_email(self,request:Request,response:Response,path:str,broker:Annotated[Broker,Depends(Broker)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
 
-        message_id = link_args.server_scoped["message_id"]
-        contact_id = link_args.server_scoped["contact_id"]
-
-        data = {"message_id":message_id,"contact_id":contact_id}
         sid_type,subject_id = link_args.subject_id
-        
-        broker.publish('message',subject_id,data,'emails')
-        broker.publish(sid_type,subject_id,data,'links',{**link_args.server_scoped})
-
-        broker.stream('emails',data)
+        data = {}
+        broker.publish('message',subject_id,data,StreamConstant.EMAIL_EVENT_STREAM)
+        broker.stream(StreamConstant.EMAIL_EVENT_STREAM,data)
 
         if path:
             redirect_url = link_args.create_link(None,path,('contact_id'),('cid'))
-            return RedirectResponse(redirect_url,status.HTTP_307_TEMPORARY_REDIRECT)
+            return RedirectResponse(redirect_url,status.HTTP_308_PERMANENT_REDIRECT)
 
         return ''
 

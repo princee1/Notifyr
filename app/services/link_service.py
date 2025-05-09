@@ -42,19 +42,20 @@ class LinkService(Service):
     def verify_safe_domain(self,domain:str):
         ...
     
-    def parse_info(self,request:Request,link_id:str,path:str):
+    def parse_info(self,request:Request,link_id:str,path:str,link_args):
         user_agent = request.headers.get('user-agent')
-        client_ip = ...
-
-
-        #await ...
+        client_ip = request.headers.get('x-forwarded-for')
+        message_id = link_args.server_scoped.get("message_id",None)
+        contact_id = link_args.server_scoped.get("contact_id",None)
 
         return {
-            'user_agent':user_agent
-
+            'link_id':str(link_id),
+            'user_agent':user_agent,
+            'ip_address':client_ip,
+            'link_path':path,
+            'email_id':message_id,
+            'contact_id':contact_id,
         }
-
-    
 
     async def get_server_well_know(self, link: LinkORM):
 
