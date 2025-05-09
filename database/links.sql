@@ -75,16 +75,16 @@ CREATE TABLE IF NOT EXISTS LinkSession (
 );
 
 CREATE TABLE IF NOT EXISTS LinkAnalytics(
-    link_id UUID NOT NULL  
+    link_id UUID NOT NULL,  
     country VARCHAR(5),
     region VARCHAR(60),
     -- referrer VARCHAR(100),
     city VARCHAR(100),
     device DeviceType DEFAULT 'unknown',
     visits_counts INT DEFAULT 1,
-    PRIMARY KEY (link_id,country,region,city,device)
-    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE,
-)
+    PRIMARY KEY (link_id,country,region,city,device),
+    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
 
 CREATE TYPE analytics_input AS (
     link_id UUID,  
@@ -152,7 +152,7 @@ $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION delete_link_event_session() RETURNS VOID AS $$
 BEGIN
-    SET search_path = links
+    SET search_path = links;
     DELETE FROM 
         LinkEvent
     WHERE
