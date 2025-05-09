@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS LinkEvent (
     geo_long FLOAT DEFAULT NULL,
     country VARCHAR(60),
     region VARCHAR(60),
+    referrer VARCHAR(100),
     timezone VARCHAR(80),
     city VARCHAR(100),
     date_clicked TIMESTAMPTZ,
@@ -67,6 +68,7 @@ SELECT cron.schedule('delete_expired_links_every_day', '0 0 * * *', 'SELECT link
 CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE
     links_count INT;
+    public_links_count INT;
 
 BEGIN
 SET search_path = links;
@@ -76,6 +78,22 @@ INTO
     links_count 
 FROM 
     Link;
+
+SELECT
+    COUNT(*)
+INTO
+    public_links_count
+FROM 
+    Link
+WHERE
+    public =True;
+
+IF public_links_count >=9 THEN
+    RAISE EXCEPTION 'Public Links Limit Reached';
+    RETURN OLD
+ELSE
+    RETURN NEW;
+END IF;
 
 IF links_count >= 15 THEN
     RAISE EXCEPTION 'Links Limit Reached';

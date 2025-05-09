@@ -53,6 +53,7 @@ class LinkEventORM(models.Model):
     geo_long = fields.FloatField(null=True)
     country = fields.CharField(max_length=60, null=True)
     region = fields.CharField(max_length=60, null=True)
+    referrer =  fields.CharField(max_length=100, null=True)
     timezone= fields.CharField(max_length=80, null=True)
     city = fields.CharField(max_length=100, null=True)
     date_clicked = fields.DatetimeField(auto_now_add=True)
@@ -75,6 +76,7 @@ class LinkEventORM(models.Model):
             "geo_long": self.geo_long,
             "country": self.country,
             'region':self.region,
+            "referrer":self.referrer,
             "timezone":self.timezone,
             "city": self.city,
             "date_clicked": self.date_clicked.isoformat(),

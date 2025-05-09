@@ -49,18 +49,22 @@ class LinkService(Service):
         client_ip = request.headers.get('x-forwarded-for')
         message_id = link_args.server_scoped.get("message_id",None)
         contact_id = link_args.server_scoped.get("contact_id",None)
+        referrer = request.headers.get('referrer',None)
 
         ip_lookup = await self.ip_lookup(client_ip)
-        lat,long = ip_lookup.get('loc',(None,None))
+        loc:str = ip_lookup.get('loc',None)
+        if loc == None:
+            lat,long = None,None
+        lat,long = loc.split(',')
         ip_data = {
             'country':ip_lookup.get('country',None),
             'get_lat':lat,
             'get_long':long,
             'region':ip_lookup.get('region',None),
             'city':ip_lookup.get('city',None),
-            'timezone':ip_lookup.get('timezone',None)
+            'timezone':ip_lookup.get('timezone',None),
+            'referrer':referrer,
         }
-        
 
         return {
             'link_id':str(link_id),
