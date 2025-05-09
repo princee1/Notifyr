@@ -1,6 +1,6 @@
 from datetime import datetime,timedelta
 from typing import Self
-from tortoise import fields, models
+from tortoise import Tortoise, fields, models
 from app.utils.helper import uuid_v1_mc,generateId
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, field_validator, model_validator
@@ -17,6 +17,8 @@ class LinkORM(models.Model):
     expiration_verification = fields.DatetimeField(null=True)
     total_visit_count = fields.IntField(default=0)
     public = fields.BooleanField(default=True)
+    converted_count = fields.IntField()
+    total_session_count = fields.IntField()
     # ownership_public_key = fields.TextField()
     # ownership_private_key = fields.TextField()
     ownership_signature = fields.CharField(max_length=150, null=True)
@@ -48,7 +50,7 @@ class LinkEventORM(models.Model):
     contact_id = fields.UUIDField(null=True)
     email_id = fields.UUIDField(null=True)
     user_agent = fields.CharField(max_length=150, null=True)
-    ip_address = fields.CharField(max_length=50, null=True)
+    #ip_address = fields.CharField(max_length=50, null=True)
     geo_lat = fields.FloatField(null=True)
     geo_long = fields.FloatField(null=True)
     country = fields.CharField(max_length=60, null=True)
@@ -71,7 +73,7 @@ class LinkEventORM(models.Model):
             "contact_id": str(self.contact_id) if self.contact_id else None,
             "email_id": str(self.email_id) if self.email_id else None,
             "user_agent": self.user_agent,
-            "ip_address": self.ip_address,
+            #"ip_address": self.ip_address,
             "geo_lat": self.geo_lat,
             "geo_long": self.geo_long,
             "country": self.country,
@@ -102,6 +104,31 @@ class LinkSessionORM(models.Model):
             "converted": self.converted
         }
     
+
+class LinkAnalyticsORM(models.Model):
+    link = fields.ForeignKeyField("models.LinkORM", related_name="analytics", on_delete=fields.CASCADE)
+    visits_counts = fields.IntField(default=1)
+    country = fields.CharField(max_length=60, null=True)
+    region = fields.CharField(max_length=60, null=True)
+    city = fields.CharField(max_length=100, null=True)
+    device = fields.CharField(max_length=50, default="unknown")
+
+    class Meta:
+        schema = SCHEMA
+        table = "linkanalytics"
+        unique_together = ("link", "country", "region", "city", "device")
+
+    @property
+    def to_json(self):
+        return {
+            "link_id": str(self.link_id),
+            "visits_counts": self.visits_counts,
+            "country": self.country,
+            "region": self.region,
+            "city": self.city,
+            "device": self.device,
+        }
+
 LinkModelBase = pydantic_model_creator(LinkORM,name="LinkORM",include=('link_url','expiration','link_name','public'))
 
 class LinkModel(LinkModelBase):
@@ -171,3 +198,16 @@ class QRCodeModel(BaseModel):
     version: int = 1
     box_size: int = 10
     border: int = 4
+
+
+async def bulk_upsert_analytics(analytics_data):
+    values_str = ", ".join(f"ROW('{link_id}', {country}, {region}, {city}, {device}, {visits_counts})::analytics_input" for link_id, country,region,city,device,visits_counts in analytics_data)
+    query = f"SELECT * FROM links.bulk_upsert_analytics(ARRAY[{values_str}])"
+    client = Tortoise.get_connection('default')
+    return await client.execute_query(query,[])
+
+async def bulk_upsert_links_vc(analytics_data):
+    values_str = ", ".join(f"ROW('{link_id}', {visits_counts})::analytics_input" for link_id,visits_counts in analytics_data)
+    query = f"SELECT * FROM links.bulk_upsert_links_visits_counts(ARRAY[{values_str}])"
+    client = Tortoise.get_connection('default')
+    return await client.execute_query(query,[])

@@ -99,7 +99,7 @@ class RedisService(DatabaseService):
         self.streams:Dict[StreamConstant.StreamLiteral,RedisService.StreamConfig] = {
             StreamConstant.LINKS_EVENT_STREAM:self.StreamConfig(**{
                 'sub':True,
-                'count':100,
+                'count':1000*4,
                 'wait':1000*5,
                 'stream':True
             }),

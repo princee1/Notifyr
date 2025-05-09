@@ -1,6 +1,25 @@
 -- Active: 1740679093248@@localhost@5432@notifyr@links
 SET search_path = links;
 
+CREATE DOMAIN DeviceType AS VARCHAR(50) CHECK (
+    VALUE IN (
+    'desktop',
+    'smartphone',
+    'tablet',
+    'feature phone',
+    'console',
+    'tv',
+    'car browser',
+    'smart display',
+    'camera',
+    'portable media player',
+    'phablet',
+    'smartwatch',
+    'ebook reader',
+    'unknown'
+        
+    )
+);
 
 CREATE TABLE IF NOT EXISTS Link (
     link_id UUID DEFAULT uuid_generate_v1mc(),
@@ -10,6 +29,8 @@ CREATE TABLE IF NOT EXISTS Link (
     expiration TIMESTAMPTZ DEFAULT NULL,
     expiration_verification TIMESTAMPTZ DEFAULT NOW() + INTERVAL '1 week',
     total_visit_count INT DEFAULT 0,
+    converted_count INT DEFAULT NULL,
+    total_session_count INT DEFAULT NULL,
     public BOOLEAN DEFAULT TRUE,
     -- ownership_public_key TEXT DEFAULT NULL,
     -- ownership_private_key TEXT DEFAULT NULL,
@@ -26,16 +47,16 @@ CREATE TABLE IF NOT EXISTS LinkEvent (
     contact_id UUID DEFAULT NULL,
     email_id UUID DEFAULT NULL,
     user_agent VARCHAR(150) DEFAULT NULL,
-    ip_address VARCHAR(50),
+    --ip_address VARCHAR(50),
     geo_lat FLOAT DEFAULT NULL,
     geo_long FLOAT DEFAULT NULL,
-    country VARCHAR(60),
+    country VARCHAR(5),
     region VARCHAR(60),
     referrer VARCHAR(100),
     timezone VARCHAR(80),
     city VARCHAR(100),
     date_clicked TIMESTAMPTZ,
-    expiring_date TIMESTAMPTZ DEFAULT NOW() + INTERVAL '1 week',
+    expiring_date TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '2 week'),
     PRIMARY KEY (event_id),
     FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL,
@@ -47,10 +68,78 @@ CREATE TABLE IF NOT EXISTS LinkSession (
     contact_id UUID DEFAULT NULL,
     link_id UUID NOT NULL,
     converted BOOLEAN DEFAULT FALSE,
+    expiring_date TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '2 week'),
     PRIMARY KEY (session_id),
     FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS LinkAnalytics(
+    link_id UUID NOT NULL  
+    country VARCHAR(5),
+    region VARCHAR(60),
+    -- referrer VARCHAR(100),
+    city VARCHAR(100),
+    device DeviceType DEFAULT 'unknown',
+    visits_counts INT DEFAULT 1,
+    PRIMARY KEY (link_id,country,region,city,device)
+    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE,
+)
+
+CREATE TYPE analytics_input AS (
+    link_id UUID NOT NULL  
+    country VARCHAR(5),
+    region VARCHAR(60),
+    -- referrer VARCHAR(100),
+    city VARCHAR(100),
+    device DeviceType,
+    visits_counts INT,
+);
+
+CREATE TYPE links_vc_input AS (
+    link_id UUID,
+    visits_counts,
+);
+
+CREATE OR REPLACE FUNCTION bulk_upsert_links_visits_counts(data links_vc_input[])  RETURNS VOID AS $$
+DECLARE
+    record links_vc_input;
+
+BEGIN
+    SET search_path = links;
+
+    FOREACH record in data
+    LOOP
+        INSERT INTO Link (link_id,total_visit_count)
+        VALUES 
+            (record.link_id,record.visits_counts)
+        ON CONFLICT
+            (link_id)
+        DO UPDATE
+            SET total_visit_count = Link.total_visit_count + EXCLUDED.visits_counts;
+    END LOOP;
+END;
+$$ LANGUAGE PLPGSQL;
+
+CREATE OR REPLACE FUNCTION bulk_upsert_analytics(data analytics_input[]) RETURNS VOID AS $$
+DECLARE
+    record analytics_input;
+BEGIN
+    SET search_path = links;
+
+    FOREACH record IN ARRAY data
+    LOOP
+        INSERT 
+            INTO LinkAnalytics (link_id, country,region,city,device,visits_counts)
+        VALUES 
+            (record.link_id, record.country,record.region,record.city,record.device,record.visits_counts)
+        ON CONFLICT 
+            (link_id, country,region,city,device)
+        DO UPDATE 
+            SET visits_counts = LinkAnalytics.visits_counts + EXCLUDED.visits_counts;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION delete_expired_links() RETURNS VOID AS $$
 BEGIN
@@ -62,8 +151,25 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
+CREATE OR REPLACE FUNCTION delete_link_event_session() RETURNS VOID AS $$
+BEGIN
+    SET search_path = links
+    DELETE FROM 
+        LinkEvent
+    WHERE
+        expiring_date <= NOW();
+
+    DELETE FROM 
+        LinkSession
+    WHERE
+        expiring_date <= NOW();
+END;
+$$ LANGUAGE PLPGSQL;
+
+
 SELECT cron.schedule('delete_expired_links_every_day', '0 0 * * *', 'SELECT links.delete_expired_links();');
 
+SELECT cron.schedule('delete_expired_link_session_event_every_day', '0 0 * * *', 'SELECT links.delete_link_event_session();');
 
 CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE
@@ -103,8 +209,6 @@ ELSE
 END IF;
 END;
 $compute_limit$ LANGUAGE plpgsql;
-
-
 
 CREATE TRIGGER limit_links
 BEFORE INSERT ON Link
