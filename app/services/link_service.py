@@ -60,8 +60,8 @@ class LinkService(Service):
         lat,long = loc.split(',')
         ip_data = {
             'country':ip_lookup.get('country',None),
-            'get_lat':lat,
-            'get_long':long,
+            'get_lat':float(lat),
+            'get_long':float(long),
             'region':ip_lookup.get('region',None),
             'city':ip_lookup.get('city',None),
             'timezone':ip_lookup.get('timezone',None),
