@@ -12,6 +12,8 @@ from app.services.security_service import SecurityService
 from app.utils.helper import b64_encode, generateId
 import aiohttp
 
+from app.utils.tools import Cache
+
 @ServiceClass
 class LinkService(Service):
     
@@ -76,6 +78,7 @@ class LinkService(Service):
             **ip_data
         }
     
+    #@Cache(10)
     async def ip_lookup(self,ip_address):
         headers = {
             "Accept": "application/json",
@@ -86,7 +89,6 @@ class LinkService(Service):
                 async with session.get(f"https://ipinfo.io/{ip_address}", headers=headers) as response:
                     if response.status == 200:
                         data = await response.json()
-                        print(data)
                         return data
                     else:
                         {}

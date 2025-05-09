@@ -1,6 +1,7 @@
 from functools import wraps
 from time import perf_counter
 from typing import Callable
+from cachetools import LRUCache
 
 
 def hash_args(args):
@@ -36,3 +37,25 @@ def Time(func: Callable):
         return result
 
     return wrapper
+
+def Cache(maxsize:float=100):
+    
+    cache = LRUCache(maxsize)
+
+    def callback(func:Callable):
+    
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            key = hash_args((args, kwargs))
+            if key in cache:
+                print(f"Cache hit for key: {key}")
+                return cache[key]
+            print(f"Cache miss for key: {key}")
+            result = await func(*args, **kwargs)
+            cache[key] = result
+            return result
+        
+
+        return wrapper
+    return callback
+        

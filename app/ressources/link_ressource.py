@@ -169,3 +169,5 @@ class LinkRessource(BaseHTTPRessource):
     
     
 
+    async def ip_lookup(self,ip_address):
+        ...
