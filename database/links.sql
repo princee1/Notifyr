@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS Link (
 CREATE TABLE IF NOT EXISTS LinkEvent (
     event_id UUID DEFAULT uuid_generate_v1mc(),
     link_id UUID,
-    link_path VARCHAR(100) DEFAULT "/",
+    link_path VARCHAR(100) DEFAULT '/',
     contact_id UUID DEFAULT NULL,
     email_id UUID DEFAULT NULL,
     user_agent VARCHAR(150) DEFAULT NULL,
@@ -90,7 +90,7 @@ WHERE
 
 IF public_links_count >=9 THEN
     RAISE EXCEPTION 'Public Links Limit Reached';
-    RETURN OLD
+    RETURN OLD;
 ELSE
     RETURN NEW;
 END IF;
