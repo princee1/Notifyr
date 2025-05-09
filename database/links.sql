@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS Link (
 
 CREATE TABLE IF NOT EXISTS LinkEvent (
     event_id UUID DEFAULT uuid_generate_v1mc(),
-    link_id UUID NOT NULL,
+    link_id UUID,
     link_path VARCHAR(100) DEFAULT NULL,
     contact_id UUID DEFAULT NULL,
     email_id UUID DEFAULT NULL,

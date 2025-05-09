@@ -49,8 +49,8 @@ CREATE OR REPLACE FUNCTION delete_expired_email_tracking() RETURNS VOID AS $$
 BEGIN
     SET search_path = emails;
 
-    DELETE FROM EmailTracking e
-    WHERE e.expired_tracking_date <= NOW();
+    DELETE FROM EmailTracking
+    WHERE expired_tracking_date <= NOW();
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -59,8 +59,8 @@ BEGIN
     SET search_path = emails;
 
     UPDATE EmailTracking e
-    SET e.email_current_status = 'DELIVERED'
-    WHERE e.email_current_status = 'SENT' AND NOW() - e.date_sent >= INTERVAL '5 hours';
+    SET email_current_status = 'DELIVERED'
+    WHERE email_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '5 hours';
 END;
 $$ LANGUAGE PLPGSQL;
 
