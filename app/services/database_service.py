@@ -5,6 +5,8 @@ from typing_extensions import Literal
 from app.classes.broker import MessageBroker, json_to_exception
 from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
+from app.utils.constant import StreamConstant
+from app.utils.transformer import none_to_empty_str
 from .config_service import ConfigService
 from .file_service import FileService
 from app.definition._service import BuildFailureError, Service,AbstractServiceClass,ServiceClass,BuildWarningError
@@ -78,6 +80,7 @@ class MongooseService(DatabaseService): # Chat data
 class RedisService(DatabaseService):
 
     class StreamConfig(TypedDict):
+        sub:bool
         count:int|None = None
         wait:int|None=None
         stream:bool
@@ -93,18 +96,22 @@ class RedisService(DatabaseService):
         self.reactiveService = reactiveService
         self.to_shutdown = False
         
-        self.streams:Dict[str,RedisService.StreamConfig] = {
-            'links':self.StreamConfig(**{
+        self.streams:Dict[StreamConstant.StreamLiteral,RedisService.StreamConfig] = {
+            StreamConstant.LINKS_EVENT_STREAM:self.StreamConfig(**{
+                'sub':True,
                 'count':100,
                 'wait':1000*5,
                 'stream':True
             }),
-            'emails':self.StreamConfig(**{
+            StreamConstant.EMAIL_EVENT_STREAM:self.StreamConfig(**{
+                'sub':True,
                 'count':10,
                 'wait':1000*10,
                 'stream':True
             }),
-            'twilio':self.StreamConfig(**{'stream':False})
+            StreamConstant.TWILIO_STREAM:self.StreamConfig(**{
+                'sub':True,
+                'stream':False})
         }
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
@@ -118,7 +125,7 @@ class RedisService(DatabaseService):
         
         if not data:
             return 
-        
+        none_to_empty_str(data)
         await self.redis_events.xadd(stream,data)
 
     async def publish_data(self,channel:str,data:Any):
@@ -180,9 +187,10 @@ class RedisService(DatabaseService):
                 else:
                     ...
 
-    def register_consumer(self,callbacks={}):
+    def register_consumer(self,callbacks_sub:dict[str,Callable]={},callbacks_stream:dict[str,Callable]={}):
         for stream_name,config in self.streams.items():
             is_stream = config['stream']
+            is_sub = config['sub']
             if is_stream:
                 count = config['count']
                 wait = config['wait']
@@ -191,23 +199,24 @@ class RedisService(DatabaseService):
                 'stream_tasks':None
             })
 
-            config['channel_tasks']= asyncio.create_task(self._consume_channel(stream_name,lambda v:print(v)))
+            if is_sub:
+                channel_callback = callbacks_sub.get(stream_name,lambda v:print(v))
+                config['channel_tasks']= asyncio.create_task(self._consume_channel(stream_name,channel_callback))
             
             if is_stream:
-               config['stream_tasks'] =asyncio.create_task(self._consume_stream(stream_name,count,wait))           
+                stream_callback = callbacks_stream.get(stream_name,None)
+                config['stream_tasks'] =asyncio.create_task(self._consume_stream(stream_name,count,wait,stream_callback))           
 
-    async def _consume_stream(self,stream_name,count,wait,handler:Callable[[Any],Any]=None):
+    async def _consume_stream(self,stream_name,count,wait,handler:Callable[[dict[str,Any]],list]):
         while True:
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(10.10)
             try:
                 response = await self.redis_events.xreadgroup(self.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=wait)
                 if response:
                     for stream, entries in response:
-                        for entry_id, data in entries:
-
-                            print(entry_id,data)
-                            await self.redis_events.xack(stream_name, self.GROUP, entry_id)
-                            await self.redis_events.xdel(stream_name, entry_id)
+                        entry_ids = await handler(entries)
+                        await self.redis_events.xack(stream_name, self.GROUP, *entry_ids)
+                        await self.redis_events.xdel(stream_name,*entry_ids )
             except:
                 ...
             finally:

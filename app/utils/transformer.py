@@ -21,3 +21,18 @@ transform={
 }
 
 transform.update({'split_by_'+key:split_by(key)  for key in [" ",".","-","#"] })
+
+def none_to_empty_str(val:dict):
+    for key,values in val.items():
+        if values == None:
+            val[key] = ''
+        if isinstance(values,(dict)):
+            none_to_empty_str(values)
+
+def empty_str_to_none(val:dict):
+    for key,values in val.items():
+        if values == '':
+            val[key] = None
+        if isinstance(values,(dict)):
+            empty_str_to_none(values)
+        

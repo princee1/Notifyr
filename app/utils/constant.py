@@ -1,4 +1,5 @@
 from enum import Enum
+from typing_extensions import Literal
 ########################  ** Dependencies **   ########################################
 
 class DependencyConstant:
@@ -71,3 +72,18 @@ class EmailHostConstant(Enum):
     YAHOO = "YAHOO"
     AOL = 'AOL'
     ICLOUD = 'ICLOUD'
+
+
+########################                     ########################################
+
+class StreamConstant:
+    StreamLiteral = Literal['email-event','twilio','links-event','links-session','email-tracking']
+
+    EMAIL_EVENT_STREAM ='email-event'
+    TWILIO_STREAM ='twilio'
+    LINKS_EVENT_STREAM ='links-event'
+    LINKS_SESSION_STREAM ='links-session'
+    EMAIL_TRACKING ='email-tracking'
+
+class ServerParamsConstant:
+    SESSION_ID = 'session-id'
