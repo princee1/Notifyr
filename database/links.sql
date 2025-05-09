@@ -87,18 +87,18 @@ CREATE TABLE IF NOT EXISTS LinkAnalytics(
 )
 
 CREATE TYPE analytics_input AS (
-    link_id UUID NOT NULL  
+    link_id UUID,  
     country VARCHAR(5),
     region VARCHAR(60),
     -- referrer VARCHAR(100),
     city VARCHAR(100),
     device DeviceType,
-    visits_counts INT,
+    visits_counts INT
 );
 
 CREATE TYPE links_vc_input AS (
     link_id UUID,
-    visits_counts,
+    visits_counts INT
 );
 
 CREATE OR REPLACE FUNCTION bulk_upsert_links_visits_counts(data links_vc_input[])  RETURNS VOID AS $$
@@ -108,18 +108,17 @@ DECLARE
 BEGIN
     SET search_path = links;
 
-    FOREACH record in data
+    FOREACH record IN ARRAY data
     LOOP
-        INSERT INTO Link (link_id,total_visit_count)
+        INSERT INTO Link (link_id, total_visit_count)
         VALUES 
-            (record.link_id,record.visits_counts)
-        ON CONFLICT
-            (link_id)
+            (record.link_id, record.visits_counts)
+        ON CONFLICT (link_id)
         DO UPDATE
-            SET total_visit_count = Link.total_visit_count + EXCLUDED.visits_counts;
+            SET total_visit_count = Link.total_visit_count + EXCLUDED.total_visit_count;
     END LOOP;
 END;
-$$ LANGUAGE PLPGSQL;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION bulk_upsert_analytics(data analytics_input[]) RETURNS VOID AS $$
 DECLARE
