@@ -52,6 +52,8 @@ class LinkEventORM(models.Model):
     geo_lat = fields.FloatField(null=True)
     geo_long = fields.FloatField(null=True)
     country = fields.CharField(max_length=60, null=True)
+    region = fields.CharField(max_length=60, null=True)
+    timezone= fields.CharField(max_length=80, null=True)
     city = fields.CharField(max_length=100, null=True)
     date_clicked = fields.DatetimeField(auto_now_add=True)
     expiring_date = fields.DatetimeField(null=True)
@@ -72,6 +74,8 @@ class LinkEventORM(models.Model):
             "geo_lat": self.geo_lat,
             "geo_long": self.geo_long,
             "country": self.country,
+            'region':self.region,
+            "timezone":self.timezone,
             "city": self.city,
             "date_clicked": self.date_clicked.isoformat(),
             "expiring_date": self.expiring_date.isoformat() if self.expiring_date else None

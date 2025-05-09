@@ -24,6 +24,8 @@ class LinkService(Service):
         self.securityService = securityService
 
         self.BASE_URL:Callable[[str],str] = lambda v: self.configService.getenv('PROD_URL',"")+v
+        self.IPINFO_API_KEY = self.configService['IPINFO_API_KEY']
+
     
     def build(self):
         ...
@@ -42,11 +44,23 @@ class LinkService(Service):
     def verify_safe_domain(self,domain:str):
         ...
     
-    def parse_info(self,request:Request,link_id:str,path:str,link_args):
+    async def parse_info(self,request:Request,link_id:str,path:str,link_args):
         user_agent = request.headers.get('user-agent')
         client_ip = request.headers.get('x-forwarded-for')
         message_id = link_args.server_scoped.get("message_id",None)
         contact_id = link_args.server_scoped.get("contact_id",None)
+
+        ip_lookup = await self.ip_lookup(client_ip)
+        lat,long = ip_lookup.get('loc',(None,None))
+        ip_data = {
+            'country':ip_lookup.get('country',None),
+            'get_lat':lat,
+            'get_long':long,
+            'region':ip_lookup.get('region',None),
+            'city':ip_lookup.get('city',None),
+            'timezone':ip_lookup.get('timezone',None)
+        }
+        
 
         return {
             'link_id':str(link_id),
@@ -55,7 +69,29 @@ class LinkService(Service):
             'link_path':path,
             'email_id':message_id,
             'contact_id':contact_id,
+            **ip_data
         }
+    
+    async def ip_lookup(self,ip_address):
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.IPINFO_API_KEY}"
+        }
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(f"https://ipinfo.io/{ip_address}", headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        print(data)
+                        return data
+                    else:
+                        {}
+            except aiohttp.ClientError as e:
+                return {}
+            except aiohttp.ConnectionTimeoutError as e:
+                return {}
+            except Exception:
+                return {}
 
     async def get_server_well_know(self, link: LinkORM):
 

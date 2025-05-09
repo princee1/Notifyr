@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated, Any, Literal, Dict,TypedDict
 from fastapi import BackgroundTasks, Depends, Query, Request, Response
 from app.classes.broker import MessageBroker, SubjectType,exception_to_json
@@ -144,7 +145,14 @@ class Broker:
 
             self.backgroundTasks.add_task(self.redisService.publish_data,channel,message_broker)
 
-    def stream(self,channel,value):
+    def stream(self,channel,value,handler=None,args=None,kwargs=None):
+        
+        async def callback():
+            if asyncio.iscoroutinefunction(handler):
+                await handler(*args,**kwargs)
+            else:
+                handler(*args,kwargs) 
+
         self.backgroundTasks.add_task(self.redisService.stream_data,channel,value)
         
 class KeepAliveQuery:

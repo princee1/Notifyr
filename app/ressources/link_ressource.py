@@ -135,11 +135,10 @@ class LinkRessource(BaseHTTPRessource):
         redirect_link = link_args.create_link(link,path,("session_id"))
         sid_type,subject_id = link_args.subject_id
 
-        parsed_info = self.linkService.parse_info(request,link.link_id,path,link_args)
-        data = {**parsed_info,**{'event_id':uuid_v1_mc()}}
+        saved_info = await self.linkService.parse_info(request,link.link_id,path,link_args)
 
-        broker.publish(sid_type,subject_id,data,StreamConstant.LINKS_EVENT_STREAM)
-        broker.stream(StreamConstant.LINKS_EVENT_STREAM,data)
+        broker.publish(sid_type,subject_id,saved_info,StreamConstant.LINKS_EVENT_STREAM)
+        broker.stream(StreamConstant.LINKS_EVENT_STREAM,saved_info)
 
         return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT,)
 
