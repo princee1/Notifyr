@@ -51,15 +51,18 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
                 event_count[link_id] =0
             
             event_count[link_id]+=1
-
-            dd = DeviceDetector(val['user-agent']).parse()
+            dd = DeviceDetector(val['user_agent']).parse()
             device_type = dd.device_type()
+            device_type = device_type.strip()
+            if not device_type:
+                device_type = 'unknown'
+
             analytics_key = (link_id,val['country'],val['region'],val['city'],device_type)
 
             if analytics_key not in analytics:
                 analytics[analytics_key] = 0
 
-            analytics_key[analytics_key]+=1
+            analytics[analytics_key]+=1
 
             objs.append(LinkEventORM(**val))
 
@@ -69,16 +72,25 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
 
     analytics_inputs = []
 
-    for key,val in analytics:
+
+    for key,val in analytics.items():
         key = list(key)
         key.append(val)
-        analytics_inputs.append(val)
+        analytics_inputs.append(key)
+    
+    link_visit_input = []
+    for key,val in event_count.items():
+        link_visit_input.append((key,val))
+
     
     try:
+        #print(analytics_inputs)
+        #print(event_count)
         async with in_transaction():
             await LinkEventORM.bulk_create(objs)
+        #async with in_transaction():
             await bulk_upsert_analytics(analytics_inputs)
-            await bulk_upsert_links_vc(event_count)
+            await bulk_upsert_links_vc(link_visit_input)
         
         return list(valid_entries.union(invalid_entries))
     except Exception as e:

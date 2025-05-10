@@ -39,6 +39,8 @@ class LinkORM(models.Model):
             "expiration": self.expiration.isoformat() if self.expiration else None,
             "expiration_verification": self.expiration_verification.isoformat() if self.expiration_verification else None,
             "total_visit_count": self.total_visit_count,
+            "converted_count":self.converted_count,
+            "total_session_count":self.total_session_count,
             "public": self.public,
             "verified": self.verified,
             "archived": self.archived
@@ -201,13 +203,13 @@ class QRCodeModel(BaseModel):
 
 
 async def bulk_upsert_analytics(analytics_data):
-    values_str = ", ".join(f"ROW('{link_id}', {country}, {region}, {city}, {device}, {visits_counts})::analytics_input" for link_id, country,region,city,device,visits_counts in analytics_data)
+    values_str = ", ".join(f"ROW('{link_id}', '{country}', '{region}', '{city}', '{device}', '{visits_counts}')::links.analytics_input" for link_id, country,region,city,device,visits_counts in analytics_data)
     query = f"SELECT * FROM links.bulk_upsert_analytics(ARRAY[{values_str}])"
     client = Tortoise.get_connection('default')
     return await client.execute_query(query,[])
 
-async def bulk_upsert_links_vc(analytics_data):
-    values_str = ", ".join(f"ROW('{link_id}', {visits_counts})::analytics_input" for link_id,visits_counts in analytics_data)
+async def bulk_upsert_links_vc(links_input):
+    values_str = ", ".join(f"ROW('{link_id}', '{visits_counts}')::links.links_vc_input" for link_id,visits_counts in links_input)
     query = f"SELECT * FROM links.bulk_upsert_links_visits_counts(ARRAY[{values_str}])"
     client = Tortoise.get_connection('default')
     return await client.execute_query(query,[])

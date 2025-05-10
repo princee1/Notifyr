@@ -101,9 +101,9 @@ CREATE TYPE links_vc_input AS (
     visits_counts INT
 );
 
-CREATE OR REPLACE FUNCTION bulk_upsert_links_visits_counts(data links_vc_input[])  RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION bulk_upsert_links_visits_counts(data links.links_vc_input[])  RETURNS VOID AS $$
 DECLARE
-    record links_vc_input;
+    record links.links_vc_input;
 
 BEGIN
     SET search_path = links;
@@ -120,9 +120,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION bulk_upsert_analytics(data analytics_input[]) RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION bulk_upsert_analytics(data links.analytics_input[]) RETURNS VOID AS $$
 DECLARE
-    record analytics_input;
+    record links.analytics_input;
 BEGIN
     SET search_path = links;
 
