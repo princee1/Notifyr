@@ -1,8 +1,8 @@
 import functools
 from typing import Callable
 from app.container import Get, InjectInFunction
-from app.models.email_model import EmailTrackingORM
-from app.models.link_model import LinkEventORM,LinkSessionORM, LinkORM,LinkAnalyticsORM,bulk_upsert_analytics, bulk_upsert_links_vc
+from app.models.email_model import EmailTrackingORM,TrackingEventORM
+from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
 from app.services.reactive_service import ReactiveService
 from app.services.celery_service import CeleryService
 from app.utils.constant import StreamConstant
@@ -11,7 +11,6 @@ from tortoise.transactions import in_transaction
 from app.utils.helper import uuid_v1_mc
 from app.utils.transformer import empty_str_to_none
 from device_detector import DeviceDetector
-
 
 async def simple_bulk_creates(entries,orm:type[Model]):
     valid_entries = set()
@@ -31,6 +30,7 @@ async def simple_bulk_creates(entries,orm:type[Model]):
     except Exception as e:
         print(e)
         return list(invalid_entries)
+
 
 async def Add_Link_Event(entries:list[tuple[str,dict]]):
     valid_entries = set()

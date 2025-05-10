@@ -23,9 +23,9 @@ CREATE DOMAIN DeviceType AS VARCHAR(50) CHECK (
 
 CREATE TABLE IF NOT EXISTS Link (
     link_id UUID DEFAULT uuid_generate_v1mc(),
-    link_name VARCHAR(100) UNIQUE NOT NULL,
-    link_short_id VARCHAR(7) UNIQUE NOT NULL,
-    link_url VARCHAR(150) UNIQUE NOT NULL,
+    link_name VARCHAR(100) UNIQUE,
+    link_short_id VARCHAR(7) UNIQUE,
+    link_url VARCHAR(150) UNIQUE,
     expiration TIMESTAMPTZ DEFAULT NULL,
     expiration_verification TIMESTAMPTZ DEFAULT NOW() + INTERVAL '1 week',
     total_visit_count INT DEFAULT 0,
