@@ -89,6 +89,14 @@ class SkipCode(Exception):
 
 DICT_SEP = "->"
 
+def KeyBuilder(prefix,sep='-'):
+    def builder(key:str)->str:
+        return prefix+sep+key
+    
+    def separator(key:str)->str:
+        return key.split(sep)[1]
+    
+    return builder,separator
 
 def key_builder(key): return key+DICT_SEP
 

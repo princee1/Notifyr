@@ -1,7 +1,7 @@
 import functools
 from typing import Any, Callable, Dict, TypedDict
 from typing_extensions import Literal
-
+from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
 from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
@@ -209,7 +209,7 @@ class RedisService(DatabaseService):
 
     async def _consume_stream(self,stream_name,count,wait,handler:Callable[[dict[str,Any]],list]):
         while True:
-            await asyncio.sleep(10.10)
+            await asyncio.sleep(1+(randint(0,10)*random()))
             try:
                 response = await self.redis_events.xreadgroup(self.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=wait)
                 if response:
@@ -285,6 +285,10 @@ class RedisService(DatabaseService):
             return value
         value = json.loads(value)
         return value
+    
+    @check_db
+    async def delete(self,database:int|str,key:str,redis:Redis=None):
+        return await redis.delete(key)
     
     @check_db
     async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):

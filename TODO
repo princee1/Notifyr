@@ -24,3 +24,4 @@
 22. Have a distributed implementation for subject subscribing using redis and rxPy and finish all type of subscriptions
 23. Have landing page and a better workflow for contacts and campaings...
 24. Each notify instance will have a persistance on their subject
+25. Add simple txt template message for email
