@@ -291,6 +291,13 @@ class RedisService(DatabaseService):
         return await redis.delete(key)
     
     @check_db
+    async def delete_all(self, database: int | str, prefix: str, redis: Redis = None):
+        keys = await redis.keys(f"{prefix}*")
+        if keys:
+            return await redis.delete(*keys)
+        return 0
+    
+    @check_db
     async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):
         return await redis.append(key,data)
     

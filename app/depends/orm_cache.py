@@ -1,4 +1,5 @@
 import functools
+from app.models.link_model import LinkORM
 from app.services.database_service import RedisService
 from app.services.config_service import ConfigService
 from app.container import Get
@@ -15,8 +16,74 @@ T = TypeVar('T',bool,str,int,Model)
 redisService:RedisService = Get(RedisService)
 configService = Get(ConfigService)
 
+class CacheInterface:
 
-def generate_cache_func(type_:Type[T],prefix='orm-cache',sep='-',expiry:int = 0):
+    @staticmethod
+    async def Get(key:str)->Type[T]|None:
+        """
+        Retrieves an object from the Redis cache.
+        Args:
+            key (str): The key of the object to retrieve.
+        Returns:
+            Type[T] | None: The retrieved object, or None if the key does not exist in the cache.
+        """
+        ...
+
+    @staticmethod
+    async def Invalid(key:str)->None:
+        """
+        Invalidates (deletes) an object from the Redis cache.
+        Args:
+            key (str): The key of the object to delete.
+        Returns:
+            Any: The result of the Redis delete operation.
+        """
+        ...
+
+    @staticmethod
+    async def Cache(key:str,obj:T,exp:int=0):
+        """
+        Stores an object in the Redis cache.
+        Args:
+            key (str): The key under which the object will be stored.
+            obj (T): The object to store in the cache.
+        Returns:
+            Any: The result of the Redis store operation.
+        """
+        ...
+
+    @staticmethod
+    async def InvalidAll():
+        """
+            Invalidates all cached ORM data.
+
+            This method is a static asynchronous function that clears or invalidates
+            all cached data related to the ORM (Object-Relational Mapping). It is 
+            typically used to ensure that stale or outdated data is removed from the 
+            cache, forcing the system to fetch fresh data from the database.
+
+            Note:
+            The implementation details of this method are not provided in the 
+            current context. Ensure that the actual implementation handles 
+            concurrency and error scenarios appropriately.
+            """
+        ...
+
+    @staticmethod
+    def Key_Separator(key:str)->str:
+        """
+        Splits or processes a given key string based on a specific separator logic.
+
+        Args:
+            key (str): The input key string to be processed.
+
+        Returns:
+            str: The processed or modified key string.
+        """
+        ...
+
+
+def generate_cache_type(type_:Type[T],prefix='orm-cache',sep='-',expiry:int = 0)->Type[CacheInterface]:
     """
         Generates a set of cache-related functions (Cache, Get, Invalid) for storing, retrieving, 
         and invalidating objects in a Redis cache. The functions are tailored to work with a specific 
@@ -37,58 +104,64 @@ def generate_cache_func(type_:Type[T],prefix='orm-cache',sep='-',expiry:int = 0)
  
     key_builder,key_separator = KeyBuilder(prefix,sep)
 
-    def kb(func:Callable):
-        """
-            Decorator for wrapping cache-related functions to ensure consistent key-building.
-            Args:
-                func (Callable): The function to wrap.
-            Returns:
-                Callable: The wrapped function with key-building logic applied.
-        """
-        @functools.wraps(func)
-        async def wrapper(key,*args,**kwargs):
-            key = key_builder(key)
-            return await func(key,*args,**kwargs)
-    
-        return wrapper
-    
-    @kb
-    async def Cache(key:str,obj:T):
-        """
-            Stores an object in the Redis cache.
-            Args:
-                key (str): The key under which the object will be stored.
-                obj (T): The object to store in the cache.
-            Returns:
-                Any: The result of the Redis store operation.
-        """
-        if type(type_) == ModelMeta:
-            obj = ...
-        return await redisService.store(REDIS_CACHE_KEY,key,obj,expiry)
-    
-    @kb
-    async def Get(key:str)->Type[T]|None:
-        """
-            Retrieves an object from the Redis cache.
-            Args:
-                key (str): The key of the object to retrieve.
-            Returns:
-                Type[T] | None: The retrieved object, or None if the key does not exist in the cache.
-        """
-        obj = await redisService.retrieve(REDIS_CACHE_KEY,key)   
-        if type(type_) == ModelMeta:
-            return type_(**obj) 
-        return obj
-    
-    @kb
-    async def Invalid(key:str):
-        """
-            Invalidates (deletes) an object from the Redis cache.
-            Args:
-                key (str): The key of the object to delete.
-            Returns:
-                Any: The result of the Redis delete operation.
-        """
-        return await redisService.delete(REDIS_CACHE_KEY,key)
+    class ORMCache(CacheInterface):
 
-    return Cache,Get,Invalid,key_separator
+        @staticmethod
+        def kb(func:Callable):
+            """
+                Decorator for wrapping cache-related functions to ensure consistent key-building.
+                Args:
+                    func (Callable): The function to wrap.
+                Returns:
+                    Callable: The wrapped function with key-building logic applied.
+            """
+            @functools.wraps(func)
+            async def wrapper(key,*args,**kwargs):
+                if type(key) != str:
+                    key = str(key)
+
+                key = key_builder(key)
+                return await func(key,*args,**kwargs)
+        
+            return wrapper
+        
+        @kb
+        @staticmethod
+        async def Cache(key:str,obj:T,exp=expiry):
+            
+            if type(type_) == ModelMeta:
+                obj:Model = obj
+                obj = {field: getattr(obj, field) for field in obj._meta.fields_map}
+            return await redisService.store(REDIS_CACHE_KEY,key,obj,exp)
+        
+        @kb
+        @staticmethod
+        async def Get(key:str)->Type[T]|None:
+            
+            obj = await redisService.retrieve(REDIS_CACHE_KEY,key)   
+            if obj == None:
+                return None
+            
+            if type(type_) == ModelMeta:
+                return type_(**obj) 
+            return obj
+        
+        @kb
+        @staticmethod
+        async def Invalid(key:str):
+            return await redisService.delete(REDIS_CACHE_KEY,key)
+        
+        @staticmethod
+        async def InvalidAll():
+            return await redisService.delete_all(REDIS_CACHE_KEY,prefix)
+
+        @staticmethod
+        def Key_Separator(key:str):
+            return key_separator(key)
+    
+    return ORMCache
+
+ClientORMCache = generate_cache_type(ClientORM,'client')
+BlacklistORMCache = generate_cache_type(bool,'blacklist')
+ChallengeORMCache = generate_cache_type(ChallengeORM,'challenge')
+LinkORMCache = generate_cache_type(LinkORM,'link')
