@@ -12,6 +12,7 @@ from app.depends.funcs_dep import GetClient, get_client_by_password,verify_admin
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, TwilioPermission, UserPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.depends.orm_cache import ChallengeORMCache, ClientORMCache
 from app.errors.security_error import AuthzIdMisMatchError, ClientDoesNotExistError,ClientTokenHeaderNotProvidedError, CouldNotCreateAuthTokenError
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ChallengeORM, ClientORM, raw_revoke_auth_token, raw_revoke_challenges
@@ -55,6 +56,10 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             auth_token, refresh_token = await self.issue_auth(client, authPermission)
             client.authenticated = True # NOTE just to make sure
             await client.save()
+
+        await ChallengeORMCache.Invalid(client.client_id)
+        await ClientORMCache.Invalid(client.client_id)
+        
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token}, "message": "Tokens successfully refreshed"})
 
 
@@ -69,6 +74,9 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             refreshPermission:RefreshPermission = tokens
             await raw_revoke_auth_token(client)
             auth_token, refresh_token = await self.issue_auth(client, authPermission)
+
+        await ClientORMCache.Invalid(client.client_id)
+        
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token,}, "message": "Tokens successfully refreshed"})
     
 
@@ -142,9 +150,11 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             await raw_revoke_challenges(client)
             authPermission = self._create_superuser_auth_permission(client,roles)
             auth_token, refresh_token = await self.issue_auth(client,authPermission)
-    
+        
         if auth_token == None:
             raise CouldNotCreateAuthTokenError
+    
+        await ChallengeORMCache.Invalid(client.client_id)
 
         return auth_token, refresh_token
 
@@ -192,7 +202,11 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             
             await raw_revoke_auth_token(client)
             auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            
             await client.save()
+
+        await ChallengeORMCache.Invalid(client.client_id)
+        
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
 
@@ -220,6 +234,9 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             funcMetaData:FuncMetaData = getattr(self.self_revoke_by_connect,'meta')
             jwtAuthPermission.permission(self.__class__.__name__,funcMetaData,authPermission)
             await self._revoke_client(client)
+
+        await ChallengeORMCache.Invalid(client.client_id)
+        
         return JSONResponse(status_code=status.HTTP_200_OK,content={'message':'Successfully disconnect'})
 
 

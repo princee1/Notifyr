@@ -4,6 +4,7 @@ from fastapi import Depends, Query, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.depends.funcs_dep import get_blacklist, get_group, get_client
+from app.depends.orm_cache import ChallengeORMCache, ClientORMCache
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
@@ -119,6 +120,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.Delete('/')
     async def delete_client(self, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         await client.delete()
+        await ClientORMCache.Invalid(str(client.client_id))
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully deleted", "client": client.to_json})
 
     @UseRoles(roles=[Role.CONTACTS])
@@ -195,6 +197,8 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
                 if not ipv4_subnet_validator(client.issued_for):
                     raise ValueError(f"Invalid IPv4 subnet: {client.issued_for}")
                 
+        await ClientORMCache.Invalid(str(client.client_id))
+                
         return is_revoked
 
 @UseHandler(TortoiseHandler)
@@ -255,7 +259,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
         client = await ClientORM.filter(client_id=authPermission['client_id']).first()
         auth_token, refresh_token = self.issue_auth(client, authPermission)
-
+        await ChallengeORMCache.InvalidAll()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
                                                                      "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},
@@ -291,6 +295,10 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
             if client.can_login:
                 challenge = await ChallengeORM.filter(client=client).first()
                 await self.change_authz_id(challenge)
+                await ClientORMCache.Invalid(client.client_id)
+                
+            await ChallengeORMCache.Invalid(client.client_id)
+
             
             await client.save()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
@@ -311,6 +319,8 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
             client.authenticated = True
             client.can_login = True
             await client.save()
+
+        await ChallengeORMCache.Invalid(client.client_id)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})

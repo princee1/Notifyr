@@ -2,7 +2,8 @@ import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientType, Role, Scope, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
-from app.models.security_model import ChallengeORM, ClientORM
+from app.depends.orm_cache import BlacklistORMCache, ChallengeORMCache, ClientORMCache
+from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import TaskService
 from app.services.config_service import ConfigService
@@ -114,14 +115,23 @@ class JWTAuthMiddleware(MiddleWare):
             authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
           
             client_id = authPermission['client_id']
-            client:ClientORM = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
+            client = await ClientORMCache.Get(client)
+            if client == None:
+                client:ClientORM = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
+                await ClientORMCache.Cache(client_id,client,0)
 
             #TODO check group id
             if not client.authenticated:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
 
             if client.client_type != ClientType.Admin: 
-                if await self.adminService.is_blacklisted(client):
+                is_blacklisted = await BlacklistORMCache.Get(client_id)
+                
+                if is_blacklisted == None:
+                    is_blacklisted = await self.adminService.is_blacklisted(client)
+                    await BlacklistORMCache.Cache(client_id,is_blacklisted,3600)
+
+                if is_blacklisted :
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
 
             request.state.client = client
@@ -182,9 +192,15 @@ class ChallengeMatchMiddleware(MiddleWare):
     async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         authPermission: AuthPermission = await get_auth_permission(request)
         client:ClientORM = await get_client_from_request(request)
-
         challenge = authPermission['challenge']
-        db_challenge= await ChallengeORM.filter(client=client).first()
+
+        client_id = str(client.client_id)
+
+        db_challenge = await ChallengeORMCache.Get(client_id)
+
+        if db_challenge ==None:
+            db_challenge= await ChallengeORM.filter(client=client).first()
+            await ChallengeORMCache.Cache(client_id,db_challenge,3600)
 
         if challenge != db_challenge.challenge_auth:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 

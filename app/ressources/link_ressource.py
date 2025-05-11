@@ -11,6 +11,7 @@ from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessour
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import GetLink
 from app.depends.class_dep import Broker, LinkArgs
+from app.depends.orm_cache import LinkORMCache
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService
@@ -82,10 +83,12 @@ class CRUDLinkRessource(BaseHTTPRessource):
         link_data = link.to_json.copy()
         if not archive:
             await link.delete()
+            await LinkORMCache.Invalid(link.link_id)
             return {"data": link_data, "message": "Link deleted successfully"}
         
         link.archived = True
         await link.save()
+        await LinkORMCache.Invalid(link.link_id)
         return {"data": link_data, "message": "Link archived successfully"}
 
     @UseRoles([Role.ADMIN])
@@ -102,6 +105,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
             link.link_name = linkUpdateModel.link_name
 
         await link.save()
+        await LinkORMCache.Invalid(link.link_id)
         return {"data": link.to_json(), "message": "Link updated successfully"}
 
     
@@ -114,6 +118,8 @@ class CRUDLinkRessource(BaseHTTPRessource):
         domain = urlparse(link.link_url).hostname
         await self.linkService.get_server_well_know(link)
         await self.linkService.verify_public_signature(link)
+        await LinkORMCache.Invalid(link.link_id)
+
         
 
 LINK_PREFIX='link'
