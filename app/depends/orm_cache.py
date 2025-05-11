@@ -1,4 +1,5 @@
 import functools
+from uuid import UUID
 from app.models.link_model import LinkORM
 from app.services.database_service import RedisService
 from app.services.config_service import ConfigService
@@ -131,8 +132,13 @@ def generate_cache_type(type_:Type[T],prefix='orm-cache',sep='-',expiry:int = 0)
             
             if type(type_) == ModelMeta:
                 obj:Model = obj
-                obj = {field: getattr(obj, field) for field in obj._meta.fields_map}
-            return await redisService.store(REDIS_CACHE_KEY,key,obj,exp)
+                temp = {}
+                for field in obj._meta.fields_map:
+                    attr = getattr(obj, field)
+                    if isinstance(attr,UUID):
+                        attr = str(attr)
+                    temp[field] =attr
+            return await redisService.store(REDIS_CACHE_KEY,key,temp,exp)
         
         @kb
         @staticmethod
@@ -140,8 +146,10 @@ def generate_cache_type(type_:Type[T],prefix='orm-cache',sep='-',expiry:int = 0)
             
             obj = await redisService.retrieve(REDIS_CACHE_KEY,key)   
             if obj == None:
+                print(f'Cache MISS key: {key} | prefix: {prefix}')
                 return None
-            
+
+            print(f'Cache HIT key: {key} | prefix: {prefix}')
             if type(type_) == ModelMeta:
                 return type_(**obj) 
             return obj
