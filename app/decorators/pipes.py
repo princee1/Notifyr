@@ -7,7 +7,7 @@ from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDUL
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
-from app.depends.classes import KeepAliveQuery
+from app.depends.class_dep import KeepAliveQuery
 from app.models.contacts_model import Status
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM

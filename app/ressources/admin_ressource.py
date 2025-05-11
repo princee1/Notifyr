@@ -3,7 +3,7 @@ from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Query, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.depends.funcs import get_blacklist, get_group, get_client
+from app.depends.funcs_dep import get_blacklist, get_group, get_client
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
