@@ -54,7 +54,7 @@ class Handler(DecoratorObj):
         return await self.ref(*args, **kwargs)
 
     async def handle(self, function: Callable, *args, **kwargs):
-        ...
+        await function(*args,**kwargs)
 
 class HandlerDefaultException(Exception):
     ...

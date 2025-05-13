@@ -457,3 +457,7 @@ class EmailRelatedHandler(Handler):
 
         except EmailInvalidFormatError as e:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,)
+
+
+class ORMCacheHandler(Handler):
+    ...
