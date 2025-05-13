@@ -23,25 +23,26 @@ class SubjectParams:
         if isinstance(self.subject_id,tuple):
             self.subject_id = list(self.subject_id)[0]
 
-class ServerScopedParams(TypedDict):
-    client_id:str | None = None
-    group_id:str|None = None
-    contact_id:str|None = None
-    session_id:str|None = None
-    message_id:str|None = None
-    link_id:str|None = None
-    subject_id:str|None = None
-
-class IdsTypeParams(TypedDict):
-    cid:str |None = None
-    gid:str |None = None
-    lid:str |None = None
-    ctid:str |None = None
-
-    cid_type :Literal['client','contact']
-    sid_type: SubjectType
-
 class LinkArgs:
+
+    class ServerScopedParams(TypedDict):
+        client_id:str | None = None
+        group_id:str|None = None
+        contact_id:str|None = None
+        session_id:str|None = None
+        message_id:str|None = None
+        link_id:str|None = None
+        subject_id:str|None = None
+
+    class IdsTypeParams(TypedDict):
+        cid:str |None = None
+        gid:str |None = None
+        lid:str |None = None
+        ctid:str |None = None
+
+        cid_type :Literal['client','contact']
+        sid_type: SubjectType
+
     server_scoped_params = ["client_id", "group_id", "contact_id", "session_id","message_id","link_id","subject_id"]
     ids_type = ["cid","gid","lid","ctid","sid_type"]
     
@@ -69,8 +70,8 @@ class LinkArgs:
             else:
                 self._link_params[key] =value
 
-        self.server_scoped:ServerScopedParams = ServerScopedParams(**scoped_params) 
-        self.ids_type_params:IdsTypeParams = IdsTypeParams(**ids_type_params)
+        self.server_scoped = self.ServerScopedParams(**scoped_params) 
+        self.ids_type_params = self.IdsTypeParams(**ids_type_params)
 
     @property
     def all_params(self):
