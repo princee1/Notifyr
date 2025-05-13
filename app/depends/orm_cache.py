@@ -256,7 +256,10 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
             obj:T|None =  await ORMCache.Get(key)
             if obj == None:
                 obj = await DB_Get(*args,**kwargs)
-
+                
+                if obj == None:
+                    return None
+                    
                 if isinstance(expiry,function):
                     expiry = expiry(obj)
                     
