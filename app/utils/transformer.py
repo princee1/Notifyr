@@ -1,5 +1,6 @@
 from typing import Callable
 from humanize import naturaltime, naturaldelta
+from pytimeparse.timeparse import timeparse
 
 
 
@@ -11,6 +12,13 @@ def split_by(split=" ")->Callable[[str],str]:
 def natural_time(value:str):
     value=float(value)
     return naturaltime(value,future=True)
+
+
+def parse_time(value: str) -> int:
+    parsed_time = timeparse(value)
+    if parsed_time is None:
+        raise ValueError(f"Unable to parse time from value: {value}")
+    return parsed_time
 
 coerce = {
 
