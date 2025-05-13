@@ -4,7 +4,7 @@ from random import choice, seed
 from string import hexdigits, digits, ascii_letters,punctuation
 import time
 from inspect import currentframe, getargvalues
-from typing import Any, Callable, Literal, Type
+from typing import Any, Callable, Literal, Tuple, Type
 import urllib.parse
 from fastapi import Response
 from namespace import Namespace
@@ -16,6 +16,12 @@ import urllib
 import uuid
 import hashlib
 import socket
+
+alphanumeric = digits + ascii_letters
+
+
+################################   ** REST API HELPER Helper **      #################################
+
 
 def APIFilterInject(func:Callable | Type):
 
@@ -34,7 +40,6 @@ def APIFilterInject(func:Callable | Type):
         return func(*args, **filtered_kwargs)
     return wrapper
 
-
 def AsyncAPIFilterInject(func:Callable | Type):
 
     if type(func) == type:
@@ -52,7 +57,6 @@ def AsyncAPIFilterInject(func:Callable | Type):
         return await func(*args, **filtered_kwargs)
     return wrapper
 
-
 def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None):
     reversed_kwargs = reverseDict(kwargs)
     if key == None and cls == None:
@@ -61,15 +65,12 @@ def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None)
     #     for 
     return 
 
-
 def copy_response(result:Response,response:Response):
     if not response:
         return result
     result.raw_headers.extend(response.raw_headers)
     result.status_code = response.status_code if response.status_code else result.status_code
     return result
-
-
 
 def stable_mac():
     """Generate a stable pseudo-MAC address based on the machine's hostname."""
@@ -83,25 +84,73 @@ def uuid_v1_mc():
     return uuid.uuid1(node=stable_mac())
 
 
+################################   ** Code Helper **      #################################
+
 class SkipCode(Exception):
     pass
+
+################################   ** Key Helper **      #################################
 
 
 DICT_SEP = "->"
 
-def KeyBuilder(prefix,sep='-'):
-    def builder(key:str)->str:
-        return prefix+sep+key
-    
+def KeyBuilder(prefix:str|list[str],sep:str|list[str]='-'):
+
+    if prefix == None:
+        raise ValueError('prefix cant be None')
+
+    if sep == None:
+        raise ValueError('sep cant be None')
+
+    if isinstance(prefix,list) and isinstance(sep,list):
+        p_len = len(prefix)
+        s_len = len(sep)
+
+        if p_len == 0:
+            raise ValueError('prefix cant be an empty list')
+        if s_len == 0:
+            raise ValueError('sep cant be an empty list')
+
+        if p_len < s_len:
+            s_len = [s_len[0]]*p_len
+
+        if p_len != s_len:
+            sep = sep[:p_len]
+
+    if isinstance(prefix,list) and isinstance(sep,str):
+        sep = [sep]*len(prefix)
+
+    if isinstance(prefix,str) and isinstance(sep,str):
+        prefix = [prefix]
+        sep= [sep]
+
+    def builder(key:str|list[str])->str:
+        if not isinstance(key,str):
+            key = [key]
+
+        if len(key) != len(prefix):
+            raise ValueError()
+
+        temp = ""
+        for p,k,s in zip(prefix,key,sep):
+            temp+=f"{p}{s}{k}{s}"
+        
+        return temp[:-1]
+
     def separator(key:str)->str:
-        return key.split(sep)[1]
+        if not isinstance(key,str):
+            key = [key]
+
+        if len(key) != len(prefix):
+            raise ValueError()
+        #TODO
+        raise NotImplementedError
     
     return builder,separator
 
 def key_builder(key): return key+DICT_SEP
 
 
-alphanumeric = digits + ascii_letters
 ################################   ** Parsing Helper **      #################################
 
 
@@ -296,8 +345,8 @@ primitive_classes = [
 ]
 
 
-def isprimitive_type(typ:type):
-    return typ in primitive_classes
+def isprimitive_type(obj:Any):
+    return type(obj) in primitive_classes
 
 ################################   ** Generate Helper **      #################################
 

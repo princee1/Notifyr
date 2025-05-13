@@ -7,7 +7,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData, MustHave, MustHaveRoleSuchAs, RefreshPermission, Role, TokensModel, parse_authPermission_enum
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
+from app.decorators.handlers import ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.depends.funcs_dep import GetClient, get_client_by_password,verify_admin_signature, verify_admin_token,verify_twilio_token
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, TwilioPermission, UserPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
@@ -46,6 +46,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
     @UsePipe(RefreshTokenPipe)
     @UseRoles(roles=[Role.REFRESH])
+    @UseHandler(ORMCacheHandler)
     @UsePermission(UserPermission,JWTRefreshTokenPermission)
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard,)
     @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST])
@@ -65,6 +66,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
     @UsePipe(RefreshTokenPipe)
+    @UseHandler(ORMCacheHandler)
     @UseRoles(roles=[Role.ADMIN,Role.REFRESH],options=[MustHave(Role.ADMIN)])
     @UsePermission(AdminPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_signature)], )
@@ -159,7 +161,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         return auth_token, refresh_token
 
     @UseLimiter(limit_value='1/day')
-    @UseHandler(SecurityClientHandler)
+    @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
     async def issue_admin_auth(self, request: Request,):
         #TODO Protect requests
@@ -169,7 +171,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
     
     @UseLimiter(limit_value='1/day')
-    @UseHandler(SecurityClientHandler)
+    @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/twilio/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)],mount=False)
     async def issue_twilio_auth(self,request:Request):
         
@@ -183,7 +185,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         
     @UseLimiter(limit_value='1/day',per_method=True)
     @UsePipe(ForceClientPipe)
-    @UseHandler(SecurityClientHandler)
+    @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
     @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
     @UsePermission(UserPermission(accept_none_auth=True))
@@ -212,7 +214,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UsePipe(ForceClientPipe)
     @UseLimiter(limit_value='1/day',per_method=True)
-    @UseHandler(SecurityClientHandler)
+    @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseGuard(AuthenticatedClientGuard)
     @UsePermission(UserPermission(accept_none_auth=True))
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise

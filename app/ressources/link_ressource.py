@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from app.classes.auth_permission import Role
 from app.container import InjectInMethod
 from app.decorators.guards import AccessLinkGuard
-from app.decorators.handlers import TortoiseHandler
+from app.decorators.handlers import ORMCacheHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
@@ -25,7 +25,6 @@ from app.classes.broker import MessageBroker,MessageError
 
 LINK_MANAGER_PREFIX = 'manage'
 
-get_link_serve = GetLink(True)
 get_link = GetLink(False)
 
 @APIFilterInject
@@ -39,6 +38,10 @@ def verify_link_guard(link:LinkORM):
         return False, 'Already verified'
 
     return True
+
+async def get_link_cache(link_id:str,)->LinkORM:
+    return await LinkORMCache.Cache(link_id,link_id,lid="sid")
+
 
 @UseRoles([Role.LINK])
 @UsePermission(JWTRouteHTTPPermission)
@@ -54,6 +57,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
 
     @UseRoles([Role.ADMIN])
     @HTTPStatusCode(201)
+    @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
     async def add_link(self, request: Request, linkModel: LinkModel, response: Response,authPermission=Depends(get_auth_permission)):
         link = linkModel.model_dump()
@@ -69,7 +73,8 @@ class CRUDLinkRessource(BaseHTTPRessource):
             signature, public_key = await self.linkService.generate_public_signature(link)
             public_security['signature'] = signature
             public_security['public_key'] = public_key
-
+        else:
+            await LinkORMCache.Store(link.link_short_id,link)
         return {"data": {**link.to_json}, "message": "Link created successfully"}
 
     @UseRoles([Role.PUBLIC])
@@ -78,21 +83,23 @@ class CRUDLinkRessource(BaseHTTPRessource):
         return {"data": link.to_json, "message": "Link retrieved successfully"}
 
     @UseRoles([Role.ADMIN])
+    @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE])
     async def delete_link(self, link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission)):
         link_data = link.to_json.copy()
         if not archive:
             await link.delete()
-            await LinkORMCache.Invalid(link.link_id)
+            await LinkORMCache.Invalid(link.link_short_id)
             return {"data": link_data, "message": "Link deleted successfully"}
         
         link.archived = True
         await link.save()
-        await LinkORMCache.Invalid(link.link_id)
+        await LinkORMCache.Invalid(link.link_short_id)
         return {"data": link_data, "message": "Link archived successfully"}
 
     @UseRoles([Role.ADMIN])
     @HTTPStatusCode(200)
+    @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
     async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,response:Response,authPermission=Depends(get_auth_permission)):
         if linkUpdateModel.archived != None:
@@ -105,7 +112,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
             link.link_name = linkUpdateModel.link_name
 
         await link.save()
-        await LinkORMCache.Invalid(link.link_id)
+        await LinkORMCache.Invalid(link.link_short_id)
         return {"data": link.to_json(), "message": "Link updated successfully"}
 
     
@@ -118,7 +125,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
         domain = urlparse(link.link_url).hostname
         await self.linkService.get_server_well_know(link)
         await self.linkService.verify_public_signature(link)
-        await LinkORMCache.Invalid(link.link_id)
+        await LinkORMCache.Store(link.link_short_id,link)
 
         
 
@@ -136,7 +143,7 @@ class LinkRessource(BaseHTTPRessource):
     @UseGuard(AccessLinkGuard(True))
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/v/{link_id}/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    async def visit_url(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_serve)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+    async def visit_url(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_cache)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
         path = None
         redirect_link = link_args.create_link(link,path,("session_id"))
         sid_type,subject_id = link_args.subject_id

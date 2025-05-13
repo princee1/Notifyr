@@ -7,7 +7,7 @@ from app.container import Get, GetAttr
 from app.definition._error import ServerFileError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
-from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
+from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
 from app.services.celery_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
@@ -267,7 +267,7 @@ async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_
     return await _get_blacklist(blacklist_id=blacklist_id)
 
 
-def GetLink(raise_file_error:bool):
+def GetLink(raise_file_error:bool,raise_err:bool=True):
 
     async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
         
@@ -288,7 +288,10 @@ def GetLink(raise_file_error:bool):
             if raise_file_error:
                 raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
             else:
-                raise HTTPException(status.HTTP_404_NOT_FOUND,"links not found")
+                if raise_err:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND,"links not found")
+                else:
+                    return None
             
         return link
     
@@ -301,3 +304,6 @@ async def get_task(request_id: str = Depends(get_request_id), as_async: bool = D
     if offload_task == None:
         raise HTTPException(500, detail='Offload task is not available')
     return taskService._register_tasks(request_id, as_async, runtype, offload_task, ttl, save, return_results)
+
+async def get_challenge(client:ClientORM):
+    return await ChallengeORM.filter(client=client).first()

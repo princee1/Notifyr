@@ -101,7 +101,6 @@ class JWTAuthMiddleware(MiddleWare):
         self.jwtService:JWTAuthService = Get(JWTAuthService)
         self.configService: ConfigService = Get(ConfigService)
         self.adminService: AdminService = Get(AdminService)
-        self.get_client = GetClient(True,True)
 
     @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*'])
@@ -115,21 +114,16 @@ class JWTAuthMiddleware(MiddleWare):
             authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
           
             client_id = authPermission['client_id']
-            client = await ClientORMCache.Get(client)
-            if client == None:
-                client:ClientORM = await self.get_client(client_id=client_id,cid="id",authPermission=authPermission)
-                await ClientORMCache.Cache(client_id,client,0)
+            group_id = authPermission['group_id']
+
+            client:ClientORM = await ClientORMCache.Cache([group_id,client_id],client_id=client_id,cid="id",authPermission=authPermission)
 
             #TODO check group id
             if not client.authenticated:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
 
             if client.client_type != ClientType.Admin: 
-                is_blacklisted = await BlacklistORMCache.Get(client_id)
-                
-                if is_blacklisted == None:
-                    is_blacklisted = await self.adminService.is_blacklisted(client)
-                    await BlacklistORMCache.Cache(client_id,is_blacklisted,3600)
+                is_blacklisted:bool = await BlacklistORMCache.Cache([group_id,client_id],client)
 
                 if is_blacklisted :
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
@@ -194,13 +188,7 @@ class ChallengeMatchMiddleware(MiddleWare):
         client:ClientORM = await get_client_from_request(request)
         challenge = authPermission['challenge']
 
-        client_id = str(client.client_id)
-
-        db_challenge = await ChallengeORMCache.Get(client_id)
-
-        if db_challenge ==None:
-            db_challenge= await ChallengeORM.filter(client=client).first()
-            await ChallengeORMCache.Cache(client_id,db_challenge,3600)
+        db_challenge:ChallengeORM = await ChallengeORMCache.Cache(client.client_id,client) 
 
         if challenge != db_challenge.challenge_auth:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 

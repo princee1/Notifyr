@@ -273,10 +273,10 @@ class RedisService(DatabaseService):
         return await redis.decr(limit_request_id)
 
     @check_db
-    async def store(self,database:int|str,key:str,value:Any,expiry,redis:Redis=None):
+    async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
             value = json.dumps(value)
-        return await redis.set(key,value,ex=expiry)
+        return await redis.set(key,value,ex=expiry,get=True,nx=nx,xx=xx)
     
     @check_db
     async def retrieve(self,database:int|str,key:str,redis:Redis=None):
@@ -291,8 +291,10 @@ class RedisService(DatabaseService):
         return await redis.delete(key)
     
     @check_db
-    async def delete_all(self, database: int | str, prefix: str, redis: Redis = None):
-        keys = await redis.keys(f"{prefix}*")
+    async def delete_all(self, database: int | str, prefix: str,simple_prefix=True, redis: Redis = None):
+        if simple_prefix:
+            prefix =f"{prefix}*"
+        keys = await redis.keys(prefix)
         if keys:
             return await redis.delete(*keys)
         return 0
