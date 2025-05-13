@@ -5,7 +5,6 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ContactPermission, Role
 from app.container import Get, GetAttr
 from app.definition._error import ServerFileError
-from app.depends.orm_cache import LinkORMCache
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
@@ -271,9 +270,6 @@ async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_
 def GetLink(raise_file_error:bool):
 
     async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
-        link = await LinkORMCache.Get(link_id)
-        if link != None: 
-            return link
         
         match lid:
             case 'id':
@@ -294,8 +290,6 @@ def GetLink(raise_file_error:bool):
             else:
                 raise HTTPException(status.HTTP_404_NOT_FOUND,"links not found")
             
-        await LinkORMCache.Cache(link_id,link,0)
-
         return link
     
     return get_link

@@ -15,20 +15,28 @@ class AdminService(Service):
     def build(self):
         ...
     
-    async def is_blacklisted(self,client:ClientORM):
-        if await BlacklistORM.exists(client=client):
-            return True
-        
-        if client.group_id == None:
-            return False
+    async def is_blacklisted(self, client: ClientORM) -> tuple[bool, float | None]:
+        blacklist = await BlacklistORM.filter(client=client).first()
+        if blacklist:
+            time_left = (blacklist.expired_at - blacklist.created_at).total_seconds()
+            return True, time_left
 
-        return await BlacklistORM.exists(group=client.group_id)
+        if client.group_id is None:
+            return False, None
+
+        group_blacklist = await BlacklistORM.filter(group=client.group_id).first()
+        if group_blacklist:
+            time_left = (group_blacklist.expired_at - group_blacklist.created_at).total_seconds()
+            return True, time_left
+
+        return False, None
         
 
     async def blacklist(self,client: ClientORM,group:GroupClientORM,time:float):
 
         if client!=None and group == None:
-            if await self.is_blacklisted(client):
+            is_blacklist,_ = await self.is_blacklisted(client)
+            if is_blacklist:
                 raise AlreadyBlacklistedClientError()
             else:
                 blacklist = await BlacklistORM.create(client=client)
@@ -49,7 +57,8 @@ class AdminService(Service):
 
     async def un_blacklist(self,client:ClientORM,group:GroupClientORM):
         if client!=None and group == None:
-            if not await self.is_blacklisted(client):
+            is_blacklist,_ = await self.is_blacklisted(client)
+            if not is_blacklist:
                 raise AlreadyBlacklistedClientError(True)
             else:
                 return await BlacklistORM.filter(client=client).delete()

@@ -167,7 +167,9 @@ class BlacklistClientGuard(Guard):
         self.adminService = Get(AdminService)
     
     async def guard(self,client:ClientORM):
-        if await self.adminService.is_blacklisted(client):
+        is_blacklist,_ =await self.adminService.is_blacklisted(client)
+
+        if is_blacklist:
             return False,'Client is blacklisted'
         return True,''
     
