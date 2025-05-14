@@ -460,4 +460,6 @@ class EmailRelatedHandler(Handler):
 
 
 class ORMCacheHandler(Handler):
-    ...
+    
+    async def handle(self, function, *args, **kwargs):
+        return await function(*args,**kwargs)

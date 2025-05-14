@@ -125,11 +125,11 @@ def KeyBuilder(prefix:str|list[str],sep:str|list[str]='-'):
         sep= [sep]
 
     def builder(key:str|list[str])->str:
-        if not isinstance(key,str):
+        if isinstance(key,str):
             key = [key]
 
         if len(key) != len(prefix):
-            raise ValueError()
+            raise ValueError('')
 
         temp = ""
         for p,k,s in zip(prefix,key,sep):

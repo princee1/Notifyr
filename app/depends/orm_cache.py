@@ -196,7 +196,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
         @staticmethod
         async def Store(key:str|list[str],obj:T,exp=expiry):
 
-            ex = Set_Expiry(ex)
+            exp = Set_Expiry(exp)
             
             if type(type_) == ModelMeta:
                 obj:Model = obj
@@ -260,14 +260,12 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
                 if obj == None:
                     return None
                     
-                if isinstance(expiry,function):
+                if callable(expiry):
                     expiry = expiry(obj)
-                    
                     if expiry <= 0:
                         return 
                     else:
                         expiry + randint(1,5)
-                    
                 await ORMCache.Store(key,obj,expiry)
             
             return obj
@@ -280,7 +278,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
         def When(args):
             if when == None:
                 return True
-            if not isinstance(when,function):
+            if not callable(when):
                 #raise NotImplementedError
                 return True
 
@@ -291,4 +289,4 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
 ClientORMCache = generate_cache_type(ClientORM,GetClient(True,True),prefix=['orm-group','client'])
 BlacklistORMCache = generate_cache_type(bool,adminService.is_blacklisted,prefix=['orm-blacklist','client'],expiry=lambda o:o[1])
 ChallengeORMCache = generate_cache_type(ChallengeORM,get_challenge,prefix='orm-challenge',expiry=lambda o:o.expired_at_auth.timestamp()-time.time())
-LinkORMCache = generate_cache_type(LinkORM,GetLink(False,False),prefix='orm-link')
+LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link')

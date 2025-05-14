@@ -244,7 +244,7 @@ class RedisService(DatabaseService):
         host = "localhost"
         self.redis_celery = Redis(host=host,db=0)
         self.redis_limiter = Redis(host=host,db=1)
-        self.redis_cache = Redis(host=host,db=3)
+        self.redis_cache = Redis(host=host,db=3,decode_responses=True)
         self.redis_events=Redis(host=host,db=2,decode_responses=True)
         self.db:Dict[Literal['celery','limiter','events',0,1,2,3],Redis] = {
             0:self.redis_celery,
@@ -276,6 +276,8 @@ class RedisService(DatabaseService):
     async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
             value = json.dumps(value)
+        if expiry <=0:
+            expiry = None
         return await redis.set(key,value,ex=expiry,get=True,nx=nx,xx=xx)
     
     @check_db
