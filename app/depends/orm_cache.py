@@ -16,6 +16,7 @@ from tortoise.models import Model,ModelMeta
 from app.utils.helper import isprimitive_type
 from app.utils.transformer import parse_time
 import asyncio
+from cachetools import LRUCache
 
 REDIS_CACHE_KEY = 3
 
@@ -146,6 +147,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
             - Key_Separator: Builds a cache key using the specified separator.
             - When: Evaluates the provided condition to determine whether caching should occur.
     """
+    IN_MEMORY_CACHE = LRUCache()
  
     key_builder,key_separator = KeyBuilder(prefix,sep)
 

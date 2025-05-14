@@ -209,7 +209,7 @@ class RedisService(DatabaseService):
 
     async def _consume_stream(self,stream_name,count,wait,handler:Callable[[dict[str,Any]],list]):
         while True:
-            await asyncio.sleep(1+(randint(0,10)*random()))
+            await asyncio.sleep(5+(randint(0,10)*random()))
             try:
                 response = await self.redis_events.xreadgroup(self.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=wait)
                 if response:
