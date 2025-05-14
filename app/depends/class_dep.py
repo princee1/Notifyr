@@ -126,7 +126,7 @@ class Broker:
         self.request = request
         self.response = response
 
-    def publish(self,sid_type:SubjectType,subject_id:str, value:Any,channel:str,state:Literal['next','complete']='next'):
+    def publish(self,channel:str,sid_type:SubjectType,subject_id:str, value:Any,state:Literal['next','complete']='next'):
 
         if self.configService.pool:
             subject = self.reactiveService[subject_id]

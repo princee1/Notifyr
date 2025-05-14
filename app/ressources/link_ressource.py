@@ -150,8 +150,11 @@ class LinkRessource(BaseHTTPRessource):
 
         saved_info = await self.linkService.parse_info(request,link.link_id,path,link_args)
 
-        broker.publish(sid_type,subject_id,saved_info,StreamConstant.LINKS_EVENT_STREAM)
+        broker.publish(StreamConstant.LINKS_EVENT_STREAM,sid_type,subject_id,saved_info,)
         broker.stream(StreamConstant.LINKS_EVENT_STREAM,saved_info)
+
+        message_id = link_args.server_scoped.get('message_id',None)
+        #if message_id:
 
         return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT,)
 
@@ -161,7 +164,7 @@ class LinkRessource(BaseHTTPRessource):
 
         sid_type,subject_id = link_args.subject_id
         data = {}
-        broker.publish('message',subject_id,data,StreamConstant.EMAIL_EVENT_STREAM)
+        broker.publish(StreamConstant.EMAIL_EVENT_STREAM,'message',subject_id,data,)
         broker.stream(StreamConstant.EMAIL_EVENT_STREAM,data)
 
         if path:
@@ -181,6 +184,5 @@ class LinkRessource(BaseHTTPRessource):
         return Response(content=img_data, media_type="image/png")
     
     
-
     async def ip_lookup(self,ip_address):
         ...

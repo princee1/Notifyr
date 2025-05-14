@@ -27,6 +27,7 @@ from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
 from app.depends.class_dep import Broker, KeepAliveQuery, SubjectParams
+from app.utils.constant import StreamConstant
 
 
 CALL_ONGOING_PREFIX = 'ongoing'
@@ -224,7 +225,7 @@ class IncomingCallRessources(BaseHTTPRessource):
                 'state':status.CallStatus,
                 'data':status.model_dump(include=('CallSid','RecordingSid','Duration','CallDuration','RecordingDuration'))
             }
-        broker.publish('plain',subject_id,value,'twilio',)
+        broker.publish(StreamConstant.TWILIO_STREAM,'plain',subject_id,value,)
         return 
 
         
@@ -232,7 +233,7 @@ class IncomingCallRessources(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
     async def gather_result(self,gatherResult:GatherResultModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],authPermission=Depends(get_auth_permission)):
         value =gatherResult.model_dump(include=('data','state'))
-        broker.publish('plain',subject_params.subject_id,value,'twilio',)
+        broker.publish(StreamConstant.TWILIO_STREAM,'plain',subject_params.subject_id,value,)
 
         #subject.on_completed()
         return
