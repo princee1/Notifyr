@@ -8,15 +8,12 @@ SubjectType = Literal['contact','plain','message','session']
 class MessageError(TypedDict):
     type_:str
     message:Iterator
-
-
 class MessageBroker(TypedDict):
     subject_id:str
     state:Literal['next','completed','error']
     sid_type:SubjectType
     value:Any
     error:MessageError
-
 
 def json_to_exception(error:MessageError):
     if error == None:

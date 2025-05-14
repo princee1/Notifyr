@@ -111,7 +111,13 @@ class RedisService(DatabaseService):
             }),
             StreamConstant.TWILIO_STREAM:self.StreamConfig(**{
                 'sub':True,
-                'stream':False})
+                'stream':False}),
+            
+            StreamConstant.EMAIL_TRACKING:self.StreamConfig(**{
+                'sub':False,
+                'stream':True,
+                
+            })
         }
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
@@ -168,7 +174,7 @@ class RedisService(DatabaseService):
                 except ReactiveSubjectNotFoundError:
                     ...
 
-        await pubsub.subscribe(**{channels:handler_wrapper})
+        await pubsub.subscribe(**{channels:handler_wrapper}) # TODO Maybe add the function as await
 
         while True:
             await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
@@ -192,8 +198,8 @@ class RedisService(DatabaseService):
             is_stream = config['stream']
             is_sub = config['sub']
             if is_stream:
-                count = config['count']
-                wait = config['wait']
+                count = config.get('count',1000)
+                wait = config.get('wait',1000)
             config.update ({
                 'channel_tasks':None,
                 'stream_tasks':None

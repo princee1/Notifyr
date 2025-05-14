@@ -125,7 +125,7 @@ class CacheInterface:
     def When(cond:Any)->bool:
         ...
 
-def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,prefix:str|list[str]='orm-cache',sep:str|list[str]='/',expiry:int|str|Callable[[T],int|float] = 0,nx:bool=False, when:Callable[[Any],bool]|None=None)->Type[CacheInterface]:
+def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,prefix:str|list[str]='orm-cache',sep:str|list[str]='/',expiry:int|str|Callable[[T],int|float] = 0,nx:bool=False, when:Callable[[Any],bool]|None=None,max_size_memory_cache=1000)->Type[CacheInterface]:
     """
         Generates a cache interface class for managing cached objects with a consistent key-building mechanism.
             type_ (Type[T]): The type of the object to be cached. If it is a model, it should support initialization with keyword arguments.
@@ -147,7 +147,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
             - Key_Separator: Builds a cache key using the specified separator.
             - When: Evaluates the provided condition to determine whether caching should occur.
     """
-    IN_MEMORY_CACHE = LRUCache()
+    IN_MEMORY_CACHE = LRUCache(max_size_memory_cache)
  
     key_builder,key_separator = KeyBuilder(prefix,sep)
 

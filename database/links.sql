@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS Link (
     link_short_id VARCHAR(7) UNIQUE,
     link_url VARCHAR(150) UNIQUE,
     expiration TIMESTAMPTZ DEFAULT NULL,
-    expiration_verification TIMESTAMPTZ DEFAULT NOW() + INTERVAL '1 week',
+    expiration_verification TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '1 week'),
     total_visit_count INT DEFAULT 0,
     converted_count INT DEFAULT NULL,
     total_session_count INT DEFAULT NULL,
