@@ -2,7 +2,9 @@ import asyncio
 from typing import Annotated, Any, Literal, Dict,TypedDict
 from fastapi import BackgroundTasks, Depends, Query, Request, Response
 from app.classes.broker import MessageBroker, SubjectType,exception_to_json
+from app.classes.celery import SchedulerModel
 from app.depends.dependencies import get_request_id
+from app.models.email_model import CustomEmailModel, EmailTemplateModel
 from app.models.link_model import LinkORM
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
@@ -14,6 +16,37 @@ from app.services.reactive_service import ReactiveService, ReactiveType,Disposab
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from time import perf_counter,time
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
+from app.utils.helper import uuid_v1_mc,UUID
+from email.utils import make_msgid as msid
+
+def  make_msgid():
+    configService:ConfigService = Get(ConfigService)
+    return msid()
+
+class EmailTracker:
+
+    def __init__(self,scheduler:SchedulerModel, email_id:Annotated[UUID,Depends(uuid_v1_mc)],message_id:Annotated[str,Depends(make_msgid)],track_email:bool=Depends(track_email)):
+        self.email_id = str(email_id)
+        self.message_id = message_id
+        self.is_track = track_email
+
+        self.configService = Get(ConfigService)
+        configService: ConfigService = Get(ConfigService)
+        content:EmailTemplateModel|CustomEmailModel = scheduler.content
+        emailMetaData=content.meta
+
+        if self.is_track:
+            emailMetaData.Disposition_Notification_To = configService.SMTP_EMAIL
+            emailMetaData.Return_Receipt_To = configService.SMTP_EMAIL
+            
+            emailMetaData.X_Email_ID = self.email_id
+
+        emailMetaData.Message_ID = self.message_id
+        
+    @property
+    def track_event_data(self)->dict:
+        ...
+
 
 class SubjectParams:
 
@@ -306,4 +339,3 @@ class KeepAliveQuery:
     def __repr__(self):
         subj_id = None if self.rx_subject == None else self.rx_subject.subject_id
         return f'KeepAliveQuery(timeout={self.timeout}, subject_id={subj_id}, request_id={self.x_request_id})'
-    

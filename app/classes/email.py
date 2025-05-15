@@ -8,6 +8,8 @@ from email.utils import formatdate
 from typing import List, Optional, Literal
 from app.definition._error import BaseError
 from app.utils.fileIO import getFilenameOnly
+from dataclasses import dataclass, field
+from typing import List, Optional, Literal, Union
 
 
 class NotSameDomainEmailError(BaseError):
@@ -16,31 +18,26 @@ class NotSameDomainEmailError(BaseError):
 class EmailInvalidFormatError(BaseError):
     ...
 
-
+@dataclass
 class EmailMetadata:
-    def __init__(
-        self,
-        Subject: str,
-        From: str,
-        To: str | List[str],
-        CC: Optional[str] = None,
-        Bcc: Optional[str] = None,
-        replyTo: Optional[str] = None,
-        Return_Path: Optional[str] = None,
-        Priority: Literal['1', '3', '5'] = '1',
-        Disposition_Notification_To:str = None,
-        Return_Receipt_To:str = None
-    ):
-        self.Subject = Subject
-        self.From = From
-        self.To:list[str] | str = To if isinstance(To, list) else [To]
-        self.CC:list[str] | str = CC
-        self.Bcc = Bcc
-        self.replyTo = replyTo
-        self.Return_Path = Return_Path
-        self.Priority = Priority
-        self.Disposition_Notification_To = Disposition_Notification_To
-        self.Return_Receipt_To = Return_Receipt_To
+    Subject: str
+    From: str
+    To: Union[str, List[str]]
+    CC: Optional[Union[str, List[str]]] = None
+    Bcc: Optional[str] = None
+    replyTo: Optional[str] = None
+    Return_Path: Optional[str] = None
+    Priority: Literal['1', '3', '5'] = '1'
+    Disposition_Notification_To: Optional[str] = None
+    Return_Receipt_To: Optional[str] = None
+    X_Email_ID: Optional[str] = None
+    Message_ID: Optional[str] = None
+
+    def __post_init__(self):
+        if isinstance(self.To, str):
+            self.To = [self.To]
+        if isinstance(self.CC, str):
+            self.CC = [self.CC]
 
     def __str__(self):
         return (
@@ -65,12 +62,14 @@ class EmailBuilder():
         self.multiple_dest(emailMetaData.To, "To")
         self.multiple_dest(emailMetaData.CC, "Cc",False)
         
-        self.id = make_msgid()
+        self.id = emailMetaData.Message_ID
         self.message['Message-ID'] = self.id
         self.message['Date'] = formatdate(localtime=True)
         self.message['Reply-To'] = emailMetaData.replyTo
         self.message['Return-Path'] = emailMetaData.Return_Path
         self.message['X-Priority'] = emailMetaData.Priority
+        if emailMetaData.X_Email_ID:
+            self.message['X_Email_ID'] = emailMetaData.X_Email_ID
 
         if emailMetaData.Disposition_Notification_To:
             self.message['Disposition-Notification-To'] = emailMetaData.Disposition_Notification_To

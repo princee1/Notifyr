@@ -1,4 +1,4 @@
-from typing import Any, List, Literal, Optional, Self
+from typing import Any, List, Literal, Optional, Self, TypedDict
 from pydantic import BaseModel, model_validator
 from enum import Enum
 from tortoise import fields, models
@@ -16,11 +16,15 @@ class EmailMetaModel(BaseModel):
     Priority: Literal['1', '3', '5'] = '1'
     Disposition_Notification_To:str|None = None
     Return_Receipt_To:str|None = None
+    Message_ID:str|None = None
+    X_Email_ID:str|None =None
 
     @model_validator(mode="after")
     def meta_validator(self)->Self:
         self.Disposition_Notification_To = None
         self.Return_Receipt_To = None
+        self.Message_ID = None
+        self.X_Email_ID = None
         return self
 
 
@@ -50,6 +54,22 @@ class EmailSpamDetectionModel(BaseModel):
         return self
 
 
+class EmailStatus(str, Enum):
+    SENT = 'SENT'
+    DELIVERED = 'DELIVERED'
+    SOFT_BOUNCE = 'SOFT-BOUNCE'
+    HARD_BOUNCE = 'HARD-BOUNCE'
+    MAILBOX_FULL = 'MAILBOX-FULL'
+    OPENED = 'OPENED'
+    LINK_CLICKED = 'LINK-CLICKED'
+    FAILED = 'FAILED'
+    BLOCKED = 'BLOCKED'
+    COMPLAINT = 'COMPLAINT'
+    DEFERRED = 'DEFERRED'
+    DELAYED = 'DELAYED'
+    REPLIED = 'REPLIED'
+
+
 class EmailTrackingORM(models.Model):
     email_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     message_id = fields.CharField(max_length=150, unique=True)
@@ -57,7 +77,7 @@ class EmailTrackingORM(models.Model):
     date_sent = fields.DatetimeField(auto_now_add=True)
     last_update = fields.DatetimeField(auto_now=True)
     expired_tracking_date = fields.DatetimeField(null=True)
-    email_current_status = fields.CharField(max_length=50, null=True)
+    email_current_status = fields.CharEnumField(EmailStatus, null=True)
     spam_label = fields.CharField(max_length=50, null=True)
     spam_detection_confidence = fields.FloatField(null=True)
 
@@ -74,16 +94,26 @@ class EmailTrackingORM(models.Model):
             "date_sent": self.date_sent.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
-            "email_current_status": self.email_current_status,
+            "email_current_status": self.email_current_status.value if self.email_current_status else None,
             "spam_label": self.spam_label,
             "spam_detection_confidence": self.spam_detection_confidence
         }
 
-class TrackingEventORM(models.Model):
+class TrackingEmailEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     email = fields.ForeignKeyField("models.EmailTrackingORM", related_name="events", on_delete=fields.CASCADE)
-    current_event = fields.CharField(max_length=50)
+    contact = fields.ForeignKeyField("models.ContactORM",'contact',on_delete=fields.NO_ACTION)
+    current_event = fields.CharEnumField(EmailStatus)
     date_event_received = fields.DatetimeField(auto_now_add=True)
+
+
+    class TrackingEventJSON(TypedDict):
+        event_id:str
+        email_id:str|None
+        contact_id:str|None
+        current_event:str|None
+        
+
 
     class Meta:
         schema = SCHEMA
@@ -93,8 +123,9 @@ class TrackingEventORM(models.Model):
     def to_json(self):
         return {
             "event_id": str(self.event_id),
-            "email_id": str(self.email_id),
-            "current_event": self.current_event,
+            "email_id": str(self.email.email_id),
+            "contact_id":str(self.contact.contact_id),
+            "current_event": self.current_event.value,
             "date_event_received": self.date_event_received.isoformat()
         }
 

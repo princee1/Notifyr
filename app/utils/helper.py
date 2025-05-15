@@ -13,7 +13,7 @@ import ast
 from enum import Enum
 import base64
 import urllib
-import uuid
+from uuid import UUID,uuid1
 import hashlib
 import socket
 
@@ -81,7 +81,7 @@ def stable_mac():
 
 def uuid_v1_mc():
     """Generate a UUIDv1 with a stable, modified MAC address."""
-    return uuid.uuid1(node=stable_mac())
+    return uuid1(node=stable_mac())
 
 
 ################################   ** Code Helper **      #################################
