@@ -443,6 +443,9 @@ class OffloadTaskService(Service):
         # TODO choose algorightm
         if algorithm == 'normal':
             ...
+        if algorithm == 'worker_focus':
+            return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
+            
         return await self._normal_offload(scheduler, ttd, x_request_id, as_async,index,callback, *args, **kwargs)
 
     async def _normal_offload(self, scheduler: SchedulerModel, ttd: float, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):

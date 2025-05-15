@@ -1,13 +1,15 @@
-from typing import Literal
+from typing import Annotated, Literal
 import aiohttp
 from app.classes.auth_permission import MustHave, Role
 from app.classes.template import HTMLTemplate
 from app.definition._service import ServiceStatus
+from app.depends.class_dep import Broker, EmailTracker
+from app.depends.funcs_dep import get_task
 from app.models.email_model import CustomEmailModel, EmailSpamDetectionModel, EmailTemplateModel
-from app.services.celery_service import TaskService, CeleryService
+from app.services.celery_service import TaskManager, TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
-from app.container import InjectInMethod
+from app.container import Get, InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailSenderService
 from fastapi import   Request, Response, status
@@ -15,6 +17,8 @@ from app.depends.dependencies import Depends, get_auth_permission, get_request_i
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import SchedulerModel
 from app.depends.variables import populate_response_with_request_id,track_email,email_verifier
+from app.utils.constant import StreamConstant
+from app.utils.helper import APIFilterInject
 
 
 class EmailTemplateSchedulerModel(SchedulerModel):
@@ -40,7 +44,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @InjectInMethod
     def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,bkgTaskService:TaskService):
-        super().__init__(dependencies=[Depends(populate_response_with_request_id)])
+        super().__init__()
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
@@ -67,44 +71,38 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'))
     @UsePipe(pipes.OffloadedTaskResponsePipe,before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
-    @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE)
-    async def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,x_request_id:str =Depends(get_request_id) ,authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
+    async def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         mail_content = scheduler.content
-
-        emailMetaData=scheduler.content.meta
-        emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
-        emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
 
         meta = mail_content.meta.model_dump(mode='python')
 
         template: HTMLTemplate = self.assetService.html[template]
         _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
+
+        if tracker.will_track:
+            email_tracking = tracker.track_event_data()
+            broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
         
-        # if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-            # if scheduler.task_type == TaskType.NOW.value:
-            #     return await self.taskService.add_task( scheduler.heaviness,x_request_id,0,None,self.emailService.sendTemplateEmail, data, meta, template.images )
-        return self.celeryService.trigger_task_from_scheduler(scheduler,None,data, meta, template.images)
+        taskManager.offload_task('worker_focus',scheduler,0,None,None,data, meta, template.images)
+        return taskManager.results
     
     @UseLimiter(limit_value='10000/minutes')
     @UsePipe(pipes.CeleryTaskPipe)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @UsePipe(pipes.OffloadedTaskResponsePipe,before=False)
-    @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE)
-    async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,x_request_id:str =Depends(get_request_id), authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
+    async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         customEmail_content = scheduler.content
         content = (customEmail_content.html_content, customEmail_content.text_content)
-
-        emailMetaData=scheduler.content.meta
-        emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
-        emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
     
         meta = customEmail_content.meta.model_dump()
+        if tracker.will_track:
+            email_tracking = tracker.track_event_data()
+            broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
 
-        #if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-        # if scheduler.task_type == TaskType.NOW.value:
-        #         return await self.taskService.add_task(scheduler.heaviness,x_request_id,0,None,self.emailService.sendCustomEmail, content,meta,customEmail_content.images, customEmail_content.attachments)
-        return self.celeryService.trigger_task_from_scheduler(scheduler,None,content,meta,customEmail_content.images, customEmail_content.attachments)
-
+        taskManager.offload_task('worker_focus',scheduler,0,None,None,content,meta,customEmail_content.images, customEmail_content.attachments)
+        return taskManager.results
 
 
     @UseRoles(options=[MustHave(Role.ADMIN)])

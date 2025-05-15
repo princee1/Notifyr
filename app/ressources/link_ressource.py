@@ -12,6 +12,7 @@ from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import GetLink
 from app.depends.class_dep import Broker, LinkArgs
 from app.depends.orm_cache import LinkORMCache
+from app.models.email_model import EmailStatus, TrackingEmailEventORM
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService
@@ -149,13 +150,17 @@ class LinkRessource(BaseHTTPRessource):
         sid_type,subject_id = link_args.subject_id
 
         saved_info = await self.linkService.parse_info(request,link.link_id,path,link_args)
+        message_id = link_args.server_scoped.get('message_id',None)
+        contact_id = link_args.server_scoped.get('contact_id',None)
 
         broker.publish(StreamConstant.LINKS_EVENT_STREAM,sid_type,subject_id,saved_info,)
         broker.stream(StreamConstant.LINKS_EVENT_STREAM,saved_info)
-
-        message_id = link_args.server_scoped.get('message_id',None)
-        #if message_id:
-
+        
+        if message_id:
+            email_event= TrackingEmailEventORM.TrackingEventJSON(contact_id=contact_id,email_id=message_id,event_id=uuid_v1_mc(),current_event=EmailStatus.LINK_CLICKED.value)
+            broker.publish(StreamConstant.EMAIL_EVENT_STREAM,'message',message_id,email_event)
+            broker.stream(StreamConstant.EMAIL_EVENT_STREAM,email_event,)
+        
         return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT,)
 
     @UseLimiter(limit_value='10000/min')
@@ -171,7 +176,7 @@ class LinkRessource(BaseHTTPRessource):
             redirect_url = link_args.create_link(None,path,('contact_id'),('cid'))
             return RedirectResponse(redirect_url,status.HTTP_308_PERMANENT_REDIRECT)
 
-        return ''
+        return None
 
     @UsePermission(JWTRouteHTTPPermission)
     @UseGuard(AccessLinkGuard)

@@ -18,6 +18,7 @@ from time import perf_counter,time
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
 from app.utils.helper import uuid_v1_mc,UUID
 from email.utils import make_msgid as msid
+from datetime import datetime, timedelta, timezone
 
 def  make_msgid():
     configService:ConfigService = Get(ConfigService)
@@ -28,24 +29,39 @@ class EmailTracker:
     def __init__(self,scheduler:SchedulerModel, email_id:Annotated[UUID,Depends(uuid_v1_mc)],message_id:Annotated[str,Depends(make_msgid)],track_email:bool=Depends(track_email)):
         self.email_id = str(email_id)
         self.message_id = message_id
-        self.is_track = track_email
-
-        self.configService = Get(ConfigService)
-        configService: ConfigService = Get(ConfigService)
-        content:EmailTemplateModel|CustomEmailModel = scheduler.content
-        emailMetaData=content.meta
-
-        if self.is_track:
-            emailMetaData.Disposition_Notification_To = configService.SMTP_EMAIL
-            emailMetaData.Return_Receipt_To = configService.SMTP_EMAIL
-            
-            emailMetaData.X_Email_ID = self.email_id
-
-        emailMetaData.Message_ID = self.message_id
+        self.will_track = track_email
         
-    @property
-    def track_event_data(self)->dict:
-        ...
+        self.configService = Get(ConfigService)
+
+        content:EmailTemplateModel|CustomEmailModel = scheduler.content
+        self.emailMetaData=content.meta
+
+        if self.will_track:
+            self.emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
+            self.emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
+            
+            self.emailMetaData.X_Email_ID = self.email_id
+
+        self.emailMetaData.Message_ID = self.message_id
+        
+    def track_event_data(self,spam:tuple[float,str]=(100,'no-spam'))->dict:
+        spam_confidence,spam_label = spam
+        # Convert datetime fields to timezone-aware ISO 8601 string representation
+        now = datetime.now(timezone.utc).isoformat()
+        expired_tracking_date = (now + timedelta(days=30)).isoformat()
+
+        # Create the EmailTrackingORM object
+        return {
+            "recipient": self.emailMetaData.To,
+            "email_id": self.email_id,
+            "message_id": self.message_id,
+            "spam_confidence": spam_confidence,
+            "spam_label": spam_label,
+            "date_sent": now,
+            "last_update": now,
+            "expired_tracking_date": expired_tracking_date,
+        }
+
 
 
 class SubjectParams:
