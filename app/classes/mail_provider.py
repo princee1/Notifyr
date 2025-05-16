@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import smtplib as smtp
 import imaplib as imap
 from enum import Enum
@@ -67,15 +68,34 @@ class IMAPConfig (EmailConnInterface, Enum):
 
     def setHostAddr(host: str) -> str | None:
         host = host.upper().strip()
-        if host in SMTPConfig._member_names_:
-            return SMTPConfig._member_map_[host].value
+        if host in IMAPConfig._member_names_:
+            return IMAPConfig._member_map_[host].value
         return None
 
-    def setConnFlag(mode: str): return mode.lower() == "ssl"
+    def setConnFlag(mode: str): return mode.lower() == "tls"
 
     def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower(
     ).strip() == "ssl" else IMAP_NORMAL_PORT
 
+
+class SearchFilter(Enum):
+    UNSEEN = "UNSEEN"
+    FROM = "FROM"
+    SUBJECT = "SUBJECT"
+    SINCE = "SINCE"
+
+
+@dataclass
+class IMAPMailboxes:
+    flags:list[str]
+    delimiters:str
+    name:str
+
+    def __repr__(self):
+        return self.name
+    
+    def __str__(self):
+        return self.__repr__()
 
 class MailAPI:
     ...

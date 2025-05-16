@@ -1,5 +1,6 @@
 
 import functools
+import re
 import smtplib as smtp
 import imaplib as imap
 import poplib as pop
@@ -11,7 +12,7 @@ from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
-from app.classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
+from app.classes.mail_provider import IMAPMailboxes, SMTPConfig, IMAPConfig, MailAPI
 from app.utils.tools import Time
 
 from app.utils.constant import EmailHostConstant
@@ -103,7 +104,9 @@ class BaseEmailService(_service.Service):
                 connector = server_type_ssl(self.hostAddr, self.hostPort)
             else:
                 connector = server_type(self.hostAddr, self.hostPort)
-            connector.set_debuglevel(self.configService.SMTP_EMAIL_LOG_LEVEL)
+           
+            if self.type_ == 'SMTP':
+                connector.set_debuglevel(self.configService.SMTP_EMAIL_LOG_LEVEL)
             return connector
         except (socket.gaierror, ConnectionRefusedError, TimeoutError) as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
@@ -242,11 +245,15 @@ class EmailSenderService(BaseEmailService):
 
 @_service.ServiceClass
 class EmailReaderService(BaseEmailService,IntervalInterface):
+
+    
     def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService) -> None:
         super().__init__(configService, loggerService)
         IntervalInterface.__init__(self,True,10)
         self.reactiveService = reactiveService
         self.redisService = redisService
+
+        self._mailboxes = None
 
         self.init()
 
@@ -259,17 +266,37 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 
+    def get_mailboxes(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+        if self._mailboxes == None:
+            status, mailboxes = connector.list()
+
+            self._mailboxes = {}
+            pattern = re.compile(r'\((.*?)\) "(.*?)" "(.*?)"')
+            for line in mailboxes:
+                match = pattern.match(line.decode())
+                if match:
+                    flags_str, delimiter, mailbox_name = match.groups()
+                    flags = flags_str.split()
+                    mailbox = IMAPMailboxes(flags,delimiter,mailbox_name)
+                    self._mailboxes[mailbox.name] = mailbox
+                    
     def authenticate(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+        
         try:
             if self.tlsConn:
                 context = ssl.create_default_context()
                 connector.starttls(context=context)
-
             if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.IMAP_PASS is not None:
                 status, data = connector.login(self.configService.IMAP_EMAIL, self.configService.IMAP_PASS)
+                if status != 'OK':
+                    raise Exception
+                
+                self.get_mailboxes(connector)
+    
+                return True
             else:
                 self.service_status = _service.ServiceStatus.NOT_AVAILABLE
-                return 
+                return False
                 access_token = self.mailOAuth.encode_token(self.configService.IMAP_EMAIL)
                 auth_code, auth_message = connector.authenticate('AUTH XOAUTH2', access_token)
                 if auth_code != 'OK':
@@ -288,8 +315,9 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
 
     @BaseEmailService.task_lifecycle
     def read_email(self,connector:imap.IMAP4|imap.IMAP4_SSL):
-        print(connector.list())
 
+        connector
+        
     def logout(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         try:
             connector.close()
@@ -302,6 +330,10 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
 
     def callback(self):
         self.read_email()
+    
+    @property
+    def mailboxes(self):
+        return self._mailboxes.keys()
         
 # @_service.ServiceClass
 class EmailAPIService(BaseEmailService):

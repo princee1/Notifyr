@@ -157,4 +157,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     def on_startup(self):
         super().on_startup()
         self.emailReaderService.start_interval()
-        
+    
+    def on_shutdown(self):
+        super().on_shutdown()
+        self.emailReaderService.stop_interval()
