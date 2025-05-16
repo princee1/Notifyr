@@ -11,7 +11,7 @@ from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
-from app.services.email_service import EmailSenderService
+from app.services.email_service import EmailReaderService, EmailSenderService
 from fastapi import   Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission, get_request_id
 from app.decorators import permissions, handlers,pipes,guards
@@ -35,6 +35,25 @@ DEFAULT_RESPONSE = {
         'message': 'email task received successfully'}
 }
 
+@APIFilterInject
+async def pipe_email_track(scheduler:CustomEmailSchedulerModel| EmailTemplateSchedulerModel,tracker:EmailTracker):
+    configService = Get(ConfigService)
+    content:EmailTemplateModel|CustomEmailModel = scheduler.content
+    emailMetaData=content.meta
+
+    if tracker.will_track:
+
+        tracker.recipient = emailMetaData.To
+        tracker.subject = emailMetaData.Subject
+
+        emailMetaData.Disposition_Notification_To = configService.SMTP_EMAIL
+        emailMetaData.Return_Receipt_To = configService.SMTP_EMAIL
+        
+        emailMetaData.X_Email_ID = tracker.email_id
+
+    emailMetaData.Message_ID = tracker.message_id
+    return {'scheduler':scheduler,'tracker':tracker}
+
 @UseRoles([Role.RELAY])
 @UseHandler(handlers.ServiceAvailabilityHandler,handlers.CeleryTaskHandler)
 @UsePermission(permissions.JWTRouteHTTPPermission)
@@ -43,13 +62,14 @@ DEFAULT_RESPONSE = {
 class EmailTemplateRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,bkgTaskService:TaskService):
+    def __init__(self,emailReaderService:EmailReaderService, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,taskService:TaskService):
         super().__init__()
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
         self.celeryService:CeleryService = celeryService
-        self.taskService: TaskService = bkgTaskService
+        self.taskService: TaskService = taskService
+        self.emailReaderService:EmailReaderService = emailReaderService
 
     
     @UseLimiter(limit_value="10/minutes")
@@ -68,7 +88,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission('html'))
     @UseHandler(handlers.TemplateHandler)
-    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'))
+    @UsePipe(pipe_email_track,pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'))
     @UsePipe(pipes.OffloadedTaskResponsePipe,before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
@@ -79,16 +99,16 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
         template: HTMLTemplate = self.assetService.html[template]
         _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
-
+    
         if tracker.will_track:
             email_tracking = tracker.track_event_data()
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
         
-        taskManager.offload_task('worker_focus',scheduler,0,None,None,data, meta, template.images)
+        await taskManager.offload_task('worker_focus',scheduler,0,None,None,data, meta, template.images)
         return taskManager.results
     
     @UseLimiter(limit_value='10000/minutes')
-    @UsePipe(pipes.CeleryTaskPipe)
+    @UsePipe(pipe_email_track,pipes.CeleryTaskPipe)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
     @UsePipe(pipes.OffloadedTaskResponsePipe,before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
@@ -101,7 +121,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             email_tracking = tracker.track_event_data()
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
 
-        taskManager.offload_task('worker_focus',scheduler,0,None,None,content,meta,customEmail_content.images, customEmail_content.attachments)
+        await taskManager.offload_task('worker_focus',scheduler,0,None,None,content,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
 
 
@@ -132,4 +152,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 if resp.status == 200:
                     return await resp.json()
             return {"error": f"Failed to verify email. Status code: {resp.status}"}
+        
+
+    def on_startup(self):
+        super().on_startup()
+        self.emailReaderService.start_interval()
         

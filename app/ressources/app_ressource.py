@@ -19,6 +19,7 @@ class AppRessource(BaseHTTPRessource):
         self.fileService = fileService
 
     def on_startup(self):
+        super().on_startup()
         self.app_route_html_content = self.fileService.readFile('app/static/index.html',FDFlag.READ)
         self.landing_page_html_content = self.fileService.readFile('app/static/landing-page/index.html',FDFlag.READ)
 

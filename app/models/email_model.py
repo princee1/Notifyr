@@ -1,7 +1,8 @@
-from typing import Any, List, Literal, Optional, Self, TypedDict
+from typing import Any, List, Literal, Optional, Self, TypeVar, TypedDict
 from pydantic import BaseModel, model_validator
 from enum import Enum
 from tortoise import fields, models
+from app.classes.celery import SchedulerModel
 from app.utils.helper import uuid_v1_mc
 
 SCHEMA = 'emails'
