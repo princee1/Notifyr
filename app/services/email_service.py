@@ -7,13 +7,13 @@ import socket
 from typing import Callable, Literal
 
 from app.interface.timers import IntervalInterface
+from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from app.classes.mail_provider import SMTPConfig, IMAPConfig, MailAPI
 from app.utils.tools import Time
 
-from .model_service import LLMModelService
 from app.utils.constant import EmailHostConstant
 from app.classes.email import EmailBuilder, EmailMetadata, NotSameDomainEmailError
 
@@ -240,12 +240,13 @@ class EmailSenderService(BaseEmailService):
 
         
 
-# @_service.ServiceClass
+@_service.ServiceClass
 class EmailReaderService(BaseEmailService,IntervalInterface):
-    def __init__(self, configService: ConfigService, loggerService: LoggerService, llmService: LLMModelService,reactiveService:ReactiveService) -> None:
+    def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService) -> None:
         super().__init__(configService, loggerService)
-        self.llmService=llmService
+        IntervalInterface.__init__(self,True,10)
         self.reactiveService = reactiveService
+        self.redisService = redisService
 
         self.init()
 
@@ -258,7 +259,7 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 
-    def authenticate(self,connector:imap.IMAP4):
+    def authenticate(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         try:
             if self.tlsConn:
                 context = ssl.create_default_context()
@@ -285,6 +286,23 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         except Exception as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
 
+    @BaseEmailService.task_lifecycle
+    def read_email(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+        print(connector.list())
+
+    def logout(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+        try:
+            connector.close()
+            connector.logout()
+        except:
+            ...
+    
+    def build(self):
+        ...
+
+    def callback(self):
+        self.read_email()
+        
 # @_service.ServiceClass
 class EmailAPIService(BaseEmailService):
     ...

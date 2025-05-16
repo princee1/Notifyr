@@ -15,3 +15,4 @@ from .contacts_service import *
 from .admin_service import AdminService
 from .reactive_service import ReactiveService
 from .link_service import LinkService
+from .model_service import LLMModelService

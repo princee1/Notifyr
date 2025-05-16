@@ -79,7 +79,7 @@ class IntervalInterface(Interface):
         if self._task is not None:
             self._task.cancel()
             self._task = None
-            self._interval = None
+            #self._interval = None
 
     def is_running(self) -> bool:
         """Check if the interval timer is running."""
