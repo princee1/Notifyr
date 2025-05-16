@@ -75,6 +75,7 @@ class EmailTrackingORM(models.Model):
     email_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     message_id = fields.CharField(max_length=150, unique=True)
     recipient = fields.CharField(max_length=100)
+    subject = fields.CharField(max_length=150)
     date_sent = fields.DatetimeField(auto_now_add=True)
     last_update = fields.DatetimeField(auto_now=True)
     expired_tracking_date = fields.DatetimeField(null=True)

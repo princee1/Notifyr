@@ -1,7 +1,7 @@
 import functools
 from typing import Callable
 from app.container import Get, InjectInFunction
-from app.models.email_model import EmailTrackingORM,TrackingEventORM
+from app.models.email_model import EmailTrackingORM,TrackingEmailEventORM
 from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
 from app.services.reactive_service import ReactiveService
 from app.services.celery_service import CeleryService
@@ -31,6 +31,7 @@ async def simple_bulk_creates(entries,orm:type[Model]):
         print(e)
         return list(invalid_entries)
 
+#############################################        ############################################
 
 async def Add_Link_Event(entries:list[tuple[str,dict]]):
     valid_entries = set()
@@ -42,6 +43,7 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
     analytics = {
     }
 
+    print('Link Event Callback:','Treating',len(entries), 'entries')
     for ids,val in entries:
         try:
             empty_str_to_none(val)
@@ -82,13 +84,9 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
     for key,val in event_count.items():
         link_visit_input.append((key,val))
 
-    
     try:
-        #print(analytics_inputs)
-        #print(event_count)
         async with in_transaction():
             await LinkEventORM.bulk_create(objs)
-        #async with in_transaction():
             await bulk_upsert_analytics(analytics_inputs)
             await bulk_upsert_links_vc(link_visit_input)
         
@@ -98,6 +96,7 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
         return list(invalid_entries)
     
 async def Add_Email_Tracking(entries:list[str,dict]):
+    print(f'Treating: {len(entries)} entries for Email Tracking Stream')
     async with in_transaction():
         return await simple_bulk_creates(entries,EmailTrackingORM)
     
@@ -109,6 +108,7 @@ async def Add_Link_Session(entries:list[str,dict]):
     print(entries)
     return entries.keys()
 
+#############################################        ############################################
 
 Callbacks_Stream = {
     StreamConstant.EMAIL_EVENT_STREAM:Add_Email_Event,

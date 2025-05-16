@@ -41,7 +41,6 @@ class EmailTracker:
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
 
         # Create the EmailTrackingORM object
-        print(self.subject)
         return {
             "recipient": self.recipient,
             "subject":self.subject,
