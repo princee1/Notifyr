@@ -230,6 +230,8 @@ class ConfigService(_service.Service):
 
         self.CHAT_EXPIRATION = ConfigService.parseToInt(
             self.getenv("CHAT_EXPIRATION"), 3600)
+    
+        self.HOSTNAME = self.getenv('Domain',socket.getfqdn())
 
     def verify(self):
         if self.API_EXPIRATION < self.AUTH_EXPIRATION:

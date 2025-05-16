@@ -9,6 +9,7 @@ from app.models.link_model import LinkORM
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.container import Get
+from app.utils.tools import Time
 from .variables import *
 from app.services.link_service import LinkService
 from app.services.logger_service import LoggerService
@@ -19,11 +20,13 @@ from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDat
 from app.utils.helper import uuid_v1_mc,UUID
 from email.utils import make_msgid as msid
 from datetime import datetime, timedelta, timezone
+import random
 
 def  make_msgid():
     configService:ConfigService = Get(ConfigService)
-    return msid()
-
+    timeval = int(time() * 1000000)
+    randval = random.getrandbits(64)
+    return f"<{timeval}.{randval}@{configService.HOSTNAME}>"
 
 class EmailTracker:
 
