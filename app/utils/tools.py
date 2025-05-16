@@ -1,7 +1,9 @@
 from functools import wraps
-from time import perf_counter
+from time import perf_counter,time,time_ns
 from typing import Callable
 from cachetools import LRUCache
+import asyncio
+
 
 
 def hash_args(args):
@@ -30,13 +32,21 @@ def Time(func: Callable):
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        start_time = perf_counter()
+        start_time = time()
         result = func(*args, **kwargs)
-        end_time = perf_counter()
+        end_time = time()
         print(f'Function Object: {str(func)}\nTime: {end_time-start_time} sec')
         return result
 
-    return wrapper
+
+    @wraps(func)
+    async def wrapper_async (*args, **kwargs):
+        start_time = time()
+        result = await func(*args, **kwargs)
+        end_time = time()
+        print(f'Function Object: {str(func)}\nTime: {end_time-start_time} sec')
+        return result
+    return wrapper_async if asyncio.iscoroutinefunction(func) else wrapper
 
 def Cache(maxsize:float=100):
     

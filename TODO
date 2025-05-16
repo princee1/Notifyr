@@ -23,3 +23,4 @@
 21. Each notify instance will have a persistance on their subject
 22. Add simple txt template message for email
 23. Verify domain using rsa encryption
+24. Create an MCP server myb?
