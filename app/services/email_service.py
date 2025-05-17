@@ -5,7 +5,7 @@ import smtplib as smtp
 import imaplib as imap
 import poplib as pop
 import socket
-from typing import Callable, Literal
+from typing import Callable, Literal, Self
 
 from app.interface.timers import IntervalInterface
 from app.services.database_service import RedisService
@@ -23,7 +23,12 @@ from app.definition import _service
 from .config_service import ConfigService
 import ssl
 
+from app.models.email_model import EmailTrackingORM,TrackingEmailEventORM
 from app.utils.validation import email_validator
+
+from app.utils.constant import StreamConstant
+from email.header import decode_header
+from email import message_from_bytes
 
 @_service.AbstractServiceClass
 class BaseEmailService(_service.Service):
@@ -241,11 +246,24 @@ class EmailSenderService(BaseEmailService):
         
         return connector.verify(email)
 
-        
-
+     
 @_service.ServiceClass
 class EmailReaderService(BaseEmailService,IntervalInterface):
 
+    @staticmethod
+    def select_inbox(func:Callable):
+
+        @functools.wraps(func)
+        def wrapper(self:Self,inbox:str,*args,**kwargs):
+            if inbox not in self.mailboxes:
+                #raise KeyError('Mail box not found')
+                return
+            self._current_mailbox = inbox
+            connector:imap.IMAP4 | imap.IMAP4_SSL = kwargs['connector']
+            connector.select(inbox)
+            return func(self,*args,**kwargs)
+
+        return wrapper
     
     def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService) -> None:
         super().__init__(configService, loggerService)
@@ -254,6 +272,7 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         self.redisService = redisService
 
         self._mailboxes = None
+        self._current_mailbox = None
 
         self.init()
 
@@ -312,11 +331,35 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
         except Exception as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+    
+    def read_email(self,message_ids,connector:imap.IMAP4|imap.IMAP4_SSL):
+        for num in message_ids:  # fetch last 5 emails
+            
+            status, data = connector.fetch(num, "(RFC822)")
+            raw_email = data[0][1]
 
-    @BaseEmailService.task_lifecycle
-    def read_email(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+            # Step 7: Parse the raw email
+            msg = message_from_bytes(raw_email)
+            
+            subject, encoding = decode_header(msg["Subject"])[0]
+            if isinstance(subject, bytes):
+                subject = subject.decode(encoding or "utf-8")
+            
+            from_ = msg.get("From")
+            print(f"Subject: {subject}")
+            print(f"From: {from_}")
 
-        connector
+            # Extract email body
+            if msg.is_multipart():
+                for part in msg.walk():
+                    content_type = part.get_content_type()
+                    if content_type == "text/plain":
+                        body = part.get_payload(decode=True).decode()
+                        print("Body:", body[:100])
+                        break
+            else:
+                body = msg.get_payload(decode=True).decode()
+                print("Body:", body[:100])
         
     def logout(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         try:
@@ -329,11 +372,20 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         ...
 
     def callback(self):
-        self.read_email()
-    
+        self.search_email('INBOX','ALL')
+
     @property
     def mailboxes(self):
         return self._mailboxes.keys()
+    
+    @BaseEmailService.task_lifecycle
+    @select_inbox
+    def search_email(self,command:str,connector:imap.IMAP4|imap.IMAP4_SSL=None):
+        status, message_numbers = connector.search(None, command)  # or "UNSEEN", "FROM someone@example.com", etc.
+        if status != 'OK':
+            return 
+        
+        return
         
 # @_service.ServiceClass
 class EmailAPIService(BaseEmailService):

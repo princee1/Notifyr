@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import smtplib as smtp
 import imaplib as imap
 from enum import Enum
-from typing import Literal
+from typing import Callable, Literal
 from .mail_oauth_access import GoogleFlowType,MailOAuthFactory
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -78,11 +78,12 @@ class IMAPConfig (EmailConnInterface, Enum):
     ).strip() == "ssl" else IMAP_NORMAL_PORT
 
 
-class SearchFilter(Enum):
-    UNSEEN = "UNSEEN"
-    FROM = "FROM"
-    SUBJECT = "SUBJECT"
-    SINCE = "SINCE"
+class SearchFilter(Callable[[str|None],str],Enum):
+    UNSEEN = lambda:"UNSEEN"
+    FROM = lambda f:f"FROM {f}"
+    SUBJECT = lambda s:f"SUBJECT {s}"
+    SINCE = lambda d:f"SINCE {d}"
+    ALL= lambda:'ALL'
 
 
 @dataclass
@@ -96,6 +97,8 @@ class IMAPMailboxes:
     
     def __str__(self):
         return self.__repr__()
+    
+    
 
 class MailAPI:
     ...
