@@ -86,9 +86,3 @@ class GitCloneRepoService(BaseFileRetrieverService):
         return super().destroy()
     pass
 
-@ServiceClass
-class AmazonS3BucketService(BaseFileRetrieverService):
-    
-    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__(configService,fileService)
-
