@@ -143,3 +143,10 @@ class FutureEmailBuilder(EmailBuilder):
     def __init__(self, attachments: List[tuple[str, str]], images: List[tuple[str, str]], content: tuple[str, str], emailMetaData: EmailMetadata) -> None:
         super().__init__(attachments, images, content, emailMetaData)
     pass
+
+
+#######################################################                        #################################
+
+
+class EmailReader:
+    ...

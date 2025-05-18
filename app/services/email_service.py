@@ -280,14 +280,15 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             if status != 'OK':
                 raise imap.IMAP4.error(f"Failed to rename mailbox {self.name} to {new_name}")
             self.name = new_name
+            return response
 
         @BaseEmailService.task_lifecycle
         def delete(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Delete the mailbox."""
-
             status, response = connector.delete(self.name)
             if status != 'OK':
                 raise imap.IMAP4.error(f"Failed to delete mailbox {self.name}")
+            return response
 
         @BaseEmailService.task_lifecycle
         def create_subfolder(self, subfolder_name: str,connector: imap.IMAP4 | imap.IMAP4_SSL):
@@ -296,9 +297,12 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             status, response = connector.create(full_name)
             if status != 'OK':
                 raise imap.IMAP4.error(f"Failed to create subfolder {subfolder_name} under {self.name}")
-            return full_name
-                
-    
+            return full_name,response
+
+        @BaseEmailService.task_lifecycle
+        def status(self,connector: imap.IMAP4 | imap.IMAP4_SSL):
+            ...
+
     @staticmethod
     def select_inbox(func:Callable):
 
@@ -338,19 +342,21 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 
-    def get_mailboxes(self,connector:imap.IMAP4|imap.IMAP4_SSL):
-        if self._mailboxes == None:
-            status, mailboxes = connector.list()
-            self._mailboxes = {}
-            pattern = re.compile(r'\((.*?)\) "(.*?)" "(.*?)"')
-            for line in mailboxes:
-                match = pattern.match(line.decode())
-                if match:
-                    flags_str, delimiter, mailbox_name = match.groups()
-                    flags = flags_str.split()
-                    
-                    mailbox = self.IMAPMailboxes(flags,delimiter,mailbox_name)
-                    self._mailboxes[mailbox.name] = mailbox
+    def update_mailboxes(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+        """
+            Update the mailboxes lists at each lifecycle
+        """
+        status, mailboxes = connector.list()
+        self._mailboxes = {}
+        pattern = re.compile(r'\((.*?)\) "(.*?)" "(.*?)"')
+        for line in mailboxes:
+            match = pattern.match(line.decode())
+            if match:
+                flags_str, delimiter, mailbox_name = match.groups()
+                flags = flags_str.split()
+                
+                mailbox = self.IMAPMailboxes(flags,delimiter,mailbox_name)
+                self._mailboxes[mailbox.name] = mailbox
                     
     def authenticate(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         
@@ -363,7 +369,7 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
                 if status != 'OK':
                     raise Exception
                 
-                self.get_mailboxes(connector)
+                self.update_mailboxes(connector)
     
                 return True
             else:
@@ -427,10 +433,6 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
     def callback(self):
         self.search_email('INBOX','ALL')
 
-    @property
-    def mailboxes(self):
-        return self._mailboxes.keys()
-    
     def search_email(self,command:str,connector:imap.IMAP4|imap.IMAP4_SSL=None):
         status, message_numbers = connector.search(None, command)  # or "UNSEEN", "FROM someone@example.com", etc.
         if status != 'OK':
@@ -443,12 +445,30 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         if hard:
             return connector.expunge() 
         return 
+ 
+    def mark_as_un_seen(self,email_id:str,connector:imap.IMAP4|imap.IMAP4_SSL,seen=True):
+        flag = '+' if seen else '-'
+        status,result = connector.uid('STORE', email_id, f'{flag}FLAGS', '(\\Seen)')
+        if status == 'OK':
+            return result
+        return result
 
+    def copy_email(self,email_id:str,target_mailbox:str,connector:imap.IMAP4|imap.IMAP4_SSL,hard_delete=False):
+        if target_mailbox not in self.mailboxes:
+            raise imap.IMAP4.error('Target mailboxes does not exists')
+        
+        if connector.copy(email_id, target_mailbox)[0] != 'OK':
+            return
+        return self.delete_email(email_id,connector,hard_delete)
+      
     @BaseEmailService.task_lifecycle
     @select_inbox
     def _temp_entry_point(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         ...
-
+  
+    @property
+    def mailboxes(self):
+        return self._mailboxes.keys()
     
 # @_service.ServiceClass
 class EmailAPIService(BaseEmailService):

@@ -75,9 +75,9 @@ class IMAPConfig (EmailConnInterface, Enum):
 
 class SearchFilter(Enum):
     UNSEEN = lambda:"UNSEEN"
-    FROM = lambda f:f"FROM {f}"
-    SUBJECT = lambda s:f"SUBJECT {s}"
-    SINCE = lambda d:f"SINCE {d}"
+    FROM = lambda f:("FROM",f)
+    SUBJECT = lambda s:("SUBJECT",s)
+    SINCE = lambda d:("SINCE",d)
     ALL= lambda:'ALL'
 
 class MailAPI:
