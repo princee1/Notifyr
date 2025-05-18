@@ -67,7 +67,7 @@ class ContactORM(Model):
     action_code = fields.TextField(null=True)
     status = fields.CharEnumField(max_length=20,enum_type=Status,default=Status.Active)
     lang = fields.CharEnumField(max_length=20,enum_type=Lang, default=Lang.en)
-    created_at = fields.DatetimeField(auto_now=True,use_tz=True)
+    created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
 
     def __str__(self):

@@ -1,7 +1,7 @@
 
 from typing import Callable,get_args
 
-from fastapi import Request
+from fastapi import Request, Response
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
 from app.services.celery_service import TaskService
@@ -17,7 +17,7 @@ verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_tok
 
 parse_to_phone_format: Callable = GetDependsFunc(TwilioService, 'parse_to_phone_format')
 
-populate_response_with_request_id: Callable = GetDependsFunc(TaskService,'populate_response_with_request_id')
+populate_response_with_request_id: Callable[[Request,Response],None] = GetDependsFunc(TaskService,'populate_response_with_request_id')
 
 # ----------------------------------------------                                    ---------------------------------- #
 
