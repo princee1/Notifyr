@@ -138,7 +138,7 @@ class ConfigService(_service.Service):
 
         self.MODE = MODE.toMode(self.getenv('MODE'))
         self.LOG_LEVEL = ConfigService.parseToInt(self.getenv("LOG_LEVEL"), 2)
-        self.HTTP_MODE = self.getenv("HTTP_MODE")
+        self.HTTP_MODE = self.getenv("HTTP_MODE",'HTTP')
         self.HTTPS_CERTIFICATE = self.getenv("HTTPS_CERTIFICATE", 'cert.pem')
         self.HTTPS_KEY = self.getenv("HTTPS_KEY", 'key.pem')
 

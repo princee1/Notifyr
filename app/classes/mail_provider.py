@@ -19,15 +19,12 @@ IMAP_SSL_TLS_PORT = 993
 
 ConnMode = Literal['tls', 'ssl', 'normal']
 
-
-
 class EmailConnInterface():
     def setHostPort(connMode: str): pass
 
     def setConnFlag(mode: str): pass
 
     def setHostAddr(host: str): pass
-
 
 class SMTPConfig(EmailConnInterface, Enum):
 
@@ -58,7 +55,6 @@ class SMTPConfig(EmailConnInterface, Enum):
             return SMTPConfig._member_map_[host].value
         return host
 
-
 class IMAPConfig (EmailConnInterface, Enum):
     """The IMAPHost class is an enumeration of the IMAP host names for the two email providers that I use
     """
@@ -77,28 +73,12 @@ class IMAPConfig (EmailConnInterface, Enum):
     def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower(
     ).strip() == "ssl" else IMAP_NORMAL_PORT
 
-
-class SearchFilter(Callable[[str|None],str],Enum):
+class SearchFilter(Enum):
     UNSEEN = lambda:"UNSEEN"
     FROM = lambda f:f"FROM {f}"
     SUBJECT = lambda s:f"SUBJECT {s}"
     SINCE = lambda d:f"SINCE {d}"
     ALL= lambda:'ALL'
-
-
-@dataclass
-class IMAPMailboxes:
-    flags:list[str]
-    delimiters:str
-    name:str
-
-    def __repr__(self):
-        return self.name
-    
-    def __str__(self):
-        return self.__repr__()
-    
-    
 
 class MailAPI:
     ...

@@ -1,4 +1,5 @@
 
+from dataclasses import dataclass
 import functools
 import re
 import smtplib as smtp
@@ -12,7 +13,7 @@ from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
-from app.classes.mail_provider import IMAPMailboxes, SMTPConfig, IMAPConfig, MailAPI
+from app.classes.mail_provider import  SMTPConfig, IMAPConfig, MailAPI
 from app.utils.tools import Time
 
 from app.utils.constant import EmailHostConstant
@@ -49,9 +50,13 @@ class BaseEmailService(_service.Service):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             self: BaseEmailService = args[0]
+            if not isinstance(self,BaseEmailService):
+                self = self.__class__.service
+
             connector = self.connect()
             if connector == None:
                 return 
+            
             if not self.authenticate(connector):
                 return
             kwargs['connector'] = connector
@@ -246,18 +251,65 @@ class EmailSenderService(BaseEmailService):
         
         return connector.verify(email)
 
-     
+
 @_service.ServiceClass
 class EmailReaderService(BaseEmailService,IntervalInterface):
 
+    service:Self # Class Singleton
+    @dataclass
+    class IMAPMailboxes:
+        flags: list[str]
+        delimiters: str
+        name: str
+
+        def __repr__(self):
+            return f"IMAPMailboxes(flags={self.flags}, delimiters={self.delimiters}, name={self.name})"
+
+        def __str__(self):
+            return self.__repr__()
+
+        @property
+        def no_select(self)->bool:
+            return "\\Noselect" in self.flags
+
+            
+        @BaseEmailService.task_lifecycle
+        def rename(self, new_name: str, connector: imap.IMAP4 | imap.IMAP4_SSL):
+            """Rename the mailbox."""
+            status, response = connector.rename(self.name, new_name)
+            if status != 'OK':
+                raise imap.IMAP4.error(f"Failed to rename mailbox {self.name} to {new_name}")
+            self.name = new_name
+
+        @BaseEmailService.task_lifecycle
+        def delete(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
+            """Delete the mailbox."""
+
+            status, response = connector.delete(self.name)
+            if status != 'OK':
+                raise imap.IMAP4.error(f"Failed to delete mailbox {self.name}")
+
+        @BaseEmailService.task_lifecycle
+        def create_subfolder(self, subfolder_name: str,connector: imap.IMAP4 | imap.IMAP4_SSL):
+            """Create a subfolder under the current mailbox."""
+            full_name = f"{self.name}/{subfolder_name}"
+            status, response = connector.create(full_name)
+            if status != 'OK':
+                raise imap.IMAP4.error(f"Failed to create subfolder {subfolder_name} under {self.name}")
+            return full_name
+                
+    
     @staticmethod
     def select_inbox(func:Callable):
 
         @functools.wraps(func)
         def wrapper(self:Self,inbox:str,*args,**kwargs):
             if inbox not in self.mailboxes:
-                #raise KeyError('Mail box not found')
-                return
+                raise KeyError('Mail box not found')
+            
+            if self._mailboxes[inbox].no_select:
+                raise imap.IMAP4.error(f'This inbox cannot be selected')
+                        
             self._current_mailbox = inbox
             connector:imap.IMAP4 | imap.IMAP4_SSL = kwargs['connector']
             connector.select(inbox)
@@ -271,10 +323,11 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         self.reactiveService = reactiveService
         self.redisService = redisService
 
-        self._mailboxes = None
-        self._current_mailbox = None
+        self._mailboxes:dict[str,EmailReaderService.IMAPMailboxes] = {}
+        self._current_mailbox:str = None
 
         self.init()
+        EmailReaderService.service = self
 
     def init(self):
         self.type_ = 'IMAP'
@@ -288,7 +341,6 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
     def get_mailboxes(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         if self._mailboxes == None:
             status, mailboxes = connector.list()
-
             self._mailboxes = {}
             pattern = re.compile(r'\((.*?)\) "(.*?)" "(.*?)"')
             for line in mailboxes:
@@ -296,7 +348,8 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
                 if match:
                     flags_str, delimiter, mailbox_name = match.groups()
                     flags = flags_str.split()
-                    mailbox = IMAPMailboxes(flags,delimiter,mailbox_name)
+                    
+                    mailbox = self.IMAPMailboxes(flags,delimiter,mailbox_name)
                     self._mailboxes[mailbox.name] = mailbox
                     
     def authenticate(self,connector:imap.IMAP4|imap.IMAP4_SSL):
@@ -378,15 +431,25 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
     def mailboxes(self):
         return self._mailboxes.keys()
     
-    @BaseEmailService.task_lifecycle
-    @select_inbox
     def search_email(self,command:str,connector:imap.IMAP4|imap.IMAP4_SSL=None):
         status, message_numbers = connector.search(None, command)  # or "UNSEEN", "FROM someone@example.com", etc.
         if status != 'OK':
             return 
         
         return
-        
+
+    def delete_email(self,message_id:str,connector:imap.IMAP4|imap.IMAP4_SSL,hard=False):
+        connector.store(message_id, '+FLAGS', '\\Deleted')
+        if hard:
+            return connector.expunge() 
+        return 
+
+    @BaseEmailService.task_lifecycle
+    @select_inbox
+    def _temp_entry_point(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+        ...
+
+    
 # @_service.ServiceClass
 class EmailAPIService(BaseEmailService):
     ...
