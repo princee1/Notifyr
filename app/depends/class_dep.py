@@ -30,7 +30,7 @@ def  make_msgid():
 
 class EmailTracker:
 
-    def __init__(self, email_id:Annotated[UUID,Depends(uuid_v1_mc)],message_id:Annotated[str,Depends(make_msgid)],track_email:bool=Depends(track_email)):
+    def __init__(self, email_id:Annotated[UUID,Depends(uuid_v1_mc)],message_id:Annotated[str,Depends(make_msgid)],track_email:bool=Depends(track)):
         self.email_id = str(email_id)
         self.message_id = message_id
         self.will_track = track_email

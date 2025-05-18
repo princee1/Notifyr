@@ -2,7 +2,6 @@ from typing import Annotated, Literal
 import aiohttp
 from app.classes.auth_permission import MustHave, Role
 from app.classes.template import HTMLTemplate
-from app.definition._service import ServiceStatus
 from app.depends.class_dep import Broker, EmailTracker
 from app.depends.funcs_dep import get_task
 from app.models.email_model import CustomEmailModel, EmailSpamDetectionModel, EmailTemplateModel
@@ -13,10 +12,10 @@ from app.container import Get, InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailReaderService, EmailSenderService
 from fastapi import   Request, Response, status
-from app.depends.dependencies import Depends, get_auth_permission, get_request_id
+from app.depends.dependencies import Depends, get_auth_permission
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import SchedulerModel
-from app.depends.variables import populate_response_with_request_id,track_email,email_verifier
+from app.depends.variables import populate_response_with_request_id,email_verifier
 from app.utils.constant import StreamConstant
 from app.utils.helper import APIFilterInject
 

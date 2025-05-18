@@ -46,7 +46,7 @@ verify_otp:Callable[[Request],bool]=get_query_params('verify_otp','false',True)
 
 keep_connection:Callable[[Request],bool]=get_query_params('keep_connection','false',True)
 
-track_email:Callable[[Request],bool] = get_query_params('track','false',True)
+track:Callable[[Request],bool] = get_query_params('track','false',True)
 
 # ----------------------------------------------                                    ---------------------------------- #
 
