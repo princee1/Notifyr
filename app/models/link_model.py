@@ -21,9 +21,13 @@ class LinkORM(models.Model):
     total_session_count = fields.IntField(default=0,null=True)
     # ownership_public_key = fields.TextField()
     # ownership_private_key = fields.TextField()
-    ownership_signature = fields.CharField(max_length=150, null=True)
+    ownership_signature = fields.TextField()
+    ownership_nonce = fields.CharField(max_length=50, unique=True)
     verified = fields.BooleanField(default=False)
     archived = fields.BooleanField(default=False)
+    created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
+    updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
+
 
     class Meta:
         schema = SCHEMA

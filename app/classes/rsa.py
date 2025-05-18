@@ -42,7 +42,7 @@ class RSA:
         self.private_key, self.public_key = self.generate_keypair_and_encrypt()
     
     @overload
-    def __init__(self,public_key,private_key):
+    def __init__(self,public_key=None,private_key=None):
         if public_key:
             self.public_key = self.load_public_key_from_bytes(public_key)
 

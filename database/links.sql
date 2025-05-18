@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS Link (
     link_name VARCHAR(100) UNIQUE,
     link_short_id VARCHAR(7) UNIQUE,
     link_url VARCHAR(150) UNIQUE,
+    create_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     expiration TIMESTAMPTZ DEFAULT NULL,
     expiration_verification TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '1 week'),
     total_visit_count INT DEFAULT 0,
@@ -34,7 +36,8 @@ CREATE TABLE IF NOT EXISTS Link (
     public BOOLEAN DEFAULT TRUE,
     -- ownership_public_key TEXT DEFAULT NULL,
     -- ownership_private_key TEXT DEFAULT NULL,
-    ownership_signature VARCHAR(150) DEFAULT NULL,
+    ownership_signature TEXT DEFAULT NULL,
+    ownership_nonce VARCHAR(50) DEFAULT NULL,
     verified BOOLEAN DEFAULT FALSE,
     archived BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (link_id)
