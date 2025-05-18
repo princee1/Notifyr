@@ -108,7 +108,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.RELAY])
     @UsePermission(JWTAssetPermission('phone'))
     @UseHandler(TemplateHandler, CeleryTaskHandler)
-    @UsePipe(OffloadedTaskResponsePipe, before=False)
+    @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @UsePipe(TemplateParamsPipe('phone', 'xml'), CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
@@ -124,7 +124,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']))
     @UseHandler(CeleryTaskHandler)
-    @UsePipe(OffloadedTaskResponsePipe, before=False)
+    @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @BaseHTTPRessource.HTTPRoute('/twiml/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)], mount=False)
     async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel, request: Request, response: Response, taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         details = scheduler.content.model_dump(exclude={'url'})
@@ -137,7 +137,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']))
     @UseHandler(CeleryTaskHandler)
-    @UsePipe(OffloadedTaskResponsePipe, before=False)
+    @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @BaseHTTPRessource.HTTPRoute('/custom/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
     async def voice_custom(self, scheduler: CallCustomSchedulerModel, request: Request, response: Response, taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         details = scheduler.content.model_dump(

@@ -227,8 +227,9 @@ class ContactStatusPipe(Pipe):
 
 class OffloadedTaskResponsePipe(Pipe):
 
-    def __init__(self, before):
-        super().__init__(before) 
+    def __init__(self,copy_res=False):
+        super().__init__(False) 
+        self.copy_res= copy_res
         
     def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,taskManager:TaskManager=None,as_async:bool=None):
         if taskManager == None and as_async == None:
@@ -246,8 +247,9 @@ class OffloadedTaskResponsePipe(Pipe):
 
         if not isinstance(result,Response):
             result = JSONResponse(content=result)
-
-        response = copy_response(result,response)
+        
+        if self.copy_res:
+            response = copy_response(result,response)
 
         if (scheduler and scheduler.task_type != TaskType.NOW)  or (otpModel and as_async ) or  (as_async):
             response.status_code = 201
