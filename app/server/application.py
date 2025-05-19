@@ -36,6 +36,8 @@ AppParameterKey = Literal['title', 'summary', 'description',
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
+BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
+
 
 @dataclass
 class AppParameter:
@@ -107,68 +109,23 @@ class Application(EventInterface):
     def add_exception_handlers(self):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-        self.add_builtin_exception_handler()
+        def wrapper(exception:type[Exception]):
+
+            @self.app.exception_handler(exception)
+            async def callback(request,e:type[Exception]):
+                print(e.__class__,e.args)
+                return JSONResponse({'message': 'An unexpected error occurred!'}, status_code=500)
+
+
+        for e in BUILTIN_ERROR:
+            wrapper(e)
+
 
         @self.app.exception_handler(ServerFileError)
         async def serve_file_error(request:Request,e:ServerFileError):
             #return StaticFiles(e.filename,html=True)
             #return HTMLResponse()
             return FileResponse(e.filename,e.status_code,e.headers)# TODO change to html_response
-
-    def add_builtin_exception_handler(self,):
-        @self.app.exception_handler(TypeError)
-        async def type_error(request, e:TypeError):
-            print(e)
-            print(e.__cause__)
-            traceback.print_exc()  
-
-            return JSONResponse({'message': 'Type Error'}, status_code=500)
-
-        @self.app.exception_handler(AttributeError)
-        async def attribute_error(request, e):
-            print(e)
-            traceback.print_exc()  
-
-
-            return JSONResponse({'message': 'Attribute Error'}, status_code=500)
-
-        @self.app.exception_handler(OSError)
-        async def os_error(request, e):
-            return JSONResponse({'message': 'OS Error'}, status_code=500)
-
-        @self.app.exception_handler(KeyError)
-        async def key_error(request, e):
-            print(e)
-            traceback.print_exc()  
-
-            return JSONResponse({'message': 'Error while retrieving an important key '}, status_code=status.HTTP_400_BAD_REQUEST)
-
-        @self.app.exception_handler(NotImplementedError)
-        async def not_implemented_error(request, e):
-            print(e)
-            return JSONResponse({'message': 'The service requested is not available in this version'}, status_code=504)
-
-        @self.app.exception_handler(MemoryError)
-        async def memory_error(request, e):
-            return JSONResponse({'message': 'Memory Error'}, status_code=500)
-
-        @self.app.exception_handler(NameError)
-        async def name_error(request, e):
-            print(e)
-            print(e.__cause__)
-
-            return JSONResponse({'message': 'Name Error'}, status_code=500)
-
-        @self.app.exception_handler(TimeoutError)
-        async def timeout_error(request, e):
-            return JSONResponse({'message': 'Timeout Error'}, status_code=500)
-  
-        @self.app.exception_handler(Exception)
-        async def base_exception(request, e:Exception):
-            print(e)
-            print(e.__class__)
-            traceback.print_exc()  
-            return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={'message': 'An unexpected error occurred!'})
 
 
     def set_httpMode(self):
