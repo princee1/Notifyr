@@ -1,5 +1,6 @@
 from datetime import datetime,timedelta
 from typing import Self
+from urllib.parse import urlparse
 from tortoise import Tortoise, fields, models
 from app.utils.helper import uuid_v1_mc,generateId
 from tortoise.contrib.pydantic import pydantic_model_creator
@@ -22,7 +23,7 @@ class LinkORM(models.Model):
     # ownership_public_key = fields.TextField()
     # ownership_private_key = fields.TextField()
     ownership_signature = fields.TextField()
-    ownership_nonce = fields.CharField(max_length=50, unique=True)
+    ownership_nonce = fields.CharField(max_length=50, null=True)
     verified = fields.BooleanField(default=False)
     archived = fields.BooleanField(default=False)
     created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
@@ -164,6 +165,8 @@ class LinkModel(LinkModelBase):
     def check_url(cls,link_url:str):
         if not url_validator(link_url):
             raise ValueError('url domain format not valid')
+        # if urlparse(link_url).scheme != 'https':
+        #     raise ValueError('domain must be hosted')
         return link_url
     
 

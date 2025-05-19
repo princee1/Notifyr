@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS Link (
     link_name VARCHAR(100) UNIQUE,
     link_short_id VARCHAR(7) UNIQUE,
     link_url VARCHAR(150) UNIQUE,
-    create_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     expiration TIMESTAMPTZ DEFAULT NULL,
     expiration_verification TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '1 week'),
