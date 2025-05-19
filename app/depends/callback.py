@@ -46,6 +46,7 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
     print('Link Event Callback:','Treating',len(entries), 'entries')
     for ids,val in entries:
         try:
+            print(val)
             empty_str_to_none(val)
             link_id = val['link_id']
             
@@ -87,8 +88,10 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
     try:
         async with in_transaction():
             await LinkEventORM.bulk_create(objs)
-            await bulk_upsert_analytics(analytics_inputs)
             await bulk_upsert_links_vc(link_visit_input)
+        
+        async with in_transaction():
+            await bulk_upsert_analytics(analytics_inputs)
         
         return list(valid_entries.union(invalid_entries))
     except Exception as e:
