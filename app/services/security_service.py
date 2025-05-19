@@ -301,8 +301,13 @@ class SecurityService(Service, EncryptDecryptInterface):
     def verify_admin_signature(self,):
         ...
 
-    def generate_key_pair(self,key_size=2048):
+    def generate_rsa_key_pair(self,key_size=2048):
         rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
         return RSA(password=rsa_secret_pwd,key_size=key_size)
+
+    def generate_rsa_from_encrypted_keys(self,private_key=None,public_key=None):
+        rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
+        return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
+
         
     

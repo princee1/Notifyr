@@ -34,7 +34,7 @@ class LinkService(Service):
         ...
 
     async def generate_public_signature(self,link:LinkORM):
-        rsa:RSA =  self.securityService.generate_key_pair()
+        rsa:RSA =  self.securityService.generate_rsa_key_pair(512)
         nonce = generateId(50)
         message= {
             'domain':urlparse(link.link_url).hostname,
@@ -44,18 +44,20 @@ class LinkService(Service):
         message= json.dumps(message)
         signature= rsa.sign_message(message)
         link.ownership_signature = signature
+        link.ownership_nonce = nonce
         await link.save()
-        return str(rsa.public_key)
+        return str(rsa.encrypted_public_key)
 
     async def verify_public_signature(self,link:LinkORM,public_key):
-        rsa:RSA = RSA(public_key=public_key)
+
+        rsa:RSA = self.securityService.generate_rsa_from_encrypted_keys(public_key=public_key[2:-1].encode())
         message= {
             'domain':urlparse(link.link_url).hostname,
             'timestamp':link.created_at.isoformat(),
             'nonce':link.ownership_nonce
         }
         message= json.dumps(message)
-        return rsa.verify_signature(message,link.ownership_signature)
+        return rsa.verify_signature(message,str(link.ownership_signature).encode())
         
     def verify_safe_domain(self,domain:str):
         ...
@@ -117,18 +119,22 @@ class LinkService(Service):
                 return {}
 
     async def get_server_well_know(self, link: LinkORM):
-
         parsed_url = urlparse(link.link_url)
-        link_url = f"{parsed_url.scheme}://{parsed_url.netloc}/.well-known/notifyr"
+        link_url = f"{parsed_url.scheme}://{parsed_url.netloc}/.well-known/notifyr/"
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(link_url) as response:
                     if response.status == 200:
-                        data = await response.json()
+                        data:dict = await response.json()
+                        return data['public-key']
                     else:
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": f"Failed to fetch well-known info, status code: {response.status}"})
             except aiohttp.ClientError as e:
                 raise  HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"error": f"HTTP request failed: {str(e)}"})
+            except KeyError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": f"Failed to fetch well-known info"})
+
+            
 
     async def generate_qr_code(self, full_url: str, qr_config:QRCodeModel):
         """

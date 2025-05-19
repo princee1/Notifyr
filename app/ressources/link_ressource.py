@@ -23,6 +23,7 @@ from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkMode
 from app.utils.constant import StreamConstant
 from app.utils.helper import APIFilterInject, uuid_v1_mc
 from app.classes.broker import MessageBroker,MessageError
+from tortoise.transactions import in_transaction
 
 LINK_MANAGER_PREFIX = 'manage'
 
@@ -63,19 +64,19 @@ class CRUDLinkRessource(BaseHTTPRessource):
     async def add_link(self, request: Request, linkModel: LinkModel, response: Response,authPermission=Depends(get_auth_permission)):
         link = linkModel.model_dump()
         domain = urlparse(link['link_url']).netloc
+        async with in_transaction():
+            if linkModel.public:
+                self.linkService.verify_safe_domain(domain)
 
-        if linkModel.public:
-            self.linkService.verify_safe_domain(domain)
+            public_security = {}
+            link = await LinkORM.create(**link)
 
-        public_security = {}
-        link = await LinkORM.create(**link)
-
-        if not link.public:
-            public_key = await self.linkService.generate_public_signature(link)
-            public_security['public_key'] = public_key
-        else:
-            await LinkORMCache.Store(link.link_short_id,link)
-        return {"data": {**link.to_json},"security":public_security,  "message": "Link created successfully"}
+            if not link.public:
+                public_key = await self.linkService.generate_public_signature(link)
+                public_security['public_key'] = public_key
+            else:
+                await LinkORMCache.Store(link.link_short_id,link)
+            return {"data": {**link.to_json},"security":public_security,  "message": "Link created successfully"}
 
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])

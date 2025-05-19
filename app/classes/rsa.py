@@ -1,7 +1,7 @@
 import os
 import base64
 from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from typing import overload
@@ -35,20 +35,35 @@ def _decrypt_bytes(blob: bytes, password: bytes) -> bytes:
 
 class RSA:
 
-    @overload
-    def __init__(self,password,key_size:int=2048):
-        self.key_size = key_size
-        self.password= password
-        self.private_key, self.public_key = self.generate_keypair_and_encrypt()
-    
-    @overload
-    def __init__(self,public_key=None,private_key=None):
-        if public_key:
-            self.public_key = self.load_public_key_from_bytes(public_key)
+    # @overload
+    # def __init__(self,password:str,key_size:int=2048):
+    #     """
+    #     """
+    #     ...
 
-        if private_key:
-            self.private_key = self.load_private_key_from_bytes(private_key)
+    # @overload
+    # def __init__(public_key:str=None,private_key:str=None):
+    #     """
+    #     """
+    #     ...
+        
+    def __init__(self,password:str,key_size:int=2048,public_key:bytes=None,private_key:bytes=None):
+        self.password= password.encode()
+        
+        if public_key or private_key:
+            if public_key:
+                self.encrypted_public_key = public_key
+                self.public_key = self.load_public_key_from_bytes(public_key)
 
+            if private_key:
+                self.private_key = private_key
+                self.private_key = self.load_private_key_from_bytes(private_key)
+        else:   
+            self.key_size = key_size
+            self.encrypted_private_key, self.encrypted_public_key = self.generate_keypair_and_encrypt()
+            self.private_key = self.load_private_key_from_bytes(self.encrypted_private_key)
+            self.public_key = self.load_public_key_from_bytes(self.encrypted_public_key)
+        
     def generate_keypair_and_encrypt(self,):
         """
         Generates an RSA key pair and returns:
@@ -84,23 +99,23 @@ class RSA:
 
         return encrypted_private_pem, encrypted_public_pem
 
-    def load_private_key_from_bytes(self,encrypted_private_pem: bytes, password: bytes):
+    def load_private_key_from_bytes(self,encrypted_private_pem: bytes):
         """
         Decrypts the private key PEM and returns a cryptography RSA private key.
         """
         return serialization.load_pem_private_key(
             encrypted_private_pem,
-            password=password
+            password=self.password
         )
 
-    def load_public_key_from_bytes(self,encrypted_public_pem: bytes, password: bytes):
+    def load_public_key_from_bytes(self,encrypted_public_pem: bytes,):
         """
         Decrypts our PEM-like encrypted public key and returns a RSA public key.
         """
         text = encrypted_public_pem.decode('ascii').strip().splitlines()
         b64 = "".join(text[1:-1])
         blob = base64.decodebytes(b64.encode('ascii'))
-        public_pem = _decrypt_bytes(blob, password)
+        public_pem = _decrypt_bytes(blob,self.password)
         return serialization.load_pem_public_key(public_pem)
 
     def sign_message(self, message: str) -> bytes:
@@ -109,9 +124,9 @@ class RSA:
         """
         signature = self.private_key.sign(
             message.encode('utf-8'),
-            rsa.padding.PSS(
-                mgf=rsa.padding.MGF1(algorithm=hashes.SHA256()),
-                salt_length=rsa.padding.PSS.MAX_LENGTH
+            padding.PSS(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
             ),
             hashes.SHA256()
         )
@@ -125,9 +140,9 @@ class RSA:
             self.public_key.verify(
                 signature,
                 message.encode('utf-8'),
-                rsa.padding.PSS(
-                    mgf=rsa.padding.MGF1(algorithm=hashes.SHA256()),
-                    salt_length=rsa.padding.PSS.MAX_LENGTH
+                padding.PSS(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
                 ),
                 hashes.SHA256()
             )
