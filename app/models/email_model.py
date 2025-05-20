@@ -73,7 +73,14 @@ class EmailStatus(str, Enum):
 
 class EmailTrackingORM(models.Model):
     email_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    """
+    Email ID generated for database PK
+    """
+
     message_id = fields.CharField(max_length=150, unique=True)
+    """
+    Message ID generated for the smtp email transactions
+    """
     recipient = fields.CharField(max_length=100)
     subject = fields.CharField(max_length=150)
     date_sent = fields.DatetimeField(auto_now_add=True)

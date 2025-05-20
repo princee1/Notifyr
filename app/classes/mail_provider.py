@@ -73,7 +73,7 @@ class IMAPConfig (EmailConnInterface, Enum):
     def setHostPort(mode: str): return IMAP_SSL_TLS_PORT if mode.lower(
     ).strip() == "ssl" else IMAP_NORMAL_PORT
 
-class SearchFilter(Enum):
+class IMAPSearchFilter(Enum):
     UNSEEN = lambda:"UNSEEN"
     FROM = lambda f:("FROM",f)
     SUBJECT = lambda s:("SUBJECT",s)

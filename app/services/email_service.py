@@ -13,7 +13,7 @@ from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
-from app.classes.mail_provider import  SMTPConfig, IMAPConfig, MailAPI
+from app.classes.mail_provider import  SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter
 from app.utils.tools import Time
 
 from app.utils.constant import EmailHostConstant
@@ -28,7 +28,6 @@ from app.models.email_model import EmailTrackingORM,TrackingEmailEventORM
 from app.utils.validation import email_validator
 
 from app.utils.constant import StreamConstant
-from email.header import decode_header
 from email import message_from_bytes
 
 @_service.AbstractServiceClass
@@ -330,10 +329,11 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         self._mailboxes:dict[str,EmailReaderService.IMAPMailboxes] = {}
         self._current_mailbox:str = None
 
-        self.init()
+        self._init_config()
         EmailReaderService.service = self
+        self._capabilities:list = None
 
-    def init(self):
+    def _init_config(self):
         self.type_ = 'IMAP'
         self.connMethod = self.configService.IMAP_EMAIL_CONN_METHOD.lower()
         self.tlsConn: bool = IMAPConfig.setConnFlag(self.connMethod)
@@ -342,7 +342,7 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 
-    def update_mailboxes(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+    def _update_mailboxes(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         """
             Update the mailboxes lists at each lifecycle
         """
@@ -357,7 +357,15 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
                 
                 mailbox = self.IMAPMailboxes(flags,delimiter,mailbox_name)
                 self._mailboxes[mailbox.name] = mailbox
-                    
+
+    def _get_capabilities(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+        if self._capabilities !=None:
+            return 
+
+        typ, capabilities = connector.capability()
+        capabilities = b' '.join(capabilities).decode().upper()
+        self._capabilities = capabilities.split(' ')
+        
     def authenticate(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         
         try:
@@ -369,7 +377,8 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
                 if status != 'OK':
                     raise Exception
                 
-                self.update_mailboxes(connector)
+                self._update_mailboxes(connector)
+                self._get_capabilities(connector)
     
                 return True
             else:
@@ -392,34 +401,18 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
     
     def read_email(self,message_ids,connector:imap.IMAP4|imap.IMAP4_SSL):
+        message = [] 
+        return 
         for num in message_ids:  # fetch last 5 emails
             
             status, data = connector.fetch(num, "(RFC822)")
+            if status != None:
+                return
             raw_email = data[0][1]
 
             # Step 7: Parse the raw email
             msg = message_from_bytes(raw_email)
-            
-            subject, encoding = decode_header(msg["Subject"])[0]
-            if isinstance(subject, bytes):
-                subject = subject.decode(encoding or "utf-8")
-            
-            from_ = msg.get("From")
-            print(f"Subject: {subject}")
-            print(f"From: {from_}")
-
-            # Extract email body
-            if msg.is_multipart():
-                for part in msg.walk():
-                    content_type = part.get_content_type()
-                    if content_type == "text/plain":
-                        body = part.get_payload(decode=True).decode()
-                        print("Body:", body[:100])
-                        break
-            else:
-                body = msg.get_payload(decode=True).decode()
-                print("Body:", body[:100])
-        
+                 
     def logout(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         try:
             connector.close()
@@ -431,14 +424,14 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         ...
 
     def callback(self):
-        self.search_email('INBOX','ALL')
+        self._temp_entry_point('INBOX')
 
     def search_email(self,command:str,connector:imap.IMAP4|imap.IMAP4_SSL=None):
         status, message_numbers = connector.search(None, command)  # or "UNSEEN", "FROM someone@example.com", etc.
         if status != 'OK':
-            return 
+            return None
         
-        return
+        return message_numbers
 
     def delete_email(self,message_id:str,connector:imap.IMAP4|imap.IMAP4_SSL,hard=False):
         connector.store(message_id, '+FLAGS', '\\Deleted')
@@ -464,12 +457,24 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
     @BaseEmailService.task_lifecycle
     @select_inbox
     def _temp_entry_point(self,connector:imap.IMAP4|imap.IMAP4_SSL):
-        ...
-  
+        message_ids =self.search_email(IMAPSearchFilter.ALL(),connector)
+        if message_ids == None:
+            print('error')
+            return 
+        self.read_email(message_ids,connector)
+        
     @property
     def mailboxes(self):
         return self._mailboxes.keys()
     
+    @property
+    def capabilities(self):
+        return self._capabilities
+
+    @property
+    def has_thread_capabilities(self):
+        return 'THREAD=REFERENCES' in self._capabilities or 'THREAD=ORDEREDSUBJECT' in self._capabilities
+
 # @_service.ServiceClass
 class EmailAPIService(BaseEmailService):
     ...

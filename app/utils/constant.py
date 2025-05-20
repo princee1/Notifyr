@@ -87,3 +87,11 @@ class StreamConstant:
 
 class ServerParamsConstant:
     SESSION_ID = 'session-id'
+
+
+########################                     ########################################
+
+class EmailHeadersConstant:
+
+    X_EMAIL_ID = 'X-EMAIL-ID'
+    MESSAGE_ID = 'MESSAGE-ID'

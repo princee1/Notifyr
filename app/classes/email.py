@@ -3,13 +3,16 @@ from email import encoders
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
-from email.utils import make_msgid
 from email.utils import formatdate
 from typing import List, Optional, Literal
 from app.definition._error import BaseError
+from app.utils.constant import EmailHeadersConstant
 from app.utils.fileIO import getFilenameOnly
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Literal, Union
+from email.message import Message
+from email.header import decode_header
+from dataclasses import dataclass, field
 
 
 class NotSameDomainEmailError(BaseError):
@@ -146,7 +149,96 @@ class FutureEmailBuilder(EmailBuilder):
 
 
 #######################################################                        #################################
-
-
+@dataclass
 class EmailReader:
-    ...
+    Subject: str = None
+    From: str = None
+    To: str = None
+    CC: str = None
+    Date: str = None
+    Is_Multipart: bool = False
+    Plain_Body: str = None
+    HTML_Body: str = None
+    Attachments: list = field(default_factory=list)
+    Headers: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        pass  # Prevents the dataclass from generating its own __init__
+
+    def __init__(self,msg:Message):
+        self.parse_email(msg)
+        self.parse_body(msg)
+        
+    def parse_email(self, msg: Message):
+        # Parse headers
+        self.Subject = self.decode_header_field(msg.get("Subject"))
+        self.From = msg.get("From")
+        self.To = msg.get("To")
+        self.CC = msg.get("Cc")
+        self.Date = msg.get("Date")
+
+        # Store all headers
+        for header, value in msg.items():
+            self.Headers[header] = value
+
+        # Check if the email is multipart
+        self.Is_Multipart = msg.is_multipart()
+
+        self.parse_body(msg)
+
+    def parse_body(self, msg: Message):
+        if self.Is_Multipart:
+            for part in msg.walk():
+                content_type = part.get_content_type()
+                content_disposition = str(part.get("Content-Disposition"))
+
+                if content_type == "text/plain" and "attachment" not in content_disposition:
+                    self.Plain_Body = part.get_payload(decode=True).decode(errors="ignore")
+                elif content_type == "text/html" and "attachment" not in content_disposition:
+                    self.HTML_Body = part.get_payload(decode=True).decode(errors="ignore")
+                elif "attachment" in content_disposition:
+                    filename = part.get_filename()
+                    if filename:
+                        attachment_data = part.get_payload(decode=True)
+                        self.Attachments.append({"filename": filename, "data": attachment_data})
+        else:
+            # If not multipart, treat the payload as plain text
+            self.Plain_Body = msg.get_payload(decode=True).decode(errors="ignore")
+
+    @staticmethod
+    def decode_header_field(field):
+        if not field:
+            return None
+        decoded_parts = decode_header(field)
+        decoded_string = ""
+        for part, encoding in decoded_parts:
+            if isinstance(part, bytes):
+                decoded_string += part.decode(encoding or "utf-8", errors="ignore")
+            else:
+                decoded_string += part
+        return decoded_string
+
+    @property
+    def Email_ID(self):
+        """
+        Email ID generated for database PK
+        """
+        return self.Headers.get(EmailHeadersConstant.X_EMAIL_ID,None)
+
+    @property
+    def Message_ID(self):
+        """
+        Message ID generated for the smtp email transactions
+        """
+        return self.Headers.get(EmailHeadersConstant.MESSAGE_ID,None)
+    
+    @property
+    def References(self):
+        references:str = self.Headers.get('References',None)
+        if not references:
+            return []
+        return references.split(' ')
+
+    @property
+    def In_Reply_To(self):
+        return self.Headers.get('In-Reply-To',None)
