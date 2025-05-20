@@ -1,7 +1,9 @@
+-- Active: 1740679093248@@localhost@5432@notifyr@emails
 SET search_path = emails;
 
 CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
     VALUE IN (
+        'RECEIVED',
         'SENT',
         'DELIVERED',
         'SOFT-BOUNCE',
@@ -14,6 +16,7 @@ CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
         'COMPLAINT',
         'DEFERRED',
         'DELAYED'
+        'REPLIED'
     )
 );
 
@@ -34,14 +37,21 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
 CREATE TABLE IF NOT EXISTS TrackingEvent (
     event_id UUID DEFAULT uuid_generate_v1mc (),
     email_id UUID NOT NULL,
+    contact_id UUID DEFAULT NULL,
     current_event EmailStatus NOT NULL,
     date_event_received TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (event_id),
-    FOREIGN KEY (email_id) REFERENCES EmailTracking (email_id) ON DELETE CASCADE ON UPDATE CASCADE
+    FOREIGN KEY (email_id) REFERENCES EmailTracking (email_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
 CREATE TABLE IF NOT EXISTS TrackedLinks (
     -- Define columns here as needed
+);
+
+
+CREATE TABLE IF NOT EXISTS EmailAnalytics (
+    
 );
 
 
@@ -51,6 +61,22 @@ BEGIN
 
     DELETE FROM EmailTracking
     WHERE expired_tracking_date <= NOW();
+END;
+$$ LANGUAGE PLPGSQL;
+
+
+CREATE OR REPLACE FUNCTION delete_non_mapped_email_event() RETURNS VOID AS $$
+BEGIN
+    SET search_path = emails;
+    DELETE FROM 
+        TrackingEvent te 
+    WHERE
+        te.email_id NOT IN (
+            SELECT e.email_id FROM EmailTracking
+        ) 
+    OR 
+        te.email_id == NULL;
+
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -75,4 +101,10 @@ SELECT cron.schedule (
                 'delete_expired_email_tracking_every_day',
                 '0 0 * * *', -- Cron expression for every day at midnight
                 'SELECT emails.delete_expired_email_tracking();'
-            )
+            );
+
+SELECT cron.schedule (
+                'delete_non_mapped_email_event_every_day',
+                '0 */3 * * *', -- Cron expression for every 3 hours
+                'SELECT emails.delete_non_mapped_email_event();'
+            );

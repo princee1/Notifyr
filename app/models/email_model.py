@@ -56,6 +56,7 @@ class EmailSpamDetectionModel(BaseModel):
 
 
 class EmailStatus(str, Enum):
+    RECEIVED='RECEIVED'
     SENT = 'SENT'
     DELIVERED = 'DELIVERED'
     SOFT_BOUNCE = 'SOFT-BOUNCE'
