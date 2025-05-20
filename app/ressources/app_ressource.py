@@ -41,3 +41,10 @@ class AppRessource(BaseHTTPRessource):
         }
         return HTMLResponse(self.landing_page_html_content,headers=headers)
         #return HTMLResponse()
+
+    @BaseHTTPRessource.HTTPRoute('/.well-know/{system}',[HTTPMethod.GET],deprecated=True,mount=True,)
+    def well_known(self,request:Request,system:str|None):
+
+        return {
+            'service':'notify'
+        }
