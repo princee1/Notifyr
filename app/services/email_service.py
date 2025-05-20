@@ -17,7 +17,7 @@ from app.classes.mail_provider import  SMTPConfig, IMAPConfig, MailAPI, IMAPSear
 from app.utils.tools import Time
 
 from app.utils.constant import EmailHostConstant
-from app.classes.email import EmailBuilder, EmailMetadata, NotSameDomainEmailError
+from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameDomainEmailError
 
 from .logger_service import LoggerService
 from app.definition import _service
@@ -401,18 +401,15 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
     
     def read_email(self,message_ids,connector:imap.IMAP4|imap.IMAP4_SSL):
-        message = [] 
-        return 
-        for num in message_ids:  # fetch last 5 emails
-            
+
+        for num in message_ids:
             status, data = connector.fetch(num, "(RFC822)")
             if status != None:
-                return
+                continue
             raw_email = data[0][1]
-
-            # Step 7: Parse the raw email
             msg = message_from_bytes(raw_email)
-                 
+            yield EmailReader(msg)
+              
     def logout(self,connector:imap.IMAP4|imap.IMAP4_SSL):
         try:
             connector.close()
