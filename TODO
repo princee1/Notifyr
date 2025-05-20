@@ -24,3 +24,6 @@
 22. Add simple txt template message for email
 23. Verify domain using rsa encryption
 24. Create an MCP server myb?
+25. Cache the ip_lookup in redis
+26. Keep the public in the database and finish the private verification
+27. Have an (AI) algortihm that chooses whether to run in the background task or to send to the Celery worker with strategies design pattern
