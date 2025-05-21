@@ -1,14 +1,17 @@
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field, fields
 import functools
+from random import randint
 import re
 import smtplib as smtp
 import imaplib as imap
 import poplib as pop
 import socket
-from typing import Callable, Literal, Self
+from typing import Callable, Iterable, Literal, Self, TypedDict
 
 from app.interface.timers import IntervalInterface
+from app.services.celery_service import CeleryService
 from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.prettyprint import SkipInputException
@@ -253,8 +256,32 @@ class EmailSenderService(BaseEmailService):
 
 @_service.ServiceClass
 class EmailReaderService(BaseEmailService,IntervalInterface):
-
     service:Self # Class Singleton
+    @dataclass
+    class Jobs:
+        job_name:str
+        func:str
+        args:Iterable
+        kwargs:dict
+        stop:bool = True
+        task:asyncio.Task = None
+        delay:int = field(default_factory=lambda:randint(10,100))
+
+
+        async def __call__(self,):
+            service: EmailReaderService = EmailReaderService.service
+            callback =  getattr(service,self.func,None)
+            while self.stop:
+                self.is_running =True
+                callback(*self.args,**self.kwargs)
+                self.is_running=False
+                await asyncio.sleep(self.delay)
+            return 
+        
+        def cancel_job(self):
+            self.stop=False
+            self.task.cancel()
+
     @dataclass
     class IMAPMailboxes:
         flags: list[str]
@@ -302,6 +329,8 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         def status(self,connector: imap.IMAP4 | imap.IMAP4_SSL):
             ...
 
+    jobs:dict[str,Jobs]={}
+    
     @staticmethod
     def select_inbox(func:Callable):
 
@@ -320,11 +349,34 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
 
         return wrapper
     
-    def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService) -> None:
+    @staticmethod
+    def register_job(job_name:str,delay:int,*args,**kwargs):
+        def wrapper(func:Callable):
+            func_name = func.__name__
+            params = {
+                'job_name':job_name,
+                'func':func_name,
+                'args':args,
+                'kwargs':kwargs
+            }
+            if delay ==None or not isinstance(delay,(float,int)) or delay<=0:
+                ...
+            else:
+                params['delay']=delay
+
+            jobs = Self.Jobs(**params)
+            if job_name in Self.jobs:
+                ... # Warning 
+            Self.jobs[job_name] =jobs
+            return func
+        return wrapper
+
+    def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService,celeryService:CeleryService) -> None:
         super().__init__(configService, loggerService)
         IntervalInterface.__init__(self,True,10)
         self.reactiveService = reactiveService
         self.redisService = redisService
+        self.celeryService = celeryService
 
         self._mailboxes:dict[str,EmailReaderService.IMAPMailboxes] = {}
         self._current_mailbox:str = None
@@ -421,8 +473,13 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         ...
 
     def callback(self):
-        self._temp_entry_point('INBOX')
+        #self._temp_entry_point('INBOX')
 
+        for job_name,job in self.jobs.items():
+            #self.prettyPrinter.
+            task = asyncio.create_task(job(),name=job_name)
+            job.task = task
+        
     def search_email(self,command:str,connector:imap.IMAP4|imap.IMAP4_SSL=None):
         status, message_numbers = connector.search(None, command)  # or "UNSEEN", "FROM someone@example.com", etc.
         if status != 'OK':
@@ -458,7 +515,7 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         if message_ids == None:
             print('error')
             return 
-        self.read_email(message_ids,connector)
+        return self.read_email(message_ids,connector)
         
     @property
     def mailboxes(self):
