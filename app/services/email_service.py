@@ -280,7 +280,7 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         
         def cancel_job(self):
             self.stop=False
-            self.task.cancel()
+            return self.task.cancel()
 
     @dataclass
     class IMAPMailboxes:
@@ -371,6 +371,11 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             return func
         return wrapper
 
+    @staticmethod
+    def cancel_job():
+        for job in EmailReaderService.jobs.values():
+            job.cancel_job()
+        
     def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService,celeryService:CeleryService) -> None:
         super().__init__(configService, loggerService)
         IntervalInterface.__init__(self,True,10)
@@ -478,6 +483,8 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         for job_name,job in self.jobs.items():
             #self.prettyPrinter.
             task = asyncio.create_task(job(),name=job_name)
+            if job.task!=None:
+                job.cancel_job()
             job.task = task
         
     def search_email(self,command:str,connector:imap.IMAP4|imap.IMAP4_SSL=None):

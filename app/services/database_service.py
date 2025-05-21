@@ -34,18 +34,6 @@ class DatabaseService(Service):
             self.fileService = fileService
 
 @ServiceClass
-class SQLiteService(DatabaseService):
-    def __init__(self,configService:ConfigService, fileService:FileService) -> None:
-        super().__init__(configService,fileService)
-
-@ServiceClass
-class CSVService(DatabaseService): # analytics
-
-    def __init__(self,configService:ConfigService,fileService:FileService):
-        super().__init__(configService,fileService)
-    ...
-
-@ServiceClass
 class MongooseService(DatabaseService): # Chat data
     DB = Literal['agent','chat']
 
@@ -252,7 +240,7 @@ class RedisService(DatabaseService):
         self.redis_limiter = Redis(host=host,db=1)
         self.redis_cache = Redis(host=host,db=3,decode_responses=True)
         self.redis_events=Redis(host=host,db=2,decode_responses=True)
-        self.db:Dict[Literal['celery','limiter','events',0,1,2,3],Redis] = {
+        self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
             0:self.redis_celery,
             1:self.redis_limiter,
             2:self.redis_events,
@@ -328,7 +316,6 @@ class RedisService(DatabaseService):
         len_db = len(self.db.keys())//2
         for i in range(len_db):
             await self.db[i].close()
-
             
 @ServiceClass
 class TortoiseConnectionService(DatabaseService):

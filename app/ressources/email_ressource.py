@@ -160,3 +160,4 @@ class EmailTemplateRessource(BaseHTTPRessource):
     def on_shutdown(self):
         super().on_shutdown()
         self.emailReaderService.stop_interval()
+        self.emailReaderService.cancel_job()
