@@ -64,7 +64,6 @@ class Template(Asset):
 
     def __init__(self, filename: str, content: str, dirName: str) -> None:
         super().__init__(filename, content, dirName)
-        self.keys: list[str] = []
         self.translator = Translator(['translate.google.com', 'translate.google.com'])
         self.load()
 
@@ -199,8 +198,6 @@ class MLTemplate(Template):
             builder = MLSchemaBuilder(self.validation_balise,self.filename)
             self.schema = builder.schema
             self.transform = builder.transform
-
-            self.keys = self.schema.keys()
             self.validation_balise.decompose()
         except SchemaError as e:
             raise SkipTemplateCreationError(self.filename,e.args[0])
