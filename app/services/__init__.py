@@ -7,8 +7,8 @@ from .file_service import FileService,BaseFileRetrieverService
 from .logger_service import LoggerService
 from .notification_service import *
 from .security_service import JWTAuthService,SecurityService
-from .stats_service import *
-from .chat_service import *
+from .stats_service import Stats,StatsService
+from .chat_service import ChatService
 from .twilio_service import TwilioService,CallService,SMSService,BaseTwilioCommunication
 from .contacts_service import ContactsService
 from .admin_service import AdminService

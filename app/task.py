@@ -6,7 +6,7 @@ from celery import Celery, shared_task
 from celery.result import AsyncResult
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import ConfigService,CeleryEnv
-from app.services.email_service import EmailSenderService
+from app.services.email_service import EmailSenderService,EmailReaderService
 from app.container import Get, build_container
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import SMSService, CallService

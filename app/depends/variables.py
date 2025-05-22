@@ -1,10 +1,12 @@
 
 from typing import Callable,get_args
 
+from aiohttp_retry import Any
 from fastapi import Request, Response
+from app.classes.celery import CeleryTask
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
-from app.services.celery_service import TaskService
+from app.services.celery_service import CeleryService, TaskService
 from app.services.config_service import ConfigService
 from app.services.twilio_service import TwilioService
 
@@ -18,6 +20,8 @@ verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_tok
 parse_to_phone_format: Callable = GetDependsFunc(TwilioService, 'parse_to_phone_format')
 
 populate_response_with_request_id: Callable[[Request,Response],None] = GetDependsFunc(TaskService,'populate_response_with_request_id')
+
+trigger_task: Callable[[CeleryTask,int|None,str],dict[str,Any]] = GetDependsFunc(CeleryService,'trigger_task_from_task')
 
 # ----------------------------------------------                                    ---------------------------------- #
 
