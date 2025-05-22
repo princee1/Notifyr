@@ -99,8 +99,8 @@ class Reader():
             except SkipTemplateCreationError as e:
                 print(e.args[0])
                 #printJSON(e.args[1])
-            except Exception:
-                ...
+            except Exception as e :
+                print(e.__class__,e)
 
             if issubclass_of(Template, self.asset):
                 if self.func != None:

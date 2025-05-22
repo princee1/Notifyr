@@ -1,6 +1,6 @@
 
 from enum import Enum
-from typing import Any
+from typing import Any, Self, overload
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from app.definition._error import BaseError
 from app.classes.schema import MLSchemaBuilder
@@ -61,11 +61,24 @@ class Asset():
 
 class Template(Asset):
     LANG = None
+    
+    @overload
+    def __init__(self,filename:str, content:str, dirName:str) -> None:
+        ...
 
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName)
-        self.translator = Translator(['translate.google.com', 'translate.google.com'])
-        self.load()
+    @overload
+    def __init__(self,):
+        ...
+    
+    def __init__(self,*args):
+        if len(args) == 3:
+            filename, content, dirName = args
+            super().__init__(filename, content, dirName)
+            self.translator = Translator(['translate.google.com', 'translate.google.com'])
+            self.load()
+        
+        else:
+            self.translator = Translator(['translate.google.com', 'translate.google.com'])
 
     def inject(self, data:  dict) -> bool:
         """
@@ -106,6 +119,9 @@ class Template(Asset):
         """
         pass
 
+    def clone(self)->Self:
+        ...
+    
     @property
     def routeName(self,): return self.name.replace(os.sep, ROUTE_SEP)
 
@@ -223,13 +239,30 @@ class MLTemplate(Template):
 
 class HTMLTemplate(MLTemplate):
 
+    @overload
     def __init__(self,filename:str,content:str,dirname:str):
-        self.parser = XMLLikeParser.LXML.value
+        ...
 
-        super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
-        self.images: list[tuple[str, str]] = []
-        self.image_needed: list[str] = []
-    
+    @overload
+    def __init__(self,bs4:BeautifulSoup,schema:dict,transform:dict,images:list[tuple[str, str]]):
+        ...
+
+    def __init__(self,*args):
+        if len(args) == 3:
+            filename,content,dirname = args
+            self.parser = XMLLikeParser.LXML.value
+            super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
+            self.images: list[tuple[str, str]] = []
+            self.image_needed: list[str] = []
+
+        elif len(args):
+            bs4,schema,transform,images = args
+            self.bs4 = bs4
+            self.schema = schema
+            self.transform = transform
+            self.images = images
+
+
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
         style = self.bs4.select_one("head > style")
         if style is None:
@@ -280,12 +313,16 @@ class HTMLTemplate(MLTemplate):
         return content, content_text
 
     def add_tracking_pixel(self,url):
-        ...
+        self.set_content()
     
     def add_unsubscribe_footer(self,urls):
-        ...
-    
-    
+        self.set_content()
+
+    def clone(self)->Self:
+        clone = HTMLTemplate(self.bs4,self.schema,self.transform,self.images) 
+        Template.__init__(clone)
+        return clone
+
     
     
 
