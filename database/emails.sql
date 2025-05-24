@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS TrackingEvent (
     email_id UUID NOT NULL,
     contact_id UUID DEFAULT NULL,
     current_event EmailStatus NOT NULL,
+    description VARCHAR(200) DEFAULT NULL,
     date_event_received TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (event_id),
     FOREIGN KEY (email_id) REFERENCES EmailTracking (email_id) ON DELETE CASCADE ON UPDATE CASCADE,

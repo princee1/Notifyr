@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS LinkEvent (
     referrer VARCHAR(100),
     timezone VARCHAR(80),
     city VARCHAR(100),
-    date_clicked TIMESTAMPTZ,
+    date_clicked TIMESTAMPTZ DEFAULT NOW(),
     expiring_date TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '2 week'),
     PRIMARY KEY (event_id),
     FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE,
