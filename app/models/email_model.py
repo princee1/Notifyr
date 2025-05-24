@@ -3,6 +3,7 @@ from pydantic import BaseModel, model_validator
 from enum import Enum
 from tortoise import fields, models
 from app.classes.celery import SchedulerModel
+from app.classes.email import MimeType
 from app.utils.helper import uuid_v1_mc
 
 SCHEMA = 'emails'
@@ -33,11 +34,13 @@ class EmailTemplateModel(BaseModel):
     meta: EmailMetaModel
     data: dict[str, Any]
     attachments: Optional[dict[str, Any]] = {}
+    mimeType:MimeType = 'both'
+
 
 class CustomEmailModel(BaseModel):
     meta: EmailMetaModel
-    text_content: str
-    html_content: str
+    text_content: str|None = None
+    html_content: str|None = None
     attachments: Optional[List[tuple[str, str]]] = []
     images: Optional[List[tuple[str, str]]] = []
 
@@ -122,9 +125,8 @@ class TrackingEmailEventORM(models.Model):
         email_id:str|None
         contact_id:str|None
         current_event:str|None
+        date_event_received:str
         
-
-
     class Meta:
         schema = SCHEMA
         table = "trackingevent"

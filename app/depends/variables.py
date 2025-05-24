@@ -11,6 +11,7 @@ from app.services.config_service import ConfigService
 from app.services.twilio_service import TwilioService
 
 from app.classes.broker import SubjectType
+from app.classes.email import MimeType
 
 
 SECURITY_FLAG=GetAttr(ConfigService,'SECURITY_FLAG')
@@ -50,7 +51,7 @@ verify_otp:Callable[[Request],bool]=get_query_params('verify_otp','false',True)
 
 keep_connection:Callable[[Request],bool]=get_query_params('keep_connection','false',True)
 
-track:Callable[[Request],bool] = get_query_params('track','false',True)
+track:Callable[[Request],bool] = get_query_params('track','false',True,raise_except=True)
 
 # ----------------------------------------------                                    ---------------------------------- #
 
@@ -63,3 +64,5 @@ email_verifier:Callable[[Request],bool] = get_query_params('email_verifier',None
 subject_id_params:Callable[[Request],str] = get_query_params('subject_id',None)
 
 sid_type_params:Callable[[Request],str] = get_query_params("sid_type","plain",checker=lambda v:v in get_args(SubjectType))
+
+mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_except=True,checker=lambda v:v in get_args(MimeType))

@@ -21,6 +21,24 @@ class NotSameDomainEmailError(BaseError):
 class EmailInvalidFormatError(BaseError):
     ...
 
+#######################################################                        #################################
+
+MimeType = Literal['html','plain','both','none']
+
+def parse_mime_content(content:tuple[str,str],mimeType:MimeType):
+    match mimeType:
+        case 'both':
+            return content
+        case 'html':
+            return (content[0],None)
+        case 'plain':
+            return  (None,content[1])
+        case 'none':
+            return (None,None)
+
+        case _:
+            return content
+
 @dataclass
 class EmailMetadata:
     Subject: str
@@ -111,10 +129,12 @@ class EmailBuilder():
 
     def set_content(self, content: tuple[str, str]):
         html_content, text_content = content
-        part1 = MIMEText(text_content, "plain")
-        part2 = MIMEText(html_content, "html")
-        self.message.attach(part1)
-        self.message.attach(part2)
+        if text_content:
+            part1 = MIMEText(text_content, "plain")
+            self.message.attach(part1)
+        if html_content:
+            part2 = MIMEText(html_content, "html")
+            self.message.attach(part2)
 
     def attach_image(self, image_path, image_data, disposition: Literal["inline", "attachment"] = "inline"):
         img = MIMEImage(image_data)
