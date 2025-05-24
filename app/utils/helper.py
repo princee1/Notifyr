@@ -79,9 +79,13 @@ def stable_mac():
     mac = int.from_bytes(hash_bytes[:6], 'big') | 0x010000000000  # Set multicast bit
     return mac & 0xFFFFFFFFFFFF  # Ensure 48-bit value
 
-def uuid_v1_mc():
+def uuid_v1_mc(len=1):
     """Generate a UUIDv1 with a stable, modified MAC address."""
-    return uuid1(node=stable_mac())
+    if len <=0:
+        raise ValueError('len needs to be positive and non null')
+    if len==1:
+        return uuid1(node=stable_mac())
+    return [uuid1(node=stable_mac()) for _ in range(len)]
 
 
 ################################   ** Code Helper **      #################################

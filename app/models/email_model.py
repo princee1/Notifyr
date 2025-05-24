@@ -73,6 +73,9 @@ class EmailStatus(str, Enum):
     DEFERRED = 'DEFERRED'
     DELAYED = 'DELAYED'
     REPLIED = 'REPLIED'
+    MAILBOX_UNREACHABLE='MAILBOX-UNREACHABLE'
+    USER_NOT_FOUND = 'USER-NOT-FOUND'
+    
 
 
 class EmailTrackingORM(models.Model):
@@ -116,12 +119,14 @@ class TrackingEmailEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     email = fields.ForeignKeyField("models.EmailTrackingORM", related_name="events", on_delete=fields.CASCADE)
     contact = fields.ForeignKeyField("models.ContactORM",'contact',on_delete=fields.NO_ACTION)
+    description = fields.CharField(max_length=100)
     current_event = fields.CharEnumField(EmailStatus)
     date_event_received = fields.DatetimeField(auto_now_add=True)
 
 
     class TrackingEventJSON(TypedDict):
         event_id:str
+        description:str=None
         email_id:str|None
         contact_id:str|None
         current_event:str|None

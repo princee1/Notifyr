@@ -16,7 +16,9 @@ CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
         'COMPLAINT',
         'DEFERRED',
         'DELAYED'
-        'REPLIED'
+        'REPLIED',
+        'MAILBOX-UNREACHABLE',
+        'USER-NOT-FOUND',
     )
 );
 
@@ -87,7 +89,7 @@ BEGIN
 
     UPDATE EmailTracking e
     SET email_current_status = 'DELIVERED'
-    WHERE email_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '5 hours';
+    WHERE email_current_status = 'SEN' AND NOW() - date_sent >= INTERVAL '5 hours';
 END;
 $$ LANGUAGE PLPGSQL;
 
