@@ -12,6 +12,7 @@ from app.services.security_service import JWTAuthService
 from app.services.twilio_service import SMSService, CallService
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
+from asgiref.sync import async_to_sync
 from flower import VERSION
 
 
@@ -103,15 +104,17 @@ def SharedTask(heaviness: TaskHeaviness, **kwargs):
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_mail(data, meta, images):
+def task_send_template_mail(data, meta, images,message_tracking_id,contact_id=None):
     emailService: EmailSenderService = Get(EmailSenderService)
-    return emailService.sendTemplateEmail(data, meta, images)
+    sendTemplateEmail = async_to_sync(emailService.sendTemplateEmail)
+    return sendTemplateEmail(data, meta, images,message_tracking_id,contact_id)
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_mail(content, meta, images, attachment):
+def task_send_custom_mail(content, meta, images, attachment,message_tracking_id,contact_id=None):
     emailService: EmailSenderService = Get(EmailSenderService)
-    return emailService.sendCustomEmail(content, meta, images, attachment)
+    sendCustomEmail = async_to_sync(emailService.sendCustomEmail)
+    return sendCustomEmail(content, meta, images, attachment,message_tracking_id,contact_id)
 
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_custom_sms(messages):

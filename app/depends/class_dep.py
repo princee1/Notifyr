@@ -56,10 +56,13 @@ class EmailTracker:
             "spam_label": spam_label,
             "date_sent": now.isoformat(),
             "last_update": now.isoformat(),
-            'email_current_status':EmailStatus.SENT.value,
+            'email_current_status':EmailStatus.RECEIVED.value,
             "expired_tracking_date": expired_tracking_date,
         }
 
+    @property
+    def message_tracking_id(self):
+        return self.email_id if self.will_track else None
 
 
 class SubjectParams:

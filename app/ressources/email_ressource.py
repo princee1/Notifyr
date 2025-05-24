@@ -108,7 +108,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
         data = parse_mime_content(data,mail_content.mimeType)
         
-        await taskManager.offload_task('worker_focus',scheduler,0,None,None,data, meta, template.images)
+        await taskManager.offload_task('worker_focus',scheduler,0,None,None,data, meta, template.images,tracker.message_tracking_id,contact_id=None)
         return taskManager.results
     
     @UseLimiter(limit_value='10000/minutes')
@@ -125,7 +125,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             email_tracking = tracker.track_event_data()
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
             
-        await taskManager.offload_task('worker_focus',scheduler,0,None,None,content,meta,customEmail_content.images, customEmail_content.attachments)
+        await taskManager.offload_task('worker_focus',scheduler,0,None,None,content,meta,customEmail_content.images, customEmail_content.attachments,tracker.message_tracking_id,contact_id =None)
         return taskManager.results
 
 

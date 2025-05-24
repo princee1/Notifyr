@@ -7,7 +7,7 @@ from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
 from app.utils.constant import StreamConstant
 from app.utils.transformer import none_to_empty_str
-from .config_service import ConfigService
+from .config_service import CeleryMode, ConfigService
 from .file_service import FileService
 from app.definition._service import BuildFailureError, Service,AbstractServiceClass,ServiceClass,BuildWarningError
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
@@ -93,8 +93,8 @@ class RedisService(DatabaseService):
             }),
             StreamConstant.EMAIL_EVENT_STREAM:self.StreamConfig(**{
                 'sub':True,
-                'count':10,
-                'wait':1000*10,
+                'count':1000,
+                'wait':1000*30,
                 'stream':True
             }),
             StreamConstant.TWILIO_STREAM:self.StreamConfig(**{
@@ -104,6 +104,7 @@ class RedisService(DatabaseService):
             StreamConstant.EMAIL_TRACKING:self.StreamConfig(**{
                 'sub':False,
                 'stream':True,
+                'wait':1000*5
                 
             })
         }
@@ -120,15 +121,19 @@ class RedisService(DatabaseService):
         if not data:
             return 
         none_to_empty_str(data)
-        await self.redis_events.xadd(stream,data)
+        if self.configService.celery_env == CeleryMode.none:    
+            return await self.redis_events.xadd(stream,data)
+        return self.redis_events.xadd(stream,data)
 
     async def publish_data(self,channel:str,data:Any):
         if channel not in self.streams.keys():
             return
         #if data:   
         data = json.dumps(data)
-        return await self.redis_events.publish(channel,data)
-    
+        if self.configService.celery_env == CeleryMode.none:    
+            return await self.redis_events.publish(channel,data)
+        return self.redis_events.publish(channel,data)
+        
     async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker]):
         pubsub = self.redis_events.pubsub()
 
@@ -239,7 +244,12 @@ class RedisService(DatabaseService):
         self.redis_celery = Redis(host=host,db=0)
         self.redis_limiter = Redis(host=host,db=1)
         self.redis_cache = Redis(host=host,db=3,decode_responses=True)
-        self.redis_events=Redis(host=host,db=2,decode_responses=True)
+
+        if self.configService.celery_env == CeleryMode.none:
+            self.redis_events=Redis(host=host,db=2,decode_responses=True)
+        else :
+            self.redis_events = SyncRedis(host=host,db=2,decode_responses=True)
+
         self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
             0:self.redis_celery,
             1:self.redis_limiter,
@@ -252,7 +262,7 @@ class RedisService(DatabaseService):
         }
 
         try:
-            temp_redis = SyncRedis()
+            temp_redis = SyncRedis(host=host)
             pong = temp_redis.ping()
             if not pong:
                 raise ConnectionError("Redis ping failed")

@@ -1,6 +1,7 @@
 
 import asyncio
 from dataclasses import dataclass, field, fields
+from datetime import datetime, timezone
 import functools
 from random import randint
 import re
@@ -13,6 +14,7 @@ from typing import Callable, Iterable, Literal, Self, TypedDict
 from app.interface.timers import IntervalInterface
 from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
+from app.utils.helper import uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from app.classes.mail_provider import  SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter
@@ -26,7 +28,7 @@ from app.definition import _service
 from .config_service import ConfigService
 import ssl
 
-from app.models.email_model import EmailTrackingORM,TrackingEmailEventORM
+from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM
 from app.utils.validation import email_validator
 
 from app.utils.constant import StreamConstant
@@ -49,7 +51,7 @@ class BaseEmailService(_service.Service):
     @staticmethod
     def task_lifecycle(func: Callable):
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        async def wrapper(*args, **kwargs):
             self: BaseEmailService = args[0]
             if not isinstance(self,BaseEmailService):
                 self = self.__class__.service
@@ -61,7 +63,7 @@ class BaseEmailService(_service.Service):
             if not self.authenticate(connector):
                 return
             kwargs['connector'] = connector
-            result = func(*args, **kwargs)
+            result = await func(*args, **kwargs)
             self.logout(connector)
             return result
         return wrapper
@@ -140,8 +142,9 @@ class BaseEmailService(_service.Service):
 @_service.ServiceClass
 class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
-    def __init__(self, configService: ConfigService, loggerService: LoggerService):
+    def __init__(self, configService: ConfigService, loggerService: LoggerService,redisService:RedisService):
         super().__init__(configService, loggerService)
+        self.redisService = redisService
         self.type_ = 'SMTP'
         self.fromEmails: set[str] = set()
         self.connMethod = self.configService.SMTP_EMAIL_CONN_METHOD.lower()
@@ -204,43 +207,62 @@ class EmailSenderService(BaseEmailService):
             # TODO Depends on the error code
         return False
 
-    def sendTemplateEmail(self,data, meta, images):
+    async def sendTemplateEmail(self,data, meta, images,message_tracking_id,contact_id=None):
         meta = EmailMetadata(**meta)
         email  = EmailBuilder(data,meta,images)
-        return self._send_message(email)
+        return self._send_message(email,message_tracking_id,message_tracking_id,contact_id)
 
-    def sendCustomEmail(self,content, meta, images, attachment):
+    async def sendCustomEmail(self,content, meta, images, attachment,message_tracking_id,contact_id=None):
         meta = EmailMetadata(**meta)
         email =  EmailBuilder(content,meta,images,attachment)
         #send_custom_email(content, meta, images, attachment)
-        return self._send_message(email)
+        return self._send_message(email,message_tracking_id,message_tracking_id,contact_id)
 
     @Time
     @BaseEmailService.task_lifecycle
-    def _send_message(self, email: EmailBuilder,connector:smtp.SMTP):
+    async def _send_message(self, email: EmailBuilder,connector:smtp.SMTP,message_tracking_id:str,contact_id:str=None):
         try:
+            event_id = uuid_v1_mc()
+            now = datetime.now(timezone.utc).isoformat()
             emailID, message = email.mail_message
             reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message,rcpt_options=['NOTIFY=SUCCESS,FAILURE,DELAY'])
+            email_status = EmailStatus.SENT.value
+                      
 
-            return {
-                "emailID":emailID,
-                "status":reply_
-            }
+        except smtp.SMTPRecipientsRefused as e:
+            email_status=EmailStatus.BLOCKED.value
 
         except smtp.SMTPSenderRefused as e:
             self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT
-        
+            email_status=EmailStatus.FAILED.value
+                
         except smtp.SMTPNotSupportedError as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            email_status=EmailStatus.FAILED
 
         except smtp.SMTPServerDisconnected as e:
+            email_status=EmailStatus.FAILED
+
             print('Server disconnected')
             print(e)
             self._builded = False
             # BUG service destroyed too ?
             self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
             # TODO retry getting the access token
-            ...
+        
+        finally:
+
+            if message_tracking_id:
+                event = TrackingEmailEventORM.TrackingEventJSON(event_id=event_id,email_id=message_tracking_id,contact_id=None,current_event=email_status,date_event_received=now)    
+                await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
+
+            return {
+                "emailID":emailID,
+                "status":reply_
+            }
+
+            
+        
 
     @BaseEmailService.task_lifecycle
     def verify_same_domain_email(self,email:str,connector:smtp.SMTP):
