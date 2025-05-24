@@ -1,4 +1,3 @@
-
 from enum import Enum
 from typing import Any, Self, overload
 from bs4 import BeautifulSoup, PageElement, Tag, element
@@ -257,7 +256,7 @@ class HTMLTemplate(MLTemplate):
 
         elif len(args):
             bs4,schema,transform,images = args
-            self.bs4 = bs4
+            self.bs4:BeautifulSoup = bs4
             self.schema = schema
             self.transform = transform
             self.images = images
@@ -312,9 +311,26 @@ class HTMLTemplate(MLTemplate):
         content_text = self.exportText(content)
         return content, content_text
 
-    def add_tracking_pixel(self,url):
-        self.set_content()
+    def add_tracking_pixel(self, tracking_url: str):
+        """
+        Add a tracking pixel to the HTML content.
+
+        Args:
+            tracking_url (str): The URL of the tracking pixel.
+        """
+        if not hasattr(self, 'bs4') or not self.bs4:
+            raise TemplateBuildError("HTML content is not loaded or initialized.")
+        
+        tracking_pixel_tag = self.bs4.new_tag("img", src=tracking_url, width="1", height="1", style="display:none;")
+        body_tag = self.bs4.select_one("body")
+        if body_tag:
+            body_tag.append(tracking_pixel_tag)
+        else:
+            raise TemplateBuildError("No <body> tag found in the HTML content.")
     
+        self.set_content()
+
+
     def add_unsubscribe_footer(self,urls):
         self.set_content()
 

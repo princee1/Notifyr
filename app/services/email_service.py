@@ -11,7 +11,6 @@ import socket
 from typing import Callable, Iterable, Literal, Self, TypedDict
 
 from app.interface.timers import IntervalInterface
-from app.services.celery_service import CeleryService
 from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.prettyprint import SkipInputException
@@ -137,8 +136,7 @@ class BaseEmailService(_service.Service):
 
     def help(self):
         ...
-
-
+        
 @_service.ServiceClass
 class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
@@ -252,8 +250,6 @@ class EmailSenderService(BaseEmailService):
             raise NotSameDomainEmailError
         
         return connector.verify(email)
-
-
 @_service.ServiceClass
 class EmailReaderService(BaseEmailService,IntervalInterface):
     service:Self # Class Singleton
@@ -376,12 +372,11 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         for job in EmailReaderService.jobs.values():
             job.cancel_job()
         
-    def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService,celeryService:CeleryService) -> None:
+    def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService) -> None:
         super().__init__(configService, loggerService)
         IntervalInterface.__init__(self,True,10)
         self.reactiveService = reactiveService
         self.redisService = redisService
-        self.celeryService = celeryService
 
         self._mailboxes:dict[str,EmailReaderService.IMAPMailboxes] = {}
         self._current_mailbox:str = None

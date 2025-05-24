@@ -7,6 +7,7 @@ from app.definition._service import Service, ServiceClass
 from app.errors.contact_error import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.models.contacts_model import *
 from app.services.config_service import ConfigService
+from app.services.link_service import LinkService
 from app.services.security_service import JWTAuthService, SecurityService
 from random import randint
 
@@ -55,11 +56,12 @@ class SubscriptionService(Service):
 @ServiceClass
 class ContactsService(Service):
 
-    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService):
+    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService,linkService:LinkService):
         super().__init__()
         self.securityService = securityService
         self.configService = configService
         self.jwtService = jwtService
+        self.linkService = linkService
 
         self.expiration = 3600000000
 

@@ -17,7 +17,7 @@ from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
-from app.utils.helper import flatten_dict,b64_encode
+from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request,status
 
 class CeleryTaskGuard(Guard):
@@ -239,3 +239,16 @@ class AccessLinkGuard(Guard):
                 raise ServerFileError(self.error_file,status.HTTP_410_GONE)
             
         return True,""
+
+    @APIFilterInject
+    @staticmethod
+    def verify_link_guard(link:LinkORM):
+
+        if link.public:
+            return False,'Cannot verify public domain'
+        if link.archived:
+            return False, 'Cannot verify archived domain'
+        if link.verified:
+            return False, 'Already verified'
+
+        return True

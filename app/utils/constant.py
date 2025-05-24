@@ -77,21 +77,26 @@ class EmailHostConstant(Enum):
 ########################                     ########################################
 
 class StreamConstant:
-    StreamLiteral = Literal['email-event','twilio','links-event','links-session','email-tracking']
+    StreamLiteral = Literal['email-event','twilio','links-event','links-session','email-tracking','contact-event']
 
     EMAIL_EVENT_STREAM ='email-event'
     TWILIO_STREAM ='twilio'
     LINKS_EVENT_STREAM ='links-event'
     LINKS_SESSION_STREAM ='links-session'
     EMAIL_TRACKING ='email-tracking'
+    CONTACT_EVENT = 'contact-event'
 
-class ServerParamsConstant:
+class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'
 
 
 ########################                     ########################################
 
-class EmailHeadersConstant:
+class EmailHeadersConstant(str,Enum):
 
     X_EMAIL_ID = 'X-EMAIL-ID'
     MESSAGE_ID = 'MESSAGE-ID'
+
+
+class LinkConstant(str,Enum):
+    PIXEL = 'pixel'

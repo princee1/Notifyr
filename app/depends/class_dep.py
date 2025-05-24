@@ -1,8 +1,10 @@
 import asyncio
 from typing import Annotated, Any, Literal, Dict,TypedDict
+from urllib.parse import urlparse
 from fastapi import BackgroundTasks, Depends, Query, Request, Response
 from app.classes.broker import MessageBroker, SubjectType,exception_to_json
 from app.classes.celery import SchedulerModel
+from app.definition._error import ServerFileError
 from app.depends.dependencies import get_request_id
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel
 from app.models.link_model import LinkORM
@@ -10,6 +12,7 @@ from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.container import Get
 from app.utils.tools import Time
+from app.utils.validation import url_validator
 from .variables import *
 from app.services.link_service import LinkService
 from app.services.logger_service import LoggerService
@@ -95,6 +98,7 @@ class LinkArgs:
         self._filter_params()
         self.configService:ConfigService = Get(ConfigService)
         self.linkService:LinkService = Get(LinkService)
+        self.base_url = self.linkService.BASE_URL('')
     
     def __getitem__(self,params)->str|None:
         return self.request.query_params.get(params,None)
@@ -128,16 +132,23 @@ class LinkArgs:
     def raw_filtered_out_params(self,attr,include=()):
         return "&".join([ f'{key}={value}' for key,value in getattr(self,attr).items() if key in include])
     
-    def create_link(self,link:LinkORM,path:str,include_scoped_out=(),include_ids_type=()):
+    def create_link(self,link:LinkORM|None|str,path:str='',include_scoped_out=(),include_ids_type=()):
         if link == None:
-            url = self.request.url.hostname
-        else:
+            url = self.request.url.netloc
+        elif isinstance(link,LinkORM):
             url = link.link_url
+        elif isinstance(link,url):
+            url = link
             
         if not url.endswith("/"):
             url+="/"
-        
-        url+=path if path else ""
+
+        path = path if path else ""
+
+        if path.startswith('/'):
+            path = path[1:]
+
+        url+=path
         url+="?"
         url+=self.raw_link_params
         url+=self.raw_filtered_out_params('server_scoped',include_scoped_out)
@@ -148,10 +159,10 @@ class LinkArgs:
     def subject_id(self):
         sid_type = self.ids_type_params.get('sid_type','plain')
         match sid_type:
-            case 'contact':
-                return sid_type,self.server_scoped.get("contact_id",None)
             case 'message':
                 return sid_type,self.server_scoped.get('message_id',None)
+            case 'contact':
+                return sid_type,self.server_scoped.get("contact_id",None)
             case 'plain':
                 return sid_type,self.server_scoped.get("subject_id",None)
             case 'session':
@@ -159,6 +170,16 @@ class LinkArgs:
             case _:
                 return sid_type,self.server_scoped.get('subject_id',None)
             
+    @property
+    def redirect_url(self):
+        redirect_url = self.request.query_params.get('redirect_url',None)
+        if not url_validator(redirect_url):
+            raise ServerFileError('app/static/error-404-page/index.html',status_code=404)
+
+        if urlparse(redirect_url).netloc == self.base_url:
+            redirect_url = redirect_url.replace(self.base_url,'')
+        return redirect_url
+        
 class Broker:
     
     def __init__(self,request:Request,response:Response,backgroundTasks:BackgroundTasks):

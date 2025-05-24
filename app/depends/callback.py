@@ -46,7 +46,6 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
     print('Link Event Callback:','Treating',len(entries), 'entries')
     for ids,val in entries:
         try:
-            print(val)
             empty_str_to_none(val)
             link_id = val['link_id']
             

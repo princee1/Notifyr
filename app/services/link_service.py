@@ -2,6 +2,7 @@ from typing import Callable
 from urllib.parse import urlparse
 from fastapi import HTTPException, Request,status
 from app.classes.rsa import RSA
+from app.classes.template import HTMLTemplate
 from app.definition._service import Service, ServiceClass
 from app.models.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
@@ -63,6 +64,8 @@ class LinkService(Service):
         ...
     
     async def parse_info(self,request:Request,link_id:str,path:str,link_args):
+        if not path:
+            path = None
         user_agent = request.headers.get('user-agent')
         client_ip = request.headers.get('x-forwarded-for')
         message_id = link_args.server_scoped.get("message_id",None)
@@ -134,8 +137,6 @@ class LinkService(Service):
             except KeyError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": f"Failed to fetch well-known info"})
 
-            
-
     async def generate_qr_code(self, full_url: str, qr_config:QRCodeModel):
         """
         Generate a QR code for the given URL with optional configuration.
@@ -163,3 +164,34 @@ class LinkService(Service):
 
         base64_img = b64_encode(img_io.read())
         return f'data:image/png;base64,{base64_img}'
+    
+    def create_tracking_pixel(self,template:HTMLTemplate, email_id: str,contact_id:str=None) -> str:
+        """
+        Generate a tracking pixel URL for the given email ID.
+
+        Args:
+            email_id (str): The email ID to associate with the tracking pixel.
+
+        Returns:
+            str: The full URL of the tracking pixel.
+        """
+        contact_id = '' if not contact_id else f'&contact_id={contact_id}'
+        tracking_path = f"/link/p/?message_id={email_id}{contact_id}"
+        url = self.BASE_URL(tracking_path)
+        template.add_tracking_pixel(url)
+    
+    def generate_html(self, img_data):
+        html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>QR Code</title>
+            </head>
+            <body>
+                <h1>QR Code</h1>
+                <img src="{img_data}" alt="QR Code">
+            </body>
+            </html>
+            """
+        
+        return html_content
