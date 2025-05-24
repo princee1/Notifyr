@@ -183,7 +183,7 @@ class LinkRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/t/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_email_links(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
-        self.send_email_event(broker, link_query,EmailStatus.LINK_CLICKED)
+        self.send_email_event(broker, link_query,EmailStatus.LINK_CLICKED.value)
         
         redirect_url = link_query.redirect_url
         redirect_url = link_query.create_link(redirect_url,None,('contact_id','message_id'),('cid'))
@@ -192,7 +192,7 @@ class LinkRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/p/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_pixel(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
-        self.send_email_event(broker,link_query,EmailStatus.OPENED)
+        self.send_email_event(broker,link_query,EmailStatus.OPENED.value)
         return None
     
 
