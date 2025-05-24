@@ -42,6 +42,12 @@ class SchemaValidationError(BaseError):
 
 class SkipTemplateCreationError(BaseError):
     ...
+
+class TemplateFormatError(BaseError):
+    ...
+
+class TemplateCreationError(BaseError):
+    ...
 # ============================================================================================================
 
 
@@ -319,19 +325,44 @@ class HTMLTemplate(MLTemplate):
             tracking_url (str): The URL of the tracking pixel.
         """
         if not hasattr(self, 'bs4') or not self.bs4:
-            raise TemplateBuildError("HTML content is not loaded or initialized.")
+            raise TemplateCreationError("HTML content is not loaded or initialized.")
         
         tracking_pixel_tag = self.bs4.new_tag("img", src=tracking_url, width="1", height="1", style="display:none;")
         body_tag = self.bs4.select_one("body")
         if body_tag:
             body_tag.append(tracking_pixel_tag)
         else:
-            raise TemplateBuildError("No <body> tag found in the HTML content.")
+            raise TemplateFormatError("No <body> tag found in the HTML content.")
     
         self.set_content()
 
+    def add_signature(self, signature_content: str):
+        self.update_footer(signature_content)
+        self.set_content()
 
-    def add_unsubscribe_footer(self,urls):
+    def add_unsubscribe_footer(self, content: str):
+        self.update_footer(content)
+        self.set_content()
+
+    def update_footer(self, content):
+        footer = self.bs4.select_one('footer')
+        if footer is None:
+            footer = Tag(name="footer")
+            body = self.bs4.select_one('body')
+            if body:
+                body.append(footer)
+            else:
+                raise TemplateFormatError("No <body> tag found in the HTML content.")
+        
+        if footer.string is None:
+            footer.string = content
+        else:
+            footer.string += f"\n{content}"
+
+    def set_to_email_tracking_link(self, content: str):
+        body = self.bs4.select_one('body')
+        if body:
+            body.string = content
         self.set_content()
 
     def clone(self)->Self:
@@ -339,7 +370,9 @@ class HTMLTemplate(MLTemplate):
         Template.__init__(clone)
         return clone
 
-    
+    @property
+    def body(self):
+        return self.bs4.select_one('body').string
     
 
 class PDFTemplate(Template):

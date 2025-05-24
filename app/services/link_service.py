@@ -14,8 +14,9 @@ from app.services.security_service import SecurityService
 from app.utils.helper import b64_encode, generateId
 import aiohttp
 import json
-
 from app.utils.tools import Cache
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+import re
 
 @ServiceClass
 class LinkService(Service):
@@ -179,6 +180,42 @@ class LinkService(Service):
         tracking_path = f"/link/p/?message_id={email_id}{contact_id}"
         url = self.BASE_URL(tracking_path)
         template.add_tracking_pixel(url)
+
+    def set_tracking_link(self, template:HTMLTemplate,message_tracking_id: str, contact_id: str) -> str:
+        """
+        Replace every link in the given content with a new tracking URL.
+
+        Args:
+            message_tracking_id (str): The message tracking ID to include in the query.
+            contact_id (str): The contact ID to include in the query.
+            content (str): The content containing links to be replaced.
+
+        Returns:
+            str: The content with replaced tracking links.
+        """
+
+        def replace_link(match):
+            original_url = match.group(0)
+            parsed_url = urlparse(original_url)
+            redirect_url = original_url
+
+            if parsed_url.netloc == urlparse(self.BASE_URL("")).netloc:
+                # If the netloc matches the base URL, use only the path and query
+                redirect_url = urlunparse(("", "", parsed_url.path, parsed_url.params, parsed_url.query, ""))
+            
+            # Construct the new tracking URL
+            query_params = {
+                "message_id": message_tracking_id,
+                "contact_id": contact_id,
+                "redirect_url": redirect_url
+            }
+            tracking_url = self.BASE_URL(f"/link/t/?{urlencode(query_params)}")
+            return tracking_url
+
+        # Regex to match URLs in the content
+        url_pattern = r"https?://[^\s]+"
+        new_content = re.sub(url_pattern, replace_link, template.body)
+        template.set_to_email_tracking_link(new_content)
     
     def generate_html(self, img_data):
         html_content = f"""

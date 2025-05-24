@@ -4,7 +4,7 @@ from typing import Callable
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
-from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateNotFoundError, TemplateValidationError
+from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
 from app.definition._error import BaseError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
@@ -73,6 +73,18 @@ class TemplateHandler(Handler):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
                 'details': error,
                 'message': 'Validation Error'
+            })
+    
+        except TemplateFormatError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+                'message': 'Template format is invalid',
+                'details': e.args[0]
+            })
+
+        except TemplateCreationError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'Failed to create template',
+                'details': e.args[0]
             })
 
         except SchemaValidationError as e:
