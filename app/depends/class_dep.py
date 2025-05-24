@@ -70,7 +70,7 @@ class SubjectParams:
         if isinstance(self.subject_id,tuple):
             self.subject_id = list(self.subject_id)[0]
 
-class LinkArgs:
+class LinkQuery:
 
     class ServerScopedParams(TypedDict):
         client_id:str | None = None

@@ -63,13 +63,13 @@ class LinkService(Service):
     def verify_safe_domain(self,domain:str):
         ...
     
-    async def parse_info(self,request:Request,link_id:str,path:str,link_args):
+    async def parse_info(self,request:Request,link_id:str,path:str,link_query):
         if not path:
             path = None
         user_agent = request.headers.get('user-agent')
         client_ip = request.headers.get('x-forwarded-for')
-        message_id = link_args.server_scoped.get("message_id",None)
-        contact_id = link_args.server_scoped.get("contact_id",None)
+        message_id = link_query.server_scoped.get("message_id",None)
+        contact_id = link_query.server_scoped.get("contact_id",None)
         referrer = request.headers.get('referrer',None)
 
         ip_lookup:dict|None = await self.ip_lookup(client_ip)

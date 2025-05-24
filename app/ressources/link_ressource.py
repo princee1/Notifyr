@@ -12,7 +12,7 @@ from app.definition._error import ServerFileError
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import GetLink
-from app.depends.class_dep import Broker, LinkArgs
+from app.depends.class_dep import Broker, LinkQuery
 from app.depends.orm_cache import LinkORMCache
 from app.models.email_model import EmailStatus, TrackingEmailEventORM
 from app.services.config_service import ConfigService
@@ -137,9 +137,9 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @HTTPStatusCode(200)
     @BaseHTTPRessource.HTTPRoute('/code/{link_id}/', methods=[HTTPMethod.GET,HTTPMethod.POST], mount=True)
-    async def get_qrcode(self,response:Response, link_id: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_args: Annotated[LinkArgs, Depends(LinkArgs)], media_type: MediaType = Depends(media_type_query), authPermission=Depends(get_auth_permission)):
+    async def get_qrcode(self,response:Response, link_id: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_query: Annotated[LinkQuery, Depends(LinkQuery)], media_type: MediaType = Depends(media_type_query), authPermission=Depends(get_auth_permission)):
         path: str = None
-        url = link_args.create_link(link, path, ("contact_id", "message_id", "session_id"))
+        url = link_query.create_link(link, path, ("contact_id", "message_id", "session_id"))
         img_data = await self.linkService.generate_qr_code(url, qrModel)
 
         if media_type == "image":
@@ -168,12 +168,12 @@ class LinkRessource(BaseHTTPRessource):
     @UseGuard(AccessLinkGuard(True))
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/v/{link_id}/{path:path}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    async def track_visit_url(self,request:Request,response:Response,path:str,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_cache)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
+    async def track_visit_url(self,request:Request,response:Response,path:str,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_cache)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
 
-        redirect_link = link_args.create_link(link,path,("session_id"))
-        sid_type,subject_id = link_args.subject_id
+        redirect_link = link_query.create_link(link,path,("session_id"))
+        sid_type,subject_id = link_query.subject_id
 
-        saved_info = await self.linkService.parse_info(request,link.link_id,path,link_args)
+        saved_info = await self.linkService.parse_info(request,link.link_id,path,link_query)
        
         broker.publish(StreamConstant.LINKS_EVENT_STREAM,sid_type,subject_id,saved_info,)
         broker.stream(StreamConstant.LINKS_EVENT_STREAM,saved_info)
@@ -182,23 +182,23 @@ class LinkRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/t/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    def track_email_links(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
-        self.send_email_event(broker, link_args,EmailStatus.LINK_CLICKED)
+    def track_email_links(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
+        self.send_email_event(broker, link_query,EmailStatus.LINK_CLICKED)
         
-        redirect_url = link_args.redirect_url
-        redirect_url = link_args.create_link(redirect_url,None,('contact_id','message_id'),('cid'))
+        redirect_url = link_query.redirect_url
+        redirect_url = link_query.create_link(redirect_url,None,('contact_id','message_id'),('cid'))
         return RedirectResponse(redirect_url,status.HTTP_308_PERMANENT_REDIRECT)
 
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/p/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
-    def track_pixel(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_args:Annotated[LinkArgs,Depends(LinkArgs)]):
-        self.send_email_event(broker,link_args,EmailStatus.OPENED)
+    def track_pixel(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
+        self.send_email_event(broker,link_query,EmailStatus.OPENED)
         return None
     
 
-    def send_email_event(self, broker:Broker, link_args:LinkArgs,event:EmailStatus):
-        message_id = link_args['message_id']
-        contact_id = link_args['contact_id']
+    def send_email_event(self, broker:Broker, link_query:LinkQuery,event:EmailStatus):
+        message_id = link_query['message_id']
+        contact_id = link_query['contact_id']
         now = datetime.now(timezone.utc).isoformat()
 
         if contact_id: 
