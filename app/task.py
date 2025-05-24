@@ -7,7 +7,7 @@ from celery.result import AsyncResult
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import ConfigService,CeleryEnv
 from app.services.email_service import EmailSenderService,EmailReaderService
-from app.container import Get, build_container
+from app.container import Get, build_container,__DEPENDENCY
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import SMSService, CallService
 from app.utils.prettyprint import PrettyPrinter_
@@ -29,7 +29,10 @@ if sys.argv[0] == exe_path:
     c_env = sys.argv[3]
     ConfigService.set_celery_env(c_env)
     PrettyPrinter_.message(c_env)
-    build_container(False)
+    if c_env =='purge':
+        build_container(dep=[ConfigService])
+    else:
+        build_container(False)
         
 ##############################################           ##################################################
 

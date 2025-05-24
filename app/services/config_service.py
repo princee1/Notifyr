@@ -41,6 +41,7 @@ class CeleryMode(Enum):
     worker = 'worker'
     beat = 'beat'
     none = 'none'
+    purge = 'purge'
 
 
 class ServerConfig(TypedDict):
@@ -53,7 +54,7 @@ class ServerConfig(TypedDict):
                        "warning", "info", "debug", "trace"]
 
 
-CeleryEnv = Literal['flower', 'worker', 'beat', 'none']
+CeleryEnv = Literal['flower', 'worker', 'beat', 'none','purge']
 
 
 @_service.ServiceClass
