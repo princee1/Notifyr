@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from fastapi import BackgroundTasks, Depends, Query, Request, Response
 from app.classes.broker import MessageBroker, SubjectType,exception_to_json
 from app.classes.celery import SchedulerModel
+from app.classes.mail_provider import get_email_provider_name
 from app.definition._error import ServerFileError
 from app.depends.dependencies import get_request_id
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel
@@ -52,6 +53,7 @@ class EmailTracker:
             "subject":self.subject,
             "email_id": self.email_id,
             "message_id": self.message_id,
+            "esp_provider":get_email_provider_name(self.recipient),
             "spam_detection_confidence": spam_confidence,
             "spam_label": spam_label,
             "date_sent": now.isoformat(),

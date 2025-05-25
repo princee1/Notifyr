@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     email_id UUID DEFAULT uuid_generate_v1mc (),
     message_id VARCHAR(150) UNIQUE NOT NULL,
     recipient VARCHAR(100) NOT NULL,
+    esp_provider VARCHAR(30) DEFAULT NULL,
     date_sent TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,

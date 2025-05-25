@@ -90,6 +90,7 @@ class EmailTrackingORM(models.Model):
     """
     recipient = fields.CharField(max_length=100)
     subject = fields.CharField(max_length=150)
+    esp_provider = fields.CharField(max_length=30)
     date_sent = fields.DatetimeField(auto_now_add=True)
     last_update = fields.DatetimeField(auto_now=True)
     expired_tracking_date = fields.DatetimeField(null=True)
@@ -107,6 +108,7 @@ class EmailTrackingORM(models.Model):
             "email_id": str(self.email_id),
             "message_id": self.message_id,
             "recipient": self.recipient,
+            'esp_provider':self.esp_provider,
             "date_sent": self.date_sent.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,

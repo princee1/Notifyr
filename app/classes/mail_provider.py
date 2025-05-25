@@ -19,6 +19,42 @@ IMAP_SSL_TLS_PORT = 993
 
 ConnMode = Literal['tls', 'ssl', 'normal']
 
+provider_map = {
+        # Google domains
+        "gmail": "Google",
+        "googlemail": "Google",
+        "google": "Google",
+
+        # Microsoft domains
+        "hotmail": "Microsoft",
+        "outlook": "Microsoft",
+        "live": "Microsoft",
+        "msn": "Microsoft",
+
+        # Yahoo domains
+        "yahoo": "Yahoo",
+        "ymail": "Yahoo",
+        "rocketmail": "Yahoo",
+
+        # Apple
+        "icloud": "Apple",
+        "me": "Apple",
+        "mac": "Apple",
+
+        # ProtonMail
+        "protonmail": "ProtonMail",
+
+        # Zoho
+        "zoho": "Zoho",
+
+        # AOL
+        "aol": "AOL",
+
+        # Example fallback
+        "example": "Example Provider"
+    }
+
+
 class EmailConnInterface():
     def setHostPort(connMode: str): pass
 
@@ -140,3 +176,13 @@ class GMailAPI(MailAPI):
 
 class MicrosoftGraphMailAPI(MailAPI):
     ...
+
+def get_email_provider_name(email):
+    
+    try:
+        domain = email.split('@')[1]
+        subdomain = domain.split('.')[0].lower()
+
+        return provider_map.get(subdomain, "Unknown Provider")
+    except (IndexError, AttributeError):
+        return "Invalid Email"
