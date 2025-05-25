@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS LinkSession (
 );
 
 CREATE TABLE IF NOT EXISTS LinkAnalytics(
-    link_id UUID NOT NULL,  
+    link_id UUID NOT NULL,
+    week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     country VARCHAR(5),
     region VARCHAR(60),
     -- referrer VARCHAR(100),
@@ -132,11 +133,11 @@ BEGIN
     FOREACH record IN ARRAY data
     LOOP
         INSERT 
-            INTO LinkAnalytics (link_id, country,region,city,device,visits_counts)
+            INTO LinkAnalytics (link_id,week_start_date, country, region, city, device, visits_counts )
         VALUES 
-            (record.link_id, record.country,record.region,record.city,record.device,record.visits_counts)
+            (record.link_id,DATE_TRUNC('week', NOW()), record.country, record.region, record.city, record.device, record.visits_counts)
         ON CONFLICT 
-            (link_id, country,region,city,device)
+            (link_id,week_start_date, country, region, city, device, week_start_date)
         DO UPDATE 
             SET visits_counts = LinkAnalytics.visits_counts + EXCLUDED.visits_counts;
     END LOOP;

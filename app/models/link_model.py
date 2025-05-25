@@ -114,6 +114,7 @@ class LinkSessionORM(models.Model):
 
 class LinkAnalyticsORM(models.Model):
     link = fields.ForeignKeyField("models.LinkORM", related_name="analytics", on_delete=fields.CASCADE)
+    week_start_date = fields.DateField(default=datetime.utcnow().date)
     visits_counts = fields.IntField(default=1)
     country = fields.CharField(max_length=60, null=True)
     region = fields.CharField(max_length=60, null=True)
@@ -123,12 +124,13 @@ class LinkAnalyticsORM(models.Model):
     class Meta:
         schema = SCHEMA
         table = "linkanalytics"
-        unique_together = ("link", "country", "region", "city", "device")
+        unique_together = ("link", "week_start_date", "country", "region", "city", "device")
 
     @property
     def to_json(self):
         return {
             "link_id": str(self.link_id),
+            "week_start_date": self.week_start_date.isoformat(),
             "visits_counts": self.visits_counts,
             "country": self.country,
             "region": self.region,
