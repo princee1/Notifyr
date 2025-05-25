@@ -1,7 +1,8 @@
 from typing import Any, List, Literal, Optional, Self, TypeVar, TypedDict
 from pydantic import BaseModel, model_validator
 from enum import Enum
-from tortoise import fields, models
+from tortoise import fields, models, Tortoise, run_async
+from tortoise.transactions import in_transaction
 from app.classes.celery import SchedulerModel
 from app.classes.email import MimeType
 from app.utils.helper import uuid_v1_mc
@@ -29,13 +30,11 @@ class EmailMetaModel(BaseModel):
         self.X_Email_ID = None
         return self
 
-
 class EmailTemplateModel(BaseModel):
     meta: EmailMetaModel
     data: dict[str, Any]
     attachments: Optional[dict[str, Any]] = {}
     mimeType:MimeType = 'both'
-
 
 class CustomEmailModel(BaseModel):
     meta: EmailMetaModel
@@ -43,7 +42,6 @@ class CustomEmailModel(BaseModel):
     html_content: str|None = None
     attachments: Optional[List[tuple[str, str]]] = []
     images: Optional[List[tuple[str, str]]] = []
-
 
 class EmailSpamDetectionModel(BaseModel):
     recipient:str |List[str] | None
@@ -56,7 +54,6 @@ class EmailSpamDetectionModel(BaseModel):
         if self.body_html == None and self.body_plain == None:
             raise ValueError('Plain body and Html body cannot both be null')
         return self
-
 
 class EmailStatus(str, Enum):
     RECEIVED='RECEIVED'
@@ -73,10 +70,7 @@ class EmailStatus(str, Enum):
     DEFERRED = 'DEFERRED'
     DELAYED = 'DELAYED'
     REPLIED = 'REPLIED'
-    MAILBOX_UNREACHABLE='MAILBOX-UNREACHABLE'
-    USER_NOT_FOUND = 'USER-NOT-FOUND'
-    
-
+ 
 
 class EmailTrackingORM(models.Model):
     email_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -142,6 +136,7 @@ class TrackingEmailEventORM(models.Model):
     def to_json(self):
         return {
             "event_id": str(self.event_id),
+            "description":self.description,
             "email_id": str(self.email.email_id),
             "contact_id":str(self.contact.contact_id),
             "current_event": self.current_event.value,
@@ -166,4 +161,65 @@ class TrackedLinksORM(models.Model):
             "link_url": self.link_url,
             "click_count": self.click_count
         }
+
+class EmailAnalyticsORM(models.Model):
+    analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    week_start_date = fields.DateField(unique=True)
+    emails_sent = fields.IntField(default=0)
+    emails_delivered = fields.IntField(default=0)
+    emails_opened = fields.IntField(default=0)
+    emails_bounced = fields.IntField(default=0)
+    emails_replied = fields.IntField(default=0)
+
+    class Meta:
+        schema = SCHEMA
+        table = "emailanalytics"
+
+    @property
+    def to_json(self):
+        return {
+            "analytics_id": str(self.analytics_id),
+            "week_start_date": self.week_start_date.isoformat(),
+            "emails_sent": self.emails_sent,
+            "emails_delivered": self.emails_delivered,
+            "emails_opened": self.emails_opened,
+            "emails_bounced": self.emails_bounced,
+            "emails_replied": self.emails_replied,
+        }
+
+# Service function to upsert analytics
+async def upsert_email_analytics(sent: int, delivered: int, opened: int, bounced: int, replied: int):
+    async with in_transaction() as conn:
+        await conn.execute_query(
+            """
+            SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5);
+            """,
+            [sent, delivered, opened, bounced, replied]
+        )
+
+async def calculate_email_analytics_grouped(group_by_factor: int):
+    """
+    Fetch grouped email analytics based on the specified grouping factor.
+    :param group_by_factor: The grouping factor (e.g., 1 for weeks, 4 for months, etc.)
+    :return: List of grouped analytics as dictionaries
+    """
+    async with in_transaction() as conn:
+        rows = await conn.execute_query(
+            """
+            SELECT * FROM emails.calculate_email_analytics_grouped($1);
+            """,
+            [group_by_factor]
+        )
+        # Convert rows to a list of dictionaries for easier use
+        return [
+            {
+                "group_number": row[0],
+                "emails_sent": row[1],
+                "emails_delivered": row[2],
+                "emails_opened": row[3],
+                "emails_bounced": row[4],
+                "emails_replied": row[5],
+            }
+            for row in rows
+        ]
 
