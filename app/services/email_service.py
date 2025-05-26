@@ -584,7 +584,7 @@ class EmailReaderService(BaseEmailService):
         for jobs in self.jobs.values():
             jobs.cancel_job()
 
-    @register_job('Parse Dns Email',None,'INBOX', None)
+    #@register_job('Parse Dns Email',None,'INBOX', None)
     @BaseEmailService.task_lifecycle
     @select_inbox
     async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):

@@ -30,14 +30,38 @@ CREATE TABLE AggreateCampaignAnalytics (
     last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- Optional: Add a scheduled job to delete old campaigns and analytics
--- Example for PostgreSQL:
--- CREATE OR REPLACE FUNCTION delete_old_campaigns() RETURNS VOID AS $$
--- BEGIN
---     DELETE FROM Campaign WHERE end_date < NOW() - INTERVAL '30 days';
---     DELETE FROM CampaignAnalytics WHERE campaign_id NOT IN (SELECT id FROM Campaign);
--- END;
--- $$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION delete_old_campaigns() RETURNS VOID AS $$
+BEGIN
+    DELETE FROM Campaign WHERE end_date < NOW() - INTERVAL '30 days';
+    DELETE FROM CampaignAnalytics WHERE campaign_id NOT IN (SELECT id FROM Campaign);
+END;
+$$ LANGUAGE plpgsql;
 
 
--- SELECT cron.schedule('0 0 * * *', 'CALL delete_old_campaigns()');
+SELECT cron.schedule('0 0 * * *', 'CALL delete_old_campaigns()');
+
+CREATE OR REPLACE FUNCTION compute_campaign_limit() RETURNS TRIGGER AS $compute_campaign_limit$
+DECLARE
+    campaign_count INT;
+
+BEGIN
+    SELECT 
+        COUNT(*) 
+    INTO 
+        campaign_count 
+    FROM 
+        Campaign;
+
+    IF campaign_count >= 5 THEN
+        RAISE EXCEPTION 'Campaign Limit Reached';
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END;
+$compute_campaign_limit$ LANGUAGE plpgsql;
+
+CREATE TRIGGER limit_campaign
+BEFORE INSERT ON Campaign
+FOR EACH ROW
+EXECUTE FUNCTION compute_campaign_limit();
