@@ -21,9 +21,11 @@
 19. Features for emails: verify email(potentially implement our own or using a tools), monitoring email( with return path and image), hosting email (postfix,dovecot and more), read email, try to improve deliverability, rotate proxys when sending emails
 20. Have landing page and a better workflow for contacts and campaings...
 21. Each notify instance will have a persistance on their subject
-22. Add simple txt template message for email
-23. Verify domain using rsa encryption
-24. Create an MCP server myb?
-25. Cache the ip_lookup in redis
-26. Keep the public in the database and finish the private verification
-27. Have an (AI) algortihm that chooses whether to run in the background task or to send to the Celery worker with strategies design pattern
+22. Verify domain using rsa encryption
+23. Create an MCP server myb?
+24. Cache the ip_lookup in redis
+25. Keep the public in the database and finish the private verification
+26. Have an (AI) algortihm that chooses whether to run in the background task or to send to the Celery worker with strategies design pattern
+27. FOR NOW cant track multiple email sent at once
+28. verify template format
+29. Implement Campaign analytics

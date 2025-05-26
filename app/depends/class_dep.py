@@ -12,7 +12,6 @@ from app.models.link_model import LinkORM
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.container import Get
-from app.utils.tools import Time
 from app.utils.validation import url_validator
 from .variables import *
 from app.services.link_service import LinkService
@@ -22,7 +21,6 @@ from app.errors.async_error import ReactiveSubjectNotFoundError
 from time import perf_counter,time
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
 from app.utils.helper import uuid_v1_mc,UUID
-from email.utils import make_msgid as msid
 from datetime import datetime, timedelta, timezone
 import random
 
@@ -388,3 +386,15 @@ class KeepAliveQuery:
     def __repr__(self):
         subj_id = None if self.rx_subject == None else self.rx_subject.subject_id
         return f'KeepAliveQuery(timeout={self.timeout}, subject_id={subj_id}, request_id={self.x_request_id})'
+
+class CampaignQuery:
+    
+    def __init__(self,request:Request):
+        self.request = request
+
+        self.utm_source = self.request.query_params.get("utm_source", None)
+        self.utm_medium = self.request.query_params.get("utm_medium", None)
+        self.utm_campaign = self.request.query_params.get("utm_campaign", None)
+        self.utm_term = self.request.query_params.get("utm_term", None)
+        self.utm_content = self.request.query_params.get("utm_content", None)
+
