@@ -151,6 +151,22 @@ services:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
       - NGROK_URL=${NGROK_URL}
     
+  pgbouncer:
+    image: edoburu/pgbouncer
+    container_name: notifyr-pgbouncer
+    restart: always
+    ports:
+      - "6432:6432" # PgBouncer listens on port 6432
+    volumes:
+      - ./docker/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+      - ./docker/userlist.txt:/etc/pgbouncer/userlist.txt
+    environment:
+      - DB_HOST=notifyr-postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres
     
 volumes:
   mongo-data:
