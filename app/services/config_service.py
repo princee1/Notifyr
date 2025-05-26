@@ -162,7 +162,7 @@ class ConfigService(_service.Service):
         self.SMTP_EMAIL = self.getenv("SMTP_EMAIL")
         self.SMTP_ADDR_SERVER = self.getenv('SMTP_ADDR_SERVER')
         self.SMTP_PASS = self.getenv("SMTP_EMAIL_PASS")
-        self.SMTP_EMAIL_CONN_METHOD = self.getenv("SMTP_EMAIL_CONN_METHOD")
+        self.SMTP_EMAIL_CONN_METHOD = self.getenv("SMTP_EMAIL_CONN_METHOD",'tls')
         self.SMTP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(
             self.getenv("SMTP_EMAIL_LOG_LEVEL"), 0)
 
@@ -188,7 +188,7 @@ class ConfigService(_service.Service):
         self.TWILIO_TEST_URL = self.getenv("TWILIO_TEST_URL", None)
 
         self.JWT_SECRET_KEY = self.getenv("JWT_SECRET_KEY")
-        self.JWT_ALGORITHM = self.getenv("JWT_ALGORITHM")
+        self.JWT_ALGORITHM = self.getenv("JWT_ALGORITHM",'HS256')
         self.API_KEY = self.getenv("API_KEY")
         self.ON_TOP_SECRET_KEY = self.getenv("ON_TOP_SECRET_KEY")
         self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
