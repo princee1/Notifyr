@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS TrackedLinks (
 -- Create EmailAnalytics table
 CREATE TABLE IF NOT EXISTS EmailAnalytics (
     analytics_id UUID DEFAULT uuid_generate_v1mc (),
+    -- esp_provider VARCHAR(30),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     emails_sent INT DEFAULT 0,
     emails_delivered INT DEFAULT 0,
@@ -61,6 +62,7 @@ CREATE TABLE IF NOT EXISTS EmailAnalytics (
     emails_bounced INT DEFAULT 0,
     emails_replied INT DEFAULT 0,
     PRIMARY KEY (analytics_id),
+    -- UNIQUE(week_start_date,esp_provider)
     UNIQUE (week_start_date)
 );
 
