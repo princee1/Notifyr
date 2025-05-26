@@ -1,7 +1,7 @@
 import functools
 from typing import Callable
 from app.container import Get, InjectInFunction
-from app.models.email_model import EmailTrackingORM,TrackingEmailEventORM
+from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM, upsert_email_analytics
 from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
 from app.services.reactive_service import ReactiveService
 from app.services.celery_service import CeleryService
@@ -102,9 +102,57 @@ async def Add_Email_Tracking(entries:list[str,dict]):
     async with in_transaction():
         return await simple_bulk_creates(entries,EmailTrackingORM)
     
-async def Add_Email_Event(entries:list[str,dict]):
-    ...
-    
+async def Add_Email_Event(entries: list[tuple[str, dict]]):
+    valid_entries = set()
+    invalid_entries = set()
+    objs = []
+
+    analytics = {
+        'sent': 0,
+        'delivered': 0,
+        'opened': 0,
+        'bounced': 0,
+        'replied': 0
+    }
+
+    opens_per_email = {}
+
+    for ids, val in entries:
+        try:
+            empty_str_to_none(val)
+            email_id = val['email_id']
+            event = TrackingEmailEventORM(**val)
+            objs.append(event)
+
+            # Match the current event to the most accurate EmailStatus
+            match event.current_event:
+                case EmailStatus.SENT.value:
+                    analytics['sent'] += 1
+                case EmailStatus.DELIVERED.value:
+                    analytics['delivered'] += 1
+                case EmailStatus.OPENED.value | EmailStatus.LINK_CLICKED.value:
+                    # Ensure only one open event is tracked per email_id
+                    if email_id not in opens_per_email:
+                        analytics['opened'] += 1
+                        opens_per_email[email_id] = True
+                case EmailStatus.SOFT_BOUNCE | EmailStatus.HARD_BOUNCE | EmailStatus.MAILBOX_FULL:
+                    analytics['bounced'] += 1
+                case EmailStatus.REPLIED:
+                    analytics['replied'] += 1
+
+            valid_entries.add(ids)
+        except Exception as e:
+            invalid_entries.add(ids)
+
+    try:
+        async with in_transaction():
+            await TrackingEmailEventORM.bulk_create(objs)
+            await upsert_email_analytics(analytics)
+                        
+        return list(valid_entries.union(invalid_entries))
+    except Exception as e:
+        print(e)
+        return list(invalid_entries)
 async def Add_Link_Session(entries:list[str,dict]):
     uuid = uuid_v1_mc()
     print(entries)
@@ -117,4 +165,5 @@ Callbacks_Stream = {
     StreamConstant.EMAIL_TRACKING:Add_Email_Tracking,
     StreamConstant.LINKS_EVENT_STREAM:Add_Link_Event,
     StreamConstant.LINKS_SESSION_STREAM:Add_Link_Session
+    
 }
