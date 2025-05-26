@@ -3,6 +3,7 @@ from app.classes.auth_permission import AuthPermission, RefreshPermission
 from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
+from app.depends.class_dep import TrackerInterface
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.link_model import LinkORM
 from app.models.otp_model import OTPModel
@@ -251,4 +252,13 @@ class AccessLinkGuard(Guard):
         if link.verified:
             return False, 'Already verified'
 
-        return True
+        return True,''
+
+class TrackGuard(Guard):
+
+    async def guard(self,scheduler:SchedulerModel,tracker:TrackerInterface):
+        if not tracker.will_track:
+            return True,''
+        if scheduler.task_type !='now' or scheduler.task_type!='once':
+            return False,'Cannot track task that are not ran once'
+        return True,''

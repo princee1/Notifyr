@@ -92,7 +92,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseHandler(handlers.TemplateHandler)
     @UsePipe(pipe_email_track,pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
-    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']))
+    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         mail_content = scheduler.content
@@ -113,7 +113,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
     @UseLimiter(limit_value='10000/minutes')
     @UsePipe(pipe_email_track,pipes.CeleryTaskPipe)
-    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']))
+    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
     async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):

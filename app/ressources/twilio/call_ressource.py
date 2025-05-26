@@ -6,7 +6,7 @@ from app.classes.broker import exception_to_json
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.classes.template import PhoneTemplate
-from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard
+from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard, TrackGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path
@@ -26,7 +26,7 @@ from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTP
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
-from app.depends.class_dep import Broker, KeepAliveQuery, SubjectParams
+from app.depends.class_dep import Broker, KeepAliveQuery, SubjectParams, TwilioTracker
 from app.utils.constant import StreamConstant
 
 
@@ -110,9 +110,9 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseHandler(TemplateHandler, CeleryTaskHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @UsePipe(TemplateParamsPipe('phone', 'xml'), CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'))
-    @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']))
+    @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
-    async def voice_template(self, template: str, scheduler: CallTemplateSchedulerModel, request: Request, response: Response, taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
+    async def voice_template(self, template: str, scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         content = scheduler.content.model_dump()
         phoneTemplate: PhoneTemplate = self.assetService.phone[template]
         _, result = phoneTemplate.build(content, ...)
@@ -122,11 +122,11 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
     @UsePipe(CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'))
-    @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']))
+    @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']),TrackGuard)
     @UseHandler(CeleryTaskHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @BaseHTTPRessource.HTTPRoute('/twiml/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)], mount=False)
-    async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel, request: Request, response: Response, taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
+    async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         details = scheduler.content.model_dump(exclude={'url'})
         url = scheduler.content.url
         await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_twiml_voice_call, url, details)
@@ -135,11 +135,11 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
     @UsePipe(CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'))
-    @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']))
+    @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']),TrackGuard)
     @UseHandler(CeleryTaskHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @BaseHTTPRessource.HTTPRoute('/custom/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
-    async def voice_custom(self, scheduler: CallCustomSchedulerModel, request: Request, response: Response, taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
+    async def voice_custom(self, scheduler: CallCustomSchedulerModel, request: Request, response: Response, broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         details = scheduler.content.model_dump(
             exclude={'body', 'voice', 'language', 'loop'})
         body = scheduler.content.body

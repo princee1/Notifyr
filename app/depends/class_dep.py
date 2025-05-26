@@ -32,12 +32,18 @@ def  make_msgid():
     randval = random.getrandbits(64)
     return f"<{timeval}.{randval}@{configService.HOSTNAME}>"
 
-class EmailTracker:
+class TrackerInterface:
+
+    def __init__(self,flag):
+        self.will_track=flag
+
+
+class EmailTracker(TrackerInterface):
 
     def __init__(self, email_id:Annotated[UUID,Depends(uuid_v1_mc)],message_id:Annotated[str,Depends(make_msgid)],track_email:bool=Depends(track)):
+        super().__init__(track_email)
         self.email_id = str(email_id)
         self.message_id = message_id
-        self.will_track = track_email
         self.recipient:str = None
         self.subject:str = None
         
@@ -66,6 +72,12 @@ class EmailTracker:
     def message_tracking_id(self):
         return self.email_id if self.will_track else None
 
+
+class TwilioTracker(TrackerInterface):
+
+    def __init__(self,twilio_id:Annotated[UUID,Depends(uuid_v1_mc)],track_twilio:bool=Depends(track)):
+        super().__init__(track_twilio)
+        self.twilio_id=twilio_id
 
 class SubjectParams:
 
