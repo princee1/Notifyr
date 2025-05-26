@@ -85,6 +85,8 @@ class StreamConstant:
     LINKS_SESSION_STREAM ='links-session'
     EMAIL_TRACKING ='email-tracking'
     CONTACT_EVENT = 'contact-event'
+    TWILIO_TRACKING ='twilio-tracking'
+    TWILIO_EVENT = 'twilio-event'
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'
