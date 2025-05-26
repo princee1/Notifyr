@@ -25,8 +25,8 @@ import aiohttp
 import asyncio
 from aiohttp import BasicAuth
 
-@_service.ServiceClass
-class TwilioService(_service.Service):
+@_service.Service
+class TwilioService(_service.BaseService):
     def __init__(self, configService: ConfigService,) -> None:
         super().__init__()
         self.configService = configService
@@ -109,7 +109,7 @@ class TwilioService(_service.Service):
         }
 
 @_service.AbstractServiceClass
-class BaseTwilioCommunication(_service.Service):
+class BaseTwilioCommunication(_service.BaseService):
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService) -> None:
         super().__init__()
         self.configService = configService
@@ -144,7 +144,7 @@ class BaseTwilioCommunication(_service.Service):
         ...
 
 
-@_service.ServiceClass
+@_service.Service
 class SMSService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
@@ -188,7 +188,7 @@ class SMSService(BaseTwilioCommunication):
         self.messages
 
 
-@_service.ServiceClass
+@_service.Service
 class CallService(BaseTwilioCommunication):
     status_callback_event = ['initiated', 'ringing', 'answered', 'completed','busy','failed','no-answer']
 
@@ -320,7 +320,7 @@ class CallService(BaseTwilioCommunication):
 
 
 
-@_service.ServiceClass
+@_service.Service
 class FaxService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):

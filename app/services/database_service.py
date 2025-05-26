@@ -9,7 +9,7 @@ from app.utils.constant import StreamConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import BuildFailureError, Service,AbstractServiceClass,ServiceClass,BuildWarningError
+from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from redis.asyncio import Redis
@@ -27,13 +27,13 @@ class RedisDatabaseDoesNotExistsError(BaseError):
     ...
 
 @AbstractServiceClass
-class DatabaseService(Service): 
+class DatabaseService(BaseService): 
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
             super().__init__()
             self.configService= configService
             self.fileService = fileService
 
-@ServiceClass
+@Service
 class MongooseService(DatabaseService): # Chat data
     DB = Literal['agent','chat']
 
@@ -64,7 +64,7 @@ class MongooseService(DatabaseService): # Chat data
             print(e) 
             raise ...    
 
-@ServiceClass
+@Service
 class RedisService(DatabaseService):
 
     class StreamConfig(TypedDict):
@@ -327,7 +327,7 @@ class RedisService(DatabaseService):
         for i in range(len_db):
             await self.db[i].close()
             
-@ServiceClass
+@Service
 class TortoiseConnectionService(DatabaseService):
 
     def __init__(self, configService: ConfigService):

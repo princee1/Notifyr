@@ -1,12 +1,12 @@
 from app.interface.timers import IntervalInterface
 from .config_service import ConfigService
-from app.definition._service import Service,ServiceClass,AbstractServiceClass
+from app.definition._service import BaseService,Service,AbstractServiceClass
 from app.utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 
-@ServiceClass
-class FileService(Service,):
+@Service
+class FileService(BaseService,):
     # TODO add security layer on some file: encription,decryption
     # TODO add file watcher
     def __init__(self,configService:ConfigService) -> None:
@@ -48,14 +48,14 @@ class FileService(Service,):
 
 
 @AbstractServiceClass
-class BaseFileRetrieverService(Service,IntervalInterface):
+class BaseFileRetrieverService(BaseService,IntervalInterface):
     
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__()
         self.configService = configService
         self.fileService = fileService
     
-@ServiceClass
+@Service
 class FTPService(BaseFileRetrieverService):
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__(configService,fileService)
@@ -77,7 +77,7 @@ class FTPService(BaseFileRetrieverService):
             self.ftpClient.close()
     pass
 
-@ServiceClass
+@Service
 class GitCloneRepoService(BaseFileRetrieverService):
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
         super().__init__(configService,fileService)

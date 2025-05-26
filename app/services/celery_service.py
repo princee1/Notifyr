@@ -5,7 +5,7 @@ from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict
 import typing
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, TaskHeaviness, TaskType
 from app.classes.celery import CeleryTask, SchedulerModel
-from app.definition._service import BuildFailureError, Service, ServiceClass, ServiceStatus,BuildWarningError
+from app.definition._service import BuildFailureError, BaseService, Service, ServiceStatus,BuildWarningError
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.database_service import RedisService
 from app.utils.constant import HTTPHeaderConstant
@@ -63,8 +63,8 @@ class TaskManager():
         }
 
 
-@ServiceClass
-class TaskService(BackgroundTasks, Service, SchedulerInterface):
+@Service
+class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
     def __init__(self, configService: ConfigService, redisService: RedisService):
         self.configService = configService
@@ -77,7 +77,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         self.server_load: dict[TaskHeaviness, int] = {
             t: 0 for t in TaskHeaviness._value2member_map_.values()}
         super().__init__(None)
-        Service.__init__(self)
+        BaseService.__init__(self)
         SchedulerInterface.__init__(self)
 
     def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool)->TaskManager:
@@ -237,7 +237,7 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         if count:
             ...
 
-        return await Service.pingService(self)
+        return await BaseService.pingService(self)
 
     def check_system_ram():
         ...
@@ -246,13 +246,13 @@ class TaskService(BackgroundTasks, Service, SchedulerInterface):
         response.headers.append(HTTPHeaderConstant.REQUEST_ID, request.state.request_id)
 
 
-@ServiceClass
-class CeleryService(Service, IntervalInterface):
+@Service
+class CeleryService(BaseService, IntervalInterface):
     _celery_app = celery_app
     _task_registry = TASK_REGISTRY
 
     def __init__(self, configService: ConfigService, bTaskService: TaskService,redisService:RedisService):
-        Service.__init__(self)
+        BaseService.__init__(self)
         IntervalInterface.__init__(self,False)
         self.configService = configService
         self.bTaskService = bTaskService
@@ -420,15 +420,15 @@ class CeleryService(Service, IntervalInterface):
         if count:
             # TODO check in which interval the ratio is in
             ...
-        await Service.pingService(self)
+        await BaseService.pingService(self)
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
     def callback(self):
         asyncio.create_task(self._check_workers_status())
 
 
-@ServiceClass
-class OffloadTaskService(Service):
+@Service
+class OffloadTaskService(BaseService):
 
     def __init__(self, configService: ConfigService, celeryService: CeleryService, taskService: TaskService):
         super().__init__()

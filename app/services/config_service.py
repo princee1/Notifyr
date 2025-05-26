@@ -57,8 +57,8 @@ class ServerConfig(TypedDict):
 CeleryEnv = Literal['flower', 'worker', 'beat', 'none','purge']
 
 
-@_service.ServiceClass
-class ConfigService(_service.Service):
+@_service.Service
+class ConfigService(_service.BaseService):
     _celery_env = CeleryMode.none
 
     def __init__(self) -> None:

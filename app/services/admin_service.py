@@ -1,12 +1,12 @@
 from datetime import timedelta
-from app.definition._service import Service, ServiceClass
+from app.definition._service import BaseService, Service
 from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,AlreadyBlacklistedClientError
 from app.models.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
 from app.services.security_service import JWTAuthService
 
 
-@ServiceClass
-class AdminService(Service):
+@Service
+class AdminService(BaseService):
 
     def __init__(self,jwtAuthService:JWTAuthService):
         super().__init__()

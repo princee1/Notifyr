@@ -14,7 +14,7 @@ from app.utils.helper import copy_response, issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
 from app.container import Get, Need
-from app.definition._service import S, Service
+from app.definition._service import S, BaseService
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
@@ -792,7 +792,7 @@ def PingService(services:list[S|dict]):
                     await cls.pingService(*a,**k)
                     
                 else:    
-                    s: Service = Get(s)
+                    s: BaseService = Get(s)
                     await s.pingService()
 
             result = func(*args,**kwargs)          

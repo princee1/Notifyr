@@ -6,7 +6,7 @@ from app.definition._interface import Interface, IsInterface
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
-from app.definition._service import AbstractServiceClass, Service, ServiceClass
+from app.definition._service import AbstractServiceClass, BaseService, Service
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 import base64
@@ -48,8 +48,8 @@ class EncryptDecryptInterface(Interface):
         return generate_salt()
 
 
-@ServiceClass
-class JWTAuthService(Service, EncryptDecryptInterface):
+@Service
+class JWTAuthService(BaseService, EncryptDecryptInterface):
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__()
         self.configService = configService
@@ -243,8 +243,8 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         ...
 
 
-@ServiceClass
-class SecurityService(Service, EncryptDecryptInterface):
+@Service
+class SecurityService(BaseService, EncryptDecryptInterface):
 
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__()

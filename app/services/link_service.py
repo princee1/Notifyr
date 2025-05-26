@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException, Request,status
 from app.classes.rsa import RSA
 from app.classes.template import HTMLTemplate
-from app.definition._service import Service, ServiceClass
+from app.definition._service import BaseService, Service
 from app.models.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
@@ -18,8 +18,8 @@ from app.utils.tools import Cache
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 import re
 
-@ServiceClass
-class LinkService(Service):
+@Service
+class LinkService(BaseService):
     
     def __init__(self,configService:ConfigService,redisService:RedisService,reactiveService:ReactiveService,securityService:SecurityService):
         super().__init__()

@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 from app.classes.broker import SubjectType
 from app.definition._error import BaseError
-from app.definition._service import Service, ServiceClass
+from app.definition._service import BaseService, Service
 from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundError
 from app.interface.timers import IntervalInterface
 from app.services.config_service import ConfigService
@@ -76,11 +76,11 @@ class ReactiveSubject():
             if lock.locked():
                 lock.release()
 
-@ServiceClass
-class ReactiveService(Service,IntervalInterface):
+@Service
+class ReactiveService(BaseService,IntervalInterface):
     
     def __init__(self,configService:ConfigService,loggerService:LoggerService):
-        Service.__init__(self)
+        BaseService.__init__(self)
         IntervalInterface.__init__(self,start_now=True, interval=0.10)
         self.configService = configService
         self.loggerService = loggerService

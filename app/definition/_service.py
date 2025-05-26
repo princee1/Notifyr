@@ -79,7 +79,7 @@ class MethodServiceNotExistsError(BuildError):
 
 WAIT_TIME = 0.1
 
-class Service():
+class BaseService():
 
     def __init__(self) -> None:
         self.build_status: BuildErrorLevel = None
@@ -88,7 +88,7 @@ class Service():
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         self.service_status: ServiceStatus = None
         self.method_not_available: list[str] = []
-        self.service_list:list[Service] = []
+        self.service_list:list[BaseService] = []
 
     @staticmethod
     def CheckStatusBeforeHand(func:Callable):
@@ -96,7 +96,7 @@ class Service():
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             
-            self:Service = args[0]
+            self:BaseService = args[0]
 
             match self.service_status :
                 case ServiceStatus.NOT_AVAILABLE :
@@ -239,7 +239,7 @@ class Service():
         return {s:s.service_status for s in self.service_list}
 
 
-S = TypeVar('S', bound=Service)
+S = TypeVar('S', bound=BaseService)
 
 
 def AbstractServiceClass(cls: S) -> S:
@@ -250,14 +250,14 @@ def AbstractServiceClass(cls: S) -> S:
     return cls
 
 
-def ServiceClass(cls: S) -> S:
+def Service(cls: S) -> S:
     if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
         __DEPENDENCY.append(cls)
     return cls
 
 
 @overload
-def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
+def InjectWithCondition(baseClass: type, resolvedClass: type[BaseService]):
     # NOTE we cannot create instance of the base class
     """
     The `InjectWCondition` decorator is used to specify a Dependency that will be resolved instead of its parent class. Thus
@@ -297,9 +297,9 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
     def decorator(cls: Type[S]) -> Type[S]:
         if not AbstractServiceClasses.__contains__(baseClass):
             raise BuildAbortError(f'Base class {baseClass} not an abstract service')
-        if not issubclass_of(Service, baseClass):
+        if not issubclass_of(BaseService, baseClass):
             raise BuildAbortError(f'Base class {baseClass} is not class of Service')
-        if not issubclass_of(Service, cls):
+        if not issubclass_of(BaseService, cls):
             raise BuildAbortError(f'Class {cls} is not class of Service')
         AbstractDependency[cls.__name__] = {baseClass.__name__: {DependencyConstant.RESOLVED_FUNC_KEY: resolvedClass,
                                                                  DependencyConstant.RESOLVED_PARAMETER_KEY: None,
@@ -310,8 +310,8 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[Service]):
 
 
 @overload
-def InjectWithCondition(baseClass: type[Service], resolvedClass: Callable[..., type[Service]],
-                        fallback: list[type[Service]]): pass
+def InjectWithCondition(baseClass: type[BaseService], resolvedClass: Callable[..., type[BaseService]],
+                        fallback: list[type[BaseService]]): pass
 
 
 # def InjectWithCondition(baseClass: type, fallback: list[type[Service]]): pass # FIXME: overload function does not work because theres already another with two variable
@@ -354,14 +354,14 @@ def SkipBuild(cls: Type[S]):
     return decorator(False)
 
 
-def PossibleDep(dependencies: list[type[Service]]):
+def PossibleDep(dependencies: list[type[BaseService]]):
     def decorator(cls: Type[S]) -> Type[S]:
         PossibleDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls
     return decorator
 
 
-def OptionalDep(dependencies: list[type[Service]]):
+def OptionalDep(dependencies: list[type[BaseService]]):
     def decorator(cls: Type[S]) -> Type[S]:
         OptionalDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls

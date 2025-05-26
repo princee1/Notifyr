@@ -9,7 +9,7 @@ from app.utils.helper import issubclass_of, SkipCode
 from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
 from ordered_set import OrderedSet
-from app.definition._service import S, MethodServiceNotExistsError, Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from app.definition._service import S, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
@@ -56,7 +56,7 @@ class InvalidDependencyError(ContainerError):
     pass  # Abstract class in the dependency list
 
 
-def issubclass(cls): return issubclass_of(Service, cls)
+def issubclass(cls): return issubclass_of(BaseService, cls)
 
 
 def isabstract(cls):
@@ -94,7 +94,7 @@ class Container():
         self.__app.binder.bind(type_, to=obj, scope=scope)
 
     def bind(self, type_:type, obj:Any, scope=None):
-        if isinstance(obj,Service):
+        if isinstance(obj,BaseService):
             raise ValueError('Use Register Instead')
         if isinstance(obj,not_allowed_types):
             raise ValueError
@@ -351,7 +351,7 @@ class Container():
 
     def __createDep(self, typ: type, params:dict):
         flag = issubclass(typ)
-        obj: Service = typ(**params)
+        obj: BaseService = typ(**params)
         
         if flag:
             obj.service_list= list(params.values())
@@ -383,7 +383,7 @@ class Container():
         raise NotImplementedError
         D = self.__app.get(typ, scope)
         if issubclass(D):  # BUG need to ensure that this a Service type
-            D: Service = D  # NOTE access to the intellisense
+            D: BaseService = D  # NOTE access to the intellisense
             D._destroyer()
 
     def reloadDep(self, typ: type, scope=None):  # TODO
@@ -395,7 +395,7 @@ class Container():
         self.__inject(typ.__name__)
     
     @property
-    def dependencies(self) -> list[Service]: return [x[DependencyConstant.TYPE_KEY]
+    def dependencies(self) -> list[BaseService]: return [x[DependencyConstant.TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]
 
     @property

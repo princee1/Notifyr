@@ -5,8 +5,8 @@ from logging import Logger, LogRecord
 import sqlite3
 
 
-@_service.ServiceClass
-class LoggerService(_service.Service):
+@_service.Service
+class LoggerService(_service.BaseService):
 
     def __init__(self, configService: ConfigService) -> None:
         super().__init__()

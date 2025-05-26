@@ -38,7 +38,7 @@ from email import message_from_bytes
 
 
 @_service.AbstractServiceClass
-class BaseEmailService(_service.Service):
+class BaseEmailService(_service.BaseService):
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__()
         self.configService: ConfigService = configService
@@ -163,7 +163,7 @@ class BaseEmailService(_service.Service):
         ...
 
 
-@_service.ServiceClass
+@_service.Service
 class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
@@ -299,7 +299,7 @@ class EmailSenderService(BaseEmailService):
         return connector.verify(email)
 
 
-@_service.ServiceClass
+@_service.Service
 class EmailReaderService(BaseEmailService):
     service: Self  # Class Singleton
 

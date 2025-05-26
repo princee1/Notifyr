@@ -3,7 +3,7 @@ from typing import Literal
 
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import ContactPermissionScope
-from app.definition._service import Service, ServiceClass
+from app.definition._service import BaseService, Service
 from app.errors.contact_error import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.models.contacts_model import *
 from app.services.config_service import ConfigService
@@ -18,8 +18,8 @@ MIN_OPT_IN_CODE = 100000000
 MAX_OPT_IN_CODE = 999999999
 
 
-@ServiceClass
-class SubscriptionService(Service):
+@Service
+class SubscriptionService(BaseService):
 
     
 
@@ -53,8 +53,8 @@ class SubscriptionService(Service):
         return JSONResponse(content={"detail": "Subscription updated", "subscription": subs}, status_code=200)
 
 
-@ServiceClass
-class ContactsService(Service):
+@Service
+class ContactsService(BaseService):
 
     def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService,linkService:LinkService):
         super().__init__()
