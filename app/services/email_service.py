@@ -11,13 +11,15 @@ import poplib as pop
 import socket
 from typing import Callable, Iterable, Literal, Self, TypedDict
 
+from bs4 import BeautifulSoup
+
 from app.interface.timers import IntervalInterface
 from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.helper import uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
-from app.classes.mail_provider import  SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter
+from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter, SMTPErrorCode, get_error_description
 from app.utils.tools import Time
 
 from app.utils.constant import EmailHostConstant
@@ -28,11 +30,12 @@ from app.definition import _service
 from .config_service import ConfigService
 import ssl
 
-from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM
+from app.models.email_model import EmailStatus, EmailTrackingORM, TrackingEmailEventORM, map_smtp_error_to_status
 from app.utils.validation import email_validator
 
 from app.utils.constant import StreamConstant
 from email import message_from_bytes
+
 
 @_service.AbstractServiceClass
 class BaseEmailService(_service.Service):
@@ -43,35 +46,52 @@ class BaseEmailService(_service.Service):
         self.hostPort: int
         self.mailOAuth: OAuth = ...
         self.state = None
-        self.connMethod=...
+        self.connMethod = ...
         self.last_connectionTime: float = ...
         self.emailHost: EmailHostConstant = ...
-        self.type_:Literal['IMAP','SMTP']= None
+        self.type_: Literal['IMAP', 'SMTP'] = None
 
     @staticmethod
     def task_lifecycle(func: Callable):
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def async_wrapper(*args, **kwargs):
             self: BaseEmailService = args[0]
-            if not isinstance(self,BaseEmailService):
+            if not isinstance(self, BaseEmailService):
                 self = self.__class__.service
 
             connector = self.connect()
             if connector == None:
-                return 
-            
+                return
+
             if not self.authenticate(connector):
                 return
             kwargs['connector'] = connector
             result = await func(*args, **kwargs)
             self.logout(connector)
             return result
-        return wrapper
+        
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            self: BaseEmailService = args[0]
+            if not isinstance(self, BaseEmailService):
+                self = self.__class__.service
+
+            connector = self.connect()
+            if connector == None:
+                return
+
+            if not self.authenticate(connector):
+                return
+            kwargs['connector'] = connector
+            result = func(*args, **kwargs)
+            self.logout(connector)
+            return result
+        return async_wrapper if asyncio.iscoroutinefunction(func) else wrapper
 
     def build(self):
         if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
-            return 
-        
+            return
+
         params = {
             'client_id': self.configService.OAUTH_CLIENT_ID,
             'client_secret': self.configService.OAUTH_CLIENT_SECRET,
@@ -89,15 +109,15 @@ class BaseEmailService(_service.Service):
                     self.mailOAuth.refresh_access_token()
             except:
                 raise _service.BuildFailureError
-                
+
         else:
             try:
                 self.mailOAuth.grant_access_token()
             except SkipInputException:
                 raise _service.BuildFailureError
-            
+
         if self.mailOAuth.access_token == None:
-                raise _service.BuildFailureError
+            raise _service.BuildFailureError
 
         self.service_status = _service.ServiceStatus.AVAILABLE
         self.prettyPrinter.show()
@@ -108,27 +128,30 @@ class BaseEmailService(_service.Service):
     def authenticate(self): pass
 
     def connect(self):
-        config:type = SMTPConfig if  self.type_ == 'SMTP' else IMAPConfig
-        server_type_ssl:type = smtp.SMTP_SSL if self.type_ == 'SMTP' else imap.IMAP4_SSL
-        server_type:type = smtp.SMTP if self.type_ == 'SMTP' else imap.IMAP4
+        config: type = SMTPConfig if self.type_ == 'SMTP' else IMAPConfig
+        server_type_ssl: type = smtp.SMTP_SSL if self.type_ == 'SMTP' else imap.IMAP4_SSL
+        server_type: type = smtp.SMTP if self.type_ == 'SMTP' else imap.IMAP4
         try:
-            self.hostAddr = config.setHostAddr(self.configService.SMTP_EMAIL_HOST)
+            self.hostAddr = config.setHostAddr(
+                self.configService.SMTP_EMAIL_HOST)
             if self.connMethod == 'ssl':
                 connector = server_type_ssl(self.hostAddr, self.hostPort)
             else:
                 connector = server_type(self.hostAddr, self.hostPort)
-           
+
             if self.type_ == 'SMTP':
-                connector.set_debuglevel(self.configService.SMTP_EMAIL_LOG_LEVEL)
+                connector.set_debuglevel(
+                    self.configService.SMTP_EMAIL_LOG_LEVEL)
             return connector
         except (socket.gaierror, ConnectionRefusedError, TimeoutError) as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
-            
+
         except ssl.SSLError as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
 
         except NameError as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE  # BUG need to change the error name and a builder error
+            # BUG need to change the error name and a builder error
+            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
 
         return None
 
@@ -138,11 +161,12 @@ class BaseEmailService(_service.Service):
 
     def help(self):
         ...
-        
+
+
 @_service.ServiceClass
 class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
-    def __init__(self, configService: ConfigService, loggerService: LoggerService,redisService:RedisService):
+    def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         super().__init__(configService, loggerService)
         self.redisService = redisService
         self.type_ = 'SMTP'
@@ -152,28 +176,29 @@ class EmailSenderService(BaseEmailService):
         self.hostPort = SMTPConfig.setHostPort(
             self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
 
-        self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
-    
+        self.emailHost = EmailHostConstant._member_map_[
+            self.configService.SMTP_EMAIL_HOST]
+
     def _load_valid_from_email(self):
-        config_str:str = ...
+        config_str: str = ...
         config_str = config_str.strip()
         emails = config_str.split('|')
         emails = [email for email in emails if email_validator(email)]
         self.fromEmails.update(emails)
 
-    def logout(self,connector:smtp.SMTP):
+    def logout(self, connector: smtp.SMTP):
         try:
             connector.quit()
             connector.close()
         except:
             ...
-    
+
     def verify_dependency(self):
         if self.configService.SMTP_EMAIL_HOST not in EmailHostConstant._member_names_:
             raise _service.BuildFailureError
-        
-    def authenticate(self,connector:smtp.SMTP):
-        
+
+    def authenticate(self, connector: smtp.SMTP):
+
         try:
             if self.tlsConn:
                 context = ssl.create_default_context()
@@ -183,9 +208,11 @@ class EmailSenderService(BaseEmailService):
 
             if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
 
-                auth_status = connector.login(self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
+                auth_status = connector.login(
+                    self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
             else:
-                access_token = self.mailOAuth.encode_token(self.configService.SMTP_EMAIL)
+                access_token = self.mailOAuth.encode_token(
+                    self.configService.SMTP_EMAIL)
                 auth_status = connector.docmd("AUTH XOAUTH2", access_token)
                 auth_status = tuple(auth_status)
                 auth_code, auth_mess = auth_status
@@ -207,41 +234,41 @@ class EmailSenderService(BaseEmailService):
             # TODO Depends on the error code
         return False
 
-    async def sendTemplateEmail(self,data, meta, images,message_tracking_id,contact_id=None):
+    async def sendTemplateEmail(self, data, meta, images, message_tracking_id, contact_id=None):
         meta = EmailMetadata(**meta)
-        email  = EmailBuilder(data,meta,images)
-        return self._send_message(email,message_tracking_id,message_tracking_id,contact_id)
+        email = EmailBuilder(data, meta, images)
+        return self._send_message(email, message_tracking_id, message_tracking_id, contact_id)
 
-    async def sendCustomEmail(self,content, meta, images, attachment,message_tracking_id,contact_id=None):
+    async def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None):
         meta = EmailMetadata(**meta)
-        email =  EmailBuilder(content,meta,images,attachment)
-        #send_custom_email(content, meta, images, attachment)
-        return self._send_message(email,message_tracking_id,message_tracking_id,contact_id)
+        email = EmailBuilder(content, meta, images, attachment)
+        # send_custom_email(content, meta, images, attachment)
+        return self._send_message(email, message_tracking_id, message_tracking_id, contact_id)
 
     @Time
     @BaseEmailService.task_lifecycle
-    async def _send_message(self, email: EmailBuilder,connector:smtp.SMTP,message_tracking_id:str,contact_id:str=None):
+    async def _send_message(self, email: EmailBuilder, connector: smtp.SMTP, message_tracking_id: str, contact_id: str = None):
         try:
             event_id = uuid_v1_mc()
             now = datetime.now(timezone.utc).isoformat()
             emailID, message = email.mail_message
-            reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message,rcpt_options=['NOTIFY=SUCCESS,FAILURE,DELAY'])
+            reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message, rcpt_options=[
+                                        'NOTIFY=SUCCESS,FAILURE,DELAY'])
             email_status = EmailStatus.SENT.value
-                      
 
         except smtp.SMTPRecipientsRefused as e:
-            email_status=EmailStatus.BLOCKED.value
+            email_status = EmailStatus.BLOCKED.value
 
         except smtp.SMTPSenderRefused as e:
             self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT
-            email_status=EmailStatus.FAILED.value
-                
+            email_status = EmailStatus.FAILED.value
+
         except smtp.SMTPNotSupportedError as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
-            email_status=EmailStatus.FAILED
+            email_status = EmailStatus.FAILED.value
 
         except smtp.SMTPServerDisconnected as e:
-            email_status=EmailStatus.FAILED
+            email_status = EmailStatus.FAILED.value
 
             print('Server disconnected')
             print(e)
@@ -249,56 +276,60 @@ class EmailSenderService(BaseEmailService):
             # BUG service destroyed too ?
             self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
             # TODO retry getting the access token
-        
+
         finally:
 
             if message_tracking_id:
-                event = TrackingEmailEventORM.TrackingEventJSON(event_id=event_id,email_id=message_tracking_id,contact_id=None,current_event=email_status,date_event_received=now)    
-                await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
+                event = TrackingEmailEventORM.TrackingEventJSON(
+                    event_id=event_id, email_id=message_tracking_id, contact_id=None, current_event=email_status, date_event_received=now)
+                await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
 
             return {
-                "emailID":emailID,
-                "status":reply_
+                "emailID": emailID,
+                "status": reply_
             }
 
-            
-        
-
     @BaseEmailService.task_lifecycle
-    def verify_same_domain_email(self,email:str,connector:smtp.SMTP):
+    def verify_same_domain_email(self, email: str, connector: smtp.SMTP):
         domain = email.split['@'][1]
         our_domain = self.configService.SMTP_EMAIL.split['@'][1]
         if our_domain != domain:
             raise NotSameDomainEmailError
-        
+
         return connector.verify(email)
+
+
 @_service.ServiceClass
-class EmailReaderService(BaseEmailService,IntervalInterface):
-    service:Self # Class Singleton
+class EmailReaderService(BaseEmailService):
+    service: Self  # Class Singleton
+
     @dataclass
     class Jobs:
-        job_name:str
-        func:str
-        args:Iterable
-        kwargs:dict
-        stop:bool = True
-        task:asyncio.Task = None
-        delay:int = field(default_factory=lambda:randint(10,100))
-
+        job_name: str
+        func: str
+        args: Iterable
+        kwargs: dict
+        stop: bool = True
+        task: asyncio.Task = None
+        delay: int = field(default_factory=lambda: randint(3600/2, 3600))
 
         async def __call__(self,):
             service: EmailReaderService = EmailReaderService.service
-            callback =  getattr(service,self.func,None)
+            callback = getattr(service, self.func, None)
+            is_async = asyncio.iscoroutinefunction(callback)
             while self.stop:
-                self.is_running =True
-                callback(*self.args,**self.kwargs)
-                self.is_running=False
+                self.is_running = True
+                if is_async:
+                    await callback(*self.args,**self.kwargs)
+                else:
+                    callback(*self.args, **self.kwargs)
+                self.is_running = False
                 await asyncio.sleep(self.delay)
-            return 
-        
+            return
+
         def cancel_job(self):
-            self.stop=False
-            return self.task.cancel()
+            self.stop = False
+            self.delay = 0
 
     @dataclass
     class IMAPMailboxes:
@@ -313,16 +344,16 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             return self.__repr__()
 
         @property
-        def no_select(self)->bool:
+        def no_select(self) -> bool:
             return "\\Noselect" in self.flags
 
-            
         @BaseEmailService.task_lifecycle
         def rename(self, new_name: str, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Rename the mailbox."""
             status, response = connector.rename(self.name, new_name)
             if status != 'OK':
-                raise imap.IMAP4.error(f"Failed to rename mailbox {self.name} to {new_name}")
+                raise imap.IMAP4.error(
+                    f"Failed to rename mailbox {self.name} to {new_name}")
             self.name = new_name
             return response
 
@@ -335,88 +366,95 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             return response
 
         @BaseEmailService.task_lifecycle
-        def create_subfolder(self, subfolder_name: str,connector: imap.IMAP4 | imap.IMAP4_SSL):
+        def create_subfolder(self, subfolder_name: str, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Create a subfolder under the current mailbox."""
             full_name = f"{self.name}/{subfolder_name}"
             status, response = connector.create(full_name)
             if status != 'OK':
-                raise imap.IMAP4.error(f"Failed to create subfolder {subfolder_name} under {self.name}")
-            return full_name,response
+                raise imap.IMAP4.error(
+                    f"Failed to create subfolder {subfolder_name} under {self.name}")
+            return full_name, response
 
         @BaseEmailService.task_lifecycle
-        def status(self,connector: imap.IMAP4 | imap.IMAP4_SSL):
+        def status(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
             ...
 
-    jobs:dict[str,Jobs]={}
-    
-    @staticmethod
-    def select_inbox(func:Callable):
+    jobs: dict[str, Jobs] = {}
 
-        @functools.wraps(func)
-        def wrapper(self:Self,inbox:str,*args,**kwargs):
+    @staticmethod
+    def select_inbox(func: Callable):
+        
+        def callback(self:Self,inbox:str,kwargs):
             if inbox not in self.mailboxes:
                 raise KeyError('Mail box not found')
-            
+
             if self._mailboxes[inbox].no_select:
                 raise imap.IMAP4.error(f'This inbox cannot be selected')
-                        
-            self._current_mailbox = inbox
-            connector:imap.IMAP4 | imap.IMAP4_SSL = kwargs['connector']
-            connector.select(inbox)
-            return func(self,*args,**kwargs)
 
-        return wrapper
-    
+            self._current_mailbox = inbox
+            connector: imap.IMAP4 | imap.IMAP4_SSL = kwargs['connector']
+            connector.select(inbox)
+
+        @functools.wraps(func)
+        def wrapper(self: Self, inbox: str, *args, **kwargs):
+            callback(self,inbox,kwargs)
+            return func(self, *args, **kwargs)
+        
+        @functools.wraps(func)
+        async def async_wrapper(self: Self, inbox: str, *args, **kwargs):
+            callback(self,inbox,kwargs)
+            return await func(self, *args, **kwargs)
+
+        return wrapper if not asyncio.iscoroutinefunction(func) else async_wrapper 
+
     @staticmethod
-    def register_job(job_name:str,delay:int,*args,**kwargs):
-        def wrapper(func:Callable):
+    def register_job(job_name: str,delay:tuple[int,int], *args, **kwargs):
+        def wrapper(func: Callable):
             func_name = func.__name__
+            job_name = job_name if job_name else func_name
             params = {
-                'job_name':job_name,
-                'func':func_name,
-                'args':args,
-                'kwargs':kwargs
+                'job_name': job_name,
+                'func': func_name,
+                'args': args,
+                'kwargs': kwargs
             }
-            if delay ==None or not isinstance(delay,(float,int)) or delay<=0:
+            if delay ==None or not isinstance(delay,tuple):
                 ...
             else:
-                params['delay']=delay
+                params['delay']=randint(*delay)
 
             jobs = Self.Jobs(**params)
             if job_name in Self.jobs:
-                ... # Warning 
-            Self.jobs[job_name] =jobs
+                ...  # Warning
+            Self.jobs[job_name] = jobs
             return func
         return wrapper
 
-    @staticmethod
-    def cancel_job():
-        for job in EmailReaderService.jobs.values():
-            job.cancel_job()
-        
-    def __init__(self, configService: ConfigService, loggerService: LoggerService,reactiveService:ReactiveService,redisService:RedisService) -> None:
+
+    def __init__(self, configService: ConfigService, loggerService: LoggerService, reactiveService: ReactiveService, redisService: RedisService) -> None:
         super().__init__(configService, loggerService)
-        IntervalInterface.__init__(self,True,10)
+        IntervalInterface.__init__(self, True, 10)
         self.reactiveService = reactiveService
         self.redisService = redisService
 
-        self._mailboxes:dict[str,EmailReaderService.IMAPMailboxes] = {}
-        self._current_mailbox:str = None
+        self._mailboxes: dict[str, EmailReaderService.IMAPMailboxes] = {}
+        self._current_mailbox: str = None
 
         self._init_config()
         EmailReaderService.service = self
-        self._capabilities:list = None
+        self._capabilities: list = None
 
     def _init_config(self):
         self.type_ = 'IMAP'
         self.connMethod = self.configService.IMAP_EMAIL_CONN_METHOD.lower()
         self.tlsConn: bool = IMAPConfig.setConnFlag(self.connMethod)
 
-        self.emailHost = EmailHostConstant._member_map_[self.configService.IMAP_EMAIL_HOST]
+        self.emailHost = EmailHostConstant._member_map_[
+            self.configService.IMAP_EMAIL_HOST]
         self.hostPort = IMAPConfig.setHostPort(
             self.configService.IMAP_EMAIL_CONN_METHOD) if self.configService.IMAP_EMAIL_PORT == None else self.configService.IMAP_EMAIL_PORT
 
-    def _update_mailboxes(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+    def _update_mailboxes(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
         """
             Update the mailboxes lists at each lifecycle
         """
@@ -428,41 +466,45 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             if match:
                 flags_str, delimiter, mailbox_name = match.groups()
                 flags = flags_str.split()
-                
-                mailbox = self.IMAPMailboxes(flags,delimiter,mailbox_name)
+
+                mailbox = self.IMAPMailboxes(flags, delimiter, mailbox_name)
                 self._mailboxes[mailbox.name] = mailbox
 
-    def _get_capabilities(self,connector:imap.IMAP4|imap.IMAP4_SSL):
-        if self._capabilities !=None:
-            return 
+    def _get_capabilities(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
+        if self._capabilities != None:
+            return
 
         typ, capabilities = connector.capability()
         capabilities = b' '.join(capabilities).decode().upper()
         self._capabilities = capabilities.split(' ')
-        
-    def authenticate(self,connector:imap.IMAP4|imap.IMAP4_SSL):
-        
+
+    def authenticate(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
+
         try:
             if self.tlsConn:
                 context = ssl.create_default_context()
                 connector.starttls(context=context)
             if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.IMAP_PASS is not None:
-                status, data = connector.login(self.configService.IMAP_EMAIL, self.configService.IMAP_PASS)
+                status, data = connector.login(
+                    self.configService.IMAP_EMAIL, self.configService.IMAP_PASS)
                 if status != 'OK':
                     raise Exception
-                
+
                 self._update_mailboxes(connector)
                 self._get_capabilities(connector)
-    
+
                 return True
             else:
                 self.service_status = _service.ServiceStatus.NOT_AVAILABLE
                 return False
-                access_token = self.mailOAuth.encode_token(self.configService.IMAP_EMAIL)
-                auth_code, auth_message = connector.authenticate('AUTH XOAUTH2', access_token)
+                access_token = self.mailOAuth.encode_token(
+                    self.configService.IMAP_EMAIL)
+                auth_code, auth_message = connector.authenticate(
+                    'AUTH XOAUTH2', access_token)
                 if auth_code != 'OK':
-                    raise imap.IMAP4.error(f"Authentication failed: {auth_message}")
-                
+                    raise imap.IMAP4.error(
+                        f"Authentication failed: {auth_message}")
+
         except imap.IMAP4.error as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
         except imap.IMAP4.abort as e:
@@ -473,78 +515,108 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
         except Exception as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
-    
-    def read_email(self,message_ids,connector:imap.IMAP4|imap.IMAP4_SSL):
 
-        for num in message_ids:
+    def read_email(self, message_ids, connector: imap.IMAP4 | imap.IMAP4_SSL, max_count: int = None):
+
+        for num in message_ids[:max_count]:
             status, data = connector.fetch(num, "(RFC822)")
             if status != None:
                 continue
             raw_email = data[0][1]
             msg = message_from_bytes(raw_email)
             yield EmailReader(msg)
-              
-    def logout(self,connector:imap.IMAP4|imap.IMAP4_SSL):
+
+    def logout(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
         try:
             connector.close()
             connector.logout()
         except:
             ...
-    
+
     def build(self):
         ...
 
-    def callback(self):
-        #self._temp_entry_point('INBOX')
-
-        for job_name,job in self.jobs.items():
-            #self.prettyPrinter.
-            task = asyncio.create_task(job(),name=job_name)
-            if job.task!=None:
-                job.cancel_job()
-            job.task = task
-        
-    def search_email(self,command:str,connector:imap.IMAP4|imap.IMAP4_SSL=None):
-        status, message_numbers = connector.search(None, command)  # or "UNSEEN", "FROM someone@example.com", etc.
+    def search_email(self, command: Iterable[str], connector: imap.IMAP4 | imap.IMAP4_SSL = None):
+        # or "UNSEEN", "FROM someone@example.com", etc.
+        status, message_numbers = connector.search(None, *command)
         if status != 'OK':
             return None
-        
+
         return message_numbers
 
-    def delete_email(self,message_id:str,connector:imap.IMAP4|imap.IMAP4_SSL,hard=False):
+    def delete_email(self, message_id: str, connector: imap.IMAP4 | imap.IMAP4_SSL, hard=False):
         connector.store(message_id, '+FLAGS', '\\Deleted')
         if hard:
-            return connector.expunge() 
-        return 
- 
-    def mark_as_un_seen(self,email_id:str,connector:imap.IMAP4|imap.IMAP4_SSL,seen=True):
+            return connector.expunge()
+        return
+
+    def mark_as_un_seen(self, email_id: str, connector: imap.IMAP4 | imap.IMAP4_SSL, seen=True):
         flag = '+' if seen else '-'
-        status,result = connector.uid('STORE', email_id, f'{flag}FLAGS', '(\\Seen)')
+        status, result = connector.uid(
+            'STORE', email_id, f'{flag}FLAGS', '(\\Seen)')
         if status == 'OK':
             return result
         return result
 
-    def copy_email(self,email_id:str,target_mailbox:str,connector:imap.IMAP4|imap.IMAP4_SSL,hard_delete=False):
+    def copy_email(self, email_id: str, target_mailbox: str, connector: imap.IMAP4 | imap.IMAP4_SSL, hard_delete=False):
         if target_mailbox not in self.mailboxes:
             raise imap.IMAP4.error('Target mailboxes does not exists')
-        
+
         if connector.copy(email_id, target_mailbox)[0] != 'OK':
             return
-        return self.delete_email(email_id,connector,hard_delete)
-      
+        return self.delete_email(email_id, connector, hard_delete)
+
+    async def start_jobs(self):
+        for jobs in self.jobs.values():
+            asyncio.create_task(jobs())
+
+    def cancel_jobs(self):
+        for jobs in self.jobs.values():
+            jobs.cancel_job()
+
+    @register_job('Parse_dns_email',None,'INBOX', None)
     @BaseEmailService.task_lifecycle
     @select_inbox
-    def _temp_entry_point(self,connector:imap.IMAP4|imap.IMAP4_SSL):
-        message_ids =self.search_email(IMAPSearchFilter.ALL(),connector)
-        if message_ids == None:
-            print('error')
-            return 
-        return self.read_email(message_ids,connector)
-        
+    async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
+        criteria = IMAPCriteriaBuilder()
+        criteria.add(IMAPSearchFilter.UNSEEN()).add(IMAPSearchFilter.SUBJECT(
+            "Delivery Status Notification")).add(IMAPSearchFilter.FROM('mailer-daemon@googlemail.com'))
+
+        message_ids = self.search_email(*criteria, connector)
+        emails = self.read_email(message_ids, connector, max_count=max_count,)
+
+        for ids, email in zip(message_ids, emails):
+            original_message = email.Message_RFC882
+            bs4 = BeautifulSoup(email.HTML_Body, 'html.parser')
+            last_p = bs4.body
+            if last_p ==None:
+                continue
+            last_p = last_p.find_all('p')[-1]  # Get the last <p> element in the body
+            text=last_p.get_text(strip=True)
+
+            try: smtp_error_code = SMTPErrorCode(text[:10]) 
+            except: smtp_error_code = None
+
+            email_status = map_smtp_error_to_status(smtp_error_code)
+            error_description = get_error_description(smtp_error_code)
+
+            event =TrackingEmailEventORM.TrackingEventJSON(
+                event_id=uuid_v1_mc(),
+                description=error_description,
+                email_id=original_message.Email_ID,
+                contact_id=None,
+                current_event=email_status.value,
+                date_event_received=datetime.now(timezone.utc).isoformat()
+            )
+
+            await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
+            # self.delete_email(ids,connector)
+
+
     @property
     def mailboxes(self):
         return self._mailboxes.keys()
-    
+
     @property
     def capabilities(self):
         return self._capabilities
@@ -554,5 +626,7 @@ class EmailReaderService(BaseEmailService,IntervalInterface):
         return 'THREAD=REFERENCES' in self._capabilities or 'THREAD=ORDEREDSUBJECT' in self._capabilities
 
 # @_service.ServiceClass
+
+
 class EmailAPIService(BaseEmailService):
     ...

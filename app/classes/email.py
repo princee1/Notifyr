@@ -1,10 +1,11 @@
+from email.mime.message import MIMEMessage
 from email.mime.multipart import MIMEMultipart
-from email import encoders
+from email import encoders, message_from_string, policy
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from email.utils import formatdate
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Self
 from app.definition._error import BaseError
 from app.utils.constant import EmailHeadersConstant
 from app.utils.fileIO import getFilenameOnly
@@ -130,10 +131,10 @@ class EmailBuilder():
     def set_content(self, content: tuple[str, str]):
         html_content, text_content = content
         if text_content:
-            part1 = MIMEText(text_content, "plain")
+            part1 = MIMEText(text_content, "text/plain")
             self.message.attach(part1)
         if html_content:
-            part2 = MIMEText(html_content, "html")
+            part2 = MIMEText(html_content, "text/html")
             self.message.attach(part2)
 
     def attach_image(self, image_path, image_data, disposition: Literal["inline", "attachment"] = "inline"):
@@ -181,6 +182,7 @@ class EmailReader:
     HTML_Body: str = None
     Attachments: list = field(default_factory=list)
     Headers: dict = field(default_factory=dict)
+    Message_RFC882:Self
 
     def __post_init__(self):
         pass  # Prevents the dataclass from generating its own __init__
@@ -216,6 +218,12 @@ class EmailReader:
                     self.Plain_Body = part.get_payload(decode=True).decode(errors="ignore")
                 elif content_type == "text/html" and "attachment" not in content_disposition:
                     self.HTML_Body = part.get_payload(decode=True).decode(errors="ignore")
+
+                elif content_type == 'message/rfc822':
+                    original_msg = part.get_payload(0)  # It's usually a list with one item
+                    message = message_from_string(original_msg.as_string(), policy=policy.default)
+                    self.Message_RFC882 = EmailReader(msg=message)
+                
                 elif "attachment" in content_disposition:
                     filename = part.get_filename()
                     if filename:
@@ -243,14 +251,14 @@ class EmailReader:
         """
         Email ID generated for database PK
         """
-        return self.Headers.get(EmailHeadersConstant.X_EMAIL_ID,None)
+        return self.Headers.get(EmailHeadersConstant.X_EMAIL_ID.value,None)
 
     @property
     def Message_ID(self):
         """
         Message ID generated for the smtp email transactions
         """
-        return self.Headers.get(EmailHeadersConstant.MESSAGE_ID,None)
+        return self.Headers.get(EmailHeadersConstant.MESSAGE_ID.value,None)
     
     @property
     def References(self):
@@ -262,3 +270,5 @@ class EmailReader:
     @property
     def In_Reply_To(self):
         return self.Headers.get('In-Reply-To',None)
+
+    

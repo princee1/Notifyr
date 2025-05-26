@@ -5,6 +5,7 @@ from tortoise import fields, models, Tortoise, run_async
 from tortoise.transactions import in_transaction
 from app.classes.celery import SchedulerModel
 from app.classes.email import MimeType
+from app.classes.mail_provider import SMTPErrorCode
 from app.utils.helper import uuid_v1_mc
 
 SCHEMA = 'emails'
@@ -70,6 +71,35 @@ class EmailStatus(str, Enum):
     DEFERRED = 'DEFERRED'
     DELAYED = 'DELAYED'
     REPLIED = 'REPLIED'
+
+
+mapping = {
+        SMTPErrorCode.MAILBOX_UNAVAILABLE: EmailStatus.HARD_BOUNCE,
+        SMTPErrorCode.USER_UNKNOWN: EmailStatus.HARD_BOUNCE,
+        SMTPErrorCode.POLICY_RESTRICTIONS: EmailStatus.BLOCKED,
+        SMTPErrorCode.TEMP_SERVER_ERROR: EmailStatus.DEFERRED,
+        SMTPErrorCode.CONNECTION_TIMEOUT: EmailStatus.DELAYED,
+        SMTPErrorCode.AUTH_CREDENTIALS_INVALID: EmailStatus.FAILED,
+    }
+
+def map_smtp_error_to_status(error_code: SMTPErrorCode|str) -> EmailStatus:
+    """
+    Maps an SMTPErrorCode to the most probable EmailStatus.
+
+    Args:
+        error_code (SMTPErrorCode): The SMTP error code to map.
+
+    Returns:
+        EmailStatus: The corresponding EmailStatus.
+    """
+
+    if isinstance(error_code,str):
+        try:
+            error_code = SMTPErrorCode(error_code)
+        except:
+            return EmailStatus.FAILED
+    
+    return mapping.get(error_code, EmailStatus.FAILED)
  
 
 class EmailTrackingORM(models.Model):

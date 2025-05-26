@@ -1,8 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import smtplib as smtp
 import imaplib as imap
 from enum import Enum
-from typing import Callable, Literal
+from typing import Callable, Iterable, Literal, Self, overload
 from .mail_oauth_access import GoogleFlowType,MailOAuthFactory
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -54,6 +54,25 @@ provider_map = {
         "example": "Example Provider"
     }
 
+class SMTPErrorCode(Enum):
+    MAILBOX_UNAVAILABLE = "550 5.5.0"
+    USER_UNKNOWN = "550 5.1.1"
+    POLICY_RESTRICTIONS = "554 5.7.1"
+    TEMP_SERVER_ERROR = "451 4.3.0"
+    CONNECTION_TIMEOUT = "421 4.4.2"
+    AUTH_CREDENTIALS_INVALID = "535 5.7.8"
+
+error_descriptions = {
+    SMTPErrorCode.MAILBOX_UNAVAILABLE: "Requested action not taken: mailbox unavailable.",
+    SMTPErrorCode.USER_UNKNOWN: "Recipient address rejected: User unknown.",
+    SMTPErrorCode.POLICY_RESTRICTIONS: "Message rejected due to policy restrictions.",
+    SMTPErrorCode.TEMP_SERVER_ERROR: "Temporary server error. Please try again later.",
+    SMTPErrorCode.CONNECTION_TIMEOUT: "Connection timed out. Try again later.",
+    SMTPErrorCode.AUTH_CREDENTIALS_INVALID: "Authentication credentials invalid or not accepted.",
+}
+
+def get_error_description(error_code:SMTPErrorCode):
+    return error_descriptions.get(error_code,'Unknown error to our server')
 
 class EmailConnInterface():
     def setHostPort(connMode: str): pass
@@ -115,6 +134,27 @@ class IMAPSearchFilter(Enum):
     SUBJECT = lambda s:("SUBJECT",s)
     SINCE = lambda d:("SINCE",d)
     ALL= lambda:'ALL'
+
+@dataclass
+class IMAPCriteriaBuilder:
+    criteria = field(default_factory=list)
+
+    @overload
+    def add(self,*criteria:str)->Self:
+        ...
+    
+    @overload
+    def add(self,criteria:Iterable[str])->Self:
+        ...
+
+
+    def add(self,criteria:Iterable[str])->Self:
+        self.criteria.extend(criteria)
+        return self
+
+    def __iter__(self):
+        return self.criteria.__iter__()
+    
 
 class MailAPI:
     ...
