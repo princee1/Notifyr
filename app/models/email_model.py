@@ -217,39 +217,49 @@ class EmailAnalyticsORM(models.Model):
             "emails_replied": self.emails_replied,
         }
 
-# Service function to upsert analytics
+
 async def upsert_email_analytics(sent: int, delivered: int, opened: int, bounced: int, replied: int):
-    async with in_transaction() as conn:
-        await conn.execute_query(
-            """
-            SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5);
-            """,
-            [sent, delivered, opened, bounced, replied]
-        )
+    """
+    Upserts email analytics data into the database.
+
+    Args:
+        sent (int): Number of emails sent.
+        delivered (int): Number of emails delivered.
+        opened (int): Number of emails opened.
+        bounced (int): Number of emails bounced.
+        replied (int): Number of emails replied.
+
+    Returns:
+        None
+    """
+    query = "SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5);"
+    client = Tortoise.get_connection('default')
+    await client.execute_query(query, [sent, delivered, opened, bounced, replied])
+
+
+
 
 async def calculate_email_analytics_grouped(group_by_factor: int):
     """
-    Fetch grouped email analytics based on the specified grouping factor.
-    :param group_by_factor: The grouping factor (e.g., 1 for weeks, 4 for months, etc.)
-    :return: List of grouped analytics as dictionaries
-    """
-    async with in_transaction() as conn:
-        rows = await conn.execute_query(
-            """
-            SELECT * FROM emails.calculate_email_analytics_grouped($1);
-            """,
-            [group_by_factor]
-        )
-        # Convert rows to a list of dictionaries for easier use
-        return [
-            {
-                "group_number": row[0],
-                "emails_sent": row[1],
-                "emails_delivered": row[2],
-                "emails_opened": row[3],
-                "emails_bounced": row[4],
-                "emails_replied": row[5],
-            }
-            for row in rows
-        ]
+    Fetches grouped email analytics based on the specified grouping factor.
 
+    Args:
+        group_by_factor (int): The grouping factor (e.g., 1 for weeks, 4 for months, etc.).
+
+    Returns:
+        List[dict]: List of grouped analytics as dictionaries.
+    """
+    query = "SELECT * FROM emails.calculate_email_analytics_grouped($1);"
+    client = Tortoise.get_connection('default')
+    rows = await client.execute_query(query, [group_by_factor])
+    return [
+        {
+            "group_number": row[0],
+            "emails_sent": row[1],
+            "emails_delivered": row[2],
+            "emails_opened": row[3],
+            "emails_bounced": row[4],
+            "emails_replied": row[5],
+        }
+        for row in rows[1]
+    ]

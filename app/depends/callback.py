@@ -3,10 +3,11 @@ from typing import Callable
 from app.container import Get, InjectInFunction
 from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM, upsert_email_analytics
 from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
+from app.models.contacts_model import ContactORM
 from app.services.reactive_service import ReactiveService
 from app.services.celery_service import CeleryService
 from app.utils.constant import StreamConstant
-from tortoise.models import Model
+from tortoise.models import Model,Q
 from tortoise.transactions import in_transaction
 from app.utils.helper import uuid_v1_mc
 from app.utils.transformer import empty_str_to_none
@@ -115,12 +116,17 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
         'replied': 0
     }
 
+    contact_id_to_delete = set()
+
     opens_per_email = {}
+
+    email_status =  {}
 
     for ids, val in entries:
         try:
             empty_str_to_none(val)
             email_id = val['email_id']
+            contact_id = val.get('contact_id', None)
             event = TrackingEmailEventORM(**val)
             objs.append(event)
 
@@ -135,24 +141,39 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                     if email_id not in opens_per_email:
                         analytics['opened'] += 1
                         opens_per_email[email_id] = True
-                case EmailStatus.SOFT_BOUNCE | EmailStatus.HARD_BOUNCE | EmailStatus.MAILBOX_FULL:
+                case EmailStatus.SOFT_BOUNCE.value | EmailStatus.HARD_BOUNCE.value | EmailStatus.MAILBOX_FULL.value:
                     analytics['bounced'] += 1
-                case EmailStatus.REPLIED:
+                    if event.current_event == EmailStatus.HARD_BOUNCE.value:
+                        if contact_id!=None:    
+                            contact_id_to_delete.add(contact_id)
+                case EmailStatus.REPLIED.value:
                     analytics['replied'] += 1
 
+
+            if opens_per_email.get(email_id,False):
+                email_status[email_id] = EmailStatus.OPENED.value
+            else:
+                email_status[email_id] = event
             valid_entries.add(ids)
         except Exception as e:
             invalid_entries.add(ids)
 
+    email_tracker = await EmailTrackingORM.filter(email_id__in=email_status.keys())
+    for et in email_tracker:
+        et.email_current_status = email_status[email_id]
+        
     try:
         async with in_transaction():
             await TrackingEmailEventORM.bulk_create(objs)
             await upsert_email_analytics(analytics)
+            await ContactORM.filter(Q(id__in=list(contact_id_to_delete))).delete()     
+            await EmailTrackingORM.bulk_update(email_tracker,fields=['email_current_status'])
                         
         return list(valid_entries.union(invalid_entries))
     except Exception as e:
         print(e)
         return list(invalid_entries)
+    
 async def Add_Link_Session(entries:list[str,dict]):
     uuid = uuid_v1_mc()
     print(entries)
