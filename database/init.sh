@@ -14,6 +14,14 @@ psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/links.sql
 
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/cron.sql
 
+# psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/notifications.sql
+
+# psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/campaigns.sql
+
+# psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/mta.sql
+
+# psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/twilio.sql
+
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/data.sql
 
 echo "✅ setup.sh completed."

@@ -1,25 +1,6 @@
 -- Active: 1740679093248@@localhost@5432@notifyr@links
 SET search_path = links;
 
-CREATE DOMAIN DeviceType AS VARCHAR(50) CHECK (
-    VALUE IN (
-    'desktop',
-    'smartphone',
-    'tablet',
-    'feature phone',
-    'console',
-    'tv',
-    'car browser',
-    'smart display',
-    'camera',
-    'portable media player',
-    'phablet',
-    'smartwatch',
-    'ebook reader',
-    'unknown'
-        
-    )
-);
 
 CREATE TABLE IF NOT EXISTS Link (
     link_id UUID DEFAULT uuid_generate_v1mc(),
@@ -84,7 +65,7 @@ CREATE TABLE IF NOT EXISTS LinkAnalytics(
     region VARCHAR(60),
     -- referrer VARCHAR(100),
     city VARCHAR(100),
-    device DeviceType DEFAULT 'unknown',
+    device public.DeviceType DEFAULT 'unknown',
     visits_counts INT DEFAULT 1,
     PRIMARY KEY (link_id,country,region,city,device),
     FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE
@@ -96,7 +77,7 @@ CREATE TYPE analytics_input AS (
     region VARCHAR(60),
     -- referrer VARCHAR(100),
     city VARCHAR(100),
-    device DeviceType,
+    device public.DeviceType,
     visits_counts INT
 );
 

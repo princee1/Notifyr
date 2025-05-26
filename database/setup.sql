@@ -17,6 +17,14 @@ CREATE SCHEMA emails;
 
 CREATE SCHEMA links;
 
+-- CREATE SCHEMA mta;
+
+-- CREATE SCHEMA notifications;
+
+-- CREATE SCHEMA twilio;
+
+-- CREATE SCHEMA campaigns;
+
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA PUBLIC;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA PUBLIC;
@@ -70,3 +78,23 @@ $$ LANGUAGE sql;
 GRANT USAGE ON SCHEMA cron TO test; -- need to get in env
 
 -- GRANT USAGE ON SCHEMA cron TO postgres;
+
+CREATE DOMAIN public.DeviceType AS VARCHAR(50) CHECK (
+    VALUE IN (
+    'desktop',
+    'smartphone',
+    'tablet',
+    'feature phone',
+    'console',
+    'tv',
+    'car browser',
+    'smart display',
+    'camera',
+    'portable media player',
+    'phablet',
+    'smartwatch',
+    'ebook reader',
+    'unknown'
+        
+    )
+);
