@@ -129,15 +129,16 @@ class IMAPConfig (EmailConnInterface, Enum):
     ).strip() == "ssl" else IMAP_NORMAL_PORT
 
 class IMAPSearchFilter(Enum):
-    UNSEEN = lambda:"UNSEEN"
-    FROM = lambda f:("FROM",f)
-    SUBJECT = lambda s:("SUBJECT",s)
+    UNSEEN = lambda:("UNSEEN",)
+    FROM = lambda f:("FROM",f'"{f}"')
+    SUBJECT = lambda s:("SUBJECT",f'"{s}"')
+    BODY = lambda b:("BODY",f'"{b}"')
     SINCE = lambda d:("SINCE",d)
-    ALL= lambda:'ALL'
+    ALL= lambda:('ALL',)
 
 @dataclass
 class IMAPCriteriaBuilder:
-    criteria = field(default_factory=list)
+    criteria:list = field(default_factory=list)
 
     @overload
     def add(self,*criteria:str)->Self:
@@ -153,7 +154,7 @@ class IMAPCriteriaBuilder:
         return self
 
     def __iter__(self):
-        return self.criteria.__iter__()
+        return [' '.join(self.criteria)].__iter__()
     
 
 class MailAPI:

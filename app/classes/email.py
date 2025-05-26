@@ -180,9 +180,9 @@ class EmailReader:
     Is_Multipart: bool = False
     Plain_Body: str = None
     HTML_Body: str = None
+    Message_RFC882:Self = None
     Attachments: list = field(default_factory=list)
     Headers: dict = field(default_factory=dict)
-    Message_RFC882:Self
 
     def __post_init__(self):
         pass  # Prevents the dataclass from generating its own __init__

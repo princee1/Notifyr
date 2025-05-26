@@ -15,4 +15,4 @@ from .admin_service import AdminService
 from .reactive_service import ReactiveService
 from .link_service import LinkService
 from .model_service import LLMModelService
-from .aws_service import AmazonS3Service,AmazonSESSNSService
+from .aws_service import AmazonS3Service,AmazonSESService,AmazonSNSService

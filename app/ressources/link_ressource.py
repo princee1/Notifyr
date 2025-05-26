@@ -7,7 +7,6 @@ from app.container import InjectInMethod
 from app.decorators.guards import AccessLinkGuard
 from app.decorators.handlers import ORMCacheHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.decorators.pipes import url_path_pipe
 from app.definition._error import ServerFileError
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.dependencies import get_auth_permission, get_query_params

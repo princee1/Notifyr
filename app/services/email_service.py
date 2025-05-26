@@ -9,7 +9,7 @@ import smtplib as smtp
 import imaplib as imap
 import poplib as pop
 import socket
-from typing import Callable, Iterable, Literal, Self, TypedDict
+from typing import Callable, Iterable, Literal, Self, Type, TypedDict
 
 from bs4 import BeautifulSoup
 
@@ -298,6 +298,8 @@ class EmailSenderService(BaseEmailService):
 
         return connector.verify(email)
 
+J:Type = None
+j:dict = None
 
 @_service.Service
 class EmailReaderService(BaseEmailService):
@@ -319,12 +321,12 @@ class EmailReaderService(BaseEmailService):
             is_async = asyncio.iscoroutinefunction(callback)
             while self.stop:
                 self.is_running = True
+                await asyncio.sleep(self.delay)
                 if is_async:
                     await callback(*self.args,**self.kwargs)
                 else:
                     callback(*self.args, **self.kwargs)
                 self.is_running = False
-                await asyncio.sleep(self.delay)
             return
 
         def cancel_job(self):
@@ -381,6 +383,11 @@ class EmailReaderService(BaseEmailService):
 
     jobs: dict[str, Jobs] = {}
 
+    global J
+    J = Jobs
+    global j
+    j= jobs
+
     @staticmethod
     def select_inbox(func: Callable):
         
@@ -409,11 +416,12 @@ class EmailReaderService(BaseEmailService):
 
     @staticmethod
     def register_job(job_name: str,delay:tuple[int,int], *args, **kwargs):
+
         def wrapper(func: Callable):
             func_name = func.__name__
-            job_name = job_name if job_name else func_name
+            job_name_prime = job_name if job_name else func_name
             params = {
-                'job_name': job_name,
+                'job_name': job_name_prime,
                 'func': func_name,
                 'args': args,
                 'kwargs': kwargs
@@ -423,10 +431,11 @@ class EmailReaderService(BaseEmailService):
             else:
                 params['delay']=randint(*delay)
 
-            jobs = Self.Jobs(**params)
-            if job_name in Self.jobs:
+            
+            jobs_ = J(**params)
+            if job_name_prime in j:
                 ...  # Warning
-            Self.jobs[job_name] = jobs
+            j[job_name_prime] = jobs_
             return func
         return wrapper
 
@@ -443,6 +452,7 @@ class EmailReaderService(BaseEmailService):
         self._init_config()
         EmailReaderService.service = self
         self._capabilities: list = None
+        
 
     def _init_config(self):
         self.type_ = 'IMAP'
@@ -536,11 +546,11 @@ class EmailReaderService(BaseEmailService):
     def build(self):
         ...
 
-    def search_email(self, command: Iterable[str], connector: imap.IMAP4 | imap.IMAP4_SSL = None):
+    def search_email(self, *command: str, connector: imap.IMAP4 | imap.IMAP4_SSL = None):
         # or "UNSEEN", "FROM someone@example.com", etc.
         status, message_numbers = connector.search(None, *command)
         if status != 'OK':
-            return None
+            return []
 
         return message_numbers
 
@@ -566,7 +576,7 @@ class EmailReaderService(BaseEmailService):
             return
         return self.delete_email(email_id, connector, hard_delete)
 
-    async def start_jobs(self):
+    def start_jobs(self):
         for jobs in self.jobs.values():
             asyncio.create_task(jobs())
 
@@ -574,17 +584,17 @@ class EmailReaderService(BaseEmailService):
         for jobs in self.jobs.values():
             jobs.cancel_job()
 
-    @register_job('Parse_dns_email',None,'INBOX', None)
+    @register_job('Parse Dns Email',None,'INBOX', None)
     @BaseEmailService.task_lifecycle
     @select_inbox
     async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
-        criteria.add(IMAPSearchFilter.UNSEEN()).add(IMAPSearchFilter.SUBJECT(
-            "Delivery Status Notification")).add(IMAPSearchFilter.FROM('mailer-daemon@googlemail.com'))
-
-        message_ids = self.search_email(*criteria, connector)
+        criteria.add(IMAPSearchFilter.UNSEEN()).add(IMAPSearchFilter.FROM('mailer-daemon@googlemail.com')).add(
+            IMAPSearchFilter.SUBJECT("Delivery Status Notification"))
+        
+        message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
-
+        return
         for ids, email in zip(message_ids, emails):
             original_message = email.Message_RFC882
             bs4 = BeautifulSoup(email.HTML_Body, 'html.parser')
