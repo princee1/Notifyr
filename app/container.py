@@ -131,7 +131,7 @@ class Container():
                     if len(depNotInjected) != 0:
                         for y in depNotInjected:
                             if y not in AbstractServiceClasses:
-                                raise NotInDependenciesError
+                                raise NotInDependenciesError(y)
                     abstractRes = self.__getAbstractResolving(x)
                     for r in abstractRes.keys():
                         r_dep, r_p = self.getSignature(
@@ -346,8 +346,8 @@ class Container():
                 obj_dep = self.get(self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
                 params[params_names[i]] = obj_dep
             return params
-        except KeyError:
-            raise NoResolvedDependencyError
+        except KeyError as e :
+            raise NoResolvedDependencyError(e.args)
 
     def __createDep(self, typ: type, params:dict):
         flag = issubclass(typ)
