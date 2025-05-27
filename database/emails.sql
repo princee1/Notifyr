@@ -15,8 +15,8 @@ CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
         'BLOCKED',
         'COMPLAINT',
         'DEFERRED',
-        'DELAYED'
-        'REPLIED',
+        'DELAYED',
+        'REPLIED'
     )
 );
 
@@ -36,14 +36,14 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
 );
 
 CREATE TABLE IF NOT EXISTS TrackingEvent (
-    event_id UUID DEFAULT uuid_generate_v1mc (),
+    event_id UUID DEFAULT uuid_generate_v1mc(),
     email_id UUID NOT NULL,
     contact_id UUID DEFAULT NULL,
     current_event EmailStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
     date_event_received TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (event_id),
-    FOREIGN KEY (email_id) REFERENCES EmailTracking (email_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (email_id) REFERENCES EmailTracking(email_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
@@ -139,7 +139,7 @@ BEGIN
         TrackingEvent te 
     WHERE
         te.email_id NOT IN (
-            SELECT e.email_id FROM EmailTracking
+            SELECT e.email_id FROM EmailTracking e
         ) 
     OR 
         te.email_id == NULL;
