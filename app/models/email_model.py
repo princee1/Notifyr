@@ -115,8 +115,8 @@ class EmailTrackingORM(models.Model):
     recipient = fields.CharField(max_length=100)
     subject = fields.CharField(max_length=150)
     esp_provider = fields.CharField(max_length=30)
-    date_sent = fields.DatetimeField(auto_now_add=True)
-    last_update = fields.DatetimeField(auto_now=True)
+    date_sent = fields.DatetimeField(auto_now=True)
+    last_update = fields.DatetimeField(auto_now_add=True)
     expired_tracking_date = fields.DatetimeField(null=True)
     email_current_status = fields.CharEnumField(EmailStatus, null=True)
     spam_label = fields.CharField(max_length=50, null=True)
@@ -145,7 +145,7 @@ class TrackingEmailEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     email = fields.ForeignKeyField("models.EmailTrackingORM", related_name="events", on_delete=fields.CASCADE)
     contact = fields.ForeignKeyField("models.ContactORM",'contact',on_delete=fields.NO_ACTION)
-    description = fields.CharField(max_length=100)
+    description = fields.CharField(max_length=100,null=True)
     current_event = fields.CharEnumField(EmailStatus)
     date_event_received = fields.DatetimeField(auto_now_add=True)
 
@@ -232,6 +232,7 @@ async def upsert_email_analytics(sent: int, delivered: int, opened: int, bounced
     Returns:
         None
     """
+    print(sent)
     query = "SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5);"
     client = Tortoise.get_connection('default')
     await client.execute_query(query, [sent, delivered, opened, bounced, replied])

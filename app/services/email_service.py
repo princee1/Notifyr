@@ -27,7 +27,7 @@ from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameD
 
 from .logger_service import LoggerService
 from app.definition import _service
-from .config_service import ConfigService
+from .config_service import CeleryMode, ConfigService
 import ssl
 
 from app.models.email_model import EmailStatus, EmailTrackingORM, TrackingEmailEventORM, map_smtp_error_to_status
@@ -39,6 +39,7 @@ from email import message_from_bytes
 
 @_service.AbstractServiceClass
 class BaseEmailService(_service.BaseService):
+
     def __init__(self, configService: ConfigService, loggerService: LoggerService):
         super().__init__()
         self.configService: ConfigService = configService
@@ -53,6 +54,7 @@ class BaseEmailService(_service.BaseService):
 
     @staticmethod
     def task_lifecycle(func: Callable):
+
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs):
             self: BaseEmailService = args[0]
@@ -86,6 +88,10 @@ class BaseEmailService(_service.BaseService):
             result = func(*args, **kwargs)
             self.logout(connector)
             return result
+        
+        if ConfigService._celery_env == CeleryMode.worker:
+            return wrapper
+        
         return async_wrapper if asyncio.iscoroutinefunction(func) else wrapper
 
     def build(self):
@@ -128,7 +134,7 @@ class BaseEmailService(_service.BaseService):
     def authenticate(self): pass
 
     def connect(self):
-        config: type = SMTPConfig if self.type_ == 'SMTP' else IMAPConfig
+        config: type[SMTPConfig|IMAPConfig] = SMTPConfig if self.type_ == 'SMTP' else IMAPConfig
         server_type_ssl: type = smtp.SMTP_SSL if self.type_ == 'SMTP' else imap.IMAP4_SSL
         server_type: type = smtp.SMTP if self.type_ == 'SMTP' else imap.IMAP4
         try:
@@ -237,19 +243,26 @@ class EmailSenderService(BaseEmailService):
     async def sendTemplateEmail(self, data, meta, images, message_tracking_id, contact_id=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(data, meta, images)
-        return self._send_message(email, message_tracking_id, message_tracking_id, contact_id)
+
+        if self.configService.celery_env == CeleryMode.none:
+            return await self._send_message(email, message_tracking_id, contact_id=contact_id)
+        return self._send_message(email, message_tracking_id, contact_id=contact_id)
+
 
     async def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
         # send_custom_email(content, meta, images, attachment)
-        return self._send_message(email, message_tracking_id, message_tracking_id, contact_id)
 
-    @Time
+        if self.configService.celery_env == CeleryMode.none:
+            return await self._send_message(email, message_tracking_id, contact_id=contact_id)
+        return self._send_message(email, message_tracking_id, contact_id=contact_id)
+        
+
     @BaseEmailService.task_lifecycle
-    async def _send_message(self, email: EmailBuilder, connector: smtp.SMTP, message_tracking_id: str, contact_id: str = None):
+    async def _send_message(self, email: EmailBuilder, message_tracking_id: str, connector: smtp.SMTP,contact_id: str = None):
         try:
-            event_id = uuid_v1_mc()
+            event_id = str(uuid_v1_mc())
             now = datetime.now(timezone.utc).isoformat()
             emailID, message = email.mail_message
             reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message, rcpt_options=[
@@ -282,7 +295,11 @@ class EmailSenderService(BaseEmailService):
             if message_tracking_id:
                 event = TrackingEmailEventORM.TrackingEventJSON(
                     event_id=event_id, email_id=message_tracking_id, contact_id=None, current_event=email_status, date_event_received=now)
-                await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
+
+                if self.configService.celery_env ==CeleryMode.none:
+                    await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
+                else:
+                    self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
 
             return {
                 "emailID": emailID,

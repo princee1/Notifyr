@@ -75,8 +75,10 @@ CREATE OR REPLACE FUNCTION upsert_email_analytics(
     replied_count INT
 ) RETURNS VOID AS $$
 BEGIN
+    SET search_path = emails;
+
     INSERT INTO EmailAnalytics (week_start_date, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_replied)
-    VALUES (DATE_TRUNC('week', NOW()), sent_count, delivered_count, opened_count, bounced_count, replied_count)
+    VALUES (DEFAULT, sent_count, delivered_count, opened_count, bounced_count, replied_count)
     ON CONFLICT (week_start_date)
     DO UPDATE SET
         emails_sent = EmailAnalytics.emails_sent + EXCLUDED.emails_sent,
@@ -100,6 +102,8 @@ CREATE OR REPLACE FUNCTION calculate_email_analytics_grouped(
 ) AS $$
 BEGIN
     RETURN QUERY
+    SET search_path = emails;
+
     SELECT
         FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 7 * 24 * 60 * 60)) + 1 AS group_number,
         SUM(emails_sent) AS emails_sent,
@@ -116,6 +120,8 @@ $$ LANGUAGE PLPGSQL;
 -- Cron job to create a new row for each week
 CREATE OR REPLACE FUNCTION create_weekly_email_analytics_row() RETURNS VOID AS $$
 BEGIN
+    SET search_path = emails;
+
     INSERT INTO EmailAnalytics (week_start_date)
     VALUES (DATE_TRUNC('week', NOW()))
     ON CONFLICT (week_start_date) DO NOTHING;
@@ -138,11 +144,11 @@ BEGIN
     DELETE FROM 
         TrackingEvent te 
     WHERE
-        te.email_id NOT IN (
-            SELECT e.email_id FROM EmailTracking e
+        te.email_id::uuid NOT IN (
+            SELECT e.email_id::uuid FROM EmailTracking e
         ) 
     OR 
-        te.email_id == NULL;
+        te.email_id IS NULL;
 
 END;
 $$ LANGUAGE PLPGSQL;
@@ -153,7 +159,15 @@ BEGIN
 
     UPDATE EmailTracking e
     SET email_current_status = 'DELIVERED'
-    WHERE email_current_status = 'SEN' AND NOW() - date_sent >= INTERVAL '5 hours';
+    WHERE email_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '5 hours';
+
+    UPDATE EmailTracking e
+    SET email_current_status = 'FAILED'
+    WHERE email_current_status = 'RECEIVED' AND NOW() - date_sent >= INTERVAL '5 hours';
+
+    -- Update analytics 
+    -- ADd event
+
 END;
 $$ LANGUAGE PLPGSQL;
 

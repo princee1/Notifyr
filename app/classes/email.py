@@ -131,10 +131,10 @@ class EmailBuilder():
     def set_content(self, content: tuple[str, str]):
         html_content, text_content = content
         if text_content:
-            part1 = MIMEText(text_content, "text/plain")
+            part1 = MIMEText(text_content, "plain")
             self.message.attach(part1)
         if html_content:
-            part2 = MIMEText(html_content, "text/html")
+            part2 = MIMEText(html_content, "html")
             self.message.attach(part2)
 
     def attach_image(self, image_path, image_data, disposition: Literal["inline", "attachment"] = "inline"):
