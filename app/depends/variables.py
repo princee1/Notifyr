@@ -6,7 +6,7 @@ from fastapi import Request, Response
 from app.classes.celery import CeleryTask
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
-from app.services.celery_service import CeleryService, TaskService
+from app.services.celery_service import CeleryService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.twilio_service import TwilioService
 
@@ -28,7 +28,7 @@ trigger_task: Callable[[CeleryTask,int|None,str],dict[str,Any]] = GetDependsFunc
 
 as_async_query:Callable = get_query_params('background','false',True)
 
-runtype_query:Callable=get_query_params('runtype','concurrent',False,checker=lambda v: v in ['parallel','concurrent'])
+runtype_query:Callable=get_query_params('runtype','sequential',False,checker=lambda v: v in get_args(RunType))
 
 save_results_query:Callable=get_query_params('save','false',True)
 

@@ -208,7 +208,7 @@ class Application(EventInterface):
         register_tortoise(
             app=self.app,
             db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}",
-            modules={"models": ["app.models.twilio_model","app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model"]},
+            modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model"]},
             generate_schemas=False,
             add_exception_handlers=True,    
         )

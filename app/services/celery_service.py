@@ -23,22 +23,23 @@ from random import randint
 from dataclasses import field
 
 P = ParamSpec("P")
-RunType = Literal['parallel','concurrent']
+RunType = Literal['parallel','sequential']
 Algorithm = Literal['normal', 'worker_focus']
 
 
 class TaskConfig(TypedDict):
     task: BackgroundTask | Coroutine
     heaviness: TaskHeaviness
-    ttd: float
+    delay: float
 
 class TaskMeta(TypedDict):
     x_request_id:str
     as_async:bool
     runtype:RunType
     save_result:bool
-    ttl:float=3600
-    delay:float=0
+    ttl:float=3600 # time to live in the redis database
+    ttd:float=0
+    tt:float = 0 
 
 @dataclass        
 class TaskManager():
@@ -48,19 +49,40 @@ class TaskManager():
     taskConfig: list[TaskConfig] = field(default_factory=list)
     task_result: list[dict] = field(default_factory=list)
 
-    async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel, ttd: float, index: int | None, callback: Callable, *args, **kwargs):
-        values = await self.offloadTask(algorithm, scheduler, ttd, self.meta['x_request_id'], self.meta['as_async'], index, callback, *args, **kwargs)
+    async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel, delay: float, index: int | None, callback: Callable, *args, **kwargs):
+        values = await self.offloadTask(algorithm, scheduler, delay, self.meta['x_request_id'], self.meta['as_async'], index, callback, *args, **kwargs)
         self.task_result.append(values)
+
+    def append_taskConfig(self,task,heaviness,delay):
+
+        if len(self.taskConfig)==0:
+            self.meta['ttd'] +=delay
+
+        self.meta['tt']+=delay
+        new_delay = self.meta['tt']
+        self.taskConfig.append(TaskConfig(
+            task=task,
+            heaviness=heaviness,
+            delay=delay,
+        ))
+
+        return new_delay
 
     @property
     def results(self):
         if not self.return_results:
             return {}
         meta = self.meta.copy()
+        meta['ttd'] = naturaldelta(meta['ttd'])
+        meta.pop('tt',None)
         return {
             'meta': meta,
             'results': self.task_result
         }
+
+    @property
+    def schedule_ttd(self):
+        return self.meta['ttd'] - self.taskConfig[0]['delay']
 
 
 @Service
@@ -81,7 +103,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         SchedulerInterface.__init__(self)
 
     def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool)->TaskManager:
-        meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl)
+        meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0)
         task = TaskManager(meta=meta,offloadTask=offloadTask,return_results=return_results)
         self.sharing_task[request_id] = task
         return task
@@ -92,38 +114,53 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         except:
             ...
 
-    async def add_task(self, heaviness: TaskHeaviness, request_id: str,ttd:float|None,index,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
+    async def run_task_in_route_handler(self,index,callback,*args,**kwargs):
+        now = dt.datetime.now().isoformat()
+              
+        if asyncio.iscoroutine(callback):
+            result = await callback
+        elif asyncio.iscoroutinefunction(callback):
+            result =  await callback(*args,**kwargs)
+        else:    
+            result = callback(*args, **kwargs)
+
+        return {
+            'handler':'Route Handler',
+            'offloaded':True,
+            'date':now,
+            'expected_tbd':'now',
+            'index':index,
+            'result':result
+        }
+
+    async def add_task(self, heaviness: TaskHeaviness, request_id: str,delay:float|None,index,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
         task = BackgroundTask(func, *args, **kwargs)
-        return await self._create_task_(heaviness, task, request_id,ttd,index,)
+        return await self._create_task_(heaviness, task, request_id,delay,index,)
 
-    async def add_async_task(self, heaviness: TaskHeaviness, request_id: str,ttd:int|None,index,task: Coroutine[Any, Any, None]):
-        return await self._create_task_(heaviness, task, request_id,ttd,index)
+    async def add_async_task(self, heaviness: TaskHeaviness, request_id: str,delay:int|None,index,task: Coroutine[Any, Any, None]):
+        return await self._create_task_(heaviness, task, request_id,delay,index)
 
-    async def _create_task_(self, heaviness:TaskHeaviness, task, request_id:str,ttd:float,index):
-        now = str(dt.datetime.now())
+    async def _create_task_(self, heaviness:TaskHeaviness, task, request_id:str,delay:float,index):
+        now = dt.datetime.now().isoformat()
         async with self.task_lock:
             self.server_load[heaviness] += 1
             self.running_background_tasks_count+=1
 
-        ttd = self._compute_ttd()
+        #delay = self._compute_ttd()
 
         if isinstance(task, BackgroundTask):
             name = task.func.__qualname__
         else:
             name = task.__qualname__
-        self.sharing_task[request_id].taskConfig.append(TaskConfig(
-            task=task,
-            heaviness=heaviness,
-            ttd=ttd,
-        ))
 
+        new_delay = self.sharing_task[request_id].append_taskConfig(task,heaviness,delay)
+        
         return {
             'date': now,'handler': 'BackgroundTask',
             'task_id':request_id,
             'offloaded':True,
             'index':index,
-                'message': f"[{name}] - Task added successfully", 'heaviness': str(heaviness), 'estimate_tbd': naturaldelta(ttd),}
-
+                'message': f"[{name}] - Task added successfully", 'heaviness': str(heaviness), 'estimate_tbd': naturaldelta(new_delay),}
 
     def build(self):
         try:
@@ -133,7 +170,6 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
             self.background_task_count = Gauge('background_task','Active Background Working Task')
         except:
             raise BuildWarningError
-
 
     def _compute_ttd(self,):
         return 0
@@ -149,10 +185,10 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
             return self.running_route_handler
 
     def __call__(self, request_id: str) -> None:
-        task = self.sharing_task[request_id]
-        meta = task.meta
+        taskManager = self.sharing_task[request_id]
+        meta = taskManager.meta
         schedule= lambda: asyncio.create_task(self._run_task_in_background(request_id))
-        random_delay = randint(0, 60)
+        random_ttd = randint(0, 60)
         #print(f"Scheduled task with a random delay of {random_delay} seconds")
         #self.schedule(random_delay,action=schedule) # FIXME later 
         schedule()
@@ -169,9 +205,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         for i, t in enumerate(task_config):  # TODO add the index i to the results
             task = t['task']
             heaviness_ = t['heaviness']
-            ttd = t['ttd']
-            if ttd and ttd>0:
-                await asyncio.sleep(ttd)
+            delay = t['delay']
+            if delay and delay>0:
+                await asyncio.sleep(delay)
 
             data=None if runType == 'parallel' else []
             self.background_task_count.inc()
@@ -182,7 +218,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                     else:
                         result = await task
                     if is_saving_result:
-                        if runType == 'concurrent':
+                        if runType == 'sequential':
                             data.append(result)
                         else:
                             await self.redisService.store_bkg_result(result, request_id,ttl)
@@ -201,7 +237,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                         'args':str(e.args)
                     }
                     if is_saving_result:
-                        if runType == 'concurrent':
+                        if runType == 'sequential':
                             data.append(result)
                         else:
                             await self.redisService.store_bkg_result(result, request_id,ttl)
@@ -214,12 +250,12 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                         
                     return result
 
-            if runType=='concurrent': 
+            if runType=='sequential': 
                 await callback()
             else:
                 asyncio.create_task(callback())
 
-        if runType == 'concurrent':
+        if runType == 'sequential':
             await self.redisService.store_bkg_result(data, request_id,ttl)
             async with self.task_lock:
                 self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
@@ -439,39 +475,25 @@ class OffloadTaskService(BaseService):
     def build(self):
         ...
 
-    async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel,ttd: float, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
+    async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel,delay: float, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
         # TODO choose algorightm
         if algorithm == 'normal':
             ...
         if algorithm == 'worker_focus':
             return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
             
-        return await self._normal_offload(scheduler, ttd, x_request_id, as_async,index,callback, *args, **kwargs)
+        return await self._normal_offload(scheduler, delay, x_request_id, as_async,index,callback, *args, **kwargs)
 
-    async def _normal_offload(self, scheduler: SchedulerModel, ttd: float, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):
+    async def _normal_offload(self, scheduler: SchedulerModel, delay: float, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):
         # TODO check celery worker,
         if scheduler.task_type == TaskType.NOW.value:
             if as_async:
                 if asyncio.iscoroutine(callback):
-                    return await self.taskService.add_async_task(scheduler.heaviness,x_request_id,ttd,index,callback)
-                return await self.taskService.add_task(scheduler.heaviness, x_request_id, ttd, index,callback, *args, **kwargs)
+                    return await self.taskService.add_async_task(scheduler.heaviness,x_request_id,delay,index,callback)
+                return await self.taskService.add_task(scheduler.heaviness, x_request_id, delay, index,callback, *args, **kwargs)
             
             else:
-                now = dt.datetime.now()
-              
-                if asyncio.iscoroutine(callback):
-                    result = await callback
-                if asyncio.iscoroutinefunction(callback):
-                    result =  await callback(*args,**kwargs)
-                result = callback(*args, **kwargs)
-
-                return {
-                    'handler':'Route Handler',
-                    'offloaded':True,
-                    'date':now,
-                    'expected_tbd':'now',
-                    'index':index,
-                    'result':result
-                }
+                return await self.taskService.run_task_in_route_handler(index,callback,*args,**kwargs)
+                
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
