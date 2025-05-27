@@ -14,6 +14,7 @@ from app.utils.prettyprint import printJSON
 from cerberus import schema_registry
 
 
+
 class XMLLikeParser(Enum):
     HTML = "html.parser"
     LXML = "lxml"
@@ -255,14 +256,15 @@ class HTMLTemplate(MLTemplate):
     def __init__(self,*args):
         if len(args) == 3:
             filename,content,dirname = args
-            self.parser = XMLLikeParser.LXML.value
+            self.parser = XMLLikeParser.HTML.value
             super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
             self.images: list[tuple[str, str]] = []
             self.image_needed: list[str] = []
 
         elif len(args):
-            bs4,schema,transform,images = args
-            self.bs4:BeautifulSoup = bs4
+            bs4, schema, transform, images = args
+            self.parser = XMLLikeParser.HTML.value
+            self.bs4: BeautifulSoup = BeautifulSoup(str(bs4), self.parser)
             self.schema = schema
             self.transform = transform
             self.images = images
@@ -372,7 +374,8 @@ class HTMLTemplate(MLTemplate):
 
     @property
     def body(self):
-        return self.bs4.select_one('body').string
+        body = self.bs4.select_one("body")
+        return str(body.text)
     
 
 class PDFTemplate(Template):

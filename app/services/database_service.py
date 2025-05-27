@@ -203,7 +203,7 @@ class RedisService(DatabaseService):
             })
 
             if is_sub:
-                channel_callback = callbacks_sub.get(stream_name,lambda v:print(v))
+                channel_callback = callbacks_sub.get(stream_name,lambda v:v)# Print later
                 config['channel_tasks']= asyncio.create_task(self._consume_channel(stream_name,channel_callback))
             
             if is_stream:

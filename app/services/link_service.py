@@ -181,7 +181,7 @@ class LinkService(BaseService):
         url = self.BASE_URL(tracking_path)
         template.add_tracking_pixel(url)
 
-    def set_tracking_link(self, template:HTMLTemplate,message_tracking_id: str, contact_id: str) -> str:
+    def set_tracking_link(self, template:HTMLTemplate,message_tracking_id: str, contact_id: str=None) -> str:
         """
         Replace every link in the given content with a new tracking URL.
 
@@ -204,11 +204,14 @@ class LinkService(BaseService):
                 redirect_url = urlunparse(("", "", parsed_url.path, parsed_url.params, parsed_url.query, ""))
             
             # Construct the new tracking URL
-            query_params = {
+            query_params = {}
+            if contact_id:
+                query_params['contact_id']= contact_id
+
+            query_params.update({
                 "message_id": message_tracking_id,
-                "contact_id": contact_id,
                 "redirect_url": redirect_url
-            }
+            })
             tracking_url = self.BASE_URL(f"/link/t/?{urlencode(query_params)}")
             return tracking_url
 
