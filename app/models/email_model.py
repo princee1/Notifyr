@@ -232,7 +232,7 @@ async def upsert_email_analytics(sent: int, delivered: int, opened: int, bounced
     Returns:
         None
     """
-    print(sent)
+    
     query = "SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5);"
     client = Tortoise.get_connection('default')
     await client.execute_query(query, [sent, delivered, opened, bounced, replied])

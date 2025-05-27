@@ -260,7 +260,7 @@ class EmailSenderService(BaseEmailService):
         
 
     @BaseEmailService.task_lifecycle
-    async def _send_message(self, email: EmailBuilder, message_tracking_id: str, connector: smtp.SMTP,contact_id: str = None):
+    async def _send_message(self, email: EmailBuilder, message_tracking_id: str, connector: smtp.SMTP, contact_id: str = None):
         try:
             event_id = str(uuid_v1_mc())
             now = datetime.now(timezone.utc).isoformat()
@@ -268,35 +268,43 @@ class EmailSenderService(BaseEmailService):
             reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message, rcpt_options=[
                                         'NOTIFY=SUCCESS,FAILURE,DELAY'])
             email_status = EmailStatus.SENT.value
+            description = "Email successfully sent."
 
         except smtp.SMTPRecipientsRefused as e:
             email_status = EmailStatus.BLOCKED.value
+            description = "Email blocked due to recipient refusal."
 
         except smtp.SMTPSenderRefused as e:
             self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT
             email_status = EmailStatus.FAILED.value
+            description = "Email failed due to sender refusal."
 
         except smtp.SMTPNotSupportedError as e:
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
             email_status = EmailStatus.FAILED.value
+            description = "Email failed due to unsupported SMTP operation."
 
         except smtp.SMTPServerDisconnected as e:
             email_status = EmailStatus.FAILED.value
+            description = "Email failed due to server disconnection."
 
             print('Server disconnected')
             print(e)
             self._builded = False
-            # BUG service destroyed too ?
             self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
-            # TODO retry getting the access token
 
         finally:
-
             if message_tracking_id:
                 event = TrackingEmailEventORM.TrackingEventJSON(
-                    event_id=event_id, email_id=message_tracking_id, contact_id=None, current_event=email_status, date_event_received=now)
+                    description=description,
+                    event_id=event_id,
+                    email_id=message_tracking_id,
+                    contact_id=None,
+                    current_event=email_status,
+                    date_event_received=now
+                )
 
-                if self.configService.celery_env ==CeleryMode.none:
+                if self.configService.celery_env == CeleryMode.none:
                     await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
                 else:
                     self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)

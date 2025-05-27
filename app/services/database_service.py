@@ -70,6 +70,7 @@ class RedisService(DatabaseService):
     class StreamConfig(TypedDict):
         sub:bool
         count:int|None = None
+        block:int|None=None
         wait:int|None=None
         stream:bool
         channel_tasks:asyncio.Task | None = None
@@ -88,13 +89,14 @@ class RedisService(DatabaseService):
             StreamConstant.LINKS_EVENT_STREAM:self.StreamConfig(**{
                 'sub':True,
                 'count':1000*4,
-                'wait':1000*5,
+                'block':1000*5,
                 'stream':True
             }),
             StreamConstant.EMAIL_EVENT_STREAM:self.StreamConfig(**{
                 'sub':True,
                 'count':1000,
-                'wait':1000*30,
+                'block':1000*15,
+                'wait':45,
                 'stream':True
             }),
             StreamConstant.TWILIO_STREAM:self.StreamConfig(**{
@@ -104,7 +106,8 @@ class RedisService(DatabaseService):
             StreamConstant.EMAIL_TRACKING:self.StreamConfig(**{
                 'sub':False,
                 'stream':True,
-                'wait':1000*5
+                'block':1000*5,
+                'wait':5,
                 
             })
         }
@@ -192,7 +195,8 @@ class RedisService(DatabaseService):
             is_sub = config['sub']
             if is_stream:
                 count = config.get('count',1000)
-                wait = config.get('wait',1000)
+                block = config.get('block',1000)
+                wait = config.get('wait',60)
             config.update ({
                 'channel_tasks':None,
                 'stream_tasks':None
@@ -204,13 +208,13 @@ class RedisService(DatabaseService):
             
             if is_stream:
                 stream_callback = callbacks_stream.get(stream_name,None)
-                config['stream_tasks'] =asyncio.create_task(self._consume_stream(stream_name,count,wait,stream_callback))           
+                config['stream_tasks'] =asyncio.create_task(self._consume_stream(stream_name,count,block,wait,stream_callback))           
 
-    async def _consume_stream(self,stream_name,count,wait,handler:Callable[[dict[str,Any]],list]):
+    async def _consume_stream(self,stream_name,count,block,wait,handler:Callable[[dict[str,Any]],list]):
         while True:
-            await asyncio.sleep(5+(randint(0,10)*random()))
+            await asyncio.sleep(wait+(randint(0,10)*random()))
             try:
-                response = await self.redis_events.xreadgroup(self.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=wait)
+                response = await self.redis_events.xreadgroup(self.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=block)
                 if response:
                     for stream, entries in response:
                         entry_ids = await handler(entries)
