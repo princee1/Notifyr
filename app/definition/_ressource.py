@@ -709,7 +709,7 @@ def response_decorator(func:Callable):
             result = await func(*args,**kwargs)
         else:
             result = func(*args,**kwargs)
-        response:Response = kwargs['response'] if 'response' in kwargs else None
+        response:Response = kwargs.get('response',None)
         
         if isinstance(result,Response):
             ...

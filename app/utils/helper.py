@@ -66,7 +66,7 @@ def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None)
     return 
 
 def copy_response(result:Response,response:Response):
-    if not response:
+    if response == None:
         return result
     result.raw_headers.extend(response.raw_headers)
     result.status_code = response.status_code if response.status_code else result.status_code

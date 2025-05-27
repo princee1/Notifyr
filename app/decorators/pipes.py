@@ -227,36 +227,43 @@ class ContactStatusPipe(Pipe):
 
 class OffloadedTaskResponsePipe(Pipe):
 
-    def __init__(self,copy_res=False):
-        super().__init__(False) 
-        self.copy_res= copy_res
-        
-    def pipe(self,result:Any|Response,response:Response=None,scheduler:SchedulerModel=None,otpModel:OTPModel=None,taskManager:TaskManager=None,as_async:bool=None):
-        if taskManager == None and as_async == None:
-            as_async = False
-        elif taskManager != None:
-            as_async = taskManager.meta['as_async']
-        elif as_async != None:
-            ...
-        else:
-            as_async = False
+    def __init__(self, copy_res=False):
+        super().__init__(False)
+        self.copy_res = copy_res
 
-        
-        if result == None and taskManager !=None:
-            result = taskManager.results
+    def pipe(self, result: Any | Response, response: Response = None, scheduler: SchedulerModel = None, otpModel: OTPModel = None, taskManager: TaskManager = None, as_async: bool = None):
+        as_async = self._determine_async(taskManager, as_async)
+        result = self._process_result(result, taskManager)
+        response = self._prepare_response(result, response)
+        self._set_status_code(response, scheduler, otpModel, as_async)
+        return response
 
-        if not isinstance(result,Response):
+    def _determine_async(self, taskManager: TaskManager, as_async: bool) -> bool:
+        if taskManager is None and as_async is None:
+            return False
+        if taskManager is not None:
+            return taskManager.meta['as_async']
+        return as_async if as_async is not None else False
+
+    def _process_result(self, result: Any | Response, taskManager: TaskManager) -> Any | Response:
+        if result is None and taskManager is not None:
+            return taskManager.results
+        return result
+
+    def _prepare_response(self, result: Any | Response, response: Response) -> Response:
+        if not isinstance(result, Response):
             result = JSONResponse(content=result)
-        
-        if self.copy_res:
-            response = copy_response(result,response)
+            if self.copy_res:
+                response = copy_response(result, response)
+        else:
+            response = result
+        return response
 
-        if (scheduler and scheduler.task_type != TaskType.NOW)  or (otpModel and as_async ) or  (as_async):
+    def _set_status_code(self, response: Response, scheduler: SchedulerModel, otpModel: OTPModel, as_async: bool):
+        if (scheduler and scheduler.task_type != TaskType.NOW) or (otpModel and as_async) or as_async:
             response.status_code = 201
         else:
             response.status_code = 200
-        
-        return response
 
 
 class KeepAliveResponsePipe(Pipe):
