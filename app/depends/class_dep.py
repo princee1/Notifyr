@@ -152,7 +152,7 @@ class LinkQuery:
             url = self.request.url.netloc
         elif isinstance(link,LinkORM):
             url = link.link_url
-        elif isinstance(link,url):
+        elif isinstance(link,str):
             url = link
             
         if not url.endswith("/"):
