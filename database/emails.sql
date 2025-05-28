@@ -154,19 +154,45 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION set_email_delivered() RETURNS VOID AS $$
+DECLARE
+    delivered_count INT;
+    failed_count INT;
 BEGIN
     SET search_path = emails;
 
-    UPDATE EmailTracking e
-    SET email_current_status = 'DELIVERED'
-    WHERE email_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '5 hours';
+    -- Count and update email_current_status and analytics for 'DELIVERED'
+    WITH delivered_emails AS (
+        UPDATE EmailTracking e
+        SET email_current_status = 'DELIVERED'
+        WHERE email_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '1 hours'
+        RETURNING email_id
+    )
+    SELECT COUNT(*) INTO delivered_count FROM delivered_emails;
 
-    UPDATE EmailTracking e
-    SET email_current_status = 'FAILED'
-    WHERE email_current_status = 'RECEIVED' AND NOW() - date_sent >= INTERVAL '5 hours';
+    -- Update analytics for 'DELIVERED'
+    PERFORM upsert_email_analytics(0, delivered_count, 0, 0, 0);
 
-    -- Update analytics 
-    -- ADd event
+    -- Add event for 'DELIVERED'
+    INSERT INTO TrackingEvent (email_id, current_event, description)
+    SELECT email_id, 'DELIVERED', 'Email marked as delivered after 1 hours'
+    FROM delivered_emails;
+
+    -- Count and update email_current_status and analytics for 'FAILED'
+    WITH failed_emails AS (
+        UPDATE EmailTracking e
+        SET email_current_status = 'FAILED'
+        WHERE email_current_status = 'RECEIVED' AND NOW() - date_sent >= INTERVAL '1 hours'
+        RETURNING email_id
+    )
+    SELECT COUNT(*) INTO failed_count FROM failed_emails;
+
+    -- Update analytics for 'FAILED'
+    PERFORM upsert_email_analytics(0, 0, 0, failed_count, 0);
+
+    -- Add event for 'FAILED'
+    INSERT INTO TrackingEvent (email_id, current_event, description)
+    SELECT email_id, 'FAILED', 'Email marked as failed after 1 hours'
+    FROM failed_emails;
 
 END;
 $$ LANGUAGE PLPGSQL;
