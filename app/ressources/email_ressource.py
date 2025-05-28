@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated, Callable, Literal
 import aiohttp
 from app.classes.auth_permission import MustHave, Role
 from app.classes.email import parse_mime_content
@@ -99,16 +99,20 @@ class EmailTemplateRessource(BaseHTTPRessource):
         meta = mail_content.meta.model_dump(mode='python')
         template: HTMLTemplate = self.assetService.html[template]
         
+        tracking_link_callback:Callable[[str],str] = None
         if tracker.will_track:
             template = template.clone()
             email_tracking = tracker.track_event_data()
-            self.linkService.create_tracking_pixel(template,tracker.email_id)
+            self.linkService.set_tracking_link(template,tracker.email_id)
+            tracking_link_callback = self.linkService.create_link_re(tracker.email_id,)
+            #self.linkService.create_tracking_pixel(template,tracker.email_id)
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
+        
 
-        _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
+        _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
         data = parse_mime_content(data,mail_content.mimeType)
         
-        await taskManager.offload_task('worker_focus',scheduler,0,None,None,data, meta, template.images,tracker.message_tracking_id,contact_id=None)
+        await taskManager.offload_task('normal',scheduler,0,None,self.emailService.sendTemplateEmail,data, meta, template.images,tracker.message_tracking_id,contact_id=None)
         return taskManager.results
     
     @UseLimiter(limit_value='10000/minutes')
@@ -122,8 +126,12 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
         meta = customEmail_content.meta.model_dump()
         if tracker.will_track:
+            tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(tracker.email_id,)
+
             email_tracking = tracker.track_event_data()
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
+            content[0] = tracking_link_callback(content[0])
+            content[1] = tracking_link_callback(content[1])
             
         await taskManager.offload_task('worker_focus',scheduler,0,None,None,content,meta,customEmail_content.images, customEmail_content.attachments,tracker.message_tracking_id,contact_id =None)
         return taskManager.results

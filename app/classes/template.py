@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Any, Self, overload
+from aiohttp_retry import Callable
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from app.definition._error import BaseError
 from app.classes.schema import MLSchemaBuilder
@@ -153,7 +154,7 @@ class MLTemplate(Template):
     def _built_template(self,content):
         ...
 
-    def inject(self, data: dict)->str:
+    def inject(self, data: dict,re_replace:Callable[[str],str]=None)->str:
         try:
             content_html = str(self.content_to_inject)
             flattened_data = flatten_dict(data)
@@ -167,6 +168,10 @@ class MLTemplate(Template):
                             value = t(value)
                     else:
                         value=transformers(value)
+                
+                if re_replace:
+                    value = re_replace(value)
+
                 content_html = regex.sub(value, content_html)
 
             return self._built_template(content_html)
@@ -308,9 +313,9 @@ class HTMLTemplate(MLTemplate):
     def set_content(self,):
         super().set_content("html5")
 
-    def build(self,data,target_lang):
+    def build(self,data,target_lang,re_replace=None):
         super().build(data,target_lang)
-        content_html, content_text = self.inject(data)
+        content_html, content_text = self.inject(data,re_replace=re_replace)
         content_html = self.translate(target_lang, content_html)
         content_text = self.translate(target_lang, content_text)
         return True, (content_html, content_text)
@@ -364,7 +369,10 @@ class HTMLTemplate(MLTemplate):
     def set_to_email_tracking_link(self, content: str):
         body = self.bs4.select_one('body')
         if body:
-            body.string = content
+            body.decompose()
+        new_body = BeautifulSoup(content,self.parser)
+        html = self.bs4.select_one("html")
+        html.append(new_body)
         self.set_content()
 
     def clone(self)->Self:
@@ -375,7 +383,9 @@ class HTMLTemplate(MLTemplate):
     @property
     def body(self):
         body = self.bs4.select_one("body")
-        return str(body.text)
+        if body == None:
+            raise TemplateFormatError("No <body> tag found in the HTML content.")
+        return str(body)
     
 
 class PDFTemplate(Template):

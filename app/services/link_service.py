@@ -181,6 +181,43 @@ class LinkService(BaseService):
         url = self.BASE_URL(tracking_path)
         template.add_tracking_pixel(url)
 
+    
+    def create_link_re(self,message_tracking_id, contact_id=None):
+
+        def callback(content:str)->str:
+
+            if content == None:
+                return None
+
+            def _replace_link(match):
+                original_url = match.group(0)
+                parsed_url = urlparse(original_url)
+                redirect_url = original_url
+
+                if parsed_url.netloc == urlparse(self.BASE_URL("")).netloc:
+                    # If the netloc matches the base URL, use only the path and query
+                    redirect_url = urlunparse(("", "", parsed_url.path, parsed_url.params, parsed_url.query, ""))
+                
+                # Construct the new tracking URL
+                query_params = {}
+                if contact_id:
+                    query_params['contact_id']= contact_id
+
+                query_params.update({
+                    "message_id": message_tracking_id,
+                    "r":redirect_url
+                })
+                tracking_url = self.BASE_URL(f"/link/t/?{urlencode(query_params,encoding='utf-8')}")
+                # Debugging the tracking URL
+                return tracking_url
+
+            # Regex to match URLs in the content
+            url_pattern = r"https?://[^\s]+"
+            new_content = re.sub(url_pattern, _replace_link,content )
+            return new_content
+        
+        return callback
+
     def set_tracking_link(self, template:HTMLTemplate,message_tracking_id: str, contact_id: str=None) -> str:
         """
         Replace every link in the given content with a new tracking URL.
@@ -193,31 +230,8 @@ class LinkService(BaseService):
         Returns:
             str: The content with replaced tracking links.
         """
-
-        def replace_link(match):
-            original_url = match.group(0)
-            parsed_url = urlparse(original_url)
-            redirect_url = original_url
-
-            if parsed_url.netloc == urlparse(self.BASE_URL("")).netloc:
-                # If the netloc matches the base URL, use only the path and query
-                redirect_url = urlunparse(("", "", parsed_url.path, parsed_url.params, parsed_url.query, ""))
-            
-            # Construct the new tracking URL
-            query_params = {}
-            if contact_id:
-                query_params['contact_id']= contact_id
-
-            query_params.update({
-                "message_id": message_tracking_id,
-                "redirect_url": redirect_url
-            })
-            tracking_url = self.BASE_URL(f"/link/t/?{urlencode(query_params)}")
-            return tracking_url
-
-        # Regex to match URLs in the content
-        url_pattern = r"https?://[^\s]+"
-        new_content = re.sub(url_pattern, replace_link, template.body)
+        callback = self.create_link_re(message_tracking_id,contact_id)
+        new_content = callback(template.body)
         template.set_to_email_tracking_link(new_content)
     
     def generate_html(self, img_data):

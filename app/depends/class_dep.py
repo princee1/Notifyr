@@ -187,7 +187,7 @@ class LinkQuery:
             
     @property
     def redirect_url(self):
-        redirect_url = self.request.query_params.get('redirect_url',None)
+        redirect_url = self.request.query_params.get('r',None)
         if not url_validator(redirect_url):
             raise ServerFileError('app/static/error-404-page/index.html',status_code=404)
 
