@@ -19,7 +19,7 @@ from app.services.reactive_service import ReactiveService
 from app.utils.helper import uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
-from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter, SMTPErrorCode, get_error_description
+from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter as Search, SMTPErrorCode, get_error_description
 from app.utils.tools import Time
 
 from app.utils.constant import EmailHostConstant
@@ -301,7 +301,8 @@ class EmailSenderService(BaseEmailService):
                     email_id=message_tracking_id,
                     contact_id=None,
                     current_event=email_status,
-                    date_event_received=now
+                    date_event_received=now,
+                    is_message_id=False,
                 )
 
                 if self.configService.celery_env == CeleryMode.none:
@@ -345,13 +346,17 @@ class EmailReaderService(BaseEmailService):
             callback = getattr(service, self.func, None)
             is_async = asyncio.iscoroutinefunction(callback)
             while self.stop:
-                self.is_running = True
+                self.is_running = False
                 await asyncio.sleep(self.delay)
+                self.is_running = True
+
                 if is_async:
+                    print('Ok')
                     await callback(*self.args,**self.kwargs)
                 else:
+                    print('k')
+
                     callback(*self.args, **self.kwargs)
-                self.is_running = False
             return
 
         def cancel_job(self):
@@ -608,13 +613,13 @@ class EmailReaderService(BaseEmailService):
         for jobs in self.jobs.values():
             jobs.cancel_job()
 
-    #@register_job('Parse Dns Email',(60,180),'INBOX', None)
+    #@register_job('Parse DNS Email',(60,180),'INBOX', None)
     @BaseEmailService.task_lifecycle
     @select_inbox
     async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
-        criteria.add(IMAPSearchFilter.UNSEEN()).add(IMAPSearchFilter.FROM('mailer-daemon@googlemail.com')).add(
-            IMAPSearchFilter.SUBJECT("Delivery Status Notification"))
+        criteria.add(Search.UNSEEN()).add(Search.FROM('mailer-daemon@googlemail.com')).add(
+            Search.SUBJECT("Delivery Status Notification"))
         
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
@@ -642,7 +647,8 @@ class EmailReaderService(BaseEmailService):
                 email_id=original_message.Email_ID,
                 contact_id=None,
                 current_event=email_status.value,
-                date_event_received=datetime.now(timezone.utc).isoformat()
+                date_event_received=datetime.now(timezone.utc).isoformat(),
+                is_message_id=False,
             )
 
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
@@ -654,12 +660,37 @@ class EmailReaderService(BaseEmailService):
     @select_inbox
     async def replied_email(self, max_count:int|None, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
-        criteria.add(IMAPSearchFilter.UNSEEN()).add(('ANSWERED',))
-        
+        criteria.add(Search.UNSEEN()).add(Search.SUBJECT('Re:'))
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
-
         
+        for ids,e in zip(message_ids,emails):
+            original_message = e.Message_RFC882
+            
+            if original_message == None: # the original message was partially appended
+                description = f"{e.From} has replied to  the email"
+                email_id = e.Get_Our_Last_Message_References(self.configService.HOSTNAME)
+                if email_id == None:
+                    continue
+                is_message_id = True
+            else:
+                if original_message.Email_ID == None: # The full original message was appended
+                    continue
+                description = f"{original_message.From} has replied to the email" 
+                email_id = original_message.Email_ID
+                is_message_id = False
+
+            event =TrackingEmailEventORM.TrackingEventJSON(
+                event_id=uuid_v1_mc(),
+                description=description,
+                email_id=email_id,
+                contact_id=None,
+                current_event=EmailStatus.REPLIED,
+                date_event_received=datetime.now(timezone.utc).isoformat(),
+                is_message_id=is_message_id
+            )
+
+            await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
     
 
     @property

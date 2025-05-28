@@ -29,3 +29,5 @@
 27. FOR NOW cant track multiple email sent at once
 28. verify template format
 29. Implement Campaign analytics
+30. Add email headers to specify if it is transactional
+31. Btree Index on message id
