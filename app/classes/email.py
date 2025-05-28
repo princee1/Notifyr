@@ -172,6 +172,7 @@ class FutureEmailBuilder(EmailBuilder):
 #######################################################                        #################################
 @dataclass
 class EmailReader:
+    msg:Message
     Subject: str = None
     From: str = None
     To: str = None
@@ -185,12 +186,9 @@ class EmailReader:
     Headers: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        pass  # Prevents the dataclass from generating its own __init__
-
-    def __init__(self,msg:Message):
-        self.parse_email(msg)
-        self.parse_body(msg)
-        
+        self.parse_email(self.msg)
+        self.parse_body(self.msg)
+            
     def parse_email(self, msg: Message):
         # Parse headers
         self.Subject = self.decode_header_field(msg.get("Subject"))

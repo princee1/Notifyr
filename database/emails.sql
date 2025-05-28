@@ -36,15 +36,15 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
 );
 
 CREATE TABLE IF NOT EXISTS TrackingEvent (
-    event_id UUID DEFAULT uuid_generate_v1mc(),
+    event_id UUID DEFAULT uuid_generate_v1mc (),
     email_id UUID NOT NULL,
     contact_id UUID DEFAULT NULL,
     current_event EmailStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
     date_event_received TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (event_id),
-    FOREIGN KEY (email_id) REFERENCES EmailTracking(email_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
+    FOREIGN KEY (email_id) REFERENCES EmailTracking (email_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
 CREATE TABLE IF NOT EXISTS TrackedLinks (
@@ -137,7 +137,6 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
-
 CREATE OR REPLACE FUNCTION delete_non_mapped_email_event() RETURNS VOID AS $$
 BEGIN
     SET search_path = emails;
@@ -155,44 +154,49 @@ $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION set_email_delivered() RETURNS VOID AS $$
 DECLARE
-    delivered_count INT;
-    failed_count INT;
+    sent_email_ids UUID[];
+    received_email_ids UUID[];
+
 BEGIN
     SET search_path = emails;
 
-    -- Count and update email_current_status and analytics for 'DELIVERED'
-    WITH delivered_emails AS (
-        UPDATE EmailTracking e
-        SET email_current_status = 'DELIVERED'
+    sent_email_ids := ARRAY(
+        SELECT email_id
+        FROM EmailTracking
         WHERE email_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '1 hours'
-        RETURNING email_id
-    )
-    SELECT COUNT(*) INTO delivered_count FROM delivered_emails;
+    );
 
-    -- Update analytics for 'DELIVERED'
-    PERFORM upsert_email_analytics(0, delivered_count, 0, 0, 0);
+    received_email_ids := ARRAY(
+        SELECT email_id
+        FROM EmailTracking
+        WHERE email_current_status = 'RECEIVED' AND NOW() - date_sent >= INTERVAL '1 hours'
+    );  
+    
+    UPDATE 
+        EmailTracking
+    SET 
+        email_current_status = 'DELIVERED'
+    WHERE 
+        email_id = ANY(sent_email_ids);
+
+    UPDATE 
+        EmailTracking
+    SET 
+        email_current_status = 'FAILED'
+    WHERE 
+        email_id = ANY(received_email_ids);
+    
+    PERFORM upsert_email_analytics(0, COALESCE(array_length(sent_email_ids, 1), 0), 0, COALESCE(array_length(received_email_ids, 1), 0), 0);
 
     -- Add event for 'DELIVERED'
-    INSERT INTO TrackingEvent (email_id, current_event, description)
+    INSERT INTO emails.TrackingEvent (email_id, current_event, description)
     SELECT email_id, 'DELIVERED', 'Email marked as delivered after 1 hours'
-    FROM delivered_emails;
-
-    -- Count and update email_current_status and analytics for 'FAILED'
-    WITH failed_emails AS (
-        UPDATE EmailTracking e
-        SET email_current_status = 'FAILED'
-        WHERE email_current_status = 'RECEIVED' AND NOW() - date_sent >= INTERVAL '1 hours'
-        RETURNING email_id
-    )
-    SELECT COUNT(*) INTO failed_count FROM failed_emails;
-
-    -- Update analytics for 'FAILED'
-    PERFORM upsert_email_analytics(0, 0, 0, failed_count, 0);
+    FROM unnest(sent_email_ids) AS email_id;
 
     -- Add event for 'FAILED'
-    INSERT INTO TrackingEvent (email_id, current_event, description)
+    INSERT INTO emails.TrackingEvent (email_id, current_event, description)
     SELECT email_id, 'FAILED', 'Email marked as failed after 1 hours'
-    FROM failed_emails;
+    FROM unnest(received_email_ids) AS email_id;
 
 END;
 $$ LANGUAGE PLPGSQL;
@@ -202,23 +206,20 @@ SELECT cron.schedule (
         'set_email_delivered_every_hour', -- Job name
         '0 * * * *', -- Cron expression for every hour
         'SELECT emails.set_email_delivered();'
-            );
+    );
 
 SELECT cron.schedule (
-                'delete_expired_email_tracking_every_day',
-                '0 0 * * *', -- Cron expression for every day at midnight
-                'SELECT emails.delete_expired_email_tracking();'
-            );
+        'delete_expired_email_tracking_every_day', '0 0 * * *', -- Cron expression for every day at midnight
+        'SELECT emails.delete_expired_email_tracking();'
+    );
 
 SELECT cron.schedule (
-                'delete_non_mapped_email_event_every_day',
-                '0 */3 * * *', -- Cron expression for every 3 hours
-                'SELECT emails.delete_non_mapped_email_event();'
-            );
+        'delete_non_mapped_email_event_every_day', '0 */3 * * *', -- Cron expression for every 3 hours
+        'SELECT emails.delete_non_mapped_email_event();'
+    );
 
 -- Schedule the weekly cron job
-SELECT cron.schedule(
-    'create_weekly_email_analytics_row',
-    '0 0 * * 0', -- Every Sunday at midnight
-    'SELECT emails.create_weekly_email_analytics_row();'
-);
+SELECT cron.schedule (
+        'create_weekly_email_analytics_row', '0 0 * * 0', -- Every Sunday at midnight
+        'SELECT emails.create_weekly_email_analytics_row();'
+    );

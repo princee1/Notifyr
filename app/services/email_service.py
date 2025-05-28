@@ -552,10 +552,9 @@ class EmailReaderService(BaseEmailService):
             self.service_status = _service.ServiceStatus.NOT_AVAILABLE
 
     def read_email(self, message_ids, connector: imap.IMAP4 | imap.IMAP4_SSL, max_count: int = None):
-
         for num in message_ids[:max_count]:
             status, data = connector.fetch(num, "(RFC822)")
-            if status != None:
+            if status != 'OK':
                 continue
             raw_email = data[0][1]
             msg = message_from_bytes(raw_email)
@@ -577,7 +576,7 @@ class EmailReaderService(BaseEmailService):
         if status != 'OK':
             return []
 
-        return message_numbers
+        return message_numbers[0].decode().split()
 
     def delete_email(self, message_id: str, connector: imap.IMAP4 | imap.IMAP4_SSL, hard=False):
         connector.store(message_id, '+FLAGS', '\\Deleted')
@@ -609,7 +608,7 @@ class EmailReaderService(BaseEmailService):
         for jobs in self.jobs.values():
             jobs.cancel_job()
 
-    #@register_job('Parse Dns Email',None,'INBOX', None)
+    #@register_job('Parse Dns Email',(60,180),'INBOX', None)
     @BaseEmailService.task_lifecycle
     @select_inbox
     async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
@@ -619,9 +618,11 @@ class EmailReaderService(BaseEmailService):
         
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
-        return
         for ids, email in zip(message_ids, emails):
             original_message = email.Message_RFC882
+            if original_message.Email_ID == None:
+                continue
+
             bs4 = BeautifulSoup(email.HTML_Body, 'html.parser')
             last_p = bs4.body
             if last_p ==None:
@@ -647,6 +648,19 @@ class EmailReaderService(BaseEmailService):
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
             # self.delete_email(ids,connector)
 
+    
+    #@register_job('Check Replied Email',(30,60),'INBOX', None)
+    @BaseEmailService.task_lifecycle
+    @select_inbox
+    async def replied_email(self, max_count:int|None, connector: imap.IMAP4 | imap.IMAP4_SSL):
+        criteria = IMAPCriteriaBuilder()
+        criteria.add(IMAPSearchFilter.UNSEEN()).add(('ANSWERED',))
+        
+        message_ids = self.search_email(*criteria, connector=connector)
+        emails = self.read_email(message_ids, connector, max_count=max_count,)
+
+        
+    
 
     @property
     def mailboxes(self):
