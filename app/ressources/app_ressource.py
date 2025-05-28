@@ -21,7 +21,7 @@ class AppRessource(BaseHTTPRessource):
     def on_startup(self):
         super().on_startup()
         self.app_route_html_content = self.fileService.readFile('app/static/index.html',FDFlag.READ)
-        self.landing_page_html_content = self.fileService.readFile('app/static/landing-page/index.html',FDFlag.READ)
+        self.landing_page_html_content = self.fileService.readFile('app/static/home/index.html',FDFlag.READ)
 
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.HTTPRoute('/',[HTTPMethod.GET],deprecated=True,mount=True,)
@@ -31,9 +31,11 @@ class AppRessource(BaseHTTPRessource):
             "Cache-Control": f"public, max-age={cache_duration}, immutable"
         }
         return HTMLResponse(self.app_route_html_content,headers=headers)
+    
+
 
     @UseLimiter(limit_value='10000/day')
-    @BaseHTTPRessource.HTTPRoute('/landing-page',[HTTPMethod.GET],deprecated=True,mount=True,)
+    @BaseHTTPRessource.HTTPRoute('/home/',[HTTPMethod.GET],deprecated=True,mount=True,)
     def landing_page(self,request:Request):
         cache_duration = int(timedelta(days=365).total_seconds())
         headers = {
