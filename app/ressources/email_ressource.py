@@ -133,7 +133,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             content[0] = tracking_link_callback(content[0])
             content[1] = tracking_link_callback(content[1])
             
-        await taskManager.offload_task('worker_focus',scheduler,0,None,None,content,meta,customEmail_content.images, customEmail_content.attachments,tracker.message_tracking_id,contact_id =None)
+        await taskManager.offload_task('normal',scheduler,0,None,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,tracker.message_tracking_id,contact_id =None)
         return taskManager.results
 
 

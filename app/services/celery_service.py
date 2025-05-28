@@ -187,11 +187,12 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
     def __call__(self, request_id: str) -> None:
         taskManager = self.sharing_task[request_id]
         meta = taskManager.meta
-        schedule= lambda: asyncio.create_task(self._run_task_in_background(request_id))
+        #schedule= lambda: asyncio.create_task(self._run_task_in_background(request_id))
         random_ttd = randint(0, 60)
         #print(f"Scheduled task with a random delay of {random_delay} seconds")
         #self.schedule(random_delay,action=schedule) # FIXME later 
-        schedule()
+        asyncio.create_task(self._run_task_in_background(request_id))
+        #schedule()
 
     async def _run_task_in_background(self, request_id):
         task_config = self.sharing_task[request_id].taskConfig
