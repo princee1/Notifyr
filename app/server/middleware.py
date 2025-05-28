@@ -18,6 +18,8 @@ from cryptography.fernet import InvalidToken
 from app.depends.variables import SECURITY_FLAG
 from app.utils.helper import generateId
 from app.depends.funcs_dep import GetClient
+from starlette.background import BackgroundTask
+
 
         
 class MetaDataMiddleWare(MiddleWare):
@@ -148,11 +150,14 @@ class BackgroundTaskMiddleware(MiddleWare):
     async def dispatch(self, request:Request, call_next):
         request_id = generateId(25)
         request.state.request_id = request_id
-        response = await call_next(request)
+        response:Response = await call_next(request)
         rq_response_id = get_response_id(response) 
         if rq_response_id in self.taskService.sharing_task:
             if len(self.taskService.sharing_task[rq_response_id].taskConfig)>0:
-                self.taskService(rq_response_id) 
+                async def callback():
+                    await asyncio.sleep(0.1)
+                    return await self.taskService(rq_response_id)
+                response.background= BackgroundTask(callback)
         else: 
             self.taskService._delete_tasks(request_id) #NOTE if theres no rq_response_id in the response this means we can safely remove the reference
         return response   

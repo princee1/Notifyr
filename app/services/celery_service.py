@@ -184,14 +184,14 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         async with self.route_lock:
             return self.running_route_handler
 
-    def __call__(self, request_id: str) -> None:
+    async def __call__(self, request_id: str) -> None:
         taskManager = self.sharing_task[request_id]
         meta = taskManager.meta
         #schedule= lambda: asyncio.create_task(self._run_task_in_background(request_id))
         random_ttd = randint(0, 60)
         #print(f"Scheduled task with a random delay of {random_delay} seconds")
         #self.schedule(random_delay,action=schedule) # FIXME later 
-        asyncio.create_task(self._run_task_in_background(request_id))
+        return await self._run_task_in_background(request_id)
         #schedule()
 
     async def _run_task_in_background(self, request_id):
@@ -212,6 +212,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
             data=None if runType == 'parallel' else []
             self.background_task_count.inc()
+           
             async def callback():
                 try:
                     if not asyncio.iscoroutine(task):
