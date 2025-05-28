@@ -260,7 +260,7 @@ class OffloadedTaskResponsePipe(Pipe):
         return response
 
     def _set_status_code(self, response: Response, scheduler: SchedulerModel, otpModel: OTPModel, as_async: bool):
-        if (scheduler and scheduler.task_type != TaskType.NOW) or (otpModel and as_async) or as_async:
+        if (scheduler and scheduler.task_type != TaskType.NOW.value) or (otpModel and as_async) or as_async:
             response.status_code = 201
         else:
             response.status_code = 200
