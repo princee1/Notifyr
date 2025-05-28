@@ -124,6 +124,7 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
     contact_id_to_delete = set()
 
     opens_per_email = {}
+    replied_per_email = {}
 
     email_status =  {}
 
@@ -132,6 +133,7 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
             empty_str_to_none(val)
             email_id = val['email_id']
             contact_id = val.get('contact_id', None)
+            is_message_id = val.get('is_message_id',False)
             if contact_id == None:
                 val.pop('contact_id')
             
@@ -155,13 +157,24 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                         if contact_id!=None:    
                             contact_id_to_delete.add(contact_id)
                 case EmailStatus.REPLIED.value:
-                    analytics['replied'] += 1
-
+                    if email_id not in replied_per_email:
+                        analytics['replied'] += 1
+                        replied_per_email[email_id] = True
+                    
+                    if email_id not in opens_per_email:
+                        analytics['opened'] += 1
+                        opens_per_email[email_id] = True
 
             if opens_per_email.get(email_id,False):
                 email_status[email_id] = EmailStatus.OPENED.value
             else:
                 email_status[email_id] = event.current_event.value
+
+            if replied_per_email.get(email_id,False):
+                email_status[email_id] = EmailStatus.REPLIED.value
+            else:
+                email_status[email_id] = event.current_event.value
+
             valid_entries.add(ids)
         except Exception as e:
             print(e)

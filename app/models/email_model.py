@@ -157,6 +157,7 @@ class TrackingEmailEventORM(models.Model):
         contact_id:str|None
         current_event:str|None
         date_event_received:str
+        is_message_id:bool =False
         
     class Meta:
         schema = SCHEMA

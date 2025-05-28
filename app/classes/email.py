@@ -264,6 +264,21 @@ class EmailReader:
         if not references:
             return []
         return references.split(' ')
+    
+
+    def Get_Our_Last_Message_References(self,our_host:str):
+        references = self.References
+        if not references:
+            return None
+        for r in references[::-1]:
+            r = r.split('@')
+            if r == our_host+'>':
+                return r
+        
+        return None
+        
+    def Contact_ID(self):
+        return self.Headers(EmailHeadersConstant.CONTACT_ID.value,None)
 
     @property
     def In_Reply_To(self):

@@ -135,6 +135,8 @@ class IMAPSearchFilter(Enum):
     BODY = lambda b:("BODY",f'"{b}"')
     SINCE = lambda d:("SINCE",d)
     ALL= lambda:('ALL',)
+    SEEN = lambda:('SEEN',)
+    
 
 @dataclass
 class IMAPCriteriaBuilder:

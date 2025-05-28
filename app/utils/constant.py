@@ -98,6 +98,7 @@ class EmailHeadersConstant(str,Enum):
 
     X_EMAIL_ID = 'X-EMAIL-ID'
     MESSAGE_ID = 'MESSAGE-ID'
+    CONTACT_ID = 'X_CONTACT_ID'
 
 
 class LinkConstant(str,Enum):
