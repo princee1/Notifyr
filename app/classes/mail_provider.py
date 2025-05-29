@@ -136,6 +136,7 @@ class IMAPSearchFilter(Enum):
     SINCE = lambda d:("SINCE",d)
     ALL= lambda:('ALL',)
     SEEN = lambda:('SEEN',)
+    OR = lambda:('OR',)
     
 
 @dataclass

@@ -4,7 +4,7 @@ from email import encoders, message_from_string, policy
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
-from email.utils import formatdate
+from email.utils import formatdate,make_msgid
 from typing import List, Optional, Literal, Self
 from app.definition._error import BaseError
 from app.utils.constant import EmailHeadersConstant
@@ -284,4 +284,22 @@ class EmailReader:
     def In_Reply_To(self):
         return self.Headers.get('In-Reply-To',None)
 
-    
+
+def extract_email_id_from_msgid(msgid: str,my_domain:str) -> str:
+    """
+    Extracts the email_id from a given Message-ID and rebuilds it to its original form.
+    """
+    if not msgid or '@' not in msgid:
+        return None
+        raise ValueError("Invalid Message-ID format")
+
+    try:
+        msgid_parts = msgid.strip('<>').split('@')
+        if msgid_parts[1] != my_domain:
+            return None
+        
+        email_id_part = msgid_parts[0].split('.')[-1]
+        return '-'.join(email_id_part[i:i+8] for i in range(0, len(email_id_part), 8))
+    except Exception as e:
+        return None
+        raise ValueError(f"Failed to extract email_id from Message-ID: {e}")

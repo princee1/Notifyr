@@ -24,11 +24,6 @@ from app.utils.helper import uuid_v1_mc,UUID
 from datetime import datetime, timedelta, timezone
 import random
 
-def  make_msgid():
-    configService:ConfigService = Get(ConfigService)
-    timeval = int(time() * 1000000)
-    randval = random.getrandbits(64)
-    return f"<{timeval}.{randval}@{configService.HOSTNAME}>"
 
 class TrackerInterface:
 
@@ -38,13 +33,20 @@ class TrackerInterface:
 
 class EmailTracker(TrackerInterface):
 
-    def __init__(self, email_id:Annotated[UUID,Depends(uuid_v1_mc)],message_id:Annotated[str,Depends(make_msgid)],track_email:bool=Depends(track)):
+    def __init__(self, email_id:Annotated[UUID,Depends(uuid_v1_mc)],track_email:bool=Depends(track)):
         super().__init__(track_email)
+        self.configService: ConfigService = Get(ConfigService)
         self.email_id = str(email_id)
-        self.message_id = message_id
+        self.message_id = self.make_msgid(self.email_id)
         self.recipient:str = None
         self.subject:str = None
-        
+
+    def make_msgid(self,email_id: str = None):
+        email_id = '' if email_id is None else email_id.replace('-', '')
+        timeval = int(time() * 1000000)
+        randval = random.getrandbits(64)
+        return f"<{timeval}.{randval}.{email_id}@{self.configService.HOSTNAME}>"
+            
     def track_event_data(self, spam:tuple[float,str]=(100,'no-spam'))->dict:
         spam_confidence,spam_label = spam
         # Convert datetime fields to timezone-aware ISO 8601 string representation
@@ -69,7 +71,6 @@ class EmailTracker(TrackerInterface):
     @property
     def message_tracking_id(self):
         return self.email_id if self.will_track else None
-
 
 class TwilioTracker(TrackerInterface):
 

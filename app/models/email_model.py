@@ -150,15 +150,14 @@ class TrackingEmailEventORM(models.Model):
     date_event_received = fields.DatetimeField(auto_now_add=True)
 
 
-    class TrackingEventJSON(TypedDict):
+    class JSON(TypedDict):
         event_id:str
         description:str=None
         email_id:str|None
         contact_id:str|None
         current_event:str|None
         date_event_received:str
-        is_message_id:bool =False
-        
+
     class Meta:
         schema = SCHEMA
         table = "trackingevent"

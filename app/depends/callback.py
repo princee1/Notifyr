@@ -133,7 +133,7 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
             empty_str_to_none(val)
             email_id = val['email_id']
             contact_id = val.get('contact_id', None)
-            is_message_id = val.get('is_message_id',False)
+            
             if contact_id == None:
                 val.pop('contact_id')
             

@@ -23,7 +23,7 @@ from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfi
 from app.utils.tools import Time
 
 from app.utils.constant import EmailHostConstant
-from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameDomainEmailError
+from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameDomainEmailError, extract_email_id_from_msgid
 
 from .logger_service import LoggerService
 from app.definition import _service
@@ -248,7 +248,6 @@ class EmailSenderService(BaseEmailService):
             return await self._send_message(email, message_tracking_id, contact_id=contact_id)
         return self._send_message(email, message_tracking_id, contact_id=contact_id)
 
-
     async def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
@@ -257,8 +256,16 @@ class EmailSenderService(BaseEmailService):
         if self.configService.celery_env == CeleryMode.none:
             return await self._send_message(email, message_tracking_id, contact_id=contact_id)
         return self._send_message(email, message_tracking_id, contact_id=contact_id)
-        
 
+    async def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id,reply_to,references, contact_id=None):
+        meta = EmailMetadata(**meta)
+        email = EmailBuilder(content, meta, images, attachment)
+        # TODO add references and reply_to
+
+        if self.configService.celery_env == CeleryMode.none:
+            return await self._send_message(email, message_tracking_id, contact_id=contact_id)
+        return self._send_message(email, message_tracking_id, contact_id=contact_id)
+        
     @BaseEmailService.task_lifecycle
     async def _send_message(self, email: EmailBuilder, message_tracking_id: str, connector: smtp.SMTP, contact_id: str = None):
         try:
@@ -295,14 +302,13 @@ class EmailSenderService(BaseEmailService):
 
         finally:
             if message_tracking_id:
-                event = TrackingEmailEventORM.TrackingEventJSON(
+                event = TrackingEmailEventORM.JSON(
                     description=description,
                     event_id=event_id,
                     email_id=message_tracking_id,
                     contact_id=None,
                     current_event=email_status,
                     date_event_received=now,
-                    is_message_id=False,
                 )
 
                 if self.configService.celery_env == CeleryMode.none:
@@ -623,11 +629,18 @@ class EmailReaderService(BaseEmailService):
         
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
+
         for ids, email in zip(message_ids, emails):
             original_message = email.Message_RFC882
             if original_message.Email_ID == None:
                 continue
-
+            
+            email_id_extracted = extract_email_id_from_msgid(original_message.Message_ID,self.configService.HOSTNAME)
+            if email_id_extracted == None:
+                    continue
+            
+            if email_id_extracted != original_message.Email_ID:
+                continue
             bs4 = BeautifulSoup(email.HTML_Body, 'html.parser')
             last_p = bs4.body
             if last_p ==None:
@@ -641,57 +654,65 @@ class EmailReaderService(BaseEmailService):
             email_status = map_smtp_error_to_status(smtp_error_code)
             error_description = get_error_description(smtp_error_code)
 
-            event =TrackingEmailEventORM.TrackingEventJSON(
+            event =TrackingEmailEventORM.JSON(
                 event_id=uuid_v1_mc(),
                 description=error_description,
                 email_id=original_message.Email_ID,
                 contact_id=None,
                 current_event=email_status.value,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
-                is_message_id=False,
             )
 
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
             # self.delete_email(ids,connector)
 
-    
-    #@register_job('Check Replied Email',(30,60),'INBOX', None)
+    #@register_job('Parse Replied Email',(60,180),'INBOX', None,True)
+    #@register_job('Parse Forwarded Email',(60,180),'INBOX', None,False)
     @BaseEmailService.task_lifecycle
     @select_inbox
-    async def replied_email(self, max_count:int|None, connector: imap.IMAP4 | imap.IMAP4_SSL):
+    async def forwarded_email(self, max_count:int|None, is_re:bool, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
-        criteria.add(Search.UNSEEN()).add(Search.SUBJECT('Re:'))
+        criteria.add(Search.UNSEEN()).add(Search.SUBJECT( 'Re:'if is_re else 'Fwd:'))
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
-        
+
+        verb = 'replied' if is_re else 'forwarded'
         for ids,e in zip(message_ids,emails):
             original_message = e.Message_RFC882
             
             if original_message == None: # the original message was partially appended
-                description = f"{e.From} has replied to  the email"
-                email_id = e.Get_Our_Last_Message_References(self.configService.HOSTNAME)
+                
+                description = f"{e.From} has {verb} to  the email"
+                if is_re:
+                    email_id = e.In_Reply_To
+                else:
+                    email_id = e.Get_Our_Last_Message_References(self.configService.HOSTNAME)
+                email_id = extract_email_id_from_msgid(email_id,self.configService.HOSTNAME)
                 if email_id == None:
                     continue
-                is_message_id = True
+                
             else:
                 if original_message.Email_ID == None: # The full original message was appended
                     continue
-                description = f"{original_message.From} has replied to the email" 
+                email_id_extracted = extract_email_id_from_msgid(original_message.Message_ID,self.configService.HOSTNAME)
+                if email_id_extracted == None:
+                    continue
+                if email_id_extracted != original_message.Email_ID:
+                    continue
+                description = f"{original_message.From} has {verb} to the email" 
                 email_id = original_message.Email_ID
-                is_message_id = False
 
-            event =TrackingEmailEventORM.TrackingEventJSON(
+            event =TrackingEmailEventORM.JSON(
                 event_id=uuid_v1_mc(),
                 description=description,
                 email_id=email_id,
                 contact_id=None,
                 current_event=EmailStatus.REPLIED,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
-                is_message_id=is_message_id
             )
 
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
-    
+
 
     @property
     def mailboxes(self):
