@@ -114,7 +114,7 @@ class LinkSessionORM(models.Model):
 
 class LinkAnalyticsORM(models.Model):
     link = fields.ForeignKeyField("models.LinkORM", related_name="analytics", on_delete=fields.CASCADE)
-    week_start_date = fields.DateField(default=datetime.utcnow().date)
+    day_start_date = fields.DateField(default=datetime.utcnow().date)
     visits_counts = fields.IntField(default=1)
     country = fields.CharField(max_length=60, null=True)
     region = fields.CharField(max_length=60, null=True)
@@ -124,13 +124,13 @@ class LinkAnalyticsORM(models.Model):
     class Meta:
         schema = SCHEMA
         table = "linkanalytics"
-        unique_together = ("link", "week_start_date", "country", "region", "city", "device")
+        unique_together = ("link", "date_start_date", "country", "region", "city", "device")
 
     @property
     def to_json(self):
         return {
             "link_id": str(self.link_id),
-            "week_start_date": self.week_start_date.isoformat(),
+            "day_start_date": self.day_start_date.isoformat(),
             "visits_counts": self.visits_counts,
             "country": self.country,
             "region": self.region,
@@ -222,3 +222,39 @@ async def bulk_upsert_links_vc(links_input):
     query = f"SELECT * FROM links.bulk_upsert_links_visits_counts(ARRAY[{values_str}])"
     client = Tortoise.get_connection('default')
     return await client.execute_query(query,[])
+
+async def fetch_analytics_sorted_by_date():
+    """
+    Fetches all analytics sorted by date from the oldest to the newest.
+
+    Returns:
+        dict: Contains metadata and list of analytics data sorted by date.
+    """
+    query = "SELECT * FROM links.FetchAnalyticsByDate();"
+    client = Tortoise.get_connection('default')
+    rows = await client.execute_query(query, [])
+
+    column_names = ["link_id", "day_start_date", "country", "region", "city", "device", "visits_counts"]
+
+    # analytics_data = [
+    #     {
+    #         "link_id": row[0],
+    #         "day_start_date": row[1],
+    #         "country": row[2],
+    #         "region": row[3],
+    #         "city": row[4],
+    #         "device": row[5],
+    #         "visits_counts": row[6],
+    #     }
+    #     for row in rows[1]
+    # ]
+
+    return {
+        "metadata": {
+            "total_records": len(rows),
+            "sorted_by": "date",
+            "order": "ascending",
+            "columns": column_names
+        },
+        "data": rows
+    }

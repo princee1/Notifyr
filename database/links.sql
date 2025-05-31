@@ -1,7 +1,6 @@
 -- Active: 1740679093248@@localhost@5432@notifyr@links
 SET search_path = links;
 
-
 CREATE TABLE IF NOT EXISTS Link (
     link_id UUID DEFAULT uuid_generate_v1mc(),
     link_name VARCHAR(100) UNIQUE,
@@ -58,17 +57,17 @@ CREATE TABLE IF NOT EXISTS LinkSession (
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 
+-- Update LinkAnalytics table to track daily analytics
 CREATE TABLE IF NOT EXISTS LinkAnalytics(
     link_id UUID NOT NULL,
-    week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
+    day_start_date DATE NOT NULL DEFAULT DATE_TRUNC('day', NOW()), -- Changed to daily tracking
     country VARCHAR(5),
     region VARCHAR(60),
-    -- referrer VARCHAR(100),
     city VARCHAR(100),
     device public.DeviceType DEFAULT 'unknown',
     visits_counts INT DEFAULT 1,
-    PRIMARY KEY (link_id,country,region,city,device),
-    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE CASCADE
+    PRIMARY KEY (link_id, day_start_date, country, region, city, device), -- Updated primary key for daily tracking
+    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
 CREATE TYPE analytics_input AS (
@@ -105,6 +104,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Update bulk_upsert_analytics function for daily tracking
 CREATE OR REPLACE FUNCTION bulk_upsert_analytics(data links.analytics_input[]) RETURNS VOID AS $$
 DECLARE
     record links.analytics_input;
@@ -113,14 +113,11 @@ BEGIN
 
     FOREACH record IN ARRAY data
     LOOP
-        INSERT 
-            INTO LinkAnalytics (link_id,week_start_date, country, region, city, device, visits_counts )
-        VALUES 
-            (record.link_id,DATE_TRUNC('week', NOW()), record.country, record.region, record.city, record.device, record.visits_counts)
-        ON CONFLICT 
-            (link_id,week_start_date, country, region, city, device, week_start_date)
-        DO UPDATE 
-            SET visits_counts = LinkAnalytics.visits_counts + EXCLUDED.visits_counts;
+        INSERT INTO LinkAnalytics (link_id, day_start_date, country, region, city, device, visits_counts)
+        VALUES (record.link_id, DATE_TRUNC('day', NOW()), record.country, record.region, record.city, record.device, record.visits_counts)
+        ON CONFLICT (link_id, day_start_date, country, region, city, device)
+        DO UPDATE SET
+            visits_counts = LinkAnalytics.visits_counts + EXCLUDED.visits_counts;
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
@@ -198,3 +195,15 @@ CREATE TRIGGER limit_links
 BEFORE INSERT ON Link
 FOR EACH ROW
 EXECUTE FUNCTION compute_limit();
+
+CREATE OR REPLACE VIEW FetchAnalyticsByDate AS
+SELECT
+    link_id,
+    day_start_date,
+    country,
+    region,
+    city,
+    device,
+    visits_counts
+FROM LinkAnalytics
+ORDER BY day_start_date ASC; -- Sort by oldest to newest date
