@@ -50,8 +50,8 @@ provider_map = {
         # AOL
         "aol": "AOL",
 
-        # Example fallback
-        "example": "Example Provider"
+        # # Example fallback
+        # "example": "Example Provider"
     }
 
 class SMTPErrorCode(Enum):
@@ -227,6 +227,6 @@ def get_email_provider_name(email):
         domain = email.split('@')[1]
         subdomain = domain.split('.')[0].lower()
 
-        return provider_map.get(subdomain, "Unknown Provider")
+        return provider_map.get(subdomain, "Untracked Provider")
     except (IndexError, AttributeError):
         return "Invalid Email"

@@ -147,6 +147,7 @@ class TrackingEmailEventORM(models.Model):
     contact = fields.ForeignKeyField("models.ContactORM",'contact',on_delete=fields.NO_ACTION)
     description = fields.CharField(max_length=100,null=True)
     current_event = fields.CharEnumField(EmailStatus)
+    esp_provider = fields.CharField(max_length=30)
     date_event_received = fields.DatetimeField(auto_now_add=True)
 
 
@@ -154,6 +155,7 @@ class TrackingEmailEventORM(models.Model):
         event_id:str
         description:str=None
         email_id:str|None
+        esp_provider:str|None
         contact_id:str|None
         current_event:str|None
         date_event_received:str
@@ -218,11 +220,12 @@ class EmailAnalyticsORM(models.Model):
         }
 
 
-async def upsert_email_analytics(sent: int, delivered: int, opened: int, bounced: int, replied: int):
+async def upsert_email_analytics(esp_provider: str, sent: int, delivered: int, opened: int, bounced: int, replied: int):
     """
     Upserts email analytics data into the database.
 
     Args:
+        esp_provider (str): ESP provider name.
         sent (int): Number of emails sent.
         delivered (int): Number of emails delivered.
         opened (int): Number of emails opened.
@@ -233,11 +236,9 @@ async def upsert_email_analytics(sent: int, delivered: int, opened: int, bounced
         None
     """
     
-    query = "SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5);"
+    query = "SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5, $6);"
     client = Tortoise.get_connection('default')
-    await client.execute_query(query, [sent, delivered, opened, bounced, replied])
-
-
+    await client.execute_query(query, [esp_provider, sent, delivered, opened, bounced, replied])
 
 
 async def calculate_email_analytics_grouped(group_by_factor: int):
@@ -245,7 +246,7 @@ async def calculate_email_analytics_grouped(group_by_factor: int):
     Fetches grouped email analytics based on the specified grouping factor.
 
     Args:
-        group_by_factor (int): The grouping factor (e.g., 1 for weeks, 4 for months, etc.).
+        group_by_factor (int): The grouping factor (e.g., 1 for days, 7 for weeks, etc.).
 
     Returns:
         List[dict]: List of grouped analytics as dictionaries.
@@ -256,11 +257,12 @@ async def calculate_email_analytics_grouped(group_by_factor: int):
     return [
         {
             "group_number": row[0],
-            "emails_sent": row[1],
-            "emails_delivered": row[2],
-            "emails_opened": row[3],
-            "emails_bounced": row[4],
-            "emails_replied": row[5],
+            "esp_provider": row[1],  # Added esp_provider
+            "emails_sent": row[2],
+            "emails_delivered": row[3],
+            "emails_opened": row[4],
+            "emails_bounced": row[5],
+            "emails_replied": row[6],
         }
         for row in rows[1]
     ]

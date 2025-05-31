@@ -77,8 +77,14 @@ class TwilioTracker(TrackerInterface):
     def __init__(self,twilio_id:Annotated[UUID,Depends(uuid_v1_mc)],track_twilio:bool=Depends(track)):
         super().__init__(track_twilio)
         self.twilio_id=twilio_id
+    
+    def sms_track_event_data(self):
+        ...
+    
+    def call_track_event_data(self):
+        ...
 
-class SubjectParams:
+class SubjectParams: #NOTE rename to ReactiveParams
 
     def __init__(self,request:Request,sid_type:Annotated[str|None,Depends(sid_type_params)],subject_id:Annotated[str|None,Depends(subject_id_params)]):
         self.sid_type = sid_type

@@ -195,16 +195,18 @@ class LinkRessource(BaseHTTPRessource):
         return None
     
 
-    def send_email_event(self, broker:Broker, link_query:LinkQuery,event:EmailStatus):
+    def send_email_event(self, broker:Broker, link_query:LinkQuery,event:EmailStatus,):
         message_id = link_query['message_id']
         contact_id = link_query['contact_id']
+        esp_provider =link_query['esp']
+        esp_provider  = 'Untracked Provider' if esp_provider is None else esp_provider # FIXME add the esp_provider in the query_params
         now = datetime.now(timezone.utc).isoformat()
 
         if contact_id: 
             # TODO track contact event
             broker.publish(StreamConstant.CONTACT_EVENT,'contact',contact_id,{},)
 
-        data = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),email_id=message_id,contact_id=contact_id,current_event=event,date_event_received=now)
+        data = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),email_id=message_id,contact_id=contact_id,current_event=event,date_event_received=now,esp_provider=esp_provider)
 
         broker.publish(StreamConstant.EMAIL_EVENT_STREAM,'message',message_id,data,)
         broker.stream(StreamConstant.EMAIL_EVENT_STREAM,data)

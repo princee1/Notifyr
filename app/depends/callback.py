@@ -113,64 +113,68 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
     invalid_entries = set()
     objs = []
 
-    analytics = {
-        'sent': 0,
-        'delivered': 0,
-        'opened': 0,
-        'bounced': 0,
-        'replied': 0
-    }
-
+    analytics = {}
     contact_id_to_delete = set()
 
     opens_per_email = {}
     replied_per_email = {}
 
-    email_status =  {}
+    email_status = {}
 
     for ids, val in entries:
         try:
             empty_str_to_none(val)
             email_id = val['email_id']
             contact_id = val.get('contact_id', None)
+            esp_provider = val.get('esp_provider', 'Untracked Provider')  # Default to 'unknown' if not provided
             
-            if contact_id == None:
+            if contact_id is None:
                 val.pop('contact_id')
             
             event = TrackingEmailEventORM(**val)
             objs.append(event)
 
+            # Initialize analytics for the ESP provider if not already present
+            if esp_provider not in analytics:
+                analytics[esp_provider] = {
+                    'sent': 0,
+                    'delivered': 0,
+                    'opened': 0,
+                    'bounced': 0,
+                    'replied': 0
+                }
+
             # Match the current event to the most accurate EmailStatus
             match event.current_event:
                 case EmailStatus.SENT.value:
-                    analytics['sent'] += 1
+                    analytics[esp_provider]['sent'] += 1
                 case EmailStatus.DELIVERED.value:
-                    analytics['delivered'] += 1
+                    analytics[esp_provider]['delivered'] += 1
                 case EmailStatus.OPENED.value | EmailStatus.LINK_CLICKED.value:
                     # Ensure only one open event is tracked per email_id
                     if email_id not in opens_per_email:
-                        analytics['opened'] += 1
+                        analytics[esp_provider]['opened'] += 1
                         opens_per_email[email_id] = True
                 case EmailStatus.SOFT_BOUNCE.value | EmailStatus.HARD_BOUNCE.value | EmailStatus.MAILBOX_FULL.value:
-                    analytics['bounced'] += 1
+                    analytics[esp_provider]['bounced'] += 1
                     if event.current_event == EmailStatus.HARD_BOUNCE.value:
-                        if contact_id!=None:    
+                        if contact_id is not None:    
                             contact_id_to_delete.add(contact_id)
                 case EmailStatus.REPLIED.value:
                     if email_id not in replied_per_email:
-                        analytics['replied'] += 1
+                        analytics[esp_provider]['replied'] += 1
                         replied_per_email[email_id] = True
                     
                     if email_id not in opens_per_email:
-                        analytics['opened'] += 1
+                        analytics[esp_provider]['opened'] += 1
                         opens_per_email[email_id] = True
 
-            if opens_per_email.get(email_id,False):
+            if opens_per_email.get(email_id, False):
                 email_status[email_id] = EmailStatus.OPENED.value
             else:
                 email_status[email_id] = event.current_event.value
 
-            if replied_per_email.get(email_id,False):
+            if replied_per_email.get(email_id, False):
                 email_status[email_id] = EmailStatus.REPLIED.value
             else:
                 email_status[email_id] = event.current_event.value
@@ -186,8 +190,9 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
     
     try:
         async with in_transaction():
-            await upsert_email_analytics(**analytics)
-            await EmailTrackingORM.bulk_update(email_tracker,fields=['email_current_status'])
+            for esp_provider, provider_analytics in analytics.items():
+                await upsert_email_analytics(esp_provider=esp_provider, **provider_analytics)
+            await EmailTrackingORM.bulk_update(email_tracker, fields=['email_current_status'])
             await TrackingEmailEventORM.bulk_create(objs)
         
         async with in_transaction():
@@ -195,7 +200,7 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
          
         return list(valid_entries.union(invalid_entries))
     except Exception as e:
-       print(e.__class__,e)
+       print(e.__class__, e)
        return list(invalid_entries)
     
 async def Add_Link_Session(entries:list[str,dict]):

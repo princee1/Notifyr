@@ -2,6 +2,7 @@ from typing import Annotated, Callable, Literal
 import aiohttp
 from app.classes.auth_permission import MustHave, Role
 from app.classes.email import parse_mime_content
+from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import HTMLTemplate
 from app.depends.class_dep import Broker, EmailTracker
 from app.depends.funcs_dep import get_task
@@ -104,7 +105,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
             template = template.clone()
             email_tracking = tracker.track_event_data()
             self.linkService.set_tracking_link(template,tracker.email_id)
-            tracking_link_callback = self.linkService.create_link_re(tracker.email_id,)
+            add_params = self._get_esp(meta['From'])
+            tracking_link_callback = self.linkService.create_link_re(tracker.email_id,add_params=add_params) # FIXME if its a list change it 
             #self.linkService.create_tracking_pixel(template,tracker.email_id)
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
         
@@ -126,7 +128,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
         meta = customEmail_content.meta.model_dump()
         if tracker.will_track:
-            tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(tracker.email_id,)
+            add_params = self._get_esp(customEmail_content.meta.To)
+            tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(tracker.email_id,add_params=add_params) # FIXME if its a list change it 
 
             email_tracking = tracker.track_event_data()
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
@@ -138,7 +141,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         await taskManager.offload_task('normal',scheduler,0,None,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,tracker.message_tracking_id,contact_id =None)
         return taskManager.results
 
-
+    
     @UseRoles(options=[MustHave(Role.ADMIN)])
     @BaseHTTPRessource.HTTPRoute("/domain/",methods=[HTTPMethod.GET],mount=False)
     async def verify_domain_hosting(self,):
@@ -175,3 +178,11 @@ class EmailTemplateRessource(BaseHTTPRessource):
     def on_shutdown(self):
         super().on_shutdown()
         self.emailReaderService.cancel_jobs()
+    
+    def _get_esp(self,email):
+        esp = get_email_provider_name(email)
+        if esp != 'Untracked Provider':
+            return {'esp':esp}
+        else:
+            return {}
+

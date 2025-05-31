@@ -19,7 +19,7 @@ from app.services.reactive_service import ReactiveService
 from app.utils.helper import uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
-from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter as Search, SMTPErrorCode, get_error_description
+from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter as Search, SMTPErrorCode, get_email_provider_name, get_error_description
 from app.utils.tools import Time
 
 from app.utils.constant import EmailHostConstant
@@ -309,6 +309,7 @@ class EmailSenderService(BaseEmailService):
                     contact_id=None,
                     current_event=email_status,
                     date_event_received=now,
+                    esp_provider=get_email_provider_name(email.emailMetadata.From) # VERIFY if From is a list then put it in the for loop
                 )
 
                 if self.configService.celery_env == CeleryMode.none:
@@ -661,6 +662,7 @@ class EmailReaderService(BaseEmailService):
                 contact_id=None,
                 current_event=email_status.value,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
+                esp_provider=get_email_provider_name(original_message.To)
             )
 
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
@@ -681,8 +683,8 @@ class EmailReaderService(BaseEmailService):
             original_message = e.Message_RFC882
             
             if original_message == None: # the original message was partially appended
-                
-                description = f"{e.From} has {verb} to  the email"
+                From = e.From
+                description = f"{From} has {verb} to  the email"
                 if is_re:
                     email_id = e.In_Reply_To
                 else:
@@ -699,7 +701,8 @@ class EmailReaderService(BaseEmailService):
                     continue
                 if email_id_extracted != original_message.Email_ID:
                     continue
-                description = f"{original_message.From} has {verb} to the email" 
+                From = original_message.From
+                description = f"{From} has {verb} to the email" 
                 email_id = original_message.Email_ID
 
             event =TrackingEmailEventORM.JSON(
@@ -709,6 +712,7 @@ class EmailReaderService(BaseEmailService):
                 contact_id=None,
                 current_event=EmailStatus.REPLIED,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
+                esp_provider=get_email_provider_name(From)
             )
 
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)

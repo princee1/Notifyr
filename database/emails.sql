@@ -1,6 +1,17 @@
 -- Active: 1740679093248@@localhost@5432@notifyr@emails
 SET search_path = emails;
-
+CREATE DOMAIN ESPProvider AS VARCHAR(25) CHECK (
+    VALUE IN (
+        'Google',
+        'Microsoft',
+        'Yahoo',
+        'Apple',
+        'ProtonMail',
+        'Zoho',
+        'AOL',
+        'Untracked Provider'
+    )
+);
 CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
     VALUE IN (
         'RECEIVED',
@@ -24,7 +35,7 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     email_id UUID DEFAULT uuid_generate_v1mc (),
     message_id VARCHAR(150) UNIQUE NOT NULL,
     recipient VARCHAR(100) NOT NULL,
-    esp_provider VARCHAR(30) DEFAULT NULL,
+    esp_provider VARCHAR(25) DEFAULT NULL,
     date_sent TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,
@@ -51,23 +62,23 @@ CREATE TABLE IF NOT EXISTS TrackedLinks (
     -- Define columns here as needed
 );
 
--- Create EmailAnalytics table
+-- Update EmailAnalytics table to track daily analytics
 CREATE TABLE IF NOT EXISTS EmailAnalytics (
     analytics_id UUID DEFAULT uuid_generate_v1mc (),
-    -- esp_provider VARCHAR(30),
-    week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
+    esp_provider VARCHAR(25) NOT NULL, -- Added esp_provider column
+    day_date DATE NOT NULL DEFAULT CURRENT_DATE, -- Changed to daily tracking
     emails_sent INT DEFAULT 0,
     emails_delivered INT DEFAULT 0,
     emails_opened INT DEFAULT 0,
     emails_bounced INT DEFAULT 0,
     emails_replied INT DEFAULT 0,
     PRIMARY KEY (analytics_id),
-    -- UNIQUE(week_start_date,esp_provider)
-    UNIQUE (week_start_date)
+    UNIQUE (day_date, esp_provider) -- Updated unique constraint for daily tracking
 );
 
 -- Function to upsert the latest EmailAnalytics row
 CREATE OR REPLACE FUNCTION upsert_email_analytics(
+    esp_provider VARCHAR(25), -- Added esp_provider parameter
     sent_count INT,
     delivered_count INT,
     opened_count INT,
@@ -77,9 +88,9 @@ CREATE OR REPLACE FUNCTION upsert_email_analytics(
 BEGIN
     SET search_path = emails;
 
-    INSERT INTO EmailAnalytics (week_start_date, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_replied)
-    VALUES (DEFAULT, sent_count, delivered_count, opened_count, bounced_count, replied_count)
-    ON CONFLICT (week_start_date)
+    INSERT INTO EmailAnalytics (day_date, esp_provider, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_replied)
+    VALUES (CURRENT_DATE, esp_provider, sent_count, delivered_count, opened_count, bounced_count, replied_count)
+    ON CONFLICT (day_date, esp_provider) -- Updated conflict target for daily tracking
     DO UPDATE SET
         emails_sent = EmailAnalytics.emails_sent + EXCLUDED.emails_sent,
         emails_delivered = EmailAnalytics.emails_delivered + EXCLUDED.emails_delivered,
@@ -94,6 +105,7 @@ CREATE OR REPLACE FUNCTION calculate_email_analytics_grouped(
     group_by_factor INT
 ) RETURNS TABLE (
     group_number INT,
+    esp_provider VARCHAR(25), -- Added esp_provider to the output
     emails_sent INT,
     emails_delivered INT,
     emails_opened INT,
@@ -105,28 +117,46 @@ BEGIN
     SET search_path = emails;
 
     SELECT
-        FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 7 * 24 * 60 * 60)) + 1 AS group_number,
+        FLOOR(EXTRACT(EPOCH FROM (day_date - MIN(day_date) OVER ())) / (group_by_factor * 24 * 60 * 60)) + 1 AS group_number,
+        esp_provider, -- Added esp_provider to the SELECT
         SUM(emails_sent) AS emails_sent,
         SUM(emails_delivered) AS emails_delivered,
         SUM(emails_opened) AS emails_opened,
         SUM(emails_bounced) AS emails_bounced,
         SUM(emails_replied) AS emails_replied
     FROM EmailAnalytics
-    GROUP BY group_number
-    ORDER BY group_number;
+    GROUP BY group_number, esp_provider -- Updated GROUP BY clause
+    ORDER BY group_number, esp_provider; -- Updated ORDER BY clause
 END;
 $$ LANGUAGE PLPGSQL;
 
--- Cron job to create a new row for each week
-CREATE OR REPLACE FUNCTION create_weekly_email_analytics_row() RETURNS VOID AS $$
+-- Cron job to create a new row for each day
+CREATE OR REPLACE FUNCTION create_daily_email_analytics_row()
+RETURNS VOID AS $$
+DECLARE
+    esp TEXT;
+    esp_list TEXT[] := ARRAY[
+        'Google',
+        'Microsoft',
+        'Yahoo',
+        'Apple',
+        'ProtonMail',
+        'Zoho',
+        'AOL',
+        'Untracked Provider'
+    ];
+    day_date DATE := CURRENT_DATE;
 BEGIN
     SET search_path = emails;
 
-    INSERT INTO EmailAnalytics (week_start_date)
-    VALUES (DATE_TRUNC('week', NOW()))
-    ON CONFLICT (week_start_date) DO NOTHING;
+    FOREACH esp IN ARRAY esp_list LOOP
+        INSERT INTO EmailAnalytics (day_date, esp_provider)
+        VALUES (day_date, esp)
+        ON CONFLICT (day_date, esp_provider) DO NOTHING;
+    END LOOP;
 END;
-$$ LANGUAGE PLPGSQL;
+$$ LANGUAGE plpgsql;
+
 
 CREATE OR REPLACE FUNCTION delete_expired_email_tracking() RETURNS VOID AS $$
 BEGIN
@@ -218,8 +248,8 @@ SELECT cron.schedule (
         'SELECT emails.delete_non_mapped_email_event();'
     );
 
--- Schedule the weekly cron job
+-- Schedule the daily cron job
 SELECT cron.schedule (
-        'create_weekly_email_analytics_row', '0 0 * * 0', -- Every Sunday at midnight
-        'SELECT emails.create_weekly_email_analytics_row();'
+        'create_daily_email_analytics_row', '0 0 * * *', -- Every day at midnight
+        'SELECT emails.create_daily_email_analytics_row();'
     );
