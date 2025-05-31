@@ -235,6 +235,7 @@ class OffloadedTaskResponsePipe(Pipe):
         as_async = self._determine_async(taskManager, as_async)
         result = self._process_result(result, taskManager)
         response = self._prepare_response(result, response)
+        
         self._set_status_code(response, scheduler, otpModel, as_async)
         return response
 
@@ -245,8 +246,9 @@ class OffloadedTaskResponsePipe(Pipe):
             return taskManager.meta['as_async']
         return as_async if as_async is not None else False
 
-    def _process_result(self, result: Any | Response, taskManager: TaskManager) -> Any | Response:
-        if result is None and taskManager is not None:
+    def _process_result(self, result: Any|Response, taskManager: TaskManager) -> Any | Response:
+        
+        if (result == None or result.body == b'{}' or result.body == b'') and taskManager is not None:
             return taskManager.results
         return result
 
@@ -255,6 +257,8 @@ class OffloadedTaskResponsePipe(Pipe):
             result = JSONResponse(content=result)
             if self.copy_res:
                 response = copy_response(result, response)
+            else:
+                response = result
         else:
             response = result
         return response

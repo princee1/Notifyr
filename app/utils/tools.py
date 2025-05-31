@@ -1,6 +1,7 @@
 from functools import wraps
 from time import perf_counter,time,time_ns
 from typing import Callable
+from aiohttp_retry import Any
 from cachetools import LRUCache
 import asyncio
 
@@ -69,3 +70,26 @@ def Cache(maxsize:float=100):
         return wrapper
     return callback
         
+def Mock(sleep:float=2,result:Any = None):
+    """
+    A decorator to mock asynchronous function execution by introducing a delay.
+    This decorator wraps an asynchronous function and replaces its execution
+    with a delay using `asyncio.sleep`. It is useful for testing or simulating
+    asynchronous behavior without executing the actual function logic.
+    Args:
+        sleep (float): The duration (in seconds) to delay the execution. Defaults to 2 seconds.
+    Returns:
+        Callable: A decorator that replaces the wrapped function's execution with a delay.
+    """
+    
+    def wrapper(func:Callable):
+
+        @wraps(func)
+        async def callback(*args,**kwargs):
+            await asyncio.sleep(sleep)
+            return result
+
+        return callback
+
+    return wrapper
+
