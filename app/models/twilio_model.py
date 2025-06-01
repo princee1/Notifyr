@@ -1,3 +1,4 @@
+from enum import Enum
 from datetime import datetime
 from typing import Self
 from tortoise import Tortoise, fields, models
@@ -5,9 +6,29 @@ from app.utils.helper import uuid_v1_mc
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, field_validator, model_validator
 
-
 SCHEMA = 'twilio'
 
+# Define Enums
+class SMSStatusEnum(str, Enum):
+    QUEUED = "QUEUED"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    FAILED = "FAILED"
+    RECEIVED = "RECEIVED"
+
+class CallStatusEnum(str, Enum):
+    RECEIVED = "RECEIVED"
+    COMPLETED = "COMPLETED"
+    NO_ANSWER = "NO-ANSWER"
+    INITIATED = "INITIATED"
+    RINGING = "RINGING"
+    ANSWERED = "ANSWERED"
+
+class DirectionEnum(str, Enum):
+    INBOUND = "I"
+    OUTBOUND = "O"
+
+# Updated Models
 class SMSTrackingORM(models.Model):
     sms_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     message_sid = fields.CharField(max_length=150, unique=True)
@@ -16,9 +37,7 @@ class SMSTrackingORM(models.Model):
     date_sent = fields.DatetimeField(auto_now_add=True, use_tz=True)
     last_update = fields.DatetimeField(auto_now=True, use_tz=True)
     expired_tracking_date = fields.DatetimeField(null=True)
-    sms_current_status = fields.CharEnumField(
-        enum_type=["QUEUED", "SENT", "DELIVERED", "FAILED", "RECEIVED"], max_length=50
-    )
+    sms_current_status = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
     price = fields.FloatField(null=True)
     price_unit = fields.CharField(max_length=10, null=True)
 
@@ -36,7 +55,7 @@ class SMSTrackingORM(models.Model):
             "date_sent": self.date_sent.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
-            "sms_current_status": self.sms_current_status,
+            "sms_current_status": self.sms_current_status.value,
             "price": self.price,
             "price_unit": self.price_unit,
         }
@@ -50,9 +69,7 @@ class CallTrackingORM(models.Model):
     date_started = fields.DatetimeField(auto_now_add=True, use_tz=True)
     last_update = fields.DatetimeField(auto_now=True, use_tz=True)
     expired_tracking_date = fields.DatetimeField(null=True)
-    call_current_status = fields.CharEnumField(
-        enum_type=["RECEIVED", "COMPLETED", "NO-ANSWER", "RINGING", "ANSWERED"], max_length=50
-    )
+    call_current_status = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
     duration = fields.IntField(null=True)
     price = fields.FloatField(null=True)
     price_unit = fields.CharField(max_length=10, null=True)
@@ -71,7 +88,7 @@ class CallTrackingORM(models.Model):
             "date_started": self.date_started.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
-            "call_current_status": self.call_current_status,
+            "call_current_status": self.call_current_status.value,
             "duration": self.duration,
             "price": self.price,
             "price_unit": self.price_unit,
@@ -81,10 +98,8 @@ class CallTrackingORM(models.Model):
 class SMSEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     sms = fields.ForeignKeyField("models.SMSTrackingORM", related_name="events", on_delete=fields.CASCADE)
-    direction = fields.CharEnumField(enum_type=["I", "O"], max_length=1)
-    current_event = fields.CharEnumField(
-        enum_type=["QUEUED", "SENT", "DELIVERED", "FAILED", "RECEIVED"], max_length=50
-    )
+    direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
+    current_event = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
     description = fields.CharField(max_length=200, null=True)
     date_event_received = fields.DatetimeField(auto_now_add=True, use_tz=True)
 
@@ -97,8 +112,8 @@ class SMSEventORM(models.Model):
         return {
             "event_id": str(self.event_id),
             "sms_id": str(self.sms_id),
-            "direction": self.direction,
-            "current_event": self.current_event,
+            "direction": self.direction.value,
+            "current_event": self.current_event.value,
             "description": self.description,
             "date_event_received": self.date_event_received.isoformat(),
         }
@@ -107,10 +122,8 @@ class SMSEventORM(models.Model):
 class CallEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     call = fields.ForeignKeyField("models.CallTrackingORM", related_name="events", on_delete=fields.CASCADE)
-    direction = fields.CharEnumField(enum_type=["I", "O"], max_length=1)
-    current_event = fields.CharEnumField(
-        enum_type=["RECEIVED", "COMPLETED", "NO-ANSWER", "RINGING", "ANSWERED"], max_length=50
-    )
+    direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
+    current_event = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
     description = fields.CharField(max_length=200, null=True)
     country = fields.CharField(max_length=100, null=True)
     state = fields.CharField(max_length=100, null=True)
@@ -126,8 +139,8 @@ class CallEventORM(models.Model):
         return {
             "event_id": str(self.event_id),
             "call_id": str(self.call_id),
-            "direction": self.direction,
-            "current_event": self.current_event,
+            "direction": self.direction.value,
+            "current_event": self.current_event.value,
             "description": self.description,
             "country": self.country,
             "state": self.state,
@@ -168,7 +181,7 @@ class SMSAnalyticsORM(models.Model):
 class CallAnalyticsORM(models.Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     week_start_date = fields.DateField(default=datetime.utcnow().date)
-    direction = fields.CharEnumField(enum_type=["I", "O"], max_length=1)
+    direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     country = fields.CharField(max_length=100, null=True)
     state = fields.CharField(max_length=100, null=True)
     city = fields.CharField(max_length=100, null=True)
@@ -179,6 +192,8 @@ class CallAnalyticsORM(models.Model):
     average_price = fields.FloatField(default=0)
     total_duration = fields.IntField(default=0)
     average_duration = fields.FloatField(default=0)
+    total_call_duration = fields.IntField(default=0)  # Added total call duration
+    average_call_duration = fields.FloatField(default=0)  # Added average call duration
 
     class Meta:
         schema = SCHEMA
@@ -190,7 +205,7 @@ class CallAnalyticsORM(models.Model):
         return {
             "analytics_id": str(self.analytics_id),
             "week_start_date": self.week_start_date.isoformat(),
-            "direction": self.direction,
+            "direction": self.direction.value,
             "country": self.country,
             "state": self.state,
             "city": self.city,
@@ -201,6 +216,9 @@ class CallAnalyticsORM(models.Model):
             "average_price": self.average_price,
             "total_duration": self.total_duration,
             "average_duration": self.average_duration,
+            "total_call_duration": self.total_call_duration,  # Added total call duration
+            "average_call_duration": self.average_call_duration,  # Added average call duration
+            "ringing_duration": self.total_call_duration - self.total_duration  # Added ringing duration calculation
         }
 
 

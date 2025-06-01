@@ -22,6 +22,7 @@ CREATE DOMAIN Direction AS VARCHAR(1) CHECK (
 CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
     VALUE IN (
         'RECEIVED'
+        'INITIATED'
         'COMPLETED',
         'NO-ANSWER',
         'RINGING',
@@ -116,10 +117,39 @@ CREATE TABLE IF NOT EXISTS CallAnalytics (
     average_price FLOAT DEFAULT 0,     -- Added average price column
     total_duration INT DEFAULT 0,      -- Added total duration column
     average_duration FLOAT DEFAULT 0,  -- Added average duration column
+    total_call_duration INT DEFAULT 0, -- Added total call duration column
+    average_call_duration FLOAT DEFAULT 0, -- Added average call duration column
     PRIMARY KEY (analytics_id),
     UNIQUE (week_start_date, direction,country, state, city) -- Updated unique constraint for location
 );
 
+
+CREATE OR REPLACE FUNCTION calculate_sms_analytics_grouped(
+    group_by_factor INT -- Grouping factor in weeks
+) RETURNS TABLE (
+    group_number INT,
+    direction VARCHAR(1),
+    sms_sent INT,
+    sms_delivered INT,
+    sms_failed INT,
+    total_price FLOAT,
+    average_price FLOAT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 24 * 60 * 60)) + 1 AS group_number,
+        direction,
+        SUM(sms_sent) AS sms_sent,
+        SUM(sms_delivered) AS sms_delivered,
+        SUM(sms_failed) AS sms_failed,
+        SUM(total_price) AS total_price,
+        AVG(average_price) AS average_price
+    FROM SMSAnalytics
+    GROUP BY group_number, direction
+    ORDER BY group_number, direction;
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION calculate_call_analytics_grouped(
     group_by_factor INT -- Grouping factor in days
@@ -136,6 +166,8 @@ CREATE OR REPLACE FUNCTION calculate_call_analytics_grouped(
     average_price FLOAT,
     total_duration INT,
     average_duration FLOAT
+    total_call_duration INT DEFAULT 0, -- Added total call duration column
+    average_call_duration FLOAT DEFAULT 0, -- Added average call duration column
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -151,7 +183,10 @@ BEGIN
         SUM(total_price) AS total_price,
         AVG(average_price) AS average_price,
         SUM(total_duration) AS total_duration,
-        AVG(average_duration) AS average_duration
+        AVG(average_duration) AS average_duration,
+        SUM(total_call_duration) AS total_call_duration,
+        AVG(average_call_duration) AS average_call_duration
+
     FROM CallAnalytics
     GROUP BY group_number, direction, country, state, city
     ORDER BY group_number, direction, country, state, city;
@@ -181,7 +216,7 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
--- Function to upsert Call Analytics with location details
+-- Function to upsert Call Analytics with total and average call duration
 CREATE OR REPLACE FUNCTION upsert_call_analytics(
     direction VARCHAR(10),
     country VARCHAR(100),
@@ -193,13 +228,15 @@ CREATE OR REPLACE FUNCTION upsert_call_analytics(
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
-    average_duration FLOAT
+    average_duration FLOAT,
+    total_call_duration INT, -- Added total call duration parameter
+    average_call_duration FLOAT -- Added average call duration parameter
 ) RETURNS VOID AS $$
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, total_price, average_price, total_duration, average_duration)
-    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, total_price, average_price, total_duration, average_duration)
+    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
     ON CONFLICT (week_start_date, direction, country, state, city) -- Updated conflict target for location
     DO UPDATE SET
         calls_started = CallAnalytics.calls_started + EXCLUDED.calls_started,
@@ -208,7 +245,9 @@ BEGIN
         total_price = CallAnalytics.total_price + EXCLUDED.total_price,
         average_price = (CallAnalytics.total_price + EXCLUDED.total_price) / (CallAnalytics.calls_started + EXCLUDED.calls_started),
         total_duration = CallAnalytics.total_duration + EXCLUDED.total_duration,
-        average_duration = (CallAnalytics.total_duration + EXCLUDED.total_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed);
+        average_duration = (CallAnalytics.total_duration + EXCLUDED.total_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed),
+        total_call_duration = CallAnalytics.total_call_duration + EXCLUDED.total_call_duration, -- Updated total call duration
+        average_call_duration = (CallAnalytics.total_call_duration + EXCLUDED.total_call_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed); -- Updated average call duration
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -277,28 +316,30 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
-CREATE OR REPLACE FUNCTION create_weekly_call_analytics_row()
+-- Function to create weekly SMS analytics row
+CREATE OR REPLACE FUNCTION create_weekly_sms_analytics_row()
 RETURNS VOID AS $$
 DECLARE
-    direction_list TEXT[] := ARRAY['I', 'O']; -- Inbound and Outbound directions
     direction TEXT;
-    week_start_date DATE := DATE_TRUNC('week', CURRENT_DATE); -- Start of the current week
+    direction_list TEXT[] := ARRAY['I', 'O'];
+    week_start_date DATE := DATE_TRUNC('week', CURRENT_DATE);
 BEGIN
     SET search_path = twilio;
 
     FOREACH direction IN ARRAY direction_list LOOP
-        INSERT INTO CallAnalytics (week_start_date, direction)
+        INSERT INTO SMSAnalytics (week_start_date, direction)
         VALUES (week_start_date, direction)
         ON CONFLICT (week_start_date, direction) DO NOTHING;
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
 
--- Schedule the weekly row creation function using pg_cron
+-- Schedule the weekly cron job
 SELECT cron.schedule(
-    'create_weekly_call_analytics_row', '0 0 * * 0', -- Every Sunday at midnight
-    'SELECT twilio.create_weekly_call_analytics_row();'
-);
+        'create_weekly_sms_analytics_row', '0 0 * * 0', -- Every Sunday at midnight
+        'SELECT twilio.create_weekly_sms_analytics_row();'
+    );
+
 -- Schedule the functions using pg_cron
 SELECT cron.schedule (
         'set_sms_delivered_every_hour', '0 * * * *',
@@ -315,7 +356,7 @@ SELECT cron.schedule (
         'SELECT twilio.delete_expired_tracking();'
     );
 
-    CREATE OR REPLACE VIEW FetchCallAnalyticsByWeek AS
+CREATE OR REPLACE VIEW FetchCallAnalyticsByWeek AS
     SELECT
         analytics_id,
         week_start_date,
@@ -329,6 +370,10 @@ SELECT cron.schedule (
         total_price,
         average_price,
         total_duration,
-        average_duration
+        average_duration,
+        total_call_duration, -- Added total call duration
+        average_call_duration, -- Added average call duration
+        (total_call_duration - total_duration) AS ringing_duration -- Added ringing duration column
+    FROM CallAnalytics
     FROM CallAnalytics
     ORDER BY week_start_date ASC; -- Sort by oldest to newest week

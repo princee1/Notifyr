@@ -87,21 +87,33 @@ INSERT INTO
 VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT);
 
 INSERT INTO
-    twilio.CallAnalytics (
+    twilio.SMSAnalytics (
         analytics_id,
         week_start_date,
         direction,
-        country,
-        state,
-        city,
-        calls_started,
-        calls_completed,
-        calls_failed,
+        sms_sent,
+        sms_delivered,
+        sms_failed,
         total_price,
-        average_price,
-        total_duration,
-        average_duration
+        average_price
     )
-VALUES
-    (DEFAULT, DATE_TRUNC('week', NOW()), 'I', NULL, NULL, NULL, 0, 0, 0, 0.0, 0.0, 0, 0.0),
-    (DEFAULT, DATE_TRUNC('week', NOW()), 'O', NULL, NULL, NULL, 0, 0, 0, 0.0, 0.0, 0, 0.0);
+VALUES (
+        DEFAULT,
+        DATE_TRUNC('week', CURRENT_DATE),
+        'O',
+        0,
+        0,
+        0,
+        0,
+        0
+    ),
+    (
+        DEFAULT,
+        DATE_TRUNC('week', CURRENT_DATE),
+        'I',
+        0,
+        0,
+        0,
+        0,
+        0
+    );
