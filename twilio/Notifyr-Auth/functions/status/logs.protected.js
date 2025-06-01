@@ -5,7 +5,9 @@ const CALL_TYPE = "call";
 const SMS_TYPE = "sms";
 
 function setCallLog(params) {
-  subject_id=params.subject_id ?? null
+  subject_id=params.subject_id ?? null  
+  twilio_tracker_id= params.twilio_tracking_id ?? null; 
+
 
   const {
     CallSid,
@@ -18,6 +20,8 @@ function setCallLog(params) {
     AccountSid,
     CallStatus,
     ToCity,
+    ToCountry,
+    ToState,
     To,
     From,
     SequenceNumber,
@@ -32,6 +36,8 @@ function setCallLog(params) {
     CallStatus,
     SequenceNumber,
     ToCity,
+    ToCountry,
+    ToState,
     To,
     From,
     subject_id,
@@ -41,15 +47,18 @@ function setCallLog(params) {
       temp.RecordingSid = null;
 
   if (CallStatus === "completed") {
-    return { Duration, CallDuration, "RecordingDuration":RecordingDuration??null, ...temp };
+    return { twilio_tracker_id,Duration, CallDuration, "RecordingDuration":RecordingDuration??null, ...temp };
   }
   return temp;
 }
 
 function setSmsLog(params) {
+  subject_id=params.subject_id ?? null;
+  twilio_tracker_id= params.twilio_tracking_id ?? null; 
+
   const { MessageSid, AccountSid, To, From, SmsSid, SmsStatus, MessageStatus } =
     params;
-  return { MessageSid, AccountSid, To, From, SmsSid, SmsStatus, MessageStatus };
+  return { MessageSid, AccountSid, To, From, SmsSid, SmsStatus, MessageStatus,twilio_tracking_id };
 }
 
 exports.handler = async function (context, event, callback) {
@@ -68,8 +77,8 @@ exports.handler = async function (context, event, callback) {
   }
   
   console.log(body)
-  const {subject_id} = body;
-  await service.sendLogStatus(body, url,{subject_id});
+  const {subject_id,twilio_tracking_id} = body;
+  await service.sendLogStatus(body, url,{subject_id,twilio_tracking_id});
 
   // return callback(null,{})
 };

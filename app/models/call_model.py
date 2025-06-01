@@ -43,6 +43,8 @@ class CallStatusModel(BaseModel):
     AccountSid:str
     CallStatus:str
     ToCity:str
+    ToCountry:str|None
+    ToState:str|None
     To:str
     From:str
     SequenceNumber:str

@@ -80,13 +80,15 @@ class StreamConstant:
     StreamLiteral = Literal['email-event','twilio','links-event','links-session','email-tracking','contact-event']
 
     EMAIL_EVENT_STREAM ='email-event'
-    TWILIO_STREAM ='twilio'
+    TWILIO_REACTIVE ='twilio-reactive'
     LINKS_EVENT_STREAM ='links-event'
     LINKS_SESSION_STREAM ='links-session'
     EMAIL_TRACKING ='email-tracking'
     CONTACT_EVENT = 'contact-event'
-    TWILIO_TRACKING ='twilio-tracking'
-    TWILIO_EVENT = 'twilio-event'
+    TWILIO_TRACKING_SMS ='twilio-tracking-sms'
+    TWILIO_TRACKING_CALL ='twilio-tracking-call'
+    TWILIO_EVENT_STREAM_SMS = 'twilio-event-sms'
+    TWILIO_EVENT_STREAM_CALL = 'twilio-event-call'
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'

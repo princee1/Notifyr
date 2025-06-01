@@ -33,31 +33,31 @@ CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
 -- Update table for SMS Tracking
 CREATE TABLE IF NOT EXISTS SMSTracking (
     sms_id UUID DEFAULT uuid_generate_v1mc (),
-    message_sid VARCHAR(150) UNIQUE NOT NULL,
+    -- message_sid VARCHAR(150) UNIQUE NOT NULL,
     recipient VARCHAR(100) NOT NULL,
     sender VARCHAR(100) NOT NULL,
     date_sent TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,
     sms_current_status SMSStatus,
-    price FLOAT DEFAULT NULL,
-    price_unit VARCHAR(10) DEFAULT NULL,
+    -- price FLOAT DEFAULT NULL,
+    -- price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (sms_id)
 );
 
 -- Update table for Call Tracking
 CREATE TABLE IF NOT EXISTS CallTracking (
     call_id UUID DEFAULT uuid_generate_v1mc (),
-    call_sid VARCHAR(150) UNIQUE NOT NULL,
+    -- call_sid VARCHAR(150) UNIQUE NOT NULL,
     recipient VARCHAR(100) NOT NULL,
     sender VARCHAR(100) NOT NULL,
     date_started TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,
     call_current_status CallStatus,
-    duration INT DEFAULT NULL,
-    price FLOAT DEFAULT NULL,
-    price_unit VARCHAR(10) DEFAULT NULL,
+    -- duration INT DEFAULT NULL,
+    -- price FLOAT DEFAULT NULL,
+    -- price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (call_id)
 );
 

@@ -38,8 +38,8 @@ class SMSTrackingORM(models.Model):
     last_update = fields.DatetimeField(auto_now=True, use_tz=True)
     expired_tracking_date = fields.DatetimeField(null=True)
     sms_current_status = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
-    price = fields.FloatField(null=True)
-    price_unit = fields.CharField(max_length=10, null=True)
+    # price = fields.FloatField(null=True)
+    # price_unit = fields.CharField(max_length=10, null=True)
 
     class Meta:
         schema = SCHEMA
@@ -56,8 +56,8 @@ class SMSTrackingORM(models.Model):
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
             "sms_current_status": self.sms_current_status.value,
-            "price": self.price,
-            "price_unit": self.price_unit,
+            # "price": self.price,
+            # "price_unit": self.price_unit,
         }
 
 
@@ -70,9 +70,9 @@ class CallTrackingORM(models.Model):
     last_update = fields.DatetimeField(auto_now=True, use_tz=True)
     expired_tracking_date = fields.DatetimeField(null=True)
     call_current_status = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
-    duration = fields.IntField(null=True)
-    price = fields.FloatField(null=True)
-    price_unit = fields.CharField(max_length=10, null=True)
+    # duration = fields.IntField(null=True)
+    # price = fields.FloatField(null=True)
+    # price_unit = fields.CharField(max_length=10, null=True)
 
     class Meta:
         schema = SCHEMA
@@ -89,9 +89,9 @@ class CallTrackingORM(models.Model):
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
             "call_current_status": self.call_current_status.value,
-            "duration": self.duration,
-            "price": self.price,
-            "price_unit": self.price_unit,
+            # "duration": self.duration,
+            # "price": self.price,
+            # "price_unit": self.price_unit,
         }
 
 
