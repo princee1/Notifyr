@@ -85,3 +85,23 @@ INSERT INTO
         emails_replied
     )
 VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT);
+
+INSERT INTO
+    twilio.CallAnalytics (
+        analytics_id,
+        week_start_date,
+        direction,
+        country,
+        state,
+        city,
+        calls_started,
+        calls_completed,
+        calls_failed,
+        total_price,
+        average_price,
+        total_duration,
+        average_duration
+    )
+VALUES
+    (DEFAULT, DATE_TRUNC('week', NOW()), 'I', NULL, NULL, NULL, 0, 0, 0, 0.0, 0.0, 0, 0.0),
+    (DEFAULT, DATE_TRUNC('week', NOW()), 'O', NULL, NULL, NULL, 0, 0, 0, 0.0, 0.0, 0, 0.0);

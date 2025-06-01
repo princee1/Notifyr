@@ -26,8 +26,8 @@ psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/cron.sql
 # echo "📂 Running mta.sql..."
 # psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/mta.sql
 
-# echo "📂 Running twilio.sql..."
-# psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/twilio.sql
+echo "📂 Running twilio.sql..."
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/twilio.sql
 
 echo "📂 Running data.sql..."
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/data.sql
