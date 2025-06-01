@@ -114,6 +114,7 @@ class EmailTrackingORM(models.Model):
     """
     recipient = fields.CharField(max_length=100)
     subject = fields.CharField(max_length=150)
+    contact = fields.ForeignKeyField("models.ContactORM",'contact',on_delete=fields.NO_ACTION)
     esp_provider = fields.CharField(max_length=30)
     date_sent = fields.DatetimeField(auto_now=True)
     last_update = fields.DatetimeField(auto_now_add=True)
@@ -132,6 +133,7 @@ class EmailTrackingORM(models.Model):
             "email_id": str(self.email_id),
             "message_id": self.message_id,
             "recipient": self.recipient,
+            "contact_id":str(self.contact.contact_id) if self.contact != None else None,
             'esp_provider':self.esp_provider,
             "date_sent": self.date_sent.isoformat(),
             "last_update": self.last_update.isoformat(),
@@ -144,7 +146,6 @@ class EmailTrackingORM(models.Model):
 class TrackingEmailEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     email = fields.ForeignKeyField("models.EmailTrackingORM", related_name="events", on_delete=fields.CASCADE)
-    contact = fields.ForeignKeyField("models.ContactORM",'contact',on_delete=fields.NO_ACTION)
     description = fields.CharField(max_length=100,null=True)
     current_event = fields.CharEnumField(EmailStatus)
     esp_provider = fields.CharField(max_length=30)
@@ -156,7 +157,6 @@ class TrackingEmailEventORM(models.Model):
         description:str=None
         email_id:str|None
         esp_provider:str|None
-        contact_id:str|None
         current_event:str|None
         date_event_received:str
 
@@ -170,7 +170,6 @@ class TrackingEmailEventORM(models.Model):
             "event_id": str(self.event_id),
             "description":self.description,
             "email_id": str(self.email.email_id),
-            "contact_id":str(self.contact.contact_id),
             "current_event": self.current_event.value,
             "date_event_received": self.date_event_received.isoformat()
         }

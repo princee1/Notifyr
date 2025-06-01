@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     message_id VARCHAR(150) UNIQUE NOT NULL,
     recipient VARCHAR(100) NOT NULL,
     esp_provider VARCHAR(25) DEFAULT NULL,
+    contact_id UUID DEFAULT NULL,
     date_sent TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,
@@ -43,19 +44,19 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     subject VARCHAR(150),
     spam_label VARCHAR(50),
     spam_detection_confidence FLOAT,
-    PRIMARY KEY (email_id)
+    PRIMARY KEY (email_id),
+    FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
+
 );
 
 CREATE TABLE IF NOT EXISTS TrackingEvent (
     event_id UUID DEFAULT uuid_generate_v1mc (),
     email_id UUID NOT NULL,
-    contact_id UUID DEFAULT NULL,
     current_event EmailStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
     date_event_received TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (event_id),
     FOREIGN KEY (email_id) REFERENCES EmailTracking (email_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
 CREATE TABLE IF NOT EXISTS TrackedLinks (

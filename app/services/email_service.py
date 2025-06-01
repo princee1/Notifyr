@@ -272,6 +272,7 @@ class EmailSenderService(BaseEmailService):
             event_id = str(uuid_v1_mc())
             now = datetime.now(timezone.utc).isoformat()
             emailID, message = email.mail_message
+            reply_ = None
             reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message, rcpt_options=[
                                         'NOTIFY=SUCCESS,FAILURE,DELAY'])
             email_status = EmailStatus.SENT.value
@@ -306,7 +307,7 @@ class EmailSenderService(BaseEmailService):
                     description=description,
                     event_id=event_id,
                     email_id=message_tracking_id,
-                    contact_id=None,
+                    #contact_id=None,
                     current_event=email_status,
                     date_event_received=now,
                     esp_provider=get_email_provider_name(email.emailMetadata.From) # VERIFY if From is a list then put it in the for loop
@@ -659,7 +660,7 @@ class EmailReaderService(BaseEmailService):
                 event_id=uuid_v1_mc(),
                 description=error_description,
                 email_id=original_message.Email_ID,
-                contact_id=None,
+                #contact_id=None,
                 current_event=email_status.value,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
                 esp_provider=get_email_provider_name(original_message.To)
@@ -709,7 +710,7 @@ class EmailReaderService(BaseEmailService):
                 event_id=uuid_v1_mc(),
                 description=description,
                 email_id=email_id,
-                contact_id=None,
+                #contact_id=None,
                 current_event=EmailStatus.REPLIED,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
                 esp_provider=get_email_provider_name(From)

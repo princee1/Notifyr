@@ -206,7 +206,7 @@ class LinkRessource(BaseHTTPRessource):
             # TODO track contact event
             broker.publish(StreamConstant.CONTACT_EVENT,'contact',contact_id,{},)
 
-        data = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),email_id=message_id,contact_id=contact_id,current_event=event,date_event_received=now,esp_provider=esp_provider)
+        data = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),email_id=message_id,current_event=event,date_event_received=now,esp_provider=esp_provider)
 
         broker.publish(StreamConstant.EMAIL_EVENT_STREAM,'message',message_id,data,)
         broker.stream(StreamConstant.EMAIL_EVENT_STREAM,data)
