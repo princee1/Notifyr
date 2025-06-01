@@ -213,15 +213,15 @@ class QRCodeModel(BaseModel):
 
 async def bulk_upsert_analytics(analytics_data):
     values_str = ", ".join(f"ROW('{link_id}', '{country}', '{region}', '{city}', '{device}', '{visits_counts}')::links.analytics_input" for link_id, country,region,city,device,visits_counts in analytics_data)
-    query = f"SELECT * FROM links.bulk_upsert_analytics(ARRAY[{values_str}])"
+    query = f"SELECT * FROM links.bulk_upsert_analytics($1)"
     client = Tortoise.get_connection('default')
-    return await client.execute_query(query,[])
+    return await client.execute_query(query,[f"ARRAY[{values_str}]"])
 
 async def bulk_upsert_links_vc(links_input):
     values_str = ", ".join(f"ROW('{link_id}', '{visits_counts}')::links.links_vc_input" for link_id,visits_counts in links_input)
-    query = f"SELECT * FROM links.bulk_upsert_links_visits_counts(ARRAY[{values_str}])"
+    query = f"SELECT * FROM links.bulk_upsert_links_visits_counts($1)"
     client = Tortoise.get_connection('default')
-    return await client.execute_query(query,[])
+    return await client.execute_query(query,[f"ARRAY[{values_str}]"])
 
 async def fetch_analytics_sorted_by_date():
     """

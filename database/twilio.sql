@@ -314,3 +314,21 @@ SELECT cron.schedule (
         'delete_expired_tracking_every_day', '0 0 * * *',
         'SELECT twilio.delete_expired_tracking();'
     );
+
+    CREATE OR REPLACE VIEW FetchCallAnalyticsByWeek AS
+    SELECT
+        analytics_id,
+        week_start_date,
+        direction,
+        country,
+        state,
+        city,
+        calls_started,
+        calls_completed,
+        calls_failed,
+        total_price,
+        average_price,
+        total_duration,
+        average_duration
+    FROM CallAnalytics
+    ORDER BY week_start_date ASC; -- Sort by oldest to newest week
