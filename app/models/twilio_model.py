@@ -1,6 +1,6 @@
 from enum import Enum
 from datetime import datetime
-from typing import Self
+from typing import Self, TypedDict
 from tortoise import Tortoise, fields, models
 from app.utils.helper import uuid_v1_mc
 from tortoise.contrib.pydantic import pydantic_model_creator
@@ -23,24 +23,24 @@ class CallStatusEnum(str, Enum):
     INITIATED = "INITIATED"
     RINGING = "RINGING"
     ANSWERED = "ANSWERED"
+    FAILED = 'FAILED'
+    SENT = "SENT"
+
 
 class DirectionEnum(str, Enum):
     INBOUND = "I"
     OUTBOUND = "O"
 
-# Updated Models
 class SMSTrackingORM(models.Model):
     sms_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    message_sid = fields.CharField(max_length=150, unique=True)
+    contact = fields.ForeignKeyField('models.ContactORM',null=True,on_delete=fields.NO_ACTION)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
     date_sent = fields.DatetimeField(auto_now_add=True, use_tz=True)
     last_update = fields.DatetimeField(auto_now=True, use_tz=True)
     expired_tracking_date = fields.DatetimeField(null=True)
     sms_current_status = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
-    # price = fields.FloatField(null=True)
-    # price_unit = fields.CharField(max_length=10, null=True)
-
+    
     class Meta:
         schema = SCHEMA
         table = "smstracking"
@@ -49,30 +49,25 @@ class SMSTrackingORM(models.Model):
     def to_json(self):
         return {
             "sms_id": str(self.sms_id),
-            "message_sid": self.message_sid,
             "recipient": self.recipient,
+            "contact_id": str(self.contact.contact_id) if self.contact != None else None,
             "sender": self.sender,
             "date_sent": self.date_sent.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
             "sms_current_status": self.sms_current_status.value,
-            # "price": self.price,
-            # "price_unit": self.price_unit,
         }
 
 
 class CallTrackingORM(models.Model):
     call_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    call_sid = fields.CharField(max_length=150, unique=True)
+    contact = fields.ForeignKeyField('models.ContactORM',null=True,on_delete=fields.NO_ACTION)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
     date_started = fields.DatetimeField(auto_now_add=True, use_tz=True)
     last_update = fields.DatetimeField(auto_now=True, use_tz=True)
     expired_tracking_date = fields.DatetimeField(null=True)
     call_current_status = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
-    # duration = fields.IntField(null=True)
-    # price = fields.FloatField(null=True)
-    # price_unit = fields.CharField(max_length=10, null=True)
 
     class Meta:
         schema = SCHEMA
@@ -82,26 +77,33 @@ class CallTrackingORM(models.Model):
     def to_json(self):
         return {
             "call_id": str(self.call_id),
-            "call_sid": self.call_sid,
+            "contact_id": str(self.contact.contact_id) if self.contact != None else None,
             "recipient": self.recipient,
             "sender": self.sender,
             "date_started": self.date_started.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
             "call_current_status": self.call_current_status.value,
-            # "duration": self.duration,
-            # "price": self.price,
-            # "price_unit": self.price_unit,
         }
 
 
 class SMSEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     sms = fields.ForeignKeyField("models.SMSTrackingORM", related_name="events", on_delete=fields.CASCADE)
+    sms_sid = fields.CharField(max_length=60,null=False)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     current_event = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
     description = fields.CharField(max_length=200, null=True)
     date_event_received = fields.DatetimeField(auto_now_add=True, use_tz=True)
+
+    class JSON(TypedDict):
+        event_id:str
+        sms_id:str
+        sms_sid:str
+        direction:str
+        current_event:str
+        description:str
+        date_event_received:str
 
     class Meta:
         schema = SCHEMA
@@ -112,6 +114,7 @@ class SMSEventORM(models.Model):
         return {
             "event_id": str(self.event_id),
             "sms_id": str(self.sms_id),
+            "sms_sid":self.sms_sid,
             "direction": self.direction.value,
             "current_event": self.current_event.value,
             "description": self.description,
@@ -121,7 +124,8 @@ class SMSEventORM(models.Model):
 
 class CallEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    call = fields.ForeignKeyField("models.CallTrackingORM", related_name="events", on_delete=fields.CASCADE)
+    call = fields.ForeignKeyField("models.CallTrackingORM", related_name="events", null=True, on_delete=fields.CASCADE)
+    call_sid = fields.CharField(max_length=60,null=False)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     current_event = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
     description = fields.CharField(max_length=200, null=True)
@@ -130,6 +134,18 @@ class CallEventORM(models.Model):
     city = fields.CharField(max_length=100, null=True)
     date_event_received = fields.DatetimeField(auto_now_add=True, use_tz=True)
 
+    
+    class JSON(TypedDict):
+        event_id:str
+        call_id:str
+        call_sid:str
+        direction:str
+        current_event:str
+        description:str
+        country:str
+        city:str
+        state:str
+        date_event_received:str
     class Meta:
         schema = SCHEMA
         table = "callevent"
@@ -138,7 +154,8 @@ class CallEventORM(models.Model):
     def to_json(self):
         return {
             "event_id": str(self.event_id),
-            "call_id": str(self.call_id),
+            "call_id": str(self.call.call_id) if self.call != None else None,
+            "call_sid": self.call_sid,
             "direction": self.direction.value,
             "current_event": self.current_event.value,
             "description": self.description,
@@ -188,12 +205,13 @@ class CallAnalyticsORM(models.Model):
     calls_started = fields.IntField(default=0)
     calls_completed = fields.IntField(default=0)
     calls_failed = fields.IntField(default=0)
+    calls_not_answered = fields.IntField(default=0)  # Added calls_not_answered field
     total_price = fields.FloatField(default=0)
     average_price = fields.FloatField(default=0)
     total_duration = fields.IntField(default=0)
     average_duration = fields.FloatField(default=0)
-    total_call_duration = fields.IntField(default=0)  # Added total call duration
-    average_call_duration = fields.FloatField(default=0)  # Added average call duration
+    total_call_duration = fields.IntField(default=0)
+    average_call_duration = fields.FloatField(default=0)
 
     class Meta:
         schema = SCHEMA
@@ -212,20 +230,21 @@ class CallAnalyticsORM(models.Model):
             "calls_started": self.calls_started,
             "calls_completed": self.calls_completed,
             "calls_failed": self.calls_failed,
+            "calls_not_answered": self.calls_not_answered,  # Added calls_not_answered
             "total_price": self.total_price,
             "average_price": self.average_price,
             "total_duration": self.total_duration,
             "average_duration": self.average_duration,
-            "total_call_duration": self.total_call_duration,  # Added total call duration
-            "average_call_duration": self.average_call_duration,  # Added average call duration
-            "ringing_duration": self.total_call_duration - self.total_duration  # Added ringing duration calculation
+            "total_call_duration": self.total_call_duration,
+            "average_call_duration": self.average_call_duration,
+            "ringing_duration": self.total_call_duration - self.total_duration
         }
 
 
 async def bulk_upsert_call_analytics(analytics_data):
     values_str = ", ".join(
-        f"ROW('{week_start_date}', '{direction}', '{country}', '{state}', '{city}', '{calls_started}', '{calls_completed}', '{calls_failed}', '{total_price}', '{average_price}', '{total_duration}', '{average_duration}')::twilio.call_analytics_input"
-        for week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, total_price, average_price, total_duration, average_duration in analytics_data
+        f"ROW('{week_start_date}', '{direction}', '{country}', '{state}', '{city}', '{calls_started}', '{calls_completed}', '{calls_failed}', '{calls_not_answered}', '{total_price}', '{average_price}', '{total_duration}', '{average_duration}', '{total_call_duration}', '{average_call_duration}')::twilio.call_analytics_input"
+        for week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration in analytics_data
     )
     query = f"SELECT * FROM twilio.bulk_upsert_call_analytics($1)"
     client = Tortoise.get_connection('default')

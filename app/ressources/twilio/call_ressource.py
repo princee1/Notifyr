@@ -14,7 +14,7 @@ from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.security_model import ClientORM
-from app.models.voice_model import BaseVoiceCallModel, CallStatusModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
+from app.models.call_model import BaseVoiceCallModel, CallStatusModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
@@ -116,6 +116,11 @@ class OnGoingCallRessource(BaseHTTPRessource):
         content = scheduler.content.model_dump()
         phoneTemplate: PhoneTemplate = self.assetService.phone[template]
         _, result = phoneTemplate.build(content, ...)
+        if tracker.will_track:
+            event,tracking_event_data = tracker.call_track_event_data(scheduler)
+            broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+
         await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_template_voice_call, result, content)
         return taskManager.results
 
@@ -129,6 +134,11 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         details = scheduler.content.model_dump(exclude={'url'})
         url = scheduler.content.url
+        if tracker.will_track:
+            event,tracking_event_data = tracker.call_track_event_data(scheduler)
+            broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+
         await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_twiml_voice_call, url, details)
         return taskManager.results
 
@@ -146,7 +156,14 @@ class OnGoingCallRessource(BaseHTTPRessource):
         voice = scheduler.content.voice
         lang = scheduler.content.language
         loop = scheduler.content.loop
+        
+        if tracker.will_track:
+            event,tracking_event_data = tracker.call_track_event_data(scheduler)
+            broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+
         await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_custom_voice_call, body, voice, lang, loop, details)
+        return taskManager.results
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.MFA_OTP])
@@ -220,12 +237,14 @@ class IncomingCallRessources(BaseHTTPRessource):
     @UsePipe(TwilioResponseStatusPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
     async def voice_call_status(self, status: CallStatusModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)], authPermission=Depends(get_auth_permission),):
+        print(status)
         subject_id = subject_params.subject_id
         value = {
                 'state':status.CallStatus,
                 'data':status.model_dump(include=('CallSid','RecordingSid','Duration','CallDuration','RecordingDuration'))
             }
-        broker.publish(StreamConstant.TWILIO_STREAM,'plain',subject_id,value,)
+        broker.publish(StreamConstant.TWILIO_REACTIVE,'plain',subject_id,value,)
+        #broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,)
         return 
 
         
@@ -233,7 +252,7 @@ class IncomingCallRessources(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
     async def gather_result(self,gatherResult:GatherResultModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],authPermission=Depends(get_auth_permission)):
         value =gatherResult.model_dump(include=('data','state'))
-        broker.publish(StreamConstant.TWILIO_STREAM,'plain',subject_params.subject_id,value,)
+        broker.publish(StreamConstant.TWILIO_REACTIVE,'plain',subject_params.subject_id,value,)
 
         #subject.on_completed()
         return

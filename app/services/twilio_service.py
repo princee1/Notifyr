@@ -8,15 +8,19 @@ from fastapi import HTTPException, Header, Request
 from app.classes.template import SMSTemplate
 from app.definition import _service
 from app.models.otp_model import GatherDtmfOTPModel, GatherOTPBaseModel, GatherSpeechOTPModel, OTPModel
+from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.assets_service import AssetService
+from app.services.database_service import RedisService
 from app.services.logger_service import LoggerService
-from .config_service import ConfigService
-from app.utils.helper import b64_encode, phone_parser
+from app.utils.constant import StreamConstant
+from app.utils.tools import Mock
+from .config_service import CeleryMode, ConfigService
+from app.utils.helper import b64_encode, phone_parser, uuid_v1_mc
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
 from app.utils.validation import phone_number_validator
 from app.errors.twilio_error import TwilioPhoneNumberParseError
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from twilio.rest.api.v2010.account.message import MessageInstance
 from twilio.rest.api.v2010.account.call import CallInstance
 from twilio.twiml.voice_response import VoiceResponse, Gather, Say,Record
@@ -110,11 +114,12 @@ class TwilioService(_service.BaseService):
 
 @_service.AbstractServiceClass
 class BaseTwilioCommunication(_service.BaseService):
-    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService) -> None:
+    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService,redisService:RedisService) -> None:
         super().__init__()
         self.configService = configService
         self.twilioService = twilioService
         self.assetService = assetService
+        self.redisService = redisService
 
         mode = self.configService['TWILIO_MODE']
         self.twilio_url = self.configService.TWILIO_PROD_URL if mode == "prod" else self.configService.TWILIO_TEST_URL
@@ -122,22 +127,31 @@ class BaseTwilioCommunication(_service.BaseService):
         self.logs_url = self.twilio_url + "/status/logs"
         self.partial_results_url = self.twilio_url + "/status/partial-results"
 
+    def set_url(self,subject_id=None,twilio_tracking=None):
+        url = self.status_callback
+        if subject_id!=None:
+            url +=f'&subject_id={subject_id}'
+        
+        if twilio_tracking != None:
+            url+=f'twilio_tracking_id={twilio_tracking}'
+        return url
 
     @staticmethod
     def parse_to_json(func: Callable):
 
         @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> dict | Coroutine:
+        async def wrapper(*args, **kwargs) -> dict:
             self: BaseTwilioCommunication = args[0]
-            message: MessageInstance | Coroutine = func(*args, **kwargs)
-            if asyncio.iscoroutine(message):
-                @functools.wraps(func)
-                async def callback():
-                    r = await message
-                    return self.response_extractor(r)
-                return callback
-            else:
-                return self.response_extractor(message)
+            message: MessageInstance | Coroutine = await func(*args, **kwargs)
+            # if asyncio.iscoroutine(message):
+            #     @functools.wraps(func)
+            #     async def callback():
+            #         r = await message
+            #         return self.response_extractor(r)
+            #     return callback
+            # else:
+            #     return self.response_extractor(message)
+            return self.response_extractor(message)
         return wrapper
 
     def response_extractor(self, res) -> dict:
@@ -147,8 +161,8 @@ class BaseTwilioCommunication(_service.BaseService):
 @_service.Service
 class SMSService(BaseTwilioCommunication):
 
-    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
-        super().__init__(configService, twilioService, assetService)
+    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService,redisService:RedisService):
+        super().__init__(configService, twilioService, assetService,redisService)
         self.status_callback = self.logs_url + '?type=sms'
 
     def response_extractor(self, message: MessageInstance) -> dict:
@@ -173,16 +187,44 @@ class SMSService(BaseTwilioCommunication):
         self.messages = self.twilioService.client.messages
 
     @BaseTwilioCommunication.parse_to_json
-    def send_custom_sms(self, messageData: dict, as_async: bool = False):
-        as_async = False
-        func = self.messages.create_async if as_async else self.messages.create
-        return func(provide_feedback=True, send_as_mms=True, status_callback=self.status_callback, **messageData)
+    async def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None) -> MessageInstance:
+        url = self.set_url(subject_id, twilio_tracking)
+        now = datetime.now(timezone.utc).isoformat()
 
-    @BaseTwilioCommunication.parse_to_json
-    def send_template_sms(self, message, as_async: bool = False):
-        as_async = False
-        func = self.messages.create_async if as_async else self.messages.create
-        return func(provide_feedback=True, send_as_mms=True, status_callback=self.status_callback, **message)
+        try:
+            if self.configService.celery_env == CeleryMode.worker:
+                result = self.messages.create(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
+            else:
+                result = self.messages.create_async(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
+                result = await result
+            description = f'Sent request to third-party API'
+            status = SMSStatusEnum.SENT.value
+        except:
+            result = None
+            description = f'Failed to send the request'
+            status = SMSStatusEnum.FAILED.value
+        finally:
+            if twilio_tracking and isinstance(result, MessageInstance):
+                event = SMSEventORM.JSON(
+                    event_id=uuid_v1_mc(),
+                    sms_sid=result.sid,
+                    direction='O',
+                    current_event=status,
+                    description=description,
+                    date_event_received=now
+                )
+                if self.configService.celery_env == CeleryMode.none:
+                    await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event.to_json)
+                else:
+                    self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_SMS, event.to_json)
+
+            return result
+
+    async def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None):
+        return await self._send_sms(messageData, subject_id, twilio_tracking)
+
+    async def send_template_sms(self, message: dict, subject_id=None, twilio_tracking: str = None):
+        return await self._send_sms(message, subject_id, twilio_tracking)
 
     def get_message(self, to: str):
         self.messages
@@ -192,8 +234,8 @@ class SMSService(BaseTwilioCommunication):
 class CallService(BaseTwilioCommunication):
     status_callback_event = ['initiated', 'ringing', 'answered', 'completed','busy','failed','no-answer']
 
-    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
-        super().__init__(configService, twilioService, assetService)
+    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService,redisService:RedisService):
+        super().__init__(configService, twilioService, assetService,redisService)
         self.status_callback = self.logs_url + '?type=call'
         self.gather_url = self.twilio_url + '/gather'
 
@@ -229,35 +271,59 @@ class CallService(BaseTwilioCommunication):
         }
 
     @BaseTwilioCommunication.parse_to_json
-    def send_otp_voice_call(self, body: str, otp: OTPModel,as_async: bool = False):
+    async def send_otp_voice_call(self, body: str, otp: OTPModel):
         call = {}
         call.update(otp.model_dump(exclude=('content')))
         call['twiml'] = body
-        return self._create_call(call,as_async)
+        return await self._create_call(call)
 
     @BaseTwilioCommunication.parse_to_json
-    def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,as_async: bool = False):
+    async def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,subject_id=None,twilio_tracking:str=None):
         voiceResponse = VoiceResponse()
         voiceResponse.say(body, voice, loop, lang)
         call['twiml'] = voiceResponse
-        return self._create_call(call,as_async)
+        return await self._create_call(call,subject_id,twilio_tracking)
 
     @BaseTwilioCommunication.parse_to_json
-    def send_twiml_voice_call(self, url: str, call_details: dict,as_async: bool = False):
+    async def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
         call_details['url'] = url
-        return self._create_call(call_details,as_async)
+        return await self._create_call(call_details,subject_id,twilio_tracking)
 
     @BaseTwilioCommunication.parse_to_json
-    def send_template_voice_call(self, result: str, call_details: dict,as_async: bool = False,subject_id=None):
+    async def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
         call_details['twiml'] = result
-        return self._create_call(call_details,as_async,subject_id)
+        return await self._create_call(call_details,subject_id,twilio_tracking)
 
-    def _create_call(self, details: dict,as_async: bool = False,subject_id:str=None):
-        url = self.status_callback
-        if subject_id!=None:
-            url +=f'&subject_id={subject_id}'
-        return self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+    async def _create_call(self, details: dict,subject_id:str=None,twilio_tracking:str=None):
+        url = self.set_url(subject_id,twilio_tracking)
+        now = datetime.now(timezone.utc).isoformat()
+        
+        try:
+            result = None
+            if self.configService.celery_env == CeleryMode.worker:
+                result = self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+            else:
+                result = self.calls.create_async(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+                result = await result
+            description = f'Sent request to third-party API'
+            status = CallStatusEnum.SENT.value
+        except:
+            description = f'Failed to send the request'
+            status =CallStatusEnum.FAILED.value
+        finally:
+           
 
+            if twilio_tracking and isinstance(result,CallInstance):
+
+                event = CallEventORM.JSON(event_id=uuid_v1_mc(),call_sid =result.sid ,call_id=twilio_tracking,direction='O',current_event=status,city=None,country=None,state=None,
+                                          date_event_received=now, description=description)
+                if self.configService.celery_env == CeleryMode.none:
+                    await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
+                else:
+                    self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_CALL, event)
+
+            return result
+            
     def update_voice_call(self):
         ...
 
@@ -320,7 +386,6 @@ class CallService(BaseTwilioCommunication):
 
 
 
-@_service.Service
 class FaxService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):

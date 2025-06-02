@@ -25,8 +25,11 @@ CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
         'INITIATED'
         'COMPLETED',
         'NO-ANSWER',
+        'IN-PROGRESS'
         'RINGING',
-        'ANSWERED'
+        'FAILED',
+        'SENT'
+
     )
 );
 
@@ -34,6 +37,7 @@ CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
 CREATE TABLE IF NOT EXISTS SMSTracking (
     sms_id UUID DEFAULT uuid_generate_v1mc (),
     -- message_sid VARCHAR(150) UNIQUE NOT NULL,
+    contact_id UUID DEFAULT NULL,
     recipient VARCHAR(100) NOT NULL,
     sender VARCHAR(100) NOT NULL,
     date_sent TIMESTAMPTZ DEFAULT NOW(),
@@ -42,13 +46,15 @@ CREATE TABLE IF NOT EXISTS SMSTracking (
     sms_current_status SMSStatus,
     -- price FLOAT DEFAULT NULL,
     -- price_unit VARCHAR(10) DEFAULT NULL,
-    PRIMARY KEY (sms_id)
+    PRIMARY KEY (sms_id),
+    FOREIGN KEY (contact_id) REFERENCES contact.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 
 -- Update table for Call Tracking
 CREATE TABLE IF NOT EXISTS CallTracking (
     call_id UUID DEFAULT uuid_generate_v1mc (),
     -- call_sid VARCHAR(150) UNIQUE NOT NULL,
+    contact_id UUID DEFAULT NULL,
     recipient VARCHAR(100) NOT NULL,
     sender VARCHAR(100) NOT NULL,
     date_started TIMESTAMPTZ DEFAULT NOW(),
@@ -58,13 +64,15 @@ CREATE TABLE IF NOT EXISTS CallTracking (
     -- duration INT DEFAULT NULL,
     -- price FLOAT DEFAULT NULL,
     -- price_unit VARCHAR(10) DEFAULT NULL,
-    PRIMARY KEY (call_id)
+    PRIMARY KEY (call_id),
+    FOREIGN KEY (contact_id) REFERENCES contact.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 
 -- Update table for SMS Events
 CREATE TABLE IF NOT EXISTS SMSEvent (
     event_id UUID DEFAULT uuid_generate_v1mc (),
     sms_id UUID DEFAULT NULL,
+    sms_sid VARCHAR(60) NULL,
     direction Direction,
     current_event SMSStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
@@ -77,6 +85,7 @@ CREATE TABLE IF NOT EXISTS SMSEvent (
 CREATE TABLE IF NOT EXISTS CallEvent (
     event_id UUID DEFAULT uuid_generate_v1mc (),
     call_id UUID DEFAULT NULL,
+    call_sid VARCHAR(60) NOT NULL,
     direction Direction,
     current_event CallStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
@@ -113,6 +122,7 @@ CREATE TABLE IF NOT EXISTS CallAnalytics (
     calls_started INT DEFAULT 0,
     calls_completed INT DEFAULT 0,
     calls_failed INT DEFAULT 0,
+    calls_not_answered INT DEFAULT 0,
     total_price FLOAT DEFAULT 0,       -- Added total price column
     average_price FLOAT DEFAULT 0,     -- Added average price column
     total_duration INT DEFAULT 0,      -- Added total duration column
@@ -162,6 +172,7 @@ CREATE OR REPLACE FUNCTION calculate_call_analytics_grouped(
     calls_started INT,
     calls_completed INT,
     calls_failed INT,
+    calls_not_answered INT,
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
@@ -180,6 +191,7 @@ BEGIN
         SUM(calls_started) AS calls_started,
         SUM(calls_completed) AS calls_completed,
         SUM(calls_failed) AS calls_failed,
+        SUM(calls_not_answered) AS calls_not_answered,
         SUM(total_price) AS total_price,
         AVG(average_price) AS average_price,
         SUM(total_duration) AS total_duration,
@@ -216,7 +228,7 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
--- Function to upsert Call Analytics with total and average call duration
+-- Function to upsert Call Analytics with calls_not_answered
 CREATE OR REPLACE FUNCTION upsert_call_analytics(
     direction VARCHAR(10),
     country VARCHAR(100),
@@ -225,29 +237,31 @@ CREATE OR REPLACE FUNCTION upsert_call_analytics(
     started_count INT,
     completed_count INT,
     failed_count INT,
+    not_answered_count INT, -- Added calls_not_answered parameter
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
     average_duration FLOAT,
-    total_call_duration INT, -- Added total call duration parameter
-    average_call_duration FLOAT -- Added average call duration parameter
+    total_call_duration INT,
+    average_call_duration FLOAT
 ) RETURNS VOID AS $$
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
-    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
-    ON CONFLICT (week_start_date, direction, country, state, city) -- Updated conflict target for location
+    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, not_answered_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    ON CONFLICT (week_start_date, direction, country, state, city)
     DO UPDATE SET
         calls_started = CallAnalytics.calls_started + EXCLUDED.calls_started,
         calls_completed = CallAnalytics.calls_completed + EXCLUDED.calls_completed,
         calls_failed = CallAnalytics.calls_failed + EXCLUDED.calls_failed,
+        calls_not_answered = CallAnalytics.calls_not_answered + EXCLUDED.calls_not_answered, -- Updated calls_not_answered
         total_price = CallAnalytics.total_price + EXCLUDED.total_price,
         average_price = (CallAnalytics.total_price + EXCLUDED.total_price) / (CallAnalytics.calls_started + EXCLUDED.calls_started),
         total_duration = CallAnalytics.total_duration + EXCLUDED.total_duration,
         average_duration = (CallAnalytics.total_duration + EXCLUDED.total_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed),
-        total_call_duration = CallAnalytics.total_call_duration + EXCLUDED.total_call_duration, -- Updated total call duration
-        average_call_duration = (CallAnalytics.total_call_duration + EXCLUDED.total_call_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed); -- Updated average call duration
+        total_call_duration = CallAnalytics.total_call_duration + EXCLUDED.total_call_duration,
+        average_call_duration = (CallAnalytics.total_call_duration + EXCLUDED.total_call_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed);
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -301,17 +315,17 @@ BEGIN
     started_call_ids := ARRAY(
         SELECT call_id
         FROM CallTracking
-        WHERE call_current_status = 'ANSWERED' AND NOW() - date_started >= INTERVAL '1 hours'
+        WHERE call_current_status = 'RINGING' AND NOW() - date_started >= INTERVAL '1 hours'
     );
 
     UPDATE CallTracking
-    SET call_current_status = 'COMPLETED'
+    SET call_current_status = 'NO-ANSWER'
     WHERE call_id = ANY(started_call_ids);
 
     PERFORM upsert_call_analytics(COALESCE(array_length(started_call_ids, 1), 0), COALESCE(array_length(started_call_ids, 1), 0), 0, 0, 0, 0, 0);
 
     INSERT INTO CallEvent (call_id, current_event, description)
-    SELECT call_id, 'COMPLETED', 'Call marked as completed after 1 hours'
+    SELECT call_id, 'NO-ANSWER', 'Call marked as completed after 1 hours'
     FROM unnest(started_call_ids) AS call_id;
 END;
 $$ LANGUAGE PLPGSQL;
@@ -367,6 +381,7 @@ CREATE OR REPLACE VIEW FetchCallAnalyticsByWeek AS
         calls_started,
         calls_completed,
         calls_failed,
+        calls_not_answered,
         total_price,
         average_price,
         total_duration,

@@ -9,6 +9,7 @@ from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
+from app.depends.class_dep import Broker, TwilioTracker
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
@@ -19,6 +20,7 @@ from app.services.database_service import RedisService
 from app.services.twilio_service import SMSService
 from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
 from app.depends.funcs_dep import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
+from app.utils.constant import StreamConstant
 from app.utils.helper import APIFilterInject
 
 
@@ -84,8 +86,13 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
-    async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission),):
+    async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager:Annotated[TaskManager,Depends(get_task)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission),):
         message = scheduler.content.model_dump()
+        if tracker.will_track:
+            event,tracking_event_data = tracker.sms_track_event_data(scheduler)
+            broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
+            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
+        
         await taskManager.offload_task('normal',scheduler,0,None,self.smsService.send_custom_sms,message)
         return taskManager.results
         
@@ -98,11 +105,17 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UseGuard(CeleryTaskGuard(['task_send_template_sms']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
-    async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
+    async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
         sms_data = scheduler.content
         smsTemplate:SMSTemplate = self.assetService.sms[template]
         _,result=smsTemplate.build(self.configService.ASSET_LANG,sms_data.data)
         message = {'body':result,'to':sms_data.to,'from_':sms_data.from_}
+
+        if tracker.will_track:
+            event,tracking_event_data = tracker.sms_track_event_data(scheduler)
+            broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
+            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
+
         await taskManager.offload_task('normal',scheduler,0,None,self.smsService.send_template_sms,message)
         return taskManager.results
 
@@ -151,8 +164,8 @@ class IncomingSMSRessource(BaseHTTPRessource):
         pass
 
     @BaseHTTPRessource.HTTPRoute('/status/',methods=[HTTPMethod.POST])
-    async def sms_call_status_changes(self,status: SMSStatusModel,authPermission=Depends(get_auth_permission)):
-        ...
+    async def sms_call_status_changes(self,status: SMSStatusModel,broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
+        print(status)
 
     @BaseHTTPRessource.HTTPRoute('/error/',methods=[HTTPMethod.POST])
     async def sms_error(self,authPermission=Depends(get_auth_permission)):
