@@ -7,13 +7,14 @@ CREATE DOMAIN SMSStatus AS VARCHAR(50) CHECK (
         'SENT',
         'DELIVERED',
         'FAILED',
-        'RECEIVED'
+        'RECEIVED',
+        'BOUNCE'
     )
 );
 
 CREATE DOMAIN Direction AS VARCHAR(1) CHECK (
     VALUE IN (
-        'I',-- INBOUND
+        'I', -- INBOUND
         'O' -- OUTBOUND
     )
 )
@@ -21,15 +22,12 @@ CREATE DOMAIN Direction AS VARCHAR(1) CHECK (
 -- Create domain for Call Status
 CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
     VALUE IN (
-        'RECEIVED'
-        'INITIATED'
-        'COMPLETED',
+        'RECEIVED' 'INITIATED' 'COMPLETED',
         'NO-ANSWER',
-        'IN-PROGRESS'
-        'RINGING',
+        'BOUNCE',
+        'IN-PROGRESS' 'RINGING',
         'FAILED',
         'SENT'
-
     )
 );
 
@@ -47,7 +45,7 @@ CREATE TABLE IF NOT EXISTS SMSTracking (
     -- price FLOAT DEFAULT NULL,
     -- price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (sms_id),
-    FOREIGN KEY (contact_id) REFERENCES contact.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
+    FOREIGN KEY (contact_id) REFERENCES contact.Contact (contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 
 -- Update table for Call Tracking
@@ -65,7 +63,7 @@ CREATE TABLE IF NOT EXISTS CallTracking (
     -- price FLOAT DEFAULT NULL,
     -- price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (call_id),
-    FOREIGN KEY (contact_id) REFERENCES contact.Contact(contact_id) ON UPDATE CASCADE ON DELETE SET NULL
+    FOREIGN KEY (contact_id) REFERENCES contact.Contact (contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 
 -- Update table for SMS Events
@@ -90,8 +88,8 @@ CREATE TABLE IF NOT EXISTS CallEvent (
     current_event CallStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
     country VARCHAR(100) DEFAULT NULL, -- Added country column
-    state VARCHAR(100) DEFAULT NULL,   -- Added state column
-    city VARCHAR(100) DEFAULT NULL,    -- Added city column
+    state VARCHAR(100) DEFAULT NULL, -- Added state column
+    city VARCHAR(100) DEFAULT NULL, -- Added city column
     date_event_received TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (event_id),
     FOREIGN KEY (call_id) REFERENCES CallTracking (call_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -105,10 +103,11 @@ CREATE TABLE IF NOT EXISTS SMSAnalytics (
     sms_sent INT DEFAULT 0,
     sms_delivered INT DEFAULT 0,
     sms_failed INT DEFAULT 0,
+    sms_bounce INT DEFAULT 0,
     total_price FLOAT DEFAULT 0, -- Added total price column
     average_price FLOAT DEFAULT 0, -- Added average price column
     PRIMARY KEY (analytics_id),
-    UNIQUE (week_start_date,direction)
+    UNIQUE (week_start_date, direction)
 );
 
 -- Update table for Call Analytics to include location details
@@ -117,22 +116,28 @@ CREATE TABLE IF NOT EXISTS CallAnalytics (
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     direction Direction NOT NULL,
     country VARCHAR(100) DEFAULT NULL, -- Added country column
-    state VARCHAR(100) DEFAULT NULL,   -- Added state column
-    city VARCHAR(100) DEFAULT NULL,    -- Added city column
+    state VARCHAR(100) DEFAULT NULL, -- Added state column
+    city VARCHAR(100) DEFAULT NULL, -- Added city column
     calls_started INT DEFAULT 0,
     calls_completed INT DEFAULT 0,
     calls_failed INT DEFAULT 0,
+    calls_bounce INT DEFAULT 0,
     calls_not_answered INT DEFAULT 0,
-    total_price FLOAT DEFAULT 0,       -- Added total price column
-    average_price FLOAT DEFAULT 0,     -- Added average price column
-    total_duration INT DEFAULT 0,      -- Added total duration column
-    average_duration FLOAT DEFAULT 0,  -- Added average duration column
+    total_price FLOAT DEFAULT 0, -- Added total price column
+    average_price FLOAT DEFAULT 0, -- Added average price column
+    total_duration INT DEFAULT 0, -- Added total duration column
+    average_duration FLOAT DEFAULT 0, -- Added average duration column
     total_call_duration INT DEFAULT 0, -- Added total call duration column
     average_call_duration FLOAT DEFAULT 0, -- Added average call duration column
     PRIMARY KEY (analytics_id),
-    UNIQUE (week_start_date, direction,country, state, city) -- Updated unique constraint for location
+    UNIQUE (
+        week_start_date,
+        direction,
+        country,
+        state,
+        city
+    ) -- Updated unique constraint for location
 );
-
 
 CREATE OR REPLACE FUNCTION calculate_sms_analytics_grouped(
     group_by_factor INT -- Grouping factor in weeks
@@ -142,6 +147,7 @@ CREATE OR REPLACE FUNCTION calculate_sms_analytics_grouped(
     sms_sent INT,
     sms_delivered INT,
     sms_failed INT,
+    sms_bounce INT,
     total_price FLOAT,
     average_price FLOAT
 ) AS $$
@@ -153,6 +159,7 @@ BEGIN
         SUM(sms_sent) AS sms_sent,
         SUM(sms_delivered) AS sms_delivered,
         SUM(sms_failed) AS sms_failed,
+        SUM(sms_bounce) AS sms_bounce,
         SUM(total_price) AS total_price,
         AVG(average_price) AS average_price
     FROM SMSAnalytics
@@ -173,6 +180,7 @@ CREATE OR REPLACE FUNCTION calculate_call_analytics_grouped(
     calls_completed INT,
     calls_failed INT,
     calls_not_answered INT,
+    calls_bounce INT,
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
@@ -192,6 +200,7 @@ BEGIN
         SUM(calls_completed) AS calls_completed,
         SUM(calls_failed) AS calls_failed,
         SUM(calls_not_answered) AS calls_not_answered,
+        SUM(calls_bounce) AS calls_bounce,
         SUM(total_price) AS total_price,
         AVG(average_price) AS average_price,
         SUM(total_duration) AS total_duration,
@@ -210,19 +219,21 @@ CREATE OR REPLACE FUNCTION upsert_sms_analytics(
     sent_count INT,
     delivered_count INT,
     failed_count INT,
+    bounced_count INT,
     total_price FLOAT,
     average_price FLOAT
 ) RETURNS VOID AS $$
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO SMSAnalytics (week_start_date, sms_sent, sms_delivered, sms_failed, total_price, average_price)
-    VALUES (DEFAULT, sent_count, delivered_count, failed_count, total_price, average_price)
+    INSERT INTO SMSAnalytics (week_start_date, sms_sent, sms_delivered, sms_failed,sms_bounce, total_price, average_price)
+    VALUES (DEFAULT, sent_count, delivered_count, failed_count,bounced_count, total_price, average_price)
     ON CONFLICT (week_start_date)
     DO UPDATE SET
         sms_sent = SMSAnalytics.sms_sent + EXCLUDED.sms_sent,
         sms_delivered = SMSAnalytics.sms_delivered + EXCLUDED.sms_delivered,
         sms_failed = SMSAnalytics.sms_failed + EXCLUDED.sms_failed,
+        sms_bounce = SMSAnalytics.sms_bounce + EXCLUDED.sms_bounce,
         total_price = SMSAnalytics.total_price + EXCLUDED.total_price,
         average_price = (SMSAnalytics.total_price + EXCLUDED.total_price) / (SMSAnalytics.sms_sent + EXCLUDED.sms_sent);
 END;
@@ -238,6 +249,7 @@ CREATE OR REPLACE FUNCTION upsert_call_analytics(
     completed_count INT,
     failed_count INT,
     not_answered_count INT, -- Added calls_not_answered parameter
+    bounced_count INT,
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
@@ -248,14 +260,15 @@ CREATE OR REPLACE FUNCTION upsert_call_analytics(
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
-    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, not_answered_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered,calls_bounce, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, not_answered_count,bounced_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
     ON CONFLICT (week_start_date, direction, country, state, city)
     DO UPDATE SET
         calls_started = CallAnalytics.calls_started + EXCLUDED.calls_started,
         calls_completed = CallAnalytics.calls_completed + EXCLUDED.calls_completed,
         calls_failed = CallAnalytics.calls_failed + EXCLUDED.calls_failed,
         calls_not_answered = CallAnalytics.calls_not_answered + EXCLUDED.calls_not_answered, -- Updated calls_not_answered
+        calls_bounce = CallAnalytics.calls_bounce + EXCLUDED.calls_bounce, -- Updated calls_bounce
         total_price = CallAnalytics.total_price + EXCLUDED.total_price,
         average_price = (CallAnalytics.total_price + EXCLUDED.total_price) / (CallAnalytics.calls_started + EXCLUDED.calls_started),
         total_duration = CallAnalytics.total_duration + EXCLUDED.total_duration,
@@ -284,23 +297,59 @@ $$ LANGUAGE PLPGSQL;
 CREATE OR REPLACE FUNCTION set_sms_delivered() RETURNS VOID AS $$
 DECLARE
     sent_sms_ids UUID[];
+    received_sms_ids UUID[];
+    queued_sms_ids UUID[];
 BEGIN
     SET search_path = twilio;
 
     sent_sms_ids := ARRAY(
         SELECT sms_id
         FROM SMSTracking
-        WHERE sms_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '1 hours'
+        WHERE  sms_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '1 hours'
+    );
+
+    receive_sms_ids := ARRAY(
+        SELECT sms_id
+        FROM SMSTracking
+        WHERE sms_current_status = 'RECEIVED' AND NOW() - date_sent >= INTERVAL '1 hours'
+    );
+
+    queued_sms_ids := ARRAY(
+        SELECT sms_id
+        FROM SMSTracking
+        WHERE sms_current_status = 'QUEUED' AND NOW() - date_sent >= INTERVAL '1 hours'
     );
 
     UPDATE SMSTracking
     SET sms_current_status = 'DELIVERED'
+    WHERE sms_id = ANY(queued_sms_ids);
+
+    UPDATE SMSTracking
+    SET sms_current_stats = 'FAILED'
+    WHERE sms_id = ANY(receive_sms_ids);
+
+    UPDATE SMSTracking
+    SET sms_current_stats = 'BOUNCE'
     WHERE sms_id = ANY(sent_sms_ids);
 
-    PERFORM upsert_sms_analytics(COALESCE(array_length(sent_sms_ids, 1), 0), COALESCE(array_length(sent_sms_ids, 1), 0), 0, 0, 0);
+    PERFORM upsert_sms_analytics(
+        0, 
+        COALESCE(array_length(queued_sms_ids, 1), 0),
+        COALESCE(array_length(received_sms_ids, 1), 0),
+        COALESCE(array_length(sent_sms_ids, 1), 0),
+        0,
+        0);
 
     INSERT INTO SMSEvent (sms_id, current_event, description)
     SELECT sms_id, 'DELIVERED', 'SMS marked as delivered after 1 hours'
+    FROM unnest(queued_sms_ids) AS sms_id;
+
+    INSERT INTO SMSEvent (sms_id, current_event, description)
+    SELECT sms_id, 'FAILED', 'SMS marked as failed after 1 hours'
+    FROM unnest(received_sms_ids) AS sms_id;
+
+    INSERT INTO SMSEvent (sms_id, current_event, description)
+    SELECT sms_id, 'BOUNCE', 'SMS marked as bounced after 1 hours'
     FROM unnest(sent_sms_ids) AS sms_id;
 END;
 $$ LANGUAGE PLPGSQL;
@@ -349,46 +398,47 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Schedule the weekly cron job
-SELECT cron.schedule(
+SELECT cron.schedule (
         'create_weekly_sms_analytics_row', '0 0 * * 0', -- Every Sunday at midnight
         'SELECT twilio.create_weekly_sms_analytics_row();'
     );
 
 -- Schedule the functions using pg_cron
 SELECT cron.schedule (
-        'set_sms_delivered_every_hour', '0 * * * *',
-        'SELECT twilio.set_sms_delivered();'
+        'set_sms_delivered_every_hour', '0 * * * *', 'SELECT twilio.set_sms_delivered();'
     );
 
 SELECT cron.schedule (
-        'set_call_completed_every_hour', '0 * * * *',
-        'SELECT twilio.set_call_completed();'
+        'set_call_completed_every_hour', '0 * * * *', 'SELECT twilio.set_call_completed();'
     );
 
 SELECT cron.schedule (
-        'delete_expired_tracking_every_day', '0 0 * * *',
-        'SELECT twilio.delete_expired_tracking();'
+        'delete_expired_tracking_every_day', '0 0 * * *', 'SELECT twilio.delete_expired_tracking();'
     );
 
 CREATE OR REPLACE VIEW FetchCallAnalyticsByWeek AS
-    SELECT
-        analytics_id,
-        week_start_date,
-        direction,
-        country,
-        state,
-        city,
-        calls_started,
-        calls_completed,
-        calls_failed,
-        calls_not_answered,
-        total_price,
-        average_price,
-        total_duration,
-        average_duration,
-        total_call_duration, -- Added total call duration
-        average_call_duration, -- Added average call duration
-        (total_call_duration - total_duration) AS ringing_duration -- Added ringing duration column
-    FROM CallAnalytics
-    FROM CallAnalytics
-    ORDER BY week_start_date ASC; -- Sort by oldest to newest week
+SELECT
+    analytics_id,
+    week_start_date,
+    direction,
+    country,
+    state,
+    city,
+    calls_started,
+    calls_completed,
+    calls_failed,
+    calls_not_answered,
+    calls_bounce, -- Added calls_bounce column
+    total_price,
+    average_price,
+    total_duration,
+    average_duration,
+    total_call_duration, -- Added total call duration
+    average_call_duration, -- Added average call duration
+    (
+        total_call_duration - total_duration
+    ) AS ringing_duration -- Added ringing duration column
+FROM CallAnalytics
+FROM CallAnalytics
+ORDER BY week_start_date ASC;
+-- Sort by oldest to newest week

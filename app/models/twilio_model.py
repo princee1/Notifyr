@@ -15,6 +15,7 @@ class SMSStatusEnum(str, Enum):
     DELIVERED = "DELIVERED"
     FAILED = "FAILED"
     RECEIVED = "RECEIVED"
+    BOUNCE = "BOUNCE"
 
 class CallStatusEnum(str, Enum):
     RECEIVED = "RECEIVED"
@@ -25,6 +26,8 @@ class CallStatusEnum(str, Enum):
     ANSWERED = "ANSWERED"
     FAILED = 'FAILED'
     SENT = "SENT"
+    BOUNCE = "BOUNCE"
+
 
 
 class DirectionEnum(str, Enum):
@@ -169,10 +172,11 @@ class CallEventORM(models.Model):
 class SMSAnalyticsORM(models.Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     week_start_date = fields.DateField(default=datetime.utcnow().date)
-    direction = fields.CharEnumField(enum_type=["I", "O"], max_length=1)
+    direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     sms_sent = fields.IntField(default=0)
     sms_delivered = fields.IntField(default=0)
     sms_failed = fields.IntField(default=0)
+    sms_bounce = fields.IntField(default=0)  # Added sms_bounce field
     total_price = fields.FloatField(default=0)
     average_price = fields.FloatField(default=0)
 
@@ -186,10 +190,11 @@ class SMSAnalyticsORM(models.Model):
         return {
             "analytics_id": str(self.analytics_id),
             "week_start_date": self.week_start_date.isoformat(),
-            "direction": self.direction,
+            "direction": self.direction.value,
             "sms_sent": self.sms_sent,
             "sms_delivered": self.sms_delivered,
             "sms_failed": self.sms_failed,
+            "sms_bounce": self.sms_bounce,  # Added sms_bounce
             "total_price": self.total_price,
             "average_price": self.average_price,
         }
@@ -206,6 +211,7 @@ class CallAnalyticsORM(models.Model):
     calls_completed = fields.IntField(default=0)
     calls_failed = fields.IntField(default=0)
     calls_not_answered = fields.IntField(default=0)  # Added calls_not_answered field
+    calls_bounce = fields.IntField(default=0)  # Added calls_bounce field
     total_price = fields.FloatField(default=0)
     average_price = fields.FloatField(default=0)
     total_duration = fields.IntField(default=0)
@@ -231,6 +237,7 @@ class CallAnalyticsORM(models.Model):
             "calls_completed": self.calls_completed,
             "calls_failed": self.calls_failed,
             "calls_not_answered": self.calls_not_answered,  # Added calls_not_answered
+            "calls_bounce": self.calls_bounce,  # Added calls_bounce
             "total_price": self.total_price,
             "average_price": self.average_price,
             "total_duration": self.total_duration,
@@ -243,8 +250,8 @@ class CallAnalyticsORM(models.Model):
 
 async def bulk_upsert_call_analytics(analytics_data):
     values_str = ", ".join(
-        f"ROW('{week_start_date}', '{direction}', '{country}', '{state}', '{city}', '{calls_started}', '{calls_completed}', '{calls_failed}', '{calls_not_answered}', '{total_price}', '{average_price}', '{total_duration}', '{average_duration}', '{total_call_duration}', '{average_call_duration}')::twilio.call_analytics_input"
-        for week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration in analytics_data
+        f"ROW('{direction}', '{country}', '{state}', '{city}', '{calls_started}', '{calls_completed}', '{calls_failed}', '{calls_not_answered}', '{total_price}', '{average_price}', '{total_duration}', '{average_duration}', '{total_call_duration}', '{average_call_duration}')"
+        for direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration in analytics_data
     )
     query = f"SELECT * FROM twilio.bulk_upsert_call_analytics($1)"
     client = Tortoise.get_connection('default')
@@ -252,8 +259,8 @@ async def bulk_upsert_call_analytics(analytics_data):
 
 async def bulk_upsert_sms_analytics(analytics_data):
     values_str = ", ".join(
-        f"ROW('{week_start_date}', '{direction}', '{sms_sent}', '{sms_delivered}', '{sms_failed}', '{total_price}', '{average_price}')::twilio.sms_analytics_input"
-        for week_start_date, direction, sms_sent, sms_delivered, sms_failed, total_price, average_price in analytics_data
+        f"ROW('{direction}', '{sms_sent}', '{sms_delivered}', '{sms_failed}', '{total_price}', '{average_price}')"
+        for direction, sms_sent, sms_delivered, sms_failed, total_price, average_price in analytics_data
     )
     query = f"SELECT * FROM twilio.bulk_upsert_sms_analytics($1)"
     client = Tortoise.get_connection('default')

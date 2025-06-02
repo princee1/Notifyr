@@ -194,50 +194,63 @@ $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION set_email_delivered() RETURNS VOID AS $$
 DECLARE
+    esp_provider TEXT;
     sent_email_ids UUID[];
     received_email_ids UUID[];
-
 BEGIN
     SET search_path = emails;
 
-    sent_email_ids := ARRAY(
-        SELECT email_id
-        FROM EmailTracking
-        WHERE email_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '1 hours'
-    );
+    -- Loop through each ESP provider
+    FOR esp_provider IN SELECT DISTINCT esp_provider FROM EmailTracking WHERE esp_provider IS NOT NULL LOOP
+        -- Get sent email IDs for the current ESP provider
+        sent_email_ids := ARRAY(
+            SELECT email_id
+            FROM EmailTracking
+            WHERE email_current_status = 'SENT'
+              AND esp_provider = esp_provider
+              AND NOW() - date_sent >= INTERVAL '1 hours'
+        );
 
-    received_email_ids := ARRAY(
-        SELECT email_id
-        FROM EmailTracking
-        WHERE email_current_status = 'RECEIVED' AND NOW() - date_sent >= INTERVAL '1 hours'
-    );  
-    
-    UPDATE 
-        EmailTracking
-    SET 
-        email_current_status = 'DELIVERED'
-    WHERE 
-        email_id = ANY(sent_email_ids);
+        -- Get received email IDs for the current ESP provider
+        received_email_ids := ARRAY(
+            SELECT email_id
+            FROM EmailTracking
+            WHERE email_current_status = 'RECEIVED'
+              AND esp_provider = esp_provider
+              AND NOW() - date_sent >= INTERVAL '1 hours'
+        );
 
-    UPDATE 
-        EmailTracking
-    SET 
-        email_current_status = 'FAILED'
-    WHERE 
-        email_id = ANY(received_email_ids);
-    
-    PERFORM upsert_email_analytics(0, COALESCE(array_length(sent_email_ids, 1), 0), 0, COALESCE(array_length(received_email_ids, 1), 0), 0);
+        -- Update EmailTracking statuses for the current ESP provider
+        UPDATE EmailTracking
+        SET email_current_status = 'DELIVERED'
+        WHERE email_id = ANY(sent_email_ids);
 
-    -- Add event for 'DELIVERED'
-    INSERT INTO emails.TrackingEvent (email_id, current_event, description)
-    SELECT email_id, 'DELIVERED', 'Email marked as delivered after 1 hours'
-    FROM unnest(sent_email_ids) AS email_id;
+        UPDATE EmailTracking
+        SET email_current_status = 'FAILED'
+        WHERE email_id = ANY(received_email_ids);
 
-    -- Add event for 'FAILED'
-    INSERT INTO emails.TrackingEvent (email_id, current_event, description)
-    SELECT email_id, 'FAILED', 'Email marked as failed after 1 hours'
-    FROM unnest(received_email_ids) AS email_id;
+        -- Upsert analytics for the current ESP provider
+        PERFORM upsert_email_analytics(
+            esp_provider,
+            0, -- emails_sent
+            COALESCE(array_length(sent_email_ids, 1), 0), -- emails_delivered
+            0,                                           -- emails_opened
+            0, -- emails_bounced
+            0,                                           -- emails_complaint
+            0,                                           -- emails_replied
+            COALESCE(array_length(received_email_ids, 1), 0)  -- emails_failed
+        );
 
+        -- Add events for 'DELIVERED' for the current ESP provider
+        INSERT INTO emails.TrackingEvent (email_id, current_event, description)
+        SELECT email_id, 'DELIVERED', 'Email marked as delivered after 1 hours'
+        FROM unnest(sent_email_ids) AS email_id;
+
+        -- Add events for 'FAILED' for the current ESP provider
+        INSERT INTO emails.TrackingEvent (email_id, current_event, description)
+        SELECT email_id, 'FAILED', 'Email marked as failed after 1 hours'
+        FROM unnest(received_email_ids) AS email_id;
+    END LOOP;
 END;
 $$ LANGUAGE PLPGSQL;
 
