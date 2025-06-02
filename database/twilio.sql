@@ -34,7 +34,7 @@ CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
 -- Update table for SMS Tracking
 CREATE TABLE IF NOT EXISTS SMSTracking (
     sms_id UUID DEFAULT uuid_generate_v1mc (),
-    -- message_sid VARCHAR(150) UNIQUE NOT NULL,
+    sms_sid VARCHAR(60) UNIQUE DEFAULT NULL,
     contact_id UUID DEFAULT NULL,
     recipient VARCHAR(100) NOT NULL,
     sender VARCHAR(100) NOT NULL,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS SMSTracking (
 -- Update table for Call Tracking
 CREATE TABLE IF NOT EXISTS CallTracking (
     call_id UUID DEFAULT uuid_generate_v1mc (),
-    -- call_sid VARCHAR(150) UNIQUE NOT NULL,
+    call_sid VARCHAR(60) UNIQUE DEFAULT NULL,
     contact_id UUID DEFAULT NULL,
     recipient VARCHAR(100) NOT NULL,
     sender VARCHAR(100) NOT NULL,
@@ -143,7 +143,7 @@ CREATE OR REPLACE FUNCTION calculate_sms_analytics_grouped(
     group_by_factor INT -- Grouping factor in weeks
 ) RETURNS TABLE (
     group_number INT,
-    direction VARCHAR(1),
+    direction Direction,
     sms_sent INT,
     sms_delivered INT,
     sms_failed INT,
@@ -172,7 +172,7 @@ CREATE OR REPLACE FUNCTION calculate_call_analytics_grouped(
     group_by_factor INT -- Grouping factor in days
 ) RETURNS TABLE (
     group_number INT,
-    direction VARCHAR(1),
+    direction Direction,
     country VARCHAR(100),
     state VARCHAR(100),
     city VARCHAR(100),
@@ -215,7 +215,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function to upsert SMS Analytics with price data
-CREATE OR REPLACE FUNCTION upsert_sms_analytics(
+CREATE OR REPLACE FUNCTION bulk_upsert_sms_analytics(
+    direction Direction, -- Added direction parameter
     sent_count INT,
     delivered_count INT,
     failed_count INT,
@@ -226,9 +227,9 @@ CREATE OR REPLACE FUNCTION upsert_sms_analytics(
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO SMSAnalytics (week_start_date, sms_sent, sms_delivered, sms_failed,sms_bounce, total_price, average_price)
-    VALUES (DEFAULT, sent_count, delivered_count, failed_count,bounced_count, total_price, average_price)
-    ON CONFLICT (week_start_date)
+    INSERT INTO SMSAnalytics (week_start_date, direction, sms_sent, sms_delivered, sms_failed, sms_bounce, total_price, average_price)
+    VALUES (DEFAULT, direction, sent_count, delivered_count, failed_count, bounced_count, total_price, average_price)
+    ON CONFLICT (week_start_date, direction) -- Updated conflict target for direction
     DO UPDATE SET
         sms_sent = SMSAnalytics.sms_sent + EXCLUDED.sms_sent,
         sms_delivered = SMSAnalytics.sms_delivered + EXCLUDED.sms_delivered,
@@ -240,15 +241,15 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 -- Function to upsert Call Analytics with calls_not_answered
-CREATE OR REPLACE FUNCTION upsert_call_analytics(
-    direction VARCHAR(10),
+CREATE OR REPLACE FUNCTION bulk_upsert_call_analytics(
+    direction Direction, -- Added direction parameter
     country VARCHAR(100),
     state VARCHAR(100),
     city VARCHAR(100),
     started_count INT,
     completed_count INT,
     failed_count INT,
-    not_answered_count INT, -- Added calls_not_answered parameter
+    not_answered_count INT,
     bounced_count INT,
     total_price FLOAT,
     average_price FLOAT,
@@ -260,15 +261,15 @@ CREATE OR REPLACE FUNCTION upsert_call_analytics(
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered,calls_bounce, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
-    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, not_answered_count,bounced_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
-    ON CONFLICT (week_start_date, direction, country, state, city)
+    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, calls_bounce, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, not_answered_count, bounced_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    ON CONFLICT (week_start_date, direction, country, state, city) -- Updated conflict target for direction
     DO UPDATE SET
         calls_started = CallAnalytics.calls_started + EXCLUDED.calls_started,
         calls_completed = CallAnalytics.calls_completed + EXCLUDED.calls_completed,
         calls_failed = CallAnalytics.calls_failed + EXCLUDED.calls_failed,
-        calls_not_answered = CallAnalytics.calls_not_answered + EXCLUDED.calls_not_answered, -- Updated calls_not_answered
-        calls_bounce = CallAnalytics.calls_bounce + EXCLUDED.calls_bounce, -- Updated calls_bounce
+        calls_not_answered = CallAnalytics.calls_not_answered + EXCLUDED.calls_not_answered,
+        calls_bounce = CallAnalytics.calls_bounce + EXCLUDED.calls_bounce,
         total_price = CallAnalytics.total_price + EXCLUDED.total_price,
         average_price = (CallAnalytics.total_price + EXCLUDED.total_price) / (CallAnalytics.calls_started + EXCLUDED.calls_started),
         total_duration = CallAnalytics.total_duration + EXCLUDED.total_duration,
@@ -332,7 +333,8 @@ BEGIN
     SET sms_current_stats = 'BOUNCE'
     WHERE sms_id = ANY(sent_sms_ids);
 
-    PERFORM upsert_sms_analytics(
+    PERFORM bulk_upsert_sms_analytics(
+        'O'
         0, 
         COALESCE(array_length(queued_sms_ids, 1), 0),
         COALESCE(array_length(received_sms_ids, 1), 0),
@@ -359,23 +361,23 @@ CREATE OR REPLACE FUNCTION set_call_completed() RETURNS VOID AS $$
 DECLARE
     started_call_ids UUID[];
 BEGIN
-    SET search_path = twilio;
+    -- SET search_path = twilio;
 
-    started_call_ids := ARRAY(
-        SELECT call_id
-        FROM CallTracking
-        WHERE call_current_status = 'RINGING' AND NOW() - date_started >= INTERVAL '1 hours'
-    );
+    -- started_call_ids := ARRAY(
+    --     SELECT call_id
+    --     FROM CallTracking
+    --     WHERE call_current_status = 'RINGING' AND NOW() - date_started >= INTERVAL '1 hours'
+    -- );
 
-    UPDATE CallTracking
-    SET call_current_status = 'NO-ANSWER'
-    WHERE call_id = ANY(started_call_ids);
+    -- UPDATE CallTracking
+    -- SET call_current_status = 'NO-ANSWER'
+    -- WHERE call_id = ANY(started_call_ids);
 
-    PERFORM upsert_call_analytics(COALESCE(array_length(started_call_ids, 1), 0), COALESCE(array_length(started_call_ids, 1), 0), 0, 0, 0, 0, 0);
+    -- PERFORM upsert_call_analytics(COALESCE(array_length(started_call_ids, 1), 0), COALESCE(array_length(started_call_ids, 1), 0), 0, 0, 0, 0, 0);
 
-    INSERT INTO CallEvent (call_id, current_event, description)
-    SELECT call_id, 'NO-ANSWER', 'Call marked as completed after 1 hours'
-    FROM unnest(started_call_ids) AS call_id;
+    -- INSERT INTO CallEvent (call_id, current_event, description)
+    -- SELECT call_id, 'NO-ANSWER', 'Call marked as completed after 1 hours'
+    -- FROM unnest(started_call_ids) AS call_id;
 END;
 $$ LANGUAGE PLPGSQL;
 

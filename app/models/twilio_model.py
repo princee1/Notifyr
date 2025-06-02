@@ -36,6 +36,7 @@ class DirectionEnum(str, Enum):
 
 class SMSTrackingORM(models.Model):
     sms_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    sms_sid = fields.CharField(max_length=60,null=True,default=None)
     contact = fields.ForeignKeyField('models.ContactORM',null=True,on_delete=fields.NO_ACTION)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
@@ -52,6 +53,7 @@ class SMSTrackingORM(models.Model):
     def to_json(self):
         return {
             "sms_id": str(self.sms_id),
+            "sms_sid":self.sms_sid,
             "recipient": self.recipient,
             "contact_id": str(self.contact.contact_id) if self.contact != None else None,
             "sender": self.sender,
@@ -64,6 +66,7 @@ class SMSTrackingORM(models.Model):
 
 class CallTrackingORM(models.Model):
     call_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    call_sid = fields.CharField(max_length=60,null=False,default=None)
     contact = fields.ForeignKeyField('models.ContactORM',null=True,on_delete=fields.NO_ACTION)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
@@ -80,6 +83,7 @@ class CallTrackingORM(models.Model):
     def to_json(self):
         return {
             "call_id": str(self.call_id),
+            "call_sid": self.call_sid,
             "contact_id": str(self.contact.contact_id) if self.contact != None else None,
             "recipient": self.recipient,
             "sender": self.sender,
@@ -107,6 +111,7 @@ class SMSEventORM(models.Model):
         current_event:str
         description:str
         date_event_received:str
+        correction:bool = False
 
     class Meta:
         schema = SCHEMA
@@ -149,6 +154,8 @@ class CallEventORM(models.Model):
         city:str
         state:str
         date_event_received:str
+        correction:bool = False
+
     class Meta:
         schema = SCHEMA
         table = "callevent"
