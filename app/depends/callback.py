@@ -146,36 +146,39 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                     'replied': 0
                 }
 
+            factor = -1 if val.get('correction',False) else 1
+             
+
             # Match the current event to the most accurate EmailStatus
             match event.current_event:
                 case EmailStatus.SENT.value:
-                    analytics[esp_provider]['sent'] += 1
+                    analytics[esp_provider]['sent'] += factor
                 case EmailStatus.DELIVERED.value:
-                    analytics[esp_provider]['delivered'] += 1
+                    analytics[esp_provider]['delivered'] += factor
                 case EmailStatus.OPENED.value | EmailStatus.LINK_CLICKED.value:
                     # Ensure only one open event is tracked per email_id
                     if email_id not in opens_per_email:
-                        analytics[esp_provider]['opened'] += 1
+                        analytics[esp_provider]['opened'] += factor
                         opens_per_email[email_id] = True
                 case EmailStatus.SOFT_BOUNCE.value | EmailStatus.HARD_BOUNCE.value | EmailStatus.MAILBOX_FULL.value:
-                    analytics[esp_provider]['bounced'] += 1
+                    analytics[esp_provider]['bounced'] += factor
                     if event.current_event == EmailStatus.HARD_BOUNCE.value:
                         if contact_id is not None:    
                             contact_id_to_delete.add(contact_id)
                 case EmailStatus.REPLIED.value:
                     if email_id not in replied_per_email:
-                        analytics[esp_provider]['replied'] += 1
+                        analytics[esp_provider]['replied'] += factor
                         replied_per_email[email_id] = True
                     
                     if email_id not in opens_per_email:
-                        analytics[esp_provider]['opened'] += 1
+                        analytics[esp_provider]['opened'] += factor
                         opens_per_email[email_id] = True
                 
                 case EmailStatus.FAILED.value:
-                    analytics[esp_provider]['failed'] += 1
+                    analytics[esp_provider]['failed'] += factor
                 
                 case EmailStatus.COMPLAINT.value:
-                    analytics[esp_provider]['complaint'] += 1
+                    analytics[esp_provider]['complaint'] += factor
 
             if opens_per_email.get(email_id, False):
                 email_status[email_id] = EmailStatus.OPENED.value

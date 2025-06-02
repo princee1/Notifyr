@@ -160,6 +160,7 @@ class TrackingEmailEventORM(models.Model):
         esp_provider:str|None
         current_event:str|None
         date_event_received:str
+        correction:bool = False
 
     class Meta:
         schema = SCHEMA
