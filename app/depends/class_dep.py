@@ -48,17 +48,17 @@ class EmailTracker(TrackerInterface):
     def make_msgid(self,email_id: str = None):
         email_id = '' if email_id is None else email_id.replace('-', '')
         timeval = int(time() * 1000000)
-        randval = random.getrandbits(64)
+        randval = random.getrandbits(8)
         return f"<{timeval}.{randval}.{email_id}@{self.configService.HOSTNAME}>"
             
-    def track_event_data(self, spam:tuple[float,str]=(100,'no-spam'))->dict:
+    def track_event_data(self, spam:tuple[float,str]=(100,'no-spam')):
         spam_confidence,spam_label = spam
         # Convert datetime fields to timezone-aware ISO 8601 string representation
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
         esp_provider = get_email_provider_name(self.recipient)
         description=f'Notifyr server received the request'
-        event = TrackingEmailEventORM.JSON(event_id=uuid_v1_mc(),description=description,esp_provider=esp_provider,email_id=self.email_id,current_event=EmailStatus.RECEIVED.value)
+        event = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),description=description,esp_provider=esp_provider,email_id=self.email_id,current_event=EmailStatus.RECEIVED.value)
         # Create the EmailTrackingORM object
         tracking= {
             "recipient": self.recipient,
@@ -66,7 +66,7 @@ class EmailTracker(TrackerInterface):
             "email_id": self.email_id,
             'contact_id':self.contact_id,
             "message_id": self.message_id,
-            "esp_provider":get_email_provider_name(self.recipient),
+            "esp_provider":esp_provider,
             "spam_detection_confidence": spam_confidence,
             "spam_label": spam_label,
             "date_sent": now.isoformat(),

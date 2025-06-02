@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     email_id UUID DEFAULT uuid_generate_v1mc (),
     message_id VARCHAR(150) UNIQUE NOT NULL,
     recipient VARCHAR(100) NOT NULL,
-    esp_provider VARCHAR(25) DEFAULT NULL,
+    esp_provider VARCHAR(25) DEFAULT 'Untracked Provider',
     contact_id UUID DEFAULT NULL,
     date_sent TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW(),
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS EmailAnalytics (
 -- Function to upsert the latest EmailAnalytics row
 -- Function to upsert Email Analytics with emails_complaint and emails_failed
 CREATE OR REPLACE FUNCTION upsert_email_analytics(
-    esp_provider VARCHAR(25),
+    esp VARCHAR(25),
     sent_count INT,
     delivered_count INT,
     opened_count INT,
@@ -96,7 +96,7 @@ BEGIN
     SET search_path = emails;
 
     INSERT INTO EmailAnalytics (day_start_date, esp_provider, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_complaint, emails_replied, emails_failed)
-    VALUES (DATE_TRUNC('DAY', NOW()), esp_provider, sent_count, delivered_count, opened_count, bounced_count, complaint_count, replied_count, failed_count)
+    VALUES (DATE_TRUNC('DAY', NOW()), esp, sent_count, delivered_count, opened_count, bounced_count, complaint_count, replied_count, failed_count)
     ON CONFLICT (day_start_date, esp_provider)
     DO UPDATE SET
         emails_sent = EmailAnalytics.emails_sent + EXCLUDED.emails_sent,

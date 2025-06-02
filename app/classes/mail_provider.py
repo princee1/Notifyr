@@ -229,4 +229,4 @@ def get_email_provider_name(email):
 
         return provider_map.get(subdomain, "Untracked Provider")
     except (IndexError, AttributeError):
-        return "Invalid Email"
+        return "Untracked Provider"

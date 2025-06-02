@@ -115,7 +115,7 @@ class EmailTrackingORM(models.Model):
     """
     recipient = fields.CharField(max_length=100)
     subject = fields.CharField(max_length=150)
-    contact = fields.ForeignKeyField("models.ContactORM",'contact',on_delete=fields.NO_ACTION)
+    contact = fields.ForeignKeyField("models.ContactORM",'contact',null=True,on_delete=fields.NO_ACTION)
     esp_provider = fields.CharField(max_length=30)
     date_sent = fields.DatetimeField(auto_now=True)
     last_update = fields.DatetimeField(auto_now_add=True)
@@ -149,7 +149,6 @@ class TrackingEmailEventORM(models.Model):
     email = fields.ForeignKeyField("models.EmailTrackingORM", related_name="events", on_delete=fields.CASCADE)
     description = fields.CharField(max_length=100,null=True)
     current_event = fields.CharEnumField(EmailStatus)
-    esp_provider = fields.CharField(max_length=30)
     date_event_received = fields.DatetimeField(auto_now_add=True)
 
 
@@ -197,7 +196,7 @@ class TrackedLinksORM(models.Model):
 
 class EmailAnalyticsORM(models.Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    day_date = fields.DateField(default=datetime.utcnow().date)
+    day_start_date = fields.DateField(default=datetime.utcnow().date)
     esp_provider = fields.CharField(max_length=25)
     emails_sent = fields.IntField(default=0)
     emails_delivered = fields.IntField(default=0)
@@ -216,7 +215,7 @@ class EmailAnalyticsORM(models.Model):
     def to_json(self):
         return {
             "analytics_id": str(self.analytics_id),
-            "day_date": self.day_date.isoformat(),
+            "day_start_date": self.day_start_date.isoformat(),
             "esp_provider": self.esp_provider,
             "emails_sent": self.emails_sent,
             "emails_delivered": self.emails_delivered,

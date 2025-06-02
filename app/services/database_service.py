@@ -96,10 +96,10 @@ class RedisService(DatabaseService):
                 'sub':True,
                 'count':1000,
                 'block':1000*15,
-                'wait':45,
+                'wait':60,
                 'stream':True
             }),
-            StreamConstant.TWILIO_STREAM:self.StreamConfig(**{
+            StreamConstant.TWILIO_REACTIVE:self.StreamConfig(**{
                 'sub':True,
                 'stream':False}),
             
@@ -108,8 +108,19 @@ class RedisService(DatabaseService):
                 'stream':True,
                 'block':1000*5,
                 'wait':5,
-                
-            })
+            }),
+            StreamConstant.TWILIO_TRACKING_CALL:self.StreamConfig(
+                sub=False,
+                stream=True,
+                wait=5,
+                block=1000*5
+            ),
+            StreamConstant.TWILIO_TRACKING_SMS:self.StreamConfig(
+                sub=False,
+                stream=True,
+                wait=5,
+                block=1000*5
+            ),
         }
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'

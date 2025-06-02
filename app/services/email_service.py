@@ -303,6 +303,7 @@ class EmailSenderService(BaseEmailService):
 
         finally:
             if message_tracking_id:
+                
                 event = TrackingEmailEventORM.JSON(
                     description=description,
                     event_id=event_id,
@@ -310,13 +311,15 @@ class EmailSenderService(BaseEmailService):
                     #contact_id=None,
                     current_event=email_status,
                     date_event_received=now,
-                    esp_provider=get_email_provider_name(email.emailMetadata.From) # VERIFY if From is a list then put it in the for loop
+                    esp_provider=get_email_provider_name(email.emailMetadata.To[0]) # VERIFY if To is a list then put it in the for loop
                 )
-
-                if self.configService.celery_env == CeleryMode.none:
-                    await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
-                else:
-                    self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
+                try:
+                    if self.configService.celery_env == CeleryMode.none:
+                        await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
+                    else:
+                        self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
+                except Exception as e:
+                    print('redis',e)
 
             return {
                 "emailID": emailID,
@@ -663,7 +666,7 @@ class EmailReaderService(BaseEmailService):
                 #contact_id=None,
                 current_event=email_status.value,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
-                esp_provider=get_email_provider_name(original_message.To)
+                esp_provider=get_email_provider_name(original_message.From)
             )
 
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
