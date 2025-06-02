@@ -139,6 +139,8 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                 analytics[esp_provider] = {
                     'sent': 0,
                     'delivered': 0,
+                    'complaint':0,
+                    'failed':0,
                     'opened': 0,
                     'bounced': 0,
                     'replied': 0
@@ -168,6 +170,12 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                     if email_id not in opens_per_email:
                         analytics[esp_provider]['opened'] += 1
                         opens_per_email[email_id] = True
+                
+                case EmailStatus.FAILED.value:
+                    analytics[esp_provider]['failed'] += 1
+                
+                case EmailStatus.COMPLAINT.value:
+                    analytics[esp_provider]['complaint'] += 1
 
             if opens_per_email.get(email_id, False):
                 email_status[email_id] = EmailStatus.OPENED.value

@@ -1,5 +1,6 @@
 -- Active: 1740679093248@@localhost@5432@notifyr@emails
 SET search_path = emails;
+
 CREATE DOMAIN ESPProvider AS VARCHAR(25) CHECK (
     VALUE IN (
         'Google',
@@ -12,6 +13,7 @@ CREATE DOMAIN ESPProvider AS VARCHAR(25) CHECK (
         'Untracked Provider'
     )
 );
+
 CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
     VALUE IN (
         'RECEIVED',
@@ -46,7 +48,6 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     spam_detection_confidence FLOAT,
     PRIMARY KEY (email_id),
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
-
 );
 
 CREATE TABLE IF NOT EXISTS TrackingEvent (
@@ -72,32 +73,39 @@ CREATE TABLE IF NOT EXISTS EmailAnalytics (
     emails_delivered INT DEFAULT 0,
     emails_opened INT DEFAULT 0,
     emails_bounced INT DEFAULT 0,
+    emails_complaint INT DEFAULT 0,
     emails_replied INT DEFAULT 0,
+    emails_failed INT DEFAULT 0,
     PRIMARY KEY (analytics_id),
     UNIQUE (day_date, esp_provider) -- Updated unique constraint for daily tracking
 );
 
 -- Function to upsert the latest EmailAnalytics row
+-- Function to upsert Email Analytics with emails_complaint and emails_failed
 CREATE OR REPLACE FUNCTION upsert_email_analytics(
-    esp_provider VARCHAR(25), -- Added esp_provider parameter
+    esp_provider VARCHAR(25),
     sent_count INT,
     delivered_count INT,
     opened_count INT,
     bounced_count INT,
-    replied_count INT
+    complaint_count INT, -- Added emails_complaint parameter
+    replied_count INT,
+    failed_count INT -- Added emails_failed parameter
 ) RETURNS VOID AS $$
 BEGIN
     SET search_path = emails;
 
-    INSERT INTO EmailAnalytics (day_date, esp_provider, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_replied)
-    VALUES (CURRENT_DATE, esp_provider, sent_count, delivered_count, opened_count, bounced_count, replied_count)
-    ON CONFLICT (day_date, esp_provider) -- Updated conflict target for daily tracking
+    INSERT INTO EmailAnalytics (day_date, esp_provider, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_complaint, emails_replied, emails_failed)
+    VALUES (CURRENT_DATE, esp_provider, sent_count, delivered_count, opened_count, bounced_count, complaint_count, replied_count, failed_count)
+    ON CONFLICT (day_date, esp_provider)
     DO UPDATE SET
         emails_sent = EmailAnalytics.emails_sent + EXCLUDED.emails_sent,
         emails_delivered = EmailAnalytics.emails_delivered + EXCLUDED.emails_delivered,
         emails_opened = EmailAnalytics.emails_opened + EXCLUDED.emails_opened,
         emails_bounced = EmailAnalytics.emails_bounced + EXCLUDED.emails_bounced,
-        emails_replied = EmailAnalytics.emails_replied + EXCLUDED.emails_replied;
+        emails_complaint = EmailAnalytics.emails_complaint + EXCLUDED.emails_complaint, -- Updated emails_complaint
+        emails_replied = EmailAnalytics.emails_replied + EXCLUDED.emails_replied,
+        emails_failed = EmailAnalytics.emails_failed + EXCLUDED.emails_failed; -- Updated emails_failed
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -106,28 +114,30 @@ CREATE OR REPLACE FUNCTION calculate_email_analytics_grouped(
     group_by_factor INT
 ) RETURNS TABLE (
     group_number INT,
-    esp_provider VARCHAR(25), -- Added esp_provider to the output
+    esp_provider VARCHAR(25),
     emails_sent INT,
     emails_delivered INT,
     emails_opened INT,
     emails_bounced INT,
-    emails_replied INT
+    emails_complaint INT, -- Added emails_complaint to output
+    emails_replied INT,
+    emails_failed INT -- Added emails_failed to output
 ) AS $$
 BEGIN
     RETURN QUERY
-    SET search_path = emails;
-
     SELECT
         FLOOR(EXTRACT(EPOCH FROM (day_date - MIN(day_date) OVER ())) / (group_by_factor * 24 * 60 * 60)) + 1 AS group_number,
-        esp_provider, -- Added esp_provider to the SELECT
+        esp_provider,
         SUM(emails_sent) AS emails_sent,
         SUM(emails_delivered) AS emails_delivered,
         SUM(emails_opened) AS emails_opened,
         SUM(emails_bounced) AS emails_bounced,
-        SUM(emails_replied) AS emails_replied
+        SUM(emails_complaint) AS emails_complaint, -- Updated emails_complaint
+        SUM(emails_replied) AS emails_replied,
+        SUM(emails_failed) AS emails_failed -- Updated emails_failed
     FROM EmailAnalytics
-    GROUP BY group_number, esp_provider -- Updated GROUP BY clause
-    ORDER BY group_number, esp_provider; -- Updated ORDER BY clause
+    GROUP BY group_number, esp_provider
+    ORDER BY group_number, esp_provider;
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -157,7 +167,6 @@ BEGIN
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
-
 
 CREATE OR REPLACE FUNCTION delete_expired_email_tracking() RETURNS VOID AS $$
 BEGIN

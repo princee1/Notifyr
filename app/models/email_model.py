@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, List, Literal, Optional, Self, TypeVar, TypedDict
 from pydantic import BaseModel, model_validator
 from enum import Enum
@@ -195,73 +196,66 @@ class TrackedLinksORM(models.Model):
 
 class EmailAnalyticsORM(models.Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    week_start_date = fields.DateField(unique=True)
+    day_date = fields.DateField(default=datetime.utcnow().date)
+    esp_provider = fields.CharField(max_length=25)
     emails_sent = fields.IntField(default=0)
     emails_delivered = fields.IntField(default=0)
     emails_opened = fields.IntField(default=0)
     emails_bounced = fields.IntField(default=0)
+    emails_complaint = fields.IntField(default=0)  # Added emails_complaint field
     emails_replied = fields.IntField(default=0)
+    emails_failed = fields.IntField(default=0)  # Added emails_failed field
 
     class Meta:
         schema = SCHEMA
         table = "emailanalytics"
+        unique_together = ("day_date", "esp_provider")
 
     @property
     def to_json(self):
         return {
             "analytics_id": str(self.analytics_id),
-            "week_start_date": self.week_start_date.isoformat(),
+            "day_date": self.day_date.isoformat(),
+            "esp_provider": self.esp_provider,
             "emails_sent": self.emails_sent,
             "emails_delivered": self.emails_delivered,
             "emails_opened": self.emails_opened,
             "emails_bounced": self.emails_bounced,
+            "emails_complaint": self.emails_complaint,  # Added emails_complaint
             "emails_replied": self.emails_replied,
+            "emails_failed": self.emails_failed,  # Added emails_failed
         }
 
-
-async def upsert_email_analytics(esp_provider: str, sent: int, delivered: int, opened: int, bounced: int, replied: int):
-    """
-    Upserts email analytics data into the database.
-
-    Args:
-        esp_provider (str): ESP provider name.
-        sent (int): Number of emails sent.
-        delivered (int): Number of emails delivered.
-        opened (int): Number of emails opened.
-        bounced (int): Number of emails bounced.
-        replied (int): Number of emails replied.
-
-    Returns:
-        None
-    """
-    
-    query = "SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5, $6);"
+async def upsert_email_analytics(
+    esp_provider: str,
+    sent: int,
+    delivered: int,
+    opened: int,
+    bounced: int,
+    complaint: int,  # Added emails_complaint parameter
+    replied: int,
+    failed: int  # Added emails_failed parameter
+):
+    query = "SELECT emails.upsert_email_analytics($1, $2, $3, $4, $5, $6, $7, $8);"
     client = Tortoise.get_connection('default')
-    await client.execute_query(query, [esp_provider, sent, delivered, opened, bounced, replied])
+    await client.execute_query(query, [esp_provider, sent, delivered, opened, bounced, complaint, replied, failed])
 
 
 async def calculate_email_analytics_grouped(group_by_factor: int):
-    """
-    Fetches grouped email analytics based on the specified grouping factor.
-
-    Args:
-        group_by_factor (int): The grouping factor (e.g., 1 for days, 7 for weeks, etc.).
-
-    Returns:
-        List[dict]: List of grouped analytics as dictionaries.
-    """
     query = "SELECT * FROM emails.calculate_email_analytics_grouped($1);"
     client = Tortoise.get_connection('default')
     rows = await client.execute_query(query, [group_by_factor])
     return [
         {
             "group_number": row[0],
-            "esp_provider": row[1],  # Added esp_provider
+            "esp_provider": row[1],
             "emails_sent": row[2],
             "emails_delivered": row[3],
             "emails_opened": row[4],
             "emails_bounced": row[5],
-            "emails_replied": row[6],
+            "emails_complaint": row[6],  # Added emails_complaint
+            "emails_replied": row[7],
+            "emails_failed": row[8],  # Added emails_failed
         }
         for row in rows[1]
     ]
