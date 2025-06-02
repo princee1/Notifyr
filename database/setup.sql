@@ -21,7 +21,7 @@ CREATE SCHEMA links;
 
 -- CREATE SCHEMA notifications;
 
--- CREATE SCHEMA twilio;
+CREATE SCHEMA twilio;
 
 -- CREATE SCHEMA campaigns;
 
@@ -63,6 +63,13 @@ $$ LANGUAGE sql;
 
 
 CREATE OR REPLACE FUNCTION emails.uuid_generate_v1mc()
+RETURNS uuid AS
+$$
+SELECT public.uuid_generate_v1mc();
+$$ LANGUAGE sql;
+
+
+CREATE OR REPLACE FUNCTION twilio.uuid_generate_v1mc()
 RETURNS uuid AS
 $$
 SELECT public.uuid_generate_v1mc();

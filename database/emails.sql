@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS TrackingEvent (
     description VARCHAR(200) DEFAULT NULL,
     date_event_received TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (event_id),
-    FOREIGN KEY (email_id) REFERENCES EmailTracking (email_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (email_id) REFERENCES EmailTracking (email_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS TrackedLinks (
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS TrackedLinks (
 CREATE TABLE IF NOT EXISTS EmailAnalytics (
     analytics_id UUID DEFAULT uuid_generate_v1mc (),
     esp_provider VARCHAR(25) NOT NULL, -- Added esp_provider column
-    day_date DATE NOT NULL DEFAULT CURRENT_DATE, -- Changed to daily tracking
+    day_start_date DATE NOT NULL DEFAULT DATE_TRUNC('day', NOW()), -- Changed to daily tracking
     emails_sent INT DEFAULT 0,
     emails_delivered INT DEFAULT 0,
     emails_opened INT DEFAULT 0,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS EmailAnalytics (
     emails_replied INT DEFAULT 0,
     emails_failed INT DEFAULT 0,
     PRIMARY KEY (analytics_id),
-    UNIQUE (day_date, esp_provider) -- Updated unique constraint for daily tracking
+    UNIQUE (day_start_date, esp_provider) -- Updated unique constraint for daily tracking
 );
 
 -- Function to upsert the latest EmailAnalytics row
@@ -95,9 +95,9 @@ CREATE OR REPLACE FUNCTION upsert_email_analytics(
 BEGIN
     SET search_path = emails;
 
-    INSERT INTO EmailAnalytics (day_date, esp_provider, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_complaint, emails_replied, emails_failed)
-    VALUES (CURRENT_DATE, esp_provider, sent_count, delivered_count, opened_count, bounced_count, complaint_count, replied_count, failed_count)
-    ON CONFLICT (day_date, esp_provider)
+    INSERT INTO EmailAnalytics (day_start_date, esp_provider, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_complaint, emails_replied, emails_failed)
+    VALUES (DATE_TRUNC('DAY', NOW()), esp_provider, sent_count, delivered_count, opened_count, bounced_count, complaint_count, replied_count, failed_count)
+    ON CONFLICT (day_start_date, esp_provider)
     DO UPDATE SET
         emails_sent = EmailAnalytics.emails_sent + EXCLUDED.emails_sent,
         emails_delivered = EmailAnalytics.emails_delivered + EXCLUDED.emails_delivered,
@@ -125,8 +125,10 @@ CREATE OR REPLACE FUNCTION calculate_email_analytics_grouped(
 ) AS $$
 BEGIN
     RETURN QUERY
+    SET search_path = emails;
+
     SELECT
-        FLOOR(EXTRACT(EPOCH FROM (day_date - MIN(day_date) OVER ())) / (group_by_factor * 24 * 60 * 60)) + 1 AS group_number,
+        FLOOR(EXTRACT(EPOCH FROM (day_start_date - MIN(day_start_date) OVER ())) / (group_by_factor * 24 * 60 * 60)) + 1 AS group_number,
         esp_provider,
         SUM(emails_sent) AS emails_sent,
         SUM(emails_delivered) AS emails_delivered,
@@ -156,17 +158,16 @@ DECLARE
         'AOL',
         'Untracked Provider'
     ];
-    day_date DATE := CURRENT_DATE;
 BEGIN
     SET search_path = emails;
 
     FOREACH esp IN ARRAY esp_list LOOP
-        INSERT INTO EmailAnalytics (day_date, esp_provider)
-        VALUES (day_date, esp)
-        ON CONFLICT (day_date, esp_provider) DO NOTHING;
+        INSERT INTO EmailAnalytics (day_start_date, esp_provider)
+        VALUES (DEFAULT, esp)
+        ON CONFLICT (day_start_date, esp_provider) DO NOTHING;
     END LOOP;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION delete_expired_email_tracking() RETURNS VOID AS $$
 BEGIN

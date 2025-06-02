@@ -1,3 +1,4 @@
+-- Active: 1740679093248@@localhost@5432@notifyr@twilio
 SET search_path = twilio;
 
 -- Create domain for SMS Status
@@ -17,15 +18,18 @@ CREATE DOMAIN Direction AS VARCHAR(1) CHECK (
         'I', -- INBOUND
         'O' -- OUTBOUND
     )
-)
+);
 
 -- Create domain for Call Status
 CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
     VALUE IN (
-        'RECEIVED' 'INITIATED' 'COMPLETED',
+        'RECEIVED',
+        'INITIATED',
+        'COMPLETED',
         'NO-ANSWER',
         'BOUNCE',
-        'IN-PROGRESS' 'RINGING',
+        'IN-PROGRESS',
+        'RINGING',
         'FAILED',
         'SENT'
     )
@@ -45,7 +49,7 @@ CREATE TABLE IF NOT EXISTS SMSTracking (
     -- price FLOAT DEFAULT NULL,
     -- price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (sms_id),
-    FOREIGN KEY (contact_id) REFERENCES contact.Contact (contact_id) ON UPDATE CASCADE ON DELETE SET NULL
+    FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 
 -- Update table for Call Tracking
@@ -63,7 +67,7 @@ CREATE TABLE IF NOT EXISTS CallTracking (
     -- price FLOAT DEFAULT NULL,
     -- price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (call_id),
-    FOREIGN KEY (contact_id) REFERENCES contact.Contact (contact_id) ON UPDATE CASCADE ON DELETE SET NULL
+    FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 
 -- Update table for SMS Events
@@ -153,6 +157,8 @@ CREATE OR REPLACE FUNCTION calculate_sms_analytics_grouped(
 ) AS $$
 BEGIN
     RETURN QUERY
+    SET search_path = twilio;
+
     SELECT
         FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 24 * 60 * 60)) + 1 AS group_number,
         direction,
@@ -184,11 +190,13 @@ CREATE OR REPLACE FUNCTION calculate_call_analytics_grouped(
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
-    average_duration FLOAT
-    total_call_duration INT DEFAULT 0, -- Added total call duration column
-    average_call_duration FLOAT DEFAULT 0, -- Added average call duration column
+    average_duration FLOAT,
+    total_call_duration INT, -- Added total call duration column
+    average_call_duration FLOAT -- Added average call duration column
 ) AS $$
 BEGIN
+    SET search_path = twilio;
+
     RETURN QUERY
     SELECT
         FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 24 * 60 * 60)) + 1 AS group_number,
@@ -309,7 +317,7 @@ BEGIN
         WHERE  sms_current_status = 'SENT' AND NOW() - date_sent >= INTERVAL '1 hours'
     );
 
-    receive_sms_ids := ARRAY(
+    received_sms_ids := ARRAY(
         SELECT sms_id
         FROM SMSTracking
         WHERE sms_current_status = 'RECEIVED' AND NOW() - date_sent >= INTERVAL '1 hours'
@@ -327,14 +335,14 @@ BEGIN
 
     UPDATE SMSTracking
     SET sms_current_stats = 'FAILED'
-    WHERE sms_id = ANY(receive_sms_ids);
+    WHERE sms_id = ANY(received_sms_ids);
 
     UPDATE SMSTracking
     SET sms_current_stats = 'BOUNCE'
     WHERE sms_id = ANY(sent_sms_ids);
 
     PERFORM bulk_upsert_sms_analytics(
-        'O'
+        'O',
         0, 
         COALESCE(array_length(queued_sms_ids, 1), 0),
         COALESCE(array_length(received_sms_ids, 1), 0),
@@ -361,7 +369,7 @@ CREATE OR REPLACE FUNCTION set_call_completed() RETURNS VOID AS $$
 DECLARE
     started_call_ids UUID[];
 BEGIN
-    -- SET search_path = twilio;
+    SET search_path = twilio;
 
     -- started_call_ids := ARRAY(
     --     SELECT call_id
@@ -440,7 +448,6 @@ SELECT
     (
         total_call_duration - total_duration
     ) AS ringing_duration -- Added ringing duration column
-FROM CallAnalytics
 FROM CallAnalytics
 ORDER BY week_start_date ASC;
 -- Sort by oldest to newest week

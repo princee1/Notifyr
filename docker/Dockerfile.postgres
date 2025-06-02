@@ -6,6 +6,9 @@ RUN apt-get -y install postgresql-15-cron
 
 RUN apt install postgresql-15-pgvector
 
+# RUN apt-get install -y postgresql-plpython3-15 && \
+#     apt-get clean && rm -rf /var/lib/apt/lists/*
+
 COPY database/*.sql /database/
 
 COPY --chmod=755 database/init.sh /docker-entrypoint-initdb.d/init.sh

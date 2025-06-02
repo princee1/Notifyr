@@ -74,17 +74,7 @@ VALUES (
         NOW() + INTERVAL '1 hour'
     );
 
-INSERT INTO
-    emails.EmailAnalytics (
-        analytics_id,
-        week_start_date,
-        emails_sent,
-        emails_delivered,
-        emails_opened,
-        emails_bounced,
-        emails_replied
-    )
-VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT);
+SELECT emails.create_daily_email_analytics_row();
 
 INSERT INTO
     twilio.SMSAnalytics (
@@ -99,7 +89,7 @@ INSERT INTO
     )
 VALUES (
         DEFAULT,
-        DATE_TRUNC('week', CURRENT_DATE),
+        DATE_TRUNC('week', NOW()),
         'O',
         0,
         0,
