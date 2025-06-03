@@ -1,12 +1,12 @@
 from typing import Annotated
 from fastapi import Depends, Header, Query, Request, Response
 from app.classes.auth_permission import AuthPermission, Role
-from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
+from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType, s
 from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
-from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path
+from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.depends.class_dep import Broker, TwilioTracker
@@ -65,17 +65,19 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value="10000/minutes")
     @UseRoles([Role.MFA_OTP])
-    @UsePipe(_to_otp_path)
+    @UsePipe(_to_otp_path,force_task_manager_attributes_pipe)
     @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
+    @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UseHandler(TemplateHandler)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
-    @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST])
-    async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
+    async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,response:Response,taskManager: Annotated[TaskManager, Depends(get_task)],authPermission=Depends(get_auth_permission)):
         smsTemplate:SMSTemplate = self.assetService.sms[template]
         _,body= smsTemplate.build(otpModel.content,...)
-        result = self.smsService.send_otp(otpModel,body)
-        return result
+        
+        await taskManager.offload_task('route-focus',s(TaskHeaviness.LIGHT),10,None,self.smsService.send_otp,otpModel,body)
+        return taskManager.results
         
 
     @UseLimiter(limit_value="5000/minutes")

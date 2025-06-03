@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 from types import NoneType
 from fastapi import HTTPException,status
@@ -21,6 +22,7 @@ class CeleryTaskNameNotExistsError(BaseError):
 
 class CelerySchedulerOptionError(BaseError):
     ...
+
 class TaskHeaviness(Enum):
     VERY_LIGHT = 1  # Minimal effort required
     LIGHT = 2       # Some effort, but not demanding
@@ -77,3 +79,6 @@ class CeleryTask(TypedDict):
     task_id:Optional[str] = None
     heaviness:TaskHeaviness
 
+@dataclass
+class s:
+    heaviness: TaskHeaviness

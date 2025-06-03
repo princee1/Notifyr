@@ -3,13 +3,13 @@ from typing import Annotated, Any
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response
 from app.classes.auth_permission import Role
 from app.classes.broker import exception_to_json
-from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType
+from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType, s
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard, TrackGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
-from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path
+from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path, force_task_manager_attributes_pipe
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
@@ -78,12 +78,15 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UseHandler(TemplateHandler)
     @UsePipe(_to_otp_path)
-    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'), TemplateParamsPipe('phone', 'xml'))
-    @BaseHTTPRessource.Post('/otp/{template}')
-    def voice_relay_otp(self, template: str, otpModel: OTPModel, request: Request, authPermission=Depends(get_auth_permission)):
+    @UsePipe(OffloadedTaskResponsePipe(),before=False)
+    @UsePipe(force_task_manager_attributes_pipe,TwilioFromPipe('TWILIO_OTP_NUMBER'), TemplateParamsPipe('phone', 'xml'))
+    @BaseHTTPRessource.Post('/otp/{template}',dependencies=[Depends(populate_response_with_request_id)])
+    async def voice_relay_otp(self, template: str, otpModel: OTPModel, request: Request,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         phoneTemplate: PhoneTemplate = self.assetService.phone[template]
         _, body = phoneTemplate.build(otpModel.content, ...)
-        return self.callService.send_otp_voice_call(body, otpModel)
+
+        await taskManager.offload_task('route-focus',s(TaskHeaviness.LIGHT),0,None,self.callService.send_otp_voice_call,body, otpModel)
+        return taskManager.results
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
@@ -99,7 +102,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         
         result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
         call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
-        call_results = self.callService.send_template_voice_call(result, call_details,False,keepAliveConn.rx_subject.subject_id)
+        call_results = await self.callService.send_template_voice_call(result, call_details,False,keepAliveConn.rx_subject.subject_id)
 
         return await keepAliveConn.wait_for(call_results, 'otp_result')
       

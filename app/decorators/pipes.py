@@ -309,3 +309,11 @@ def verify_email_pipe(email:str):
     return {
         'email':email
     }
+
+@APIFilterInject
+async def force_task_manager_attributes_pipe(taskManager:TaskManager):
+    taskManager.return_results = True
+    taskManager.meta['save_result'] =False
+    taskManager.meta['runtype'] = 'sequential'
+
+    return {'taskManager':taskManager}

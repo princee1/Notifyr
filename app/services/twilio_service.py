@@ -142,7 +142,11 @@ class BaseTwilioCommunication(_service.BaseService):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> dict:
             self: BaseTwilioCommunication = args[0]
-            message: MessageInstance | Coroutine = await func(*args, **kwargs)
+            #message: CallInstance|MessageInstance | Coroutine = await func(*args, **kwargs)
+            if asyncio.iscoroutinefunction(func):
+                message:CallInstance| MessageInstance | Coroutine = await func(*args, **kwargs)
+            else:
+                message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
             # if asyncio.iscoroutine(message):
             #     @functools.wraps(func)
             #     async def callback():

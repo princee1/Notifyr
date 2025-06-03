@@ -24,7 +24,7 @@ from dataclasses import field
 
 P = ParamSpec("P")
 RunType = Literal['parallel','sequential']
-Algorithm = Literal['normal', 'worker_focus']
+Algorithm = Literal['normal', 'worker_focus','route-focus']
 
 
 class TaskConfig(TypedDict):
@@ -480,11 +480,12 @@ class OffloadTaskService(BaseService):
     async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel,delay: float, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
         # TODO choose algorightm
         if algorithm == 'normal':
-            ...
+             return await self._normal_offload(scheduler, delay, x_request_id, as_async,index,callback, *args, **kwargs)
         if algorithm == 'worker_focus':
             return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
             
-        return await self._normal_offload(scheduler, delay, x_request_id, as_async,index,callback, *args, **kwargs)
+        if algorithm == 'route-focus':
+            return await self._route_offload(scheduler, delay, x_request_id, as_async,index,callback, *args, **kwargs)
 
     async def _normal_offload(self, scheduler: SchedulerModel, delay: float, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):
         # TODO check celery worker,
@@ -499,3 +500,13 @@ class OffloadTaskService(BaseService):
                 
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
+
+
+    async def _route_offload(self,scheduler,delay: float, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
+        if as_async:
+            if asyncio.iscoroutine(callback):
+                return await self.taskService.add_async_task(scheduler.heaviness,x_request_id,delay,index,callback)
+            return await self.taskService.add_task(scheduler.heaviness, x_request_id, delay, index,callback, *args, **kwargs)
+            
+        else:
+                return await self.taskService.run_task_in_route_handler(index,callback,*args,**kwargs)
