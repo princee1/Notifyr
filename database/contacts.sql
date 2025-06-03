@@ -267,3 +267,54 @@ CREATE TRIGGER limit_contact
 BEFORE INSERT ON Contact
 FOR EACH ROW
 EXECUTE FUNCTION compute_limit();
+
+CREATE TABLE IF NOT EXISTS ContactAnalytics (
+    analytics_id UUID DEFAULT uuid_generate_v1mc(),
+    week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    subscriptions_count INT DEFAULT 0,
+    unsubscriptions_count INT DEFAULT 0,
+    PRIMARY KEY (analytics_id),
+    UNIQUE (week_start_date,country,region,city)
+);
+
+CREATE OR REPLACE FUNCTION upsert_contact_analytics(
+    c_country VARCHAR(5),
+    c_region VARCHAR(60),
+    c_city VARCHAR(100),
+    subscriptions INT,
+    unsubscriptions INT
+) RETURNS VOID AS $$
+BEGIN
+    SET search_path = contacts;
+
+    INSERT INTO ContactAnalytics (week_start_date,country,region,city, subscriptions_count, unsubscriptions_count)
+    VALUES (DATE_TRUNC('week', NOW()),c_country,c_region,c_city, subscriptions, unsubscriptions)
+    ON CONFLICT (week_start_date,country,region,city)
+    DO UPDATE SET
+        subscriptions_count = ContactAnalytics.subscriptions_count + EXCLUDED.subscriptions_count,
+        unsubscriptions_count = ContactAnalytics.unsubscriptions_count + EXCLUDED.unsubscriptions_count;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION calculate_contact_analytics_grouped(
+    group_by_factor INT
+) RETURNS TABLE (
+    group_number INT,
+    subscriptions_count INT,
+    unsubscriptions_count INT
+) AS $$
+BEGIN
+    SET search_path = contacts;
+    RETURN QUERY
+    SELECT
+        FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 7 * 24 * 60 * 60)) + 1 AS group_number,
+        SUM(subscriptions_count) AS subscriptions_count,
+        SUM(unsubscriptions_count) AS unsubscriptions_count
+    FROM ContactAnalytics
+    GROUP BY group_number
+    ORDER BY group_number;
+END;
+$$ LANGUAGE plpgsql;

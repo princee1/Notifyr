@@ -37,15 +37,17 @@ class DirectionEnum(str, Enum):
 
 class SMSTrackingORM(models.Model):
     sms_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    sms_sid = fields.CharField(max_length=60,null=True,default=None)
-    contact = fields.ForeignKeyField('models.ContactORM',null=True,on_delete=fields.NO_ACTION)
+    sms_sid = fields.CharField(max_length=60, null=True, default=None)
+    contact = fields.ForeignKeyField('models.ContactORM', null=True, on_delete=fields.SET_NULL)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
     date_sent = fields.DatetimeField(auto_now_add=True, use_tz=True)
     last_update = fields.DatetimeField(auto_now=True, use_tz=True)
     expired_tracking_date = fields.DatetimeField(null=True)
     sms_current_status = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
-    
+    price = fields.FloatField(null=True)  # Added price field
+    price_unit = fields.CharField(max_length=10, null=True)  # Added price_unit field
+
     class Meta:
         schema = SCHEMA
         table = "smstracking"
@@ -54,27 +56,32 @@ class SMSTrackingORM(models.Model):
     def to_json(self):
         return {
             "sms_id": str(self.sms_id),
-            "sms_sid":self.sms_sid,
+            "sms_sid": self.sms_sid,
             "recipient": self.recipient,
-            "contact_id": str(self.contact.contact_id) if self.contact != None else None,
+            "contact_id": str(self.contact.contact_id) if self.contact else None,
             "sender": self.sender,
             "date_sent": self.date_sent.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
             "sms_current_status": self.sms_current_status.value,
+            "price": self.price,
+            "price_unit": self.price_unit,
         }
 
 
 class CallTrackingORM(models.Model):
     call_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    call_sid = fields.CharField(max_length=60,null=False,default=None)
-    contact = fields.ForeignKeyField('models.ContactORM',null=True,on_delete=fields.NO_ACTION)
+    call_sid = fields.CharField(max_length=60, null=False, default=None)
+    contact = fields.ForeignKeyField('models.ContactORM', null=True, on_delete=fields.SET_NULL)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
     date_started = fields.DatetimeField(auto_now_add=True, use_tz=True)
     last_update = fields.DatetimeField(auto_now=True, use_tz=True)
     expired_tracking_date = fields.DatetimeField(null=True)
     call_current_status = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
+    duration = fields.IntField(default=0)  # Added duration field
+    price = fields.FloatField(null=True)  # Added price field
+    price_unit = fields.CharField(max_length=10, null=True)  # Added price_unit field
 
     class Meta:
         schema = SCHEMA
@@ -85,13 +92,16 @@ class CallTrackingORM(models.Model):
         return {
             "call_id": str(self.call_id),
             "call_sid": self.call_sid,
-            "contact_id": str(self.contact.contact_id) if self.contact != None else None,
+            "contact_id": str(self.contact.contact_id) if self.contact else None,
             "recipient": self.recipient,
             "sender": self.sender,
             "date_started": self.date_started.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,
             "call_current_status": self.call_current_status.value,
+            "duration": self.duration,
+            "price": self.price,
+            "price_unit": self.price_unit,
         }
 
 
@@ -156,8 +166,11 @@ class CallEventORM(models.Model):
         state:str
         date_event_received:str
         correction:bool = False
+        price:float|None = None
+        price_unit:str|None = None
+        total_duration:int|None=None
+        call_duration:int|None=None
         
-
     class Meta:
         schema = SCHEMA
         table = "callevent"

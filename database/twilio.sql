@@ -63,9 +63,9 @@ CREATE TABLE IF NOT EXISTS CallTracking (
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,
     call_current_status CallStatus,
-    -- duration INT DEFAULT NULL,
-    -- price FLOAT DEFAULT NULL,
-    -- price_unit VARCHAR(10) DEFAULT NULL,
+    duration INT DEFAULT 0,
+    price FLOAT DEFAULT NULL,
+    price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (call_id),
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );
