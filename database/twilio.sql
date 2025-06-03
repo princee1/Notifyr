@@ -8,6 +8,7 @@ CREATE DOMAIN SMSStatus AS VARCHAR(50) CHECK (
         'SENT',
         'DELIVERED',
         'FAILED',
+        'REPLIED',
         'RECEIVED',
         'BOUNCE'
     )
@@ -46,8 +47,8 @@ CREATE TABLE IF NOT EXISTS SMSTracking (
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,
     sms_current_status SMSStatus,
-    -- price FLOAT DEFAULT NULL,
-    -- price_unit VARCHAR(10) DEFAULT NULL,
+    price FLOAT DEFAULT NULL,
+    price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (sms_id),
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE SET NULL
 );

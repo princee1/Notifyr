@@ -271,16 +271,19 @@ EXECUTE FUNCTION compute_limit();
 CREATE TABLE IF NOT EXISTS ContactAnalytics (
     analytics_id UUID DEFAULT uuid_generate_v1mc(),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
+    content_id UUID DEFAULT '00000000-0000-0000-0000-000000000000',
     country VARCHAR(5),
     region VARCHAR(60),
     city VARCHAR(100),
     subscriptions_count INT DEFAULT 0,
     unsubscriptions_count INT DEFAULT 0,
     PRIMARY KEY (analytics_id),
-    UNIQUE (week_start_date,country,region,city)
+    UNIQUE (week_start_date,content_id,country,region,city),
+    Foreign Key (content_id) REFERENCES SubsContent(content_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
 CREATE OR REPLACE FUNCTION upsert_contact_analytics(
+    c_content_id UUID,
     c_country VARCHAR(5),
     c_region VARCHAR(60),
     c_city VARCHAR(100),
@@ -290,19 +293,27 @@ CREATE OR REPLACE FUNCTION upsert_contact_analytics(
 BEGIN
     SET search_path = contacts;
 
-    INSERT INTO ContactAnalytics (week_start_date,country,region,city, subscriptions_count, unsubscriptions_count)
-    VALUES (DATE_TRUNC('week', NOW()),c_country,c_region,c_city, subscriptions, unsubscriptions)
-    ON CONFLICT (week_start_date,country,region,city)
+    -- Coerce c_content_id to default if NULL
+    c_content_id := COALESCE(c_content_id, '00000000-0000-0000-0000-000000000000');
+
+    INSERT INTO ContactAnalytics (week_start_date, content_id, country, region, city, subscriptions_count, unsubscriptions_count)
+    VALUES (DATE_TRUNC('week', NOW()), c_content_id, c_country, c_region, c_city, subscriptions, unsubscriptions)
+    ON CONFLICT (week_start_date, content_id, country, region, city)
     DO UPDATE SET
         subscriptions_count = ContactAnalytics.subscriptions_count + EXCLUDED.subscriptions_count,
         unsubscriptions_count = ContactAnalytics.unsubscriptions_count + EXCLUDED.unsubscriptions_count;
 END;
 $$ LANGUAGE plpgsql;
 
+
 CREATE OR REPLACE FUNCTION calculate_contact_analytics_grouped(
     group_by_factor INT
 ) RETURNS TABLE (
     group_number INT,
+    content_id UUID,
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
     subscriptions_count INT,
     unsubscriptions_count INT
 ) AS $$
@@ -311,10 +322,14 @@ BEGIN
     RETURN QUERY
     SELECT
         FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 7 * 24 * 60 * 60)) + 1 AS group_number,
+        content_id,
+        country,
+        region,
+        city,
         SUM(subscriptions_count) AS subscriptions_count,
         SUM(unsubscriptions_count) AS unsubscriptions_count
     FROM ContactAnalytics
-    GROUP BY group_number
-    ORDER BY group_number;
+    GROUP BY group_number, content_id, country, region, city
+    ORDER BY group_number, content_id, country, region, city;
 END;
 $$ LANGUAGE plpgsql;

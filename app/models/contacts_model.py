@@ -183,6 +183,7 @@ class ContentTypeSubscriptionORM(Model):
 
 class ContactAnalyticsORM(Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    content = fields.ForeignKeyField('models.ContentSubscriptionORM','analytics',null=True,on_delete=fields.NO_ACTION,)
     week_start_date = fields.DateField(default=datetime.utcnow().date)
     country = fields.CharField(max_length=5, null=True)
     region = fields.CharField(max_length=60, null=True)
@@ -199,6 +200,7 @@ class ContactAnalyticsORM(Model):
     def to_json(self):
         return {
             "analytics_id": str(self.analytics_id),
+            "content_id":str(self.content.content_id) if self.content != None else None,
             "week_start_date": self.week_start_date.isoformat(),
             "country": self.country,
             "region": self.region,
