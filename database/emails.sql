@@ -195,20 +195,20 @@ $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION set_email_delivered() RETURNS VOID AS $$
 DECLARE
-    esp_provider TEXT;
+    esp TEXT;
     sent_email_ids UUID[];
     received_email_ids UUID[];
 BEGIN
     SET search_path = emails;
 
     -- Loop through each ESP provider
-    FOR esp_provider IN SELECT DISTINCT esp_provider FROM EmailTracking WHERE esp_provider IS NOT NULL LOOP
+    FOR esp IN SELECT DISTINCT esp_provider FROM EmailTracking WHERE esp_provider IS NOT NULL LOOP
         -- Get sent email IDs for the current ESP provider
         sent_email_ids := ARRAY(
             SELECT email_id
             FROM EmailTracking
             WHERE email_current_status = 'SENT'
-              AND esp_provider = esp_provider
+              AND esp_provider = esp
               AND NOW() - date_sent >= INTERVAL '1 hours'
         );
 
@@ -217,7 +217,7 @@ BEGIN
             SELECT email_id
             FROM EmailTracking
             WHERE email_current_status = 'RECEIVED'
-              AND esp_provider = esp_provider
+              AND esp_provider = esp
               AND NOW() - date_sent >= INTERVAL '1 hours'
         );
 

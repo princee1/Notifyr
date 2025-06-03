@@ -334,11 +334,11 @@ BEGIN
     WHERE sms_id = ANY(queued_sms_ids);
 
     UPDATE SMSTracking
-    SET sms_current_stats = 'FAILED'
+    SET sms_current_status = 'FAILED'
     WHERE sms_id = ANY(received_sms_ids);
 
     UPDATE SMSTracking
-    SET sms_current_stats = 'BOUNCE'
+    SET sms_current_status = 'BOUNCE'
     WHERE sms_id = ANY(sent_sms_ids);
 
     PERFORM bulk_upsert_sms_analytics(
