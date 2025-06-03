@@ -208,6 +208,30 @@ class ContactAnalyticsORM(Model):
             "subscriptions_count": self.subscriptions_count,
             "unsubscriptions_count": self.unsubscriptions_count,
         }
+    
+class ContactCreationAnalyticsORM(Model):
+    analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    week_start_date = fields.DateField(default=datetime.utcnow().date)
+    country = fields.CharField(max_length=5, null=True)
+    region = fields.CharField(max_length=60, null=True)
+    city = fields.CharField(max_length=100, null=True)
+    contacts_created_count = fields.IntField(default=0)
+
+    class Meta:
+        schema = CONTACTS_SCHEMA
+        table = "contactcreationanalytics"
+        unique_together = ("week_start_date", "country", "region", "city")
+
+    @property
+    def to_json(self):
+        return {
+            "analytics_id": str(self.analytics_id),
+            "week_start_date": self.week_start_date.isoformat(),
+            "country": self.country,
+            "region": self.region,
+            "city": self.city,
+            "contacts_created_count": self.contacts_created_count,
+        }
 ##################################################################              ##############################################################3333333333
 
 class SubscriptionStatusModel(BaseModel):
@@ -381,6 +405,36 @@ async def calculate_contact_analytics_grouped(group_by_factor: int):
             "group_number": row[0],
             "subscriptions_count": row[1],
             "unsubscriptions_count": row[2],
+        }
+        for row in rows[1]
+    ]
+
+async def upsert_contact_creation_analytics(
+    country: str,
+    region: str,
+    city: str,
+    contacts_created: int
+):
+    query = """
+        SELECT contacts.upsert_contact_creation_analytics($1, $2, $3, $4);
+    """
+    client = Tortoise.get_connection('default')
+    await client.execute_query(query, [country, region, city, contacts_created])
+
+
+async def calculate_contact_creation_analytics_grouped(group_by_factor: int):
+    query = """
+        SELECT * FROM contacts.calculate_contact_creation_analytics_grouped($1);
+    """
+    client = Tortoise.get_connection('default')
+    rows = await client.execute_query(query, [group_by_factor])
+    return [
+        {
+            "group_number": row[0],
+            "country": row[1],
+            "region": row[2],
+            "city": row[3],
+            "contacts_created_count": row[4],
         }
         for row in rows[1]
     ]

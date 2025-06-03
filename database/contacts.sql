@@ -305,7 +305,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
 CREATE OR REPLACE FUNCTION calculate_contact_analytics_grouped(
     group_by_factor INT
 ) RETURNS TABLE (
@@ -331,5 +330,57 @@ BEGIN
     FROM ContactAnalytics
     GROUP BY group_number, content_id, country, region, city
     ORDER BY group_number, content_id, country, region, city;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TABLE IF NOT EXISTS ContactCreationAnalytics (
+    analytics_id UUID DEFAULT uuid_generate_v1mc(),
+    week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    contacts_created_count INT DEFAULT 0,
+    PRIMARY KEY (analytics_id),
+    UNIQUE (week_start_date, country, region, city)
+);
+
+CREATE OR REPLACE FUNCTION upsert_contact_creation_analytics(
+    c_country VARCHAR(5),
+    c_region VARCHAR(60),
+    c_city VARCHAR(100),
+    contacts_created INT
+) RETURNS VOID AS $$
+BEGIN
+    SET search_path = contacts;
+
+    INSERT INTO ContactCreationAnalytics (week_start_date, country, region, city, contacts_created_count)
+    VALUES (DATE_TRUNC('week', NOW()), c_country, c_region, c_city, contacts_created)
+    ON CONFLICT (week_start_date, country, region, city)
+    DO UPDATE SET
+        contacts_created_count = ContactCreationAnalytics.contacts_created_count + EXCLUDED.contacts_created_count;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION calculate_contact_creation_analytics_grouped(
+    group_by_factor INT
+) RETURNS TABLE (
+    group_number INT,
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    contacts_created_count INT
+) AS $$
+BEGIN
+    SET search_path = contacts;
+    RETURN QUERY
+    SELECT
+        FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 7 * 24 * 60 * 60)) + 1 AS group_number,
+        country,
+        region,
+        city,
+        SUM(contacts_created_count) AS contacts_created_count
+    FROM ContactCreationAnalytics
+    GROUP BY group_number, country, region, city
+    ORDER BY group_number, country, region, city;
 END;
 $$ LANGUAGE plpgsql;
