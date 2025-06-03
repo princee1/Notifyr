@@ -27,6 +27,7 @@ class CallStatusEnum(str, Enum):
     FAILED = 'FAILED'
     SENT = "SENT"
     BOUNCE = "BOUNCE"
+    IN_PROGRESS="IN-PROGRESS"
 
 
 
@@ -155,6 +156,7 @@ class CallEventORM(models.Model):
         state:str
         date_event_received:str
         correction:bool = False
+        
 
     class Meta:
         schema = SCHEMA

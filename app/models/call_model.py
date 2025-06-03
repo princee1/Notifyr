@@ -49,6 +49,7 @@ class CallStatusModel(BaseModel):
     From:str
     SequenceNumber:str
     subject_id:str|None = None
+    twilio_tracking_id:str = None
 
 class GatherDataModel(BaseModel):
     message:str

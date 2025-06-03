@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated
 from fastapi import Depends, Header, Query, Request, Response
 from app.classes.auth_permission import AuthPermission, Role
@@ -12,6 +13,7 @@ from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.depends.class_dep import Broker, TwilioTracker
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
+from app.models.twilio_model import SMSEventORM
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
@@ -21,7 +23,7 @@ from app.services.twilio_service import SMSService
 from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
 from app.depends.funcs_dep import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
 from app.utils.constant import StreamConstant
-from app.utils.helper import APIFilterInject
+from app.utils.helper import APIFilterInject, uuid_v1_mc
 
 
 
@@ -168,6 +170,17 @@ class IncomingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/status/',methods=[HTTPMethod.POST])
     async def sms_call_status_changes(self,status: SMSStatusModel,broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
         print(status)
+        if status.twilio_tracking_id:
+            event = 'QUEUED' if status.MessageStatus == 'sent' else 'QUEUED'
+            now = datetime.now(timezone.utc).isoformat()
+            event = {
+                'sms_id':status.twilio_tracking_id,
+                'sms_sid':status.SmsSid,
+                'current_event':event,
+                'description':f'The sms is in the {status.MessageStatus} state',
+                'date_event_received':now,
+            }
+            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,SMSEventORM.JSON(event_id=str(uuid_v1_mc()),direction='O',**event))
 
     @BaseHTTPRessource.HTTPRoute('/error/',methods=[HTTPMethod.POST])
     async def sms_error(self,authPermission=Depends(get_auth_permission)):

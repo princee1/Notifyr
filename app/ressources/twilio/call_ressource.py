@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from typing import Annotated, Any
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response
 from app.classes.auth_permission import Role
@@ -15,6 +16,7 @@ from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.security_model import ClientORM
 from app.models.call_model import BaseVoiceCallModel, CallStatusModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
+from app.models.twilio_model import CallEventORM
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
@@ -28,6 +30,7 @@ from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_client, get_contacts, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
 from app.depends.class_dep import Broker, KeepAliveQuery, SubjectParams, TwilioTracker
 from app.utils.constant import StreamConstant
+from app.utils.helper import uuid_v1_mc
 
 
 CALL_ONGOING_PREFIX = 'ongoing'
@@ -102,7 +105,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         
         result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
         call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
-        call_results = await self.callService.send_template_voice_call(result, call_details,False,keepAliveConn.rx_subject.subject_id)
+        call_results = await self.callService.send_template_voice_call(result, call_details,subject_id=keepAliveConn.rx_subject.subject_id,twilio_tracking=None)
 
         return await keepAliveConn.wait_for(call_results, 'otp_result')
       
@@ -189,7 +192,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         call_details['record'] = True
         
         result = self.callService.gather_speech(otpModel,rx_id,keepAliveConn.x_request_id)
-        call_results = self.callService.send_template_voice_call(result, call_details,False,rx_id)
+        call_results = await self.callService.send_template_voice_call(result, call_details,False,rx_id)
 
         return await keepAliveConn.wait_for(call_results,'otp_result')
 
@@ -247,7 +250,20 @@ class IncomingCallRessources(BaseHTTPRessource):
                 'data':status.model_dump(include=('CallSid','RecordingSid','Duration','CallDuration','RecordingDuration'))
             }
         broker.publish(StreamConstant.TWILIO_REACTIVE,'plain',subject_id,value,)
-        #broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,)
+        if status.twilio_tracking_id:
+            now = datetime.now(timezone.utc).isoformat()
+            event = {
+                'call_id':status.twilio_tracking_id,
+                'call_sid':status.CallSid,
+                'current_event':status.CallStatus.upper(),
+                'description':f'The call is in the {status.CallStatus} state',
+                'date_event_received':now,
+                'country':status.ToCountry,
+                'city':status.ToCity,
+                'state':status.ToState
+
+            }
+            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,CallEventORM.JSON(event_id=str(uuid_v1_mc()),direction='O',**event))
         return 
 
         

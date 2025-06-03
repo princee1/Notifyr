@@ -6,7 +6,7 @@ const SMS_TYPE = "sms";
 
 function setCallLog(params) {
   subject_id=params.subject_id ?? null  
-  twilio_tracker_id= params.twilio_tracking_id ?? null; 
+  twilio_tracking_id= params.twilio_tracking_id ?? null; 
 
 
   const {
@@ -41,20 +41,21 @@ function setCallLog(params) {
     To,
     From,
     subject_id,
+    twilio_tracking_id
   };
 
   if (temp.RecordingSid === undefined)
       temp.RecordingSid = null;
 
   if (CallStatus === "completed") {
-    return { twilio_tracker_id,Duration, CallDuration, "RecordingDuration":RecordingDuration??null, ...temp };
+    return { Duration, CallDuration, "RecordingDuration":RecordingDuration??null, ...temp };
   }
   return temp;
 }
 
 function setSmsLog(params) {
   subject_id=params.subject_id ?? null;
-  twilio_tracker_id= params.twilio_tracking_id ?? null; 
+  twilio_tracking_id= params.twilio_tracking_id ?? null; 
 
   const { MessageSid, AccountSid, To, From, SmsSid, SmsStatus, MessageStatus } =
     params;

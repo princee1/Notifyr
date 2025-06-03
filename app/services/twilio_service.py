@@ -182,7 +182,7 @@ class SMSService(BaseTwilioCommunication):
         }
 
     @BaseTwilioCommunication.parse_to_json
-    def send_otp(self, otpModel: OTPModel, body: str, as_async: bool = False):
+    async def send_otp(self, otpModel: OTPModel, body: str, as_async: bool = False):
         as_async = False
         func = self.messages.create_async if as_async else self.messages.create
         return func(send_as_mms=True, provide_feedback=True, to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=body)
@@ -196,11 +196,11 @@ class SMSService(BaseTwilioCommunication):
         now = datetime.now(timezone.utc).isoformat()
 
         try:
-            if self.configService.celery_env == CeleryMode.worker:
-                result = self.messages.create(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
-            else:
-                result = self.messages.create_async(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
-                result = await result
+            #if self.configService.celery_env == CeleryMode.worker:
+            result = self.messages.create(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
+            # else:
+            #     result = self.messages.create_async(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
+            #     result = await result
             description = f'Sent request to third-party API'
             status = SMSStatusEnum.SENT.value
         except:
@@ -304,11 +304,13 @@ class CallService(BaseTwilioCommunication):
         
         try:
             result = None
-            if self.configService.celery_env == CeleryMode.worker:
-                result = self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
-            else:
-                result = self.calls.create_async(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
-                result = await result
+            result = self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+
+            # if self.configService.celery_env == CeleryMode.worker:
+            #     result = self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+            # else:
+            #     result = self.calls.create_async(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+            #     result = await result
             description = f'Sent request to third-party API'
             status = CallStatusEnum.SENT.value
         except:
@@ -316,10 +318,9 @@ class CallService(BaseTwilioCommunication):
             status =CallStatusEnum.FAILED.value
         finally:
            
-
             if twilio_tracking and isinstance(result,CallInstance):
-
-                event = CallEventORM.JSON(event_id=uuid_v1_mc(),call_sid =result.sid ,call_id=twilio_tracking,direction='O',current_event=status,city=None,country=None,state=None,
+                
+                event = CallEventORM.JSON(event_id=str(uuid_v1_mc()),call_sid =result.sid ,call_id=twilio_tracking,direction='O',current_event=status,city=None,country=None,state=None,
                                           date_event_received=now, description=description)
                 if self.configService.celery_env == CeleryMode.none:
                     await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)

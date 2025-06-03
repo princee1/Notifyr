@@ -28,3 +28,5 @@ class SMSStatusModel(BaseModel):
     SmsSid:str
     SmsStatus:str
     MessageStatus:str
+    twilio_tracking_id:str = None
+
