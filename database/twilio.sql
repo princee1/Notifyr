@@ -28,6 +28,7 @@ CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
         'INITIATED',
         'COMPLETED',
         'NO-ANSWER',
+        'DECLINED',
         'BOUNCE',
         'IN-PROGRESS',
         'RINGING',
@@ -75,7 +76,7 @@ CREATE TABLE IF NOT EXISTS CallTracking (
 CREATE TABLE IF NOT EXISTS SMSEvent (
     event_id UUID DEFAULT uuid_generate_v1mc (),
     sms_id UUID DEFAULT NULL,
-    sms_sid VARCHAR(60) NULL,
+    sms_sid VARCHAR(60) DEFAULT NULL,
     direction Direction,
     current_event SMSStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
@@ -88,7 +89,7 @@ CREATE TABLE IF NOT EXISTS SMSEvent (
 CREATE TABLE IF NOT EXISTS CallEvent (
     event_id UUID DEFAULT uuid_generate_v1mc (),
     call_id UUID DEFAULT NULL,
-    call_sid VARCHAR(60) NOT NULL,
+    call_sid VARCHAR(60) DEFAULT NULL,
     direction Direction,
     current_event CallStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
@@ -110,7 +111,7 @@ CREATE TABLE IF NOT EXISTS SMSAnalytics (
     sms_failed INT DEFAULT 0,
     sms_bounce INT DEFAULT 0,
     total_price FLOAT DEFAULT 0, -- Added total price column
-    average_price FLOAT DEFAULT 0, -- Added average price column
+    -- average_price FLOAT DEFAULT 0, -- Added average price column
     PRIMARY KEY (analytics_id),
     UNIQUE (week_start_date, direction)
 );
@@ -128,12 +129,13 @@ CREATE TABLE IF NOT EXISTS CallAnalytics (
     calls_failed INT DEFAULT 0,
     calls_bounce INT DEFAULT 0,
     calls_not_answered INT DEFAULT 0,
+    calls_declined INT DEFAULT 0,
     total_price FLOAT DEFAULT 0, -- Added total price column
-    average_price FLOAT DEFAULT 0, -- Added average price column
+    -- average_price FLOAT DEFAULT 0, -- Added average price column
     total_duration INT DEFAULT 0, -- Added total duration column
-    average_duration FLOAT DEFAULT 0, -- Added average duration column
+    -- average_duration FLOAT DEFAULT 0, -- Added average duration column
     total_call_duration INT DEFAULT 0, -- Added total call duration column
-    average_call_duration FLOAT DEFAULT 0, -- Added average call duration column
+    -- average_call_duration FLOAT DEFAULT 0, -- Added average call duration column
     PRIMARY KEY (analytics_id),
     UNIQUE (
         week_start_date,
@@ -153,8 +155,9 @@ CREATE OR REPLACE FUNCTION calculate_sms_analytics_grouped(
     sms_delivered INT,
     sms_failed INT,
     sms_bounce INT,
-    total_price FLOAT,
-    average_price FLOAT
+    total_price FLOAT
+
+    -- average_price FLOAT
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -167,8 +170,8 @@ BEGIN
         SUM(sms_delivered) AS sms_delivered,
         SUM(sms_failed) AS sms_failed,
         SUM(sms_bounce) AS sms_bounce,
-        SUM(total_price) AS total_price,
-        AVG(average_price) AS average_price
+        SUM(total_price) AS total_price
+        -- AVG(average_price) AS average_price
     FROM SMSAnalytics
     GROUP BY group_number, direction
     ORDER BY group_number, direction;
@@ -188,12 +191,13 @@ CREATE OR REPLACE FUNCTION calculate_call_analytics_grouped(
     calls_failed INT,
     calls_not_answered INT,
     calls_bounce INT,
+    calls_declined INT,
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
-    average_duration FLOAT,
-    total_call_duration INT, -- Added total call duration column
-    average_call_duration FLOAT -- Added average call duration column
+    -- average_duration FLOAT,
+    total_call_duration INT -- Added total call duration column
+    -- average_call_duration FLOAT -- Added average call duration column
 ) AS $$
 BEGIN
     SET search_path = twilio;
@@ -210,12 +214,13 @@ BEGIN
         SUM(calls_failed) AS calls_failed,
         SUM(calls_not_answered) AS calls_not_answered,
         SUM(calls_bounce) AS calls_bounce,
+        SUM(calls_declined) AS calls_declined,
         SUM(total_price) AS total_price,
         AVG(average_price) AS average_price,
         SUM(total_duration) AS total_duration,
-        AVG(average_duration) AS average_duration,
-        SUM(total_call_duration) AS total_call_duration,
-        AVG(average_call_duration) AS average_call_duration
+        -- AVG(average_duration) AS average_duration,
+        SUM(total_call_duration) AS total_call_duration
+        -- AVG(average_call_duration) AS average_call_duration
 
     FROM CallAnalytics
     GROUP BY group_number, direction, country, state, city
@@ -225,33 +230,33 @@ $$ LANGUAGE plpgsql;
 
 -- Function to upsert SMS Analytics with price data
 CREATE OR REPLACE FUNCTION bulk_upsert_sms_analytics(
-    direction Direction, -- Added direction parameter
+    d Direction, -- Added direction parameter
     sent_count INT,
     delivered_count INT,
     failed_count INT,
     bounced_count INT,
-    total_price FLOAT,
-    average_price FLOAT
+    total_price FLOAT
+    -- average_price FLOAT
 ) RETURNS VOID AS $$
 BEGIN
     SET search_path = twilio;
 
     INSERT INTO SMSAnalytics (week_start_date, direction, sms_sent, sms_delivered, sms_failed, sms_bounce, total_price, average_price)
-    VALUES (DEFAULT, direction, sent_count, delivered_count, failed_count, bounced_count, total_price, average_price)
+    VALUES (DEFAULT, d, sent_count, delivered_count, failed_count, bounced_count, total_price, average_price)
     ON CONFLICT (week_start_date, direction) -- Updated conflict target for direction
     DO UPDATE SET
         sms_sent = SMSAnalytics.sms_sent + EXCLUDED.sms_sent,
         sms_delivered = SMSAnalytics.sms_delivered + EXCLUDED.sms_delivered,
         sms_failed = SMSAnalytics.sms_failed + EXCLUDED.sms_failed,
         sms_bounce = SMSAnalytics.sms_bounce + EXCLUDED.sms_bounce,
-        total_price = SMSAnalytics.total_price + EXCLUDED.total_price,
-        average_price = (SMSAnalytics.total_price + EXCLUDED.total_price) / (SMSAnalytics.sms_sent + EXCLUDED.sms_sent);
+        total_price = SMSAnalytics.total_price + EXCLUDED.total_price;
+        -- average_price = (SMSAnalytics.total_price + EXCLUDED.total_price) / (SMSAnalytics.sms_sent + EXCLUDED.sms_sent);
 END;
 $$ LANGUAGE PLPGSQL;
 
 -- Function to upsert Call Analytics with calls_not_answered
 CREATE OR REPLACE FUNCTION bulk_upsert_call_analytics(
-    direction Direction, -- Added direction parameter
+    d Direction, -- Added direction parameter
     country VARCHAR(100),
     state VARCHAR(100),
     city VARCHAR(100),
@@ -260,18 +265,19 @@ CREATE OR REPLACE FUNCTION bulk_upsert_call_analytics(
     failed_count INT,
     not_answered_count INT,
     bounced_count INT,
+    declined_count INT,
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
-    average_duration FLOAT,
-    total_call_duration INT,
-    average_call_duration FLOAT
+    -- average_duration FLOAT,
+    total_call_duration INT
+    -- average_call_duration FLOAT
 ) RETURNS VOID AS $$
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, calls_bounce, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
-    VALUES (DEFAULT, direction, country, state, city, started_count, completed_count, failed_count, not_answered_count, bounced_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, calls_bounce,calls_declined, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
+    VALUES (DEFAULT, d, country, state, city, started_count, completed_count, failed_count, not_answered_count, bounced_count,declined_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
     ON CONFLICT (week_start_date, direction, country, state, city) -- Updated conflict target for direction
     DO UPDATE SET
         calls_started = CallAnalytics.calls_started + EXCLUDED.calls_started,
@@ -279,12 +285,13 @@ BEGIN
         calls_failed = CallAnalytics.calls_failed + EXCLUDED.calls_failed,
         calls_not_answered = CallAnalytics.calls_not_answered + EXCLUDED.calls_not_answered,
         calls_bounce = CallAnalytics.calls_bounce + EXCLUDED.calls_bounce,
+        calls_declined = CallAnalytics.calls_declined + EXCLUDED.calls_declined,
         total_price = CallAnalytics.total_price + EXCLUDED.total_price,
         average_price = (CallAnalytics.total_price + EXCLUDED.total_price) / (CallAnalytics.calls_started + EXCLUDED.calls_started),
         total_duration = CallAnalytics.total_duration + EXCLUDED.total_duration,
-        average_duration = (CallAnalytics.total_duration + EXCLUDED.total_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed),
-        total_call_duration = CallAnalytics.total_call_duration + EXCLUDED.total_call_duration,
-        average_call_duration = (CallAnalytics.total_call_duration + EXCLUDED.total_call_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed);
+        -- average_duration = (CallAnalytics.total_duration + EXCLUDED.total_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed),
+        total_call_duration = CallAnalytics.total_call_duration + EXCLUDED.total_call_duration;
+        -- average_call_duration = (CallAnalytics.total_call_duration + EXCLUDED.total_call_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed);
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -348,8 +355,8 @@ BEGIN
         COALESCE(array_length(queued_sms_ids, 1), 0),
         COALESCE(array_length(received_sms_ids, 1), 0),
         COALESCE(array_length(sent_sms_ids, 1), 0),
-        0,
-        0);
+        0
+        );
 
     INSERT INTO SMSEvent (sms_id, current_event, description)
     SELECT sms_id, 'DELIVERED', 'SMS marked as delivered after 1 hours'
@@ -441,11 +448,8 @@ SELECT
     calls_not_answered,
     calls_bounce, -- Added calls_bounce column
     total_price,
-    average_price,
     total_duration,
-    average_duration,
     total_call_duration, -- Added total call duration
-    average_call_duration, -- Added average call duration
     (
         total_call_duration - total_duration
     ) AS ringing_duration -- Added ringing duration column

@@ -28,7 +28,7 @@ class CallStatusEnum(str, Enum):
     SENT = "SENT"
     BOUNCE = "BOUNCE"
     IN_PROGRESS="IN-PROGRESS"
-
+    DECLINED= "DECLINED"
 
 
 class DirectionEnum(str, Enum):
@@ -71,7 +71,7 @@ class SMSTrackingORM(models.Model):
 
 class CallTrackingORM(models.Model):
     call_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    call_sid = fields.CharField(max_length=60, null=False, default=None)
+    call_sid = fields.CharField(max_length=60, null=True, default=None)
     contact = fields.ForeignKeyField('models.ContactORM', null=True, on_delete=fields.SET_NULL)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
@@ -108,7 +108,7 @@ class CallTrackingORM(models.Model):
 class SMSEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     sms = fields.ForeignKeyField("models.SMSTrackingORM", related_name="events", on_delete=fields.CASCADE)
-    sms_sid = fields.CharField(max_length=60,null=False)
+    sms_sid = fields.CharField(max_length=60,null=True)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     current_event = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
     description = fields.CharField(max_length=200, null=True)
@@ -144,7 +144,7 @@ class SMSEventORM(models.Model):
 class CallEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     call = fields.ForeignKeyField("models.CallTrackingORM", related_name="events", null=True, on_delete=fields.CASCADE)
-    call_sid = fields.CharField(max_length=60,null=False)
+    call_sid = fields.CharField(max_length=60,null=True)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     current_event = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
     description = fields.CharField(max_length=200, null=True)
@@ -200,7 +200,7 @@ class SMSAnalyticsORM(models.Model):
     sms_failed = fields.IntField(default=0)
     sms_bounce = fields.IntField(default=0)  # Added sms_bounce field
     total_price = fields.FloatField(default=0)
-    average_price = fields.FloatField(default=0)
+    #average_price = fields.FloatField(default=0)
 
     class Meta:
         schema = SCHEMA
@@ -218,7 +218,7 @@ class SMSAnalyticsORM(models.Model):
             "sms_failed": self.sms_failed,
             "sms_bounce": self.sms_bounce,  # Added sms_bounce
             "total_price": self.total_price,
-            "average_price": self.average_price,
+            #"average_price": self.average_price,
         }
 
 
@@ -237,9 +237,9 @@ class CallAnalyticsORM(models.Model):
     total_price = fields.FloatField(default=0)
     average_price = fields.FloatField(default=0)
     total_duration = fields.IntField(default=0)
-    average_duration = fields.FloatField(default=0)
+    #average_duration = fields.FloatField(default=0)
     total_call_duration = fields.IntField(default=0)
-    average_call_duration = fields.FloatField(default=0)
+    #average_call_duration = fields.FloatField(default=0)
 
     class Meta:
         schema = SCHEMA
@@ -263,30 +263,120 @@ class CallAnalyticsORM(models.Model):
             "total_price": self.total_price,
             "average_price": self.average_price,
             "total_duration": self.total_duration,
-            "average_duration": self.average_duration,
+            #"average_duration": self.average_duration,
             "total_call_duration": self.total_call_duration,
-            "average_call_duration": self.average_call_duration,
+            #"average_call_duration": self.average_call_duration,
             "ringing_duration": self.total_call_duration - self.total_duration
         }
 
 
-async def bulk_upsert_call_analytics(analytics_data):
-    values_str = ", ".join(
-        f"ROW('{direction}', '{country}', '{state}', '{city}', '{calls_started}', '{calls_completed}', '{calls_failed}', '{calls_not_answered}', '{total_price}', '{average_price}', '{total_duration}', '{average_duration}', '{total_call_duration}', '{average_call_duration}')"
-        for direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration in analytics_data
-    )
-    query = f"SELECT * FROM twilio.bulk_upsert_call_analytics($1)"
-    client = Tortoise.get_connection('default')
-    return await client.execute_query(query, [f"ARRAY[{values_str}]"])
+async def bulk_upsert_call_analytics(
+    direction: str,
+    country: str,
+    state: str,
+    city: str,
+    calls_started: int,
+    calls_completed: int,
+    calls_failed: int,
+    calls_not_answered: int,
+    calls_bounce: int,
+    calls_declined: int,
+    total_price: float,
+    average_price: float,
+    total_duration: int,
+    #average_duration: float,
+    total_call_duration: int,
+    #average_call_duration: float
+):
+    """
+    Upserts call analytics data into the database.
 
-async def bulk_upsert_sms_analytics(analytics_data):
-    values_str = ", ".join(
-        f"ROW('{direction}', '{sms_sent}', '{sms_delivered}', '{sms_failed}', '{total_price}', '{average_price}')"
-        for direction, sms_sent, sms_delivered, sms_failed, total_price, average_price in analytics_data
-    )
-    query = f"SELECT * FROM twilio.bulk_upsert_sms_analytics($1)"
+    Args:
+        direction (str): Direction of the call (INBOUND/OUTBOUND).
+        country (str): Country of the call.
+        state (str): State of the call.
+        city (str): City of the call.
+        calls_started (int): Number of calls started.
+        calls_completed (int): Number of calls completed.
+        calls_failed (int): Number of calls failed.
+        calls_not_answered (int): Number of calls not answered.
+        calls_bounce (int): Number of calls bounced.
+        calls_declined (int): Number of calls declined.
+        total_price (float): Total price of the calls.
+        average_price (float): Average price of the calls.
+        total_duration (int): Total duration of the calls.
+        average_duration (float): Average duration of the calls.
+        total_call_duration (int): Total call duration.
+        average_call_duration (float): Average call duration.
+    """
+    query = """
+        SELECT twilio.bulk_upsert_call_analytics(
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+        );
+    """
     client = Tortoise.get_connection('default')
-    return await client.execute_query(query, [f"ARRAY[{values_str}]"])
+    await client.execute_query(
+        query,
+        [
+            direction,
+            country,
+            state,
+            city,
+            calls_started,
+            calls_completed,
+            calls_failed,
+            calls_not_answered,
+            calls_bounce,
+            calls_declined,
+            total_price,
+            average_price,
+            total_duration,
+            #average_duration,
+            total_call_duration,
+            #average_call_duration,
+        ],
+    )
+
+
+async def bulk_upsert_sms_analytics(
+    direction: str,
+    sms_sent: int,
+    sms_delivered: int,
+    sms_failed: int,
+    sms_bounce: int,
+    total_price: float,
+    #average_price: float
+):
+    """
+    Upserts SMS analytics data into the database.
+
+    Args:
+        direction (str): Direction of the SMS (INBOUND/OUTBOUND).
+        sms_sent (int): Number of SMS sent.
+        sms_delivered (int): Number of SMS delivered.
+        sms_failed (int): Number of SMS failed.
+        sms_bounce (int): Number of SMS bounced.
+        total_price (float): Total price of the SMS.
+        average_price (float): Average price of the SMS.
+    """
+    query = """
+        SELECT twilio.bulk_upsert_sms_analytics(
+            $1, $2, $3, $4, $5, $6
+        );
+    """
+    client = Tortoise.get_connection('default')
+    await client.execute_query(
+        query,
+        [
+            direction,
+            sms_sent,
+            sms_delivered,
+            sms_failed,
+            sms_bounce,
+            total_price,
+            #average_price,
+        ],
+    )
 
 
 async def aggregate_sms_analytics(group_by_factor: int):

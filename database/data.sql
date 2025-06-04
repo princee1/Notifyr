@@ -84,14 +84,12 @@ INSERT INTO
         sms_sent,
         sms_delivered,
         sms_failed,
-        total_price,
-        average_price
+        total_price
     )
 VALUES (
         DEFAULT,
         DATE_TRUNC('week', NOW()),
         'O',
-        0,
         0,
         0,
         0,
@@ -101,7 +99,6 @@ VALUES (
         DEFAULT,
         DATE_TRUNC('week', CURRENT_DATE),
         'I',
-        0,
         0,
         0,
         0,
