@@ -652,7 +652,11 @@ async def Add_Contact_Creation_Event(entries:list[tuple[str,dict]]):
 
 async def Retry_Mechanism(entries:list[tuple[str,dict]]):
     celeryService = Get(CeleryService)
-    ...
+
+    for ids, val in entries:
+        ...
+
+    return []
 #############################################        ############################################
 
 Callbacks_Stream = {
@@ -665,6 +669,6 @@ Callbacks_Stream = {
     StreamConstant.TWILIO_EVENT_STREAM_CALL:Add_Twilio_Call_Event,
     StreamConstant.TWILIO_EVENT_STREAM_SMS:Add_Twilio_Sms_Event,
     StreamConstant.CONTACT_SUBS_EVENT:Add_Contact_Subs_Event,
-    StreamConstant.CONTACT_CREATION_EVENT:Add_Contact_Creation_Event
-    
+    StreamConstant.CONTACT_CREATION_EVENT:Add_Contact_Creation_Event,
+    StreamConstant.RETRY_MECHANISM:Retry_Mechanism
 }

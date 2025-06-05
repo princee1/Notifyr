@@ -183,35 +183,40 @@ class RedisService(DatabaseService):
     async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker]):
         pubsub = self.redis_events.pubsub()
 
-        def handler_wrapper(message):
-            if message is None:
-                print('No message')
-                return
-            if message["type"] == "message":
-                try:
-                    message_broker = json.loads(message["data"])
-                    message_broker = MessageBroker(**message_broker)
+        if channels != StreamConstant.RETRY_MECHANISM:
+            def handler_wrapper(message):
+                if message is None:
+                    print('No message')
+                    return
+                if message["type"] == "message":
+                    try:
+                        message_broker = json.loads(message["data"])
+                        message_broker = MessageBroker(**message_broker)
 
-                    if handler != None:
-                        handler(message_broker)
-                    subject_id = message_broker['subject_id']
-                    state = message_broker['state']
-                    value = message_broker['value']
-                    error = message_broker['error']
-                    subject = self.reactiveService[subject_id]
-                    match state:
-                        case 'completed':
-                            self.reactiveService.delete_subject(subject_id)
-                        case 'error':
-                            error  = json_to_exception(error)
-                            subject.on_error(error)
-                        case 'next':
-                            subject.on_next(value)
-                                                            
-                except json.JSONDecodeError:
-                    print(f"[Handler] Bad JSON: {message['data']}")
-                except ReactiveSubjectNotFoundError:
-                    ...
+                        if handler != None:
+                            handler(message_broker)
+                        subject_id = message_broker['subject_id']
+                        state = message_broker['state']
+                        value = message_broker['value']
+                        error = message_broker['error']
+                        subject = self.reactiveService[subject_id]
+                        match state:
+                            case 'completed':
+                                self.reactiveService.delete_subject(subject_id)
+                            case 'error':
+                                error  = json_to_exception(error)
+                                subject.on_error(error)
+                            case 'next':
+                                subject.on_next(value)
+                                                                
+                    except json.JSONDecodeError:
+                        print(f"[Handler] Bad JSON: {message['data']}")
+                    except ReactiveSubjectNotFoundError:
+                        ...
+        else:
+            def handler_wrapper(message):
+                ...
+
 
         await pubsub.subscribe(**{channels:handler_wrapper}) # TODO Maybe add the function as await
 
