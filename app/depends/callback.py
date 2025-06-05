@@ -465,35 +465,36 @@ async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
             key = None
             data:list[CallEventORM.JSON]= []
 
-            if val['current_event'] not in [CallStatusEnum.REJECTED.value,CallStatusEnum.FAILED.value]: # BUG if received is here for a long time
-                if call_id not in Call_Ids:
-                    if val['city'] != None:
-                        Call_Ids[call_id]['key']= key =(val['country'],val['state'],val['city'])
-                        analytics[key] = create_analytics()
-                        data.append(val)
+            if call_id not in Call_Ids:
+                if val['city'] != None:
+                    Call_Ids[call_id]['key']= key =(val['country'],val['state'],val['city'])
+                    analytics[key] = create_analytics()
+                    data.append(val)
 
-                    else:
-                        if 'temp' not in Call_Ids[call_id]:
-                            Call_Ids[call_id]['temp'] = []
-
-                        Call_Ids[call_id]['temp'].append(val)
                 else:
-                    if 'temp' in Call_Ids[call_id]:
-                        if val['city'] != None:
+                    if 'temp' not in Call_Ids[call_id]:
+                        Call_Ids[call_id]['temp'] = []
+
+                    Call_Ids[call_id]['temp'].append(val)
+                    if val['current_event'] not in [CallStatusEnum.REJECTED.value,CallStatusEnum.FAILED.value]:
+                        key= (N_A,N_A,N_A)
+                        if key not in analytics:
                             analytics[key] = create_analytics()
-                            data.extend(Call_Ids[call_id]['temp'])
-                            Call_Ids[call_id]['temp'] = []
-                        else:
-                            Call_Ids[call_id]['temp'].append(val)
-                    else:
-                        key = Call_Ids[call_id]['key']
-                        data.append(val)
+                        
+                        data.extend(Call_Ids[call_id]['temp'])
 
             else:
-                key= (N_A,N_A,N_A)
-                if key not in analytics:
-                    analytics[key] = create_analytics()
-                data.append(val)
+                if 'temp' in Call_Ids[call_id]:
+                    if val['city'] != None:
+                        analytics[key] = create_analytics()
+                        data.extend(Call_Ids[call_id]['temp'])
+                        Call_Ids[call_id]['temp'] = []
+                    else:
+                        Call_Ids[call_id]['temp'].append(val)
+                else:
+                    key = Call_Ids[call_id]['key']
+                    data.append(val)
+
 
             if key!= None:
                 try:
