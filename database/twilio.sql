@@ -267,7 +267,7 @@ BEGIN
     DO UPDATE SET
         sms_received = SMSAnalytics.sms_received + EXCLUDED.sms_received,
         sms_sent = SMSAnalytics.sms_sent + EXCLUDED.sms_sent,
-        rejected_count = SMSAnalytics.rejected_count + EXCLUDED.rejected_count,
+        sms_rejected = SMSAnalytics.sms_rejected + EXCLUDED.sms_rejected,
         sms_delivered = SMSAnalytics.sms_delivered + EXCLUDED.sms_delivered,
         sms_failed = SMSAnalytics.sms_failed + EXCLUDED.sms_failed,
         sms_bounce = SMSAnalytics.sms_bounce + EXCLUDED.sms_bounce,
@@ -380,7 +380,6 @@ BEGIN
 
     PERFORM bulk_upsert_sms_analytics(
         'O',
-        0,
         0,
         0,
         0, 
