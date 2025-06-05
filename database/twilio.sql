@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS CallTracking (
     expired_tracking_date TIMESTAMPTZ,
     call_current_status CallStatus,
     duration INT DEFAULT 0,
+    total_duration INT DEFAULT 0,
     price FLOAT DEFAULT NULL,
     price_unit VARCHAR(10) DEFAULT NULL,
     PRIMARY KEY (call_id),
@@ -126,6 +127,7 @@ CREATE TABLE IF NOT EXISTS CallAnalytics (
     state VARCHAR(100) DEFAULT NULL, -- Added state column
     city VARCHAR(100) DEFAULT NULL, -- Added city column
     calls_received INT DEFAULT 0,
+    calls_sent INT DEFAULT 0,
     calls_started INT DEFAULT 0,
     calls_completed INT DEFAULT 0,
     calls_failed INT DEFAULT 0,
@@ -191,6 +193,7 @@ CREATE OR REPLACE FUNCTION calculate_call_analytics_grouped(
     state VARCHAR(100),
     city VARCHAR(100),
     calls_received INT,
+    calls_sent INT,
     calls_started INT,
     calls_completed INT,
     calls_failed INT,
@@ -215,6 +218,7 @@ BEGIN
         state,
         city,
         SUM(calls_received) AS calls_received,
+        SUM(calls_sent) AS  calls_sent,
         SUM(calls_started) AS calls_started,
         SUM(calls_completed) AS calls_completed,
         SUM(calls_failed) AS calls_failed,
@@ -268,6 +272,7 @@ CREATE TYPE call_analytics_input AS (
     state VARCHAR(100),
     city VARCHAR(100),
     received_count INT,
+    sent_count INT,
     started_count INT,
     completed_count INT,
     failed_count INT,
@@ -275,7 +280,6 @@ CREATE TYPE call_analytics_input AS (
     bounced_count INT,
     declined_count INT,
     total_price FLOAT,
-    average_price FLOAT,
     total_duration INT,
     total_call_duration INT
 );
@@ -288,11 +292,12 @@ BEGIN
 
     FOREACH record IN ARRAY data
     LOOP
-        INSERT INTO CallAnalytics (week_start_date, direction, country, state, city,calls_received, calls_started, calls_completed, calls_failed, calls_not_answered, calls_bounce, calls_declined, total_price, total_duration, total_call_duration)
-        VALUES (DEFAULT, record.direction, record.country, record.state, record.city, record.received_count, record.started_count, record.completed_count, record.failed_count, record.not_answered_count, record.bounced_count, record.declined_count, record.total_price, record.total_duration, record.total_call_duration)
+        INSERT INTO CallAnalytics (week_start_date, direction, country, state, city,calls_received,calls_sent, calls_started, calls_completed, calls_failed, calls_not_answered, calls_bounce, calls_declined, total_price, total_duration, total_call_duration)
+        VALUES (DEFAULT, record.direction, record.country, record.state, record.city, record.received_count, record.sent_count, record.started_count, record.completed_count, record.failed_count, record.not_answered_count, record.bounced_count, record.declined_count, record.total_price, record.total_duration, record.total_call_duration)
         ON CONFLICT (week_start_date, direction, country, state, city)
         DO UPDATE SET
             calls_received = CallAnalytics.calls_received + EXCLUDED.calls_received,
+            calls_sent = CallAnalytics.calls_sent + EXCLUDED.calls_sent,
             calls_started = CallAnalytics.calls_started + EXCLUDED.calls_started,
             calls_completed = CallAnalytics.calls_completed + EXCLUDED.calls_completed,
             calls_failed = CallAnalytics.calls_failed + EXCLUDED.calls_failed,
@@ -363,6 +368,7 @@ BEGIN
 
     PERFORM bulk_upsert_sms_analytics(
         'O',
+        0,
         0,
         0, 
         COALESCE(array_length(queued_sms_ids, 1), 0),
@@ -456,6 +462,7 @@ SELECT
     state,
     city,
     calls_received,
+    calls_sent,
     calls_started,
     calls_completed,
     calls_failed,

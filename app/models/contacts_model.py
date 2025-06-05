@@ -379,10 +379,10 @@ async def get_all_contact_summary():
     client = Tortoise.get_connection('default')
     return await client.execute_query(query,[])
 
-async def bulk_upsert_contact_analytics(analytics_data):
+async def bulk_upsert_contact_analytics(analytics_data:dict):
     values_str = ", ".join(
-        f"ROW('{country}', '{region}', '{city}', '{subscriptions}', '{unsubscriptions}')::contacts.analytics_input"
-        for country, region, city, subscriptions, unsubscriptions in analytics_data
+        f"ROW('{country}', '{region}', '{city}', {data['subscriptions']}, {data['unsubscriptions']})::contacts.analytics_input"
+        for (country, region, city), data in analytics_data.items()
     )
     query = "SELECT * FROM contacts.bulk_upsert_contact_analytics($1)"
     client = Tortoise.get_connection('default')
@@ -403,10 +403,10 @@ async def calculate_contact_analytics_grouped(group_by_factor: int):
         for row in rows[1]
     ]
 
-async def bulk_upsert_contact_creation_analytics(analytics_data):
+async def bulk_upsert_contact_creation_analytics(analytics_data:dict):
     values_str = ", ".join(
-        f"ROW('{country}', '{region}', '{city}', '{contacts_created}')::contacts.creation_analytics_input"
-        for country, region, city, contacts_created in analytics_data
+        f"ROW('{country}', '{region}', '{city}', {contacts_created})::contacts.creation_analytics_input"
+        for (country, region, city), contacts_created in analytics_data.items()
     )
     query = "SELECT * FROM contacts.bulk_upsert_contact_creation_analytics($1)"
     client = Tortoise.get_connection('default')

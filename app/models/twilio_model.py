@@ -80,6 +80,7 @@ class CallTrackingORM(models.Model):
     expired_tracking_date = fields.DatetimeField(null=True)
     call_current_status = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
     duration = fields.IntField(default=0)  # Added duration field
+    total_duration = fields.IntField(default=0)  # Added duration field
     price = fields.FloatField(null=True)  # Added price field
     price_unit = fields.CharField(max_length=10, null=True)  # Added price_unit field
 
@@ -234,6 +235,7 @@ class CallAnalyticsORM(models.Model):
     state = fields.CharField(max_length=100, null=True)
     city = fields.CharField(max_length=100, null=True)
     calls_received = fields.IntField(default= 0)
+    calls_sent = fields.IntField(default=0)
     calls_started = fields.IntField(default=0)
     calls_completed = fields.IntField(default=0)
     calls_failed = fields.IntField(default=0)
@@ -261,6 +263,7 @@ class CallAnalyticsORM(models.Model):
             "state": self.state,
             "city": self.city,
             "calls_received":self.calls_received,
+            "calls_sent":self.calls_sent,
             "calls_started": self.calls_started,
             "calls_completed": self.calls_completed,
             "calls_failed": self.calls_failed,
@@ -275,7 +278,7 @@ class CallAnalyticsORM(models.Model):
             "ringing_duration": self.total_call_duration - self.total_duration
         }
 
-async def bulk_upsert_call_analytics(call_analytics_data):
+async def bulk_upsert_call_analytics(call_analytics_data:dict,direction):
     """
     Upserts call analytics data into the database.
 
@@ -287,12 +290,10 @@ async def bulk_upsert_call_analytics(call_analytics_data):
             total_duration, total_call_duration)
     """
     values_str = ", ".join(
-        f"ROW('{direction}', '{country}', '{state}', '{city}',{calls_received}, {calls_started}, {calls_completed}, {calls_failed}, "
-        f"{calls_not_answered}, {calls_bounce}, {calls_declined}, {total_price}, {average_price}, "
-        f"{total_duration}, {total_call_duration})::twilio.call_analytics_input"
-        for direction, country, state, city,calls_received, calls_started, calls_completed, calls_failed,
-        calls_not_answered, calls_bounce, calls_declined, total_price, average_price,
-        total_duration, total_call_duration in call_analytics_data
+        f"ROW('{direction}', '{key[0]}', '{key[1]}', '{key[2]}',{data[direction]['received']}, {data[direction]['started']}, {data[direction]['completed']}, {data[direction]['failed']}, "
+        f"{data[direction]['no_answer']}, {data[direction]['bounce']}, {data[direction]['declined']}, {data[direction]['price']}, "
+        f"{data[direction]['call_duration']}, {data[direction]['total_duration']})::twilio.call_analytics_input"
+        for key,data in call_analytics_data.items()
     )
     query = "SELECT * FROM twilio.bulk_upsert_call_analytics($1);"
     client = Tortoise.get_connection('default')
@@ -300,12 +301,12 @@ async def bulk_upsert_call_analytics(call_analytics_data):
 
 async def bulk_upsert_sms_analytics(
     direction: str,
-    sms_received:int,
-    sms_sent: int,
-    sms_delivered: int,
-    sms_failed: int,
-    sms_bounce: int,
-    total_price: float,
+    received:int,
+    sent: int,
+    delivered: int,
+    failed: int,
+    bounce: int,
+    price: float,
     #average_price: float
 ):
     """
@@ -330,12 +331,12 @@ async def bulk_upsert_sms_analytics(
         query,
         [
             direction,
-            sms_received,
-            sms_sent,
-            sms_delivered,
-            sms_failed,
-            sms_bounce,
-            total_price,
+            received,
+            sent,
+            delivered,
+            failed,
+            bounce,
+            price,
             #average_price,
         ],
     )
