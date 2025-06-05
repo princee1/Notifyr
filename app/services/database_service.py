@@ -20,6 +20,8 @@ import asyncio
 from tortoise import Tortoise
 from app.errors.async_error import ReactiveSubjectNotFoundError
 
+MS_1000 = 1000
+
 class RedisStreamDoesNotExistsError(BaseError):
     ...
 
@@ -88,14 +90,14 @@ class RedisService(DatabaseService):
         self.streams:Dict[StreamConstant.StreamLiteral,RedisService.StreamConfig] = {
             StreamConstant.LINKS_EVENT_STREAM:self.StreamConfig(**{
                 'sub':True,
-                'count':1000*4,
-                'block':1000*5,
+                'count':MS_1000*4,
+                'block':MS_1000*5,
                 'stream':True
             }),
             StreamConstant.EMAIL_EVENT_STREAM:self.StreamConfig(**{
                 'sub':True,
-                'count':1000,
-                'block':1000*15,
+                'count':MS_1000,
+                'block':MS_1000*15,
                 'wait':60,
                 'stream':True
             }),
@@ -106,21 +108,37 @@ class RedisService(DatabaseService):
             StreamConstant.EMAIL_TRACKING:self.StreamConfig(**{
                 'sub':False,
                 'stream':True,
-                'block':1000*5,
+                'block':MS_1000*5,
                 'wait':5,
             }),
             StreamConstant.TWILIO_TRACKING_CALL:self.StreamConfig(
                 sub=False,
                 stream=True,
                 wait=5,
-                block=1000*5
+                block=MS_1000*5
             ),
             StreamConstant.TWILIO_TRACKING_SMS:self.StreamConfig(
                 sub=False,
                 stream=True,
                 wait=5,
-                block=1000*5
+                block=MS_1000*5
             ),
+            StreamConstant.TWILIO_EVENT_STREAM_CALL:self.StreamConfig(
+                sub=True,
+                stream=True,
+                wait=45,
+                block=MS_1000*15,
+                count=MS_1000,
+
+            ),
+            StreamConstant.TWILIO_EVENT_STREAM_SMS:self.StreamConfig(
+                sub=True,
+                stream=True,
+                wait=45,
+                block=MS_1000*15,
+                count=500,
+            )
+
         }
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
@@ -205,8 +223,8 @@ class RedisService(DatabaseService):
             is_stream = config['stream']
             is_sub = config['sub']
             if is_stream:
-                count = config.get('count',1000)
-                block = config.get('block',1000)
+                count = config.get('count',MS_1000)
+                block = config.get('block',MS_1000)
                 wait = config.get('wait',60)
             config.update ({
                 'channel_tasks':None,
@@ -310,7 +328,18 @@ class RedisService(DatabaseService):
     @check_db
     async def delete(self,database:int|str,key:str,redis:Redis=None):
         return await redis.delete(key)
-    
+
+    @check_db
+    async def exists(self,database:int|str,key:str,redis:Redis=None)->bool:
+        if isinstance(key,(list,tuple)):
+            result =  await redis.exists(*key)
+        elif isinstance(key,dict):
+            result = await redis.exists(*key.keys())
+        else:
+            result =  await redis.exists(key)
+        
+        return result > 0
+            
     @check_db
     async def delete_all(self, database: int | str, prefix: str,simple_prefix=True, redis: Redis = None):
         if simple_prefix:

@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS EmailAnalytics (
     analytics_id UUID DEFAULT uuid_generate_v1mc (),
     esp_provider VARCHAR(25) NOT NULL, -- Added esp_provider column
     day_start_date DATE NOT NULL DEFAULT DATE_TRUNC('day', NOW()), -- Changed to daily tracking
+    emails_received INT DEFAULT 0,
     emails_sent INT DEFAULT 0,
     emails_delivered INT DEFAULT 0,
     emails_opened INT DEFAULT 0,
@@ -82,8 +83,9 @@ CREATE TABLE IF NOT EXISTS EmailAnalytics (
 
 -- Function to upsert the latest EmailAnalytics row
 -- Function to upsert Email Analytics with emails_complaint and emails_failed
-CREATE OR REPLACE FUNCTION upsert_email_analytics(
+CREATE TYPE email_analytics_input AS (
     esp VARCHAR(25),
+    received_count INT,
     sent_count INT,
     delivered_count INT,
     opened_count INT,
@@ -91,21 +93,29 @@ CREATE OR REPLACE FUNCTION upsert_email_analytics(
     complaint_count INT, -- Added emails_complaint parameter
     replied_count INT,
     failed_count INT -- Added emails_failed parameter
-) RETURNS VOID AS $$
+);
+
+CREATE OR REPLACE FUNCTION bulk_upsert_email_analytics(data emails.email_analytics_input[]) RETURNS VOID AS $$
+DECLARE
+    record emails.email_analytics_input;
 BEGIN
     SET search_path = emails;
 
-    INSERT INTO EmailAnalytics (day_start_date, esp_provider, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_complaint, emails_replied, emails_failed)
-    VALUES (DATE_TRUNC('DAY', NOW()), esp, sent_count, delivered_count, opened_count, bounced_count, complaint_count, replied_count, failed_count)
-    ON CONFLICT (day_start_date, esp_provider)
-    DO UPDATE SET
-        emails_sent = EmailAnalytics.emails_sent + EXCLUDED.emails_sent,
-        emails_delivered = EmailAnalytics.emails_delivered + EXCLUDED.emails_delivered,
-        emails_opened = EmailAnalytics.emails_opened + EXCLUDED.emails_opened,
-        emails_bounced = EmailAnalytics.emails_bounced + EXCLUDED.emails_bounced,
-        emails_complaint = EmailAnalytics.emails_complaint + EXCLUDED.emails_complaint, -- Updated emails_complaint
-        emails_replied = EmailAnalytics.emails_replied + EXCLUDED.emails_replied,
-        emails_failed = EmailAnalytics.emails_failed + EXCLUDED.emails_failed; -- Updated emails_failed
+    FOREACH record IN ARRAY data
+    LOOP
+        INSERT INTO EmailAnalytics (day_start_date, esp_provider, emails_received, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_complaint, emails_replied, emails_failed)
+        VALUES (DATE_TRUNC('DAY', NOW()), record.esp, record.received_count, record.sent_count, record.delivered_count, record.opened_count, record.bounced_count, record.complaint_count, record.replied_count, record.failed_count)
+        ON CONFLICT (day_start_date, esp_provider)
+        DO UPDATE SET
+            emails_received = EmailAnalytics.emails_received + EXCLUDED.emails_received,
+            emails_sent = EmailAnalytics.emails_sent + EXCLUDED.emails_sent,
+            emails_delivered = EmailAnalytics.emails_delivered + EXCLUDED.emails_delivered,
+            emails_opened = EmailAnalytics.emails_opened + EXCLUDED.emails_opened,
+            emails_bounced = EmailAnalytics.emails_bounced + EXCLUDED.emails_bounced,
+            emails_complaint = EmailAnalytics.emails_complaint + EXCLUDED.emails_complaint, -- Updated emails_complaint
+            emails_replied = EmailAnalytics.emails_replied + EXCLUDED.emails_replied,
+            emails_failed = EmailAnalytics.emails_failed + EXCLUDED.emails_failed; -- Updated emails_failed
+    END LOOP;
 END;
 $$ LANGUAGE PLPGSQL;
 
@@ -115,6 +125,7 @@ CREATE OR REPLACE FUNCTION calculate_email_analytics_grouped(
 ) RETURNS TABLE (
     group_number INT,
     esp_provider VARCHAR(25),
+    emails_received INT,
     emails_sent INT,
     emails_delivered INT,
     emails_opened INT,
@@ -130,6 +141,7 @@ BEGIN
     SELECT
         FLOOR(EXTRACT(EPOCH FROM (day_start_date - MIN(day_start_date) OVER ())) / (group_by_factor * 24 * 60 * 60)) + 1 AS group_number,
         esp_provider,
+        SUM(emails_received) AS emails_received,
         SUM(emails_sent) AS emails_sent,
         SUM(emails_delivered) AS emails_delivered,
         SUM(emails_opened) AS emails_opened,
@@ -198,6 +210,7 @@ DECLARE
     esp TEXT;
     sent_email_ids UUID[];
     received_email_ids UUID[];
+    analytics emails.email_analytics_input[];
 BEGIN
     SET search_path = emails;
 
@@ -230,17 +243,20 @@ BEGIN
         SET email_current_status = 'FAILED'
         WHERE email_id = ANY(received_email_ids);
 
-        -- Upsert analytics for the current ESP provider
-        PERFORM upsert_email_analytics(
+        -- Prepare data for bulk upsert analytics
+
+        analytics := array_append(analytics, ROW(
             esp,
+            0, -- emails_received
             0, -- emails_sent
             COALESCE(array_length(sent_email_ids, 1), 0), -- emails_delivered
-            0,                                           -- emails_opened
+            0, -- emails_opened
             0, -- emails_bounced
-            0,                                           -- emails_complaint
-            0,                                           -- emails_replied
-            COALESCE(array_length(received_email_ids, 1), 0)  -- emails_failed
-        );
+            0, -- emails_complaint
+            0, -- emails_replied
+            COALESCE(array_length(received_email_ids, 1), 0) -- emails_failed
+            )::emails.email_analytics_input);
+        
 
         -- Add events for 'DELIVERED' for the current ESP provider
         INSERT INTO emails.TrackingEvent (email_id, current_event, description)
@@ -252,6 +268,8 @@ BEGIN
         SELECT email_id, 'FAILED', 'Email marked as failed after 1 hours'
         FROM unnest(received_email_ids) AS email_id;
     END LOOP;
+    
+    PERFORM bulk_upsert_email_analytics(analytics::emails.email_analytics_input[]);
 END;
 $$ LANGUAGE PLPGSQL;
 
