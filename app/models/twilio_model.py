@@ -270,72 +270,28 @@ class CallAnalyticsORM(models.Model):
         }
 
 
-async def bulk_upsert_call_analytics(
-    direction: str,
-    country: str,
-    state: str,
-    city: str,
-    calls_started: int,
-    calls_completed: int,
-    calls_failed: int,
-    calls_not_answered: int,
-    calls_bounce: int,
-    calls_declined: int,
-    total_price: float,
-    average_price: float,
-    total_duration: int,
-    #average_duration: float,
-    total_call_duration: int,
-    #average_call_duration: float
-):
+async def bulk_upsert_call_analytics(call_analytics_data):
     """
     Upserts call analytics data into the database.
 
     Args:
-        direction (str): Direction of the call (INBOUND/OUTBOUND).
-        country (str): Country of the call.
-        state (str): State of the call.
-        city (str): City of the call.
-        calls_started (int): Number of calls started.
-        calls_completed (int): Number of calls completed.
-        calls_failed (int): Number of calls failed.
-        calls_not_answered (int): Number of calls not answered.
-        calls_bounce (int): Number of calls bounced.
-        calls_declined (int): Number of calls declined.
-        total_price (float): Total price of the calls.
-        average_price (float): Average price of the calls.
-        total_duration (int): Total duration of the calls.
-        average_duration (float): Average duration of the calls.
-        total_call_duration (int): Total call duration.
-        average_call_duration (float): Average call duration.
+        call_analytics_data (list): List of tuples containing call analytics data.
+            Each tuple should have the following structure:
+            (direction, country, state, city, calls_started, calls_completed, calls_failed,
+            calls_not_answered, calls_bounce, calls_declined, total_price, average_price,
+            total_duration, total_call_duration)
     """
-    query = """
-        SELECT twilio.bulk_upsert_call_analytics(
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-        );
-    """
-    client = Tortoise.get_connection('default')
-    await client.execute_query(
-        query,
-        [
-            direction,
-            country,
-            state,
-            city,
-            calls_started,
-            calls_completed,
-            calls_failed,
-            calls_not_answered,
-            calls_bounce,
-            calls_declined,
-            total_price,
-            average_price,
-            total_duration,
-            #average_duration,
-            total_call_duration,
-            #average_call_duration,
-        ],
+    values_str = ", ".join(
+        f"ROW('{direction}', '{country}', '{state}', '{city}', {calls_started}, {calls_completed}, {calls_failed}, "
+        f"{calls_not_answered}, {calls_bounce}, {calls_declined}, {total_price}, {average_price}, "
+        f"{total_duration}, {total_call_duration})::twilio.call_analytics_input"
+        for direction, country, state, city, calls_started, calls_completed, calls_failed,
+        calls_not_answered, calls_bounce, calls_declined, total_price, average_price,
+        total_duration, total_call_duration in call_analytics_data
     )
+    query = "SELECT * FROM twilio.bulk_upsert_call_analytics($1);"
+    client = Tortoise.get_connection('default')
+    await client.execute_query(query, [f"ARRAY[{values_str}]"])
 
 
 async def bulk_upsert_sms_analytics(

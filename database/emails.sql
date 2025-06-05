@@ -232,7 +232,7 @@ BEGIN
 
         -- Upsert analytics for the current ESP provider
         PERFORM upsert_email_analytics(
-            esp_provider,
+            esp,
             0, -- emails_sent
             COALESCE(array_length(sent_email_ids, 1), 0), -- emails_delivered
             0,                                           -- emails_opened

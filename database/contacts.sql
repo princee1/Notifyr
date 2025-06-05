@@ -282,26 +282,33 @@ CREATE TABLE IF NOT EXISTS ContactAnalytics (
     Foreign Key (content_id) REFERENCES SubsContent(content_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
-CREATE OR REPLACE FUNCTION upsert_contact_analytics(
-    c_content_id UUID,
-    c_country VARCHAR(5),
-    c_region VARCHAR(60),
-    c_city VARCHAR(100),
+CREATE TYPE contact_analytics_input AS (
+    content_id UUID,
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
     subscriptions INT,
     unsubscriptions INT
-) RETURNS VOID AS $$
+);
+
+CREATE OR REPLACE FUNCTION bulk_upsert_contact_analytics(data contact_analytics_input[]) RETURNS VOID AS $$
+DECLARE
+    record contact_analytics_input;
 BEGIN
     SET search_path = contacts;
 
-    -- Coerce c_content_id to default if NULL
-    c_content_id := COALESCE(c_content_id, '00000000-0000-0000-0000-000000000000');
+    FOREACH record IN ARRAY data
+    LOOP
+        -- Coerce content_id to default if NULL
+        record.content_id := COALESCE(record.content_id, '00000000-0000-0000-0000-000000000000');
 
-    INSERT INTO ContactAnalytics (week_start_date, content_id, country, region, city, subscriptions_count, unsubscriptions_count)
-    VALUES (DATE_TRUNC('week', NOW()), c_content_id, c_country, c_region, c_city, subscriptions, unsubscriptions)
-    ON CONFLICT (week_start_date, content_id, country, region, city)
-    DO UPDATE SET
-        subscriptions_count = ContactAnalytics.subscriptions_count + EXCLUDED.subscriptions_count,
-        unsubscriptions_count = ContactAnalytics.unsubscriptions_count + EXCLUDED.unsubscriptions_count;
+        INSERT INTO ContactAnalytics (week_start_date, content_id, country, region, city, subscriptions_count, unsubscriptions_count)
+        VALUES (DATE_TRUNC('week', NOW()), record.content_id, record.country, record.region, record.city, record.subscriptions, record.unsubscriptions)
+        ON CONFLICT (week_start_date, content_id, country, region, city)
+        DO UPDATE SET
+            subscriptions_count = ContactAnalytics.subscriptions_count + EXCLUDED.subscriptions_count,
+            unsubscriptions_count = ContactAnalytics.unsubscriptions_count + EXCLUDED.unsubscriptions_count;
+    END LOOP;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -344,20 +351,27 @@ CREATE TABLE IF NOT EXISTS ContactCreationAnalytics (
     UNIQUE (week_start_date, country, region, city)
 );
 
-CREATE OR REPLACE FUNCTION upsert_contact_creation_analytics(
-    c_country VARCHAR(5),
-    c_region VARCHAR(60),
-    c_city VARCHAR(100),
+CREATE TYPE contact_creation_analytics_input AS (
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
     contacts_created INT
-) RETURNS VOID AS $$
+);
+
+CREATE OR REPLACE FUNCTION bulk_upsert_contact_creation_analytics(data contact_creation_analytics_input[]) RETURNS VOID AS $$
+DECLARE
+    record contact_creation_analytics_input;
 BEGIN
     SET search_path = contacts;
 
-    INSERT INTO ContactCreationAnalytics (week_start_date, country, region, city, contacts_created_count)
-    VALUES (DATE_TRUNC('week', NOW()), c_country, c_region, c_city, contacts_created)
-    ON CONFLICT (week_start_date, country, region, city)
-    DO UPDATE SET
-        contacts_created_count = ContactCreationAnalytics.contacts_created_count + EXCLUDED.contacts_created_count;
+    FOREACH record IN ARRAY data
+    LOOP
+        INSERT INTO ContactCreationAnalytics (week_start_date, country, region, city, contacts_created_count)
+        VALUES (DATE_TRUNC('week', NOW()), record.country, record.region, record.city, record.contacts_created)
+        ON CONFLICT (week_start_date, country, region, city)
+        DO UPDATE SET
+            contacts_created_count = ContactCreationAnalytics.contacts_created_count + EXCLUDED.contacts_created_count;
+    END LOOP;
 END;
 $$ LANGUAGE plpgsql;
 

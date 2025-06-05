@@ -379,20 +379,14 @@ async def get_all_contact_summary():
     client = Tortoise.get_connection('default')
     return await client.execute_query(query,[])
 
-async def upsert_contact_analytics(
-    country: str,
-    region: str,
-    city: str,
-    subscriptions: int,
-    unsubscriptions: int
-):
-    query = """
-        SELECT contacts.upsert_contact_analytics($1, $2, $3, $4, $5);
-    """
+async def bulk_upsert_contact_analytics(analytics_data):
+    values_str = ", ".join(
+        f"ROW('{country}', '{region}', '{city}', '{subscriptions}', '{unsubscriptions}')::contacts.analytics_input"
+        for country, region, city, subscriptions, unsubscriptions in analytics_data
+    )
+    query = "SELECT * FROM contacts.bulk_upsert_contact_analytics($1)"
     client = Tortoise.get_connection('default')
-    await client.execute_query(query, [country, region, city, subscriptions, unsubscriptions])
-
-
+    return await client.execute_query(query, [f"ARRAY[{values_str}]"])
 
 async def calculate_contact_analytics_grouped(group_by_factor: int):
     query = """
@@ -409,18 +403,14 @@ async def calculate_contact_analytics_grouped(group_by_factor: int):
         for row in rows[1]
     ]
 
-async def upsert_contact_creation_analytics(
-    country: str,
-    region: str,
-    city: str,
-    contacts_created: int
-):
-    query = """
-        SELECT contacts.upsert_contact_creation_analytics($1, $2, $3, $4);
-    """
+async def bulk_upsert_contact_creation_analytics(analytics_data):
+    values_str = ", ".join(
+        f"ROW('{country}', '{region}', '{city}', '{contacts_created}')::contacts.creation_analytics_input"
+        for country, region, city, contacts_created in analytics_data
+    )
+    query = "SELECT * FROM contacts.bulk_upsert_contact_creation_analytics($1)"
     client = Tortoise.get_connection('default')
-    await client.execute_query(query, [country, region, city, contacts_created])
-
+    return await client.execute_query(query, [f"ARRAY[{values_str}]"])
 
 async def calculate_contact_creation_analytics_grouped(group_by_factor: int):
     query = """

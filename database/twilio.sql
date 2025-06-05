@@ -241,8 +241,8 @@ CREATE OR REPLACE FUNCTION bulk_upsert_sms_analytics(
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO SMSAnalytics (week_start_date, direction, sms_sent, sms_delivered, sms_failed, sms_bounce, total_price, average_price)
-    VALUES (DEFAULT, d, sent_count, delivered_count, failed_count, bounced_count, total_price, average_price)
+    INSERT INTO SMSAnalytics (week_start_date, direction, sms_sent, sms_delivered, sms_failed, sms_bounce, total_price)
+    VALUES (DEFAULT, d, sent_count, delivered_count, failed_count, bounced_count, total_price)
     ON CONFLICT (week_start_date, direction) -- Updated conflict target for direction
     DO UPDATE SET
         sms_sent = SMSAnalytics.sms_sent + EXCLUDED.sms_sent,
@@ -254,9 +254,8 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
--- Function to upsert Call Analytics with calls_not_answered
-CREATE OR REPLACE FUNCTION bulk_upsert_call_analytics(
-    d Direction, -- Added direction parameter
+CREATE TYPE call_analytics_input AS (
+    direction Direction,
     country VARCHAR(100),
     state VARCHAR(100),
     city VARCHAR(100),
@@ -269,29 +268,32 @@ CREATE OR REPLACE FUNCTION bulk_upsert_call_analytics(
     total_price FLOAT,
     average_price FLOAT,
     total_duration INT,
-    -- average_duration FLOAT,
     total_call_duration INT
-    -- average_call_duration FLOAT
-) RETURNS VOID AS $$
+);
+
+CREATE OR REPLACE FUNCTION bulk_upsert_call_analytics(data call_analytics_input[]) RETURNS VOID AS $$
+DECLARE
+    record call_analytics_input;
 BEGIN
     SET search_path = twilio;
 
-    INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, calls_bounce,calls_declined, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
-    VALUES (DEFAULT, d, country, state, city, started_count, completed_count, failed_count, not_answered_count, bounced_count,declined_count, total_price, average_price, total_duration, average_duration, total_call_duration, average_call_duration)
-    ON CONFLICT (week_start_date, direction, country, state, city) -- Updated conflict target for direction
-    DO UPDATE SET
-        calls_started = CallAnalytics.calls_started + EXCLUDED.calls_started,
-        calls_completed = CallAnalytics.calls_completed + EXCLUDED.calls_completed,
-        calls_failed = CallAnalytics.calls_failed + EXCLUDED.calls_failed,
-        calls_not_answered = CallAnalytics.calls_not_answered + EXCLUDED.calls_not_answered,
-        calls_bounce = CallAnalytics.calls_bounce + EXCLUDED.calls_bounce,
-        calls_declined = CallAnalytics.calls_declined + EXCLUDED.calls_declined,
-        total_price = CallAnalytics.total_price + EXCLUDED.total_price,
-        average_price = (CallAnalytics.total_price + EXCLUDED.total_price) / (CallAnalytics.calls_started + EXCLUDED.calls_started),
-        total_duration = CallAnalytics.total_duration + EXCLUDED.total_duration,
-        -- average_duration = (CallAnalytics.total_duration + EXCLUDED.total_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed),
-        total_call_duration = CallAnalytics.total_call_duration + EXCLUDED.total_call_duration;
-        -- average_call_duration = (CallAnalytics.total_call_duration + EXCLUDED.total_call_duration) / (CallAnalytics.calls_completed + EXCLUDED.calls_completed);
+    FOREACH record IN ARRAY data
+    LOOP
+        INSERT INTO CallAnalytics (week_start_date, direction, country, state, city, calls_started, calls_completed, calls_failed, calls_not_answered, calls_bounce, calls_declined, total_price, total_duration, total_call_duration)
+        VALUES (DEFAULT, record.direction, record.country, record.state, record.city, record.started_count, record.completed_count, record.failed_count, record.not_answered_count, record.bounced_count, record.declined_count, record.total_price, record.total_duration, record.total_call_duration)
+        ON CONFLICT (week_start_date, direction, country, state, city)
+        DO UPDATE SET
+            calls_started = CallAnalytics.calls_started + EXCLUDED.calls_started,
+            calls_completed = CallAnalytics.calls_completed + EXCLUDED.calls_completed,
+            calls_failed = CallAnalytics.calls_failed + EXCLUDED.calls_failed,
+            calls_not_answered = CallAnalytics.calls_not_answered + EXCLUDED.calls_not_answered,
+            calls_bounce = CallAnalytics.calls_bounce + EXCLUDED.calls_bounce,
+            calls_declined = CallAnalytics.calls_declined + EXCLUDED.calls_declined,
+            total_price = CallAnalytics.total_price + EXCLUDED.total_price,
+            average_price = (CallAnalytics.total_price + EXCLUDED.total_price) / (CallAnalytics.calls_started + EXCLUDED.calls_started),
+            total_duration = CallAnalytics.total_duration + EXCLUDED.total_duration,
+            total_call_duration = CallAnalytics.total_call_duration + EXCLUDED.total_call_duration;
+    END LOOP;
 END;
 $$ LANGUAGE PLPGSQL;
 
