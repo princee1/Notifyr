@@ -195,6 +195,7 @@ class SMSAnalyticsORM(models.Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     week_start_date = fields.DateField(default=datetime.utcnow().date)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
+    sms_received = fields.IntField(default=0)
     sms_sent = fields.IntField(default=0)
     sms_delivered = fields.IntField(default=0)
     sms_failed = fields.IntField(default=0)
@@ -213,6 +214,7 @@ class SMSAnalyticsORM(models.Model):
             "analytics_id": str(self.analytics_id),
             "week_start_date": self.week_start_date.isoformat(),
             "direction": self.direction.value,
+            "sms_received":self.sms_received,
             "sms_sent": self.sms_sent,
             "sms_delivered": self.sms_delivered,
             "sms_failed": self.sms_failed,
@@ -221,7 +223,6 @@ class SMSAnalyticsORM(models.Model):
             #"average_price": self.average_price,
         }
 
-
 class CallAnalyticsORM(models.Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     week_start_date = fields.DateField(default=datetime.utcnow().date)
@@ -229,6 +230,7 @@ class CallAnalyticsORM(models.Model):
     country = fields.CharField(max_length=100, null=True)
     state = fields.CharField(max_length=100, null=True)
     city = fields.CharField(max_length=100, null=True)
+    calls_received = fields.IntField(default= 0)
     calls_started = fields.IntField(default=0)
     calls_completed = fields.IntField(default=0)
     calls_failed = fields.IntField(default=0)
@@ -255,6 +257,7 @@ class CallAnalyticsORM(models.Model):
             "country": self.country,
             "state": self.state,
             "city": self.city,
+            "calls_received":self.calls_received,
             "calls_started": self.calls_started,
             "calls_completed": self.calls_completed,
             "calls_failed": self.calls_failed,
@@ -269,7 +272,6 @@ class CallAnalyticsORM(models.Model):
             "ringing_duration": self.total_call_duration - self.total_duration
         }
 
-
 async def bulk_upsert_call_analytics(call_analytics_data):
     """
     Upserts call analytics data into the database.
@@ -277,15 +279,15 @@ async def bulk_upsert_call_analytics(call_analytics_data):
     Args:
         call_analytics_data (list): List of tuples containing call analytics data.
             Each tuple should have the following structure:
-            (direction, country, state, city, calls_started, calls_completed, calls_failed,
+            (direction, country, state, city, calls_received, calls_started, calls_completed, calls_failed,
             calls_not_answered, calls_bounce, calls_declined, total_price, average_price,
             total_duration, total_call_duration)
     """
     values_str = ", ".join(
-        f"ROW('{direction}', '{country}', '{state}', '{city}', {calls_started}, {calls_completed}, {calls_failed}, "
+        f"ROW('{direction}', '{country}', '{state}', '{city}',{calls_received}, {calls_started}, {calls_completed}, {calls_failed}, "
         f"{calls_not_answered}, {calls_bounce}, {calls_declined}, {total_price}, {average_price}, "
         f"{total_duration}, {total_call_duration})::twilio.call_analytics_input"
-        for direction, country, state, city, calls_started, calls_completed, calls_failed,
+        for direction, country, state, city,calls_received, calls_started, calls_completed, calls_failed,
         calls_not_answered, calls_bounce, calls_declined, total_price, average_price,
         total_duration, total_call_duration in call_analytics_data
     )
@@ -293,9 +295,9 @@ async def bulk_upsert_call_analytics(call_analytics_data):
     client = Tortoise.get_connection('default')
     await client.execute_query(query, [f"ARRAY[{values_str}]"])
 
-
 async def bulk_upsert_sms_analytics(
     direction: str,
+    sms_received:int,
     sms_sent: int,
     sms_delivered: int,
     sms_failed: int,
@@ -317,7 +319,7 @@ async def bulk_upsert_sms_analytics(
     """
     query = """
         SELECT twilio.bulk_upsert_sms_analytics(
-            $1, $2, $3, $4, $5, $6
+            $1, $2, $3, $4, $5, $6, $7
         );
     """
     client = Tortoise.get_connection('default')
@@ -325,6 +327,7 @@ async def bulk_upsert_sms_analytics(
         query,
         [
             direction,
+            sms_received,
             sms_sent,
             sms_delivered,
             sms_failed,
@@ -333,7 +336,6 @@ async def bulk_upsert_sms_analytics(
             #average_price,
         ],
     )
-
 
 async def aggregate_sms_analytics(group_by_factor: int):
     query = """
