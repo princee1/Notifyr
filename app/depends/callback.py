@@ -7,6 +7,7 @@ from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEv
 from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
 from app.models.contacts_model import ContactORM, bulk_upsert_contact_analytics, bulk_upsert_contact_creation_analytics
 from app.models.twilio_model import CallEventORM, CallStatusEnum, CallTrackingORM, SMSEventORM, SMSStatusEnum,SMSTrackingORM, bulk_upsert_call_analytics, bulk_upsert_sms_analytics
+from app.services.celery_service import CeleryService
 from app.utils.constant import StreamConstant
 from tortoise.models import Model
 from tortoise.transactions import in_transaction
@@ -15,6 +16,7 @@ from device_detector import DeviceDetector
 from tortoise.exceptions import IntegrityError
 
 Call_Ids:dict[str|dict]={}
+
 
 
 def inject_set(func:Callable):
@@ -628,6 +630,7 @@ async def Add_Contact_Creation_Event(entries:list[tuple[str,dict]]):
 
 
 async def Retry_Mechanism(entries:list[tuple[str,dict]]):
+    celeryService = Get(CeleryService)
     ...
 #############################################        ############################################
 

@@ -32,3 +32,4 @@
 30. Add email headers to specify if it is transactional
 31. Add analytics on session converted
 32. Make sure the date of the scheduler are coordinated
+33. Add another message broker to retry the request sending back the data to the celery worker in callback.py

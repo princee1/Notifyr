@@ -91,6 +91,7 @@ class StreamConstant:
     TWILIO_EVENT_STREAM_CALL = 'twilio-event-call'
     CONTACT_SUBS_EVENT = 'contact-subs-event'
     CONTACT_CREATION_EVENT= 'contact-creation-event'
+    RETRY_MECHANISM='retry-mechanism'
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'
