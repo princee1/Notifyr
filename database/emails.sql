@@ -29,7 +29,8 @@ CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
         'COMPLAINT',
         'DEFERRED',
         'DELAYED',
-        'REPLIED'
+        'REPLIED',
+        'REJECTED'
     )
 );
 
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS EmailAnalytics (
     day_start_date DATE NOT NULL DEFAULT DATE_TRUNC('day', NOW()), -- Changed to daily tracking
     emails_received INT DEFAULT 0,
     emails_sent INT DEFAULT 0,
+    emails_rejected INT DEFAULT 0,
     emails_delivered INT DEFAULT 0,
     emails_opened INT DEFAULT 0,
     emails_bounced INT DEFAULT 0,
@@ -87,6 +89,7 @@ CREATE TYPE email_analytics_input AS (
     esp VARCHAR(25),
     received_count INT,
     sent_count INT,
+    rejected_count INT,
     delivered_count INT,
     opened_count INT,
     bounced_count INT,
@@ -103,12 +106,13 @@ BEGIN
 
     FOREACH record IN ARRAY data
     LOOP
-        INSERT INTO EmailAnalytics (day_start_date, esp_provider, emails_received, emails_sent, emails_delivered, emails_opened, emails_bounced, emails_complaint, emails_replied, emails_failed)
-        VALUES (DATE_TRUNC('DAY', NOW()), record.esp, record.received_count, record.sent_count, record.delivered_count, record.opened_count, record.bounced_count, record.complaint_count, record.replied_count, record.failed_count)
+        INSERT INTO EmailAnalytics (day_start_date, esp_provider, emails_received, emails_sent,emails_rejected, emails_delivered, emails_opened, emails_bounced, emails_complaint, emails_replied, emails_failed)
+        VALUES (DATE_TRUNC('DAY', NOW()), record.esp, record.received_count, record.sent_count,record.rejected_count, record.delivered_count, record.opened_count, record.bounced_count, record.complaint_count, record.replied_count, record.failed_count)
         ON CONFLICT (day_start_date, esp_provider)
         DO UPDATE SET
             emails_received = EmailAnalytics.emails_received + EXCLUDED.emails_received,
             emails_sent = EmailAnalytics.emails_sent + EXCLUDED.emails_sent,
+            emails_rejected = EmailAnalytics.emails_rejected + EXCLUDED.emails_rejected,
             emails_delivered = EmailAnalytics.emails_delivered + EXCLUDED.emails_delivered,
             emails_opened = EmailAnalytics.emails_opened + EXCLUDED.emails_opened,
             emails_bounced = EmailAnalytics.emails_bounced + EXCLUDED.emails_bounced,
@@ -127,6 +131,7 @@ CREATE OR REPLACE FUNCTION calculate_email_analytics_grouped(
     esp_provider VARCHAR(25),
     emails_received INT,
     emails_sent INT,
+    emails_rejected INT,
     emails_delivered INT,
     emails_opened INT,
     emails_bounced INT,
@@ -143,6 +148,7 @@ BEGIN
         esp_provider,
         SUM(emails_received) AS emails_received,
         SUM(emails_sent) AS emails_sent,
+        SUM(emails_rejected) AS emails_rejected,
         SUM(emails_delivered) AS emails_delivered,
         SUM(emails_opened) AS emails_opened,
         SUM(emails_bounced) AS emails_bounced,
@@ -249,6 +255,7 @@ BEGIN
             esp,
             0, -- emails_received
             0, -- emails_sent
+            0, -- emails_rejected
             COALESCE(array_length(sent_email_ids, 1), 0), -- emails_delivered
             0, -- emails_opened
             0, -- emails_bounced

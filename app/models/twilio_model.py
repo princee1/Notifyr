@@ -16,6 +16,7 @@ class SMSStatusEnum(str, Enum):
     FAILED = "FAILED"
     RECEIVED = "RECEIVED"
     BOUNCE = "BOUNCE"
+    REJECTED = "REJECTED"
 
 class CallStatusEnum(str, Enum):
     RECEIVED = "RECEIVED"
@@ -29,6 +30,7 @@ class CallStatusEnum(str, Enum):
     BOUNCE = "BOUNCE"
     IN_PROGRESS="IN-PROGRESS"
     DECLINED= "DECLINED"
+    REJECTED = "REJECTED"
 
 
 class DirectionEnum(str, Enum):
@@ -201,6 +203,7 @@ class SMSAnalyticsORM(models.Model):
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     sms_received = fields.IntField(default=0)
     sms_sent = fields.IntField(default=0)
+    sms_rejected = fields.IntField(default=0)
     sms_delivered = fields.IntField(default=0)
     sms_failed = fields.IntField(default=0)
     sms_bounce = fields.IntField(default=0)  # Added sms_bounce field
@@ -220,6 +223,7 @@ class SMSAnalyticsORM(models.Model):
             "direction": self.direction.value,
             "sms_received":self.sms_received,
             "sms_sent": self.sms_sent,
+            "sms_rejected":self.sms_rejected,
             "sms_delivered": self.sms_delivered,
             "sms_failed": self.sms_failed,
             "sms_bounce": self.sms_bounce,  # Added sms_bounce
@@ -236,6 +240,7 @@ class CallAnalyticsORM(models.Model):
     city = fields.CharField(max_length=100, null=True)
     calls_received = fields.IntField(default= 0)
     calls_sent = fields.IntField(default=0)
+    calls_rejected = fields.IntField(default=0)
     calls_started = fields.IntField(default=0)
     calls_completed = fields.IntField(default=0)
     calls_failed = fields.IntField(default=0)
@@ -264,6 +269,7 @@ class CallAnalyticsORM(models.Model):
             "city": self.city,
             "calls_received":self.calls_received,
             "calls_sent":self.calls_sent,
+            "calls_rejected":self.calls_rejected,
             "calls_started": self.calls_started,
             "calls_completed": self.calls_completed,
             "calls_failed": self.calls_failed,
@@ -290,7 +296,7 @@ async def bulk_upsert_call_analytics(call_analytics_data:dict,direction):
             total_duration, total_call_duration)
     """
     values_str = ", ".join(
-        f"ROW('{direction}', '{key[0]}', '{key[1]}', '{key[2]}',{data[direction]['received']}, {data[direction]['started']}, {data[direction]['completed']}, {data[direction]['failed']}, "
+        f"ROW('{direction}', '{key[0]}', '{key[1]}', '{key[2]}',{data[direction]['received']}, {data[direction]['started']}, {data[direction]['rejected']}, {data[direction]['completed']}, {data[direction]['failed']}, "
         f"{data[direction]['no_answer']}, {data[direction]['bounce']}, {data[direction]['declined']}, {data[direction]['price']}, "
         f"{data[direction]['call_duration']}, {data[direction]['total_duration']})::twilio.call_analytics_input"
         for key,data in call_analytics_data.items()
@@ -303,6 +309,7 @@ async def bulk_upsert_sms_analytics(
     direction: str,
     received:int,
     sent: int,
+    rejected:int,
     delivered: int,
     failed: int,
     bounce: int,
@@ -323,7 +330,7 @@ async def bulk_upsert_sms_analytics(
     """
     query = """
         SELECT twilio.bulk_upsert_sms_analytics(
-            $1, $2, $3, $4, $5, $6, $7
+            $1, $2, $3, $4, $5, $6, $7,$8
         );
     """
     client = Tortoise.get_connection('default')
@@ -333,6 +340,7 @@ async def bulk_upsert_sms_analytics(
             direction,
             received,
             sent,
+            rejected,
             delivered,
             failed,
             bounce,
@@ -368,8 +376,9 @@ async def fetch_call_analytics_by_week():
 
     column_names = [
         "analytics_id", "week_start_date", "direction", "country", "state", "city",
-        "calls_started", "calls_completed", "calls_failed", "total_price", "average_price",
-        "total_duration", "average_duration"
+        "calls_received", "calls_sent", "calls_rejected", "calls_started", "calls_completed",
+        "calls_failed", "calls_not_answered", "calls_bounce", "total_price", "total_duration",
+        "total_call_duration", "ringing_duration"
     ]
 
     return {

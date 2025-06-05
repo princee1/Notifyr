@@ -180,7 +180,8 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                     'failed':0,
                     'opened': 0,
                     'bounced': 0,
-                    'replied': 0
+                    'replied': 0,
+                    'rejected':0,
                 }
 
             factor = -1 if val.get('correction',False) else 1
@@ -189,6 +190,9 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
             match event.current_event:
                 case EmailStatus.RECEIVED.value:
                     analytics[esp_provider]['received']+=factor
+                
+                case EmailStatus.REJECTED.value:
+                    analytics[esp_provider]['rejected']+=factor
 
                 case EmailStatus.SENT.value:
                     analytics[esp_provider]['sent'] += factor
@@ -291,7 +295,8 @@ async def Add_Twilio_Sms_Event(entries: list[tuple[str, dict]]):
             'delivered':0,
             'failed':0,
             'bounce':0,
-            'price':0
+            'price':0,
+            'rejected':0,
         },
         'O':{
             'received':0,
@@ -299,7 +304,8 @@ async def Add_Twilio_Sms_Event(entries: list[tuple[str, dict]]):
             'delivered':0,
             'failed':0,
             'bounce':0,
-            'price':0
+            'price':0,
+            'rejected':0
         }
 
     } 
@@ -330,6 +336,9 @@ async def Add_Twilio_Sms_Event(entries: list[tuple[str, dict]]):
             match val['current_event']:
 
                 case SMSStatusEnum.RECEIVED.value:
+                    analytics[val[analytics]]['received'] +=factor
+                
+                case SMSStatusEnum.REJECTED.value:
                     analytics[val[analytics]]['received'] +=factor
                 
                 case SMSStatusEnum.SENT.value:
@@ -409,6 +418,7 @@ async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
             'price':0,
             'no_answer':0,
             'declined':0,
+            'rejected':0,
             'call_duration':0,
             'total_duration':0,
         },
@@ -423,6 +433,7 @@ async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
             'price':0,
             'no_answer':0,
             'declined':0,
+            'rejected':0,
             'call_duration':0,
             'total_duration':0,
         }
@@ -489,6 +500,9 @@ async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
                     
                     case CallStatusEnum.SENT.value:
                         analytics[key][v['direction']]['sent'] +=factor
+
+                    case CallStatusEnum.REJECTED.value:
+                        analytics[key][v['direction']]['sent'] +=factor
                     
                     case CallStatusEnum.INITIATED:
                         analytics[key][v['direction']]['started'] +=factor
@@ -507,7 +521,6 @@ async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
 
                         duration[call_id]['duration']=0
                         duration[call_id]['total_duration']=v['total_duration']
-
 
                     case  CallStatusEnum.FAILED.value:
                         analytics[key][v['direction']]['failed'] +=factor
@@ -614,6 +627,8 @@ async def Add_Contact_Creation_Event(entries:list[tuple[str,dict]]):
         return invalid_entries
 
 
+async def Retry_Mechanism(entries:list[tuple[str,dict]]):
+    ...
 #############################################        ############################################
 
 Callbacks_Stream = {

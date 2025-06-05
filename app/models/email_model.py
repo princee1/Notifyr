@@ -77,6 +77,7 @@ class EmailStatus(str, Enum):
     DEFERRED = 'DEFERRED'
     DELAYED = 'DELAYED'
     REPLIED = 'REPLIED'
+    REJECTED = 'REJECTED'
 
 
 mapping = {
@@ -211,6 +212,7 @@ class EmailAnalyticsORM(models.Model):
     esp_provider = fields.CharField(max_length=25)
     emails_received = fields.IntField(default=0)
     emails_sent = fields.IntField(default=0)
+    emails_rejected= fields.IntField(default=0)
     emails_delivered = fields.IntField(default=0)
     emails_opened = fields.IntField(default=0)
     emails_bounced = fields.IntField(default=0)
@@ -231,6 +233,7 @@ class EmailAnalyticsORM(models.Model):
             "day_start_date": self.day_start_date.isoformat(),
             "esp_provider": self.esp_provider,
             "emails_received": self.emails_received,
+            "emails_reject":self.emails_rejected,
             "emails_sent": self.emails_sent,
             "emails_delivered": self.emails_delivered,
             "emails_opened": self.emails_opened,
@@ -252,8 +255,8 @@ async def bulk_upsert_email_analytics(data: dict[str, dict]):
     SELECT emails.bulk_upsert_email_analytics($1::emails.email_analytics_input[]);
     """
     emails_values = ", ".join(
-        f"ROW('{esp_provider}', '{analytics['received']}','{analytics['sent']}', '{analytics['delivered']}', '{analytics['opened']}',"+
-        f" '{analytics['bounced']}', '{analytics['complaint']}', '{analytics['replied']}', '{analytics['failed']}')::emails.email_analytics_input"
+        f"ROW('{esp_provider}', {analytics['received']},{analytics['sent']},{analytics['rejected']} ,{analytics['delivered']}, {analytics['opened']},"+
+        f" {analytics['bounced']}, {analytics['complaint']}, {analytics['replied']}, {analytics['failed']})::emails.email_analytics_input"
         for esp_provider, analytics in data.items()
     )
     
@@ -262,20 +265,31 @@ async def bulk_upsert_email_analytics(data: dict[str, dict]):
     
 
 async def calculate_email_analytics_grouped(group_by_factor: int):
+    """
+    Calculate email analytics grouped by a specified factor.
+
+    Args:
+        group_by_factor (int): The grouping factor in days.
+
+    Returns:
+        List[dict]: A list of dictionaries containing grouped analytics data.
+    """
     query = "SELECT * FROM emails.calculate_email_analytics_grouped($1);"
     client = Tortoise.get_connection('default')
     rows = await client.execute_query(query, [group_by_factor])
     return [
         {
-            "group_number": row[0],
-            "esp_provider": row[1],
-            "emails_sent": row[2],
-            "emails_delivered": row[3],
-            "emails_opened": row[4],
-            "emails_bounced": row[5],
-            "emails_complaint": row[6],  # Added emails_complaint
-            "emails_replied": row[7],
-            "emails_failed": row[8],  # Added emails_failed
+            "group_number": row["group_number"],
+            "esp_provider": row["esp_provider"],
+            "emails_received": row["emails_received"],
+            "emails_sent": row["emails_sent"],
+            "emails_rejected": row["emails_rejected"],
+            "emails_delivered": row["emails_delivered"],
+            "emails_opened": row["emails_opened"],
+            "emails_bounced": row["emails_bounced"],
+            "emails_complaint": row["emails_complaint"],
+            "emails_replied": row["emails_replied"],
+            "emails_failed": row["emails_failed"],
         }
         for row in rows[1]
     ]

@@ -25,6 +25,7 @@ from twilio.rest.api.v2010.account.message import MessageInstance
 from twilio.rest.api.v2010.account.call import CallInstance
 from twilio.twiml.voice_response import VoiceResponse, Gather, Say,Record
 from twilio.twiml.messaging_response import MessagingResponse
+from twilio.base.exceptions import TwilioRestException
 import aiohttp
 import asyncio
 from aiohttp import BasicAuth
@@ -155,6 +156,8 @@ class BaseTwilioCommunication(_service.BaseService):
             #     return callback
             # else:
             #     return self.response_extractor(message)
+            if message== None:
+                return None
             return self.response_extractor(message)
         return wrapper
 
@@ -203,7 +206,14 @@ class SMSService(BaseTwilioCommunication):
             #     result = await result
             description = f'Sent request to third-party API'
             status = SMSStatusEnum.SENT.value
-        except:
+        
+        except TwilioRestException as e:
+            print(e.msg,e.details,e.code)
+            result = None
+            description = f'Third Party Api could not process the request'
+            status = SMSStatusEnum.FAILED.value
+
+        except Exception as e:
             result = None
             description = f'Failed to send the request'
             status = SMSStatusEnum.FAILED.value
@@ -218,9 +228,9 @@ class SMSService(BaseTwilioCommunication):
                     date_event_received=now
                 )
                 if self.configService.celery_env == CeleryMode.none:
-                    await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event.to_json)
+                    await self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_SMS, event)
                 else:
-                    self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_SMS, event.to_json)
+                    self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_SMS, event)
 
             return result
 
@@ -314,7 +324,14 @@ class CallService(BaseTwilioCommunication):
             #     result = await result
             description = f'Sent request to third-party API'
             status = CallStatusEnum.SENT.value
-        except:
+        except TwilioRestException as e:
+            print(e.msg,e.details,e.code)
+            result = None
+            description = f'Third Party Api could not process the request'
+            status = SMSStatusEnum.FAILED.value
+
+        except Exception as e:
+            result=None
             description = f'Failed to send the request'
             status =CallStatusEnum.FAILED.value
         finally:
@@ -324,7 +341,7 @@ class CallService(BaseTwilioCommunication):
                 event = CallEventORM.JSON(event_id=str(uuid_v1_mc()),call_sid =result.sid ,call_id=twilio_tracking,direction='O',current_event=status,city=None,country=None,state=None,
                                           date_event_received=now, description=description)
                 if self.configService.celery_env == CeleryMode.none:
-                    await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
+                    await self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_CALL, event)
                 else:
                     self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_CALL, event)
 
