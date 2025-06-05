@@ -10,7 +10,8 @@ CREATE DOMAIN SMSStatus AS VARCHAR(50) CHECK (
         'FAILED',
         'REPLIED',
         'RECEIVED',
-        'BOUNCE'
+        'BOUNCE',
+        'REJECTED'
     )
 );
 
@@ -33,7 +34,8 @@ CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
         'IN-PROGRESS',
         'RINGING',
         'FAILED',
-        'SENT'
+        'SENT',
+        'REJECTED'
     )
 );
 
