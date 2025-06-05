@@ -128,7 +128,7 @@ class RedisService(DatabaseService):
                 stream=True,
                 wait=45,
                 block=MS_1000*15,
-                count=MS_1000,
+                count=MS_1000*5,
 
             ),
             StreamConstant.TWILIO_EVENT_STREAM_SMS:self.StreamConfig(
@@ -137,6 +137,20 @@ class RedisService(DatabaseService):
                 wait=45,
                 block=MS_1000*15,
                 count=500,
+            ),
+            StreamConstant.CONTACT_CREATION_EVENT:self.StreamConfig(
+                sub=False,
+                stream=True,
+                wait = 60*60*6,
+                block=MS_1000*10,
+                count=1000
+            ),
+            StreamConstant.CONTACT_SUBS_EVENT:self.StreamConfig(
+                sub=False,
+                stream=True,
+                wait = 60*60*4,
+                block=MS_1000*20,
+                count=10000
             )
 
         }

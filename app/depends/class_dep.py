@@ -87,17 +87,17 @@ class TwilioTracker(TrackerInterface):
         self.twilio_id = str(twilio_id)
         self.contact_id = None
 
-    def sms_track_event_data(self, scheduler: OnGoingBaseSMSModel, contact_id=None):
+    def sms_track_event_data(self, content: OnGoingBaseSMSModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
 
         # Create the SMS sent event
         sent_event = SMSEventORM.JSON(
-            event_id=uuid_v1_mc(),
+            event_id=str(uuid_v1_mc()),
             sms_id=self.twilio_id,
             sms_sid=None,
             direction='O',
-            current_event=SMSStatusEnum.SENT.value,
+            current_event=SMSStatusEnum.RECEIVED.value,
             description="SMS sent successfully",
             date_event_received=now.isoformat()
         )
@@ -105,8 +105,8 @@ class TwilioTracker(TrackerInterface):
         tracking_data = {
             'sms_id': self.twilio_id,
             'contact_id': contact_id,
-            'recipient': scheduler.to,
-            'sender': scheduler.from_,
+            'recipient': content.to,
+            'sender': content.from_,
             'date_sent': now.isoformat(),
             'last_update': now.isoformat(),
             'expired_tracking_date': expired_tracking_date,
@@ -115,17 +115,17 @@ class TwilioTracker(TrackerInterface):
 
         return sent_event, tracking_data
 
-    def call_track_event_data(self, scheduler: BaseVoiceCallModel, contact_id=None):
+    def call_track_event_data(self, content: BaseVoiceCallModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
 
         # Create the Call sent event
         sent_event = CallEventORM.JSON(
-            event_id=uuid_v1_mc(),
+            event_id=str(uuid_v1_mc()),
             call_sid=None,
             call_id=self.twilio_id,
             direction='O',
-            current_event=CallStatusEnum.SENT.value,
+            current_event=CallStatusEnum.RECEIVED.value,
             description="Call initiated successfully",
             date_event_received=now.isoformat(),
             city=None,
@@ -136,8 +136,8 @@ class TwilioTracker(TrackerInterface):
         tracking_data = {
             'call_id': self.twilio_id,
             'contact_id': contact_id,
-            'recipient': scheduler.to,
-            'sender': scheduler.from_,
+            'recipient': content.to,
+            'sender': content.from_,
             'date_sent': now.isoformat(),
             'last_update': now.isoformat(),
             'expired_tracking_date': expired_tracking_date,

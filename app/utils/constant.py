@@ -89,6 +89,8 @@ class StreamConstant:
     TWILIO_TRACKING_CALL ='twilio-tracking-call'
     TWILIO_EVENT_STREAM_SMS = 'twilio-event-sms'
     TWILIO_EVENT_STREAM_CALL = 'twilio-event-call'
+    CONTACT_SUBS_EVENT = 'contact-subs-event'
+    CONTACT_CREATION_EVENT= 'contact-creation-event'
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'

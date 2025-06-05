@@ -271,6 +271,7 @@ class CallService(BaseTwilioCommunication):
             'sid': result.sid,
             'direction': result.direction,
             'status': result.status,
+            'queue_time':result.queue_time,
             'start_time': str(result.start_time) if result.start_time else None
         }
 

@@ -16,7 +16,7 @@ from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.security_model import ClientORM
 from app.models.call_model import BaseVoiceCallModel, CallStatusModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
-from app.models.twilio_model import CallEventORM
+from app.models.twilio_model import CallEventORM, CallStatusEnum
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
@@ -164,7 +164,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         loop = scheduler.content.loop
         
         if tracker.will_track:
-            event,tracking_event_data = tracker.call_track_event_data(scheduler)
+            event,tracking_event_data = tracker.call_track_event_data(scheduler.content)
             broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
             broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
 
@@ -255,14 +255,18 @@ class IncomingCallRessources(BaseHTTPRessource):
             event = {
                 'call_id':status.twilio_tracking_id,
                 'call_sid':status.CallSid,
-                'current_event':status.CallStatus.upper(),
-                'description':f'The call is in the {status.CallStatus} state',
                 'date_event_received':now,
                 'country':status.ToCountry,
                 'city':status.ToCity,
                 'state':status.ToState
 
             }
+            if status.CallStatus == 'completed' and (status.Duration == None or status.Duration <=1):
+                event['current_event']= CallStatusEnum.DECLINED.value
+                event['description'] = f'The callee declined the call'
+            else:
+                event['current_event']=status.CallStatus.upper(),
+                event['description']=f'The call is in the {status.CallStatus} state',
             broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,CallEventORM.JSON(event_id=str(uuid_v1_mc()),direction='O',**event))
         return 
 
