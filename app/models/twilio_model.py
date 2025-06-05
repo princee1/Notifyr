@@ -123,6 +123,9 @@ class SMSEventORM(models.Model):
         description:str
         date_event_received:str
         correction:bool = False
+        price:float|None = None
+        price_unit:str|None = None
+
 
     class Meta:
         schema = SCHEMA
@@ -157,13 +160,13 @@ class CallEventORM(models.Model):
     class JSON(TypedDict):
         event_id:str
         call_id:str
-        call_sid:str
         direction:str
         current_event:str
         description:str
         country:str
         city:str
         state:str
+        call_sid:str|None=None
         date_event_received:str
         correction:bool = False
         price:float|None = None

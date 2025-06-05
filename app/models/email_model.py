@@ -249,16 +249,17 @@ async def bulk_upsert_email_analytics(data: dict[str, dict]):
         data (List[dict]): A list of dictionaries containing analytics data.
     """
     query = """
-    SELECT emails.bulk_upsert_email_analytics($1::emails.analytics_input[]);
+    SELECT emails.bulk_upsert_email_analytics($1::emails.email_analytics_input[]);
     """
     emails_values = ", ".join(
-        f"ROW('{esp_provider}', {analytics['emails_received']}, {analytics['emails_sent']}, {analytics['emails_delivered']}, {analytics['emails_opened']}, {analytics['emails_bounced']}, {analytics['emails_complaint']}, {analytics['emails_replied']}, {analytics['emails_failed']})::emails.email_analytics_input"
+        f"ROW('{esp_provider}', '{analytics['received']}','{analytics['sent']}', '{analytics['delivered']}', '{analytics['opened']}',"+
+        f" '{analytics['bounced']}', '{analytics['complaint']}', '{analytics['replied']}', '{analytics['failed']}')::emails.email_analytics_input"
         for esp_provider, analytics in data.items()
     )
-
+    
     client = Tortoise.get_connection('default')
-    await client.execute_query(query, [emails_values])
-
+    await client.execute_query(query, [f'ARRAY[{emails_values}]'])
+    
 
 async def calculate_email_analytics_grouped(group_by_factor: int):
     query = "SELECT * FROM emails.calculate_email_analytics_grouped($1);"
