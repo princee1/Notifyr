@@ -208,9 +208,8 @@ class SMSService(BaseTwilioCommunication):
             status = SMSStatusEnum.SENT.value
         
         except TwilioRestException as e:
-            print(e.msg,e.details,e.code)
             result = None
-            description = f'Third Party Api could not process the request'
+            description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
             status = SMSStatusEnum.FAILED.value
 
         except Exception as e:
@@ -325,9 +324,8 @@ class CallService(BaseTwilioCommunication):
             description = f'Sent request to third-party API'
             status = CallStatusEnum.SENT.value
         except TwilioRestException as e:
-            print(e.msg,e.details,e.code)
             result = None
-            description = f'Third Party Api could not process the request'
+            description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
             status = SMSStatusEnum.FAILED.value
 
         except Exception as e:

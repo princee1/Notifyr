@@ -16,7 +16,7 @@ from device_detector import DeviceDetector
 from tortoise.exceptions import IntegrityError
 
 Call_Ids:dict[str|dict]={}
-
+N_A = 'N/A'
 
 
 def inject_set(func:Callable):
@@ -97,13 +97,20 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
                 event_count[link_id] =0
             
             event_count[link_id]+=1
-            dd = DeviceDetector(val['user_agent']).parse()
-            device_type = dd.device_type()
-            device_type = device_type.strip()
-            if not device_type:
+            user_agent = val.get('user_agent',None)
+            if user_agent == None:
                 device_type = 'unknown'
+            else:
+                dd = DeviceDetector().parse()
+                device_type = dd.device_type()
+                device_type = device_type.strip()
+                if not device_type:
+                    device_type = 'unknown'
 
-            analytics_key = (link_id,val['country'],val['region'],val['city'],device_type)
+            if val.get('country',None) == None:
+                analytics_key(link_id,N_A,N_A,N_A,device_type)
+            else:
+                analytics_key = (link_id,val['country'],val['region'],val['city'],device_type)
 
             if analytics_key not in analytics:
                 analytics[analytics_key] = 0
@@ -276,7 +283,7 @@ async def Add_Link_Session(entries:list[str,dict]):
 
 async def Add_Twilio_Tracking_Call(entries: list[tuple[str, dict]]):
     print(f'Treating: {len(entries)} entries for Twilio Tracking Call Stream')
-    print(entries)
+    #print(entries)
     async with in_transaction():
         return await simple_bulk_creates(entries, CallTrackingORM)
 
@@ -401,6 +408,9 @@ async def Add_Twilio_Sms_Event(entries: list[tuple[str, dict]]):
         return invalid_entries
 
 async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
+
+    print(f'Treating: {len(entries)} entries for Add Twilio Call Event Stream')
+    
     valid_entries = set()
     invalid_entries = set()
     in_memory_cache_entries = set()
@@ -455,32 +465,41 @@ async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
             key = None
             data:list[CallEventORM.JSON]= []
 
-            if call_id not in Call_Ids:
-                if val['city'] != None:
-                    Call_Ids[call_id]['key']= key =(val['country'],val['state'],val['city'])
-                    analytics[key] = create_analytics()
-                    data.append(val)
-
-                else:
-                    if 'temp' not in Call_Ids[call_id]:
-                        Call_Ids[call_id]['temp'] = []
-
-                    Call_Ids[call_id]['temp'].append(val)
-            else:
-                if 'temp' in Call_Ids[call_id]:
+            if val['current_event'] not in [CallStatusEnum.REJECTED.value,CallStatusEnum.FAILED.value]: # BUG if received is here for a long time
+                if call_id not in Call_Ids:
                     if val['city'] != None:
+                        Call_Ids[call_id]['key']= key =(val['country'],val['state'],val['city'])
                         analytics[key] = create_analytics()
-                        data.extend(Call_Ids[call_id]['temp'])
-                        Call_Ids[call_id]['temp'] = []
+                        data.append(val)
+
                     else:
+                        if 'temp' not in Call_Ids[call_id]:
+                            Call_Ids[call_id]['temp'] = []
+
                         Call_Ids[call_id]['temp'].append(val)
                 else:
-                    key = Call_Ids[call_id]['key']
-                    data.append(val)
+                    if 'temp' in Call_Ids[call_id]:
+                        if val['city'] != None:
+                            analytics[key] = create_analytics()
+                            data.extend(Call_Ids[call_id]['temp'])
+                            Call_Ids[call_id]['temp'] = []
+                        else:
+                            Call_Ids[call_id]['temp'].append(val)
+                    else:
+                        key = Call_Ids[call_id]['key']
+                        data.append(val)
 
+            else:
+                key= (N_A,N_A,N_A)
+                if key not in analytics:
+                    analytics[key] = create_analytics()
+                data.append(val)
 
             if key!= None:
-                del Call_Ids[call_id]
+                try:
+                    del Call_Ids[call_id]
+                except:
+                    ...
 
             call_tracking_status[call_id] = val['current_event']
 
@@ -553,21 +572,22 @@ async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
     @retry_logic(3,3)
     async def callback():
         async with in_transaction():
-            if len(call_tracking) >0:
-                await CallTrackingORM.bulk_update(call_tracking,fields=['price','price_unit','duration','total_duration'])
-            
+            # if len(call_tracking) >0:
+            #     await CallTrackingORM.bulk_update(call_tracking,fields=['price','price_unit','duration','total_duration'])
             await CallEventORM.bulk_create(objs)
-            await bulk_upsert_call_analytics()
-            await bulk_upsert_call_analytics()
+            await bulk_upsert_call_analytics(analytics,'I')
+            await bulk_upsert_call_analytics(analytics,'O')
 
 
     try:
+        async with in_transaction():
+            if len(call_tracking) >0:
+                await CallTrackingORM.bulk_update(call_tracking,fields=['price','price_unit','duration','total_duration'])
         await callback()
         return list(valid_entries.union(invalid_entries))
     except:
         return invalid_entries
     
-
 async def Add_Contact_Subs_Event(entries:list[tuple[str,dict]]):
     valid_entries = set()
     invalid_entries = set()
@@ -576,11 +596,12 @@ async def Add_Contact_Subs_Event(entries:list[tuple[str,dict]]):
     for ids,val in entries:
         
         try:
-            if val['country']!=None:
+            empty_str_to_none(val)
+            if val.get('country',None)!=None:
 
                 key = (val['country'],val['state'],val['region'])
             else:
-                key =(None,None,None)
+                key =(N_A,N_A,N_A)
 
             if key not in analytics:
                 analytics[key]['sub']=0
@@ -598,8 +619,6 @@ async def Add_Contact_Subs_Event(entries:list[tuple[str,dict]]):
     except:
         return invalid_entries
 
-
-
 async def Add_Contact_Creation_Event(entries:list[tuple[str,dict]]):
     valid_entries = set()
     invalid_entries = set()
@@ -608,11 +627,12 @@ async def Add_Contact_Creation_Event(entries:list[tuple[str,dict]]):
     for ids,val in entries:
         
         try:
+            empty_str_to_none(val)
             if val['country']!=None:
 
                 key = (val['country'],val['state'],val['region'])
             else:
-                key =(None,None,None)
+                key =(N_A,N_A,N_A)
 
             if key not in analytics:
                 analytics[key]=0
