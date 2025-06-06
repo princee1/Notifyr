@@ -93,6 +93,10 @@ class StreamConstant:
     CONTACT_CREATION_EVENT= 'contact-creation-event'
     RETRY_MECHANISM='retry-mechanism'
 
+
+class SubConstant:
+    SERVICE_STATUS = 'service-status'
+
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'
 

@@ -13,6 +13,7 @@ AbstractServiceClasses: Dict[str, type] = {}
 BuildOnlyIfDependencies: Dict = {}
 PossibleDependencies: Dict[str, list[type]] = {}
 OptionalDependencies: Dict[str, list[type]] = {}
+__CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []
 
 
@@ -250,9 +251,10 @@ def AbstractServiceClass(cls: S) -> S:
     return cls
 
 
-def Service(cls: S) -> S:
+def Service(cls: Type[S]) -> Type[S]:
     if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
         __DEPENDENCY.append(cls)
+        __CLASS_DEPENDENCY[cls.__name__] = cls
     return cls
 
 
