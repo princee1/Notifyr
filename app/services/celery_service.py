@@ -8,8 +8,9 @@ from app.definition._service import BuildFailureError, BaseService, Service, Ser
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.database_service import RedisService
 from app.utils.constant import HTTPHeaderConstant, StreamConstant
+from app.utils.transformer import none_to_empty_str
 from .config_service import ConfigService
-from app.utils.helper import generateId
+from app.utils.helper import flatten_dict, generateId
 from app.task import TASK_REGISTRY, celery_app, AsyncResult, task_name
 from redbeat import RedBeatSchedulerEntry
 from app.utils.helper import generateId
@@ -111,7 +112,7 @@ class CeleryService(BaseService, IntervalInterface):
     def trigger_task_from_task(self, celery_task: CeleryTask,index:int|None, schedule_name: str = None):
         return self._trigger_task(celery_task, schedule_name,index)
 
-    def scheduler_to_celery_task(scheduler: SchedulerModel,index:int|None, *args, **kwargs):
+    def scheduler_to_celery_task(self,scheduler: SchedulerModel,index:int|None, *args, **kwargs):
         celery_task = scheduler.model_dump(mode='python', exclude={'content'})
         celery_task: CeleryTask = CeleryTask(args=args, kwargs=kwargs, **celery_task)
         return {
@@ -320,10 +321,11 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                 'index':index,
                 'result':result
             }
-        except TaskRetryError:
+        except TaskRetryError as e:
             if is_retry:
                 if not isinstance(scheduler,s):
                     params = self.celeryService.scheduler_to_celery_task(scheduler,index,*args,**kwargs)
+                    params = flatten_dict(params,serialized=True)
                     await self.redisService.stream_data(StreamConstant.CELERY_RETRY_MECHANISM,params)
             return {
                 'handler':'Route Handler',
@@ -463,6 +465,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                     if is_retry:
                         if not isinstance(scheduler,s) and isinstance(task,BackgroundTask):
                             params = self.celeryService.scheduler_to_celery_task(scheduler,i,task.args,task.kwargs)
+                            params = flatten_dict(params,serialized=True)
                             await self.redisService.stream_data(StreamConstant.CELERY_RETRY_MECHANISM,params)
                             return
                         
@@ -539,11 +542,11 @@ class OffloadTaskService(BaseService):
         return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
 
 
-    async def _route_offload(self,scheduler,delay: float, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
+    async def _route_offload(self,scheduler,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
         if as_async:
             if asyncio.iscoroutine(callback):
                 return await self.taskService.add_async_task(scheduler,x_request_id,delay,index,callback)
             return await self.taskService.add_task(scheduler, x_request_id, delay, index,callback, *args, **kwargs)
             
         else:
-                return await self.taskService.run_task_in_route_handler(scheduler,index,callback,*args,**kwargs)
+                return await self.taskService.run_task_in_route_handler(scheduler,is_retry,index,callback,*args,**kwargs)

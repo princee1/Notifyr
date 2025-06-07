@@ -5,7 +5,7 @@ from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
 from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
-from app.utils.constant import StreamConstant
+from app.utils.constant import StreamConstant, SubConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import CeleryMode, ConfigService
 from .file_service import FileService
@@ -111,6 +111,7 @@ class RedisService(DatabaseService):
                 'block':MS_1000*5,
                 'wait':5,
             }),
+
             StreamConstant.TWILIO_TRACKING_CALL:self.StreamConfig(
                 sub=False,
                 stream=True,
@@ -151,8 +152,19 @@ class RedisService(DatabaseService):
                 wait = 60*60*4,
                 block=MS_1000*20,
                 count=10000
-            )
+            ),
+            StreamConstant.CELERY_RETRY_MECHANISM:self.StreamConfig(
+                sub=False,
+                stream=True,
+                wait=10,
+                block=10,
+                count=1000,
+            ),
 
+            SubConstant.SERVICE_STATUS:self.StreamConfig(
+                sub=True,
+                stream=True
+            )
         }
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
@@ -183,7 +195,7 @@ class RedisService(DatabaseService):
     async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker]):
         pubsub = self.redis_events.pubsub()
 
-        if channels != StreamConstant.CELERY_RETRY_MECHANISM:
+        if channels != SubConstant.SERVICE_STATUS:
             def handler_wrapper(message):
                 if message is None:
                     print('No message')

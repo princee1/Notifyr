@@ -1,5 +1,6 @@
 from inspect import getmro
 from abc import ABC
+import json
 from random import choice, seed
 from string import hexdigits, digits, ascii_letters,punctuation
 import time
@@ -176,7 +177,11 @@ def parseToDataStruct(value: str):
             return parsed_value
     except (ValueError, SyntaxError):
         return None
-
+    
+def enum_encoder(obj):
+    if isinstance(obj, Enum):
+        return obj.value  # or obj.value if you prefer
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
 # TODO need to add the build error level
 def parseToValue(value: str, _type: type[int | bytes | float | bytearray], default: int | bytes | float | bytearray | None = None, ):
@@ -267,7 +272,7 @@ def swapDict(values: dict):
 
 def default_flattenReducer(key1:str,key2:str): return  key1+key2
 
-def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] ={}, reducer:Callable[[str,str],str] = default_flattenReducer):
+def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] ={}, reducer:Callable[[str,str],str] = default_flattenReducer,serialized=False):
     """
     See https://pypi.org/project/flatten-dict/ for a better implementation
     """
@@ -282,12 +287,35 @@ def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedD
         key_val  = reducer(from_keys,key)  
 
         if type(item) is not dict:
-            flattenedDict[key_val] = item
+            if not serialized:
+                flattenedDict[key_val] = item
+            else:
+                #flattenedDict[key_val] = str(item)
+                flattenedDict[key_val] = json.dumps(item,default=enum_encoder)
 
-        if type(item) is dict:
-            flatten_dict(item, key_builder(key_val), flattenedDict)
+        if type(item) is dict: 
+            flatten_dict(item, key_builder(key_val), flattenedDict,reducer,serialized)
     
     return flattenedDict
+
+def unflattened_dict(flattened_dict: dict[str, Any], separator: str = DICT_SEP) -> dict[str, Any]:
+    """
+    Converts a flattened dictionary back into a nested dictionary, attempting to parse JSON values back to their original types.
+    """
+    unflattened = {}
+    for key, value in flattened_dict.items():
+        keys = key.split(separator)
+        current = unflattened
+        for part in keys[:-1]:
+            if part not in current or not isinstance(current[part], dict):
+                current[part] = {}
+            current = current[part]
+        try:
+            current[keys[-1]] = json.loads(value) if isinstance(value, str) else value
+        except (json.JSONDecodeError, TypeError):
+            current[keys[-1]] = value
+    return unflattened
+
 
 
 ################################   ** Class Helper **      #################################

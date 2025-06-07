@@ -2,6 +2,7 @@ import asyncio
 import functools
 import traceback
 from typing import Callable
+from app.classes.celery import TaskHeaviness
 from app.container import Get, InjectInFunction
 from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM, bulk_upsert_email_analytics
 from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
@@ -11,6 +12,7 @@ from app.services.celery_service import CeleryService
 from app.utils.constant import StreamConstant
 from tortoise.models import Model
 from tortoise.transactions import in_transaction
+from app.utils.helper import unflattened_dict
 from app.utils.transformer import empty_str_to_none
 from device_detector import DeviceDetector
 from tortoise.exceptions import IntegrityError
@@ -258,7 +260,7 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
             contact_id_to_delete.append(str(et.contact.contact_id))
     
 
-    @retry_logic(3,2)
+    @retry_logic(4,10)
     async def callback():
         async with in_transaction():
             await bulk_upsert_email_analytics(analytics)
@@ -651,12 +653,27 @@ async def Add_Contact_Creation_Event(entries:list[tuple[str,dict]]):
 
 
 async def Retry_Mechanism(entries:list[tuple[str,dict]]):
+    print(f'Treating: {len(entries)} entries for Retry Mechanism Stream')
+
+    valid_entries = set()
+    invalid_entries = set()
+
     celeryService = Get(CeleryService)
 
     for ids, val in entries:
-        ...
+        empty_str_to_none(val)
+        val = unflattened_dict(val)
+        val['celery_task']['heaviness'] = TaskHeaviness(val['celery_task']['heaviness'])
+        print(val)
+        continue
+        try:
+            celeryService.trigger_task_from_task(**val)
+            valid_entries.add(ids)
+        except Exception as e:
+            invalid_entries.add(ids)
 
-    return []
+    return list(valid_entries.union(invalid_entries))
+    
 #############################################        ############################################
 
 Callbacks_Stream = {
@@ -670,5 +687,5 @@ Callbacks_Stream = {
     StreamConstant.TWILIO_EVENT_STREAM_SMS:Add_Twilio_Sms_Event,
     StreamConstant.CONTACT_SUBS_EVENT:Add_Contact_Subs_Event,
     StreamConstant.CONTACT_CREATION_EVENT:Add_Contact_Creation_Event,
-    StreamConstant.RETRY_MECHANISM:Retry_Mechanism
+    StreamConstant.CELERY_RETRY_MECHANISM:Retry_Mechanism
 }
