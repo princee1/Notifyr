@@ -104,6 +104,7 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
     for key,val in analytics.items():
         key = list(key)
         key.append(val)
+        key = tuple(key)
         analytics_inputs.append(key)
     
     link_visit_input = []
