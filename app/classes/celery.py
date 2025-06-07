@@ -82,3 +82,8 @@ class CeleryTask(TypedDict):
 @dataclass
 class s:
     heaviness: TaskHeaviness
+
+class TaskRetryError(BaseError):
+    def __init__(self,error, *args):
+        super().__init__(*args)
+        self.error=error

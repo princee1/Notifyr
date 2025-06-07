@@ -34,6 +34,8 @@ save_results_query:Callable=get_query_params('save','false',True)
 
 get_task_results:Callable= get_query_params('get_task_results','true',True)
 
+retry_query:Callable= get_query_params('retry','false',True)
+
 # ----------------------------------------------                                    ---------------------------------- #
 
 carrier_info:Callable[[Request],bool]=get_query_params('carrier_info','true',True)

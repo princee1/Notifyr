@@ -183,7 +183,7 @@ class RedisService(DatabaseService):
     async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker]):
         pubsub = self.redis_events.pubsub()
 
-        if channels != StreamConstant.RETRY_MECHANISM:
+        if channels != StreamConstant.CELERY_RETRY_MECHANISM:
             def handler_wrapper(message):
                 if message is None:
                     print('No message')
