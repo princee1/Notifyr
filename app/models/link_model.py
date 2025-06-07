@@ -211,17 +211,51 @@ class QRCodeModel(BaseModel):
     border: int = 4
 
 
-async def bulk_upsert_analytics(analytics_data):
-    values_str = ", ".join(f"ROW('{link_id}', '{country}', '{region}', '{city}', '{device}', '{visits_counts}')::links.analytics_input" for link_id, country,region,city,device,visits_counts in analytics_data)
-    query = f"SELECT * FROM links.bulk_upsert_analytics($1)"
-    client = Tortoise.get_connection('default')
-    return await client.execute_query(query,[f"ARRAY[{values_str}]"])
+async def bulk_upsert_analytics(data: dict[str, dict]):
+    """
+    Bulk upsert link analytics data.
 
-async def bulk_upsert_links_vc(links_input):
-    values_str = ", ".join(f"ROW('{link_id}', '{visits_counts}')::links.links_vc_input" for link_id,visits_counts in links_input)
-    query = f"SELECT * FROM links.bulk_upsert_links_visits_counts($1)"
+    Args:
+        data (dict): A dictionary containing analytics data.
+    """
+    query = """
+    SELECT links.bulk_upsert_analytics($1);
+    """
+    analytics_values = [
+        (
+            link_id,
+            analytics['country'],
+            analytics['region'],
+            analytics['city'],
+            analytics['device'],
+            analytics['visits_counts']
+        )
+        for link_id, analytics in data.items()
+    ]
     client = Tortoise.get_connection('default')
-    return await client.execute_query(query,[f"ARRAY[{values_str}]"])
+    await client.execute_query(query, [analytics_values])
+
+
+async def bulk_upsert_links_vc(data: dict[str, int]):
+    """
+    Bulk upsert link visit counts.
+
+    Args:
+        data (dict): A dictionary containing link visit counts.
+    """
+    query = """
+    SELECT links.bulk_upsert_links_visits_counts($1);
+    """
+    links_values = [
+        (
+            link_id,
+            visits_counts
+        )
+        for link_id, visits_counts in data.items()
+    ]
+    client = Tortoise.get_connection('default')
+    await client.execute_query(query, [links_values])
+
 
 async def fetch_analytics_sorted_by_date():
     """

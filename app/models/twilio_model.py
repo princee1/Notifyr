@@ -284,26 +284,39 @@ class CallAnalyticsORM(models.Model):
             "ringing_duration": self.total_call_duration - self.total_duration
         }
 
-async def bulk_upsert_call_analytics(call_analytics_data:dict,direction):
+async def bulk_upsert_call_analytics(data: dict[str, dict]):
     """
-    Upserts call analytics data into the database.
+    Bulk upsert call analytics data.
 
     Args:
-        call_analytics_data (list): List of tuples containing call analytics data.
-            Each tuple should have the following structure:
-            (direction, country, state, city, calls_received, calls_started, calls_completed, calls_failed,
-            calls_not_answered, calls_bounce, calls_declined, total_price, average_price,
-            total_duration, total_call_duration)
+        data (dict): A dictionary containing analytics data.
     """
-    values_str = ", ".join(
-        f"ROW('{direction}', '{key[0]}', '{key[1]}', '{key[2]}',{data[direction]['received']}, {data[direction]['started']}, {data[direction]['rejected']}, {data[direction]['completed']}, {data[direction]['failed']}, "
-        f"{data[direction]['no_answer']}, {data[direction]['bounce']}, {data[direction]['declined']}, {data[direction]['price']}, "
-        f"{data[direction]['call_duration']}, {data[direction]['total_duration']})::twilio.call_analytics_input"
-        for key,data in call_analytics_data.items()
-    )
-    query = "SELECT * FROM twilio.bulk_upsert_call_analytics($1);"
+    query = """
+    SELECT twilio.bulk_upsert_call_analytics($1);
+    """
+    call_values = [
+        (
+            direction,
+            analytics['country'],
+            analytics['state'],
+            analytics['city'],
+            analytics['received'],
+            analytics['sent'],
+            analytics['rejected'],
+            analytics['started'],
+            analytics['completed'],
+            analytics['failed'],
+            analytics['no_answer'],
+            analytics['bounce'],
+            analytics['price'],
+            analytics['average_price'],
+            analytics['total_duration'],
+            analytics['total_call_duration']
+        )
+        for direction, analytics in data.items()
+    ]
     client = Tortoise.get_connection('default')
-    await client.execute_query(query, [f"ARRAY[{values_str}]"])
+    await client.execute_query(query, [call_values])
 
 async def bulk_upsert_sms_analytics(
     direction: str,
