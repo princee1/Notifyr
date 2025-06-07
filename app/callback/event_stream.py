@@ -7,7 +7,6 @@ from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upser
 from app.models.contacts_model import ContactORM, bulk_upsert_contact_analytics, bulk_upsert_contact_creation_analytics
 from app.models.twilio_model import CallEventORM, CallStatusEnum, CallTrackingORM, SMSEventORM, SMSStatusEnum,SMSTrackingORM, bulk_upsert_call_analytics, bulk_upsert_sms_analytics
 from app.utils.constant import StreamConstant
-from tortoise.models import Model
 from tortoise.transactions import in_transaction
 from app.utils.transformer import empty_str_to_none
 from device_detector import DeviceDetector
@@ -28,29 +27,6 @@ def inject_set(func:Callable):
         return await wrapper(*args,**kwargs)
 
     return wrapper
-
-
-async def simple_bulk_creates(entries,orm:type[Model]):
-    valid_entries = set()
-    invalid_entries = set()
-    objs = []
-    for ids,val in entries:
-        try:
-            empty_str_to_none(val)
-            objs.append(orm(**val))
-            valid_entries.add(ids)
-        except Exception as e:
-            print(e.__class__,e)
-            traceback.print_exc()
-            invalid_entries.add(ids)
-    
-    try:
-        await orm.bulk_create(objs)
-        return list(valid_entries.union(invalid_entries))
-    except Exception as e:
-        print(e.__class__,e)
-        traceback.print_exc()
-        return list(invalid_entries)
 
 
 def retry_logic(retry:int,sleep_time:int):
@@ -99,7 +75,7 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
             if user_agent == None:
                 device_type = 'unknown'
             else:
-                dd = DeviceDetector().parse()
+                dd = DeviceDetector(user_agent).parse()
                 device_type = dd.device_type()
                 device_type = device_type.strip()
                 if not device_type:
@@ -146,12 +122,7 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
     except Exception as e:
         print(e)
         return list(invalid_entries)
-    
-async def Add_Email_Tracking(entries:list[str,dict]):
-    print(f'Treating: {len(entries)} entries for Email Tracking Stream')
-    async with in_transaction():
-        return await simple_bulk_creates(entries,EmailTrackingORM)
-    
+        
 async def Add_Email_Event(entries: list[tuple[str, dict]]):
     print(f'Treating: {len(entries)} entries for Email Tracking Event Stream')
 
@@ -278,17 +249,6 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
     
 async def Add_Link_Session(entries:list[str,dict]):
     ...
-
-async def Add_Twilio_Tracking_Call(entries: list[tuple[str, dict]]):
-    print(f'Treating: {len(entries)} entries for Twilio Tracking Call Stream')
-    #print(entries)
-    async with in_transaction():
-        return await simple_bulk_creates(entries, CallTrackingORM)
-
-async def Add_Twilio_Tracking_Sms(entries: list[tuple[str, dict]]):
-    print(f'Treating: {len(entries)} entries for Twilio Tracking SMS Stream')
-    async with in_transaction():
-        return await simple_bulk_creates(entries, SMSTrackingORM)
 
 async def Add_Twilio_Sms_Event(entries: list[tuple[str, dict]]):
     valid_entries = set()
@@ -652,11 +612,8 @@ async def Add_Contact_Creation_Event(entries:list[tuple[str,dict]]):
 
 Events_Stream = {
     StreamConstant.EMAIL_EVENT_STREAM:Add_Email_Event,
-    StreamConstant.EMAIL_TRACKING:Add_Email_Tracking,
     StreamConstant.LINKS_EVENT_STREAM:Add_Link_Event,
     StreamConstant.LINKS_SESSION_STREAM:Add_Link_Session,
-    StreamConstant.TWILIO_TRACKING_CALL:Add_Twilio_Tracking_Call,
-    StreamConstant.TWILIO_TRACKING_SMS:Add_Twilio_Tracking_Sms,
     StreamConstant.TWILIO_EVENT_STREAM_CALL:Add_Twilio_Call_Event,
     StreamConstant.TWILIO_EVENT_STREAM_SMS:Add_Twilio_Sms_Event,
     StreamConstant.CONTACT_SUBS_EVENT:Add_Contact_Subs_Event,
