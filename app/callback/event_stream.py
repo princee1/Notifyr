@@ -82,7 +82,7 @@ async def Add_Link_Event(entries:list[tuple[str,dict]]):
                     device_type = 'unknown'
 
             if val.get('country',None) == None:
-                analytics_key(link_id,N_A,N_A,N_A,device_type)
+                analytics_key=(link_id,N_A,N_A,N_A,device_type)
             else:
                 analytics_key = (link_id,val['country'],val['region'],val['city'],device_type)
 

@@ -211,7 +211,7 @@ class QRCodeModel(BaseModel):
     border: int = 4
 
 
-async def bulk_upsert_analytics(data: dict[str, dict]):
+async def bulk_upsert_analytics(analytics_values: dict[str, dict]):
     """
     Bulk upsert link analytics data.
 
@@ -221,22 +221,11 @@ async def bulk_upsert_analytics(data: dict[str, dict]):
     query = """
     SELECT links.bulk_upsert_analytics($1);
     """
-    analytics_values = [
-        (
-            link_id,
-            analytics['country'],
-            analytics['region'],
-            analytics['city'],
-            analytics['device'],
-            analytics['visits_counts']
-        )
-        for link_id, analytics in data.items()
-    ]
     client = Tortoise.get_connection('default')
     await client.execute_query(query, [analytics_values])
 
 
-async def bulk_upsert_links_vc(data: dict[str, int]):
+async def bulk_upsert_links_vc(links_values: dict[str, int]):
     """
     Bulk upsert link visit counts.
 
@@ -246,13 +235,6 @@ async def bulk_upsert_links_vc(data: dict[str, int]):
     query = """
     SELECT links.bulk_upsert_links_visits_counts($1);
     """
-    links_values = [
-        (
-            link_id,
-            visits_counts
-        )
-        for link_id, visits_counts in data.items()
-    ]
     client = Tortoise.get_connection('default')
     await client.execute_query(query, [links_values])
 
