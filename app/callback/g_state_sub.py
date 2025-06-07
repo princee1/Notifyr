@@ -6,6 +6,6 @@ from app.utils.constant import SubConstant
 def Set_Service_Status():
     ...
 
-Callback_Subs = {
+G_State_Subs = {
     SubConstant.SERVICE_STATUS:Set_Service_Status
 }
