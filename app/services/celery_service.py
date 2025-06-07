@@ -533,7 +533,7 @@ class OffloadTaskService(BaseService):
                 return await self.taskService.add_task(scheduler, x_request_id, delay, index,callback, *args, **kwargs)
             
             else:
-                return await self.taskService.run_task_in_route_handler(scheduler,index,callback,*args,**kwargs)
+                return await self.taskService.run_task_in_route_handler(scheduler,is_retry,index,callback,*args,**kwargs)
                 
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
