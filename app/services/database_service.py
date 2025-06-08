@@ -192,7 +192,7 @@ class RedisService(DatabaseService):
             return await self.redis_events.publish(channel,data)
         return self.redis_events.publish(channel,data)
         
-    async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker]):
+    async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker|Any|None]):
         pubsub = self.redis_events.pubsub()
 
         if channels != SubConstant.SERVICE_STATUS:
@@ -227,8 +227,7 @@ class RedisService(DatabaseService):
                         ...
         else:
             def handler_wrapper(message):
-                ...
-
+                return handler(message)
 
         await pubsub.subscribe(**{channels:handler_wrapper}) # TODO Maybe add the function as await
 
@@ -263,7 +262,7 @@ class RedisService(DatabaseService):
             })
 
             if is_sub:
-                channel_callback = callbacks_sub.get(stream_name,lambda v:v)# Print later
+                channel_callback = callbacks_sub.get(stream_name,None)# Print later
                 config['channel_tasks']= asyncio.create_task(self._consume_channel(stream_name,channel_callback))
             
             if is_stream:
