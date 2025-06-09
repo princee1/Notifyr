@@ -83,7 +83,7 @@ class BaseEmailService(_service.BaseService):
                 return result
             
             @functools.wraps(func)
-            def wrapper(*args, **kwargs):
+            def sync_wrapper(*args, **kwargs):
                 self: BaseEmailService = args[0]
                 if not isinstance(self, BaseEmailService):
                     self = self.__class__.service
@@ -107,15 +107,15 @@ class BaseEmailService(_service.BaseService):
                 return result
             
             if ConfigService._celery_env == CeleryMode.worker:
-                return wrapper
+                return sync_wrapper
             
             if pref =='async':
                 return async_wrapper
 
             if pref == 'sync':
-                return wrapper 
+                return sync_wrapper 
                     
-            return async_wrapper if asyncio.iscoroutinefunction(func) else wrapper
+            return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
 
         return callback
 
