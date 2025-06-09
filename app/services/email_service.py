@@ -40,10 +40,11 @@ from email import message_from_bytes
 @_service.AbstractServiceClass
 class BaseEmailService(_service.BaseService):
 
-    def __init__(self, configService: ConfigService, loggerService: LoggerService):
+    def __init__(self, configService: ConfigService, loggerService: LoggerService,redisService:RedisService):
         super().__init__()
         self.configService: ConfigService = configService
-        self.loggerService: ConfigService = loggerService
+        self.loggerService: LoggerService = loggerService
+        self.redisService: RedisService = redisService
         self.hostPort: int
         self.mailOAuth: OAuth = ...
         self.state = None
@@ -53,46 +54,70 @@ class BaseEmailService(_service.BaseService):
         self.type_: Literal['IMAP', 'SMTP'] = None
 
     @staticmethod
-    def task_lifecycle(func: Callable):
-
-        @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            self: BaseEmailService = args[0]
-            if not isinstance(self, BaseEmailService):
-                self = self.__class__.service
-
-            connector = self.connect()
-            if connector == None:
-                return
-
-            if not self.authenticate(connector):
-                return
-            kwargs['connector'] = connector
-            result = await func(*args, **kwargs)
-            self.logout(connector)
-            return result
+    def task_lifecycle(pref:Literal['async','sync']=None,async_callback:Callable=None,sync_callback:Callable=None):
         
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            self: BaseEmailService = args[0]
-            if not isinstance(self, BaseEmailService):
-                self = self.__class__.service
+        def callback(func:Callable):
 
-            connector = self.connect()
-            if connector == None:
-                return
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                self: BaseEmailService = args[0]
+                if not isinstance(self, BaseEmailService):
+                    self = self.__class__.service
 
-            if not self.authenticate(connector):
-                return
-            kwargs['connector'] = connector
-            result = func(*args, **kwargs)
-            self.logout(connector)
-            return result
-        
-        if ConfigService._celery_env == CeleryMode.worker:
-            return wrapper
-        
-        return async_wrapper if asyncio.iscoroutinefunction(func) else wrapper
+                connector = self.connect()
+                if connector == None:
+                    return
+
+                if not self.authenticate(connector):
+                    return
+                kwargs['connector'] = connector
+                result = await func(*args, **kwargs)
+                if callable(async_callback):
+                    await async_callback(self,*result[1],**result[2])
+                    result = result[0]
+                else:
+                    if isinstance(result,(list,tuple)):
+                        result = result[0]
+
+                self.logout(connector)
+                return result
+            
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                self: BaseEmailService = args[0]
+                if not isinstance(self, BaseEmailService):
+                    self = self.__class__.service
+
+                connector = self.connect()
+                if connector == None:
+                    return
+
+                if not self.authenticate(connector):
+                    return
+                kwargs['connector'] = connector
+                result = func(*args, **kwargs)
+                if callable(sync_callback):
+                    sync_callback(self,*result[1],**result[2])
+                    result = result[0]
+                else:
+                    if isinstance(result,tuple):
+                        result = result[0]
+
+                self.logout(connector)
+                return result
+            
+            if ConfigService._celery_env == CeleryMode.worker:
+                return wrapper
+            
+            if pref =='async':
+                return async_wrapper
+
+            if pref == 'sync':
+                return wrapper 
+                    
+            return async_wrapper if asyncio.iscoroutinefunction(func) else wrapper
+
+        return callback
 
     def build(self):
         if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
@@ -161,20 +186,33 @@ class BaseEmailService(_service.BaseService):
 
         return None
 
+    async def async_stream_event(self,event_name,event):
+        try:
+            await self.redisService.stream_data(event_name, event)
+        except Exception as e:
+            print('Redis',e) 
+    
+    def sync_stream_event(self,event_name,event):
+        try:
+            self.redisService.stream_data(event_name, event)
+        except Exception as e:
+            print('Redis',e)
+
     def logout(self): ...
 
     def resetConnection(self): ...
 
     def help(self):
         ...
+    
+    redis_event_callback = (async_stream_event,sync_stream_event)
 
 
 @_service.Service
 class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
-        super().__init__(configService, loggerService)
-        self.redisService = redisService
+        super().__init__(configService, loggerService,redisService)
         self.type_ = 'SMTP'
         self.fromEmails: set[str] = set()
         self.connMethod = self.configService.SMTP_EMAIL_CONN_METHOD.lower()
@@ -240,34 +278,36 @@ class EmailSenderService(BaseEmailService):
             # TODO Depends on the error code
         return False
 
-    async def sendTemplateEmail(self, data, meta, images, message_tracking_id, contact_id=None):
+    @BaseEmailService.task_lifecycle('async',*BaseEmailService.redis_event_callback)
+    def sendTemplateEmail(self, data, meta, images, message_tracking_id, contact_id=None,connector:smtp.SMTP=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(data, meta, images)
 
-        if self.configService.celery_env == CeleryMode.none:
-            return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id)
+        # if self.configService.celery_env == CeleryMode.none:
+        #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
+        return self._send_message(email, message_tracking_id, contact_id=contact_id,connector=connector)
 
-    async def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None):
+    @BaseEmailService.task_lifecycle('async',*BaseEmailService.redis_event_callback)
+    def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None,connector:smtp.SMTP=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
         # send_custom_email(content, meta, images, attachment)
 
-        if self.configService.celery_env == CeleryMode.none:
-            return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id)
-
-    async def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id,reply_to,references, contact_id=None):
+        # if self.configService.celery_env == CeleryMode.none:
+        #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
+        return self._send_message(email, message_tracking_id, contact_id=contact_id,connector=connector)
+    
+    @BaseEmailService.task_lifecycle('async',*BaseEmailService.redis_event_callback)
+    def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id,reply_to,references,connector:smtp.SMTP=None, contact_id=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
         # TODO add references and reply_to
 
-        if self.configService.celery_env == CeleryMode.none:
-            return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id)
-        
-    @BaseEmailService.task_lifecycle
-    async def _send_message(self, email: EmailBuilder, message_tracking_id: str, connector: smtp.SMTP, contact_id: str = None):
+        # if self.configService.celery_env == CeleryMode.none:
+        #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
+        return self._send_message(email, message_tracking_id, contact_id=contact_id,connector=connector)
+    
+    def _send_message(self, email: EmailBuilder, message_tracking_id: str, connector: smtp.SMTP, contact_id: str = None):
         try:
             event_id = str(uuid_v1_mc())
             now = datetime.now(timezone.utc).isoformat()
@@ -313,27 +353,20 @@ class EmailSenderService(BaseEmailService):
                     date_event_received=now,
                     esp_provider=get_email_provider_name(email.emailMetadata.To[0]) # VERIFY if To is a list then put it in the for loop
                 )
-                try:
-                    if self.configService.celery_env == CeleryMode.none:
-                        await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
-                    else:
-                        self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
-                except Exception as e:
-                    print('redis',e)
 
             return {
                 "emailID": emailID,
                 "status": reply_
-            }
+            },(StreamConstant.EMAIL_EVENT_STREAM,event),{}
 
-    @BaseEmailService.task_lifecycle
+    @BaseEmailService.task_lifecycle()
     def verify_same_domain_email(self, email: str, connector: smtp.SMTP):
         domain = email.split['@'][1]
         our_domain = self.configService.SMTP_EMAIL.split['@'][1]
         if our_domain != domain:
             raise NotSameDomainEmailError
 
-        return connector.verify(email)
+        return (connector.verify(email),)
 
 J:Type = None
 j:dict = None
@@ -390,7 +423,7 @@ class EmailReaderService(BaseEmailService):
         def no_select(self) -> bool:
             return "\\Noselect" in self.flags
 
-        @BaseEmailService.task_lifecycle
+        @BaseEmailService.task_lifecycle()
         def rename(self, new_name: str, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Rename the mailbox."""
             status, response = connector.rename(self.name, new_name)
@@ -398,17 +431,17 @@ class EmailReaderService(BaseEmailService):
                 raise imap.IMAP4.error(
                     f"Failed to rename mailbox {self.name} to {new_name}")
             self.name = new_name
-            return response
+            return (response,)
 
-        @BaseEmailService.task_lifecycle
+        @BaseEmailService.task_lifecycle()
         def delete(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Delete the mailbox."""
             status, response = connector.delete(self.name)
             if status != 'OK':
                 raise imap.IMAP4.error(f"Failed to delete mailbox {self.name}")
-            return response
+            return (response,)
 
-        @BaseEmailService.task_lifecycle
+        @BaseEmailService.task_lifecycle()
         def create_subfolder(self, subfolder_name: str, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Create a subfolder under the current mailbox."""
             full_name = f"{self.name}/{subfolder_name}"
@@ -416,9 +449,9 @@ class EmailReaderService(BaseEmailService):
             if status != 'OK':
                 raise imap.IMAP4.error(
                     f"Failed to create subfolder {subfolder_name} under {self.name}")
-            return full_name, response
+            return ((full_name, response),)
 
-        @BaseEmailService.task_lifecycle
+        @BaseEmailService.task_lifecycle()
         def status(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
             ...
 
@@ -482,7 +515,7 @@ class EmailReaderService(BaseEmailService):
 
 
     def __init__(self, configService: ConfigService, loggerService: LoggerService, reactiveService: ReactiveService, redisService: RedisService) -> None:
-        super().__init__(configService, loggerService)
+        super().__init__(configService, loggerService,redisService)
         IntervalInterface.__init__(self, True, 10)
         self.reactiveService = reactiveService
         self.redisService = redisService
@@ -625,7 +658,7 @@ class EmailReaderService(BaseEmailService):
             jobs.cancel_job()
 
     #@register_job('Parse DNS Email',(60,180),'INBOX', None)
-    @BaseEmailService.task_lifecycle
+    @BaseEmailService.task_lifecycle()
     @select_inbox
     async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
@@ -671,10 +704,11 @@ class EmailReaderService(BaseEmailService):
 
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
             # self.delete_email(ids,connector)
+        return None
 
     #@register_job('Parse Replied Email',(60,180),'INBOX', None,True)
     #@register_job('Parse Forwarded Email',(60,180),'INBOX', None,False)
-    @BaseEmailService.task_lifecycle
+    @BaseEmailService.task_lifecycle()
     @select_inbox
     async def forwarded_email(self, max_count:int|None, is_re:bool, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
@@ -721,6 +755,7 @@ class EmailReaderService(BaseEmailService):
 
             await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
 
+        return None
 
     @property
     def mailboxes(self):

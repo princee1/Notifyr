@@ -109,15 +109,13 @@ def SharedTask(heaviness: TaskHeaviness, **kwargs):
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_template_mail(data, meta, images,message_tracking_id,contact_id=None):
     emailService: EmailSenderService = Get(EmailSenderService)
-    sendTemplateEmail = async_to_sync(emailService.sendTemplateEmail)
-    return sendTemplateEmail(data, meta, images,message_tracking_id,contact_id)
+    return emailService.sendTemplateEmail(data, meta, images,message_tracking_id,contact_id)
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_custom_mail(content, meta, images, attachment,message_tracking_id,contact_id=None):
     emailService: EmailSenderService = Get(EmailSenderService)
-    sendCustomEmail = async_to_sync(emailService.sendCustomEmail)
-    return sendCustomEmail(content, meta, images, attachment,message_tracking_id,contact_id)
+    return emailService.sendCustomEmail(content, meta, images, attachment,message_tracking_id,contact_id)
 
 @RegisterTask(TaskHeaviness.LIGHT)
 def task_send_custom_sms(messages):

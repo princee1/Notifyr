@@ -118,7 +118,7 @@ class CeleryService(BaseService, IntervalInterface):
         return {
             'celery_task':celery_task,
             'index':index,
-            'scheduler_name':scheduler.schedule_name
+            'schedule_name':scheduler.schedule_name
         }
 
     def _trigger_task(self, celery_task: CeleryTask, schedule_name: str = None,index:int|None=None):
