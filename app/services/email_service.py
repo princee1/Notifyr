@@ -71,7 +71,10 @@ class BaseEmailService(_service.BaseService):
                 if not self.authenticate(connector):
                     return
                 kwargs['connector'] = connector
-                result = await func(*args, **kwargs)
+                if asyncio.iscoroutinefunction(func):
+                    result = await func(*args, **kwargs)
+                else:
+                    result = func(*args,**kwargs)
                 if callable(async_callback):
                     await async_callback(self,*result[1],**result[2])
                     result = result[0]
@@ -96,6 +99,7 @@ class BaseEmailService(_service.BaseService):
                     return
                 kwargs['connector'] = connector
                 result = func(*args, **kwargs)
+
                 if callable(sync_callback):
                     sync_callback(self,*result[1],**result[2])
                     result = result[0]
