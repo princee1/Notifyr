@@ -32,4 +32,6 @@
 30. Add email headers to specify if it is transactional
 31. Add analytics on session converted
 32. Make sure the date of the scheduler are coordinated
-33. Add another message broker to retry the request sending back the data to the celery worker in callback.py
+33. Finish All Ping Service and work finish workers option
+34. Publish the state of all the Services using pubsub so everybody can be at the state
+35. Implements logs
