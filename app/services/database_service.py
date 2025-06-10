@@ -1,5 +1,5 @@
 import functools
-from typing import Any, Callable, Dict, TypedDict
+from typing import Any, Callable, Dict, Self, TypedDict
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
@@ -169,7 +169,20 @@ class RedisService(DatabaseService):
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
 
-    async def stream_data(self,stream:str,data:dict):
+
+    def dynamic_context(func:Callable):
+        
+        async def async_wrapper(self:Self,topic:str,data:Any|dict):
+            await func(self,topic,data)
+        
+        def sync_wrapper(self:Self,topic:str,data:Any|dict):
+            return func(self,topic,data)
+        
+        return async_wrapper  if ConfigService._celery_env == CeleryMode.none else sync_wrapper
+        
+
+    @dynamic_context
+    def stream_data(self,stream:str,data:dict):
         if stream not in self.streams.keys():
             raise RedisStreamDoesNotExistsError(stream)
         
@@ -179,17 +192,14 @@ class RedisService(DatabaseService):
         if not data:
             return 
         none_to_empty_str(data)
-        if self.configService.celery_env == CeleryMode.none:    
-            return await self.redis_events.xadd(stream,data)
         return self.redis_events.xadd(stream,data)
 
-    async def publish_data(self,channel:str,data:Any):
+    @dynamic_context
+    def publish_data(self,channel:str,data:Any):
         if channel not in self.streams.keys():
             return
         #if data:   
         data = json.dumps(data)
-        if self.configService.celery_env == CeleryMode.none:    
-            return await self.redis_events.publish(channel,data)
         return self.redis_events.publish(channel,data)
         
     async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker|Any|None]):

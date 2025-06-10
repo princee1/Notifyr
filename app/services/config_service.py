@@ -7,10 +7,12 @@ from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
 from app.utils.helper import parseToBool
+import shutil
+import sys
 
 
 ENV = ".env"
-
+CELERY_EXE_PATH = shutil.which("celery").replace(".EXE", "")
 
 class MODE(Enum):
     DEV_MODE = 'dev'
@@ -35,14 +37,12 @@ class MODE(Enum):
             case _:
                 return "127.0.0.1"
 
-
 class CeleryMode(Enum):
     flower = 'flower'
     worker = 'worker'
     beat = 'beat'
     none = 'none'
     purge = 'purge'
-
 
 class ServerConfig(TypedDict):
     app: str
@@ -53,13 +53,24 @@ class ServerConfig(TypedDict):
     log_level: Literal["critical", "error",
                        "warning", "info", "debug", "trace"]
 
-
 CeleryEnv = Literal['flower', 'worker', 'beat', 'none','purge']
 
-
+_celery_env_ = CeleryMode.none
 @_service.Service
 class ConfigService(_service.BaseService):
-    _celery_env = CeleryMode.none
+        
+    if sys.argv[0] == CELERY_EXE_PATH:
+        global _celery_env_
+        _celery_env_ = CeleryMode._member_map_[sys.argv[3]]
+
+    _celery_env = _celery_env_
+
+    @property
+    def celery_env(self) -> CeleryMode:
+        return self._celery_env
+
+    def set_celery_env(env: CeleryEnv):
+        ConfigService._celery_env = CeleryMode._member_map_[env]
 
     def __init__(self) -> None:
         super().__init__()
@@ -67,7 +78,6 @@ class ConfigService(_service.BaseService):
             path = find_dotenv(ENV)
             load_dotenv(path)
         self.config_json_app: JSONFile = None
-        self.isServerScope = None
         self.server_config = None
 
     def relative_path(self, path):
@@ -257,13 +267,6 @@ class ConfigService(_service.BaseService):
         config_file = config_file if config_json_app.exists else None
         # apps_data = config_json_app.data
         self.config_json_app = config_json_app
-
-    def set_celery_env(env: CeleryEnv):
-        ConfigService._celery_env = CeleryMode._member_map_[env]
-
-    @property
-    def celery_env(self) -> CeleryMode:
-        return self._celery_env
 
     def destroy(self):
         return super().destroy()

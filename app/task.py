@@ -5,32 +5,22 @@ from typing_extensions import Literal
 from celery import Celery, shared_task
 from celery.result import AsyncResult
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
-from app.services.config_service import ConfigService,CeleryEnv
+from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService,CeleryEnv
 from app.services.email_service import EmailSenderService,EmailReaderService
 from app.container import Get, build_container,__DEPENDENCY
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import SMSService, CallService
 from app.utils.prettyprint import PrettyPrinter_
-import shutil
-from asgiref.sync import async_to_sync
 from flower import VERSION
 
 
 ##############################################           ##################################################
 
-IS_SERVER_SCOPE=True
-exe_path = shutil.which("celery").replace(".EXE", "")
-##############################################           ##################################################
-
-c_env:CeleryEnv = 'none'
-if sys.argv[0] == exe_path:
+if sys.argv[0] == CELERY_EXE_PATH:
     PrettyPrinter_.message('Building container for the celery worker')
-    IS_SERVER_SCOPE = False
-    c_env = sys.argv[3]
-    ConfigService.set_celery_env(c_env)
-    PrettyPrinter_.message(c_env)
-    if c_env =='purge':
-        build_container(dep=[ConfigService])
+    PrettyPrinter_.message(ConfigService._celery_env.value)
+    if ConfigService._celery_env == CeleryMode.purge:
+        build_container(False,dep=[ConfigService])
     else:
         build_container(False)
         
@@ -56,7 +46,6 @@ TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 ##############################################           ##################################################
 
 configService: ConfigService = Get(ConfigService)
-configService.isServerScope = IS_SERVER_SCOPE
 
 ##############################################           ##################################################
 
