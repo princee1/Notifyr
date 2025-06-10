@@ -2,7 +2,7 @@ from fastapi import Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from app.container import InjectInMethod
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseLimiter
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, MountDirectory, UseLimiter
 from datetime import timedelta
 
 from app.services.file_service import FileService
@@ -10,6 +10,7 @@ from app.utils.fileIO import FDFlag
 
 APP_PREFIX=''
 
+#@MountDirectory()
 @HTTPRessource(APP_PREFIX,add_prefix=False)
 class AppRessource(BaseHTTPRessource):
 
@@ -32,8 +33,6 @@ class AppRessource(BaseHTTPRessource):
         }
         return HTMLResponse(self.app_route_html_content,headers=headers)
     
-
-
     @UseLimiter(limit_value='10000/day')
     @BaseHTTPRessource.HTTPRoute('/home/',[HTTPMethod.GET],deprecated=True,mount=True,)
     def landing_page(self,request:Request):

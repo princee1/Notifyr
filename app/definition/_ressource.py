@@ -807,7 +807,7 @@ def Exclude():
     ...
 
 
-def MountStaticFiles(path:str,app:StaticFiles,name:str):
+def MountDirectory(path:str,app:StaticFiles,name:str):
     def class_decorator(cls:Type[R]) ->Type[R]:
         if type(cls)!=HTTPRessourceMetaClass:
             return

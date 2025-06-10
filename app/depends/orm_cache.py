@@ -2,7 +2,8 @@ import functools
 from random import randint
 import time
 from uuid import UUID
-from app.depends.funcs_dep import GetClient, GetLink, get_challenge
+from app.depends.funcs_dep import GetClient, GetLink, get_challenge,get_contacts
+from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.services.admin_service import AdminService
 from app.services.database_service import RedisService
@@ -285,10 +286,17 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
                 return True
 
             return when(args)
-    
+
+        @kb
+        @staticmethod
+        async def Exists(key:str|list[str]):
+            return await redisService.exists(REDIS_CACHE_KEY,key)
+
     return ORMCache
 
 ClientORMCache = generate_cache_type(ClientORM,GetClient(True,True),prefix=['orm-group','client'])
 BlacklistORMCache = generate_cache_type(bool,adminService.is_blacklisted,prefix=['orm-blacklist','client'],expiry=lambda o:o[1])
 ChallengeORMCache = generate_cache_type(ChallengeORM,get_challenge,prefix='orm-challenge',expiry=lambda o:o.expired_at_auth.timestamp()-time.time())
 LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link')
+#ContactORMCache = generate_cache_type(ContactORM,)
+#ContentSubORMCache = generate_cache_type(ContentSubscriptionORM,)
