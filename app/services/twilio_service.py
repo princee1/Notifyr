@@ -137,30 +137,74 @@ class BaseTwilioCommunication(_service.BaseService):
             url+=f'twilio_tracking_id={twilio_tracking}'
         return url
 
+    async def async_stream_event(self,event_name,event):
+        try:
+            await self.redisService.stream_data(event_name, event)
+        except Exception as e:
+            print('Redis',e) 
+    
+    def sync_stream_event(self,event_name,event):
+        try:
+            self.redisService.stream_data(event_name, event)
+        except Exception as e:
+            print('Redis',e)
+    
+    redis_event_callback = (async_stream_event,sync_stream_event)
+
+
     @staticmethod
-    def parse_to_json(func: Callable):
+    def parse_to_json(pref:Literal['async','sync']=None,async_callback=None,sync_callback=None):
 
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs) -> dict:
-            self: BaseTwilioCommunication = args[0]
-            #message: CallInstance|MessageInstance | Coroutine = await func(*args, **kwargs)
-            if asyncio.iscoroutinefunction(func):
-                message:CallInstance| MessageInstance | Coroutine = await func(*args, **kwargs)
-            else:
+        def callback(func:Callable):
+
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs) -> dict:
+                self: BaseTwilioCommunication = args[0]
+                if asyncio.iscoroutinefunction(func):
+                    message:CallInstance| MessageInstance | Coroutine = await func(*args, **kwargs)
+                else:
+                    message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
+                if message== None:
+                    return None
+                
+                if callable(async_callback):
+                    await async_callback(self,*result[1],**result[2])
+                    result = result[0]
+                else:
+                    if isinstance(result,tuple):
+                        result = result[0]
+
+                return self.response_extractor(message)
+
+            @functools.wraps(func)
+            def sync_wrapper(*args,**kwargs):
+                self: BaseTwilioCommunication = args[0]
+
                 message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
-            # if asyncio.iscoroutine(message):
-            #     @functools.wraps(func)
-            #     async def callback():
-            #         r = await message
-            #         return self.response_extractor(r)
-            #     return callback
-            # else:
-            #     return self.response_extractor(message)
-            if message== None:
-                return None
-            return self.response_extractor(message)
-        return wrapper
+                if message== None:
+                    return None
+                
+                if callable(sync_callback):
+                    sync_callback(self,*result[1],**result[2])
+                    result = result[0]
+                else:
+                    if isinstance(result,tuple):
+                        result = result[0]
+                return self.response_extractor(message)
 
+            if ConfigService._celery_env == CeleryMode.worker:
+                return sync_wrapper
+            
+            if pref =='async':
+                return async_wrapper
+
+            if pref == 'sync':
+                return sync_wrapper 
+                    
+            return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+        
+        return callback
+    
     def response_extractor(self, res) -> dict:
         ...
 
@@ -184,7 +228,7 @@ class SMSService(BaseTwilioCommunication):
             'message_service_sid': message.messaging_service_sid,
         }
 
-    @BaseTwilioCommunication.parse_to_json
+    @BaseTwilioCommunication.parse_to_json()
     async def send_otp(self, otpModel: OTPModel, body: str, as_async: bool = False):
         as_async = False
         func = self.messages.create_async if as_async else self.messages.create
@@ -193,8 +237,7 @@ class SMSService(BaseTwilioCommunication):
     def build(self):
         self.messages = self.twilioService.client.messages
 
-    @BaseTwilioCommunication.parse_to_json
-    async def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None) -> MessageInstance:
+    def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None) -> MessageInstance:
         url = self.set_url(subject_id, twilio_tracking)
         now = datetime.now(timezone.utc).isoformat()
 
@@ -226,18 +269,16 @@ class SMSService(BaseTwilioCommunication):
                     description=description,
                     date_event_received=now
                 )
-                if self.configService.celery_env == CeleryMode.none:
-                    await self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_SMS, event)
-                else:
-                    self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_SMS, event)
 
-            return result
+            return (result,(StreamConstant.TWILIO_EVENT_STREAM_SMS,event),{})
+        
+    @BaseTwilioCommunication.parse_to_json('async',*BaseTwilioCommunication.redis_event_callback)
+    def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None):
+        return self._send_sms(messageData, subject_id, twilio_tracking)
 
-    async def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None):
-        return await self._send_sms(messageData, subject_id, twilio_tracking)
-
+    @BaseTwilioCommunication.parse_to_json('async',*BaseTwilioCommunication.redis_event_callback)
     async def send_template_sms(self, message: dict, subject_id=None, twilio_tracking: str = None):
-        return await self._send_sms(message, subject_id, twilio_tracking)
+        return self._send_sms(message, subject_id, twilio_tracking)
 
     def get_message(self, to: str):
         self.messages
@@ -284,31 +325,31 @@ class CallService(BaseTwilioCommunication):
             'start_time': str(result.start_time) if result.start_time else None
         }
 
-    @BaseTwilioCommunication.parse_to_json
-    async def send_otp_voice_call(self, body: str, otp: OTPModel):
+    @BaseTwilioCommunication.parse_to_json('async')
+    def send_otp_voice_call(self, body: str, otp: OTPModel):
         call = {}
         call.update(otp.model_dump(exclude=('content')))
         call['twiml'] = body
-        return await self._create_call(call)
+        return self._create_call(call)
 
-    @BaseTwilioCommunication.parse_to_json
-    async def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,subject_id=None,twilio_tracking:str=None):
+    @BaseTwilioCommunication.parse_to_json(('async',*BaseTwilioCommunication.redis_event_callback))
+    def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,subject_id=None,twilio_tracking:str=None):
         voiceResponse = VoiceResponse()
         voiceResponse.say(body, voice, loop, lang)
         call['twiml'] = voiceResponse
-        return await self._create_call(call,subject_id,twilio_tracking)
+        return self._create_call(call,subject_id,twilio_tracking)
 
-    @BaseTwilioCommunication.parse_to_json
-    async def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
+    @BaseTwilioCommunication.parse_to_json('async',*BaseTwilioCommunication.redis_event_callback)
+    def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
         call_details['url'] = url
-        return await self._create_call(call_details,subject_id,twilio_tracking)
+        return self._create_call(call_details,subject_id,twilio_tracking)
 
-    @BaseTwilioCommunication.parse_to_json
-    async def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
+    @BaseTwilioCommunication.parse_to_json('async',*BaseTwilioCommunication.redis_event_callback)
+    def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
         call_details['twiml'] = result
-        return await self._create_call(call_details,subject_id,twilio_tracking)
+        return self._create_call(call_details,subject_id,twilio_tracking)
 
-    async def _create_call(self, details: dict,subject_id:str=None,twilio_tracking:str=None):
+    def _create_call(self, details: dict,subject_id:str=None,twilio_tracking:str=None):
         url = self.set_url(subject_id,twilio_tracking)
         now = datetime.now(timezone.utc).isoformat()
         
@@ -338,12 +379,8 @@ class CallService(BaseTwilioCommunication):
                 
                 event = CallEventORM.JSON(event_id=str(uuid_v1_mc()),call_sid =result.sid ,call_id=twilio_tracking,direction='O',current_event=status,city=None,country=None,state=None,
                                           date_event_received=now, description=description)
-                if self.configService.celery_env == CeleryMode.none:
-                    await self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_CALL, event)
-                else:
-                    self.redisService.stream_data(StreamConstant.TWILIO_EVENT_STREAM_CALL, event)
-
-            return result
+            
+            return (result,(StreamConstant.TWILIO_EVENT_STREAM_CALL,event),{})
             
     def update_voice_call(self):
         ...
