@@ -7,6 +7,7 @@ from typing import Annotated, Callable, Coroutine, Literal
 from fastapi import HTTPException, Header, Request
 from app.classes.template import SMSTemplate
 from app.definition import _service
+from app.interface.redis_event import RedisEventInterface
 from app.models.otp_model import GatherDtmfOTPModel, GatherOTPBaseModel, GatherSpeechOTPModel, OTPModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.assets_service import AssetService
@@ -114,14 +115,14 @@ class TwilioService(_service.BaseService):
         }
 
 @_service.AbstractServiceClass
-class BaseTwilioCommunication(_service.BaseService):
+class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
     def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService,redisService:RedisService) -> None:
         super().__init__()
         self.configService = configService
         self.twilioService = twilioService
         self.assetService = assetService
-        self.redisService = redisService
-
+        RedisEventInterface.__init__(self,redisService)
+        
         mode = self.configService['TWILIO_MODE']
         self.twilio_url = self.configService.TWILIO_PROD_URL if mode == "prod" else self.configService.TWILIO_TEST_URL
         
@@ -136,21 +137,6 @@ class BaseTwilioCommunication(_service.BaseService):
         if twilio_tracking != None:
             url+=f'twilio_tracking_id={twilio_tracking}'
         return url
-
-    async def async_stream_event(self,event_name,event):
-        try:
-            await self.redisService.stream_data(event_name, event)
-        except Exception as e:
-            print('Redis',e) 
-    
-    def sync_stream_event(self,event_name,event):
-        try:
-            self.redisService.stream_data(event_name, event)
-        except Exception as e:
-            print('Redis',e)
-    
-    redis_event_callback = (async_stream_event,sync_stream_event)
-
 
     @staticmethod
     def parse_to_json(pref:Literal['async','sync']=None,async_callback=None,sync_callback=None):
@@ -272,11 +258,11 @@ class SMSService(BaseTwilioCommunication):
 
             return (result,(StreamConstant.TWILIO_EVENT_STREAM_SMS,event),{})
         
-    @BaseTwilioCommunication.parse_to_json('async',*BaseTwilioCommunication.redis_event_callback)
+    @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
     def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None):
         return self._send_sms(messageData, subject_id, twilio_tracking)
 
-    @BaseTwilioCommunication.parse_to_json('async',*BaseTwilioCommunication.redis_event_callback)
+    @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
     async def send_template_sms(self, message: dict, subject_id=None, twilio_tracking: str = None):
         return self._send_sms(message, subject_id, twilio_tracking)
 
@@ -332,19 +318,19 @@ class CallService(BaseTwilioCommunication):
         call['twiml'] = body
         return self._create_call(call)
 
-    @BaseTwilioCommunication.parse_to_json(('async',*BaseTwilioCommunication.redis_event_callback))
+    @BaseTwilioCommunication.parse_to_json(('async',*RedisEventInterface.redis_event_callback))
     def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,subject_id=None,twilio_tracking:str=None):
         voiceResponse = VoiceResponse()
         voiceResponse.say(body, voice, loop, lang)
         call['twiml'] = voiceResponse
         return self._create_call(call,subject_id,twilio_tracking)
 
-    @BaseTwilioCommunication.parse_to_json('async',*BaseTwilioCommunication.redis_event_callback)
+    @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
     def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
         call_details['url'] = url
         return self._create_call(call_details,subject_id,twilio_tracking)
 
-    @BaseTwilioCommunication.parse_to_json('async',*BaseTwilioCommunication.redis_event_callback)
+    @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
     def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
         call_details['twiml'] = result
         return self._create_call(call_details,subject_id,twilio_tracking)

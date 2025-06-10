@@ -35,16 +35,17 @@ from app.utils.validation import email_validator
 
 from app.utils.constant import StreamConstant
 from email import message_from_bytes
+from app.interface.redis_event import RedisEventInterface
 
 
 @_service.AbstractServiceClass
-class BaseEmailService(_service.BaseService):
+class BaseEmailService(_service.BaseService,RedisEventInterface):
 
     def __init__(self, configService: ConfigService, loggerService: LoggerService,redisService:RedisService):
         super().__init__()
         self.configService: ConfigService = configService
         self.loggerService: LoggerService = loggerService
-        self.redisService: RedisService = redisService
+        RedisEventInterface.__init__(self,redisService)
         self.hostPort: int
         self.mailOAuth: OAuth = ...
         self.state = None
@@ -190,18 +191,6 @@ class BaseEmailService(_service.BaseService):
 
         return None
 
-    async def async_stream_event(self,event_name,event):
-        try:
-            await self.redisService.stream_data(event_name, event)
-        except Exception as e:
-            print('Redis',e) 
-    
-    def sync_stream_event(self,event_name,event):
-        try:
-            self.redisService.stream_data(event_name, event)
-        except Exception as e:
-            print('Redis',e)
-
     def logout(self): ...
 
     def resetConnection(self): ...
@@ -209,8 +198,6 @@ class BaseEmailService(_service.BaseService):
     def help(self):
         ...
     
-    redis_event_callback = (async_stream_event,sync_stream_event)
-
 
 @_service.Service
 class EmailSenderService(BaseEmailService):
@@ -282,7 +269,7 @@ class EmailSenderService(BaseEmailService):
             # TODO Depends on the error code
         return False
 
-    @BaseEmailService.task_lifecycle('async',*BaseEmailService.redis_event_callback)
+    @BaseEmailService.task_lifecycle('async',*RedisEventInterface.redis_event_callback)
     def sendTemplateEmail(self, data, meta, images, message_tracking_id, contact_id=None,connector:smtp.SMTP=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(data, meta, images)
@@ -291,7 +278,7 @@ class EmailSenderService(BaseEmailService):
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
         return self._send_message(email, message_tracking_id, contact_id=contact_id,connector=connector)
 
-    @BaseEmailService.task_lifecycle('async',*BaseEmailService.redis_event_callback)
+    @BaseEmailService.task_lifecycle('async',*RedisEventInterface.redis_event_callback)
     def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None,connector:smtp.SMTP=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
@@ -301,7 +288,7 @@ class EmailSenderService(BaseEmailService):
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
         return self._send_message(email, message_tracking_id, contact_id=contact_id,connector=connector)
     
-    @BaseEmailService.task_lifecycle('async',*BaseEmailService.redis_event_callback)
+    @BaseEmailService.task_lifecycle('async',*RedisEventInterface.redis_event_callback)
     def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id,reply_to,references,connector:smtp.SMTP=None, contact_id=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
