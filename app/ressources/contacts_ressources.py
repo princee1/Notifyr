@@ -7,9 +7,10 @@ from app.classes.auth_permission import MustHave, MustHaveRoleSuchAs, Role
 from app.container import Get,InjectInMethod
 from app.decorators.guards import ActiveContactGuard, ContactActionCodeGuard, RegisteredContactsGuard
 from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler
-from app.depends.funcs_dep import get_contact_permission, get_contacts, get_subs_content,verify_twilio_token
+from app.depends.funcs_dep import get_contact_permission, Get_Contact, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
+from app.depends.orm_cache import ContactORMCache
 from app.models.contacts_model import ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
 from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
@@ -25,6 +26,8 @@ CONTACTS_PREFIX = 'contacts'
 CONTACTS_SECURITY_PREFIX = 'security'
 CONTACTS_SUBSCRIPTION_PREFIX = 'subscribe'
 SUBSCRIPTION_PREFIX = 'subscription'
+
+get_contacts = Get_Contact(False,False)
        
 ##############################################                   ##################################################
 
@@ -96,6 +99,8 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Next status cannot be set to Active when unsubscribing the contact")
         
         result = await self.contactService.unsubscribe_contact(contact, next_status)
+        await ContactORMCache.Store(str(contact.contact_id),contact)
+
         return JSONResponse(content=result, status_code=status.HTTP_200_OK)
 
     @UseGuard(ContactActionCodeGuard)
@@ -107,6 +112,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
         if contact.status in [Status.Inactive, Status.Blacklist]:
             contact.status = Status.Active
             await contact.save()
+            await ContactORMCache.Store(str(contact.contact_id),contact)
             return JSONResponse(content={"detail": "Reactivated the contact back to active"}, status_code=status.HTTP_200_OK)
         
         return JSONResponse(content={"detail": "You must reactivate your account with your new opt-in code"}, status_code=status.HTTP_423_LOCKED)
@@ -222,6 +228,7 @@ class ContactsRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/activate/{contact_id}')
     async def activate_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], opt: int = Query(ge=MIN_OPT_IN_CODE, le=MAX_OPT_IN_CODE), authPermission=Depends(get_auth_permission)):
         action_code = await self.contactsService.activate_contact(contact, opt)
+        await ContactORMCache.Store(str(contact.contact_id),contact)
         return JSONResponse(content={"detail": "Contact activated", "action_code": action_code}, status_code=status.HTTP_200_OK)
 
     @BaseHTTPRessource.Post('/')
@@ -238,11 +245,14 @@ class ContactsRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT])
     async def update_contact(self, update_contact_model: UpdateContactModel, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         updated_contact = await self.contactsService.update_contact(update_contact_model, contact)
+        await ContactORMCache.Store(str(contact.contact_id),contact)
         return JSONResponse(content={"detail": "Contact updated", "contact": updated_contact}, status_code=status.HTTP_200_OK)
 
     @BaseHTTPRessource.Delete('/{contact_id}')
     async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         content_data = await self.contactsService.read_contact(contact.contact_id)
+        await ContactORMCache.Invalid(str(contact.contact_id))
+
         await contact.delete()
         return JSONResponse(content={"detail": "Contact deleted", "contact":content_data}, status_code=status.HTTP_200_OK)
 

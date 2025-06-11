@@ -2,7 +2,7 @@ import functools
 from random import randint
 import time
 from uuid import UUID
-from app.depends.funcs_dep import GetClient, GetLink, get_challenge,get_contacts
+from app.depends.funcs_dep import GetClient, GetLink, get_challenge,Get_Contact
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.services.admin_service import AdminService
@@ -298,5 +298,5 @@ ClientORMCache = generate_cache_type(ClientORM,GetClient(True,True),prefix=['orm
 BlacklistORMCache = generate_cache_type(bool,adminService.is_blacklisted,prefix=['orm-blacklist','client'],expiry=lambda o:o[1])
 ChallengeORMCache = generate_cache_type(ChallengeORM,get_challenge,prefix='orm-challenge',expiry=lambda o:o.expired_at_auth.timestamp()-time.time())
 LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link')
-#ContactORMCache = generate_cache_type(ContactORM,)
+ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact')
 #ContentSubORMCache = generate_cache_type(ContentSubscriptionORM,)

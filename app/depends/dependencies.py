@@ -91,6 +91,12 @@ async def get_auth_permission(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.authPermission
 
+async def wrapper_auth_permission(request:Request):
+    try:
+        return await get_auth_permission(request)
+    except:
+        return None
+
 async def get_client_from_request(request:Request):
     if not configService.SECURITY_FLAG:
         return None

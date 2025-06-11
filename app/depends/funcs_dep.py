@@ -12,7 +12,7 @@ from app.services.admin_service import AdminService
 from app.services.celery_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
+from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
 from tortoise.exceptions import OperationalError
 from .variables import *
 
@@ -110,30 +110,45 @@ def GetClient(bypass: bool = False, accept_admin: bool = False, skip: bool = Fal
     return _get_client
 
 
-async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(get_auth_permission)) -> ContactORM:
+def Get_Contact(skip_permission:bool,raise_file:bool):
 
-    if Role.CONTACTS not in authPermission['roles']:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Role not allowed")
+    async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(wrapper_auth_permission)) -> ContactORM:
 
-    match idtype:
-        case "id":
-            user = await ContactORM.filter(contact_id=contact_id).first()
+        if not skip_permission:
+            if authPermission == None:
+                if Get(ConfigService).SECURITY_FLAG:
+                    raise HTTPException(status_code=401, detail="Unauthorized")
 
-        case "phone":
-            user = await ContactORM.filter(phone=contact_id).first()
+            if Role.CONTACTS not in authPermission['roles']:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Role not allowed")
 
-        case "email":
-            user = await ContactORM.filter(email=contact_id).first()
+        match idtype:
+            case "id":
+                user = await ContactORM.filter(contact_id=contact_id).first()
 
-        case _:
-            raise HTTPException(
-                400, {"message": "idtype not not properly specified"})
+            case "phone":
+                user = await ContactORM.filter(phone=contact_id).first()
 
-    if user == None:
-        raise HTTPException(404, {"detail": "user does not exists"})
+            case "email":
+                user = await ContactORM.filter(email=contact_id).first()
 
-    return user
+            case _:
+                if raise_file:
+                    raise ServerFileError('app/static/error-400-page/index.html',status.HTTP_400_BAD_REQUEST)
+                else:  
+                    raise HTTPException(400, {"message": "idtype not not properly specified"})
+
+        if user == None:
+            if not raise_file:
+                raise HTTPException(404, {"detail": "user does not exists"})
+            else:
+                raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
+
+
+        return user
+
+    return get_contacts
 
 
 def get_contact_permission(token: str = Query(None)) -> ContactPermission:
