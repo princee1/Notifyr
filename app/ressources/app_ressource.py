@@ -10,7 +10,7 @@ from app.utils.fileIO import FDFlag
 
 APP_PREFIX=''
 
-#@MountDirectory()
+@MountDirectory(f'{APP_PREFIX}/me/',StaticFiles(directory='app/static/me/'),'me')
 @HTTPRessource(APP_PREFIX,add_prefix=False)
 class AppRessource(BaseHTTPRessource):
 

@@ -213,7 +213,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
     #     ...
 
 
-@UseHandler(handle_http_exception)
+#@UseHandler(handle_http_exception)
 @UseHandler(TortoiseHandler, ContactsHandler)
 @PingService([ContactsService])
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
@@ -229,8 +229,8 @@ class ContactsCRUDRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/')
     async def create_contact(self, contact: ContactModel,request:Request,response:Response):
         new_contact = await self.contactsService.create_new_contact(contact)
-        await ContactORMCache.Store(new_contact['contact_id'],new_contact)
-        return JSONResponse(content={"detail": "Contact created", "contact": new_contact}, status_code=status.HTTP_201_CREATED)
+        await ContactORMCache.Store(str(new_contact.contact_id),new_contact)
+        return JSONResponse(content={"detail": "Contact created", "contact": new_contact.to_json}, status_code=status.HTTP_201_CREATED)
 
     @BaseHTTPRessource.HTTPRoute('/{contact_id}/',methods=[HTTPMethod.PATCH])
     async def activate_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], opt: int = Query(ge=MIN_OPT_IN_CODE, le=MAX_OPT_IN_CODE)):

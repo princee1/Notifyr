@@ -160,13 +160,11 @@ class ContactsService(BaseService):
             
 
         await user.save()
-
-        if user.app_registered:
-            d = user.to_json.copy()
-            d.update({'auth_token': user.auth_token})
-            return d
-
-        return user.to_json
+        # if user.app_registered:
+        #     d = user.to_json.copy()
+        #     d.update({'auth_token': user.auth_token})
+        #     return d
+        return user
 
     async def setup_security(self, contact: ContactORM):
 

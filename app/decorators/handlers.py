@@ -483,8 +483,8 @@ async def handle_http_exception(function, *args, **kwargs):
         return await function(*args,**kwargs)
     except HTTPException as e:
         if e.status_code == status.HTTP_404_NOT_FOUND:
-            raise ServerFileError('app/static/error-404-page/index.html')
+            raise ServerFileError('app/static/error-404-page/index.html',e.status_code)
         if e.status_code >= 400 and e.status_code< 500:
-            raise ServerFileError('app/static/error-400-page/index.html')
+            raise ServerFileError('app/static/error-400-page/index.html',e.status_code)
 
-        raise ServerFileError('app/static/error-500-page/index.html')
+        raise ServerFileError('app/static/error-500-page/index.html',e.status_code)

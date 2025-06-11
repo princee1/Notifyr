@@ -197,7 +197,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
         
         @kb
         @staticmethod
-        async def Store(key:str|list[str],obj:ModelMeta[T]|T,exp=expiry):
+        async def Store(key:str|list[str],obj:T,exp=expiry):
 
             exp = Set_Expiry(exp)
             
