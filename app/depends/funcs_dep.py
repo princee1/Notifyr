@@ -119,9 +119,10 @@ def Get_Contact(skip_permission:bool,raise_file:bool):
                 if Get(ConfigService).SECURITY_FLAG:
                     raise HTTPException(status_code=401, detail="Unauthorized")
 
-            if Role.CONTACTS not in authPermission['roles']:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail="Role not allowed")
+            else:
+                if Role.CONTACTS not in authPermission['roles']:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Role not allowed")
 
         match idtype:
             case "id":

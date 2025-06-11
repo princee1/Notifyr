@@ -375,13 +375,13 @@ async def update_reason(name:str):
     await client.execute_query(q,[name])
 
 async def get_contact_summary(contact_id: str):
-    query = "SELECT * FROM contact_summary WHERE contact_id = $1::UUID"
+    query = "SELECT * FROM contactsummary WHERE contact_id = $1::UUID"
     client = Tortoise.get_connection('default')
     result = await client.execute_query(query, [contact_id])
     return result[1][0] if result else None
 
 async def get_all_contact_summary():
-    query = "SELECT * FROM contact_summary"
+    query = "SELECT * FROM contactsummary"
     client = Tortoise.get_connection('default')
     return await client.execute_query(query,[])
 

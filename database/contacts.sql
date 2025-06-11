@@ -175,7 +175,7 @@ WHERE
 
 END; $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE VIEW UserSummary AS
+CREATE VIEW ContactSummary AS
 SELECT
     c.contact_id,
     c.first_name,
