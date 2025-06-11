@@ -94,7 +94,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     @UseGuard(ActiveContactGuard)
     @UseHandler(TemplateHandler)
     @UsePipe(ContactStatusPipe)
-    @BaseHTTPRessource.Delete('/unsubscribe/{contact_id}')
+    @BaseHTTPRessource.Delete('/unsubscribe/{contact_id}/')
     async def unsubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], action_code=Query(None), next_status: Status = Query(None), authPermission=Depends(get_auth_permission)):
         if next_status == Status.Active:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Next status cannot be set to Active when unsubscribing the contact")
@@ -105,7 +105,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
         return JSONResponse(content=result, status_code=status.HTTP_200_OK)
 
     @UseGuard(ContactActionCodeGuard)
-    @BaseHTTPRessource.HTTPRoute('/resubscribe/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/resubscribe/{contact_id}/', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
     async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], action_code: str = Query(None), authPermission=Depends(get_auth_permission)):
         if contact.status == Status.Active:
             return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"detail": "Nothing to do"})
@@ -120,13 +120,13 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
 
     @UsePipe(RelayPipe(False))
     @UseGuard(ActiveContactGuard)
-    @BaseHTTPRessource.HTTPRoute('/content-subscribe/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/content-subscribe/{contact_id}/', [HTTPMethod.PATCH, HTTPMethod.PUT, HTTPMethod.POST])
     async def content_subscribe(self, contact: Annotated[ContactORM, Depends(get_contacts)], subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], relay: str = Query(None), authPermission=Depends(get_auth_permission)):
         response = await self.subscriptionService.subscribe_user(contact, subs_content, relay)
         return response
 
     @UseGuard(ActiveContactGuard)
-    @BaseHTTPRessource.HTTPRoute('/content-preferences/{contact_id}', [HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/content-preferences/{contact_id}/', [HTTPMethod.POST])
     async def toggle_content_type_preferences(self, flags_content_types: ContentTypeSubsModel, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
         await self.contactService.toggle_content_type_subs_flag(contact, flags_content_types)
         return JSONResponse(content={"detail": "Content type preferences updated"}, status_code=status.HTTP_200_OK)
@@ -140,7 +140,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     @UseGuard(ContactActionCodeGuard(True))  # NOTE the server can bypass the action_code guard only if the subs_content is notification or update
     @UseGuard(ActiveContactGuard)
     @UsePipe(RelayPipe)
-    @BaseHTTPRessource.HTTPRoute('/content-status/{contact_id}', [HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/content-status/{contact_id}/', [HTTPMethod.POST])
     async def update_content_subscription(self, contact: Annotated[ContactORM, Depends(get_contacts)], subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], relay: str = Query(None), action_code: str = Query(None), next_subs_status: SubscriptionStatus = Query(None), authPermission=Depends(get_auth_permission)):
         if not next_subs_status:
             return JSONResponse(content={"detail": "Next subscription status is required"}, status_code=status.HTTP_400_BAD_REQUEST)
@@ -225,18 +225,18 @@ class ContactsCRUDRessource(BaseHTTPRessource):
         self.celeryService = celeryService
         self.bkgTaskService = bkgTaskService
 
+    @UseLimiter(limit_value='2000/minutes')
+    @BaseHTTPRessource.Post('/')
+    async def create_contact(self, contact: ContactModel,request:Request,response:Response):
+        new_contact = await self.contactsService.create_new_contact(contact)
+        await ContactORMCache.Store(new_contact['contact_id'],new_contact)
+        return JSONResponse(content={"detail": "Contact created", "contact": new_contact}, status_code=status.HTTP_201_CREATED)
+
     @BaseHTTPRessource.HTTPRoute('/{contact_id}/',methods=[HTTPMethod.PATCH])
     async def activate_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], opt: int = Query(ge=MIN_OPT_IN_CODE, le=MAX_OPT_IN_CODE)):
         action_code = await self.contactsService.activate_contact(contact, opt)
         await ContactORMCache.Store(str(contact.contact_id),contact)
         return JSONResponse(content={"detail": "Contact activated", "action_code": action_code}, status_code=status.HTTP_200_OK)
-
-    @UseLimiter('2000/minutes')
-    @BaseHTTPRessource.Post('/')
-    async def create_contact(self, contact: ContactModel):
-        new_contact = await self.contactsService.create_new_contact(contact)
-        await ContactORMCache.Store(str(new_contact.contact_id),new_contact)
-        return JSONResponse(content={"detail": "Contact created", "contact": new_contact}, status_code=status.HTTP_201_CREATED)
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Get('/{contact_id}/')

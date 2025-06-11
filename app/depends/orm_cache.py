@@ -126,7 +126,7 @@ class CacheInterface:
     def When(cond:Any)->bool:
         ...
 
-def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,prefix:str|list[str]='orm-cache',sep:str|list[str]='/',expiry:int|str|Callable[[T],int|float] = 0,nx:bool=False, when:Callable[[Any],bool]|None=None,max_size_memory_cache=1000)->Type[CacheInterface]:
+def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,prefix:str|list[str]='orm-cache',sep:str|list[str]='/',expiry:int|str|Callable[[T],int|float] = 0,nx:bool=False, when:Callable[[Any],bool]|None=None,use_to_json:bool=True,max_size_memory_cache=1000)->Type[CacheInterface]:
     """
         Generates a cache interface class for managing cached objects with a consistent key-building mechanism.
             type_ (Type[T]): The type of the object to be cached. If it is a model, it should support initialization with keyword arguments.
@@ -197,14 +197,14 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
         
         @kb
         @staticmethod
-        async def Store(key:str|list[str],obj:T,exp=expiry):
+        async def Store(key:str|list[str],obj:ModelMeta[T]|T,exp=expiry):
 
             exp = Set_Expiry(exp)
             
             if type(type_) == ModelMeta:
                 obj:Model = obj
                 temp = {}
-                if hasattr(obj,'to_json'):
+                if hasattr(obj,'to_json') and use_to_json:
                     temp = obj.to_json
                 else:
                     for field in obj._meta.fields_map:
@@ -298,5 +298,5 @@ ClientORMCache = generate_cache_type(ClientORM,GetClient(True,True),prefix=['orm
 BlacklistORMCache = generate_cache_type(bool,adminService.is_blacklisted,prefix=['orm-blacklist','client'],expiry=lambda o:o[1])
 ChallengeORMCache = generate_cache_type(ChallengeORM,get_challenge,prefix='orm-challenge',expiry=lambda o:o.expired_at_auth.timestamp()-time.time())
 LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link')
-ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact')
+ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact',use_to_json=True)
 #ContentSubORMCache = generate_cache_type(ContentSubscriptionORM,)
