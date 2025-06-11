@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Literal
+from uuid import UUID
 
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import ContactPermissionScope
@@ -187,7 +188,17 @@ class ContactsService(BaseService):
 
 
     async def read_contact(self, contact_id: str):
-        return await get_contact_summary(contact_id)
+        contact = await get_contact_summary(contact_id)
+        if contact != None:
+            for keys,item in contact.items():
+                if isinstance(item,UUID):
+                    contact[keys] = str(item)
+                    continue
+                
+                if isinstance(item,datetime):
+                    contact[keys] = item.isoformat()
+                
+        return contact
 
         user = await ContactORM.filter(contact_id=contact_id).first()
         subs = await SubscriptionContactStatusORM.filter(contact_id=contact_id).first()
