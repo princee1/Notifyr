@@ -182,7 +182,7 @@ class ContactsService(BaseService):
         
         update:dict = update.model_dump()
         for key, value in update.items():
-            if value:
+            if value != None:
                 setattr(contact, key, value)
         await contact.save()
         return update

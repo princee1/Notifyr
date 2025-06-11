@@ -628,7 +628,7 @@
                     console.log("Email:", email);
                     console.log("Téléphone:", telephone || "Non fourni"); // Affiche "Non fourni" si vide
 
-                    fetch('/contacts/', {
+                    fetch('/contacts/manage/', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'

@@ -309,7 +309,7 @@ class ContactModel(BaseModel):
 class UpdateContactModel(ContactModel):
     first_name:str | None= None
     last_name:str | None = None
-    app_registered:bool| None = None
+    #app_registered:bool| None = None
     lang:str | None = None
     frequency:Frequency | None = None
     
@@ -324,6 +324,9 @@ class UpdateContactModel(ContactModel):
             raise ValueError("Cant update with an empty body")
         return self
         
+class AppRegisteredContactModel(BaseModel):
+    app_registered:bool
+
     
 class SecurityModel(BaseModel):
     security_code:int

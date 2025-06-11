@@ -105,7 +105,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.adminService: AdminService = Get(AdminService)
 
     @BypassOn(not SECURITY_FLAG)
-    @ExcludeOn(['/auth/generate/*'])
+    @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/'])
@@ -172,7 +172,7 @@ class UserAppMiddleware(MiddleWare):
         self.configService = Get(ConfigService)
         self.securityService = Get(SecurityService)
 
-    @ExcludeOn(['/docs/*','/openapi.json'])
+    @ExcludeOn(['/docs/*','/openapi.json','/contacts/manage/*'])
     @ApplyOn(['/auth/generate/admin/*'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/'])
@@ -184,7 +184,7 @@ class ChallengeMatchMiddleware(MiddleWare):
     priority = MiddlewarePriority.CHALLENGE
 
     @BypassOn(not SECURITY_FLAG)
-    @ExcludeOn(['/docs/*','/openapi.json'])
+    @ExcludeOn(['/docs/*','/openapi.json','/contacts/manage/*'])
     @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/'])

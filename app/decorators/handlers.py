@@ -6,7 +6,7 @@ from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
 from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
-from app.definition._error import BaseError
+from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
 from app.definition._service import MethodServiceNotExistsError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
@@ -475,3 +475,16 @@ class ORMCacheHandler(Handler):
     
     async def handle(self, function, *args, **kwargs):
         return await function(*args,**kwargs)
+
+
+async def handle_http_exception(function, *args, **kwargs):
+    
+    try:
+        return await function(*args,**kwargs)
+    except HTTPException as e:
+        if e.status_code == status.HTTP_404_NOT_FOUND:
+            raise ServerFileError('app/static/error-404-page/index.html')
+        if e.status_code >= 400 and e.status_code< 500:
+            raise ServerFileError('app/static/error-400-page/index.html')
+
+        raise ServerFileError('app/static/error-500-page/index.html')

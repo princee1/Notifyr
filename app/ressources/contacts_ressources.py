@@ -1,17 +1,17 @@
 
 
 from typing import Annotated
-from fastapi import Depends, HTTPException, Query, Request, status
+from fastapi import Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import MustHave, MustHaveRoleSuchAs, Role
 from app.container import Get,InjectInMethod
 from app.decorators.guards import ActiveContactGuard, ContactActionCodeGuard, RegisteredContactsGuard
-from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler
+from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler, handle_http_exception
 from app.depends.funcs_dep import get_contact_permission, Get_Contact, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ContactORMCache
-from app.models.contacts_model import ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
+from app.models.contacts_model import AppRegisteredContactModel, ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
 from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
@@ -26,6 +26,7 @@ CONTACTS_PREFIX = 'contacts'
 CONTACTS_SECURITY_PREFIX = 'security'
 CONTACTS_SUBSCRIPTION_PREFIX = 'subscribe'
 SUBSCRIPTION_PREFIX = 'subscription'
+CONTACTS_CRUD_PREFIX = 'manage'
 
 get_contacts = Get_Contact(False,False)
        
@@ -211,13 +212,12 @@ class ContactSecurityRessource(BaseHTTPRessource):
     # async def request_new_token(self,contact: Annotated[ContactORM, Depends(get_contacts)],authPermission=Depends(get_auth_permission)):
     #     ...
 
-@UseHandler(TortoiseHandler, ContactsHandler)
-@UseRoles([Role.CONTACTS])
-@UsePermission(JWTRouteHTTPPermission)
-@PingService([ContactsService])
-@HTTPRessource(CONTACTS_PREFIX, routers=[ContactSecurityRessource,ContentSubscriptionRessource, ContactsSubscriptionRessource])
-class ContactsRessource(BaseHTTPRessource):
 
+@UseHandler(handle_http_exception)
+@UseHandler(TortoiseHandler, ContactsHandler)
+@PingService([ContactsService])
+@HTTPRessource(CONTACTS_CRUD_PREFIX)
+class ContactsCRUDRessource(BaseHTTPRessource):
     @InjectInMethod
     def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: TaskService, emailService: EmailSenderService, smsService: SMSService):
         super().__init__()
@@ -225,46 +225,65 @@ class ContactsRessource(BaseHTTPRessource):
         self.celeryService = celeryService
         self.bkgTaskService = bkgTaskService
 
-    @BaseHTTPRessource.Post('/activate/{contact_id}')
-    async def activate_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], opt: int = Query(ge=MIN_OPT_IN_CODE, le=MAX_OPT_IN_CODE), authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/{contact_id}/',methods=[HTTPMethod.PATCH])
+    async def activate_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], opt: int = Query(ge=MIN_OPT_IN_CODE, le=MAX_OPT_IN_CODE)):
         action_code = await self.contactsService.activate_contact(contact, opt)
         await ContactORMCache.Store(str(contact.contact_id),contact)
         return JSONResponse(content={"detail": "Contact activated", "action_code": action_code}, status_code=status.HTTP_200_OK)
 
+    @UseLimiter('2000/minutes')
     @BaseHTTPRessource.Post('/')
-    async def create_contact(self, contact: ContactModel, authPermission=Depends(get_auth_permission)):
+    async def create_contact(self, contact: ContactModel):
         new_contact = await self.contactsService.create_new_contact(contact)
+        await ContactORMCache.Store(str(new_contact.contact_id),new_contact)
         return JSONResponse(content={"detail": "Contact created", "contact": new_contact}, status_code=status.HTTP_201_CREATED)
 
     @UseRoles([Role.TWILIO])
-    @BaseHTTPRessource.Get('/{contact_id}')
-    async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.Get('/{contact_id}/')
+    async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)]):
         contact_data = await self.contactsService.read_contact(contact.contact_id)
         return JSONResponse(content={"detail": "Contact retrieved", "contact": contact_data}, status_code=status.HTTP_200_OK)
 
-    @BaseHTTPRessource.HTTPRoute('/{contact_id}', [HTTPMethod.PATCH, HTTPMethod.PUT])
-    async def update_contact(self, update_contact_model: UpdateContactModel, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/{contact_id}/', [HTTPMethod.PATCH, HTTPMethod.PUT])
+    async def update_contact(self, update_contact_model: UpdateContactModel, contact: Annotated[ContactORM, Depends(get_contacts)]):
         updated_contact = await self.contactsService.update_contact(update_contact_model, contact)
         await ContactORMCache.Store(str(contact.contact_id),contact)
         return JSONResponse(content={"detail": "Contact updated", "contact": updated_contact}, status_code=status.HTTP_200_OK)
 
-    @BaseHTTPRessource.Delete('/{contact_id}')
-    async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.Delete('/{contact_id}/')
+    async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],):
         content_data = await self.contactsService.read_contact(contact.contact_id)
         await ContactORMCache.Invalid(str(contact.contact_id))
 
         await contact.delete()
         return JSONResponse(content={"detail": "Contact deleted", "contact":content_data}, status_code=status.HTTP_200_OK)
 
+
+@UseHandler(TortoiseHandler, ContactsHandler)
+@UseRoles([Role.CONTACTS])
+@PingService([ContactsService])
+@HTTPRessource(CONTACTS_PREFIX, routers=[ContactsCRUDRessource,ContactSecurityRessource,ContentSubscriptionRessource, ContactsSubscriptionRessource,])
+class ContactsRessource(BaseHTTPRessource):
+
+    @UsePermission(JWTRouteHTTPPermission)
+    @BaseHTTPRessource.HTTPRoute('/registered/',methods=[HTTPMethod.PUT])
+    async def set_app_registered(self, app_registered_model:AppRegisteredContactModel,contact:Annotated[ContactORM,Depends(get_contacts)],response:Response,authPermission=Depends(get_auth_permission)):
+        contact.app_registered = app_registered_model.app_registered
+        await contact.save(force_update=True)
+        await ContactORMCache.Store(str(contact.contact_id),contact)
+
+    @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/all')
     async def get_all_contacts(self, authPermission=Depends(get_auth_permission)):
         row_affected, result = await get_all_contact_summary()
         return JSONResponse(content={"detail": "All contacts retrieved", "contacts": result}, status_code=status.HTTP_200_OK)
-
+    
+    @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/file',mount=False)
     async def import_contacts(self,authPermission=Depends(get_auth_permission)):
         raise NotImplementedError
-     
+    
+    @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Post('/file',mount=False)
     async def export_contacts(self,authPermission=Depends(get_auth_permission)):
         raise NotImplementedError
