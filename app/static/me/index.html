@@ -7,7 +7,7 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     
@@ -17,72 +17,110 @@
 <body>
     <div class="main-container">
         <header>
-            <h1>Tableau de Bord</h1>
+            <h1>Tableau de Bord Client</h1>
             <div class="theme-switcher-container">
                 <i class="fa-solid fa-sun theme-icon"></i>
                 <label class="switch">
                     <input type="checkbox" id="theme-toggle">
-                    <span class="slider round"></span>
+                    <span class="slider"></span>
                 </label>
                 <i class="fa-solid fa-moon theme-icon"></i>
             </div>
         </header>
 
-        <main class="profile-grid">
-            <div class="card profile-card">
-                <div class="profile-header">
-                    <div class="avatar">{{ first_name[0] }}{{ last_name[0] }}</div>
-                    <div class="profile-title">
-                        <h2>{{ first_name }} {{ last_name }}</h2>
-                        <p class="user-id">ID: {{ contact_id }}</p>
+        <main class="main-layout">
+            <section class="card profile-card-large" id="profile-card" data-contact-id="{{ contact_id }}" data-contact-name="{{ first_name }} {{ last_name }}">
+                
+                <div class="profile-view">
+                    <div class="card-header">
+                        <h3>Informations Personnelles</h3>
+                        <button id="edit-btn" class="btn btn-primary"><i class="fa-solid fa-pencil"></i> Modifier</button>
+                    </div>
+                    <div class="profile-grid">
+                        <div class="info-group">
+                            <label>Prénom</label>
+                            <span data-key="first_name">{{ first_name }}</span>
+                        </div>
+                        <div class="info-group">
+                            <label>Nom</label>
+                            <span data-key="last_name">{{ last_name }}</span>
+                        </div>
+                        <div class="info-group">
+                            <label>Adresse Email</label>
+                            <span data-key="email">{{ email }}</span>
+                        </div>
+                        <div class="info-group">
+                            <label>Téléphone</label>
+                            <span data-key="phone">{{ phone }}</span>
+                        </div>
+                        <div class="info-group">
+                            <label>Langue</label>
+                            <span data-key="lang">{{ lang | upper }}</span>
+                        </div>
                     </div>
                 </div>
-                <div class="profile-body">
-                    <div class="info-item">
-                        <i class="fa-solid fa-envelope"></i>
-                        <span>{{ email }}</span>
-                    </div>
-                    <div class="info-item">
-                        <i class="fa-solid fa-phone"></i>
-                        <span>{{ phone }}</span>
-                    </div>
-                    <div class="info-item">
-                        <i class="fa-solid fa-globe"></i>
-                        <span>Langue : {{ lang|upper }}</span>
-                    </div>
-                    <div class="info-item">
-                        <i class="fa-solid fa-calendar-alt"></i>
-                        <span>Inscrit le : {{ created_at }}</span>
-                    </div>
-                </div>
-            </div>
 
-            <div class="card status-card">
-                <h3>Statuts des Canaux</h3>
-                <div class="status-grid">
+                <div class="profile-edit" style="display: none;">
+                    <div class="card-header">
+                        <h3>Modifier les Informations</h3>
+                    </div>
+                    <form id="edit-profile-form" class="profile-grid">
+                        <div class="input-group">
+                            <label for="first_name">Prénom</label>
+                            <input type="text" id="first_name" name="first_name" value="{{ first_name }}">
+                        </div>
+                        <div class="input-group">
+                            <label for="last_name">Nom</label>
+                            <input type="text" id="last_name" name="last_name" value="{{ last_name }}">
+                        </div>
+                        <div class="input-group">
+                            <label for="email">Adresse Email</label>
+                            <input type="email" id="email" name="email" value="{{ email }}">
+                        </div>
+                        <div class="input-group">
+                            <label for="phone">Téléphone</label>
+                            <input type="tel" id="phone" name="phone" value="{{ phone }}">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" id="cancel-btn" class="btn btn-secondary">Annuler</button>
+                            <button type="submit" id="save-btn" class="btn btn-success"><i class="fa-solid fa-save"></i> Enregistrer</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="danger-zone">
+                    <div class="card-header">
+                        <h3>Zone de Danger</h3>
+                    </div>
+                    <div class="danger-content">
+                        <p>La suppression de ce contact est une action irréversible. Toutes les données associées à ce contact seront définitivement effacées.</p>
+                        <p>Pour confirmer la suppression, veuillez taper "<strong>{{ first_name }} {{ last_name }}</strong>" dans le champ ci-dessous.</p>
+                        <input type="text" id="delete-confirm-input" class="danger-confirm-input" placeholder="Taper le nom complet du contact">
+                        <button id="delete-contact-btn" class="btn btn-danger" disabled>Supprimer ce contact</button>
+                    </div>
+                </div>
+            </section>
+            
+            <aside class="sidebar">
+                <div class="card">
+                    <h3>Statuts Généraux</h3>
                     <div class="status-item">
-                        <h4>Compte</h4>
+                        <span>Compte</span>
                         <span class="status-badge status-{{ status|lower }}">{{ status }}</span>
                     </div>
                     <div class="status-item">
-                        <h4>Email</h4>
+                        <span>Email</span>
                         <span class="status-badge status-{{ email_status|lower }}">{{ email_status }}</span>
                     </div>
                     <div class="status-item">
-                        <h4>SMS</h4>
+                        <span>SMS</span>
                         <span class="status-badge status-{{ sms_status|lower }}">{{ sms_status }}</span>
                     </div>
-                    <div class="status-item">
-                        <h4>App Enregistrée</h4>
-                        <span class="status-badge status-{{ 'active' if app_registered else 'inactive' }}">{{ 'Oui' if app_registered else 'Non' }}</span>
-                    </div>
                 </div>
-            </div>
 
-            <div class="card security-card">
-                <h3>Paramètres de Sécurité</h3>
-                <div class="security-list">
-                    <div class="security-item">
+                <div class="card">
+                    <h3>Paramètres de Sécurité</h3>
+                    <div class="status-item">
                         <span>Code de sécurité</span>
                         {% if has_security_code %}
                             <i class="fa-solid fa-shield-halved icon-true" title="Actif"></i>
@@ -90,7 +128,7 @@
                             <i class="fa-solid fa-shield-slash icon-false" title="Inactif"></i>
                         {% endif %}
                     </div>
-                    <div class="security-item">
+                     <div class="status-item">
                         <span>Phrase de sécurité</span>
                         {% if has_security_phrase %}
                             <i class="fa-solid fa-shield-halved icon-true" title="Actif"></i>
@@ -98,7 +136,7 @@
                             <i class="fa-solid fa-shield-slash icon-false" title="Inactif"></i>
                         {% endif %}
                     </div>
-                    <div class="security-item">
+                    <div class="status-item">
                         <span>Empreinte vocale</span>
                         {% if has_voice_embedding %}
                             <i class="fa-solid fa-shield-halved icon-true" title="Actif"></i>
@@ -107,31 +145,26 @@
                         {% endif %}
                     </div>
                 </div>
-            </div>
 
-            <div class="card subscriptions-card">
-                <h3>Statuts des Communications</h3>
-                <p>Total des abonnements : {{ subscription_count }}</p>
-                <div class="subscription-status-list">
+                <div class="card">
+                    <h3>Abonnements</h3>
+                    <p class="subscription-count">Total des abonnements : {{ subscription_count }}</p>
                     <div class="status-item">
-                        <h4>Infolettre</h4>
+                        <span>Infolettre</span>
                         <span class="status-badge status-{{ newsletter_status|lower|default('unknown') }}">{{ newsletter_status|default('N/A') }}</span>
                     </div>
                     <div class="status-item">
-                        <h4>Promotions</h4>
+                        <span>Promotions</span>
                         <span class="status-badge status-{{ promotion_status|lower|default('unknown') }}">{{ promotion_status|default('N/A') }}</span>
                     </div>
                     <div class="status-item">
-                        <h4>Événements</h4>
+                        <span>Événements</span>
                         <span class="status-badge status-{{ event_status|lower|default('unknown') }}">{{ event_status|default('N/A') }}</span>
                     </div>
-                     <div class="status-item">
-                        <h4>Autres</h4>
-                        <span class="status-badge status-{{ other_status|lower|default('unknown') }}">{{ other_status|default('N/A') }}</span>
-                    </div>
                 </div>
-            </div>
+            </aside>
         </main>
     </div>
+    
 </body>
 </html>

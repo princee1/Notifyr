@@ -26,6 +26,8 @@
     --accent-blue-dark: #60a5fa;
     --success-dark: #4ade80;
     --danger-dark: #f87171;
+
+    --danger-zone-border: #a13a3a;
 }
 
 [data-theme="light"] {
@@ -58,7 +60,7 @@
 body {
     background-color: var(--bg-primary);
     color: var(--text-primary);
-    font-family: var(--font-primary);
+    font-family: 'Inter', sans-serif;
     margin: 0;
     transition: background-color 0.3s ease, color 0.3s ease;
 }
@@ -68,6 +70,115 @@ body {
     margin: 2rem auto;
     padding: 0 2rem;
 }
+
+/* Nouvelle mise en page principale */
+.main-layout {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 992px) {
+    .main-layout { grid-template-columns: 1fr; }
+}
+
+/* Carte de profil large */
+.profile-card-large {
+    grid-column: 1 / 2;
+}
+
+.card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+    box-shadow: 0 4px 6px -1px var(--shadow-color);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.card-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--accent-blue);
+}
+
+/* Grille pour les informations */
+.profile-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem 2rem;
+}
+
+/* Styles pour le mode consultation */
+.info-group label {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+}
+.info-group span {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Styles pour le mode édition (formulaire) */
+.input-group {
+    display: flex;
+    flex-direction: column;
+}
+.input-group label {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+.input-group input {
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-group input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 20%, transparent);
+}
+
+.form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+/* Boutons */
+.btn {
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.btn:hover { transform: translateY(-2px); }
+.btn-primary { background-color: var(--accent-blue); color: #fff; }
+.btn-secondary { background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); }
+.btn-success { background-color: var(--success-color); color: #fff; }
+
 
 /* Header */
 header {
@@ -129,6 +240,44 @@ header h1 {
 .info-item { display: flex; align-items: center; gap: 1rem; color: var(--text-secondary); margin-bottom: 0.75rem; }
 .info-item i { width: 20px; text-align: center; color: var(--accent-sky-blue); }
 .info-item span { color: var(--text-primary); }
+
+/* Danger Zone Specific Styles */
+.danger-zone {
+    border: 2px solid var(--danger-zone-border);
+    background-color: var(--danger-zone-bg);
+    margin-top: 40px; /* Give it some space */
+}
+
+.danger-zone .card-header {
+    border-bottom: 1px solid var(--danger-zone-border);
+    color: var(--danger-zone-border); /* Make header text red as well */
+}
+
+.danger-zone h3 {
+    color: var(--danger-zone-border);
+}
+
+.danger-zone p {
+    color: var(--text-color-primary);
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.danger-confirm-input {
+    width: calc(100% - 22px); /* Adjust for padding and border */
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 1em;
+    color: var(--text-color-primary);
+    background-color: var(--bg-color-primary);
+}
+
+.danger-confirm-input:focus {
+    border-color: var(--danger-zone-border);
+    outline: none;
+}
 
 /* Cartes de statut */
 .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
