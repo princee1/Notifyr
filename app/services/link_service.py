@@ -78,7 +78,8 @@ class LinkService(BaseService):
             loc:str = ip_lookup.get('loc',None)
             if loc == None:
                 lat,long = None,None
-            lat,long = loc.split(',')
+            else:
+                lat,long = loc.split(',')
             ip_data = {
                 'country':ip_lookup.get('country',None),
                 'geo_lat':float(lat) if lat != None else None,
