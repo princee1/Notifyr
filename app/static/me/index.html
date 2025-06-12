@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Préférences</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Préférences du Contact</h1>
+            <div class="theme-switcher-container">
+                <label for="theme-toggle" class="theme-label">Thème Sombre</label>
+                <label class="switch">
+                    <input type="checkbox" id="theme-toggle">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </header>
+
+        <main>
+            <section id="contact-info" class="card">
+                <h2>Détails du Contact</h2>
+                <div id="contact-details-content">
+                    <p class="placeholder">Chargement des informations...</p>
+                </div>
+            </section>
+            
+            <section id="subscriptions" class="card">
+                <h2>Abonnements Actifs</h2>
+                <div id="subscriptions-list">
+                    <p class="placeholder">Chargement des abonnements...</p>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Portail de gestion des préférences</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

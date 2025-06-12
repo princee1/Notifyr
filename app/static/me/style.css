@@ -1,0 +1,163 @@
+/* Définition des variables de couleur pour les thèmes */
+:root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f0f8ff; /* Bleu Alice */
+    --text-primary: #0a192f;
+    --text-secondary: #555;
+    --accent-primary: #007BFF; /* Bleu vif */
+    --accent-sky-blue: #87CEEB; /* Bleu ciel */
+    --border-color: #dee2e6;
+    --shadow-color: rgba(0, 0, 0, 0.08);
+    --danger-color: #dc3545;
+    --danger-hover-color: #c82333;
+    --slider-bg: #ccc;
+}
+
+body.dark-theme {
+    --bg-primary: #0a192f;
+    --bg-secondary: #172a45;
+    --text-primary: #e6f1ff;
+    --text-secondary: #a8b2d1;
+    --accent-primary: #64ffda; /* Une couleur menthe pour le contraste */
+    --accent-sky-blue: #58a6ff;
+    --border-color: #2a3f5a;
+    --shadow-color: rgba(0, 0, 0, 0.2);
+    --danger-color: #e57373;
+    --danger-hover-color: #ef5350;
+    --slider-bg: #555;
+}
+
+/* Styles généraux */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    margin: 0;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.app-container {
+    max-width: 900px;
+    margin: 2rem auto;
+    padding: 1rem;
+}
+
+/* Header et Titres */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+h1 {
+    color: var(--accent-sky-blue);
+    font-size: clamp(1.5rem, 5vw, 2.2rem);
+}
+
+h2 {
+    color: var(--accent-primary);
+    margin-top: 0;
+    border-bottom: 2px solid var(--accent-sky-blue);
+    padding-bottom: 0.5rem;
+}
+
+/* Style des cartes */
+.card {
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 12px var(--shadow-color);
+    transition: background-color 0.3s ease;
+}
+
+.placeholder {
+    color: var(--text-secondary);
+}
+
+/* Liste des abonnements */
+.subscription-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1rem 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+}
+
+.subscription-item:last-child {
+    border-bottom: none;
+}
+
+.subscription-item:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+.subscription-details p {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.subscription-details strong {
+    color: var(--text-primary);
+    font-size: 1.1em;
+}
+
+/* Boutons */
+.btn {
+    padding: 0.6rem 1rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-delete {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-delete:hover {
+    background-color: var(--danger-hover-color);
+}
+
+/* Interrupteur de thème (Toggle Switch) */
+.theme-switcher-container { display: flex; align-items: center; gap: 0.8rem; }
+.theme-label { font-size: 0.9rem; color: var(--text-secondary); }
+.switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--slider-bg); transition: .4s; }
+.slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; }
+input:checked + .slider { background-color: var(--accent-primary); }
+input:checked + .slider:before { transform: translateX(22px); }
+.slider.round { border-radius: 34px; }
+.slider.round:before { border-radius: 50%; }
+
+/* Pied de page */
+footer {
+    text-align: center;
+    margin-top: 2rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Design Responsive */
+@media (max-width: 600px) {
+    .app-container { margin-top: 1rem; }
+    .subscription-item { flex-direction: column; align-items: flex-start; }
+    .subscription-actions { width: 100%; text-align: right; }
+}
