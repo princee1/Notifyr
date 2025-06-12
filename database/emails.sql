@@ -217,11 +217,20 @@ DECLARE
     sent_email_ids UUID[];
     received_email_ids UUID[];
     analytics emails.email_analytics_input[];
+    esp_list TEXT[] := ARRAY[
+        'Google',
+        'Microsoft',
+        'Yahoo',
+        'Apple',
+        'ProtonMail',
+        'Zoho',
+        'AOL',
+        'Untracked Provider'
+    ];
 BEGIN
     SET search_path = emails;
 
-    -- Loop through each ESP provider
-    FOR esp IN SELECT DISTINCT esp_provider FROM EmailTracking WHERE esp_provider IS NOT NULL LOOP
+    FOREACH esp IN ARRAY esp_list LOOP
         -- Get sent email IDs for the current ESP provider
         sent_email_ids := ARRAY(
             SELECT email_id
@@ -250,7 +259,6 @@ BEGIN
         WHERE email_id = ANY(received_email_ids);
 
         -- Prepare data for bulk upsert analytics
-
         analytics := array_append(analytics, ROW(
             esp,
             0, -- emails_received
@@ -262,23 +270,23 @@ BEGIN
             0, -- emails_complaint
             0, -- emails_replied
             COALESCE(array_length(received_email_ids, 1), 0) -- emails_failed
-            )::emails.email_analytics_input);
-        
+        )::emails.email_analytics_input);
 
-        -- Add events for 'DELIVERED' for the current ESP provider
+        -- Add events for 'DELIVERED'
         INSERT INTO emails.TrackingEvent (email_id, current_event, description)
         SELECT email_id, 'DELIVERED', 'Email marked as delivered after 1 hours'
         FROM unnest(sent_email_ids) AS email_id;
 
-        -- Add events for 'FAILED' for the current ESP provider
+        -- Add events for 'FAILED'
         INSERT INTO emails.TrackingEvent (email_id, current_event, description)
         SELECT email_id, 'FAILED', 'Email marked as failed after 1 hours'
         FROM unnest(received_email_ids) AS email_id;
     END LOOP;
     
-    PERFORM bulk_upsert_email_analytics(analytics::emails.email_analytics_input[]);
+    PERFORM bulk_upsert_email_analytics(analytics);
 END;
 $$ LANGUAGE PLPGSQL;
+
 
 -- Schedule the function to run every hour using pg_cron
 SELECT cron.schedule (

@@ -1,45 +1,137 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ lang | default('fr') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestion des Préférences</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Profil de {{ first_name }} {{ last_name }}</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    
+    <link rel="stylesheet" href="/me/style.css">
+    <script src="/me/script.js"></script>
 </head>
 <body>
-    <div class="app-container">
+    <div class="main-container">
         <header>
-            <h1>Préférences du Contact</h1>
+            <h1>Tableau de Bord</h1>
             <div class="theme-switcher-container">
-                <label for="theme-toggle" class="theme-label">Thème Sombre</label>
+                <i class="fa-solid fa-sun theme-icon"></i>
                 <label class="switch">
                     <input type="checkbox" id="theme-toggle">
                     <span class="slider round"></span>
                 </label>
+                <i class="fa-solid fa-moon theme-icon"></i>
             </div>
         </header>
 
-        <main>
-            <section id="contact-info" class="card">
-                <h2>Détails du Contact</h2>
-                <div id="contact-details-content">
-                    <p class="placeholder">Chargement des informations...</p>
+        <main class="profile-grid">
+            <div class="card profile-card">
+                <div class="profile-header">
+                    <div class="avatar">{{ first_name[0] }}{{ last_name[0] }}</div>
+                    <div class="profile-title">
+                        <h2>{{ first_name }} {{ last_name }}</h2>
+                        <p class="user-id">ID: {{ contact_id }}</p>
+                    </div>
                 </div>
-            </section>
-            
-            <section id="subscriptions" class="card">
-                <h2>Abonnements Actifs</h2>
-                <div id="subscriptions-list">
-                    <p class="placeholder">Chargement des abonnements...</p>
+                <div class="profile-body">
+                    <div class="info-item">
+                        <i class="fa-solid fa-envelope"></i>
+                        <span>{{ email }}</span>
+                    </div>
+                    <div class="info-item">
+                        <i class="fa-solid fa-phone"></i>
+                        <span>{{ phone }}</span>
+                    </div>
+                    <div class="info-item">
+                        <i class="fa-solid fa-globe"></i>
+                        <span>Langue : {{ lang|upper }}</span>
+                    </div>
+                    <div class="info-item">
+                        <i class="fa-solid fa-calendar-alt"></i>
+                        <span>Inscrit le : {{ created_at }}</span>
+                    </div>
                 </div>
-            </section>
+            </div>
+
+            <div class="card status-card">
+                <h3>Statuts des Canaux</h3>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <h4>Compte</h4>
+                        <span class="status-badge status-{{ status|lower }}">{{ status }}</span>
+                    </div>
+                    <div class="status-item">
+                        <h4>Email</h4>
+                        <span class="status-badge status-{{ email_status|lower }}">{{ email_status }}</span>
+                    </div>
+                    <div class="status-item">
+                        <h4>SMS</h4>
+                        <span class="status-badge status-{{ sms_status|lower }}">{{ sms_status }}</span>
+                    </div>
+                    <div class="status-item">
+                        <h4>App Enregistrée</h4>
+                        <span class="status-badge status-{{ 'active' if app_registered else 'inactive' }}">{{ 'Oui' if app_registered else 'Non' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card security-card">
+                <h3>Paramètres de Sécurité</h3>
+                <div class="security-list">
+                    <div class="security-item">
+                        <span>Code de sécurité</span>
+                        {% if has_security_code %}
+                            <i class="fa-solid fa-shield-halved icon-true" title="Actif"></i>
+                        {% else %}
+                            <i class="fa-solid fa-shield-slash icon-false" title="Inactif"></i>
+                        {% endif %}
+                    </div>
+                    <div class="security-item">
+                        <span>Phrase de sécurité</span>
+                        {% if has_security_phrase %}
+                            <i class="fa-solid fa-shield-halved icon-true" title="Actif"></i>
+                        {% else %}
+                            <i class="fa-solid fa-shield-slash icon-false" title="Inactif"></i>
+                        {% endif %}
+                    </div>
+                    <div class="security-item">
+                        <span>Empreinte vocale</span>
+                        {% if has_voice_embedding %}
+                            <i class="fa-solid fa-shield-halved icon-true" title="Actif"></i>
+                        {% else %}
+                            <i class="fa-solid fa-shield-slash icon-false" title="Inactif"></i>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card subscriptions-card">
+                <h3>Statuts des Communications</h3>
+                <p>Total des abonnements : {{ subscription_count }}</p>
+                <div class="subscription-status-list">
+                    <div class="status-item">
+                        <h4>Infolettre</h4>
+                        <span class="status-badge status-{{ newsletter_status|lower|default('unknown') }}">{{ newsletter_status|default('N/A') }}</span>
+                    </div>
+                    <div class="status-item">
+                        <h4>Promotions</h4>
+                        <span class="status-badge status-{{ promotion_status|lower|default('unknown') }}">{{ promotion_status|default('N/A') }}</span>
+                    </div>
+                    <div class="status-item">
+                        <h4>Événements</h4>
+                        <span class="status-badge status-{{ event_status|lower|default('unknown') }}">{{ event_status|default('N/A') }}</span>
+                    </div>
+                     <div class="status-item">
+                        <h4>Autres</h4>
+                        <span class="status-badge status-{{ other_status|lower|default('unknown') }}">{{ other_status|default('N/A') }}</span>
+                    </div>
+                </div>
+            </div>
         </main>
-
-        <footer>
-            <p>Portail de gestion des préférences</p>
-        </footer>
     </div>
-
-    <script src="script.js"></script>
 </body>
 </html>

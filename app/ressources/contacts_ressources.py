@@ -20,6 +20,7 @@ from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import SMSService, CallService
 from app.depends.dependencies import get_auth_permission, get_contact_token
 from app.decorators.pipes import ContactStatusPipe, RelayPipe
+from app.depends.variables import summary_query
 
 
 CONTACTS_PREFIX = 'contacts'
@@ -240,8 +241,11 @@ class ContactsCRUDRessource(BaseHTTPRessource):
 
     @UseRoles([Role.TWILIO])
     @BaseHTTPRessource.Get('/{contact_id}/')
-    async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)]):
-        contact_data = await self.contactsService.read_contact(contact.contact_id)
+    async def read_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],is_summary:bool=Depends(summary_query)):
+        if is_summary:
+            contact_data = await self.contactsService.read_contact(contact.contact_id)
+        else:
+            contact_data = contact.to_json
         return JSONResponse(content={"detail": "Contact retrieved", "contact": contact_data}, status_code=status.HTTP_200_OK)
 
     @BaseHTTPRessource.HTTPRoute('/{contact_id}/', [HTTPMethod.PATCH, HTTPMethod.PUT])
@@ -251,10 +255,12 @@ class ContactsCRUDRessource(BaseHTTPRessource):
         return JSONResponse(content={"detail": "Contact updated", "contact": updated_contact}, status_code=status.HTTP_200_OK)
 
     @BaseHTTPRessource.Delete('/{contact_id}/')
-    async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],):
-        content_data = await self.contactsService.read_contact(contact.contact_id)
+    async def delete_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)],is_summary:bool=Depends(summary_query)):
+        if is_summary:
+            content_data = await self.contactsService.read_contact(contact.contact_id)
+        else:
+            content_data = contact.to_json
         await ContactORMCache.Invalid(str(contact.contact_id))
-
         await contact.delete()
         return JSONResponse(content={"detail": "Contact deleted", "contact":content_data}, status_code=status.HTTP_200_OK)
 

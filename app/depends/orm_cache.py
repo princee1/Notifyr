@@ -6,6 +6,7 @@ from app.depends.funcs_dep import GetClient, GetLink, get_challenge,Get_Contact
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.services.admin_service import AdminService
+from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
 from app.services.config_service import ConfigService
 from app.container import Get
@@ -28,6 +29,7 @@ T = TypeVar('T',bool,str,int,Model)
 redisService:RedisService = Get(RedisService)
 configService:ConfigService = Get(ConfigService)
 adminService:AdminService = Get(AdminService)
+contactService:ContactsService = Get(ContactsService)
 
 
 class CacheInterface:

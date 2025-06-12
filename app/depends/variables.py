@@ -26,6 +26,10 @@ trigger_task: Callable[[CeleryTask,int|None,str],dict[str,Any]] = GetDependsFunc
 
 # ----------------------------------------------                                    ---------------------------------- #
 
+summary_query:Callable = get_query_params('summary','false',True)
+
+# ----------------------------------------------                                    ---------------------------------- #
+
 as_async_query:Callable = get_query_params('background','false',True)
 
 runtype_query:Callable=get_query_params('runtype','sequential',False,checker=lambda v: v in get_args(RunType))
