@@ -98,7 +98,7 @@ class RedisService(DatabaseService):
                 'sub':True,
                 'count':MS_1000,
                 'block':MS_1000*15,
-                'wait':60,
+                'wait':70,
                 'stream':True
             }),
             StreamConstant.TWILIO_REACTIVE:self.StreamConfig(**{
@@ -108,7 +108,7 @@ class RedisService(DatabaseService):
             StreamConstant.EMAIL_TRACKING:self.StreamConfig(**{
                 'sub':False,
                 'stream':True,
-                'block':MS_1000*5,
+                'block':MS_1000*2,
                 'wait':5,
             }),
 
@@ -281,7 +281,7 @@ class RedisService(DatabaseService):
 
     async def _consume_stream(self,stream_name,count,block,wait,handler:Callable[[dict[str,Any]],list]):
         while True:
-            await asyncio.sleep(wait+(randint(0,10)*random()))
+            await asyncio.sleep(wait+(randint(10,50)))
             try:
                 response = await self.redis_events.xreadgroup(self.GROUP,self.consumer_name, {stream_name: '>'}, count=count, block=block)
                 if response:

@@ -35,13 +35,14 @@ def retry_logic(retry:int,sleep_time:int):
             retry_count = 0
             while retry_count < retry:
                 try:
-                    await func(*args,**kwargs)
+                    return await func(*args,**kwargs)
                     break  # Exit the loop if successful
                 except IntegrityError as e:
-                    await asyncio.sleep(sleep_time)
                     retry_count += 1
                     if retry_count == retry:
                         raise e
+                    else:
+                        await asyncio.sleep(sleep_time)
                 except Exception as e:
                     raise e
         return callback
