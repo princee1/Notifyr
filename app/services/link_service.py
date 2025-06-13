@@ -220,13 +220,13 @@ class LinkService(BaseService):
                 return tracking_url
 
             # Regex to match URLs in the content
-            url_pattern = r"https?://[^\s]+"
+            url_pattern = r'https?://[^\s"<>()]+'
             new_content = re.sub(url_pattern, _replace_link,content )
             return new_content
         
         return callback
 
-    def set_tracking_link(self, template:HTMLTemplate,message_tracking_id: str, contact_id: str=None) -> str:
+    def set_tracking_link(self, template:HTMLTemplate,message_tracking_id: str, contact_id: str=None,add_params:dict={}) -> str:
         """
         Replace every link in the given content with a new tracking URL.
 
@@ -238,7 +238,10 @@ class LinkService(BaseService):
         Returns:
             str: The content with replaced tracking links.
         """
-        callback = self.create_link_re(message_tracking_id,contact_id)
+        params = {
+            **add_params
+        }
+        callback = self.create_link_re(message_tracking_id,contact_id,add_params=params)
         new_content = callback(template.body)
         template.set_to_email_tracking_link(new_content)
     

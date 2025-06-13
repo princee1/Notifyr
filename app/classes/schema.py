@@ -58,11 +58,12 @@ class MLSchemaBuilder (SchemaBuilder):
             is_struct = v.attrs['type'] in ["list", "dict"]
 
             if 'transform' in schema[key]:
-                if not is_struct:
-                    value = schema[key]['transform']
-                    value = self._parse_to_direct_values(value,transform)
-                    abs_key = key if parent_key == '' else default_flattenReducer(key_builder(parent_key),key)
-                    self.transform[abs_key] = value
+                if False:
+                    if not is_struct:
+                        value = schema[key]['transform']
+                        value = self._parse_to_direct_values(value,transform)
+                        abs_key = key if parent_key == '' else default_flattenReducer(key_builder(parent_key),key)
+                        self.transform[abs_key] = value
                 
 
             if has_noSuccessor:

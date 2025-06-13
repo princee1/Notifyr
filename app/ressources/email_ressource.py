@@ -103,9 +103,10 @@ class EmailTemplateRessource(BaseHTTPRessource):
         tracking_link_callback:Callable[[str],str] = None
         if tracker.will_track:
             template = template.clone()
+            
             event_tracking,email_tracking = tracker.track_event_data()
-            self.linkService.set_tracking_link(template,tracker.email_id)
-            add_params = self._get_esp(meta['From'])
+            add_params = self._get_esp(meta['To'])
+            self.linkService.set_tracking_link(template,tracker.email_id,add_params=add_params)
             tracking_link_callback = self.linkService.create_link_re(tracker.email_id,add_params=add_params) # FIXME if its a list change it 
             #self.linkService.create_tracking_pixel(template,tracker.email_id)
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)

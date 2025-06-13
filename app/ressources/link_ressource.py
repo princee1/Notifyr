@@ -34,6 +34,8 @@ get_link = GetLink(False)
 
 MediaType=Literal['html_image,','html','image']
 
+Image_Ext = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg')
+
 media_type_query = get_query_params(
     'media_type', 
     'html_image', 
@@ -182,31 +184,36 @@ class LinkRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/t/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_email_links(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
-        self.send_email_event(broker, link_query,EmailStatus.LINK_CLICKED.value)
-        
         redirect_url = link_query.redirect_url
-        redirect_url = link_query.create_link(redirect_url,None,('contact_id','message_id'),('cid'))
+        is_image_url = redirect_url.split('?')[0].endswith(Image_Ext)
+
+        event_status = EmailStatus.OPENED if is_image_url else EmailStatus.LINK_CLICKED
+        self.send_email_event(broker, link_query,event_status)
+        include = [(),()] if link_query.is_same_redirect_url else [('contact_id','message_id'),('cid',)]
+        redirect_url = link_query.create_link(redirect_url,None,include[0],include[1])
+    
         return RedirectResponse(redirect_url,status.HTTP_308_PERMANENT_REDIRECT)
 
     @UseLimiter(limit_value='10000/min')
     @BaseHTTPRessource.HTTPRoute('/p/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_pixel(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
-        self.send_email_event(broker,link_query,EmailStatus.OPENED.value)
+        self.send_email_event(broker,link_query,EmailStatus.OPENED)
+
         return None
     
 
     def send_email_event(self, broker:Broker, link_query:LinkQuery,event:EmailStatus,):
         message_id = link_query['message_id']
         contact_id = link_query['contact_id']
-        esp_provider =link_query['esp']
-        esp_provider  = 'Untracked Provider' if esp_provider is None else esp_provider # FIXME add the esp_provider in the query_params
         now = datetime.now(timezone.utc).isoformat()
-
         if contact_id: 
             # TODO track contact event
             broker.publish(StreamConstant.CONTACT_EVENT,'contact',contact_id,{},)
+        if message_id:
+            esp_provider =link_query['esp']
+            esp_provider  = 'Untracked Provider' if esp_provider is None else esp_provider # FIXME add the esp_provider in the query_params
 
-        data = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),email_id=message_id,current_event=event,date_event_received=now,esp_provider=esp_provider)
-
-        broker.publish(StreamConstant.EMAIL_EVENT_STREAM,'message',message_id,data,)
-        broker.stream(StreamConstant.EMAIL_EVENT_STREAM,data)
+            description = '' # TODO add a description
+            data = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),email_id=message_id,current_event=event.value,date_event_received=now,esp_provider=esp_provider,description=description)
+            broker.publish(StreamConstant.EMAIL_EVENT_STREAM,'message',message_id,data,)
+            broker.stream(StreamConstant.EMAIL_EVENT_STREAM,data)

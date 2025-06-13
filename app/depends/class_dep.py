@@ -174,7 +174,7 @@ class LinkQuery:
         cid_type :Literal['client','contact']
         sid_type: SubjectType
 
-    server_scoped_params = ["client_id", "group_id", "contact_id", "session_id","message_id","link_id","subject_id"]
+    server_scoped_params = ["client_id", "group_id", "contact_id", "session_id","message_id","link_id","subject_id",'r','esp']
     ids_type = ["cid","gid","lid","ctid","sid_type"]
     
     def __init__(self, request: Request):
@@ -213,7 +213,7 @@ class LinkQuery:
     def raw_link_params(self):
         return "&".join([ f'{key}={value}' for key,value in self._link_params.items()])
     
-    def raw_filtered_out_params(self,attr,include=()):
+    def raw_filtered_out_params(self,attr:Literal['server_scoped','ids_type_params'],include=()):
         return "&".join([ f'{key}={value}' for key,value in getattr(self,attr).items() if key in include])
     
     def create_link(self,link:LinkORM|None|str,path:str='',include_scoped_out=(),include_ids_type=()):
@@ -263,6 +263,12 @@ class LinkQuery:
         if urlparse(redirect_url).netloc == self.base_url:
             redirect_url = redirect_url.replace(self.base_url,'')
         return redirect_url
+
+    @property
+    def is_same_redirect_url(self):
+        redirect_url = self.request.query_params.get('r',None)
+        return urlparse(redirect_url).netloc == self.base_url
+    
         
 class Broker:
     

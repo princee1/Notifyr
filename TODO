@@ -35,3 +35,4 @@
 33. Finish All Ping Service and work finish workers option
 34. Publish the state of all the Services using pubsub so everybody can be at the state
 35. Implements logs
+36. Manage duplication when receiving a request, we will receive multiple OPENED event
