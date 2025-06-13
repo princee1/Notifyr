@@ -140,6 +140,7 @@ class Template(Asset):
 
 
 class MLTemplate(Template):
+    _globals = {}
 
     DefaultValidatorConstructorParamValues = {
         "require_all": True,
@@ -169,12 +170,10 @@ class MLTemplate(Template):
         #     if t not in transform:
         #         raise TemplateInjectError()
         #     env.filters[t] = transform[t]
+        env.filters.update(transform)
+        env.filters.update(coerce)
 
-        for k,t in transform.items():
-            env.filters[k] = t
-
-        for k,c in coerce.items():
-            env.filters[k] =c
+        env.globals.update(self._globals)
 
         content_html = str(self.content_to_inject)
         try:

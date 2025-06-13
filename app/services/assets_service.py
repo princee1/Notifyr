@@ -153,6 +153,11 @@ class AssetService(_service.BaseService):
         self.securityService = securityService
         self.configService = configService
 
+        MLTemplate._globals.update({}) # TODO creates global with the config service BUG duplicates writing
+
+        
+    def build(self):
+
         self.images: dict[str, Asset] = {}
         self.css: dict[str, Asset] = {}
 
@@ -161,7 +166,7 @@ class AssetService(_service.BaseService):
         self.sms: dict[str, SMSTemplate] = {}
         self.phone: dict[str, PhoneTemplate] = {}
 
-    def build(self):
+
         Reader.fileService = self.fileService
         if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
             return 
