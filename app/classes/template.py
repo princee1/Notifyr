@@ -13,6 +13,8 @@ import os
 import re
 from app.utils.prettyprint import printJSON
 from cerberus import schema_registry
+from jinja2 import Environment, Template as JJ2Template
+from app.utils.transformer import transform,coerce
 
 
 
@@ -34,6 +36,9 @@ class TemplateNotFoundError(BaseError):
     ...
 
 class TemplateBuildError(BaseError):
+    ...
+
+class TemplateInjectError(BaseError):
     ...
 
 class TemplateValidationError(BaseError):
@@ -153,34 +158,60 @@ class MLTemplate(Template):
 
     def _built_template(self,content):
         ...
+    
 
-    def inject(self, data: dict,re_replace:Callable[[str],str]=None)->str:
+    def inject(self, data:dict, re_replace:Callable[[str],str]=None):
+        #return super().inject(data, re_replace)
+        env = Environment()
+        
+        env.filters['sub_url'] = lambda v:v if re_replace == None else re_replace 
+        # for t in self.transform.values():
+        #     if t not in transform:
+        #         raise TemplateInjectError()
+        #     env.filters[t] = transform[t]
+
+        for k,t in transform.items():
+            env.filters[k] = t
+
+        for k,c in coerce.items():
+            env.filters[k] =c
+
+        content_html = str(self.content_to_inject)
         try:
-            content_html = str(self.content_to_inject)
-            flattened_data = flatten_dict(data)
-            for key in flattened_data:
-                regex = re.compile(rf"{{{{{key}}}}}")
-                value = str(flattened_data[key])
-                if key in self.transform:
-                    transformers = self.transform[key]
-                    if isinstance(transformers,list):
-                        for t in transformers:
-                            value = t(value)
-                    else:
-                        value=transformers(value)
-                
-                if re_replace:
-                    value = re_replace(value)
-
-                content_html = regex.sub(value, content_html)
-
-            return self._built_template(content_html)
-            
+            template = env.from_string(content_html)
+            template = template.render(**data)
+            return self._built_template(template)
         except Exception as e:
-            print(e.__class__)
-            print(e.__cause__)
-            print(e.args)  
-            raise TemplateBuildError          
+            raise TemplateBuildError()
+        
+    if False:
+        def inject(self, data: dict,re_replace:Callable[[str],str]=None)->str:
+            try:
+                content_html = str(self.content_to_inject)
+                flattened_data = flatten_dict(data)
+                for key in flattened_data:
+                    regex = re.compile(rf"{{{{{key}}}}}")
+                    value = str(flattened_data[key])
+                    if key in self.transform:
+                        transformers = self.transform[key]
+                        if isinstance(transformers,list):
+                            for t in transformers:
+                                value = t(value)
+                        else:
+                            value=transformers(value)
+                    
+                    if re_replace:
+                        value = re_replace(value)
+
+                    content_html = regex.sub(value, content_html)
+
+                return self._built_template(content_html)
+                
+            except Exception as e:
+                print(e.__class__)
+                print(e.__cause__)
+                print(e.args)  
+                raise TemplateBuildError          
 
     def validate(self, document: dict):
         """See: https://docs.python-cerberus.org/errors.html"""
@@ -286,6 +317,7 @@ class HTMLTemplate(MLTemplate):
             style.string=""
         
         style.string += cssContent
+
 
     def exportText(self, content: str):
         bs4 = BeautifulSoup(content, XMLLikeParser.HTML.value)

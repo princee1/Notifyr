@@ -4,7 +4,7 @@ from typing import Callable
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
-from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateNotFoundError, TemplateValidationError
+from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
 from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
@@ -64,6 +64,12 @@ class TemplateHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail='Template not found')
 
+        except TemplateInjectError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Error in the template'
+            )
+
         except TemplateBuildError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                                 detail='Cannot build template with data specified')
@@ -85,6 +91,10 @@ class TemplateHandler(Handler):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'Failed to create template',
                 'details': e.args[0]
+            })
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
+                'message':'Could not be able to properly display the value'
             })
 
         except SchemaValidationError as e:

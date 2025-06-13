@@ -25,10 +25,11 @@ coerce = {
 }
 
 transform={
-    'naturaltime':natural_time
+    'naturaltime':natural_time,
+    'parsetime':parse_time,
 }
 
-transform.update({'split_by_'+key:split_by(key)  for key in [" ",".","-","#"] })
+transform.update({'split_by_'+key if key!=" " else "" :split_by(key)  for key in [" ",".","-","#"] })
 
 def none_to_empty_str(val:dict):
     for key,values in val.items():
