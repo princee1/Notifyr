@@ -136,11 +136,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
             event_tracking, email_tracking = tracker.track_event_data()
             broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
             broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
-            c_0 = tracking_link_callback(content[0])
-            c_1 = tracking_link_callback(content[1])
+            content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
 
-            content = (c_0,c_1)
-            
         await taskManager.offload_task('normal',scheduler,0,None,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,tracker.message_tracking_id,contact_id =None)
         return taskManager.results
 
