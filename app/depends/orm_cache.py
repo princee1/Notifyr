@@ -3,7 +3,7 @@ from random import randint
 import time
 from uuid import UUID
 from app.depends.funcs_dep import GetClient, GetLink, get_challenge,Get_Contact
-from app.models.contacts_model import ContactORM, ContentSubscriptionORM
+from app.models.contacts_model import ContactORM, ContactSummary, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.services.admin_service import AdminService
 from app.services.contacts_service import ContactsService
@@ -57,7 +57,7 @@ class CacheInterface:
         ...
 
     @staticmethod
-    async def Store(key:str|list[str],obj:T,exp:int=0):
+    async def Store(key:str|list[str],obj:T=None,exp:int=0,**kwargs):
         """
         Stores an object in the Redis cache.
         Args:
@@ -199,10 +199,12 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
         
         @kb
         @staticmethod
-        async def Store(key:str|list[str],obj:T,exp=expiry):
+        async def Store(key:str|list[str],obj:T=None,exp=expiry,**kwargs):
 
             exp = Set_Expiry(exp)
-            
+            if obj == None:
+                obj = await DB_Get(**kwargs)
+
             if type(type_) == ModelMeta:
                 obj:Model = obj
                 temp = {}
@@ -301,4 +303,5 @@ BlacklistORMCache = generate_cache_type(bool,adminService.is_blacklisted,prefix=
 ChallengeORMCache = generate_cache_type(ChallengeORM,get_challenge,prefix='orm-challenge',expiry=lambda o:o.expired_at_auth.timestamp()-time.time())
 LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link')
 ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact',use_to_json=True)
+ContactSummaryORMCache = generate_cache_type(ContactSummary,contactService.read_contact,prefix='orm-contact-summary',use_to_json=False)
 #ContentSubORMCache = generate_cache_type(ContentSubscriptionORM,)

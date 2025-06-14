@@ -10,7 +10,7 @@ from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHa
 from app.depends.funcs_dep import get_contact_permission, Get_Contact, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
-from app.depends.orm_cache import ContactORMCache
+from app.depends.orm_cache import ContactORMCache,ContactSummaryORMCache
 from app.models.contacts_model import AppRegisteredContactModel, ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
 from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
@@ -100,8 +100,10 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
         if next_status == Status.Active:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Next status cannot be set to Active when unsubscribing the contact")
         
+        contact_id = str(contact.contact_id)
         result = await self.contactService.unsubscribe_contact(contact, next_status)
-        await ContactORMCache.Store(str(contact.contact_id),contact)
+        await ContactORMCache.Store(contact_id,contact)
+        await ContactSummaryORMCache.Store(contact_id,contact_id=contact_id)
 
         return JSONResponse(content=result, status_code=status.HTTP_200_OK)
 
@@ -110,11 +112,14 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     async def resubscribe_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], action_code: str = Query(None), authPermission=Depends(get_auth_permission)):
         if contact.status == Status.Active:
             return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"detail": "Nothing to do"})
+        contact_id = str(contact.contact_id)
         
         if contact.status in [Status.Inactive, Status.Blacklist]:
             contact.status = Status.Active
             await contact.save()
             await ContactORMCache.Store(str(contact.contact_id),contact)
+            await ContactSummaryORMCache.Store(contact_id,contact_id=contact_id)
+
             return JSONResponse(content={"detail": "Reactivated the contact back to active"}, status_code=status.HTTP_200_OK)
         
         return JSONResponse(content={"detail": "You must reactivate your account with your new opt-in code"}, status_code=status.HTTP_423_LOCKED)
@@ -230,12 +235,16 @@ class ContactsCRUDRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/')
     async def create_contact(self, contact: ContactModel,request:Request,response:Response):
         new_contact = await self.contactsService.create_new_contact(contact)
-        await ContactORMCache.Store(str(new_contact.contact_id),new_contact)
+        contact_id = str(new_contact.contact_id)
+        
+        await ContactORMCache.Store(str(contact_id),new_contact)
         return JSONResponse(content={"detail": "Contact created", "contact": new_contact.to_json}, status_code=status.HTTP_201_CREATED)
 
     @BaseHTTPRessource.HTTPRoute('/{contact_id}/',methods=[HTTPMethod.PATCH])
     async def activate_contact(self, contact: Annotated[ContactORM, Depends(get_contacts)], opt: int = Query(ge=MIN_OPT_IN_CODE, le=MAX_OPT_IN_CODE)):
         action_code = await self.contactsService.activate_contact(contact, opt)
+        contact_id = str(contact.contact_id)
+        await ContactSummaryORMCache.Store(contact_id,contact_id=contact_id)
         await ContactORMCache.Store(str(contact.contact_id),contact)
         return JSONResponse(content={"detail": "Contact activated", "action_code": action_code}, status_code=status.HTTP_200_OK)
 
@@ -251,6 +260,8 @@ class ContactsCRUDRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{contact_id}/', [HTTPMethod.PATCH, HTTPMethod.PUT])
     async def update_contact(self, update_contact_model: UpdateContactModel, contact: Annotated[ContactORM, Depends(get_contacts)]):
         updated_contact = await self.contactsService.update_contact(update_contact_model, contact)
+        contact_id = str(contact.contact_id)
+        await ContactSummaryORMCache.Store(contact_id,contact_id=contact_id)
         await ContactORMCache.Store(str(contact.contact_id),contact)
         return JSONResponse(content={"detail": "Contact updated", "contact": updated_contact}, status_code=status.HTTP_200_OK)
 
@@ -260,7 +271,10 @@ class ContactsCRUDRessource(BaseHTTPRessource):
             content_data = await self.contactsService.read_contact(contact.contact_id)
         else:
             content_data = contact.to_json
-        await ContactORMCache.Invalid(str(contact.contact_id))
+
+        contact_id = str(contact.contact_id)
+        await ContactORMCache.Invalid(contact_id)
+        await ContactSummaryORMCache.Invalid(contact_id)
         await contact.delete()
         return JSONResponse(content={"detail": "Contact deleted", "contact":content_data}, status_code=status.HTTP_200_OK)
 
@@ -276,7 +290,10 @@ class ContactsRessource(BaseHTTPRessource):
     async def set_app_registered(self, app_registered_model:AppRegisteredContactModel,contact:Annotated[ContactORM,Depends(get_contacts)],response:Response,authPermission=Depends(get_auth_permission)):
         contact.app_registered = app_registered_model.app_registered
         await contact.save(force_update=True)
-        await ContactORMCache.Store(str(contact.contact_id),contact)
+        
+        contact_id = str(contact.contact_id)
+        await ContactSummaryORMCache.Store(contact_id,contact_id=contact_id)
+        await ContactORMCache.Store(contact_id,contact)
 
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/all')

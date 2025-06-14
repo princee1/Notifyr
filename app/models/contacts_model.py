@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, TypedDict
 from tortoise import fields
 from tortoise.models import Model
 from pydantic import BaseModel, field_validator,model_validator
@@ -434,3 +434,27 @@ async def calculate_contact_creation_analytics_grouped(group_by_factor: int):
         }
         for row in rows[1]
     ]
+
+class ContactSummary(TypedDict):
+    contact_id: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    app_registered: Optional[bool] = None
+    lang: Optional[str] = None
+    frequency: Optional[str] = None
+    created_at: str
+    updated_at: str
+    has_security_code: bool
+    has_security_phrase: bool
+    has_voice_embedding: bool
+    email_status: str
+    sms_status: str
+    subscription_count: int
+    newsletter_status: Optional[bool] = None
+    promotion_status: Optional[bool] = None
+    event_status: Optional[bool] = None
+    other_status: Optional[bool] = None
+    content_type_subs_updated_at: Optional[str] = None

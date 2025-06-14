@@ -8,8 +8,8 @@ from app.definition._error import ServerFileError
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, MountDirectory, UseLimiter
 from datetime import timedelta
 from app.depends.funcs_dep import Get_Contact
-from app.depends.orm_cache import ContactORMCache
-from app.models.contacts_model import ContactORM
+from app.depends.orm_cache import ContactORMCache, ContactSummaryORMCache
+from app.models.contacts_model import ContactORM, ContactSummary
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file_service import FileService
@@ -21,6 +21,9 @@ get_contacts = Get_Contact(True,True)
 
 async def get_contacts_cache(contact_id:str):
     return await ContactORMCache.Cache(contact_id)
+
+async def get_contacts_summary(contact_id:str)->ContactSummary:
+    return await ContactSummaryORMCache.Cache(contact_id)
 
 @MountDirectory(f'{APP_PREFIX}/me/',StaticFiles(directory='app/static/me/'),'me')
 @HTTPRessource(APP_PREFIX,add_prefix=False)
@@ -62,16 +65,16 @@ class AppRessource(BaseHTTPRessource):
         #return HTMLResponse()
 
     @BaseHTTPRessource.HTTPRoute('/me/{contact_id}/',[HTTPMethod.GET],deprecated=False,mount=True)
-    async def me_page(self,request:Request,contact:Annotated[ContactORM,Depends(get_contacts)]):
-        contact_data = await self.contactService.read_contact(str(contact.contact_id))
-        if contact_data == None:
+    async def me_page(self,request:Request,contact:Annotated[ContactSummary,Depends(get_contacts_summary)]):
+        
+        if contact == None:
             raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
 
         return self.templates.TemplateResponse(request,'index.html',{
-            **contact_data    
+            **contact   
         })
 
-    @BaseHTTPRessource.HTTPRoute('/.well-know/{system}',[HTTPMethod.GET],deprecated=True,mount=True,)
+    @BaseHTTPRessource.HTTPRoute('/.well-know/{system}.json',[HTTPMethod.GET],deprecated=True,mount=True,)
     def well_known(self,request:Request,system:str|None):
 
         return {
