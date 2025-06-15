@@ -13,7 +13,8 @@ from app.container import Get
 from app.utils.helper import KeyBuilder
 from app.utils.tools import Time
 from app.models.security_model import ClientORM,ChallengeORM
-from typing import Any, Callable, Type,TypeVar
+import typing
+from typing import Any, Callable, Type,TypeVar, TypedDict
 from tortoise.models import Model,ModelMeta
 from app.utils.helper import isprimitive_type
 from app.utils.transformer import parse_time
@@ -217,6 +218,12 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
                             attr = str(attr)
                         if isprimitive_type(attr):
                             temp[field] =attr
+            
+            elif type(type_) == typing._TypedDictMeta:
+                temp = type_(**obj)
+            
+            else:
+                temp = obj
             
             return await redisService.store(REDIS_CACHE_KEY,key,temp,exp,nx)
         

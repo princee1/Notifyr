@@ -22,8 +22,8 @@ get_contacts = Get_Contact(True,True)
 async def get_contacts_cache(contact_id:str):
     return await ContactORMCache.Cache(contact_id)
 
-async def get_contacts_summary(contact_id:str)->ContactSummary:
-    return await ContactSummaryORMCache.Cache(contact_id)
+async def get_contacts_summary_cache(contact_id:str)->ContactSummary:
+    return await ContactSummaryORMCache.Cache(contact_id,contact_id)
 
 @MountDirectory(f'{APP_PREFIX}/me/',StaticFiles(directory='app/static/me/'),'me')
 @HTTPRessource(APP_PREFIX,add_prefix=False)
@@ -65,7 +65,7 @@ class AppRessource(BaseHTTPRessource):
         #return HTMLResponse()
 
     @BaseHTTPRessource.HTTPRoute('/me/{contact_id}/',[HTTPMethod.GET],deprecated=False,mount=True)
-    async def me_page(self,request:Request,contact:Annotated[ContactSummary,Depends(get_contacts_summary)]):
+    async def me_page(self,request:Request,contact:Annotated[ContactSummary,Depends(get_contacts_summary_cache)]):
         
         if contact == None:
             raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
