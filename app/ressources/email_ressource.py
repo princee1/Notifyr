@@ -93,7 +93,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
             data = parse_mime_content(data,mail_content.mimeType)
             
-            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendTemplateEmail,data, meta, template.images,tracking_event_data['message_id'],contact_id=None)
+            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendTemplateEmail,data, meta, template.images,tracking_event_data['email_id'],contact_id=None)
         return taskManager.results
     
     @UseLimiter(limit_value='10000/minutes')
@@ -116,7 +116,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
                 content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
 
-            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,tracking_event_data['message_id'],contact_id =None)
+            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,tracking_event_data['email_id'],contact_id =None)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])
