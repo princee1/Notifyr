@@ -39,13 +39,13 @@ from app.interface.redis_event import RedisEventInterface
 
 
 @_service.AbstractServiceClass
-class BaseEmailService(_service.BaseService,RedisEventInterface):
+class BaseEmailService(_service.BaseService, RedisEventInterface):
 
-    def __init__(self, configService: ConfigService, loggerService: LoggerService,redisService:RedisService):
+    def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         super().__init__()
         self.configService: ConfigService = configService
         self.loggerService: LoggerService = loggerService
-        RedisEventInterface.__init__(self,redisService)
+        RedisEventInterface.__init__(self, redisService)
         self.hostPort: int
         self.mailOAuth: OAuth = ...
         self.state = None
@@ -55,9 +55,9 @@ class BaseEmailService(_service.BaseService,RedisEventInterface):
         self.type_: Literal['IMAP', 'SMTP'] = None
 
     @staticmethod
-    def task_lifecycle(pref:Literal['async','sync']=None,async_callback:Callable=None,sync_callback:Callable=None):
-        
-        def callback(func:Callable):
+    def task_lifecycle(pref: Literal['async', 'sync'] = None, async_callback: Callable = None, sync_callback: Callable = None):
+
+        def callback(func: Callable):
 
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
@@ -75,17 +75,17 @@ class BaseEmailService(_service.BaseService,RedisEventInterface):
                 if asyncio.iscoroutinefunction(func):
                     result = await func(*args, **kwargs)
                 else:
-                    result = func(*args,**kwargs)
+                    result = func(*args, **kwargs)
                 if callable(async_callback):
-                    await async_callback(self,*result[1],**result[2])
+                    await async_callback(self, *result[1], **result[2])
                     result = result[0]
                 else:
-                    if isinstance(result,(list,tuple)):
+                    if isinstance(result, (list, tuple)):
                         result = result[0]
 
                 self.logout(connector)
                 return result
-            
+
             @functools.wraps(func)
             def sync_wrapper(*args, **kwargs):
                 self: BaseEmailService = args[0]
@@ -102,24 +102,24 @@ class BaseEmailService(_service.BaseService,RedisEventInterface):
                 result = func(*args, **kwargs)
 
                 if callable(sync_callback):
-                    sync_callback(self,*result[1],**result[2])
+                    sync_callback(self, *result[1], **result[2])
                     result = result[0]
                 else:
-                    if isinstance(result,tuple):
+                    if isinstance(result, tuple):
                         result = result[0]
 
                 self.logout(connector)
                 return result
-            
+
             if ConfigService._celery_env == CeleryMode.worker:
                 return sync_wrapper
-            
-            if pref =='async':
+
+            if pref == 'async':
                 return async_wrapper
 
             if pref == 'sync':
-                return sync_wrapper 
-                    
+                return sync_wrapper
+
             return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
 
         return callback
@@ -164,7 +164,8 @@ class BaseEmailService(_service.BaseService,RedisEventInterface):
     def authenticate(self): pass
 
     def connect(self):
-        config: type[SMTPConfig|IMAPConfig] = SMTPConfig if self.type_ == 'SMTP' else IMAPConfig
+        config: type[SMTPConfig |
+                     IMAPConfig] = SMTPConfig if self.type_ == 'SMTP' else IMAPConfig
         server_type_ssl: type = smtp.SMTP_SSL if self.type_ == 'SMTP' else imap.IMAP4_SSL
         server_type: type = smtp.SMTP if self.type_ == 'SMTP' else imap.IMAP4
         try:
@@ -197,13 +198,13 @@ class BaseEmailService(_service.BaseService,RedisEventInterface):
 
     def help(self):
         ...
-    
+
 
 @_service.Service
 class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
-        super().__init__(configService, loggerService,redisService)
+        super().__init__(configService, loggerService, redisService)
         self.type_ = 'SMTP'
         self.fromEmails: set[str] = set()
         self.connMethod = self.configService.SMTP_EMAIL_CONN_METHOD.lower()
@@ -269,86 +270,92 @@ class EmailSenderService(BaseEmailService):
             # TODO Depends on the error code
         return False
 
-    @BaseEmailService.task_lifecycle('async',*RedisEventInterface.redis_event_callback)
-    def sendTemplateEmail(self, data, meta, images, message_tracking_id, contact_id=None,connector:smtp.SMTP=None):
+    @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
+    def sendTemplateEmail(self, data, meta, images, message_tracking_id, contact_id=None, connector: smtp.SMTP = None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(data, meta, images)
 
         # if self.configService.celery_env == CeleryMode.none:
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id,connector=connector)
+        return self._send_message(email, message_tracking_id, contact_id=contact_id, connector=connector)
 
-    @BaseEmailService.task_lifecycle('async',*RedisEventInterface.redis_event_callback)
-    def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None,connector:smtp.SMTP=None):
+    @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
+    def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None, connector: smtp.SMTP = None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
         # send_custom_email(content, meta, images, attachment)
 
         # if self.configService.celery_env == CeleryMode.none:
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id,connector=connector)
-    
-    @BaseEmailService.task_lifecycle('async',*RedisEventInterface.redis_event_callback)
-    def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id,reply_to,references,connector:smtp.SMTP=None, contact_id=None):
+        return self._send_message(email, message_tracking_id, contact_id=contact_id, connector=connector)
+
+    @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
+    def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id, reply_to, references, connector: smtp.SMTP = None, contact_id=None):
         meta = EmailMetadata(**meta)
+
         email = EmailBuilder(content, meta, images, attachment)
         # TODO add references and reply_to
 
         # if self.configService.celery_env == CeleryMode.none:
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id,connector=connector)
-    
+        return self._send_message(email, message_tracking_id, contact_id=contact_id, connector=connector)
+
     def _send_message(self, email: EmailBuilder, message_tracking_id: str, connector: smtp.SMTP, contact_id: str = None):
-        try:
-            event_id = str(uuid_v1_mc())
-            now = datetime.now(timezone.utc).isoformat()
-            emailID, message = email.mail_message
-            reply_ = None
-            reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message, rcpt_options=[
-                                        'NOTIFY=SUCCESS,FAILURE,DELAY'])
-            email_status = EmailStatus.SENT.value
-            description = "Email successfully sent."
+        replies = []
+        events = []
+        for emailID, message in email.create_for_recipient():
 
-        except smtp.SMTPRecipientsRefused as e:
-            email_status = EmailStatus.BLOCKED.value
-            description = "Email blocked due to recipient refusal."
+            try:
+                event_id = str(uuid_v1_mc())
+                now = datetime.now(timezone.utc).isoformat()
+                reply_ = None
+                reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message, rcpt_options=[
+                                            'NOTIFY=SUCCESS,FAILURE,DELAY'])
+                email_status = EmailStatus.SENT.value
+                description = "Email successfully sent."
 
-        except smtp.SMTPSenderRefused as e:
-            self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT
-            email_status = EmailStatus.FAILED.value
-            description = "Email failed due to sender refusal."
+            except smtp.SMTPRecipientsRefused as e:
+                email_status = EmailStatus.BLOCKED.value
+                description = "Email blocked due to recipient refusal."
 
-        except smtp.SMTPNotSupportedError as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
-            email_status = EmailStatus.FAILED.value
-            description = "Email failed due to unsupported SMTP operation."
+            except smtp.SMTPSenderRefused as e:
+                self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT
+                email_status = EmailStatus.FAILED.value
+                description = "Email failed due to sender refusal."
 
-        except smtp.SMTPServerDisconnected as e:
-            email_status = EmailStatus.FAILED.value
-            description = "Email failed due to server disconnection."
+            except smtp.SMTPNotSupportedError as e:
+                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                email_status = EmailStatus.FAILED.value
+                description = "Email failed due to unsupported SMTP operation."
 
-            print('Server disconnected')
-            print(e)
-            self._builded = False
-            self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
+            except smtp.SMTPServerDisconnected as e:
+                email_status = EmailStatus.FAILED.value
+                description = "Email failed due to server disconnection."
 
-        finally:
-            if message_tracking_id:
-                
-                event = TrackingEmailEventORM.JSON(
-                    description=description,
-                    event_id=event_id,
-                    email_id=message_tracking_id,
-                    #contact_id=None,
-                    current_event=email_status,
-                    date_event_received=now,
-                    esp_provider=get_email_provider_name(email.emailMetadata.To[0]) # VERIFY if To is a list then put it in the for loop
-                )
+                print('Server disconnected')
+                print(e)
+                self._builded = False
+                self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
 
-            return {
-                "emailID": emailID,
-                "status": reply_
-            },(StreamConstant.EMAIL_EVENT_STREAM,event),{}
+            finally:
+                if message_tracking_id:
+
+                    event = TrackingEmailEventORM.JSON(
+                        description=description,
+                        event_id=event_id,
+                        email_id=message_tracking_id,
+                        # contact_id=None,
+                        current_event=email_status,
+                        date_event_received=now,
+                        # VERIFY if To is a list then put it in the for loop
+                        esp_provider=get_email_provider_name(
+                            email.emailMetadata.To[0])
+                    )
+                    events.append(event)
+
+                replies.append( {"emailID": emailID,"status": reply_})
+
+        return replies, (StreamConstant.EMAIL_EVENT_STREAM, [event]), {}
 
     @BaseEmailService.task_lifecycle()
     def verify_same_domain_email(self, email: str, connector: smtp.SMTP):
@@ -359,8 +366,10 @@ class EmailSenderService(BaseEmailService):
 
         return (connector.verify(email),)
 
-J:Type = None
-j:dict = None
+
+J: Type = None
+j: dict = None
+
 
 @_service.Service
 class EmailReaderService(BaseEmailService):
@@ -387,7 +396,7 @@ class EmailReaderService(BaseEmailService):
 
                 if is_async:
                     print('Ok')
-                    await callback(*self.args,**self.kwargs)
+                    await callback(*self.args, **self.kwargs)
                 else:
                     print('k')
 
@@ -451,12 +460,12 @@ class EmailReaderService(BaseEmailService):
     global J
     J = Jobs
     global j
-    j= jobs
+    j = jobs
 
     @staticmethod
     def select_inbox(func: Callable):
-        
-        def callback(self:Self,inbox:str,kwargs):
+
+        def callback(self: Self, inbox: str, kwargs):
             if inbox not in self.mailboxes:
                 raise KeyError('Mail box not found')
 
@@ -469,18 +478,18 @@ class EmailReaderService(BaseEmailService):
 
         @functools.wraps(func)
         def wrapper(self: Self, inbox: str, *args, **kwargs):
-            callback(self,inbox,kwargs)
+            callback(self, inbox, kwargs)
             return func(self, *args, **kwargs)
-        
+
         @functools.wraps(func)
         async def async_wrapper(self: Self, inbox: str, *args, **kwargs):
-            callback(self,inbox,kwargs)
+            callback(self, inbox, kwargs)
             return await func(self, *args, **kwargs)
 
-        return wrapper if not asyncio.iscoroutinefunction(func) else async_wrapper 
+        return wrapper if not asyncio.iscoroutinefunction(func) else async_wrapper
 
     @staticmethod
-    def register_job(job_name: str,delay:tuple[int,int], *args, **kwargs):
+    def register_job(job_name: str, delay: tuple[int, int], *args, **kwargs):
 
         def wrapper(func: Callable):
             func_name = func.__name__
@@ -491,12 +500,11 @@ class EmailReaderService(BaseEmailService):
                 'args': args,
                 'kwargs': kwargs
             }
-            if delay ==None or not isinstance(delay,tuple):
+            if delay == None or not isinstance(delay, tuple):
                 ...
             else:
-                params['delay']=randint(*delay)
+                params['delay'] = randint(*delay)
 
-            
             jobs_ = J(**params)
             if job_name_prime in j:
                 ...  # Warning
@@ -504,9 +512,8 @@ class EmailReaderService(BaseEmailService):
             return func
         return wrapper
 
-
     def __init__(self, configService: ConfigService, loggerService: LoggerService, reactiveService: ReactiveService, redisService: RedisService) -> None:
-        super().__init__(configService, loggerService,redisService)
+        super().__init__(configService, loggerService, redisService)
         IntervalInterface.__init__(self, True, 10)
         self.reactiveService = reactiveService
         self.redisService = redisService
@@ -517,7 +524,6 @@ class EmailReaderService(BaseEmailService):
         self._init_config()
         EmailReaderService.service = self
         self._capabilities: list = None
-        
 
     def _init_config(self):
         self.type_ = 'IMAP'
@@ -648,14 +654,14 @@ class EmailReaderService(BaseEmailService):
         for jobs in self.jobs.values():
             jobs.cancel_job()
 
-    #@register_job('Parse DNS Email',(60,180),'INBOX', None)
+    # @register_job('Parse DNS Email',(60,180),'INBOX', None)
     @BaseEmailService.task_lifecycle()
     @select_inbox
     async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
         criteria.add(Search.UNSEEN()).add(Search.FROM('mailer-daemon@googlemail.com')).add(
             Search.SUBJECT("Delivery Status Notification"))
-        
+
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
 
@@ -663,88 +669,96 @@ class EmailReaderService(BaseEmailService):
             original_message = email.Message_RFC882
             if original_message.Email_ID == None:
                 continue
-            
-            email_id_extracted = extract_email_id_from_msgid(original_message.Message_ID,self.configService.HOSTNAME)
+
+            email_id_extracted = extract_email_id_from_msgid(
+                original_message.Message_ID, self.configService.HOSTNAME)
             if email_id_extracted == None:
-                    continue
-            
+                continue
+
             if email_id_extracted != original_message.Email_ID:
                 continue
             bs4 = BeautifulSoup(email.HTML_Body, 'html.parser')
             last_p = bs4.body
-            if last_p ==None:
+            if last_p == None:
                 continue
-            last_p = last_p.find_all('p')[-1]  # Get the last <p> element in the body
-            text=last_p.get_text(strip=True)
+            # Get the last <p> element in the body
+            last_p = last_p.find_all('p')[-1]
+            text = last_p.get_text(strip=True)
 
-            try: smtp_error_code = SMTPErrorCode(text[:10]) 
-            except: smtp_error_code = None
+            try:
+                smtp_error_code = SMTPErrorCode(text[:10])
+            except:
+                smtp_error_code = None
 
             email_status = map_smtp_error_to_status(smtp_error_code)
             error_description = get_error_description(smtp_error_code)
 
-            event =TrackingEmailEventORM.JSON(
+            event = TrackingEmailEventORM.JSON(
                 event_id=uuid_v1_mc(),
                 description=error_description,
                 email_id=original_message.Email_ID,
-                #contact_id=None,
+                # contact_id=None,
                 current_event=email_status.value,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
                 esp_provider=get_email_provider_name(original_message.From)
             )
 
-            await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
+            await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
             # self.delete_email(ids,connector)
         return None
 
-    #@register_job('Parse Replied Email',(60,180),'INBOX', None,True)
-    #@register_job('Parse Forwarded Email',(60,180),'INBOX', None,False)
+    # @register_job('Parse Replied Email',(60,180),'INBOX', None,True)
+    # @register_job('Parse Forwarded Email',(60,180),'INBOX', None,False)
     @BaseEmailService.task_lifecycle()
     @select_inbox
-    async def forwarded_email(self, max_count:int|None, is_re:bool, connector: imap.IMAP4 | imap.IMAP4_SSL):
+    async def forwarded_email(self, max_count: int | None, is_re: bool, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
-        criteria.add(Search.UNSEEN()).add(Search.SUBJECT( 'Re:'if is_re else 'Fwd:'))
+        criteria.add(Search.UNSEEN()).add(
+            Search.SUBJECT('Re:'if is_re else 'Fwd:'))
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
 
         verb = 'replied' if is_re else 'forwarded'
-        for ids,e in zip(message_ids,emails):
+        for ids, e in zip(message_ids, emails):
             original_message = e.Message_RFC882
-            
-            if original_message == None: # the original message was partially appended
+
+            if original_message == None:  # the original message was partially appended
                 From = e.From
                 description = f"{From} has {verb} to  the email"
                 if is_re:
                     email_id = e.In_Reply_To
                 else:
-                    email_id = e.Get_Our_Last_Message_References(self.configService.HOSTNAME)
-                email_id = extract_email_id_from_msgid(email_id,self.configService.HOSTNAME)
+                    email_id = e.Get_Our_Last_Message_References(
+                        self.configService.HOSTNAME)
+                email_id = extract_email_id_from_msgid(
+                    email_id, self.configService.HOSTNAME)
                 if email_id == None:
                     continue
-                
+
             else:
-                if original_message.Email_ID == None: # The full original message was appended
+                if original_message.Email_ID == None:  # The full original message was appended
                     continue
-                email_id_extracted = extract_email_id_from_msgid(original_message.Message_ID,self.configService.HOSTNAME)
+                email_id_extracted = extract_email_id_from_msgid(
+                    original_message.Message_ID, self.configService.HOSTNAME)
                 if email_id_extracted == None:
                     continue
                 if email_id_extracted != original_message.Email_ID:
                     continue
                 From = original_message.From
-                description = f"{From} has {verb} to the email" 
+                description = f"{From} has {verb} to the email"
                 email_id = original_message.Email_ID
 
-            event =TrackingEmailEventORM.JSON(
+            event = TrackingEmailEventORM.JSON(
                 event_id=uuid_v1_mc(),
                 description=description,
                 email_id=email_id,
-                #contact_id=None,
+                # contact_id=None,
                 current_event=EmailStatus.REPLIED,
                 date_event_received=datetime.now(timezone.utc).isoformat(),
                 esp_provider=get_email_provider_name(From)
             )
 
-            await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM,event)
+            await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
 
         return None
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, List, Literal, Optional, Self, TypeVar, TypedDict
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from enum import Enum
 from tortoise import fields, models, Tortoise, run_async
 from tortoise.transactions import in_transaction
@@ -8,6 +8,7 @@ from app.classes.celery import SchedulerModel
 from app.classes.email import MimeType
 from app.classes.mail_provider import SMTPErrorCode
 from app.utils.helper import uuid_v1_mc
+from app.utils.validation import email_validator
 
 SCHEMA = 'emails'
 
@@ -24,6 +25,8 @@ class EmailMetaModel(BaseModel):
     Return_Receipt_To: str | None = None
     Message_ID: str | None = None
     X_Email_ID: str | None = None
+    as_individual:bool = False
+    
 
     @model_validator(mode="after")
     def meta_validator(self) -> Self:
@@ -32,6 +35,43 @@ class EmailMetaModel(BaseModel):
         self.Message_ID = None
         self.X_Email_ID = None
         return self
+    
+    @model_validator(mode="after")
+    def To_validator(self:Self)->Self:
+        if isinstance(self.To,str):
+            if not email_validator(self.To):
+                raise ValueError('Email format not valid')
+            self.To = [self.To]
+            return self
+        
+        if self.as_individual:
+            for email in self.To:
+                if not email_validator(email):
+                    raise ValueError('Email format not valid')
+            
+            return self
+        
+        self.To = [','.join(self.To)]
+        return self
+            
+    @model_validator(mode="after")
+    def CC_validator(self)->Self:
+        if self.CC == None:
+            return self
+        if isinstance(self.CC,str):
+            if not email_validator(self.CC):
+                raise ValueError('Email format not valid')
+            self.CC = [self.CC]
+            return self
+        
+
+        for email in self.CC:
+            if not email_validator(email):
+                raise ValueError('Email format not valid')
+            
+        self.CC = ','.join(self.CC)
+        return self
+
 
 
 class EmailTemplateModel(BaseModel):

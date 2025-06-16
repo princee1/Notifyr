@@ -14,7 +14,7 @@ from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailReaderService, EmailSenderService
-from fastapi import   Request, Response, status
+from fastapi import   HTTPException, Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import SchedulerModel
@@ -42,10 +42,13 @@ async def pipe_email_track(scheduler:CustomEmailSchedulerModel| EmailTemplateSch
     configService = Get(ConfigService)
     content:EmailTemplateModel|CustomEmailModel = scheduler.content
     emailMetaData=content.meta
-
+    
     if tracker.will_track:
 
-        tracker.recipient = emailMetaData.To
+        if len(emailMetaData.To) >1:
+            raise HTTPException(status_code=400,detail='Can only track one email at a time')
+
+        tracker.recipient = emailMetaData.To[0]
         tracker.subject = emailMetaData.Subject
 
         emailMetaData.Disposition_Notification_To = configService.SMTP_EMAIL
@@ -105,7 +108,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             template = template.clone()
             
             event_tracking,email_tracking = tracker.track_event_data()
-            add_params = self._get_esp(meta['To'])
+            add_params = self._get_esp(meta['To'][0])
             self.linkService.set_tracking_link(template,tracker.email_id,add_params=add_params)
             tracking_link_callback = self.linkService.create_link_re(tracker.email_id,add_params=add_params) # FIXME if its a list change it 
             #self.linkService.create_tracking_pixel(template,tracker.email_id)
@@ -130,7 +133,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
         meta = customEmail_content.meta.model_dump()
         if tracker.will_track:
-            add_params = self._get_esp(customEmail_content.meta.To)
+            add_params = self._get_esp(customEmail_content.meta.To[0])
             tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(tracker.email_id,add_params=add_params) # FIXME if its a list change it 
 
             event_tracking, email_tracking = tracker.track_event_data()

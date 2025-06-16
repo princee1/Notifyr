@@ -1,4 +1,4 @@
-from typing import Any, Coroutine, Literal
+from typing import Any, Callable, Coroutine, Literal
 
 from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
@@ -23,6 +23,7 @@ from app.utils.helper import AsyncAPIFilterInject, copy_response
 from app.utils.validation import email_validator, phone_number_validator
 from app.utils.helper import APIFilterInject
 from app.depends.variables import parse_to_phone_format
+from app.depends.orm_cache import ContactSummaryORMCache
 
 @APIFilterInject
 async def _to_otp_path(template:str):
@@ -317,3 +318,31 @@ async def force_task_manager_attributes_pipe(taskManager:TaskManager):
     taskManager.meta['runtype'] = 'sequential'
 
     return {'taskManager':taskManager}
+
+class ContactToInfoPipe(Pipe):
+
+    def __init__(self,info_key:str,parse_key:str,interrupt_if_none:bool,callback:Callable=None,split='.' ):
+        super().__init__(True)
+        self.info_key= info_key
+        self.sched_key = parse_key
+        self.interrupt_if_none = interrupt_if_none
+        self.callback = callback
+        self.split = split
+    
+    async def pipe(self,scheduler:SchedulerModel):
+        ptr = scheduler.model_dump(mode='python')
+
+        for sk in self.sched_key.split(self.split):
+            if sk not in ptr:
+                ...
+            ptr = ptr[sk]
+        
+        if isinstance(ptr,str):
+            ...
+        elif isinstance(ptr,list):
+            ...
+        else:
+            ...
+        
+        return {'scheduler':scheduler}
+        

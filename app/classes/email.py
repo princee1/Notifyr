@@ -44,7 +44,7 @@ def parse_mime_content(content:tuple[str,str],mimeType:MimeType):
 class EmailMetadata:
     Subject: str
     From: str
-    To: Union[str, List[str]]
+    To: List[str]
     CC: Optional[Union[str, List[str]]] = None
     Bcc: Optional[str] = None
     replyTo: Optional[str] = None
@@ -54,12 +54,7 @@ class EmailMetadata:
     Return_Receipt_To: Optional[str] = None
     X_Email_ID: Optional[str] = None
     Message_ID: Optional[str] = None
-
-    def __post_init__(self):
-        if isinstance(self.To, str):
-            self.To = [self.To]
-        if isinstance(self.CC, str):
-            self.CC = [self.CC]
+    as_individual:bool = False
 
     def __str__(self):
         return (
@@ -81,8 +76,8 @@ class EmailBuilder():
         self.message: MIMEMultipart = MIMEMultipart()
         self.message["From"] = emailMetaData.From
         self.message["Subject"] = emailMetaData.Subject
-        self.multiple_dest(emailMetaData.To, "To")
-        self.multiple_dest(emailMetaData.CC, "Cc",False)
+        self.To = emailMetaData.To
+        self.message['CC'] = emailMetaData.CC
         
         self.id = emailMetaData.Message_ID
         self.message['Message-ID'] = self.id
@@ -106,17 +101,10 @@ class EmailBuilder():
     
     def __repr__(self):
         return self.emailMetadata.__str__()
-
-    def multiple_dest(self, param, key,required =True):
-        if type(param) == str:
-            self.message[key] = param
-        elif type(param) == list:
-            temp = ",".join(param)
-            self.message[key] = temp
-            pass
-        else:
-            if required:
-                raise TypeError
+    
+    def create_for_recipient(self):
+        for To in self.To:
+            yield self.mail_message
 
     def add_attachements(self, attachement_name, attachment_data):
         part = MIMEBase("application", "octet-stream")
