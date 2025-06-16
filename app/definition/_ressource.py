@@ -407,6 +407,42 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
         return cls
     return None
 
+def stack_decorator(decorated_function,deco_type:Type[DecoratorObj],empty_decorator:bool,default_error:dict,error_type:Type[Exception]):
+    def wrapper(function: Callable):
+
+                @functools.wraps(function)
+                async def callback(*args, **kwargs): # Function that will be called 
+                    if empty_decorator:
+                        return await function(*args, **kwargs)
+
+                    def proxy(deco,f:Callable):
+                        @functools.wraps(deco)
+                        async def delegator(*a,**k):
+                            if type(deco) == type:
+                                obj:DecoratorObj = deco()
+                                return await obj.do(f, *a, **k)
+                            elif isinstance(deco, deco_type):
+                                return await deco.do(f, *a, **k)
+                            else:
+                                return await deco(f, *a, **k)
+                        return delegator
+                        
+                    deco_prime = function
+                    for d in reversed(decorated_function):
+                        deco_prime = proxy(d,deco_prime)
+
+                    try:
+                        return await deco_prime(*args, **kwargs)
+                    except error_type as e:
+
+                        if default_error == None:
+                            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Could not correctly treat the error')
+                    
+                        raise HTTPException(**default_error)
+                    
+                return callback
+    return wrapper
+
 
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams =None):
     empty_decorator = len(permission_function) == 0
@@ -479,39 +515,8 @@ def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Ha
         if cls != None:
             return cls
 
-        def wrapper(function: Callable):
+        wrapper = stack_decorator(handler_function,Handler,empty_decorator,default_error,HandlerDefaultException)
 
-            @functools.wraps(function)
-            async def callback(*args, **kwargs): # Function that will be called 
-                if empty_decorator:
-                    return await function(*args, **kwargs)
-
-                def handler_proxy(handler,f:Callable):
-                    @functools.wraps(handler)
-                    async def delegator(*a,**k):
-                        if type(handler) == type:
-                            handler_obj:Handler = handler()
-                            return await handler_obj.do(f, *a, **k)
-                        elif isinstance(handler, Handler):
-                            return await handler.do(f, *a, **k)
-                        else:
-                            return await handler(f, *a, **k)
-                    return delegator
-                    
-                handler_prime = function
-                for handler in reversed(handler_function):
-                    handler_prime = handler_proxy(handler,handler_prime)
-
-                try:
-                    return await handler_prime(*args, **kwargs)
-                except HandlerDefaultException as e:
-
-                    if default_error == None:
-                        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Could not correctly treat the error')
-                
-                    raise HTTPException(**default_error)
-                
-            return callback
         appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER)
         return func
     return decorator
@@ -622,20 +627,18 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
         return func
     return decorator
 
-def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams =None):
-    raise NotImplementedError
+def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams =None):
+
+    empty_decorator = len(interceptor_function) == 0
+    if empty_decorator:
+        warnings.warn("No Pipe function or object was provided.", NoFunctionProvidedWarning)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(
-            func, UseInterceptor, interceptor_function)
+        cls = common_class_decorator(func, UseInterceptor, interceptor_function)
         if cls != None:
             return cls
 
-        def wrapper(function: Callable):
-            @functools.wraps(function)
-            async def callback(*args, **kwargs):
-                return await interceptor_function(function, *args, **kwargs)
-            return callback
+        wrapper = stack_decorator(interceptor_function,Interceptor,empty_decorator,default_error,InterceptorDefaultException)
 
         appends_funcs_callback(func, wrapper, DecoratorPriority.INTERCEPTOR)
         return func
