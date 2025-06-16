@@ -287,7 +287,8 @@ def extract_email_id_from_msgid(msgid: str,my_domain:str) -> str:
             return None
         
         email_id_part = msgid_parts[0].split('.')[-1]
-        return '-'.join(email_id_part[i:i+8] for i in range(0, len(email_id_part), 8))
+        #return '-'.join(email_id_part[i:i+8] for i in range(0, len(email_id_part), 8))
+        return email_id_part
     except Exception as e:
         return None
         raise ValueError(f"Failed to extract email_id from Message-ID: {e}")
