@@ -1,4 +1,5 @@
 from pydantic import BaseModel, field_validator
+from app.classes.celery import SchedulerModel
 from app.utils.validation import url_validator,language_code_validator
 
 class BaseVoiceCallModel(BaseModel):
@@ -29,6 +30,18 @@ class OnGoingTwimlVoiceCallModel(BaseVoiceCallModel):
         if not url_validator(url):
             raise ValueError('Invalid URL Address')
         return url
+
+
+class CallTemplateSchedulerModel(SchedulerModel):
+    content: BaseVoiceCallModel | list[BaseVoiceCallModel]
+
+
+class CallTwimlSchedulerModel(SchedulerModel):
+    content: OnGoingTwimlVoiceCallModel |  list[OnGoingTwimlVoiceCallModel]
+
+
+class CallCustomSchedulerModel(SchedulerModel):
+    content: OnGoingCustomVoiceCallModel | list[OnGoingCustomVoiceCallModel]
     
 ###############################################             ################################################
 

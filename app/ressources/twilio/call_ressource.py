@@ -1,21 +1,17 @@
-import asyncio
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response
 from app.classes.auth_permission import Role
-from app.classes.broker import exception_to_json
-from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType, s
+from app.classes.celery import TaskHeaviness, s
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard, TrackGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path, force_task_manager_attributes_pipe
-from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
-from app.models.security_model import ClientORM
-from app.models.call_model import BaseVoiceCallModel, CallStatusModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
+from app.models.call_model import BaseVoiceCallModel, CallCustomSchedulerModel, CallStatusModel, CallTemplateSchedulerModel, CallTwimlSchedulerModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
@@ -32,20 +28,8 @@ from app.depends.class_dep import Broker, KeepAliveQuery, SubjectParams, TwilioT
 from app.utils.constant import StreamConstant
 from app.utils.helper import uuid_v1_mc
 
-
 CALL_ONGOING_PREFIX = 'ongoing'
 get_contacts = Get_Contact(False,False)
-
-class CallTemplateSchedulerModel(SchedulerModel):
-    content: BaseVoiceCallModel
-
-
-class CallTwimlSchedulerModel(SchedulerModel):
-    content: OnGoingTwimlVoiceCallModel
-
-
-class CallCustomSchedulerModel(SchedulerModel):
-    content: OnGoingCustomVoiceCallModel
 
 
 @PingService([CallService])
@@ -119,15 +103,18 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
     async def voice_template(self, template: str, scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
-        content = scheduler.content.model_dump()
         phoneTemplate: PhoneTemplate = self.assetService.phone[template]
-        _, result = phoneTemplate.build(content, ...)
-        if tracker.will_track:
-            event,tracking_event_data = tracker.call_track_event_data(scheduler)
-            broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
-            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+        
+        for i,content in enumerate(scheduler.content):
+            content = content.model_dump()
+            _, result = phoneTemplate.build(content, ...)
+            twilio_id = None
+            if tracker.will_track:
+                twilio_id,event,tracking_event_data = tracker.call_track_event_data(scheduler)
+                broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+                broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
 
-        await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_template_voice_call, result, content)
+            await taskManager.offload_task('normal', scheduler, 0, i, self.callService.send_template_voice_call, result, content,twilio_id)
         return taskManager.results
 
     @UseLimiter(limit_value='50/day')
@@ -138,14 +125,18 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @BaseHTTPRessource.HTTPRoute('/twiml/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)], mount=False)
     async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
-        details = scheduler.content.model_dump(exclude={'url'})
-        url = scheduler.content.url
-        if tracker.will_track:
-            event,tracking_event_data = tracker.call_track_event_data(scheduler)
-            broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
-            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
 
-        await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_twiml_voice_call, url, details)
+        for i,content in enumerate(scheduler.content):
+        
+            details = content.model_dump(exclude={'url'})
+            url = content.url
+            twilio_id = None
+            if tracker.will_track:
+                twilio_id,event,tracking_event_data = tracker.call_track_event_data(content)
+                broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+                broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+
+            await taskManager.offload_task('normal', scheduler, 0, i, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_id)
         return taskManager.results
 
     @UseLimiter(limit_value='50/day')
@@ -156,19 +147,20 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @BaseHTTPRessource.HTTPRoute('/custom/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
     async def voice_custom(self, scheduler: CallCustomSchedulerModel, request: Request, response: Response, broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
-        details = scheduler.content.model_dump(
-            exclude={'body', 'voice', 'language', 'loop'})
-        body = scheduler.content.body
-        voice = scheduler.content.voice
-        lang = scheduler.content.language
-        loop = scheduler.content.loop
-        
-        if tracker.will_track:
-            event,tracking_event_data = tracker.call_track_event_data(scheduler.content)
-            broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
-            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+        for i,content in enumerate(scheduler.content):
+            details = content.model_dump(
+                exclude={'body', 'voice', 'language', 'loop'})
+            body = content.body
+            voice = content.voice
+            lang = content.language
+            loop = content.loop
+            twilio_id = None
+            if tracker.will_track:
+                twilio_id,event,tracking_event_data = tracker.call_track_event_data(scheduler.content)
+                broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+                broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
 
-        await taskManager.offload_task('normal', scheduler, 0, None, self.callService.send_custom_voice_call, body, voice, lang, loop, details)
+            await taskManager.offload_task('normal', scheduler, 0, i, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id)
         return taskManager.results
 
     @UseLimiter(limit_value='50/day')

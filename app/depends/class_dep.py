@@ -1,7 +1,7 @@
 import asyncio
 from typing import Annotated, Any, Literal, Dict,TypedDict
 from urllib.parse import urlparse
-from fastapi import BackgroundTasks, Depends, Query, Request, Response
+from fastapi import BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from app.classes.broker import MessageBroker, SubjectType,exception_to_json
 from app.classes.celery import SchedulerModel
 from app.classes.mail_provider import get_email_provider_name
@@ -36,14 +36,9 @@ class TrackerInterface:
 
 class EmailTracker(TrackerInterface):
 
-    def __init__(self, email_id:Annotated[UUID,Depends(uuid_v1_mc)],track_email:bool=Depends(track)):
+    def __init__(self,track_email:bool = Depends(track)):
         super().__init__(track_email)
         self.configService: ConfigService = Get(ConfigService)
-        self.email_id = str(email_id)
-        self.message_id = self.make_msgid(self.email_id)
-        self.recipient:str = None
-        self.subject:str = None
-        self.contact_id = None
 
     def make_msgid(self,email_id: str = None):
         email_id = '' if email_id is None else email_id
@@ -51,46 +46,80 @@ class EmailTracker(TrackerInterface):
         randval = random.getrandbits(8)
         return f"<{timeval}.{randval}.{email_id}@{self.configService.HOSTNAME}>"
             
-    def track_event_data(self, spam:tuple[float,str]=(100,'no-spam')):
+    def pipe_email_data(self,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
+        
         spam_confidence,spam_label = spam
+
+        email_id = str(uuid_v1_mc())
+        message_id = self.make_msgid(email_id)
+
+        emailMetaData=content.meta
+
+        emailMetaData.Message_ID = message_id
+
+        track =  {
+                'email_id':email_id,
+                'message_id':message_id
+            }
+
+        if self.will_track:
+
+            if len(emailMetaData.To) >1:
+                raise HTTPException(status_code=400,detail='Can only track one email at a time')
+
+            recipient = emailMetaData.To[0]
+            subject = emailMetaData.Subject
+
+            emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
+            emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
+            
+            emailMetaData.X_Email_ID = email_id
+                                        
+            temp = self.create_tracking_event_data(spam_confidence, spam_label, email_id, message_id, recipient, subject,)
+            temp ={'track':temp}
+            track.update(temp)
+        
+        return  track 
+
+
+    def create_tracking_event_data(self, spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=None):
         # Convert datetime fields to timezone-aware ISO 8601 string representation
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
-        esp_provider = get_email_provider_name(self.recipient)
+
+        esp_provider = get_email_provider_name(recipient)
         description=f'Notifyr server received the request'
-        event = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),description=description,esp_provider=esp_provider,email_id=self.email_id,current_event=EmailStatus.RECEIVED.value)
-        # Create the EmailTrackingORM object
+        event = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),description=description,esp_provider=esp_provider,email_id=email_id,current_event=EmailStatus.RECEIVED.value)
+                # Create the EmailTrackingORM object
         tracking= {
-            "recipient": self.recipient,
-            "subject":self.subject,
-            "email_id": self.email_id,
-            'contact_id':self.contact_id,
-            "message_id": self.message_id,
-            "esp_provider":esp_provider,
-            "spam_detection_confidence": spam_confidence,
-            "spam_label": spam_label,
-            "date_sent": now.isoformat(),
-            "last_update": now.isoformat(),
-            'email_current_status':EmailStatus.RECEIVED.value,
-            "expired_tracking_date": expired_tracking_date,
-        }
-        return event,tracking 
+                    "recipient": recipient,
+                    "subject":subject,
+                    "email_id": email_id,
+                    'contact_id':contact_id,
+                    "message_id": message_id,
+                    "esp_provider":esp_provider,
+                    "spam_detection_confidence": spam_confidence,
+                    "spam_label": spam_label,
+                    "date_sent": now.isoformat(),
+                    "last_update": now.isoformat(),
+                    'email_current_status':EmailStatus.RECEIVED.value,
+                    "expired_tracking_date": expired_tracking_date,
+                }
+            
+        return (event,tracking) 
 
-    @property
-    def message_tracking_id(self):
-        return self.email_id if self.will_track else None
-
+    
 class TwilioTracker(TrackerInterface):
 
-    def __init__(self, twilio_id: Annotated[UUID, Depends(uuid_v1_mc)], track_twilio: bool = Depends(track)):
+    def __init__(self, track_twilio: bool = Depends(track)):
         super().__init__(track_twilio)
-        self.twilio_id = str(twilio_id)
         self.contact_id = None
 
     def sms_track_event_data(self, content: OnGoingBaseSMSModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
 
+        twilio_id = str(uuid_v1_mc())
         # Create the SMS sent event
         sent_event = SMSEventORM.JSON(
             event_id=str(uuid_v1_mc()),
@@ -113,17 +142,19 @@ class TwilioTracker(TrackerInterface):
             'sms_current_status': SMSStatusEnum.RECEIVED.value
         }
 
-        return sent_event, tracking_data
+        return twilio_id,sent_event, tracking_data
 
     def call_track_event_data(self, content: BaseVoiceCallModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
+        twilio_id = str(uuid_v1_mc())
 
+    
         # Create the Call sent event
         sent_event = CallEventORM.JSON(
             event_id=str(uuid_v1_mc()),
             call_sid=None,
-            call_id=self.twilio_id,
+            call_id=twilio_id,
             direction='O',
             current_event=CallStatusEnum.RECEIVED.value,
             description="Call initiated successfully",
@@ -134,7 +165,7 @@ class TwilioTracker(TrackerInterface):
         )
 
         tracking_data = {
-            'call_id': self.twilio_id,
+            'call_id': twilio_id,
             'contact_id': contact_id,
             'recipient': content.to,
             'sender': content.from_,
@@ -144,7 +175,7 @@ class TwilioTracker(TrackerInterface):
             'call_current_status': CallStatusEnum.RECEIVED.value
         }
 
-        return sent_event, tracking_data
+        return twilio_id,sent_event, tracking_data
 
 class SubjectParams: #NOTE rename to ReactiveParams
 

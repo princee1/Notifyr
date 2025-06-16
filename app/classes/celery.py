@@ -45,6 +45,7 @@ SenderType =Literal['raw','contact','subs']
 
 class SchedulerModel(BaseModel):
     sender_type:SenderType='raw'
+    filter_error:bool=True
     schedule_name:Optional[str] = None
     timezone:Optional[str] = None
     task_name:str
@@ -59,6 +60,13 @@ class SchedulerModel(BaseModel):
     def check_heaviness(cls, heaviness:Any):
         if heaviness is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':'heaviness property should not be set'})
+    
+    @field_validator('content')
+    def check_content(cls,content:Any):
+        if not isinstance(content,list):
+            return [content]
+
+        return content
     
 SCHEDULER_RULES:dict[str,type] = {
     'rrule': rrule,

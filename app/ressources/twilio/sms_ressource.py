@@ -12,7 +12,7 @@ from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessourc
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.depends.class_dep import Broker, TwilioTracker
 from app.models.otp_model import OTPModel
-from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSStatusModel
+from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSCustomSchedulerModel, SMSStatusModel, SMSTemplateSchedulerModel
 from app.models.twilio_model import SMSEventORM
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
@@ -28,14 +28,6 @@ from app.utils.helper import APIFilterInject, uuid_v1_mc
 
 
 SMS_ONGOING_PREFIX = 'ongoing'
-
-
-
-class SMSCustomSchedulerModel(SchedulerModel):
-    content: OnGoingSMSModel
-
-class SMSTemplateSchedulerModel(SchedulerModel):
-    content: OnGoingTemplateSMSModel
 
 
 #@PingService([SMSService])
@@ -91,13 +83,15 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager:Annotated[TaskManager,Depends(get_task)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission),):
-        message = scheduler.content.model_dump()
-        if tracker.will_track:
-            event,tracking_event_data = tracker.sms_track_event_data(scheduler)
-            broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
-            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
-        
-        await taskManager.offload_task('normal',scheduler,0,None,self.smsService.send_custom_sms,message)
+        for i,content in enumerate(scheduler.content):
+            message = content.model_dump()
+            twilio_id = None
+            if tracker.will_track:
+                twilio_id,event,tracking_event_data = tracker.sms_track_event_data(scheduler)
+                broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
+                broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
+            
+            await taskManager.offload_task('normal',scheduler,0,i,self.smsService.send_custom_sms,message,twilio_tracking_id = None)
         return taskManager.results
         
     @UseLimiter(limit_value="5000/minutes")
@@ -110,17 +104,19 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseGuard(CeleryTaskGuard(['task_send_template_sms']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
-        sms_data = scheduler.content
-        smsTemplate:SMSTemplate = self.assetService.sms[template]
-        _,result=smsTemplate.build(self.configService.ASSET_LANG,sms_data.data)
-        message = {'body':result,'to':sms_data.to,'from_':sms_data.from_}
+        for i,content in enumerate(scheduler.content):
 
-        if tracker.will_track:
-            event,tracking_event_data = tracker.sms_track_event_data(scheduler)
-            broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
-            broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
+            smsTemplate:SMSTemplate = self.assetService.sms[template]
+            _,result=smsTemplate.build(self.configService.ASSET_LANG,content.data)
+            message = {'body':result,'to':content.to,'from_':content.from_}
 
-        await taskManager.offload_task('normal',scheduler,0,None,self.smsService.send_template_sms,message)
+            twilio_id=None
+            if tracker.will_track:
+                twilio_id,event,tracking_event_data = tracker.sms_track_event_data(scheduler)
+                broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
+                broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
+
+            await taskManager.offload_task('normal',scheduler,0,i,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_id)
         return taskManager.results
 
 

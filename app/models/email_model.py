@@ -149,6 +149,13 @@ def map_smtp_error_to_status(error_code: SMTPErrorCode | str) -> EmailStatus:
 
     return mapping.get(error_code, EmailStatus.FAILED)
 
+class EmailTemplateSchedulerModel(SchedulerModel):
+    content: EmailTemplateModel | list[EmailTemplateModel]
+
+class CustomEmailSchedulerModel(SchedulerModel):
+    content: CustomEmailModel | list[CustomEmailModel]
+
+
 
 class EmailTrackingORM(models.Model):
     email_id = fields.UUIDField(pk=True, default=uuid_v1_mc)

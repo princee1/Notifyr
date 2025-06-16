@@ -6,7 +6,7 @@ from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import HTMLTemplate
 from app.depends.class_dep import Broker, EmailTracker
 from app.depends.funcs_dep import get_task
-from app.models.email_model import CustomEmailModel, EmailSpamDetectionModel, EmailTemplateModel
+from app.models.email_model import CustomEmailModel, CustomEmailSchedulerModel, EmailSpamDetectionModel, EmailTemplateModel, EmailTemplateSchedulerModel
 from app.services.celery_service import TaskManager, TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.link_service import LinkService
@@ -21,13 +21,7 @@ from app.classes.celery import SchedulerModel
 from app.depends.variables import populate_response_with_request_id,email_verifier
 from app.utils.constant import StreamConstant
 from app.utils.helper import APIFilterInject
-
-
-class EmailTemplateSchedulerModel(SchedulerModel):
-    content: EmailTemplateModel
-
-class CustomEmailSchedulerModel(SchedulerModel):
-    content: CustomEmailModel
+from app.depends.variables import track
 
 
 EMAIL_PREFIX = "email"
@@ -36,28 +30,6 @@ DEFAULT_RESPONSE = {
     status.HTTP_202_ACCEPTED: {
         'message': 'email task received successfully'}
 }
-
-@APIFilterInject
-async def pipe_email_track(scheduler:CustomEmailSchedulerModel| EmailTemplateSchedulerModel,tracker:EmailTracker):
-    configService = Get(ConfigService)
-    content:EmailTemplateModel|CustomEmailModel = scheduler.content
-    emailMetaData=content.meta
-    
-    if tracker.will_track:
-
-        if len(emailMetaData.To) >1:
-            raise HTTPException(status_code=400,detail='Can only track one email at a time')
-
-        tracker.recipient = emailMetaData.To[0]
-        tracker.subject = emailMetaData.Subject
-
-        emailMetaData.Disposition_Notification_To = configService.SMTP_EMAIL
-        emailMetaData.Return_Receipt_To = configService.SMTP_EMAIL
-        
-        emailMetaData.X_Email_ID = tracker.email_id
-
-    emailMetaData.Message_ID = tracker.message_id
-    return {'scheduler':scheduler,'tracker':tracker}
 
 @UseRoles([Role.RELAY])
 @UseHandler(handlers.ServiceAvailabilityHandler,handlers.CeleryTaskHandler)
@@ -94,56 +66,58 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission('html'))
     @UseHandler(handlers.TemplateHandler)
-    @UsePipe(pipe_email_track,pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'))
+    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
-        mail_content = scheduler.content
-        meta = mail_content.meta.model_dump(mode='python')
         template: HTMLTemplate = self.assetService.html[template]
         
-        tracking_link_callback:Callable[[str],str] = None
-        if tracker.will_track:
-            template = template.clone()
-            
-            event_tracking,email_tracking = tracker.track_event_data()
-            add_params = self._get_esp(meta['To'][0])
-            self.linkService.set_tracking_link(template,tracker.email_id,add_params=add_params)
-            tracking_link_callback = self.linkService.create_link_re(tracker.email_id,add_params=add_params) # FIXME if its a list change it 
-            #self.linkService.create_tracking_pixel(template,tracker.email_id)
-            broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
-            broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
-        
+        for i,mail_content in enumerate(scheduler.content):
+            meta = mail_content.meta.model_dump(mode='python')
 
-        _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
-        data = parse_mime_content(data,mail_content.mimeType)
-        
-        await taskManager.offload_task('normal',scheduler,0,None,self.emailService.sendTemplateEmail,data, meta, template.images,tracker.message_tracking_id,contact_id=None)
+            tracking_event_data = tracker.pipe_email_data(mail_content)
+            tracking_link_callback:Callable[[str],str] = None
+
+            if tracker.will_track:
+                template = template.clone()
+                
+                event_tracking,email_tracking = tracking_event_data['track']
+                add_params = self._get_esp(meta['To'][0])
+                self.linkService.set_tracking_link(template,track['email_id'],add_params=add_params)
+                tracking_link_callback = self.linkService.create_link_re(tracking_event_data['email_id'],add_params=add_params) # FIXME if its a list change it 
+                #self.linkService.create_tracking_pixel(template,tracker.email_id)
+                broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
+                broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
+
+            _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
+            data = parse_mime_content(data,mail_content.mimeType)
+            
+            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendTemplateEmail,data, meta, template.images,tracking_event_data['message_id'],contact_id=None)
         return taskManager.results
     
     @UseLimiter(limit_value='10000/minutes')
-    @UsePipe(pipe_email_track,pipes.CeleryTaskPipe)
+    @UsePipe(pipes.CeleryTaskPipe)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
     async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
-        customEmail_content = scheduler.content
-        content = (customEmail_content.html_content, customEmail_content.text_content)
+        for i,customEmail_content in enumerate(scheduler.content):
 
-        meta = customEmail_content.meta.model_dump()
-        if tracker.will_track:
-            add_params = self._get_esp(customEmail_content.meta.To[0])
-            tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(tracker.email_id,add_params=add_params) # FIXME if its a list change it 
+            tracking_event_data = tracker.pipe_email_data(customEmail_content)
+            content = (customEmail_content.html_content, customEmail_content.text_content)
+            meta = customEmail_content.meta.model_dump()
+            if tracker.will_track:
+                add_params = self._get_esp(customEmail_content.meta.To[0])
+                tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(tracking_event_data['email_id'],add_params=add_params) # FIXME if its a list change it 
 
-            event_tracking, email_tracking = tracker.track_event_data()
-            broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
-            broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
-            content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
+                event_tracking,email_tracking = tracking_event_data['track']
+                broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
+                broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
+                content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
 
-        await taskManager.offload_task('normal',scheduler,0,None,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,tracker.message_tracking_id,contact_id =None)
+            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,tracking_event_data['message_id'],contact_id =None)
         return taskManager.results
-
     
     @UseRoles(options=[MustHave(Role.ADMIN)])
     @BaseHTTPRessource.HTTPRoute("/domain/",methods=[HTTPMethod.GET],mount=False)

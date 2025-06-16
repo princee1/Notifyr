@@ -113,7 +113,7 @@ class CeleryService(BaseService, IntervalInterface):
         return self._trigger_task(celery_task, schedule_name,index)
 
     def scheduler_to_celery_task(self,scheduler: SchedulerModel,index:int|None, *args, **kwargs):
-        celery_task = scheduler.model_dump(mode='python', exclude={'content','sender_type'})
+        celery_task = scheduler.model_dump(mode='python', exclude={'content','sender_type','filter_error'})
         celery_task: CeleryTask = CeleryTask(args=args, kwargs=kwargs, **celery_task)
         return {
             'celery_task':celery_task,
