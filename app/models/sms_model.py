@@ -6,6 +6,8 @@ from app.utils.validation import url_validator
 class OnGoingBaseSMSModel(BaseModel):
     from_:str = None
     to:str
+    as_contact:bool = False # special_key
+
 
 class OnGoingTemplateSMSModel(OnGoingBaseSMSModel):
     data:dict

@@ -62,6 +62,9 @@ class SpecialKeyParameterConstant:
     SCHEDULER_SPECIAL_KEY_PARAMETER = 'scheduler'
     WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
 
+class SpecialKeyAttributesConstant:
+    CONTACT_SPECIAL_KEY_ATTRIBUTES='contact'
+
 ########################                     ########################################
 
 class EmailHostConstant(Enum):

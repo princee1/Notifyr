@@ -14,7 +14,7 @@ from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExis
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
 
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
-from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
+from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
@@ -196,9 +196,9 @@ class ContactsHandler(Handler):
 
             return await function(*args, **kwargs)
 
-        except ContactNotExistsError:
+        except ContactNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
-                                'message': 'The user specified does not exists', })
+                                'message': f'The user: {e.id} specified does not exists', 'ids':[e.id]})
 
         except ContactAlreadyExistsError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
@@ -206,11 +206,15 @@ class ContactsHandler(Handler):
 
         except ContactDoubleOptInAlreadySetError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                                'message': 'Error could not create the user because info are already used', 'detail': e.message})
+                                'message': 'Contact Double opt in is already set',})
 
         except ContactOptInCodeNotMatchError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                                'message': 'Error could not create the user because info are already used', 'detail': e.message})
+                                'message': 'Contact Opt in code does not match',})
+
+
+        except ContactMissingInfoKeyError as e:
+            raise  HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':f'Contact missing {e.info_key} info key'})
 
 
 class TortoiseHandler(Handler):

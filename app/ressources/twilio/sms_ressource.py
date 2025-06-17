@@ -5,9 +5,9 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType, s
 from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
-from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
+from app.decorators.handlers import CeleryTaskHandler, ContactsHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
-from app.decorators.pipes import CeleryTaskPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path, force_task_manager_attributes_pipe
+from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.depends.class_dep import Broker, TwilioTracker
@@ -22,7 +22,7 @@ from app.services.database_service import RedisService
 from app.services.twilio_service import SMSService
 from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
 from app.depends.funcs_dep import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
-from app.utils.constant import StreamConstant
+from app.utils.constant import SpecialKeyAttributesConstant, StreamConstant
 from app.utils.helper import APIFilterInject, uuid_v1_mc
 
 
@@ -76,8 +76,8 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY,Role.MFA_OTP])    
-    @UseHandler(CeleryTaskHandler)
-    @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @UseHandler(CeleryTaskHandler,ContactsHandler)
+    @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
@@ -87,17 +87,17 @@ class OnGoingSMSRessource(BaseHTTPRessource):
             message = content.model_dump()
             twilio_id = None
             if tracker.will_track:
-                twilio_id,event,tracking_event_data = tracker.sms_track_event_data(scheduler)
+                twilio_id,event,tracking_event_data = tracker.pipe_sms_track_event_data(scheduler)
                 broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
                 broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
             
-            await taskManager.offload_task('normal',scheduler,0,i,self.smsService.send_custom_sms,message,twilio_tracking_id = None)
+            await taskManager.offload_task('normal',scheduler,0,i,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_id)
         return taskManager.results
         
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
-    @UseHandler(CeleryTaskHandler,TemplateHandler)
-    @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @UseHandler(CeleryTaskHandler,TemplateHandler,ContactsHandler)
+    @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
@@ -112,7 +112,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
             twilio_id=None
             if tracker.will_track:
-                twilio_id,event,tracking_event_data = tracker.sms_track_event_data(scheduler)
+                twilio_id,event,tracking_event_data = tracker.pipe_sms_track_event_data(scheduler)
                 broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
                 broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
 
