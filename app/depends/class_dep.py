@@ -15,6 +15,7 @@ from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, S
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.container import Get
+from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.validation import url_validator
 from .variables import *
 from app.services.link_service import LinkService
@@ -74,13 +75,16 @@ class EmailTracker(TrackerInterface):
             emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
             
             emailMetaData.X_Email_ID = email_id
+
+            contact_id = getattr(content.meta,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
+            if contact_id!=None and isinstance(contact_id,list):
+                contact_id = contact_id[0]
                                         
-            temp = self._create_tracking_event_data(spam_confidence, spam_label, email_id, message_id, recipient, subject,)
+            temp = self._create_tracking_event_data(spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=contact_id)
             temp ={'track':temp}
             track.update(temp)
         
         return  track 
-
 
     def _create_tracking_event_data(self, spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=None):
         # Convert datetime fields to timezone-aware ISO 8601 string representation
@@ -118,6 +122,7 @@ class TwilioTracker(TrackerInterface):
     def pipe_sms_track_event_data(self, content: OnGoingBaseSMSModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
+        contact_id = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
 
         twilio_id = str(uuid_v1_mc())
         # Create the SMS sent event
@@ -149,7 +154,8 @@ class TwilioTracker(TrackerInterface):
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
         twilio_id = str(uuid_v1_mc())
 
-    
+        contact_id = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
+
         # Create the Call sent event
         sent_event = CallEventORM.JSON(
             event_id=str(uuid_v1_mc()),

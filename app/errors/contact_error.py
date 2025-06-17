@@ -24,3 +24,8 @@ class ContactOptInCodeNotMatchError(BaseError):
 
 class ContactDoubleOptInAlreadySetError(BaseError):
     ...
+
+class ContactMissingInfoKeyError(BaseError):
+    def __init__(self,info_key, *args):
+        super().__init__(*args)
+        self.info_key = info_key

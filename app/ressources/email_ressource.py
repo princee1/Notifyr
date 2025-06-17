@@ -65,7 +65,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission('html'))
-    @UseHandler(handlers.TemplateHandler)
+    @UseHandler(handlers.TemplateHandler,handlers.ContactsHandler)
     @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContactToInfoPipe('email','meta.To'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
@@ -96,7 +96,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
             await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendTemplateEmail,data, meta, template.images,tracking_event_data['email_id'],contact_id=None)
         return taskManager.results
     
+
     @UseLimiter(limit_value='10000/minutes')
+    @UseHandler(handlers.ContactsHandler)
     @UsePipe(pipes.CeleryTaskPipe,pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
