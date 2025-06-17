@@ -84,7 +84,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager:Annotated[TaskManager,Depends(get_task)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission),):
         for i,content in enumerate(scheduler.content):
-            message = content.model_dump()
+            message = content.model_dump(exclude=('as_contact','index'))
             twilio_id = None
             index = content.index if content.index != None else i
 

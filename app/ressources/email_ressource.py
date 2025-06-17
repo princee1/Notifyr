@@ -75,7 +75,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         
         for i,mail_content in enumerate(scheduler.content):
             tracking_event_data = tracker.pipe_email_data(mail_content)
-            meta = mail_content.meta.model_dump(exclude=('as_contact'))
+            meta = mail_content.meta.model_dump(exclude=('as_contact','index'))
             tracking_link_callback:Callable[[str],str] = None
             index = mail_content.meta.index if mail_content.meta.index != None else i
 
@@ -94,7 +94,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
             data = parse_mime_content(data,mail_content.mimeType)
             
-            await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendTemplateEmail,data, meta, template.images,email_id,contact_id=None)
+            await taskManager.offload_task('worker_focus',scheduler,0,index,self.emailService.sendTemplateEmail,data, meta, template.images,email_id,contact_id=None)
         return taskManager.results
     
 
@@ -108,9 +108,12 @@ class EmailTemplateRessource(BaseHTTPRessource):
         for i,customEmail_content in enumerate(scheduler.content):
             tracking_event_data = tracker.pipe_email_data(customEmail_content)
             content = (customEmail_content.html_content, customEmail_content.text_content)
+
             email_id = tracking_event_data['email_id']
-            meta = customEmail_content.meta.model_dump(exclude=('as_contact'))
+
+            meta = customEmail_content.meta.model_dump(exclude=('as_contact','index'))
             index = customEmail_content.meta.index if customEmail_content.meta.index != None else i
+
             if tracker.will_track:
                 add_params = self._get_esp(customEmail_content.meta.To[0])
                 tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(email_id,add_params=add_params) # FIXME if its a list change it 

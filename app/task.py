@@ -12,6 +12,7 @@ from app.services.security_service import JWTAuthService
 from app.services.twilio_service import SMSService, CallService
 from app.utils.prettyprint import PrettyPrinter_
 from flower import VERSION
+from celery import Task
 
 
 ##############################################           ##################################################
@@ -71,7 +72,7 @@ celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 @functools.wraps(celery_app.task)
 def RegisterTask(heaviness: TaskHeaviness, **kwargs):
     def decorator(task: Callable):
-
+        kwargs['bind'] =True
         TASK_REGISTRY[task_name(task.__qualname__)] = {
             'heaviness': heaviness,
             'task': celery_app.task(**kwargs)(task)
@@ -84,6 +85,7 @@ def RegisterTask(heaviness: TaskHeaviness, **kwargs):
 @functools.wraps(shared_task)
 def SharedTask(heaviness: TaskHeaviness, **kwargs):
     def decorator(task: Callable):
+        kwargs['bind'] =True
         TASK_REGISTRY[task_name(task.__qualname__)] = {
             'heaviness':heaviness,
             'task':shared_task(**kwargs)(task)
@@ -96,39 +98,39 @@ def SharedTask(heaviness: TaskHeaviness, **kwargs):
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_mail(data, meta, images,message_tracking_id,contact_id=None):
+def task_send_template_mail(self:Task,data, meta, images,message_tracking_id,contact_id=None):
     emailService: EmailSenderService = Get(EmailSenderService)
     return emailService.sendTemplateEmail(data, meta, images,message_tracking_id,contact_id)
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_mail(content, meta, images, attachment,message_tracking_id,contact_id=None):
+def task_send_custom_mail(self:Task,content, meta, images, attachment,message_tracking_id,contact_id=None):
     emailService: EmailSenderService = Get(EmailSenderService)
     return emailService.sendCustomEmail(content, meta, images, attachment,message_tracking_id,contact_id)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_sms(messages):
+def task_send_custom_sms(self:Task,messages):
     smsService:SMSService = Get(SMSService)
     return smsService.send_custom_sms(messages)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_sms(messages):
+def task_send_template_sms(self:Task,messages):
     smsService:SMSService = Get(SMSService)
     return smsService.send_template_sms(messages)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_voice_call(result,content):
+def task_send_template_voice_call(self:Task,result,content):
     callService:CallService = Get(CallService)
     return callService.send_template_voice_call(result,content)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_twiml_voice_call(url,details):
+def task_send_twiml_voice_call(self:Task,url,details):
     callService:CallService = Get(CallService)
     return callService.send_twiml_voice_call(url,details)
     
     
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_voice_call(body,details):
+def task_send_custom_voice_call(self:Task,body,details):
     callService:CallService = Get(CallService)
     return callService.send_custom_voice_call(body,details)
 

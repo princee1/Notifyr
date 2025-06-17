@@ -106,7 +106,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         phoneTemplate: PhoneTemplate = self.assetService.phone[template]
         
         for i,content in enumerate(scheduler.content):
-            content = content.model_dump()
+            content = content.model_dump(exclude=('as_contact','index'))
             _, result = phoneTemplate.build(content, ...)
             twilio_id = None
             index = content.index if content.index != None else i
@@ -130,7 +130,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
         for i,content in enumerate(scheduler.content):
         
-            details = content.model_dump(exclude={'url'})
+            details = content.model_dump(exclude={'url','as_contact','index'})
             url = content.url
             twilio_id = None
             index = content.index if content.index != None else i
@@ -153,7 +153,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_custom(self, scheduler: CallCustomSchedulerModel, request: Request, response: Response, broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         for i,content in enumerate(scheduler.content):
             details = content.model_dump(
-                exclude={'body', 'voice', 'language', 'loop'})
+                exclude={'body', 'voice', 'language', 'loop','as_contact','index'})
             body = content.body
             voice = content.voice
             lang = content.language
