@@ -177,6 +177,7 @@ class EmailTrackingORM(models.Model):
     email_current_status = fields.CharEnumField(EmailStatus, null=True)
     spam_label = fields.CharField(max_length=50, null=True)
     spam_detection_confidence = fields.FloatField(null=True)
+    delivered = fields.BooleanField(default = False)
 
     class Meta:
         schema = SCHEMA
@@ -190,6 +191,7 @@ class EmailTrackingORM(models.Model):
             "recipient": self.recipient,
             "contact_id": str(self.contact.contact_id) if self.contact != None else None,
             'esp_provider': self.esp_provider,
+            'delivered':self.delivered,
             "date_sent": self.date_sent.isoformat(),
             "last_update": self.last_update.isoformat(),
             "expired_tracking_date": self.expired_tracking_date.isoformat() if self.expired_tracking_date else None,

@@ -214,6 +214,11 @@ class LinkRessource(BaseHTTPRessource):
             esp_provider  = 'Untracked Provider' if esp_provider is None else esp_provider # FIXME add the esp_provider in the query_params
 
             description = '' # TODO add a description
+            description_delivered = 'The email has been successfully delivered in the recipient mailbox'
             data = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),email_id=message_id,current_event=event.value,date_event_received=now,esp_provider=esp_provider,description=description)
+            data_delivered = TrackingEmailEventORM.JSON(event_id=str(uuid_v1_mc()),email_id=message_id,current_event=EmailStatus.DELIVERED.value,ate_event_received=now,esp_provider=esp_provider,description=description_delivered)
             broker.publish(StreamConstant.EMAIL_EVENT_STREAM,'message',message_id,data,)
             broker.stream(StreamConstant.EMAIL_EVENT_STREAM,data)
+            broker.stream(StreamConstant.EMAIL_EVENT_STREAM,data_delivered)
+
+

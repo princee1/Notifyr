@@ -137,11 +137,15 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
     contact_id_to_delete = []
 
     opens_per_email = {}
+    delivered_per_email = {}
+
+    index_tracking: dict[str,int] = {}
+
     replied_per_email = {}
 
     email_status = {}
 
-    for ids, val in entries:
+    for i,(ids, val) in enumerate(entries):
         try:
             empty_str_to_none(val)
             email_id = val['email_id']
@@ -178,12 +182,16 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                     analytics[esp_provider]['sent'] += factor
 
                 case EmailStatus.DELIVERED.value:
-                    analytics[esp_provider]['delivered'] += factor
 
+                    if email_status not in delivered_per_email:
+                        analytics[esp_provider]['delivered'] += factor
+                        delivered_per_email[email_status] = True
+                    
                 case EmailStatus.OPENED.value | EmailStatus.LINK_CLICKED.value:
                     # Ensure only one open event is tracked per email_id
+                    analytics[esp_provider]['opened'] += factor
+                    
                     if email_id not in opens_per_email:
-                        analytics[esp_provider]['opened'] += factor
                         opens_per_email[email_id] = True
                 
                 case EmailStatus.SOFT_BOUNCE.value | EmailStatus.HARD_BOUNCE.value | EmailStatus.MAILBOX_FULL.value:
@@ -192,12 +200,13 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                         contact_id_to_delete_from.add(email_id)
                     
                 case EmailStatus.REPLIED.value:
+                    analytics[esp_provider]['replied'] += factor
+                    analytics[esp_provider]['opened'] += factor
+
                     if email_id not in replied_per_email:
-                        analytics[esp_provider]['replied'] += factor
                         replied_per_email[email_id] = True
                     
                     if email_id not in opens_per_email:
-                        analytics[esp_provider]['opened'] += factor
                         opens_per_email[email_id] = True
                 
                 case EmailStatus.FAILED.value:
@@ -227,7 +236,10 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
             et.email_current_status = email_status[str(et.email_id)]
         if et.email_id in contact_id_to_delete_from and et.contact != None:
             contact_id_to_delete.append(str(et.contact.contact_id))
-    
+        if et.email_id in delivered_per_email:
+            if et.delivered:
+                objs[index_tracking] = None
+            
 
     @retry_logic(4,10)
     async def callback():
@@ -235,7 +247,7 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
             await bulk_upsert_email_analytics(analytics)
             if len(email_tracker) > 0:
                 await EmailTrackingORM.bulk_update(email_tracker, fields=['email_current_status'])
-            await TrackingEmailEventORM.bulk_create(objs)
+            await TrackingEmailEventORM.bulk_create(filter(lambda v : v!= None,objs))
 
     try:
         await callback()

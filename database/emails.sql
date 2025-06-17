@@ -44,12 +44,16 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     last_update TIMESTAMPTZ DEFAULT NOW(),
     expired_tracking_date TIMESTAMPTZ,
     email_current_status EmailStatus,
+    delivered BOOLEAN DEFAULT FALSE,
     subject VARCHAR(150),
     spam_label VARCHAR(50),
     spam_detection_confidence FLOAT,
     PRIMARY KEY (email_id),
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
+
+
+ALTER TABLE EmailTracking ADD COLUMN delivered BOOLEAN DEFAULT FALSE
 
 CREATE TABLE IF NOT EXISTS TrackingEvent (
     event_id UUID DEFAULT uuid_generate_v1mc (),
