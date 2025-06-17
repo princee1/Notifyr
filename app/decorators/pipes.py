@@ -24,6 +24,7 @@ from app.utils.validation import email_validator, phone_number_validator
 from app.utils.helper import APIFilterInject
 from app.depends.variables import parse_to_phone_format
 from app.depends.orm_cache import ContactSummaryORMCache
+from app.models.contacts_model import ContactSummary
 
 @APIFilterInject
 async def _to_otp_path(template:str):
@@ -321,28 +322,58 @@ async def force_task_manager_attributes_pipe(taskManager:TaskManager):
 
 class ContactToInfoPipe(Pipe):
 
-    def __init__(self,info_key:str,parse_key:str,interrupt_if_none:bool,callback:Callable=None,split='.' ):
+    def __init__(self,info_key:str,parse_key:str,interrupt_if_none:bool=False,callback:Callable=None,split:str='.' ):
         super().__init__(True)
         self.info_key= info_key
-        self.sched_key = parse_key
         self.interrupt_if_none = interrupt_if_none
         self.callback = callback
-        self.split = split
+        self.iterator = parse_key.split(split)
     
     async def pipe(self,scheduler:SchedulerModel):
-        ptr = scheduler.model_dump(mode='python')
-
-        for sk in self.sched_key.split(self.split):
-            if sk not in ptr:
+        
+        filtered_content = []
+        # if scheduler.sender_type =='raw':
+        #     return {}
+        
+        for content in scheduler.content:
+            ptr = content
+            for sk in self.iterator[:-1]:
+                next_ptr =getattr(ptr,sk,None) 
+                if next_ptr == None:
+                    ...
+                ptr = next_ptr
+            
+            
+            if ptr == None:
                 ...
-            ptr = ptr[sk]
-        
-        if isinstance(ptr,str):
-            ...
-        elif isinstance(ptr,list):
-            ...
-        else:
-            ...
-        
-        return {'scheduler':scheduler}
+            
+            if not getattr(ptr,'as_contact',False):
+                continue
+
+            val = getattr(ptr,self.iterator[-1],None)
+            
+            if val== None:
+                ...
+
+            async def getter(val):
+                contact:ContactSummary = await ContactSummaryORMCache.Cache(val)
+                if contact == None:
+                    ...
+                piped_info_key = contact.get(self.info_key,None)
+                if piped_info_key == None:
+                    ...
+                else:
+                    return piped_info_key
+
+            if isinstance(val,str):
+                val = await getter(val)
+            
+            elif isinstance(val,list):
+                val = [await getter(v) for v in val]
+            else:
+                ...
+            
+            setattr(ptr,self.iterator[-1],val)
+            print(ptr)
+        return {}
         

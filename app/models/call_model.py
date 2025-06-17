@@ -8,6 +8,7 @@ class BaseVoiceCallModel(BaseModel):
     timeout:int
     record:bool = True
     time_limit:int = 60
+    as_contact:bool = False # special_key
 
 
 class OnGoingCustomVoiceCallModel(BaseVoiceCallModel):

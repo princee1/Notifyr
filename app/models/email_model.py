@@ -26,6 +26,7 @@ class EmailMetaModel(BaseModel):
     Message_ID: str | None = None
     X_Email_ID: str | None = None
     as_individual:bool = False
+    as_contact:bool = False # special_key
     
 
     @model_validator(mode="after")
@@ -39,7 +40,7 @@ class EmailMetaModel(BaseModel):
     @model_validator(mode="after")
     def To_validator(self:Self)->Self:
         if isinstance(self.To,str):
-            if not email_validator(self.To):
+            if not self.as_contact and not email_validator(self.To):
                 raise ValueError('Email format not valid')
             self.To = [self.To]
             return self

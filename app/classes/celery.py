@@ -41,7 +41,7 @@ class TaskType(Enum):
     ONCE= 'once' # direct task call
 
 TaskTypeLiteral = Literal['rrule','solar','crontab','now','once']  #'timedelta','datetime'
-SenderType =Literal['raw','contact','subs']
+SenderType =Literal['raw','subs']
 
 class SchedulerModel(BaseModel):
     sender_type:SenderType='raw'

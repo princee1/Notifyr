@@ -63,7 +63,7 @@ class EmailTracker(TrackerInterface):
             }
 
         if self.will_track:
-
+            
             if len(emailMetaData.To) >1:
                 raise HTTPException(status_code=400,detail='Can only track one email at a time')
 
@@ -75,14 +75,14 @@ class EmailTracker(TrackerInterface):
             
             emailMetaData.X_Email_ID = email_id
                                         
-            temp = self.create_tracking_event_data(spam_confidence, spam_label, email_id, message_id, recipient, subject,)
+            temp = self._create_tracking_event_data(spam_confidence, spam_label, email_id, message_id, recipient, subject,)
             temp ={'track':temp}
             track.update(temp)
         
         return  track 
 
 
-    def create_tracking_event_data(self, spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=None):
+    def _create_tracking_event_data(self, spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=None):
         # Convert datetime fields to timezone-aware ISO 8601 string representation
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
@@ -115,7 +115,7 @@ class TwilioTracker(TrackerInterface):
         super().__init__(track_twilio)
         self.contact_id = None
 
-    def sms_track_event_data(self, content: OnGoingBaseSMSModel, contact_id=None):
+    def pipe_sms_track_event_data(self, content: OnGoingBaseSMSModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
 
@@ -123,7 +123,7 @@ class TwilioTracker(TrackerInterface):
         # Create the SMS sent event
         sent_event = SMSEventORM.JSON(
             event_id=str(uuid_v1_mc()),
-            sms_id=self.twilio_id,
+            sms_id=twilio_id,
             sms_sid=None,
             direction='O',
             current_event=SMSStatusEnum.RECEIVED.value,
@@ -132,7 +132,7 @@ class TwilioTracker(TrackerInterface):
         )
 
         tracking_data = {
-            'sms_id': self.twilio_id,
+            'sms_id': twilio_id,
             'contact_id': contact_id,
             'recipient': content.to,
             'sender': content.from_,
@@ -144,7 +144,7 @@ class TwilioTracker(TrackerInterface):
 
         return twilio_id,sent_event, tracking_data
 
-    def call_track_event_data(self, content: BaseVoiceCallModel, contact_id=None):
+    def pipe_call_track_event_data(self, content: BaseVoiceCallModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
         twilio_id = str(uuid_v1_mc())

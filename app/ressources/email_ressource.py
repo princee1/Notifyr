@@ -66,7 +66,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission('html'))
     @UseHandler(handlers.TemplateHandler)
-    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'))
+    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContactToInfoPipe('email','meta.To'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
@@ -97,7 +97,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         return taskManager.results
     
     @UseLimiter(limit_value='10000/minutes')
-    @UsePipe(pipes.CeleryTaskPipe)
+    @UsePipe(pipes.CeleryTaskPipe,pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
