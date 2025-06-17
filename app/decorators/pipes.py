@@ -349,6 +349,7 @@ class ContactToInfoPipe(Pipe):
                 ...
             
             if not getattr(ptr,'as_contact',False):
+                filtered_content.append(content)
                 continue
 
             val = getattr(ptr,self.iterator[-1],None)
@@ -357,7 +358,7 @@ class ContactToInfoPipe(Pipe):
                 ...
 
             async def getter(val):
-                contact:ContactSummary = await ContactSummaryORMCache.Cache(val)
+                contact:ContactSummary = await ContactSummaryORMCache.Cache(val,val)
                 if contact == None:
                     if self.will_filter:
                         raise ContactNotExistsError(val)
@@ -401,5 +402,6 @@ class ContactToInfoPipe(Pipe):
             filtered_content.append(content)
         
         scheduler.content = filtered_content
-        return {}
+        
+        return {'scheduler':scheduler}
         

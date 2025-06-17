@@ -74,18 +74,18 @@ class EmailTemplateRessource(BaseHTTPRessource):
         template: HTMLTemplate = self.assetService.html[template]
         
         for i,mail_content in enumerate(scheduler.content):
-            meta = mail_content.meta.model_dump(mode='python')
-
             tracking_event_data = tracker.pipe_email_data(mail_content)
+            meta = mail_content.meta.model_dump(exclude=('as_contact'))
             tracking_link_callback:Callable[[str],str] = None
 
+            email_id = tracking_event_data['email_id']
             if tracker.will_track:
                 template = template.clone()
                 
                 event_tracking,email_tracking = tracking_event_data['track']
                 add_params = self._get_esp(meta['To'][0])
-                self.linkService.set_tracking_link(template,track['email_id'],add_params=add_params)
-                tracking_link_callback = self.linkService.create_link_re(tracking_event_data['email_id'],add_params=add_params) # FIXME if its a list change it 
+                self.linkService.set_tracking_link(template,email_id,add_params=add_params)
+                tracking_link_callback = self.linkService.create_link_re(email_id,add_params=add_params) # FIXME if its a list change it 
                 #self.linkService.create_tracking_pixel(template,tracker.email_id)
                 broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
                 broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
@@ -93,7 +93,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
             data = parse_mime_content(data,mail_content.mimeType)
             
-            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendTemplateEmail,data, meta, template.images,tracking_event_data['email_id'],contact_id=None)
+            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendTemplateEmail,data, meta, template.images,email_id,contact_id=None)
         return taskManager.results
     
 
@@ -105,11 +105,11 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
     async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         for i,customEmail_content in enumerate(scheduler.content):
-
             tracking_event_data = tracker.pipe_email_data(customEmail_content)
             content = (customEmail_content.html_content, customEmail_content.text_content)
             email_id = tracking_event_data['email_id']
-            meta = customEmail_content.meta.model_dump()
+            meta = customEmail_content.meta.model_dump(exclude=('as_contact'))
+
             if tracker.will_track:
                 add_params = self._get_esp(customEmail_content.meta.To[0])
                 tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(email_id,add_params=add_params) # FIXME if its a list change it 
@@ -118,7 +118,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
                 broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
                 content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
-                content = content[0],self.linkService.create_tracking_pixel(content[1],email_id=email_id,contact_id=tracking_event_data['contact_id'],esp=add_params['esp'])
+                content = self.linkService.create_tracking_pixel(content[0],email_id=email_id,contact_id=tracking_event_data['contact_id'],esp=add_params['esp']),content[1]
 
             await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,email_id,contact_id =None)
         return taskManager.results

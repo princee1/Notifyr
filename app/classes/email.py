@@ -66,6 +66,7 @@ class EmailMetadata:
             f"Reply-To: {self.replyTo}\n"
             f"Return-Path: {self.Return_Path}\n"
             f"Priority: {self.Priority}\n"
+            f"Message_ID:{self.Message_ID}\n"
         )
 
 

@@ -42,15 +42,15 @@ class EmailMetaModel(BaseModel):
     def To_validator(self:Self)->Self:
         if isinstance(self.To,str):
             if not self.as_contact and not email_validator(self.To):
-                raise ValueError('Email format not valid')
+                raise ValueError('Email format not valid. Hint: It is a contact set as_contact=True')
             self.To = [self.To]
             return self
-        
-        if self.as_individual:
-            for email in self.To:
-                if not email_validator(email):
-                    raise ValueError('Email format not valid')
             
+        for email in self.To:
+            if not self.as_contact and not email_validator(email):
+                raise ValueError('Email format not valid. Hint: It is a contact set as_contact=True')
+            
+        if self.as_individual:   
             return self
         
         self.To = [','.join(self.To)]
