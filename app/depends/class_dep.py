@@ -51,9 +51,10 @@ class EmailTracker(TrackerInterface):
         
         spam_confidence,spam_label = spam
 
-        email_id = str(uuid_v1_mc())
-        message_id = self.make_msgid(email_id)
-
+        temp_email_id = str(uuid_v1_mc())
+        message_id = self.make_msgid(temp_email_id)
+        
+        email_id = None
         emailMetaData=content.meta
 
         emailMetaData.Message_ID = message_id
@@ -67,6 +68,9 @@ class EmailTracker(TrackerInterface):
             
             if len(emailMetaData.To) >1:
                 raise HTTPException(status_code=400,detail='Can only track one email at a time')
+            
+            email_id = temp_email_id
+            track['email_id'] = email_id
 
             recipient = emailMetaData.To[0]
             subject = emailMetaData.Subject
@@ -124,64 +128,73 @@ class TwilioTracker(TrackerInterface):
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
         contact_id = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
 
-        twilio_id = str(uuid_v1_mc())
-        # Create the SMS sent event
-        sent_event = SMSEventORM.JSON(
-            event_id=str(uuid_v1_mc()),
-            sms_id=twilio_id,
-            sms_sid=None,
-            direction='O',
-            current_event=SMSStatusEnum.RECEIVED.value,
-            description="SMS sent successfully",
-            date_event_received=now.isoformat()
-        )
+        if self.will_track:
 
-        tracking_data = {
-            'sms_id': twilio_id,
-            'contact_id': contact_id,
-            'recipient': content.to,
-            'sender': content.from_,
-            'date_sent': now.isoformat(),
-            'last_update': now.isoformat(),
-            'expired_tracking_date': expired_tracking_date,
-            'sms_current_status': SMSStatusEnum.RECEIVED.value
-        }
+            if len(content.to) >1:
+                    raise HTTPException(status_code=400,detail='Can only track one sms at a time')
+            twilio_id = str(uuid_v1_mc())
+            # Create the SMS sent event
+            sent_event = SMSEventORM.JSON(
+                event_id=str(uuid_v1_mc()),
+                sms_id=twilio_id,
+                sms_sid=None,
+                direction='O',
+                current_event=SMSStatusEnum.RECEIVED.value,
+                description="SMS sent successfully",
+                date_event_received=now.isoformat()
+            )
 
-        return twilio_id,sent_event, tracking_data
+            tracking_data = {
+                'sms_id': twilio_id,
+                'contact_id': contact_id,
+                'recipient': content.to[0],
+                'sender': content.from_,
+                'date_sent': now.isoformat(),
+                'last_update': now.isoformat(),
+                'expired_tracking_date': expired_tracking_date,
+                'sms_current_status': SMSStatusEnum.RECEIVED.value
+            }
+
+            return twilio_id,sent_event, tracking_data
 
     def pipe_call_track_event_data(self, content: BaseVoiceCallModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
-        twilio_id = str(uuid_v1_mc())
+        
 
-        contact_id = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
+        if self.will_track:
+            twilio_id = str(uuid_v1_mc())
+            if len(content.to) >1:
+                raise HTTPException(status_code=400,detail='Can only track one phone at a time')
 
-        # Create the Call sent event
-        sent_event = CallEventORM.JSON(
-            event_id=str(uuid_v1_mc()),
-            call_sid=None,
-            call_id=twilio_id,
-            direction='O',
-            current_event=CallStatusEnum.RECEIVED.value,
-            description="Call initiated successfully",
-            date_event_received=now.isoformat(),
-            city=None,
-            country=None,
-            state=None
-        )
+            contact_id = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
 
-        tracking_data = {
-            'call_id': twilio_id,
-            'contact_id': contact_id,
-            'recipient': content.to,
-            'sender': content.from_,
-            'date_sent': now.isoformat(),
-            'last_update': now.isoformat(),
-            'expired_tracking_date': expired_tracking_date,
-            'call_current_status': CallStatusEnum.RECEIVED.value
-        }
+            # Create the Call sent event
+            sent_event = CallEventORM.JSON(
+                event_id=str(uuid_v1_mc()),
+                call_sid=None,
+                call_id=twilio_id,
+                direction='O',
+                current_event=CallStatusEnum.RECEIVED.value,
+                description="Call initiated successfully",
+                date_event_received=now.isoformat(),
+                city=None,
+                country=None,
+                state=None
+            )
 
-        return twilio_id,sent_event, tracking_data
+            tracking_data = {
+                'call_id': twilio_id,
+                'contact_id': contact_id,
+                'recipient': content.to[0],
+                'sender': content.from_,
+                'date_sent': now.isoformat(),
+                'last_update': now.isoformat(),
+                'expired_tracking_date': expired_tracking_date,
+                'call_current_status': CallStatusEnum.RECEIVED.value
+            }
+
+            return twilio_id,sent_event, tracking_data
 
 class SubjectParams: #NOTE rename to ReactiveParams
 
