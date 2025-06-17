@@ -86,12 +86,14 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         for i,content in enumerate(scheduler.content):
             message = content.model_dump()
             twilio_id = None
+            index = content.index if content.index != None else i
+
             if tracker.will_track:
                 twilio_id,event,tracking_event_data = tracker.pipe_sms_track_event_data(scheduler)
                 broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
                 broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
             
-            await taskManager.offload_task('normal',scheduler,0,i,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_id)
+            await taskManager.offload_task('normal',scheduler,0,index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_id)
         return taskManager.results
         
     @UseLimiter(limit_value="5000/minutes")
@@ -109,6 +111,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
             smsTemplate:SMSTemplate = self.assetService.sms[template]
             _,result=smsTemplate.build(self.configService.ASSET_LANG,content.data)
             message = {'body':result,'to':content.to,'from_':content.from_}
+            index = content.index if content.index != None else i
 
             twilio_id=None
             if tracker.will_track:
@@ -116,7 +119,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
                 broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
                 broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
 
-            await taskManager.offload_task('normal',scheduler,0,i,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_id)
+            await taskManager.offload_task('normal',scheduler,0,index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_id)
         return taskManager.results
 
 

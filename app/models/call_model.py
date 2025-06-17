@@ -1,17 +1,13 @@
-from pydantic import BaseModel, PrivateAttr, field_validator
-from app.classes.celery import SchedulerModel
+from pydantic import BaseModel, field_validator
+from app.classes.celery import SubContentBaseModel, SchedulerModel
 from app.utils.validation import url_validator,language_code_validator
 
-class BaseVoiceCallModel(BaseModel):
+class BaseVoiceCallModel(SubContentBaseModel):
     to:str
     from_:str =None
     timeout:int
     record:bool = True
     time_limit:int = 60
-    as_contact:bool = False # special_key
-    _contact:str|None =PrivateAttr(default=None)
-
-
 
 class OnGoingCustomVoiceCallModel(BaseVoiceCallModel):
     body:str

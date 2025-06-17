@@ -3,7 +3,7 @@ from enum import Enum
 from types import NoneType
 from fastapi import HTTPException,status
 from ordered_set import OrderedSet
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, PrivateAttr, field_validator
 from typing import Any,Iterable, Literal, Optional, TypedDict, NotRequired
 from app.definition._error import BaseError
 from pydantic import BaseModel
@@ -43,6 +43,11 @@ class TaskType(Enum):
 TaskTypeLiteral = Literal['rrule','solar','crontab','now','once']  #'timedelta','datetime'
 SenderType =Literal['raw','subs']
 
+class SubContentBaseModel(BaseModel):
+    as_contact:bool = False
+    index:int |None = None
+    _contact:str|list[str]|None =PrivateAttr(default=None)
+
 class SchedulerModel(BaseModel):
     sender_type:SenderType='raw'
     filter_error:bool=True
@@ -53,7 +58,7 @@ class SchedulerModel(BaseModel):
     task_option:Optional[dict] ={}
     priority:Literal[1,2,3,4,5] = 1
     queue_name:Optional[str] = None
-    content:Any
+    content: Any | list[Any]
     heaviness: Any = None
 
     @field_validator('heaviness')

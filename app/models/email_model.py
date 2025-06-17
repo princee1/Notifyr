@@ -4,7 +4,7 @@ from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from enum import Enum
 from tortoise import fields, models, Tortoise, run_async
 from tortoise.transactions import in_transaction
-from app.classes.celery import SchedulerModel
+from app.classes.celery import SchedulerModel, SubContentBaseModel
 from app.classes.email import MimeType
 from app.classes.mail_provider import SMTPErrorCode
 from app.utils.helper import uuid_v1_mc
@@ -13,7 +13,7 @@ from app.utils.validation import email_validator
 SCHEMA = 'emails'
 
 
-class EmailMetaModel(BaseModel):
+class EmailMetaModel(SubContentBaseModel):
     Subject: str
     From: str
     To: str | List[str]
@@ -26,9 +26,6 @@ class EmailMetaModel(BaseModel):
     Message_ID: str | None = None
     X_Email_ID: str | None = None
     as_individual:bool = False
-    as_contact:bool = False # special_key
-    _contact:str|None =PrivateAttr(default=None)
-    
 
     @model_validator(mode="after")
     def meta_validator(self) -> Self:
