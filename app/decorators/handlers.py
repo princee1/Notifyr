@@ -196,9 +196,9 @@ class ContactsHandler(Handler):
 
             return await function(*args, **kwargs)
 
-        except ContactNotExistsError:
+        except ContactNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
-                                'message': 'The user specified does not exists', })
+                                'message': f'The user: {e.id} specified does not exists', 'ids':[e.id]})
 
         except ContactAlreadyExistsError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
