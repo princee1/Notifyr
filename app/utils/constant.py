@@ -63,7 +63,7 @@ class SpecialKeyParameterConstant:
     WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
 
 class SpecialKeyAttributesConstant:
-    CONTACT_SPECIAL_KEY_ATTRIBUTES='contact'
+    CONTACT_SPECIAL_KEY_ATTRIBUTES='_contact'
 
 ########################                     ########################################
 

@@ -1,5 +1,5 @@
 from typing import List
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, PrivateAttr, field_validator
 from app.classes.celery import SchedulerModel
 from app.utils.validation import url_validator
 
@@ -7,6 +7,8 @@ class OnGoingBaseSMSModel(BaseModel):
     from_:str = None
     to:str
     as_contact:bool = False # special_key
+    _contact:str|None =PrivateAttr(default=None)
+
 
 
 class OnGoingTemplateSMSModel(OnGoingBaseSMSModel):

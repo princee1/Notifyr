@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, List, Literal, Optional, Self, TypeVar, TypedDict
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from enum import Enum
 from tortoise import fields, models, Tortoise, run_async
 from tortoise.transactions import in_transaction
@@ -27,6 +27,7 @@ class EmailMetaModel(BaseModel):
     X_Email_ID: str | None = None
     as_individual:bool = False
     as_contact:bool = False # special_key
+    _contact:str|None =PrivateAttr(default=None)
     
 
     @model_validator(mode="after")
