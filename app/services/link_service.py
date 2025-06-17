@@ -178,8 +178,8 @@ class LinkService(BaseService):
             str: The full URL of the tracking pixel.
         """
         contact_id = '' if not contact_id else f'&contact_id={contact_id}'
-        esp= esp =f'esp={esp}' if esp else esp = ''
-        tracking_path = f"/link/p/?message_id={email_id}{contact_id}{esp}"
+        esp=f'esp={esp}' if esp else esp = ''
+        tracking_path = f"/link/p/p.png/?message_id={email_id}{contact_id}{esp}"
         url = self.BASE_URL(tracking_path)
         if template == None:
             return '<img src=f"{url}" width="1" height="1" style="display:none;" alt="" />'
