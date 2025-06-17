@@ -7,7 +7,7 @@ from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
 from app.decorators.handlers import CeleryTaskHandler, ContactsHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
-from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, _to_otp_path, force_task_manager_attributes_pipe
+from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioPhoneNumberPipe, _to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.depends.class_dep import Broker, TwilioTracker
@@ -60,7 +60,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="10000/minutes")
     @UseRoles([Role.MFA_OTP])
     @UsePipe(_to_otp_path,force_task_manager_attributes_pipe)
-    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
+    @UsePipe(TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UseHandler(TemplateHandler)
     @UsePermission(JWTAssetPermission('sms'))
@@ -77,7 +77,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY,Role.MFA_OTP])    
     @UseHandler(CeleryTaskHandler,ContactsHandler)
-    @UsePipe(CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(CeleryTaskPipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UseGuard(CeleryTaskGuard(task_names=['task_send_custom_sms']))
@@ -97,7 +97,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
     @UseHandler(CeleryTaskHandler,TemplateHandler,ContactsHandler)
-    @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioFromPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))

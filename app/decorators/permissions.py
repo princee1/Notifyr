@@ -77,22 +77,24 @@ class JWTAssetPermission(Permission):
         self.template_type = template_type
         self.options = options
 
-    def permission(self,template:str, scheduler:SchedulerModel, authPermission:AuthPermission,template_type:RouteAssetType=None):
+    def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
         assetPermission = authPermission['allowed_assets']
         template_type = self.template_type if template_type == None else template_type
         permission = tuple(assetPermission)
-        if template:
-            content = scheduler.model_dump(include={'content'})
-            template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
-            template = self.assetService.asset_rel_path(template,template_type)
-            if not template.startswith(permission):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
-            
         if scheduler == None:
             return True
-        
-        content = flatten_dict(content)
-        return self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options)
+        if template:
+            for content in scheduler.model_dump(include={'content'}):
+                t = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
+                t = self.assetService.asset_rel_path(t,template_type)
+                if not t.startswith(permission):
+                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{t}] not allowed' })
+                
+                content = flatten_dict(content)
+                if not self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options):
+                    return False
+                        
+        return True
 
 
 class JWTQueryAssetPermission(JWTAssetPermission):

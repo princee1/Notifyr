@@ -9,10 +9,11 @@ from app.classes.template import TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import KeepAliveQuery
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
+from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
-from app.models.sms_model import OnGoingSMSModel
+from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
 from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
@@ -135,7 +136,7 @@ class RelayPipe(Pipe):
         return {'relay':relay}
     
 
-class TwilioFromPipe(Pipe):
+class TwilioPhoneNumberPipe(Pipe):
 
     def __init__(self, phone_number_name:str):
         super().__init__(True)
@@ -144,12 +145,13 @@ class TwilioFromPipe(Pipe):
 
         self.phone_number = self.configService[phone_number_name]
     
-    def pipe(self,scheduler:SchedulerModel=None,otpModel:OTPModel=None):
+    def pipe(self,scheduler:SMSCustomSchedulerModel | CallCustomSchedulerModel =None,otpModel:OTPModel=None):
 
         if scheduler!= None:
-            content = scheduler.content
-            content.from_ = self.setFrom_(content.from_)
-            content.to = self.twilioService.parse_to_phone_format(content.to)
+            for content in scheduler.content:
+                content.from_ = self.setFrom_(content.from_)
+                if not content.as_contact:
+                    content.to = self.twilioService.parse_to_phone_format(content.to)
             return {'scheduler':scheduler}
 
         if otpModel != None:

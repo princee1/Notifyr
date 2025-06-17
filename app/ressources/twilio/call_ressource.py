@@ -8,7 +8,7 @@ from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard, TrackGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
-from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioFromPipe, TwilioResponseStatusPipe, _to_otp_path, force_task_manager_attributes_pipe
+from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, _to_otp_path, force_task_manager_attributes_pipe
 from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.call_model import BaseVoiceCallModel, CallCustomSchedulerModel, CallStatusModel, CallTemplateSchedulerModel, CallTwimlSchedulerModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
@@ -66,7 +66,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseHandler(TemplateHandler)
     @UsePipe(_to_otp_path)
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
-    @UsePipe(force_task_manager_attributes_pipe,TwilioFromPipe('TWILIO_OTP_NUMBER'), TemplateParamsPipe('phone', 'xml'))
+    @UsePipe(force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'), TemplateParamsPipe('phone', 'xml'))
     @BaseHTTPRessource.Post('/otp/{template}',dependencies=[Depends(populate_response_with_request_id)])
     async def voice_relay_otp(self, template: str, otpModel: OTPModel, request: Request,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         phoneTemplate: PhoneTemplate = self.assetService.phone[template]
@@ -77,7 +77,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
-    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'),)
+    @UsePipe(TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),)
     @UsePipe(KeepAliveResponsePipe, before=False)
     @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
     @BaseHTTPRessource.Get('/otp/', dependencies=[Depends(populate_response_with_request_id)])
@@ -99,7 +99,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePermission(JWTAssetPermission('phone'))
     @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
-    @UsePipe(TemplateParamsPipe('phone', 'xml'), CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(TemplateParamsPipe('phone', 'xml'), CeleryTaskPipe, TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
     async def voice_template(self, template: str, scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
@@ -119,7 +119,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
-    @UsePipe(CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(CeleryTaskPipe, TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']),TrackGuard)
     @UseHandler(CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
@@ -141,7 +141,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
-    @UsePipe(CeleryTaskPipe, TwilioFromPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(CeleryTaskPipe, TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']),TrackGuard)
     @UseHandler(CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
@@ -166,7 +166,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.MFA_OTP])
     @UseGuard(RegisteredContactsGuard)
-    @UsePipe(TwilioFromPipe('TWILIO_OTP_NUMBER'))
+    @UsePipe(TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(KeepAliveResponsePipe, before=False)
     @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], dependencies=[Depends(populate_response_with_request_id)],mount=False)
