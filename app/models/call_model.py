@@ -1,4 +1,5 @@
-from pydantic import BaseModel, field_validator
+from typing import Self
+from pydantic import BaseModel, field_validator, model_validator
 from app.classes.celery import SubContentBaseModel, SchedulerModel
 from app.utils.validation import url_validator,language_code_validator
 
@@ -8,6 +9,12 @@ class BaseVoiceCallModel(SubContentBaseModel):
     timeout:int
     record:bool = True
     time_limit:int = 60
+
+    @model_validator(mode="after")
+    def to_validator(self:Self)->Self:
+        if isinstance(self.to,str):
+            self.to = [self.to]  
+        return self
 
 class OnGoingCustomVoiceCallModel(BaseVoiceCallModel):
     body:str

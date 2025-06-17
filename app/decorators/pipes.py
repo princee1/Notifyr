@@ -108,10 +108,10 @@ class CeleryTaskPipe(Pipe):
         return {'scheduler':scheduler}
     
 class ContactsIdPipe(Pipe):
-        @InjectInMethod
-        def __init__(self, contactsService:ContactsService):
+
+        def __init__(self, ):
             super().__init__(True)
-            self.contactsService = contactsService
+            self.contactsService = Get(ContactsService)
 
         def pipe(self,contact_id:str):
             # TODO check if it is 
@@ -151,7 +151,7 @@ class TwilioPhoneNumberPipe(Pipe):
             for content in scheduler.content:
                 content.from_ = self.setFrom_(content.from_)
                 if not content.as_contact:
-                    content.to = self.twilioService.parse_to_phone_format(content.to)
+                    content.to = [self.twilioService.parse_to_phone_format(to) for to in content.to]
             return {'scheduler':scheduler}
 
         if otpModel != None:

@@ -1,11 +1,18 @@
-from typing import List
-from pydantic import BaseModel, field_validator
+from typing import List, Self
+from pydantic import BaseModel, field_validator, model_validator
 from app.classes.celery import SubContentBaseModel, SchedulerModel
 from app.utils.validation import url_validator
 
 class OnGoingBaseSMSModel(SubContentBaseModel):
     from_:str = None
-    to:str
+    to:str | list[str]
+
+    @model_validator(mode="after")
+    def to_validator(self:Self)->Self:
+        if isinstance(self.to,str):
+            self.to = [self.to]
+        return self
+        
 
 class OnGoingTemplateSMSModel(OnGoingBaseSMSModel):
     data:dict

@@ -226,37 +226,43 @@ class SMSService(BaseTwilioCommunication):
     def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None) -> MessageInstance:
         url = self.set_url(subject_id, twilio_tracking)
         now = datetime.now(timezone.utc).isoformat()
+        results = []
+        events= []
+        for to in messageData['to']:
+            data = messageData.copy()
+            data['to'] = to
+            try:
+                #if self.configService.celery_env == CeleryMode.worker:
+                result = self.messages.create(provide_feedback=True, send_as_mms=True, status_callback=url, **data)
+                # else:
+                #     result = self.messages.create_async(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
+                #     result = await result
+                description = f'Sent request to third-party API'
+                status = SMSStatusEnum.SENT.value
+            
+            except TwilioRestException as e:
+                result = None
+                description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
+                status = SMSStatusEnum.FAILED.value
 
-        try:
-            #if self.configService.celery_env == CeleryMode.worker:
-            result = self.messages.create(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
-            # else:
-            #     result = self.messages.create_async(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
-            #     result = await result
-            description = f'Sent request to third-party API'
-            status = SMSStatusEnum.SENT.value
-        
-        except TwilioRestException as e:
-            result = None
-            description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
-            status = SMSStatusEnum.FAILED.value
+            except Exception as e:
+                result = None
+                description = f'Failed to send the request'
+                status = SMSStatusEnum.FAILED.value
+            finally:
+                if twilio_tracking and isinstance(result, MessageInstance):
+                    event = SMSEventORM.JSON(
+                        event_id=uuid_v1_mc(),
+                        sms_sid=result.sid,
+                        direction='O',
+                        current_event=status,
+                        description=description,
+                        date_event_received=now
+                    )
+                    events.append(events)
+                results.append(result)
 
-        except Exception as e:
-            result = None
-            description = f'Failed to send the request'
-            status = SMSStatusEnum.FAILED.value
-        finally:
-            if twilio_tracking and isinstance(result, MessageInstance):
-                event = SMSEventORM.JSON(
-                    event_id=uuid_v1_mc(),
-                    sms_sid=result.sid,
-                    direction='O',
-                    current_event=status,
-                    description=description,
-                    date_event_received=now
-                )
-
-            return (result,(StreamConstant.TWILIO_EVENT_STREAM_SMS,event),{})
+            return (results,(StreamConstant.TWILIO_EVENT_STREAM_SMS,events),{})
         
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
     def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None):
@@ -336,38 +342,51 @@ class CallService(BaseTwilioCommunication):
         return self._create_call(call_details,subject_id,twilio_tracking)
 
     def _create_call(self, details: dict,subject_id:str=None,twilio_tracking:str=None):
+
         url = self.set_url(subject_id,twilio_tracking)
         now = datetime.now(timezone.utc).isoformat()
-        
-        try:
-            result = None
-            result = self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
 
-            # if self.configService.celery_env == CeleryMode.worker:
-            #     result = self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
-            # else:
-            #     result = self.calls.create_async(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
-            #     result = await result
-            description = f'Sent request to third-party API'
-            status = CallStatusEnum.SENT.value
-        except TwilioRestException as e:
-            result = None
-            description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
-            status = SMSStatusEnum.FAILED.value
+        events= []
+        results = []
 
-        except Exception as e:
-            result=None
-            description = f'Failed to send the request'
-            status =CallStatusEnum.FAILED.value
-        finally:
-           
-            if twilio_tracking and isinstance(result,CallInstance):
+        for to in details['to']:
+
+
+            try:
+                data = details.copy()
+                data['to'] = to
+                result = None
+                result = self.calls.create(**data, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+
+                # if self.configService.celery_env == CeleryMode.worker:
+                #     result = self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+                # else:
+                #     result = self.calls.create_async(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+                #     result = await result
+                description = f'Sent request to third-party API'
+                status = CallStatusEnum.SENT.value
+            except TwilioRestException as e:
+                result = None
+                description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
+                status = SMSStatusEnum.FAILED.value
+
+            except Exception as e:
+                result=None
+                description = f'Failed to send the request'
+                status =CallStatusEnum.FAILED.value
+            finally:
+            
+                if twilio_tracking and isinstance(result,CallInstance):
+                    
+                    event = CallEventORM.JSON(event_id=str(uuid_v1_mc()),call_sid =result.sid ,call_id=twilio_tracking,direction='O',current_event=status,city=None,country=None,state=None,
+                                            date_event_received=now, description=description)
                 
-                event = CallEventORM.JSON(event_id=str(uuid_v1_mc()),call_sid =result.sid ,call_id=twilio_tracking,direction='O',current_event=status,city=None,country=None,state=None,
-                                          date_event_received=now, description=description)
-            
-            return (result,(StreamConstant.TWILIO_EVENT_STREAM_CALL,event),{})
-            
+                    events.append(event)
+                results.append(result)
+                
+                
+                return (results,(StreamConstant.TWILIO_EVENT_STREAM_CALL,events),{})
+                
     def update_voice_call(self):
         ...
 

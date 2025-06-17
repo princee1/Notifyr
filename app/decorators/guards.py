@@ -186,33 +186,33 @@ class CarrierTypeGuard(Guard):
     
     async def guard(self,otpModel:OTPModel=None,contact:ContactORM=None,scheduler:SchedulerModel=None):
         if otpModel != None:
-            phone_number = [otpModel.to]
+            phone_number = [[otpModel.to]]
         elif contact != None:
-            phone_number = [contact.phone]
+            phone_number = [[contact.phone]]
         else:
 
-            phone_number = [content.to for content in scheduler.content]
-
-        for pn in phone_number:
-            status_code,data = await self.twilioService.async_phone_lookup(phone_number,True)
-            if status_code != 200:
-                return False,f'Callee Information not found: {pn}'
-            
-            carrier:dict= data.get('carrier',None)
-            if carrier == None:
-                return False,f'Carrier Information not found: {pn}'
-
-            carrier_type = carrier.get('type','unknown')
-            if carrier_type ==None:
-                carrier_type = 'unknown'
+            phone_number = [[to for to in content.to] for content in scheduler.content]
+        for _phone_number in phone_number:
+            for pn in _phone_number:
+                status_code,data = await self.twilioService.async_phone_lookup(phone_number,True)
+                if status_code != 200:
+                    return False,f'Callee Information not found: {pn}'
                 
-            if carrier_type == 'voip' and not self.accept_voip:
-                return False,f'Carrier Type is Voip: {pn}'
-            if carrier_type == 'landline' and not self.accept_landline:
-                return False,f'Carrier Type is Landline: {pn}'
-            if carrier_type == 'unknown' and not self.accept_unknown:
-                return False,f'Carrier Type is Unknown: {pn}'
-            
+                carrier:dict= data.get('carrier',None)
+                if carrier == None:
+                    return False,f'Carrier Information not found: {pn}'
+
+                carrier_type = carrier.get('type','unknown')
+                if carrier_type ==None:
+                    carrier_type = 'unknown'
+                    
+                if carrier_type == 'voip' and not self.accept_voip:
+                    return False,f'Carrier Type is Voip: {pn}'
+                if carrier_type == 'landline' and not self.accept_landline:
+                    return False,f'Carrier Type is Landline: {pn}'
+                if carrier_type == 'unknown' and not self.accept_unknown:
+                    return False,f'Carrier Type is Unknown: {pn}'
+                
         return True,''
 
 
