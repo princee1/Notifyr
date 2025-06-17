@@ -390,6 +390,7 @@ class ContactToInfoPipe(Pipe):
                     temp.append(v)
                 if c:
                     continue
+                val = temp
 
             else:
                 contact_id = None

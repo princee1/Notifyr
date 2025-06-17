@@ -167,7 +167,7 @@ class LinkService(BaseService):
         base64_img = b64_encode(img_io.read())
         return f'data:image/png;base64,{base64_img}'
     
-    def create_tracking_pixel(self,template:HTMLTemplate, email_id: str,contact_id:str=None,esp=None) -> str:
+    def create_tracking_pixel(self,template:HTMLTemplate | str |None, email_id: str,contact_id:str=None,esp=None) -> str:
         """
         Generate a tracking pixel URL for the given email ID.
 
@@ -178,13 +178,16 @@ class LinkService(BaseService):
             str: The full URL of the tracking pixel.
         """
         contact_id = '' if not contact_id else f'&contact_id={contact_id}'
-        if esp:
-            esp =f'esp={esp}'
-        else:
-            esp = ''
+        esp= esp =f'esp={esp}' if esp else esp = ''
         tracking_path = f"/link/p/?message_id={email_id}{contact_id}{esp}"
         url = self.BASE_URL(tracking_path)
-        template.add_tracking_pixel(url)
+        if template == None:
+            return '<img src=f"{url}" width="1" height="1" style="display:none;" alt="" />'
+        elif isinstance(template,HTMLTemplate):
+            template.add_tracking_pixel(url)
+        else:
+            return template
+
 
     
     def create_link_re(self,message_tracking_id, contact_id=None,add_params={}):

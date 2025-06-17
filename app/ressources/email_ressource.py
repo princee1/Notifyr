@@ -108,17 +108,19 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
             tracking_event_data = tracker.pipe_email_data(customEmail_content)
             content = (customEmail_content.html_content, customEmail_content.text_content)
+            email_id = tracking_event_data['email_id']
             meta = customEmail_content.meta.model_dump()
             if tracker.will_track:
                 add_params = self._get_esp(customEmail_content.meta.To[0])
-                tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(tracking_event_data['email_id'],add_params=add_params) # FIXME if its a list change it 
+                tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(email_id,add_params=add_params) # FIXME if its a list change it 
 
                 event_tracking,email_tracking = tracking_event_data['track']
                 broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
                 broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
                 content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
+                content = content[0],self.linkService.create_tracking_pixel(content[1],email_id=email_id,contact_id=tracking_event_data['contact_id'],esp=add_params['esp'])
 
-            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,tracking_event_data['email_id'],contact_id =None)
+            await taskManager.offload_task('normal',scheduler,0,i,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,email_id,contact_id =None)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])

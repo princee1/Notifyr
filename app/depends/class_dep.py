@@ -81,7 +81,7 @@ class EmailTracker(TrackerInterface):
                 contact_id = contact_id[0]
                                         
             temp = self._create_tracking_event_data(spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=contact_id)
-            temp ={'track':temp}
+            temp ={'track':temp,'contact_id':contact_id}
             track.update(temp)
         
         return  track 
