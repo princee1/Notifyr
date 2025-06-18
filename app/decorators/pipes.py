@@ -150,7 +150,7 @@ class TwilioPhoneNumberPipe(Pipe):
         if scheduler!= None:
             for content in scheduler.content:
                 content.from_ = self.setFrom_(content.from_)
-                if not content.as_contact:
+                if not content.as_contact: # if not content.sender_type == 'raw'
                     content.to = [self.twilioService.parse_to_phone_format(to) for to in content.to]
             return {'scheduler':scheduler}
 
@@ -361,12 +361,17 @@ class ContactToInfoPipe(Pipe,PointerIterator):
             if ptr == None:
                 ...
             
-            if not getattr(ptr,'as_contact',False):
+            if not getattr(ptr,'as_contact',False): # if getattr(ptr,'sender_type','raw') =='raw'
                 if scheduler.filter_error:
                     filtered_content.append(content)
                 continue
             
             val = self.val(ptr)
+
+            # if getattr(ptr,'sender_type','raw') == 'subs':
+            #     val = ...(val) # TODO subs
+            #     setattr(ptr,'sender_type','raw')
+            
             if val== None:
                 ...
 

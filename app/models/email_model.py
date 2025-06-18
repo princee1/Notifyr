@@ -29,6 +29,9 @@ class EmailMetaModel(SubContentBaseModel):
     
     @model_validator(mode="after")
     def To_validator(self:Self)->Self:
+        if self.sender_type == 'subs':
+            return self
+        
         if isinstance(self.To,str):
             if not self.as_contact and not email_validator(self.To):
                 raise ValueError('Email format not valid. Hint: It is a contact set as_contact=True')

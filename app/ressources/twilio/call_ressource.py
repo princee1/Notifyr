@@ -99,7 +99,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePermission(JWTAssetPermission('phone'))
     @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
-    @UsePipe(TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','data',False), CeleryTaskPipe, TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(CeleryTaskPipe,TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','data',False),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
     async def voice_template(self, template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
@@ -121,7 +121,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
-    @UsePipe(CeleryTaskPipe, TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']),TrackGuard)
     @UseHandler(CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
@@ -146,7 +146,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
-    @UsePipe(CeleryTaskPipe, TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']),TrackGuard)
     @UseHandler(CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)

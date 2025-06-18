@@ -9,6 +9,8 @@ class OnGoingBaseSMSModel(SubContentBaseModel):
 
     @model_validator(mode="after")
     def to_validator(self:Self)->Self:
+        if self.sender_type == 'subs':
+            return self
         if isinstance(self.to,str):
             self.to = [self.to]
         return self

@@ -41,16 +41,17 @@ class TaskType(Enum):
     ONCE= 'once' # direct task call
 
 TaskTypeLiteral = Literal['rrule','solar','crontab','now','once']  #'timedelta','datetime'
-SenderType =Literal['raw','subs']
+SenderType =Literal['raw','subs','contact']
 
 class SubContentBaseModel(BaseModel):
     as_contact:bool = False
     index:int |None = None
     will_track:bool = False
+    sender_type:SenderType='raw'
     _contact:str|list[str]|None =PrivateAttr(default=None)
 
+
 class SchedulerModel(BaseModel):
-    sender_type:SenderType='raw'
     filter_error:bool=True
     schedule_name:Optional[str] = None
     timezone:Optional[str] = None
