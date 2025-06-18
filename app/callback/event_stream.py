@@ -183,9 +183,9 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
 
                 case EmailStatus.DELIVERED.value:
 
-                    if email_status not in delivered_per_email:
+                    if email_id not in delivered_per_email:
                         analytics[esp_provider]['delivered'] += factor
-                        delivered_per_email[email_status] = True
+                        delivered_per_email[email_id] = True
                     
                 case EmailStatus.OPENED.value | EmailStatus.LINK_CLICKED.value:
                     # Ensure only one open event is tracked per email_id
@@ -228,6 +228,7 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
             valid_entries.add(ids)
         except Exception as e:
             print(e)
+            traceback.print_exc()
             invalid_entries.add(ids)
 
     email_tracker = await EmailTrackingORM.filter(email_id__in=email_status.keys())
