@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.email import EmailInvalidFormatError
-from app.classes.template import TemplateNotFoundError
+from app.classes.template import Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import KeepAliveQuery
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
@@ -22,7 +22,7 @@ from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.constant import SpecialKeyAttributesConstant
-from app.utils.helper import AsyncAPIFilterInject, copy_response
+from app.utils.helper import AsyncAPIFilterInject, PointerIterator, copy_response
 from app.utils.validation import email_validator, phone_number_validator
 from app.utils.helper import APIFilterInject
 from app.depends.variables import parse_to_phone_format
@@ -324,14 +324,14 @@ async def force_task_manager_attributes_pipe(taskManager:TaskManager):
 
     return {'taskManager':taskManager}
 
-class ContactToInfoPipe(Pipe):
+class ContactToInfoPipe(Pipe,PointerIterator):
 
     def __init__(self,info_key:str,parse_key:str,will_filter:bool=False,callback:Callable=None,split:str='.' ):
         super().__init__(True)
         self.info_key= info_key
         self.will_filter = will_filter
         self.callback = callback
-        self.iterator = parse_key.split(split)
+        PointerIterator.__init__(self,parse_key,split=split)
     
     async def pipe(self,scheduler:SchedulerModel):
         
@@ -340,22 +340,17 @@ class ContactToInfoPipe(Pipe):
         #     return {}
         
         for content in scheduler.content:
-            ptr = content
-            for sk in self.iterator[:-1]:
-                next_ptr =getattr(ptr,sk,None) 
-                if next_ptr == None:
-                    ...
-                ptr = next_ptr
-                       
+            
+            ptr = self.ptr(content)    
             if ptr == None:
                 ...
             
             if not getattr(ptr,'as_contact',False):
-                filtered_content.append(content)
+                if self.will_filter:
+                    filtered_content.append(content)
                 continue
-
-            val = getattr(ptr,self.iterator[-1],None)
             
+            val = self.val(ptr)
             if val== None:
                 ...
 
@@ -398,12 +393,54 @@ class ContactToInfoPipe(Pipe):
             else:
                 contact_id = None
             
-            setattr(ptr,self.iterator[-1],val)
+            setattr(ptr,self.data_key,val)
             setattr(ptr,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,contact_id)
-
-            filtered_content.append(content)
+            if self.will_filter:
+                filtered_content.append(content)
         
-        scheduler.content = filtered_content
+        if len(filtered_content) > 0:
+            scheduler.content = filtered_content
         
         return {'scheduler':scheduler}
+
+
+class TemplateValidationInjectionPipe(Pipe,PointerIterator):
+    
+    def __init__(self,template_type:RouteAssetType ,data_key:str,will_filter:bool = False,will_validate:bool = True,split:str='.'):
+        super().__init__(True)
+        PointerIterator.__init__(self,data_key,split)
+        self.will_filter = will_filter
+        self.template_type=template_type
+        self.will_validate= will_validate
+        self.assetService = Get(AssetService)
         
+    def pipe(self,template:str,scheduler:SchedulerModel)->Template:
+        assets = getattr(self.assetService,self.template_type,None)
+        if assets == None:
+            raise TemplateAssetError
+        
+        template:Template = assets[template]
+        filtered_content =[]
+
+        if self.will_validate:
+            for content in scheduler.content:
+                ptr = self.ptr(content)  
+                if ptr == None:
+                    ...
+
+                val = self.val(ptr)
+                if val == None:
+                    ...
+                
+                try:
+                    val = template.validate(val)
+                    if self.will_filter:
+                        filtered_content.append(content)
+                except Exception as e:
+                    if not self.will_filter:
+                        raise e
+            
+            if len(filtered_content) >0:
+                scheduler.content = filtered_content
+                            
+        return {'template':template,'scheduler':scheduler}

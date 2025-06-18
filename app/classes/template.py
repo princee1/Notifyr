@@ -114,7 +114,7 @@ class Template(Asset):
 
         Override this function and call the super value
         """
-        return self.validate(data)
+        ...
 
     def translate(self, targetLang: str, text: str) -> str:
         """
@@ -122,7 +122,7 @@ class Template(Asset):
         """
         pass
 
-    def validate(self, value: Any) -> bool | None | Exception:
+    def validate(self, value: Any) -> Any | None | Exception:
         """
         Validate the data injected into the template
         """
@@ -215,7 +215,7 @@ class MLTemplate(Template):
                 print(e.args)  
                 raise TemplateBuildError          
 
-    def validate(self, document: dict):
+    def _validate(self, document: dict):
         """See: https://docs.python-cerberus.org/errors.html"""
         if self.schema == None or self.schema == {}:
             return True,document
@@ -276,10 +276,13 @@ class MLTemplate(Template):
         return translated.text
 
     def build(self,  data,target_lang):
-        is_valid, data = super().build(target_lang, data)
+        ...
+    
+    def validate(self, value):
+        is_valid, data = self._validate(value)
         if not is_valid:
             raise TemplateValidationError(data)
-        
+        return data
 
 class HTMLTemplate(MLTemplate):
 

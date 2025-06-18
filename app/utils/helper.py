@@ -164,6 +164,31 @@ def get_value_in_list(data,index):
     except:
         return None
 
+
+class PointerIterator:
+    def __init__(self,var:str,split:str='.'):
+        if var== None:
+            raise ValueError(f'var cant be None')
+        self.ptr_iterator = var.split(split)
+    
+    def ptr(self,value:Any):
+        ptr = value
+        for sk in self.ptr_iterator[:-1]:
+            if ptr == None:
+                break
+            next_ptr =getattr(ptr,sk,None) 
+            ptr = next_ptr
+        return ptr
+    
+    @property
+    def data_key(self):
+        return self.ptr_iterator[-1]
+    
+    def val(self,ptr):
+        return getattr(ptr,self.data_key,None)
+
+
+
 ################################   ** Parsing Helper **      #################################
 
 
