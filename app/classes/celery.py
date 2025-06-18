@@ -46,6 +46,7 @@ SenderType =Literal['raw','subs']
 class SubContentBaseModel(BaseModel):
     as_contact:bool = False
     index:int |None = None
+    will_track:bool = False
     _contact:str|list[str]|None =PrivateAttr(default=None)
 
 class SchedulerModel(BaseModel):
@@ -60,6 +61,7 @@ class SchedulerModel(BaseModel):
     queue_name:Optional[str] = None
     content: Any | list[Any]
     heaviness: Any = None
+    errors:dict[int,dict|str] = PrivateAttr(dict)
 
     @field_validator('heaviness')
     def check_heaviness(cls, heaviness:Any):

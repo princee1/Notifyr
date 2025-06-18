@@ -78,8 +78,18 @@ class TaskManager():
         meta.pop('tt',None)
         return {
             'meta': meta,
-            'results': self.task_result
+            'results': self.task_result,
+            'errors':self.errors
         }
+    
+    @property
+    def errors(self):
+        if len(self.taskConfig) == 0:
+            return {}
+        elif isinstance(self.taskConfig[0]['scheduler'],s):
+            return {}
+        else:
+            return self.taskConfig[0]['scheduler'].errors
 
     @property
     def schedule_ttd(self):

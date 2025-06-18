@@ -47,6 +47,15 @@ class EmailTracker(TrackerInterface):
         randval = random.getrandbits(8)
         return f"<{timeval}.{randval}.{email_id}@{self.configService.HOSTNAME}>"
             
+
+    def pipe_to(self,content:EmailTemplateModel|CustomEmailModel):
+        if not content.meta.as_individual and  len(content.meta.To) >1 and self.will_track:
+                return False
+        elif not content.meta.as_individual:
+            content.meta.To = [','.join(content.meta.To)]
+        
+        return True
+
     def pipe_email_data(self,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
         
         spam_confidence,spam_label = spam        
@@ -56,6 +65,8 @@ class EmailTracker(TrackerInterface):
 
         emailMetaData.Message_ID = []
         # emailMetaData.X_Email_ID = []
+        if not self.pipe_to(content):
+            yield None
 
         for i,to in enumerate(emailMetaData.To):
             temp_email_id = str(uuid_v1_mc())
@@ -69,10 +80,7 @@ class EmailTracker(TrackerInterface):
             emailMetaData.Message_ID.append(message_id)
 
             if self.will_track:
-                
-                # if len(emailMetaData.To) >1:
-                #     raise HTTPException(status_code=400,detail='Can only track one email at a time')
-                
+                                
                 email_id = temp_email_id
                 track['email_id'] = email_id
                 emailMetaData.X_Email_ID.append(email_id)

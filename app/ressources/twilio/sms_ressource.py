@@ -7,7 +7,7 @@ from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
 from app.decorators.handlers import CeleryTaskHandler, ContactsHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
-from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioPhoneNumberPipe, _to_otp_path, force_task_manager_attributes_pipe
+from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, _to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.depends.class_dep import Broker, TwilioTracker
@@ -21,7 +21,7 @@ from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
 from app.services.twilio_service import SMSService
 from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
-from app.depends.funcs_dep import get_task, verify_twilio_token,populate_response_with_request_id,as_async_query
+from app.depends.funcs_dep import get_task, get_template, verify_twilio_token,populate_response_with_request_id,as_async_query
 from app.utils.constant import SpecialKeyAttributesConstant, StreamConstant
 from app.utils.helper import APIFilterInject, uuid_v1_mc
 
@@ -84,7 +84,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_simple_message(self,scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager:Annotated[TaskManager,Depends(get_task)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission),):
         for i,content in enumerate(scheduler.content):
-            message = content.model_dump(exclude=('as_contact','index'))
+            message = content.model_dump(exclude=('as_contact','index','will_track'))
             twilio_ids = []
             index = content.index if content.index != None else i
 
@@ -101,17 +101,16 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
     @UseHandler(CeleryTaskHandler,TemplateHandler,ContactsHandler)
-    @UsePipe(TemplateParamsPipe('sms','xml'),CeleryTaskPipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(TemplateParamsPipe('sms','xml'),TemplateValidationInjectionPipe('sms','data'),CeleryTaskPipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UseGuard(CeleryTaskGuard(['task_send_template_sms']))
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
-    async def sms_template(self,template:str,scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
+    async def sms_template(self,template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
         for i,content in enumerate(scheduler.content):
 
-            smsTemplate:SMSTemplate = self.assetService.sms[template]
-            _,result=smsTemplate.build(self.configService.ASSET_LANG,content.data)
+            _,result=template.build(self.configService.ASSET_LANG,content.data)
             message = {'body':result,'to':content.to,'from_':content.from_}
             index = content.index if content.index != None else i
 

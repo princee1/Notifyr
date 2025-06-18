@@ -38,11 +38,6 @@ class EmailMetaModel(SubContentBaseModel):
         for email in self.To:
             if not self.as_contact and not email_validator(email):
                 raise ValueError('Email format not valid. Hint: It is a contact set as_contact=True')
-            
-        if self.as_individual:   
-            return self
-        
-        self.To = [','.join(self.To)]
         return self
             
     @model_validator(mode="after")

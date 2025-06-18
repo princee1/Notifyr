@@ -107,14 +107,15 @@ class Template(Asset):
         """
         pass
 
-    def build(self, lang, data) -> Any:
+    def build(self, lang, data,validate=False) -> Any:
         """
         Build a representation of the template with injected, verified and translated value and return 
         a content output
 
         Override this function and call the super value
         """
-        ...
+        if validate:
+            self.validate(data)
 
     def translate(self, targetLang: str, text: str) -> str:
         """
@@ -275,8 +276,8 @@ class MLTemplate(Template):
         translated = self.translator.translate(text, dest=targetLang, src=src)
         return translated.text
 
-    def build(self,  data,target_lang):
-        ...
+    # def build(self,  data,target_lang,validate=False):
+    #     ...
     
     def validate(self, value):
         is_valid, data = self._validate(value)
@@ -450,8 +451,8 @@ class TWIMLTemplate(MLTemplate):
             raise SkipTemplateCreationError('Response tag not given')
         self.content_to_inject = response.prettify(formatter="html")
     
-    def build(self, data, target_lang):
-        super().build(data, target_lang)
+    def build(self, data, target_lang,validate=False):
+        super().build(data, target_lang,validate)
         body = self.inject(data)
         if False: 
             body = self.translate(target_lang,body) # TODO

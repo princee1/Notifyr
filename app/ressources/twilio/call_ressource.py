@@ -8,7 +8,7 @@ from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard, TrackGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
-from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, _to_otp_path, force_task_manager_attributes_pipe
+from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, KeepAliveResponsePipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, _to_otp_path, force_task_manager_attributes_pipe
 from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.call_model import BaseVoiceCallModel, CallCustomSchedulerModel, CallStatusModel, CallTemplateSchedulerModel, CallTwimlSchedulerModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
@@ -23,7 +23,7 @@ from app.services.twilio_service import CallService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
-from app.depends.funcs_dep import get_client,Get_Contact, get_task, verify_twilio_token, as_async_query, populate_response_with_request_id
+from app.depends.funcs_dep import get_client,Get_Contact, get_task, get_template, verify_twilio_token, as_async_query, populate_response_with_request_id
 from app.depends.class_dep import Broker, KeepAliveQuery, SubjectParams, TwilioTracker
 from app.utils.constant import StreamConstant
 from app.utils.helper import uuid_v1_mc
@@ -99,15 +99,14 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePermission(JWTAssetPermission('phone'))
     @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
-    @UsePipe(TemplateParamsPipe('phone', 'xml'), CeleryTaskPipe, TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
+    @UsePipe(TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','data',False), CeleryTaskPipe, TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),ContactToInfoPipe('phone','to'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
-    async def voice_template(self, template: str, scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
-        phoneTemplate: PhoneTemplate = self.assetService.phone[template]
+    async def voice_template(self, template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         
         for i,content in enumerate(scheduler.content):
-            content = content.model_dump(exclude=('as_contact','index'))
-            _, result = phoneTemplate.build(content, ...)
+            content = content.model_dump(exclude=('as_contact','index','will_track'))
+            _, result = template.build(content, ...,True)
             twilio_ids = []
             index = content.index if content.index != None else i
 
@@ -131,7 +130,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
         for i,content in enumerate(scheduler.content):
         
-            details = content.model_dump(exclude={'url','as_contact','index'})
+            details = content.model_dump(exclude={'url','as_contact','index','will_track'})
             url = content.url
             twilio_ids = []
             index = content.index if content.index != None else i
@@ -155,7 +154,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_custom(self, scheduler: CallCustomSchedulerModel, request: Request, response: Response, broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         for i,content in enumerate(scheduler.content):
             details = content.model_dump(
-                exclude={'body', 'voice', 'language', 'loop','as_contact','index'})
+                exclude={'body', 'voice', 'language', 'loop','as_contact','index','will_track'})
             body = content.body
             voice = content.voice
             lang = content.language

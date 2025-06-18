@@ -4,7 +4,7 @@ from app.classes.celery import SubContentBaseModel, SchedulerModel
 from app.utils.validation import url_validator,language_code_validator
 
 class BaseVoiceCallModel(SubContentBaseModel):
-    to:str
+    to:str |list[str]
     from_:str =None
     timeout:int
     record:bool = True

@@ -326,12 +326,28 @@ async def force_task_manager_attributes_pipe(taskManager:TaskManager):
 
 class ContactToInfoPipe(Pipe,PointerIterator):
 
-    def __init__(self,info_key:str,parse_key:str,will_filter:bool=False,callback:Callable=None,split:str='.' ):
+    def __init__(self,info_key:str,parse_key:str,callback:Callable=None,split:str='.' ):
         super().__init__(True)
         self.info_key= info_key
-        self.will_filter = will_filter
         self.callback = callback
         PointerIterator.__init__(self,parse_key,split=split)
+    
+
+    async def get_info_key(self,val,scheduler):
+        contact:ContactSummary = await ContactSummaryORMCache.Cache(val,val)
+        if contact == None:
+            if not scheduler.filter_error:
+                raise ContactNotExistsError(val)
+            else:
+                return None
+        piped_info_key = contact.get(self.info_key,None)
+        if piped_info_key == None:
+            if not scheduler.filter_error:
+                raise ContactMissingInfoKeyError(self.info_key)
+            else:
+                return None
+        else:
+            return piped_info_key
     
     async def pipe(self,scheduler:SchedulerModel):
         
@@ -346,7 +362,7 @@ class ContactToInfoPipe(Pipe,PointerIterator):
                 ...
             
             if not getattr(ptr,'as_contact',False):
-                if self.will_filter:
+                if scheduler.filter_error:
                     filtered_content.append(content)
                 continue
             
@@ -354,25 +370,9 @@ class ContactToInfoPipe(Pipe,PointerIterator):
             if val== None:
                 ...
 
-            async def getter(val):
-                contact:ContactSummary = await ContactSummaryORMCache.Cache(val,val)
-                if contact == None:
-                    if self.will_filter:
-                        raise ContactNotExistsError(val)
-                    else:
-                        return None
-                piped_info_key = contact.get(self.info_key,None)
-                if piped_info_key == None:
-                    if self.will_filter:
-                        raise ContactMissingInfoKeyError(self.info_key)
-                    else:
-                        return None
-                else:
-                    return piped_info_key
-
             if isinstance(val,str):
                 contact_id = val
-                val = await getter(val)
+                val = await self.get_info_key(val,scheduler)
                 if val == None:
                     continue
             
@@ -381,7 +381,7 @@ class ContactToInfoPipe(Pipe,PointerIterator):
                 temp = []
                 c = False
                 for v in val:
-                    v = await getter(v)
+                    v = await self.get_info_key(v,scheduler)
                     if v ==None:
                         c = True
                         break
@@ -395,7 +395,7 @@ class ContactToInfoPipe(Pipe,PointerIterator):
             
             setattr(ptr,self.data_key,val)
             setattr(ptr,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,contact_id)
-            if self.will_filter:
+            if scheduler.filter_error:
                 filtered_content.append(content)
         
         if len(filtered_content) > 0:
@@ -403,13 +403,13 @@ class ContactToInfoPipe(Pipe,PointerIterator):
         
         return {'scheduler':scheduler}
 
-
 class TemplateValidationInjectionPipe(Pipe,PointerIterator):
     
-    def __init__(self,template_type:RouteAssetType ,data_key:str,will_filter:bool = False,will_validate:bool = True,split:str='.'):
+    SCHEDULER_TEMPLATE_ERROR_KEY = 'template'
+
+    def __init__(self,template_type:RouteAssetType ,data_key:str,will_validate:bool = True,split:str='.'):
         super().__init__(True)
         PointerIterator.__init__(self,data_key,split)
-        self.will_filter = will_filter
         self.template_type=template_type
         self.will_validate= will_validate
         self.assetService = Get(AssetService)
@@ -434,11 +434,14 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
                 
                 try:
                     val = template.validate(val)
-                    if self.will_filter:
+                    if scheduler.filter_error:
                         filtered_content.append(content)
                 except Exception as e:
-                    if not self.will_filter:
+                    if not scheduler.filter_error:
                         raise e
+                    else:
+                        ...
+                        
             
             if len(filtered_content) >0:
                 scheduler.content = filtered_content
