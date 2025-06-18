@@ -62,7 +62,7 @@ class SchedulerModel(BaseModel):
     queue_name:Optional[str] = None
     content: Any | list[Any]
     heaviness: Any = None
-    _errors:dict[int,dict|str] = PrivateAttr(dict)
+    _errors:dict[int,dict|str] = PrivateAttr({})
 
     @field_validator('heaviness')
     def check_heaviness(cls, heaviness:Any):

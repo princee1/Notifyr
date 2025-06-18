@@ -108,7 +108,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 datas = parse_mime_content(data,mail_content.mimeType)
                 mail_content.meta._Message_ID = tracker.make_msgid
 
-            meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track'))
+            meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
             await taskManager.offload_task('worker_focus',scheduler,0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
@@ -155,7 +155,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 contents = content
                 customEmail_content.meta._Message_ID = tracker.make_msgid
 
-            meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track'))
+            meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
             await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
     

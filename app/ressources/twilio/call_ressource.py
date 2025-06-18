@@ -105,7 +105,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_template(self, template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         
         for content in scheduler.content:
-            content = content.model_dump(exclude=('as_contact','index','will_track'))
+            content = content.model_dump(exclude=('as_contact','index','will_track','sender_type'))
             _, result = template.build(content, ...,True)
             twilio_ids = []
 
@@ -129,7 +129,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
         for content in scheduler.content:
         
-            details = content.model_dump(exclude={'url','as_contact','index','will_track'})
+            details = content.model_dump(exclude={'url','as_contact','index','will_track','sender_type'})
             url = content.url
             twilio_ids = []
 
@@ -152,7 +152,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_custom(self, scheduler: CallCustomSchedulerModel, request: Request, response: Response, broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
         for content in scheduler.content:
             details = content.model_dump(
-                exclude={'body', 'voice', 'language', 'loop','as_contact','index','will_track'})
+                exclude={'body', 'voice', 'language', 'loop','as_contact','index','will_track','sender_type'})
             body = content.body
             voice = content.voice
             lang = content.language

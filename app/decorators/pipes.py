@@ -451,7 +451,7 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
         if self.will_validate:
             for content in scheduler.content:
                 ptr = self.ptr(content)
-                idx_ptr = self.index_ptr(content)  
+                idx_ptr = self.index_ptr.ptr(content)  
                 if ptr == None:
                     ...
 
