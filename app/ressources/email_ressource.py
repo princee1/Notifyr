@@ -81,7 +81,11 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 To = mail_content.meta.To.copy()
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(mail_content)):
                     if tracking_event_data == None:
-                        scheduler.errors[index] = {''}
+                        scheduler.errors[index] = {
+                            'message':'Cant track more than one email when it is set as individual at the moment',
+                            'key':To,
+                            'index':index
+                        }
                         continue
 
                     _template = template.clone()
@@ -127,7 +131,11 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 To = customEmail_content.meta.To.copy()
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(customEmail_content)):
                         if tracking_event_data == None:
-                            scheduler.errors[index] = {}
+                            scheduler.errors[index] = {
+                            'message':'Cant track more than one email when it is set as individual at the moment',
+                            'key':To,
+                            'index':index
+                            }    
                             continue
                         
                         add_params = self._get_esp(To[j])

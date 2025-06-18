@@ -368,10 +368,14 @@ class ContactToInfoPipe(Pipe,PointerIterator):
             index = getattr(ptr,'index')  
             
             if getattr(ptr, 'sender_type', 'raw') == 'subs':
-                subscriptions = await SubscriptionORM.filter(subs_id=val).select_related('contact')
+                subscriptions = await SubscriptionORM.filter(content_id=val).select_related('contact')
                 contact_ids = [subscription.contact.contact_id for subscription in subscriptions if subscription.contact]
                 if not contact_ids:
-                    scheduler.errors[index] = {}
+                    scheduler.errors[index] = {
+                        'message':'No contact associated with this content subscriptions',
+                        'index':index,
+                        'key':val
+                    }
                     continue
                 val = contact_ids
                 setattr(ptr, 'sender_type', 'raw')
@@ -384,7 +388,11 @@ class ContactToInfoPipe(Pipe,PointerIterator):
                 val = await self.get_info_key(val,scheduler.filter_error)
                 if val == None:
                     if scheduler.filter_error:
-                        scheduler.errors[index] = {}
+                        scheduler.errors[index] = {
+                            'message':'Could not get info for the contact, might not exists or might not have set the needed info',
+                            'index':index,
+                            'key':contact_id
+                        }
                     continue
             
             elif isinstance(val,list):
@@ -401,7 +409,11 @@ class ContactToInfoPipe(Pipe,PointerIterator):
                 val = temp
 
                 if errors:
-                    scheduler.errors[index] = errors
+                    scheduler.errors[index] ={
+                        'message':'Could not get info for the contact, might not exists or might not have set the needed info',
+                        'index':index,
+                        'key':contact_id
+                    }
 
             else:
                 contact_id = None
@@ -456,7 +468,12 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
                     if not scheduler.filter_error:
                         raise e
                     else:
-                        scheduler.errors[index] = exception_to_json(e)
+                        scheduler.errors[index] = {
+                            'message':'Error while creating the template',
+                            'error':exception_to_json(e),
+                            'index':index
+                        }
+                        
                         
             
             if len(filtered_content) >0:
