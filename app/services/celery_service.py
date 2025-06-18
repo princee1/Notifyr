@@ -89,7 +89,7 @@ class TaskManager():
         elif isinstance(self.taskConfig[0]['scheduler'],s):
             return {}
         else:
-            return self.taskConfig[0]['scheduler'].errors
+            return self.taskConfig[0]['scheduler']._errors
 
     @property
     def schedule_ttd(self):

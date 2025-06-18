@@ -22,10 +22,10 @@ class EmailMetaModel(SubContentBaseModel):
     replyTo: Optional[str] = None
     Priority: Literal['1', '3', '5'] = '1'
     as_individual:bool = False
-    Disposition_Notification_To: str | None = PrivateAttr(None)
-    Return_Receipt_To: str | None = PrivateAttr(None)
-    Message_ID: str | list[str]|Callable | None = PrivateAttr(None)
-    X_Email_ID: str | list[str]|None = PrivateAttr(list)
+    _Disposition_Notification_To: str | None = PrivateAttr(None)
+    _Return_Receipt_To: str | None = PrivateAttr(None)
+    _Message_ID: str | list[str]|Callable | None = PrivateAttr(None)
+    _X_Email_ID: str | list[str]|None = PrivateAttr(list)
     
     @model_validator(mode="after")
     def To_validator(self:Self)->Self:

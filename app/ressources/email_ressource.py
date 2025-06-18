@@ -81,7 +81,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 To = mail_content.meta.To.copy()
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(mail_content)):
                     if tracking_event_data == None:
-                        scheduler.errors[index] = {
+                        scheduler._errors[index] = {
                             'message':'Cant track more than one email when it is set as individual at the moment',
                             'key':To,
                             'index':index
@@ -106,7 +106,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             else:
                 _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
                 datas = parse_mime_content(data,mail_content.mimeType)
-                mail_content.meta.Message_ID = tracker.make_msgid
+                mail_content.meta._Message_ID = tracker.make_msgid
 
             meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track'))
             await taskManager.offload_task('worker_focus',scheduler,0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
@@ -131,7 +131,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 To = customEmail_content.meta.To.copy()
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(customEmail_content)):
                         if tracking_event_data == None:
-                            scheduler.errors[index] = {
+                            scheduler._errors[index] = {
                             'message':'Cant track more than one email when it is set as individual at the moment',
                             'key':To,
                             'index':index
@@ -153,7 +153,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                         contents.append(_content)
             else:
                 contents = content
-                customEmail_content.meta.Message_ID = tracker.make_msgid
+                customEmail_content.meta._Message_ID = tracker.make_msgid
 
             meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track'))
             await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)

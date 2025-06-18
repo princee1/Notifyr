@@ -63,7 +63,7 @@ class EmailTracker(TrackerInterface):
 
         contact_ids = getattr(content.meta,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,[])
 
-        emailMetaData.Message_ID = []
+        emailMetaData._Message_ID = []
         # emailMetaData.X_Email_ID = []
         if not self.pipe_to(content):
             yield None
@@ -77,19 +77,19 @@ class EmailTracker(TrackerInterface):
                     'email_id':email_id,
                     'message_id':message_id
                 }
-            emailMetaData.Message_ID.append(message_id)
+            emailMetaData._Message_ID.append(message_id)
 
             if self.will_track:
                                 
                 email_id = temp_email_id
                 track['email_id'] = email_id
-                emailMetaData.X_Email_ID.append(email_id)
+                emailMetaData._X_Email_ID.append(email_id)
 
                 recipient = to
                 subject = emailMetaData.Subject
 
-                emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
-                emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
+                emailMetaData._Disposition_Notification_To = self.configService.SMTP_EMAIL
+                emailMetaData._Return_Receipt_To = self.configService.SMTP_EMAIL
                 
                 contact_id = get_value_in_list(contact_ids,i)
 
