@@ -55,7 +55,7 @@ class EmailTracker(TrackerInterface):
         contact_ids = getattr(content.meta,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,[])
 
         emailMetaData.Message_ID = []
-        emailMetaData.X_Email_ID = []
+        # emailMetaData.X_Email_ID = []
 
         for i,to in enumerate(emailMetaData.To):
             temp_email_id = str(uuid_v1_mc())
@@ -66,14 +66,16 @@ class EmailTracker(TrackerInterface):
                     'email_id':email_id,
                     'message_id':message_id
                 }
+            emailMetaData.Message_ID.append(message_id)
 
             if self.will_track:
                 
-                if len(emailMetaData.To) >1:
-                    raise HTTPException(status_code=400,detail='Can only track one email at a time')
+                # if len(emailMetaData.To) >1:
+                #     raise HTTPException(status_code=400,detail='Can only track one email at a time')
                 
                 email_id = temp_email_id
                 track['email_id'] = email_id
+                emailMetaData.X_Email_ID.append(email_id)
 
                 recipient = to
                 subject = emailMetaData.Subject
@@ -131,8 +133,8 @@ class TwilioTracker(TrackerInterface):
             if self.will_track:
                 contact_id = get_value_in_list(contact_ids,i)
             
-                if len(content.to) >1:
-                        raise HTTPException(status_code=400,detail='Can only track one sms at a time')
+                # if len(content.to) >1:
+                #         raise HTTPException(status_code=400,detail='Can only track one sms at a time')
                 
                 twilio_id = str(uuid_v1_mc())
                 # Create the SMS sent event
@@ -171,9 +173,8 @@ class TwilioTracker(TrackerInterface):
                 contact_id = get_value_in_list(contact_ids,i)
                 
                 twilio_id = str(uuid_v1_mc())
-                if len(content.to) >1:
-                    raise HTTPException(status_code=400,detail='Can only track one phone at a time')
-
+                # if len(content.to) >1:
+                #     raise HTTPException(status_code=400,detail='Can only track one phone at a time')
 
                 # Create the Call sent event
                 sent_event = CallEventORM.JSON(
@@ -192,7 +193,7 @@ class TwilioTracker(TrackerInterface):
                 tracking_data = {
                     'call_id': twilio_id,
                     'contact_id': contact_id,
-                    'recipient': content.to[0],
+                    'recipient': to,
                     'sender': content.from_,
                     'date_sent': now.isoformat(),
                     'last_update': now.isoformat(),

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List, Literal, Optional, Self, TypeVar, TypedDict
+from typing import Any, Callable, List, Literal, Optional, Self, TypeVar, TypedDict
 from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from enum import Enum
 from tortoise import fields, models, Tortoise, run_async
@@ -21,19 +21,11 @@ class EmailMetaModel(SubContentBaseModel):
     Bcc: Optional[str] = None
     replyTo: Optional[str] = None
     Priority: Literal['1', '3', '5'] = '1'
-    Disposition_Notification_To: str | None = None
-    Return_Receipt_To: str | None = None
-    Message_ID: str | None = None
-    X_Email_ID: str | None = None
     as_individual:bool = False
-
-    @model_validator(mode="after")
-    def meta_validator(self) -> Self:
-        self.Disposition_Notification_To = None
-        self.Return_Receipt_To = None
-        self.Message_ID = None
-        self.X_Email_ID = None
-        return self
+    Disposition_Notification_To: str | None = PrivateAttr(None)
+    Return_Receipt_To: str | None = PrivateAttr(None)
+    Message_ID: str | list[str]|Callable | None = PrivateAttr(None)
+    X_Email_ID: str | list[str]|None = PrivateAttr(list)
     
     @model_validator(mode="after")
     def To_validator(self:Self)->Self:

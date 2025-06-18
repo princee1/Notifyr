@@ -5,7 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from email.utils import formatdate,make_msgid
-from typing import List, Optional, Literal, Self
+from typing import Callable, List, Optional, Literal, Self
 from app.definition._error import BaseError
 from app.utils.constant import EmailHeadersConstant
 from app.utils.fileIO import getFilenameOnly
@@ -55,7 +55,7 @@ class EmailMetadata:
     Disposition_Notification_To: Optional[str] = None
     Return_Receipt_To: Optional[str] = None
     X_Email_ID: Optional[str|list[str]] = None
-    Message_ID: Optional[str|list[str]] = None
+    Message_ID: Optional[str|list[str]|Callable] = None
     as_individual:bool = False
 
     def __str__(self):
@@ -74,15 +74,23 @@ class EmailMetadata:
 
 class EmailBuilder():
 
-    def __init__(self, content: tuple[str, str], emailMetaData: EmailMetadata, images: list[tuple[str, str]], attachments: list[tuple[str, str]]=[]) -> None:
+    def __init__(self, contents: list[tuple[str, str]]|tuple[str,str], emailMetaData: EmailMetadata, images: list[tuple[str, str]], attachments: list[tuple[str, str]]=[]) -> None:
         self.emailMetadata = emailMetaData
+        self.To = emailMetaData.To
+        self.contents = contents
+        self.images=images
+        self.attachements = attachments
+        self.id = emailMetaData.Message_ID
+
+        self.create_mime(emailMetaData)
+        self.add_attachements()
+
+
+    def create_mime(self, emailMetaData:EmailMetadata):
         self.message: MIMEMultipart = MIMEMultipart()
+        self.message['CC'] = emailMetaData.CC
         self.message["From"] = emailMetaData.From
         self.message["Subject"] = emailMetaData.Subject
-        self.To = emailMetaData.To
-        self.message['CC'] = emailMetaData.CC
-        
-        self.id = emailMetaData.Message_ID
         self.message['Date'] = formatdate(localtime=True)
         self.message['Reply-To'] = emailMetaData.replyTo
         self.message['Return-Path'] = emailMetaData.Return_Path
@@ -93,8 +101,6 @@ class EmailBuilder():
 
         if emailMetaData.Return_Receipt_To:
             self.message['Return-Receipt-To'] = emailMetaData.Return_Receipt_To
-        
-        self.init_email_content(attachments, images, content)
 
     def __str__(self):
         return self.emailMetadata.__str__()
@@ -104,10 +110,10 @@ class EmailBuilder():
     
     def create_for_recipient(self):
         for i,To in enumerate(self.To):
-            self.message['Message-ID'] = self.id[i]
+            self.message['Message-ID'] =self.id() if callable(self.id) else self.id[i]
             if get_value_in_list(self.emailMetadata.X_Email_ID,i):
                 self.message['X_Email_ID'] = self.emailMetadata.X_Email_ID[i]
-            
+            self.set_content(i)
             yield self.mail_message
 
     def add_attachements(self, attachement_name, attachment_data):
@@ -120,7 +126,12 @@ class EmailBuilder():
         )
         pass
 
-    def set_content(self, content: tuple[str, str]):
+    def set_content(self, i):
+        if isinstance(self.contents,list):
+            content = self.contents[i]
+        else:
+            content = self.contents
+        
         html_content, text_content = content
         if text_content:
             part1 = MIMEText(text_content, "plain")
@@ -136,16 +147,13 @@ class EmailBuilder():
                        filename=getFilenameOnly(image_path))
         self.message.attach(img)
 
-    def init_email_content(self, attachments: list[tuple[str, str]], images: list[tuple[str, str]], content: tuple[str, str]):
-        self.set_content(content)
-        for img in images:
+    def add_attachements(self):
+        for img in self.images:
             path, img_data = img
             self.attach_image(path, img_data)
-        for attachment in attachments:
+        for attachment in self.attachements:
             path, att_data = attachment
             self.add_attachements(path, att_data)
-
-        pass
 
     @property
     def mail_message(self):

@@ -32,6 +32,9 @@ def BODY_SELECTOR(select): return f"body {select}"
 # ============================================================================================================
 
 
+class TemplateAssetError(BaseError):
+    ...
+
 class TemplateNotFoundError(BaseError):
     ...
 

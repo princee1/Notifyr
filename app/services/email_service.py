@@ -271,36 +271,28 @@ class EmailSenderService(BaseEmailService):
         return False
 
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
-    def sendTemplateEmail(self, data, meta, images, message_tracking_id, contact_id=None, connector: smtp.SMTP = None):
+    def sendTemplateEmail(self, data, meta, images,contact_id=None, connector: smtp.SMTP = None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(data, meta, images)
-
-        # if self.configService.celery_env == CeleryMode.none:
-        #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_ids=contact_id, connector=connector)
+        return self._send_message(email, contact_ids=contact_id, connector=connector)
 
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
-    def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None, connector: smtp.SMTP = None):
+    def sendCustomEmail(self, content, meta, images, attachment,contact_id=None, connector: smtp.SMTP = None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
-        # send_custom_email(content, meta, images, attachment)
-
-        # if self.configService.celery_env == CeleryMode.none:
-        #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_ids=contact_id, connector=connector)
+        return self._send_message(email, contact_ids=contact_id, connector=connector)
 
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
-    def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id, reply_to, references, connector: smtp.SMTP = None, contact_ids:list[str]=None):
+    def reply_to_an_email(self, content, meta, images, attachment, reply_to, references, connector: smtp.SMTP = None, contact_ids:list[str]=None):
         meta = EmailMetadata(**meta)
-
         email = EmailBuilder(content, meta, images, attachment)
         # TODO add references and reply_to
 
         # if self.configService.celery_env == CeleryMode.none:
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_ids=contact_ids, connector=connector)
+        return self._send_message(email,contact_ids=contact_ids, connector=connector)
 
-    def _send_message(self, email: EmailBuilder, message_tracking_id: list[str], connector: smtp.SMTP, contact_ids:list[ str] = []):
+    def _send_message(self, email: EmailBuilder, connector: smtp.SMTP, contact_ids:list[ str] = []):
         replies = []
         events = []
         for i,(emailID, message) in enumerate(email.create_for_recipient()):
@@ -338,12 +330,12 @@ class EmailSenderService(BaseEmailService):
                 self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
 
             finally:
-                if get_value_in_list(message_tracking_id,i):
+                if get_value_in_list(email.emailMetadata.X_Email_ID,i):
 
                     event = TrackingEmailEventORM.JSON(
                         description=description,
                         event_id=event_id,
-                        email_id=message_tracking_id[i],
+                        email_id=email.emailMetadata.X_Email_ID[i],
                         #contact_id=contact_ids[i] if i in contact_ids else  None,
                         current_event=email_status,
                         date_event_received=now,

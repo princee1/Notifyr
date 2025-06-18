@@ -5,7 +5,7 @@ from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import HTMLTemplate
 from app.depends.class_dep import Broker, EmailTracker
-from app.depends.funcs_dep import get_task
+from app.depends.funcs_dep import get_task, get_template
 from app.models.email_model import CustomEmailModel, CustomEmailSchedulerModel, EmailSpamDetectionModel, EmailTemplateModel, EmailTemplateSchedulerModel
 from app.services.celery_service import TaskManager, TaskService, CeleryService
 from app.services.config_service import ConfigService
@@ -66,41 +66,44 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @UsePermission(permissions.JWTAssetPermission('html'))
     @UseHandler(handlers.TemplateHandler,handlers.ContactsHandler)
-    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContactToInfoPipe('email','meta.To'))
+    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContactToInfoPipe('email','meta.To'),)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
-    async def send_emailTemplate(self, template: str, scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+    async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         template: HTMLTemplate = self.assetService.html[template]
         
         for i,mail_content in enumerate(scheduler.content):
             
             To = mail_content.meta.To.copy()
-            tracking_link_callback:Callable[[str],str] = None
             index = mail_content.meta.index if mail_content.meta.index != None else i
+            datas = []
 
-            email_ids = []
             if tracker.will_track:
-                template = template.clone()
-                for i,tracking_event_data in enumerate(tracker.pipe_email_data(mail_content)):
-                    
+                for j,tracking_event_data in enumerate(tracker.pipe_email_data(mail_content)):
+
+                    template = template.clone()
                     event_tracking,email_tracking = tracking_event_data['track']
                     eid = tracking_event_data['email_id']
                     contact_id =tracking_event_data['contact_id']
-                    email_ids.append(eid)
 
-                    add_params = self._get_esp(To[i])
+                    add_params = self._get_esp(To[j])
                     self.linkService.set_tracking_link(template,eid,add_params=add_params)
                     tracking_link_callback = self.linkService.create_link_re(eid,add_params=add_params) # FIXME if its a list change it 
                     #self.linkService.create_tracking_pixel(template,tracker.email_id)
                     broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
                     broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
+                
+                    _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
+                    data = parse_mime_content(data,mail_content.mimeType)
+                    datas.append(data)
+            else:
+                _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
+                datas = parse_mime_content(data,mail_content.mimeType)
+                mail_content.meta.Message_ID = tracker.make_msgid
 
-            _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
-            data = parse_mime_content(data,mail_content.mimeType)
-
-            meta = mail_content.meta.model_dump(exclude=('as_contact','index'))
-            await taskManager.offload_task('worker_focus',scheduler,0,index,self.emailService.sendTemplateEmail,data, meta, template.images,email_ids,contact_id=None)
+            meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index'))
+            await taskManager.offload_task('worker_focus',scheduler,0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
 
@@ -111,29 +114,35 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
     async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+
         for i,customEmail_content in enumerate(scheduler.content):
+            
             To = customEmail_content.meta.To.copy()
             content = (customEmail_content.html_content, customEmail_content.text_content)
-            email_ids = []
+            contents = []
             index = customEmail_content.meta.index if customEmail_content.meta.index != None else i
 
             if tracker.will_track:
+                for j,tracking_event_data in enumerate(tracker.pipe_email_data(customEmail_content)):
+                        add_params = self._get_esp(To[j])
+                        eid = tracking_event_data['email_id']
+                        contact_id = tracking_event_data['contact_id']
 
-                for i,tracking_event_data in enumerate(tracker.pipe_email_data(customEmail_content)):
-                    add_params = self._get_esp(To[0])
-                    eid = tracking_event_data['email_id']
+                        tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(eid,add_params=add_params) # FIXME if its a list change it 
+                        event_tracking,email_tracking = tracking_event_data['track']
 
-                    tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(eid,add_params=add_params) # FIXME if its a list change it 
-                    event_tracking,email_tracking = tracking_event_data['track']
+                        broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
+                        broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
 
-                    broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
-                    broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
+                        _content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
+                        _content = self.linkService.create_tracking_pixel(content[0],email_id=eid,contact_id=contact_id,esp=add_params['esp']),content[1]
+                        contents.append(_content)
+            else:
+                contents = content
+                customEmail_content.meta.Message_ID = tracker.make_msgid
 
-                    content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
-                    content = self.linkService.create_tracking_pixel(content[0],email_id=eid,contact_id=tracking_event_data['contact_id'],esp=add_params['esp']),content[1]
-
-            meta = customEmail_content.meta.model_dump(exclude=('as_contact','index'))
-            await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendCustomEmail,content,meta,customEmail_content.images, customEmail_content.attachments,email_ids,contact_id =None)
+            meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index'))
+            await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])

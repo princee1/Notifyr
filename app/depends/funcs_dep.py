@@ -323,3 +323,7 @@ async def get_task(request_id: str = Depends(get_request_id), as_async: bool = D
 
 async def get_challenge(client:ClientORM):
     return await ChallengeORM.filter(client=client).first()
+
+
+def get_template(template:str):
+    return template
