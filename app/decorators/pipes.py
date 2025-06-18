@@ -3,6 +3,7 @@ from typing import Any, Callable, Coroutine, Literal
 from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, TokensModel
+from app.classes.broker import exception_to_json
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Template, TemplateAssetError, TemplateNotFoundError
@@ -10,7 +11,7 @@ from app.container import Get, InjectInMethod
 from app.depends.class_dep import KeepAliveQuery
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.models.call_model import CallCustomSchedulerModel
-from app.models.contacts_model import Status
+from app.models.contacts_model import Status, SubscriptionORM
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
@@ -150,7 +151,7 @@ class TwilioPhoneNumberPipe(Pipe):
         if scheduler!= None:
             for content in scheduler.content:
                 content.from_ = self.setFrom_(content.from_)
-                if not content.as_contact: # if not content.sender_type == 'raw'
+                if not content.sender_type == 'raw':
                     content.to = [self.twilioService.parse_to_phone_format(to) for to in content.to]
             return {'scheduler':scheduler}
 
@@ -332,17 +333,16 @@ class ContactToInfoPipe(Pipe,PointerIterator):
         self.callback = callback
         PointerIterator.__init__(self,parse_key,split=split)
     
-
-    async def get_info_key(self,val,scheduler):
+    async def get_info_key(self,val,filter_error):
         contact:ContactSummary = await ContactSummaryORMCache.Cache(val,val)
         if contact == None:
-            if not scheduler.filter_error:
+            if not filter_error:
                 raise ContactNotExistsError(val)
             else:
                 return None
         piped_info_key = contact.get(self.info_key,None)
         if piped_info_key == None:
-            if not scheduler.filter_error:
+            if not filter_error:
                 raise ContactMissingInfoKeyError(self.info_key)
             else:
                 return None
@@ -352,48 +352,56 @@ class ContactToInfoPipe(Pipe,PointerIterator):
     async def pipe(self,scheduler:SchedulerModel):
         
         filtered_content = []
-        # if scheduler.sender_type =='raw':
-        #     return {}
         
         for content in scheduler.content:
             
-            ptr = self.ptr(content)    
+            ptr = self.ptr(content)  
             if ptr == None:
                 ...
             
-            if not getattr(ptr,'as_contact',False): # if getattr(ptr,'sender_type','raw') =='raw'
+            if getattr(ptr,'sender_type','raw') =='raw':
                 if scheduler.filter_error:
                     filtered_content.append(content)
                 continue
             
             val = self.get_val(ptr)
-
-            # if getattr(ptr,'sender_type','raw') == 'subs':
-            #     val = ...(val) # TODO subs
-            #     setattr(ptr,'sender_type','raw')
+            index = getattr(ptr,'index')  
+            
+            if getattr(ptr, 'sender_type', 'raw') == 'subs':
+                subscriptions = await SubscriptionORM.filter(subs_id=val).select_related('contact')
+                contact_ids = [subscription.contact.contact_id for subscription in subscriptions if subscription.contact]
+                if not contact_ids:
+                    scheduler.errors[index] = {}
+                    continue
+                val = contact_ids
+                setattr(ptr, 'sender_type', 'raw')
             
             if val== None:
                 ...
 
             if isinstance(val,str):
                 contact_id = val
-                val = await self.get_info_key(val,scheduler)
+                val = await self.get_info_key(val,scheduler.filter_error)
                 if val == None:
+                    if scheduler.filter_error:
+                        scheduler.errors[index] = {}
                     continue
             
             elif isinstance(val,list):
                 contact_id = val
                 temp = []
-                c = False
+                errors= []
                 for v in val:
-                    v = await self.get_info_key(v,scheduler)
-                    if v ==None:
-                        c = True
-                        break
-                    temp.append(v)
-                if c:
-                    continue
+                    t = await self.get_info_key(v,scheduler.filter_error)
+                    if t ==None:
+                        if scheduler.filter_error:
+                            errors.append(v)
+                        continue
+                    temp.append(t)
                 val = temp
+
+                if errors:
+                    scheduler.errors[index] = errors
 
             else:
                 contact_id = None
@@ -412,11 +420,12 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
     
     SCHEDULER_TEMPLATE_ERROR_KEY = 'template'
 
-    def __init__(self,template_type:RouteAssetType ,data_key:str,will_validate:bool = True,split:str='.'):
+    def __init__(self,template_type:RouteAssetType ,data_key:str,index_key:str, will_validate:bool = True,split:str='.'):
         super().__init__(True)
         PointerIterator.__init__(self,data_key,split)
         self.template_type=template_type
         self.will_validate= will_validate
+        self.index_ptr = PointerIterator(index_key,split)
         self.assetService = Get(AssetService)
         
     def pipe(self,template:str,scheduler:SchedulerModel)->Template:
@@ -429,11 +438,13 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
 
         if self.will_validate:
             for content in scheduler.content:
-                ptr = self.ptr(content)  
+                ptr = self.ptr(content)
+                idx_ptr = self.index_ptr(content)  
                 if ptr == None:
                     ...
 
                 val = self.get_val(ptr)
+                index = self.index_ptr.get_val(idx_ptr)
                 if val == None:
                     ...
                 
@@ -445,13 +456,14 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
                     if not scheduler.filter_error:
                         raise e
                     else:
-                        ...
+                        scheduler.errors[index] = exception_to_json(e)
                         
             
             if len(filtered_content) >0:
                 scheduler.content = filtered_content
                             
         return {'template':template,'scheduler':scheduler}
+
 class ContentIndexPipe(Pipe,PointerIterator):
 
     def __init__(self, var:str=None):

@@ -75,11 +75,13 @@ class EmailTemplateRessource(BaseHTTPRessource):
         for mail_content in scheduler.content:
             
             datas = []
-
+            index = mail_content.meta.index
+            
             if tracker.will_track:
                 To = mail_content.meta.To.copy()
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(mail_content)):
                     if tracking_event_data == None:
+                        scheduler.errors[index] = {''}
                         continue
 
                     _template = template.clone()
@@ -103,7 +105,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 mail_content.meta.Message_ID = tracker.make_msgid
 
             meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track'))
-            await taskManager.offload_task('worker_focus',scheduler,0,mail_content.meta.index,self.emailService.sendTemplateEmail,datas, meta, template.images)
+            await taskManager.offload_task('worker_focus',scheduler,0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
 
@@ -119,11 +121,13 @@ class EmailTemplateRessource(BaseHTTPRessource):
             
             content = (customEmail_content.html_content, customEmail_content.text_content)
             contents = []
+            index = customEmail_content.meta.index
 
             if tracker.will_track:
                 To = customEmail_content.meta.To.copy()
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(customEmail_content)):
                         if tracking_event_data == None:
+                            scheduler.errors[index] = {}
                             continue
                         
                         add_params = self._get_esp(To[j])
@@ -144,7 +148,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 customEmail_content.meta.Message_ID = tracker.make_msgid
 
             meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track'))
-            await taskManager.offload_task('normal',scheduler,0,customEmail_content.meta.index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
+            await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])
