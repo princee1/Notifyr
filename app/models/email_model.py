@@ -24,8 +24,19 @@ class EmailMetaModel(SubContentBaseModel):
     as_individual:bool = False
     _Disposition_Notification_To: str | None = PrivateAttr(None)
     _Return_Receipt_To: str | None = PrivateAttr(None)
-    _Message_ID: str | list[str]|Callable | None = PrivateAttr(None)
-    _X_Email_ID: str | list[str]|None = PrivateAttr(list)
+    _Message_ID: str | list[str]|Callable | None = PrivateAttr([])
+    _X_Email_ID: str | list[str]|None = PrivateAttr([])
+
+
+    def model_dump(self, *, mode = 'python', include = None, exclude = None, context = None, by_alias = False, exclude_unset = False, exclude_defaults = False, exclude_none = False, round_trip = False, warnings = True, serialize_as_any = False):
+        base = super().model_dump(mode=mode, include=include, exclude=exclude, context=context, by_alias=by_alias, exclude_unset=exclude_unset, exclude_defaults=exclude_defaults, exclude_none=exclude_none, round_trip=round_trip, warnings=warnings, serialize_as_any=serialize_as_any)
+        return {
+            **base,
+            '_Disposition_Notification_To':self._Disposition_Notification_To,
+            '_Return_Receipt_To':self._Return_Receipt_To,
+            '_Message_ID':self._Message_ID,
+            '_X_Email_ID':self._X_Email_ID
+        }
     
     @model_validator(mode="after")
     def To_validator(self:Self)->Self:

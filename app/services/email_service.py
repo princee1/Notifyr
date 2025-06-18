@@ -330,12 +330,12 @@ class EmailSenderService(BaseEmailService):
                 self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
 
             finally:
-                if get_value_in_list(email.emailMetadata.X_Email_ID,i):
+                if get_value_in_list(email.emailMetadata._X_Email_ID,i):
 
                     event = TrackingEmailEventORM.JSON(
                         description=description,
                         event_id=event_id,
-                        email_id=email.emailMetadata.X_Email_ID[i],
+                        email_id=email.emailMetadata._X_Email_ID[i],
                         #contact_id=contact_ids[i] if i in contact_ids else  None,
                         current_event=email_status,
                         date_event_received=now,

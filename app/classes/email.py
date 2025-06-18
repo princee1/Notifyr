@@ -52,10 +52,10 @@ class EmailMetadata:
     replyTo: Optional[str] = None
     Return_Path: Optional[str] = None
     Priority: Literal['1', '3', '5'] = '1'
-    Disposition_Notification_To: Optional[str] = None
-    Return_Receipt_To: Optional[str] = None
-    X_Email_ID: Optional[str|list[str]] = None
-    Message_ID: Optional[str|list[str]|Callable] = None
+    _Disposition_Notification_To: Optional[str] = None
+    _Return_Receipt_To: Optional[str] = None
+    _X_Email_ID: Optional[str|list[str]] = None
+    _Message_ID: Optional[str|list[str]|Callable] = None
     as_individual:bool = False
 
     def __str__(self):
@@ -68,7 +68,7 @@ class EmailMetadata:
             f"Reply-To: {self.replyTo}\n"
             f"Return-Path: {self.Return_Path}\n"
             f"Priority: {self.Priority}\n"
-            f"Message_ID:{self.Message_ID}\n"
+            f"Message_ID:{self._Message_ID}\n"
         )
 
 
@@ -80,7 +80,7 @@ class EmailBuilder():
         self.contents = contents
         self.images=images
         self.attachements = attachments
-        self.id = emailMetaData.Message_ID
+        self.id = emailMetaData._Message_ID
 
         self.create_mime(emailMetaData)
         self.add_attachements()
@@ -96,11 +96,11 @@ class EmailBuilder():
         self.message['Return-Path'] = emailMetaData.Return_Path
         self.message['X-Priority'] = emailMetaData.Priority
 
-        if emailMetaData.Disposition_Notification_To:
-            self.message['Disposition-Notification-To'] = emailMetaData.Disposition_Notification_To
+        if emailMetaData._Disposition_Notification_To:
+            self.message['Disposition-Notification-To'] = emailMetaData._Disposition_Notification_To
 
-        if emailMetaData.Return_Receipt_To:
-            self.message['Return-Receipt-To'] = emailMetaData.Return_Receipt_To
+        if emailMetaData._Return_Receipt_To:
+            self.message['Return-Receipt-To'] = emailMetaData._Return_Receipt_To
 
     def __str__(self):
         return self.emailMetadata.__str__()
@@ -111,8 +111,8 @@ class EmailBuilder():
     def create_for_recipient(self):
         for i,To in enumerate(self.To):
             self.message['Message-ID'] =self.id() if callable(self.id) else self.id[i]
-            if get_value_in_list(self.emailMetadata.X_Email_ID,i):
-                self.message['X_Email_ID'] = self.emailMetadata.X_Email_ID[i]
+            if get_value_in_list(self.emailMetadata._X_Email_ID,i):
+                self.message['X_Email_ID'] = self.emailMetadata._X_Email_ID[i]
             self.set_content(i)
             yield self.mail_message
 

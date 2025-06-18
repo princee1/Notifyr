@@ -63,8 +63,6 @@ class EmailTracker(TrackerInterface):
 
         contact_ids = getattr(content.meta,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,[])
 
-        emailMetaData._Message_ID = []
-        # emailMetaData.X_Email_ID = []
         if not self.pipe_to(content):
             yield None
 
