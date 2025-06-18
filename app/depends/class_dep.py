@@ -24,7 +24,7 @@ from app.services.reactive_service import ReactiveService, ReactiveType,Disposab
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from time import perf_counter,time
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
-from app.utils.helper import uuid_v1_mc,UUID
+from app.utils.helper import get_value_in_list, uuid_v1_mc,UUID
 from datetime import datetime, timedelta, timezone
 import random
 
@@ -49,46 +49,45 @@ class EmailTracker(TrackerInterface):
             
     def pipe_email_data(self,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
         
-        spam_confidence,spam_label = spam
-
-        temp_email_id = str(uuid_v1_mc())
-        message_id = self.make_msgid(temp_email_id)
-        
-        email_id = None
+        spam_confidence,spam_label = spam        
         emailMetaData=content.meta
 
-        emailMetaData.Message_ID = message_id
+        contact_ids = getattr(content.meta,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,[])
 
-        track =  {
-                'email_id':email_id,
-                'message_id':message_id
-            }
+        emailMetaData.Message_ID = []
+        emailMetaData.X_Email_ID = []
 
-        if self.will_track:
-            
-            if len(emailMetaData.To) >1:
-                raise HTTPException(status_code=400,detail='Can only track one email at a time')
-            
-            email_id = temp_email_id
-            track['email_id'] = email_id
-
-            recipient = emailMetaData.To[0]
-            subject = emailMetaData.Subject
-
-            emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
-            emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
-            
-            emailMetaData.X_Email_ID = email_id
-
-            contact_id = getattr(content.meta,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
-            if contact_id!=None and isinstance(contact_id,list):
-                contact_id = contact_id[0]
-                                        
-            temp = self._create_tracking_event_data(spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=contact_id)
-            temp ={'track':temp,'contact_id':contact_id}
-            track.update(temp)
+        for i,to in enumerate(emailMetaData.To):
+            temp_email_id = str(uuid_v1_mc())
+            message_id = self.make_msgid(temp_email_id)
         
-        return  track 
+            email_id = None
+            track =  {
+                    'email_id':email_id,
+                    'message_id':message_id
+                }
+
+            if self.will_track:
+                
+                if len(emailMetaData.To) >1:
+                    raise HTTPException(status_code=400,detail='Can only track one email at a time')
+                
+                email_id = temp_email_id
+                track['email_id'] = email_id
+
+                recipient = to
+                subject = emailMetaData.Subject
+
+                emailMetaData.Disposition_Notification_To = self.configService.SMTP_EMAIL
+                emailMetaData.Return_Receipt_To = self.configService.SMTP_EMAIL
+                
+                contact_id = get_value_in_list(contact_ids,i)
+
+                temp = self._create_tracking_event_data(spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=contact_id)
+                temp ={'track':temp,'contact_id':contact_id }
+                track.update(temp)
+            
+            yield track 
 
     def _create_tracking_event_data(self, spam_confidence, spam_label, email_id, message_id, recipient, subject,contact_id=None):
         # Convert datetime fields to timezone-aware ISO 8601 string representation
@@ -121,80 +120,87 @@ class TwilioTracker(TrackerInterface):
 
     def __init__(self, track_twilio: bool = Depends(track)):
         super().__init__(track_twilio)
-        self.contact_id = None
 
     def pipe_sms_track_event_data(self, content: OnGoingBaseSMSModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
-        contact_id = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
+        contact_ids = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,[])
 
-        if self.will_track:
+        for i,to in enumerate(content.to):
+            
+            if self.will_track:
+                contact_id = get_value_in_list(contact_ids,i)
+            
+                if len(content.to) >1:
+                        raise HTTPException(status_code=400,detail='Can only track one sms at a time')
+                
+                twilio_id = str(uuid_v1_mc())
+                # Create the SMS sent event
+                sent_event = SMSEventORM.JSON(
+                    event_id=str(uuid_v1_mc()),
+                    sms_id=twilio_id,
+                    sms_sid=None,
+                    direction='O',
+                    current_event=SMSStatusEnum.RECEIVED.value,
+                    description="SMS sent successfully",
+                    date_event_received=now.isoformat()
+                )
 
-            if len(content.to) >1:
-                    raise HTTPException(status_code=400,detail='Can only track one sms at a time')
-            twilio_id = str(uuid_v1_mc())
-            # Create the SMS sent event
-            sent_event = SMSEventORM.JSON(
-                event_id=str(uuid_v1_mc()),
-                sms_id=twilio_id,
-                sms_sid=None,
-                direction='O',
-                current_event=SMSStatusEnum.RECEIVED.value,
-                description="SMS sent successfully",
-                date_event_received=now.isoformat()
-            )
+                tracking_data = {
+                    'sms_id': twilio_id,
+                    'contact_id': contact_id,
+                    'recipient': to,
+                    'sender': content.from_,
+                    'date_sent': now.isoformat(),
+                    'last_update': now.isoformat(),
+                    'expired_tracking_date': expired_tracking_date,
+                    'sms_current_status': SMSStatusEnum.RECEIVED.value
+                }
 
-            tracking_data = {
-                'sms_id': twilio_id,
-                'contact_id': contact_id,
-                'recipient': content.to[0],
-                'sender': content.from_,
-                'date_sent': now.isoformat(),
-                'last_update': now.isoformat(),
-                'expired_tracking_date': expired_tracking_date,
-                'sms_current_status': SMSStatusEnum.RECEIVED.value
-            }
-
-            return twilio_id,sent_event, tracking_data
+                yield twilio_id,sent_event, tracking_data
 
     def pipe_call_track_event_data(self, content: BaseVoiceCallModel, contact_id=None):
         now = datetime.now(timezone.utc)
         expired_tracking_date = (now + timedelta(days=30)).isoformat()
         
+        contact_ids = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,[])
 
-        if self.will_track:
-            twilio_id = str(uuid_v1_mc())
-            if len(content.to) >1:
-                raise HTTPException(status_code=400,detail='Can only track one phone at a time')
+        for i,to in enumerate(content.to):
 
-            contact_id = getattr(content,SpecialKeyAttributesConstant.CONTACT_SPECIAL_KEY_ATTRIBUTES,None)
+            if self.will_track:
+                contact_id = get_value_in_list(contact_ids,i)
+                
+                twilio_id = str(uuid_v1_mc())
+                if len(content.to) >1:
+                    raise HTTPException(status_code=400,detail='Can only track one phone at a time')
 
-            # Create the Call sent event
-            sent_event = CallEventORM.JSON(
-                event_id=str(uuid_v1_mc()),
-                call_sid=None,
-                call_id=twilio_id,
-                direction='O',
-                current_event=CallStatusEnum.RECEIVED.value,
-                description="Call initiated successfully",
-                date_event_received=now.isoformat(),
-                city=None,
-                country=None,
-                state=None
-            )
 
-            tracking_data = {
-                'call_id': twilio_id,
-                'contact_id': contact_id,
-                'recipient': content.to[0],
-                'sender': content.from_,
-                'date_sent': now.isoformat(),
-                'last_update': now.isoformat(),
-                'expired_tracking_date': expired_tracking_date,
-                'call_current_status': CallStatusEnum.RECEIVED.value
-            }
+                # Create the Call sent event
+                sent_event = CallEventORM.JSON(
+                    event_id=str(uuid_v1_mc()),
+                    call_sid=None,
+                    call_id=twilio_id,
+                    direction='O',
+                    current_event=CallStatusEnum.RECEIVED.value,
+                    description="Call initiated successfully",
+                    date_event_received=now.isoformat(),
+                    city=None,
+                    country=None,
+                    state=None
+                )
 
-            return twilio_id,sent_event, tracking_data
+                tracking_data = {
+                    'call_id': twilio_id,
+                    'contact_id': contact_id,
+                    'recipient': content.to[0],
+                    'sender': content.from_,
+                    'date_sent': now.isoformat(),
+                    'last_update': now.isoformat(),
+                    'expired_tracking_date': expired_tracking_date,
+                    'call_current_status': CallStatusEnum.RECEIVED.value
+                }
+
+                yield twilio_id,sent_event, tracking_data
 
 class SubjectParams: #NOTE rename to ReactiveParams
 

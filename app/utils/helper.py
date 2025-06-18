@@ -156,6 +156,14 @@ def KeyBuilder(prefix:str|list[str],sep:str|list[str]='-'):
 def key_builder(key): return key+DICT_SEP
 
 
+################################   ** Helper **      #################################
+
+def get_value_in_list(data,index):
+    try:
+        return data[index]
+    except:
+        return None
+
 ################################   ** Parsing Helper **      #################################
 
 

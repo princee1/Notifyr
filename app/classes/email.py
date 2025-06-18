@@ -15,6 +15,8 @@ from email.message import Message
 from email.header import decode_header
 from dataclasses import dataclass, field
 
+from app.utils.helper import get_value_in_list
+
 
 class NotSameDomainEmailError(BaseError):
     ...
@@ -52,8 +54,8 @@ class EmailMetadata:
     Priority: Literal['1', '3', '5'] = '1'
     Disposition_Notification_To: Optional[str] = None
     Return_Receipt_To: Optional[str] = None
-    X_Email_ID: Optional[str] = None
-    Message_ID: Optional[str] = None
+    X_Email_ID: Optional[str|list[str]] = None
+    Message_ID: Optional[str|list[str]] = None
     as_individual:bool = False
 
     def __str__(self):
@@ -81,13 +83,10 @@ class EmailBuilder():
         self.message['CC'] = emailMetaData.CC
         
         self.id = emailMetaData.Message_ID
-        self.message['Message-ID'] = self.id
         self.message['Date'] = formatdate(localtime=True)
         self.message['Reply-To'] = emailMetaData.replyTo
         self.message['Return-Path'] = emailMetaData.Return_Path
         self.message['X-Priority'] = emailMetaData.Priority
-        if emailMetaData.X_Email_ID:
-            self.message['X_Email_ID'] = emailMetaData.X_Email_ID
 
         if emailMetaData.Disposition_Notification_To:
             self.message['Disposition-Notification-To'] = emailMetaData.Disposition_Notification_To
@@ -104,7 +103,11 @@ class EmailBuilder():
         return self.emailMetadata.__str__()
     
     def create_for_recipient(self):
-        for To in self.To:
+        for i,To in enumerate(self.To):
+            self.message['Message-ID'] = self.id[i]
+            if get_value_in_list(self.emailMetadata.X_Email_ID,i):
+                self.message['X_Email_ID'] = self.emailMetadata.X_Email_ID[i]
+            
             yield self.mail_message
 
     def add_attachements(self, attachement_name, attachment_data):
@@ -146,7 +149,7 @@ class EmailBuilder():
 
     @property
     def mail_message(self):
-        return self.id, self.message.as_string()
+        return self.message['Message-ID'], self.message.as_string()
 
     pass
 

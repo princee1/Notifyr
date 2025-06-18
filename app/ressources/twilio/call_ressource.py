@@ -108,15 +108,16 @@ class OnGoingCallRessource(BaseHTTPRessource):
         for i,content in enumerate(scheduler.content):
             content = content.model_dump(exclude=('as_contact','index'))
             _, result = phoneTemplate.build(content, ...)
-            twilio_id = None
+            twilio_ids = []
             index = content.index if content.index != None else i
 
             if tracker.will_track:
-                twilio_id,event,tracking_event_data = tracker.pipe_call_track_event_data(scheduler)
-                broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
-                broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+                for tid,event,tracking_event_data in tracker.pipe_call_track_event_data(content):
+                    broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+                    broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+                    twilio_ids.append(tid)
 
-            await taskManager.offload_task('normal', scheduler, 0, index, self.callService.send_template_voice_call, result, content,twilio_id)
+            await taskManager.offload_task('normal', scheduler, 0, index, self.callService.send_template_voice_call, result, content,twilio_ids)
         return taskManager.results
 
     @UseLimiter(limit_value='50/day')
@@ -132,15 +133,16 @@ class OnGoingCallRessource(BaseHTTPRessource):
         
             details = content.model_dump(exclude={'url','as_contact','index'})
             url = content.url
-            twilio_id = None
+            twilio_ids = []
             index = content.index if content.index != None else i
 
             if tracker.will_track:
-                twilio_id,event,tracking_event_data = tracker.pipe_call_track_event_data(content)
-                broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
-                broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+                for tid,event,tracking_event_data in tracker.pipe_call_track_event_data(content):
+                    broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+                    broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+                    twilio_ids.append(tid)
 
-            await taskManager.offload_task('normal', scheduler, 0, index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_id)
+            await taskManager.offload_task('normal', scheduler, 0, index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids)
         return taskManager.results
 
     @UseLimiter(limit_value='50/day')
@@ -158,13 +160,15 @@ class OnGoingCallRessource(BaseHTTPRessource):
             voice = content.voice
             lang = content.language
             loop = content.loop
-            twilio_id = None
+            twilio_id = []
             index = content.index if content.index != None else i
 
             if tracker.will_track:
-                twilio_id,event,tracking_event_data = tracker.pipe_call_track_event_data(scheduler.content)
-                broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
-                broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+                for tid,event,tracking_event_data in tracker.pipe_call_track_event_data(scheduler.content):
+                    broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+                    broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+
+                    twilio_id.append(tid)
 
             await taskManager.offload_task('normal', scheduler, 0, index, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id)
         return taskManager.results

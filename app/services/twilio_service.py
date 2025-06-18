@@ -16,7 +16,7 @@ from app.services.logger_service import LoggerService
 from app.utils.constant import StreamConstant
 from app.utils.tools import Mock
 from .config_service import CeleryMode, ConfigService
-from app.utils.helper import b64_encode, phone_parser, uuid_v1_mc
+from app.utils.helper import b64_encode, get_value_in_list, phone_parser, uuid_v1_mc
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
 from app.utils.validation import phone_number_validator
@@ -223,14 +223,18 @@ class SMSService(BaseTwilioCommunication):
     def build(self):
         self.messages = self.twilioService.client.messages
 
-    def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None) -> MessageInstance:
-        url = self.set_url(subject_id, twilio_tracking)
-        now = datetime.now(timezone.utc).isoformat()
+    def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = []) -> MessageInstance:
+        
         results = []
         events= []
-        for to in messageData['to']:
+        for i,to in enumerate(messageData['to']):
+
+            url = self.set_url(subject_id, get_value_in_list(twilio_tracking,i))
+            now = datetime.now(timezone.utc).isoformat()
+
             data = messageData.copy()
             data['to'] = to
+
             try:
                 #if self.configService.celery_env == CeleryMode.worker:
                 result = self.messages.create(provide_feedback=True, send_as_mms=True, status_callback=url, **data)
@@ -250,7 +254,7 @@ class SMSService(BaseTwilioCommunication):
                 description = f'Failed to send the request'
                 status = SMSStatusEnum.FAILED.value
             finally:
-                if twilio_tracking and isinstance(result, MessageInstance):
+                if get_value_in_list(twilio_tracking,i) and isinstance(result, MessageInstance):
                     event = SMSEventORM.JSON(
                         event_id=uuid_v1_mc(),
                         sms_sid=result.sid,
@@ -259,17 +263,17 @@ class SMSService(BaseTwilioCommunication):
                         description=description,
                         date_event_received=now
                     )
-                    events.append(events)
+                    events.append(event)
                 results.append(result)
 
             return (results,(StreamConstant.TWILIO_EVENT_STREAM_SMS,events),{})
         
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: str = None):
+    def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = []):
         return self._send_sms(messageData, subject_id, twilio_tracking)
 
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    async def send_template_sms(self, message: dict, subject_id=None, twilio_tracking: str = None):
+    async def send_template_sms(self, message: dict, subject_id=None, twilio_tracking:list[str] = []):
         return self._send_sms(message, subject_id, twilio_tracking)
 
     def get_message(self, to: str):
@@ -325,32 +329,31 @@ class CallService(BaseTwilioCommunication):
         return self._create_call(call)
 
     @BaseTwilioCommunication.parse_to_json(('async',*RedisEventInterface.redis_event_callback))
-    def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,subject_id=None,twilio_tracking:str=None):
+    def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,subject_id=None,twilio_tracking:list[str]=None):
         voiceResponse = VoiceResponse()
         voiceResponse.say(body, voice, loop, lang)
         call['twiml'] = voiceResponse
         return self._create_call(call,subject_id,twilio_tracking)
 
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
+    def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:list[str]=None):
         call_details['url'] = url
         return self._create_call(call_details,subject_id,twilio_tracking)
 
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:str=None):
+    def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:list[str]=None):
         call_details['twiml'] = result
         return self._create_call(call_details,subject_id,twilio_tracking)
 
-    def _create_call(self, details: dict,subject_id:str=None,twilio_tracking:str=None):
-
-        url = self.set_url(subject_id,twilio_tracking)
-        now = datetime.now(timezone.utc).isoformat()
-
+    def _create_call(self, details: dict,subject_id:str=None,twilio_tracking:list[str]=[]):
+   
+        
         events= []
         results = []
 
-        for to in details['to']:
-
+        for i,to in enumerate(details['to']):
+            now = datetime.now(timezone.utc).isoformat()
+            url = self.set_url(subject_id,get_value_in_list(twilio_tracking,i))
 
             try:
                 data = details.copy()
@@ -376,9 +379,9 @@ class CallService(BaseTwilioCommunication):
                 status =CallStatusEnum.FAILED.value
             finally:
             
-                if twilio_tracking and isinstance(result,CallInstance):
+                if get_value_in_list(twilio_tracking,i) and isinstance(result,CallInstance):
                     
-                    event = CallEventORM.JSON(event_id=str(uuid_v1_mc()),call_sid =result.sid ,call_id=twilio_tracking,direction='O',current_event=status,city=None,country=None,state=None,
+                    event = CallEventORM.JSON(event_id=str(uuid_v1_mc()),call_sid =result.sid ,call_id=twilio_tracking[i],direction='O',current_event=status,city=None,country=None,state=None,
                                             date_event_received=now, description=description)
                 
                     events.append(event)

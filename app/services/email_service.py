@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup
 from app.interface.timers import IntervalInterface
 from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
-from app.utils.helper import uuid_v1_mc
+from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter as Search, SMTPErrorCode, get_email_provider_name, get_error_description
@@ -277,7 +277,7 @@ class EmailSenderService(BaseEmailService):
 
         # if self.configService.celery_env == CeleryMode.none:
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id, connector=connector)
+        return self._send_message(email, message_tracking_id, contact_ids=contact_id, connector=connector)
 
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
     def sendCustomEmail(self, content, meta, images, attachment, message_tracking_id, contact_id=None, connector: smtp.SMTP = None):
@@ -287,10 +287,10 @@ class EmailSenderService(BaseEmailService):
 
         # if self.configService.celery_env == CeleryMode.none:
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id, connector=connector)
+        return self._send_message(email, message_tracking_id, contact_ids=contact_id, connector=connector)
 
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
-    def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id, reply_to, references, connector: smtp.SMTP = None, contact_id=None):
+    def reply_to_an_email(self, content, meta, images, attachment, message_tracking_id, reply_to, references, connector: smtp.SMTP = None, contact_ids:list[str]=None):
         meta = EmailMetadata(**meta)
 
         email = EmailBuilder(content, meta, images, attachment)
@@ -298,18 +298,18 @@ class EmailSenderService(BaseEmailService):
 
         # if self.configService.celery_env == CeleryMode.none:
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
-        return self._send_message(email, message_tracking_id, contact_id=contact_id, connector=connector)
+        return self._send_message(email, message_tracking_id, contact_ids=contact_ids, connector=connector)
 
-    def _send_message(self, email: EmailBuilder, message_tracking_id: str, connector: smtp.SMTP, contact_id: str = None):
+    def _send_message(self, email: EmailBuilder, message_tracking_id: list[str], connector: smtp.SMTP, contact_ids:list[ str] = []):
         replies = []
         events = []
-        for emailID, message in email.create_for_recipient():
+        for i,(emailID, message) in enumerate(email.create_for_recipient()):
 
             try:
                 event_id = str(uuid_v1_mc())
                 now = datetime.now(timezone.utc).isoformat()
                 reply_ = None
-                reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To, message, rcpt_options=[
+                reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To[i], message, rcpt_options=[
                                             'NOTIFY=SUCCESS,FAILURE,DELAY'])
                 email_status = EmailStatus.SENT.value
                 description = "Email successfully sent."
@@ -338,18 +338,18 @@ class EmailSenderService(BaseEmailService):
                 self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
 
             finally:
-                if message_tracking_id:
+                if get_value_in_list(message_tracking_id,i):
 
                     event = TrackingEmailEventORM.JSON(
                         description=description,
                         event_id=event_id,
-                        email_id=message_tracking_id,
-                        # contact_id=None,
+                        email_id=message_tracking_id[i],
+                        #contact_id=contact_ids[i] if i in contact_ids else  None,
                         current_event=email_status,
                         date_event_received=now,
                         # VERIFY if To is a list then put it in the for loop
                         esp_provider=get_email_provider_name(
-                            email.emailMetadata.To[0])
+                            email.emailMetadata.To[i])
                     )
                     events.append(event)
 
