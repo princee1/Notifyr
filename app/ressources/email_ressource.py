@@ -68,13 +68,12 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseHandler(handlers.TemplateHandler,handlers.ContactsHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
-    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.TemplateValidationInjectionPipe('html','data'),pipes.ContactToInfoPipe('email','meta.To'),)
+    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe('meta'),pipes.TemplateValidationInjectionPipe('html','data'),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         
-        for i,mail_content in enumerate(scheduler.content):
+        for mail_content in scheduler.content:
             
-            index = mail_content.meta.index if mail_content.meta.index != None else i
             datas = []
 
             if tracker.will_track:
@@ -104,23 +103,22 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 mail_content.meta.Message_ID = tracker.make_msgid
 
             meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track'))
-            await taskManager.offload_task('worker_focus',scheduler,0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
+            await taskManager.offload_task('worker_focus',scheduler,0,mail_content.meta.index,self.emailService.sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
 
     @UseLimiter(limit_value='10000/minutes')
     @UseHandler(handlers.ContactsHandler)
-    @UsePipe(pipes.CeleryTaskPipe,pipes.ContactToInfoPipe('email','meta.To'))
+    @UsePipe(pipes.CeleryTaskPipe,pipes.ContentIndexPipe('meta'),pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
     async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
 
-        for i,customEmail_content in enumerate(scheduler.content):
+        for customEmail_content in scheduler.content:
             
             content = (customEmail_content.html_content, customEmail_content.text_content)
             contents = []
-            index = customEmail_content.meta.index if customEmail_content.meta.index != None else i
 
             if tracker.will_track:
                 To = customEmail_content.meta.To.copy()
@@ -146,7 +144,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 customEmail_content.meta.Message_ID = tracker.make_msgid
 
             meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track'))
-            await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
+            await taskManager.offload_task('normal',scheduler,0,customEmail_content.meta.index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])

@@ -366,7 +366,7 @@ class ContactToInfoPipe(Pipe,PointerIterator):
                     filtered_content.append(content)
                 continue
             
-            val = self.val(ptr)
+            val = self.get_val(ptr)
 
             # if getattr(ptr,'sender_type','raw') == 'subs':
             #     val = ...(val) # TODO subs
@@ -433,7 +433,7 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
                 if ptr == None:
                     ...
 
-                val = self.val(ptr)
+                val = self.get_val(ptr)
                 if val == None:
                     ...
                 
@@ -452,3 +452,18 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
                 scheduler.content = filtered_content
                             
         return {'template':template,'scheduler':scheduler}
+class ContentIndexPipe(Pipe,PointerIterator):
+
+    def __init__(self, var:str=None):
+        super().__init__(True)
+        var = 'index' if not var else var+'.index'
+        PointerIterator.__init__(self,var)
+
+    def pipe(self,scheduler:SchedulerModel):
+        for i,content in enumerate(scheduler.content):
+            ptr = self.ptr(content)
+            index = self.get_val(ptr)
+            val =  index if index != None else i
+            self.set_val(ptr,val)
+        
+        return {'scheduler':scheduler}

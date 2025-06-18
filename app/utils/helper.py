@@ -184,8 +184,11 @@ class PointerIterator:
     def data_key(self):
         return self.ptr_iterator[-1]
     
-    def val(self,ptr):
+    def get_val(self,ptr):
         return getattr(ptr,self.data_key,None)
+    
+    def set_val(self,ptr,new_val):
+        setattr(ptr,self.data_key,new_val)
 
 
 
