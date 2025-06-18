@@ -94,7 +94,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                     contact_id =tracking_event_data['contact_id']
 
                     add_params = self._get_esp(To[j])
-                    self.linkService.set_tracking_link(template,eid,add_params=add_params)
+                    self.linkService.set_tracking_link(_template,eid,add_params=add_params)
                     tracking_link_callback = self.linkService.create_link_re(eid,add_params=add_params) # FIXME if its a list change it 
                     #self.linkService.create_tracking_pixel(template,tracker.email_id)
                     broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
