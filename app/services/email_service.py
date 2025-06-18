@@ -301,7 +301,7 @@ class EmailSenderService(BaseEmailService):
                 event_id = str(uuid_v1_mc())
                 now = datetime.now(timezone.utc).isoformat()
                 reply_ = None
-                reply_ = connector.sendmail(email.emailMetadata.From, email.emailMetadata.To[i], message, rcpt_options=[
+                reply_ = connector.sendmail(email.emailMetadata.From, email.To[i], message, rcpt_options=[
                                             'NOTIFY=SUCCESS,FAILURE,DELAY'])
                 email_status = EmailStatus.SENT.value
                 description = "Email successfully sent."
@@ -309,6 +309,10 @@ class EmailSenderService(BaseEmailService):
             except smtp.SMTPRecipientsRefused as e:
                 email_status = EmailStatus.BLOCKED.value
                 description = "Email blocked due to recipient refusal."
+            
+            except smtp.SMTPDataError as e:
+                email_status = EmailStatus.FAILED.value
+                description = "Email failed due to error in the message"
 
             except smtp.SMTPSenderRefused as e:
                 self.service_status = _service.ServiceStatus.WORKS_ALMOST_ATT

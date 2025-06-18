@@ -16,7 +16,7 @@ from email.header import decode_header
 from dataclasses import dataclass, field
 
 from app.utils.helper import get_value_in_list
-
+import copy
 
 class NotSameDomainEmailError(BaseError):
     ...
@@ -110,11 +110,12 @@ class EmailBuilder():
     
     def create_for_recipient(self):
         for i,To in enumerate(self.To):
-            self.message['Message-ID'] =self.id() if callable(self.id) else self.id[i]
+            message = copy.deepcopy(self.message)
+            message['Message-ID'] =self.id() if callable(self.id) else self.id[i]
             if get_value_in_list(self.emailMetadata._X_Email_ID,i):
-                self.message['X_Email_ID'] = self.emailMetadata._X_Email_ID[i]
-            self.set_content(i)
-            yield self.mail_message
+                message['X_Email_ID'] = self.emailMetadata._X_Email_ID[i]
+            self.set_content(i,message)
+            yield message["Message-ID"],message.as_string()
 
     def add_attachements(self, attachement_name, attachment_data):
         part = MIMEBase("application", "octet-stream")
@@ -126,7 +127,7 @@ class EmailBuilder():
         )
         pass
 
-    def set_content(self, i):
+    def set_content(self, i,message):
         if isinstance(self.contents,list):
             content = self.contents[i]
         else:
@@ -135,10 +136,10 @@ class EmailBuilder():
         html_content, text_content = content
         if text_content:
             part1 = MIMEText(text_content, "plain")
-            self.message.attach(part1)
+            message.attach(part1)
         if html_content:
             part2 = MIMEText(html_content, "html")
-            self.message.attach(part2)
+            message.attach(part2)
 
     def attach_image(self, image_path, image_data, disposition: Literal["inline", "attachment"] = "inline"):
         img = MIMEImage(image_data)
@@ -154,10 +155,6 @@ class EmailBuilder():
         for attachment in self.attachements:
             path, att_data = attachment
             self.add_attachements(path, att_data)
-
-    @property
-    def mail_message(self):
-        return self.message['Message-ID'], self.message.as_string()
 
     pass
 

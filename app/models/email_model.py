@@ -21,7 +21,7 @@ class EmailMetaModel(SubContentBaseModel):
     Bcc: Optional[str] = None
     replyTo: Optional[str] = None
     Priority: Literal['1', '3', '5'] = '1'
-    as_individual:bool = False
+    as_individual:bool = True
     _Disposition_Notification_To: str | None = PrivateAttr(None)
     _Return_Receipt_To: str | None = PrivateAttr(None)
     _Message_ID: str | list[str]|Callable | None = PrivateAttr([])
