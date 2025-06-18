@@ -68,7 +68,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseHandler(handlers.TemplateHandler,handlers.ContactsHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
-    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe('meta'),pipes.TemplateValidationInjectionPipe('html','data'),pipes.ContactToInfoPipe('email','meta.To'),)
+    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe('meta'),pipes.TemplateValidationInjectionPipe('html','data','meta.index'),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         

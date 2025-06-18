@@ -99,7 +99,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePermission(JWTAssetPermission('phone'))
     @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
-    @UsePipe(CeleryTaskPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data',False),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
+    @UsePipe(CeleryTaskPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',False),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
     async def voice_template(self, template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):

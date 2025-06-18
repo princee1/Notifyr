@@ -33,13 +33,13 @@ class EmailMetaModel(SubContentBaseModel):
             return self
         
         if isinstance(self.To,str):
-            if not self.as_contact and not email_validator(self.To):
+            if not self.sender_type == 'raw' and not email_validator(self.To):
                 raise ValueError('Email format not valid. Hint: It is a contact set as_contact=True')
             self.To = [self.To]
             return self
             
         for email in self.To:
-            if not self.as_contact and not email_validator(email):
+            if not self.sender_type =='raw' and not email_validator(email):
                 raise ValueError('Email format not valid. Hint: It is a contact set as_contact=True')
         return self
             
