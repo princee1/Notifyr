@@ -56,6 +56,7 @@ class EmailMetadata:
     _Return_Receipt_To: Optional[str] = None
     _X_Email_ID: Optional[str|list[str]] = None
     _Message_ID: Optional[str|list[str]|Callable] = None
+    _contact: Optional[list[str]] = None
     as_individual:bool = False
 
     def __str__(self):
@@ -115,6 +116,8 @@ class EmailBuilder():
             if get_value_in_list(self.emailMetadata._X_Email_ID,i):
                 message['X_Email_ID'] = self.emailMetadata._X_Email_ID[i]
             self.set_content(i,message)
+            if self.emailMetadata._contact and  get_value_in_list(self.emailMetadata._contact,i):
+                message['X_Contact_ID'] = self.emailMetadata._contact[i]
             yield message["Message-ID"],message.as_string()
 
     def add_attachements(self, attachement_name, attachment_data):
