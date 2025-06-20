@@ -7,7 +7,7 @@ from app.classes.template import HTMLTemplate
 from app.depends.class_dep import Broker, EmailTracker
 from app.depends.funcs_dep import get_task, get_template
 from app.models.email_model import CustomEmailModel, CustomEmailSchedulerModel, EmailSpamDetectionModel, EmailTemplateModel, EmailTemplateSchedulerModel
-from app.services.celery_service import TaskManager, TaskService, CeleryService
+from app.services.task_service import TaskManager, TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.link_service import LinkService
 from app.services.security_service import SecurityService

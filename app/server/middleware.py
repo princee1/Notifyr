@@ -5,7 +5,7 @@ from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare
 from app.depends.orm_cache import BlacklistORMCache, ChallengeORMCache, ClientORMCache
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
-from app.services.celery_service import TaskService
+from app.services.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod

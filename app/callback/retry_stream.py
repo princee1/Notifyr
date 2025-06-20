@@ -1,4 +1,4 @@
-from app.services.celery_service import CeleryService
+from app.services.task_service import CeleryService
 from app.utils.constant import StreamConstant
 from app.utils.helper import unflattened_dict
 from app.classes.celery import TaskHeaviness

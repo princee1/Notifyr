@@ -1,6 +1,6 @@
 
 from app.definition._service import Service,ServiceClass
-from app.services.celery_service import BackgroundTaskService, CeleryService
+from app.services.task_service import BackgroundTaskService, CeleryService
 from app.services.config_service import ConfigService
 
 @ServiceClass

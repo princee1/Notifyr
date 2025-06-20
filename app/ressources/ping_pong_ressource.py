@@ -1,7 +1,7 @@
 from app.container import InjectInMethod
 from app.decorators.handlers import WebSocketHandler
 from app.definition._ressource import BaseHTTPRessource,HTTPRessource, UseHandler, UsePermission
-from app.services.celery_service import CeleryService
+from app.services.task_service import CeleryService
 from app.services.health_service import HealthService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.websockets.ping_pong_ws import PingPongWebSocket

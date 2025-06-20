@@ -5,7 +5,7 @@ from app.container import Get, InjectInMethod
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, WebSocketHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
-from app.services.celery_service import TaskService, CeleryService
+from app.services.task_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.security_service import JWTAuthService

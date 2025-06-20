@@ -9,7 +9,7 @@ from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
-from app.services.celery_service import OffloadTaskService, RunType, TaskService
+from app.services.task_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
