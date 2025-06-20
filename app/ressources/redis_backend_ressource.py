@@ -1,14 +1,15 @@
 from typing import Annotated
-from fastapi import Depends,status
+from fastapi import Depends, Request,status
 from fastapi.responses import JSONResponse
 from app.container import Get, InjectInMethod
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, WebSocketHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UsePermission, UsePipe, UseRoles
-from app.services.celery_service import CeleryService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
+from app.services.database_service import RedisService
 from app.services.security_service import JWTAuthService
-from app.utils.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission
 from app.classes.auth_permission import AuthPermission, MustHave, Role
 from app.websockets.redis_backend_ws  import RedisBackendWebSocket
 from pydantic.fields import Field
@@ -17,12 +18,16 @@ from pydantic.fields import Field
 REDIS_EXPIRATION = 360000
 REDIS_PREFIX = 'redis'
 
+CELERY_PREFIX= 'celery'
+
+BACKGROUND_PREFIX  = 'background'
+
 @UseRoles([Role.REDIS])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
 @PingService([CeleryService])
-@HTTPRessource(prefix=REDIS_PREFIX,websockets=[RedisBackendWebSocket])
-class RedisBackendRessource(BaseHTTPRessource):
+@HTTPRessource(prefix=CELERY_PREFIX)
+class CeleryRessource(BaseHTTPRessource):
     
     @InjectInMethod
     def __init__(self,celeryService:CeleryService,configService:ConfigService,jwtService:JWTAuthService):
@@ -64,7 +69,32 @@ class RedisBackendRessource(BaseHTTPRessource):
             'redis-token':token,
         })
 
+@UseHandler(ServiceAvailabilityHandler)
+@UsePermission(JWTRouteHTTPPermission)
+@PingService([RedisService])
+@HTTPRessource(prefix=BACKGROUND_PREFIX)
+class BackgroundTaskRessource(BaseHTTPRessource):
+    
+    def __init__(self,redisService:RedisService,configService:ConfigService,taskService:TaskService):
+        self.redisService = redisService
+        self.configService = configService
+        self.backgroundTask = taskService
+    
+    @UseLimiter(limit_value='10/day')
+    @BaseHTTPRessource.Get('/{task_id}')
+    def get_result(self,task_id:str,authPermission=Depends(get_auth_permission)):
+        ...
+    
 
+@HTTPRessource(prefix=REDIS_PREFIX, routers=[CeleryRessource,],websockets=[RedisBackendWebSocket])
+class RedisBackendRessource(BaseHTTPRessource):
+    
+    @UseHandler(ServiceAvailabilityHandler)
+    @UsePermission(JWTRouteHTTPPermission)
+    @UseLimiter(limit_value='10/day')
+    @BaseHTTPRessource.Get('/')
+    def get(self,request:Request,authPermission=Depends(get_auth_permission)):
+        return 
     
 
 

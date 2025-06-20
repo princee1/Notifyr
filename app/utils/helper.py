@@ -1,32 +1,197 @@
 from inspect import getmro
 from abc import ABC
+import json
 from random import choice, seed
-from string import hexdigits, digits, ascii_letters
+from string import hexdigits, digits, ascii_letters,punctuation
 import time
 from inspect import currentframe, getargvalues
-from typing import Any, Callable
+from typing import Any, Callable, Literal, Tuple, Type
 import urllib.parse
+from fastapi import Response
 from namespace import Namespace
 from str2bool import str2bool
 import ast
 from enum import Enum
 import base64
-
 import urllib
+from uuid import UUID,uuid1
+import hashlib
+import socket
+
+alphanumeric = digits + ascii_letters
 
 
+################################   ** REST API HELPER Helper **      #################################
+
+
+def APIFilterInject(func:Callable | Type):
+
+    if type(func) == type:
+        annotations = func.__init__.__annotations__.copy()
+    else:
+        annotations = func.__annotations__.copy()
+        annotations.pop('return',None)
+
+    def wrapper(*args,**kwargs):
+        filtered_kwargs = {
+            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
+            for key, value in kwargs.items()
+            if key in annotations
+        }
+        return func(*args, **filtered_kwargs)
+    return wrapper
+
+def AsyncAPIFilterInject(func:Callable | Type):
+
+    if type(func) == type:
+        annotations = func.__init__.__annotations__.copy()
+    else:
+        annotations = func.__annotations__.copy()
+        annotations.pop('return',None)
+
+    async def wrapper(*args,**kwargs):
+        filtered_kwargs = {
+            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
+            for key, value in kwargs.items()
+            if key in annotations
+        }
+        return await func(*args, **filtered_kwargs)
+    return wrapper
+
+def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None):
+    reversed_kwargs = reverseDict(kwargs)
+    if key == None and cls == None:
+        raise KeyError
+    # if cls:
+    #     for 
+    return 
+
+def copy_response(result:Response,response:Response):
+    if response == None:
+        return result
+    result.raw_headers.extend(response.raw_headers)
+    result.status_code = response.status_code if response.status_code else result.status_code
+    return result
+
+def stable_mac():
+    """Generate a stable pseudo-MAC address based on the machine's hostname."""
+    hostname = socket.gethostname()
+    hash_bytes = hashlib.sha1(hostname.encode()).digest()
+    mac = int.from_bytes(hash_bytes[:6], 'big') | 0x010000000000  # Set multicast bit
+    return mac & 0xFFFFFFFFFFFF  # Ensure 48-bit value
+
+def uuid_v1_mc(len=1):
+    """Generate a UUIDv1 with a stable, modified MAC address."""
+    if len <=0:
+        raise ValueError('len needs to be positive and non null')
+    if len==1:
+        return uuid1(node=stable_mac())
+    return [uuid1(node=stable_mac()) for _ in range(len)]
+
+
+################################   ** Code Helper **      #################################
 
 class SkipCode(Exception):
     pass
 
+################################   ** Key Helper **      #################################
+
 
 DICT_SEP = "->"
 
+def KeyBuilder(prefix:str|list[str],sep:str|list[str]='-'):
+
+    if prefix == None:
+        raise ValueError('prefix cant be None')
+
+    if sep == None:
+        raise ValueError('sep cant be None')
+
+    if isinstance(prefix,list) and isinstance(sep,list):
+        p_len = len(prefix)
+        s_len = len(sep)
+
+        if p_len == 0:
+            raise ValueError('prefix cant be an empty list')
+        if s_len == 0:
+            raise ValueError('sep cant be an empty list')
+
+        if p_len < s_len:
+            s_len = [s_len[0]]*p_len
+
+        if p_len != s_len:
+            sep = sep[:p_len]
+
+    if isinstance(prefix,list) and isinstance(sep,str):
+        sep = [sep]*len(prefix)
+
+    if isinstance(prefix,str) and isinstance(sep,str):
+        prefix = [prefix]
+        sep= [sep]
+
+    def builder(key:str|list[str])->str:
+        if isinstance(key,str):
+            key = [key]
+
+        if len(key) != len(prefix):
+            raise ValueError('')
+
+        temp = ""
+        for p,k,s in zip(prefix,key,sep):
+            temp+=f"{p}{s}{k}{s}"
+        
+        return temp[:-1]
+
+    def separator(key:str)->str:
+        if not isinstance(key,str):
+            key = [key]
+
+        if len(key) != len(prefix):
+            raise ValueError()
+        #TODO
+        raise NotImplementedError
+    
+    return builder,separator
 
 def key_builder(key): return key+DICT_SEP
 
 
-alphanumeric = digits + ascii_letters
+################################   ** Helper **      #################################
+
+def get_value_in_list(data,index):
+    try:
+        return data[index]
+    except:
+        return None
+
+
+class PointerIterator:
+    def __init__(self,var:str,split:str='.'):
+        if var== None:
+            raise ValueError(f'var cant be None')
+        self.ptr_iterator = var.split(split)
+    
+    def ptr(self,value:Any):
+        ptr = value
+        for sk in self.ptr_iterator[:-1]:
+            if ptr == None:
+                break
+            next_ptr =getattr(ptr,sk,None) 
+            ptr = next_ptr
+        return ptr
+    
+    @property
+    def data_key(self):
+        return self.ptr_iterator[-1]
+    
+    def get_val(self,ptr):
+        return getattr(ptr,self.data_key,None)
+    
+    def set_val(self,ptr,new_val):
+        setattr(ptr,self.data_key,new_val)
+
+
+
 ################################   ** Parsing Helper **      #################################
 
 
@@ -48,7 +213,11 @@ def parseToDataStruct(value: str):
             return parsed_value
     except (ValueError, SyntaxError):
         return None
-
+    
+def enum_encoder(obj):
+    if isinstance(obj, Enum):
+        return obj.value  # or obj.value if you prefer
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
 # TODO need to add the build error level
 def parseToValue(value: str, _type: type[int | bytes | float | bytearray], default: int | bytes | float | bytearray | None = None, ):
@@ -92,7 +261,7 @@ def strict_parseToValue(value: str):
         return None
 
 
-def parse_value(value) -> Any | str:
+def parse_value(value,return_none=False) -> Any | str:
     """
     Parse a string value into the appropriate Python type.
     """
@@ -108,6 +277,8 @@ def parse_value(value) -> Any | str:
     if parsed_value is not None:
         return parsed_value
 
+    if return_none:
+        return None
     # Default: return the string itself
     return value
 
@@ -137,7 +308,7 @@ def swapDict(values: dict):
 
 def default_flattenReducer(key1:str,key2:str): return  key1+key2
 
-def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] ={}, reducer:Callable[[str,str],str] = default_flattenReducer):
+def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] ={}, reducer:Callable[[str,str],str] = default_flattenReducer,serialized=False):
     """
     See https://pypi.org/project/flatten-dict/ for a better implementation
     """
@@ -152,12 +323,35 @@ def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedD
         key_val  = reducer(from_keys,key)  
 
         if type(item) is not dict:
-            flattenedDict[key_val] = item
+            if not serialized:
+                flattenedDict[key_val] = item
+            else:
+                #flattenedDict[key_val] = str(item)
+                flattenedDict[key_val] = json.dumps(item,default=enum_encoder)
 
-        if type(item) is dict:
-            flatten_dict(item, key_builder(key_val), flattenedDict)
+        if type(item) is dict: 
+            flatten_dict(item, key_builder(key_val), flattenedDict,reducer,serialized)
     
     return flattenedDict
+
+def unflattened_dict(flattened_dict: dict[str, Any], separator: str = DICT_SEP) -> dict[str, Any]:
+    """
+    Converts a flattened dictionary back into a nested dictionary, attempting to parse JSON values back to their original types.
+    """
+    unflattened = {}
+    for key, value in flattened_dict.items():
+        keys = key.split(separator)
+        current = unflattened
+        for part in keys[:-1]:
+            if part not in current or not isinstance(current[part], dict):
+                current[part] = {}
+            current = current[part]
+        try:
+            current[keys[-1]] = json.loads(value) if isinstance(value, str) else value
+        except (json.JSONDecodeError, TypeError):
+            current[keys[-1]] = value
+    return unflattened
+
 
 
 ################################   ** Class Helper **      #################################
@@ -183,8 +377,8 @@ def issubclass_of(bCls, kCls):
 def isextends_of(obj,bCls):
     return issubclass_of(bCls,type(obj))
     
-
-def is_abstract(cls: type, bClass: type):  # BUG
+# WARNING deprecated
+def is_abstract(cls: type, bClass: type):
     try:
         x = list(getmro(cls))
         x.remove(cls)
@@ -192,7 +386,7 @@ def is_abstract(cls: type, bClass: type):  # BUG
         x.remove(bClass)
         return x.pop(i) == ABC
     except TypeError as e:
-        pass  # TODO raise an error, make sure to extends the ABC class last
+        pass 
     except ValueError as e:
         pass
     except:
@@ -219,8 +413,8 @@ primitive_classes = [
 ]
 
 
-def isprimitive_type(typ:type):
-    return typ in primitive_classes
+def isprimitive_type(obj:Any):
+    return type(obj) in primitive_classes
 
 ################################   ** Generate Helper **      #################################
 
@@ -290,8 +484,18 @@ def phone_parser(phone_number:str):
     cleaned_number = ''.join(filter(str.isdigit, converted_number))
 
     if not cleaned_number.startswith('1'):
-        cleaned_number = '1' + cleaned_number
+        cleaned_number = '1' + cleaned_number # ERROR Assuming US OR CA country code
 
     formatted_number = f"+{cleaned_number}"
     return formatted_number
     
+def filter_paths(paths):
+        paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
+        results = []
+
+        for path in paths:
+            if not any(path.startswith(d + "\\") for d in results):
+                results.append(path)
+
+
+        return ['assets/'+ p for p in results ]

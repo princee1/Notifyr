@@ -1,0 +1,26 @@
+FROM edoburu/pgbouncer
+
+# Write the PgBouncer configuration using the cat command
+RUN cat <<EOF > /etc/pgbouncer/pgbouncer.ini
+[databases]
+notifyr = host=notifyr-postgres port=5432 dbname=${POSTGRES_DB} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD}
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+auth_type = md5
+auth_file = /etc/pgbouncer/userlist.txt
+pool_mode = transaction
+max_client_conn = 1000
+default_pool_size = 20
+log_connections = 1
+log_disconnections = 1
+EOF
+
+# Write the userlist file using the cat command
+RUN cat <<EOF > /etc/pgbouncer/userlist.txt
+"${POSTGRES_USER}" "${POSTGRES_PASSWORD}"
+EOF
+
+# Set the entrypoint command to start PgBouncer
+CMD ["pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]

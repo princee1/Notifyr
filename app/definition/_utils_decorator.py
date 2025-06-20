@@ -1,14 +1,16 @@
 import asyncio
-from typing import Callable
-from app.utils.dependencies import APIFilterInject, AsyncAPIFilterInject
+from typing import Any, Callable
+
+from fastapi import Response
+from app.utils.helper import APIFilterInject,AsyncAPIFilterInject
 from asgiref.sync import sync_to_async
 from enum import Enum
 
 class DecoratorPriority(Enum):
     PERMISSION = 1
     HANDLER = 2
-    GUARD = 4
     PIPE = 3
+    GUARD = 4
     INTERCEPTOR = 5
 
 
@@ -54,7 +56,7 @@ class Handler(DecoratorObj):
         return await self.ref(*args, **kwargs)
 
     async def handle(self, function: Callable, *args, **kwargs):
-        ...
+        await function(*args,**kwargs)
 
 class HandlerDefaultException(Exception):
     ...
@@ -63,7 +65,7 @@ class HandlerDefaultException(Exception):
 class Pipe(DecoratorObj):
     def __init__(self, before: bool):
         self.before = before
-        super().__init__(self.pipe, filter=before)
+        super().__init__(self.pipe, filter=True)
 
     def pipe(self):
         ...
@@ -88,14 +90,30 @@ class PermissionDefaultException(Exception):
 class Interceptor(DecoratorObj):
 
     def __init__(self,):
-        super().__init__(self.intercept_before, True)
+        super().__init__(self.intercept, True)
 
-    def intercept_before(self):
+
+    def _intercept_before(self):
         ...
     
-    def intercept_after(self):
+    def _intercept_after(self,result:Response|Any):
         ...
     
+    async def intercept(self,function:Callable,*args,**kwargs):
+        if asyncio.iscoroutinefunction(self._intercept_before):
+            await  AsyncAPIFilterInject(self._intercept_before)(*args,**kwargs)
+        else:
+            APIFilterInject(self._intercept_before)(*args,**kwargs)
+
+        result = await function(*args,**kwargs)
+        if asyncio.iscoroutinefunction(self._intercept_after):
+            await self._intercept_after(result)
+        else:
+            self._intercept_after(result)
+        return result
+    
+    async def do(self,function:Callable, *args, **kwargs):
+        return await self.intercept(function,*args,**kwargs)
 
 class InterceptorDefaultException(Exception):
     ...

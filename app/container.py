@@ -1,3 +1,4 @@
+import asyncio
 from threading import Thread
 import injector
 from inspect import signature, getmro
@@ -7,12 +8,12 @@ from app.utils.constant import DependencyConstant
 from app.utils.helper import issubclass_of, SkipCode
 from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
-from deprecated import deprecated
 from ordered_set import OrderedSet
-from app.definition._service import S, MethodServiceNotExistsError, Service, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from app.definition._service import S, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
+not_allowed_types=(list,str,float,bytearray,bool,bytes,int,dict,set)
 
 
 class ContainerError(BaseException):
@@ -55,7 +56,7 @@ class InvalidDependencyError(ContainerError):
     pass  # Abstract class in the dependency list
 
 
-def issubclass(cls): return issubclass_of(Service, cls)
+def issubclass(cls): return issubclass_of(BaseService, cls)
 
 
 def isabstract(cls):
@@ -73,9 +74,9 @@ def isabstract(cls):
 
 class Container():
 
-    def __init__(self, D: list[type],quiet=False) -> None:  # TODO add the scope option
+    def __init__(self, D: list[type],quiet=False,scopes:list[Any]=None) -> None:  # TODO add the scope option
         self.__app = injector.Injector()
-
+        self.quiet_print = quiet
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
 
@@ -88,16 +89,19 @@ class Container():
         PrettyPrinter_.space_line()
 
         self.__buildContainer()
-        # TODO print success  in building the app
 
     def __bind(self, type_:type, obj:Any, scope=None):
         self.__app.binder.bind(type_, to=obj, scope=scope)
 
     def bind(self, type_:type, obj:Any, scope=None):
-        # self.__bind(type_, obj, scope)
-        # TODO bind other dependency that are not in the dependency list
-        ...
-
+        if isinstance(obj,BaseService):
+            raise ValueError('Use Register Instead')
+        if isinstance(obj,not_allowed_types):
+            raise ValueError
+        if type_ in not_allowed_types:
+            raise ValueError
+        self.__bind(type_, to=obj, scope=scope)
+        
     def get(self, typ: Type[S], scope=None, all=False) -> dict[type, Type[S]] | Type[S]:
         if not all and isabstract(typ.__name__):
             raise InvalidDependencyError
@@ -127,7 +131,7 @@ class Container():
                     if len(depNotInjected) != 0:
                         for y in depNotInjected:
                             if y not in AbstractServiceClasses:
-                                raise NotInDependenciesError
+                                raise NotInDependenciesError(y)
                     abstractRes = self.__getAbstractResolving(x)
                     for r in abstractRes.keys():
                         r_dep, r_p = self.getSignature(
@@ -342,12 +346,12 @@ class Container():
                 obj_dep = self.get(self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
                 params[params_names[i]] = obj_dep
             return params
-        except KeyError:
-            raise NoResolvedDependencyError
+        except KeyError as e :
+            raise NoResolvedDependencyError(e.args)
 
     def __createDep(self, typ: type, params:dict):
         flag = issubclass(typ)
-        obj: Service = typ(**params)
+        obj: BaseService = typ(**params)
         
         if flag:
             obj.service_list= list(params.values())
@@ -379,7 +383,7 @@ class Container():
         raise NotImplementedError
         D = self.__app.get(typ, scope)
         if issubclass(D):  # BUG need to ensure that this a Service type
-            D: Service = D  # NOTE access to the intellisense
+            D: BaseService = D  # NOTE access to the intellisense
             D._destroyer()
 
     def reloadDep(self, typ: type, scope=None):  # TODO
@@ -391,8 +395,8 @@ class Container():
         self.__inject(typ.__name__)
     
     @property
-    def dependencies(self) -> list[type]: return [x[DependencyConstant.TYPE_KEY]
-                                                  for x in self.DEPENDENCY_MetaData.values()]  # TODO avoid to compute this everytime we call this function
+    def dependencies(self) -> list[BaseService]: return [x[DependencyConstant.TYPE_KEY]
+                                                  for x in self.DEPENDENCY_MetaData.values()]
 
     @property
     def objectDependencies(self):
@@ -406,12 +410,16 @@ class Container():
     def seek_bindings(self):
         return self.__app.binder._bindings
 
+    @property
+    def services_status(self):
+        return {s:s.service_status for s in self.dependencies}
+
 CONTAINER: Container = None #Container(__DEPENDENCY)
 
-def build_container(quiet=False):
+def build_container(quiet=False,dep=__DEPENDENCY):
     PrettyPrinter_.quiet=quiet
     global CONTAINER
-    CONTAINER = Container(__DEPENDENCY)
+    CONTAINER = Container(dep)
 
 def InjectInFunction(func: Callable):
     """
@@ -548,17 +556,32 @@ def Need(typ: Type[S]) -> Type[S]:
     return CONTAINER.need(typ)
 
 
+def Bind(type_:type, obj:Any, scope=None):
+    return CONTAINER.bind(type_,obj,scope)
+
 def GetDepends(typ:type[S])->Type[S] | dict[str,Type[S]]:
     def depends():
         return Get(typ)
     return depends
 
-def GetDependsAttr(typ:type[S],func_name:str)->Callable:
-    def depends():
-        self = Get(typ)
-        func = getattr(self,func_name,None)
-        if not func:
-            raise MethodServiceNotExistsError
-        return func
+def GetDependsFunc(typ:type[S],func_name:str)->Callable:
+    self = Get(typ)
+    func = getattr(self,func_name,None)
+    if not func:
+        raise MethodServiceNotExistsError
+    
+    if asyncio.iscoroutinefunction(func):
+        @functools.wraps(func)
+        async def depends(**kwargs):
+            return await func(**kwargs)
+    else:
+        @functools.wraps(func)
+        def depends(**kwargs):
+            return func(**kwargs)
+    
     return depends
+
+def GetAttr(typ:type[S],attr_name:str):
+    self = Get(typ)
+    return getattr(self,attr_name,None)
 

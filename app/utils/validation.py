@@ -5,6 +5,13 @@ from validators import url as validate_url, ipv4 as IPv4Address, ValidationError
 from geopy.geocoders import Nominatim
 from bs4 import Tag
 from cerberus import Validator,SchemaError
+from datetime import datetime
+from functools import wraps
+import re
+import ipaddress
+from .transformer import transform
+from langcodes import Language
+
 
 def ipv4_validator(ip):
     """
@@ -23,6 +30,21 @@ def ipv6_validator(ip):
     try:
         return IPv6Address(ip)
     except ValidationError:
+        return False
+
+
+def ipv4_subnet_validator(ip):
+    """
+    The function `ipv4_subnet_validator` checks if a given input is a valid IPv4 subnet.
+    """
+    try:
+        ipaddress.IPv4Network(ip, strict=False)
+        return True
+    except ValueError:
+        return False
+    except ipaddress.NetmaskValueError:
+        return False
+    except:
         return False
 
 
@@ -51,7 +73,10 @@ def url_validator(url):
     """
     The function `url_validator` takes a URL as input and validates the URL format
     """
-    return validate_url(url)
+    try:
+        return validate_url(url)
+    except:
+        return False
 
 
 def mac_address_validator(mac):
@@ -77,7 +102,6 @@ def location_validator(latitude, longitude):
 def digit_validator(val:int):
     return val>=0 and val <=9
 
-from datetime import datetime
 
 def date_validator(date: str) -> bool:
     try:
@@ -86,11 +110,34 @@ def date_validator(date: str) -> bool:
     except ValueError:
         return False
 
+
 def time_validator(time: str) -> bool:
     try:
         datetime.strptime(time, "%H:%M:%S")
         return True
     except ValueError:
+        return False
+    
+
+def PasswordValidator(min_length=8, max_length=128, require_digit=True, require_symbol=True, require_uppercase=True):
+
+        def validator(password: str) -> str:
+            if len(password) < min_length or len(password) > max_length:
+                raise ValueError(f"Password must be between {min_length} and {max_length} characters long.")
+            if require_digit and not any(char.isdigit() for char in password):
+                raise ValueError("Password must contain at least one digit.")
+            if require_symbol and not any(char in "!@#$%^&*()-_=+[]{}|;:'\",.<>?/`~" for char in password):
+                raise ValueError("Password must contain at least one symbol.")
+            if require_uppercase and not any(char.isupper() for char in password):
+                raise ValueError("Password must contain at least one uppercase letter.")
+            return password
+        return validator
+
+    
+def language_code_validator(language):
+    try:
+        return Language.get(language).is_valid()
+    except:
         return False
 
 #######################                      #################################
@@ -104,7 +151,8 @@ class ValidatorType(Enum):
     URL=url_validator,"Must be an url address format"
     DIGIT=digit_validator,"Must be a digit"
     DATE = date_validator,"Must be a date format Y-M-D"
-    TIME = time_validator,"Must be a time format H:M:S" 
+    TIME = time_validator,"Must be a time format H:M:S"
+    LANG = language_code_validator,"Must be a valid language code format" 
 #######################                      #################################
 
 class CustomValidator(Validator):
@@ -120,6 +168,14 @@ class CustomValidator(Validator):
         flag = validationFunc(value)
         if not flag:
             self._error(field, error_message)
+    
+    def _validate_transform(self,constraint:str,field,value):
+        if not constraint:
+            self._error(field,'Must be a valid string')
+        
+        if constraint not in transform:
+            self._error(field,'Transformer does not exists')
+
     # ERROR extending :check normal validation 
     # TODO for  operator
 

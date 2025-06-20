@@ -1,0 +1,16 @@
+from app.definition._error import BaseError
+
+class CustomTwilioError(BaseError):
+    ...
+
+class TwilioPhoneNumberParseError(CustomTwilioError):
+    ...
+
+class TwilioCallBusyError(CustomTwilioError):
+    ...
+
+class TwilioCallNoAnswerError(CustomTwilioError):
+    ...
+
+class TwilioCallFailedError(CustomTwilioError):
+    ...

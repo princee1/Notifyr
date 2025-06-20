@@ -10,6 +10,8 @@ from app.definition._error import BaseError
 PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
+PermissionStatus= Literal['active','inactive','expired']
+ClientTypeLiteral = Literal['User','Admin']
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
@@ -23,6 +25,19 @@ class Role(Enum):
     CONTACTS = 'CONTACTS'
     TWILIO = 'TWILIO'
     SUBSCRIPTION = 'SUBSCRIPTION'
+    CLIENT = "CLIENT"
+    LINK = "LINK"
+
+class Scope(Enum):
+    SoloDolo = 'SoloDolo'
+    Organization = 'Organization'
+    #Domain = 'Domain'
+
+
+class ClientType(Enum):
+    User = 'User'
+    Admin = 'Admin'
+    Twilio = 'Twilio'
 
 
 class FuncMetaData(TypedDict):
@@ -30,8 +45,10 @@ class FuncMetaData(TypedDict):
     roles:set[Role]
     excludes:set[Role]
     options: list[Callable]
+    shared:bool
     limit_obj:dict
     limit_exempt:bool=False
+    default_role:bool =True
 
 
 class RoutePermission(TypedDict):
@@ -45,19 +62,40 @@ class AssetsPermission(TypedDict):
         
 class AuthPermission(TypedDict):
     generation_id: str
-    domain_name:str=None # TODO accept sudomains 
-    client_id: str= None # TODO
-    application_id: str = None # TODO
-    roles:list[str]
+    hostname:str
+    client_id: str
+    client_type:ClientTypeLiteral = 'User'
+    #application_id: str = None # TODO
+    roles:list[str|Role]
     issued_for: str # Subnets
+    group_id:str | None = None
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str]
-    challenge: str= None # TODO 
-    scope:list[str] = None # TODO
+    challenge: str
+    scope:str
     salt:str
+    status:PermissionStatus= 'active'
+    authz_id:str
 
+class RefreshPermission(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
+    generation_id: str
+    challenge:str
+    salt:str
+    client_id:str
+    group_id:str | None = None
+    issued_for:str
+    created_at:float
+    expired_at:float
+    status:PermissionStatus= 'active'
+    client_type:ClientTypeLiteral = 'User'
+
+
+def parse_authPermission_enum(authPermission):
+        authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+        authPermission['scope'] = Scope._member_map_[authPermission['scope']]
+        
 
 class ContactPermission(TypedDict):
     expired_at:int
@@ -67,7 +105,7 @@ class ContactPermission(TypedDict):
     salt:str
 
 class TokensModel(BaseModel):
-    tokens: str | list[str]
+    tokens: str
 
 class WSPermission(TypedDict):
     operation_id:str
@@ -83,19 +121,19 @@ class WSPathNotFoundError(BaseError):
 def MustHave(role:Role):
 
     def verify(authPermission:AuthPermission):
-        return role.value in authPermission['roles']
+        return role in authPermission['roles']
 
     return verify
 
 def MustNotHave(role:Role):
 
     def verify(authPermission:AuthPermission):
-        return role.value not in authPermission['roles']
+        return role not in authPermission['roles']
 
     return verify
 
 
-def MustHaveRoleSuchHas(*role:Role):
+def MustHaveRoleSuchAs(*role:Role):
 
     roles = set(role)
     roles_size= len(roles)

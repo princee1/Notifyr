@@ -1,4 +1,5 @@
 from enum import Enum
+from typing_extensions import Literal
 ########################  ** Dependencies **   ########################################
 
 class DependencyConstant:
@@ -40,6 +41,7 @@ class ConfigAppConstant:
 class HTTPHeaderConstant:
     API_KEY_HEADER = 'X-API-KEY'
     ADMIN_KEY = 'X-Admin-Key'
+    CONTACT_TOKEN='X-Contact-TOKEN'
     WS_KEY = 'X-WS-Key'
     REQUEST_ID = 'x-request-id'
 
@@ -60,6 +62,9 @@ class SpecialKeyParameterConstant:
     SCHEDULER_SPECIAL_KEY_PARAMETER = 'scheduler'
     WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
 
+class SpecialKeyAttributesConstant:
+    CONTACT_SPECIAL_KEY_ATTRIBUTES='_contact'
+
 ########################                     ########################################
 
 class EmailHostConstant(Enum):
@@ -70,3 +75,43 @@ class EmailHostConstant(Enum):
     YAHOO = "YAHOO"
     AOL = 'AOL'
     ICLOUD = 'ICLOUD'
+
+
+########################                     ########################################
+
+class StreamConstant:
+    StreamLiteral = Literal['email-event','twilio','links-event','links-session','email-tracking','contact-event']
+
+    EMAIL_EVENT_STREAM ='email-event'
+    TWILIO_REACTIVE ='twilio-reactive'
+    LINKS_EVENT_STREAM ='links-event'
+    LINKS_SESSION_STREAM ='links-session'
+    EMAIL_TRACKING ='email-tracking'
+    CONTACT_EVENT = 'contact-event'
+    TWILIO_TRACKING_SMS ='twilio-tracking-sms'
+    TWILIO_TRACKING_CALL ='twilio-tracking-call'
+    TWILIO_EVENT_STREAM_SMS = 'twilio-event-sms'
+    TWILIO_EVENT_STREAM_CALL = 'twilio-event-call'
+    CONTACT_SUBS_EVENT = 'contact-subs-event'
+    CONTACT_CREATION_EVENT= 'contact-creation-event'
+    CELERY_RETRY_MECHANISM='retry-mechanism'
+
+
+class SubConstant:
+    SERVICE_STATUS = 'service-status'
+
+class ServerParamsConstant(Enum):
+    SESSION_ID = 'session-id'
+
+
+########################                     ########################################
+
+class EmailHeadersConstant(str,Enum):
+
+    X_EMAIL_ID = 'X-EMAIL-ID'
+    MESSAGE_ID = 'MESSAGE-ID'
+    CONTACT_ID = 'X_CONTACT_ID'
+
+
+class LinkConstant(str,Enum):
+    PIXEL = 'pixel'

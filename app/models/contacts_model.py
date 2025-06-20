@@ -1,15 +1,15 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, TypedDict
 from tortoise import fields
 from tortoise.models import Model
-import uuid
 from pydantic import BaseModel, field_validator,model_validator
 from typing_extensions import Literal, Self
 from app.utils.helper import phone_parser
 from app.utils.validation import email_validator, phone_number_validator
 from app.definition._error import BaseError
 from tortoise import Tortoise
+from app.utils.helper import uuid_v1_mc
 
 
 ##################################################################              ##############################################################3333333333
@@ -48,33 +48,6 @@ class ContentType(Enum):
 
 ##################################################################              ##############################################################3333333333
 
-class ContactNotExistsError(BaseError):
-    ...
-class ContactAlreadyExistsError(BaseError):
-    
-    def __init__(self,email,phone ,*args):
-        self.email=email
-        self.phone=phone
-        super().__init__(*args)
-    
-    @property
-    def message(self):
-        if self.email and self.phone:
-            return "Both the email and the phone field is already used"
-
-        if self.email:
-            return "The email field is already used"
-        
-        return "The phone field is already used"
-
-class ContactOptInCodeNotMatchError(BaseError):
-    ...
-
-class ContactDoubleOptInAlreadySetError(BaseError):
-    ...
-
-##################################################################              ##############################################################3333333333
-
 CONTACTS_SCHEMA = "contacts"
 
 def table_builder (name:str):
@@ -82,7 +55,7 @@ def table_builder (name:str):
     return f"{CONTACTS_SCHEMA}.{name}"
 
 class ContactORM(Model):
-    contact_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    contact_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     first_name = fields.CharField(max_length=50)
     last_name = fields.CharField(max_length=50)
     email = fields.CharField(max_length=50, null=True, unique=True)
@@ -93,8 +66,8 @@ class ContactORM(Model):
     frequency = fields.CharEnumField(max_length=20,enum_type=Frequency,default=Frequency.always)
     action_code = fields.TextField(null=True)
     status = fields.CharEnumField(max_length=20,enum_type=Status,default=Status.Active)
-    lang = fields.CharField(max_length=20,default="en")
-    created_at = fields.DatetimeField(auto_now=True,use_tz=True)
+    lang = fields.CharEnumField(max_length=20,enum_type=Lang, default=Lang.en)
+    created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
 
     def __str__(self):
@@ -109,8 +82,12 @@ class ContactORM(Model):
         'email': self.email,
         'phone': self.phone,
         'app_registered': self.app_registered,
-        'lang': self.lang,
+        #'opt_in_code':self.opt_in_code,
+        'frequency':self.frequency.value,
+        'status':self.status.value,
+        'lang': self.lang.value,
         'created_at': self.created_at.isoformat(),
+        'update_at':self.updated_at.isoformat(),
     }
 
     @property
@@ -119,10 +96,10 @@ class ContactORM(Model):
 
     class Meta:
         schema = CONTACTS_SCHEMA
-        table = table_builder("contact")
+        table = "contact"
 
 class SecurityContactORM(Model):
-    security_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    security_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     security_code = fields.TextField(null=True)
     security_code_salt = fields.CharField(64,null=True)
@@ -138,10 +115,10 @@ class SecurityContactORM(Model):
 
     class Meta:
         schema = CONTACTS_SCHEMA
-        table = table_builder("securitycontact")
+        table = "securitycontact"
 
 class SubscriptionContactStatusORM(Model):
-    subscription_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    subscription_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscriptions_status', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
     email_status = fields.CharEnumField(enum_type=SubscriptionStatus,max_length=20)
     sms_status = fields.CharEnumField(enum_type=SubscriptionStatus,max_length=20)
@@ -152,11 +129,11 @@ class SubscriptionContactStatusORM(Model):
         return f"{self.subscription_id} {self.contact}"
 
     class Meta:
-        table = table_builder("subscriptioncontact")
+        table = "subscriptioncontact"
         schema = CONTACTS_SCHEMA
 
 class ReasonORM(Model):
-    reason_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    reason_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     reason_description = fields.TextField(null=True)
     reason_name = fields.CharField(max_length=255, unique=True)
     reason_count = fields.BigIntField(default=0)
@@ -166,7 +143,7 @@ class ReasonORM(Model):
         schema = CONTACTS_SCHEMA
 
 class ContentSubscriptionORM(Model):
-    content_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    content_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     content_name = fields.CharField(max_length=50, unique=True)
     content_description = fields.TextField(null=True)
     content_type = fields.CharEnumField(max_length=20,enum_type=ContentType)
@@ -180,7 +157,7 @@ class ContentSubscriptionORM(Model):
         schema = CONTACTS_SCHEMA
 
 class SubscriptionORM(Model):
-    subs_id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    subs_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     contact = fields.ForeignKeyField('models.ContactORM', related_name='subscription', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     content = fields.ForeignKeyField('models.ContentSubscriptionORM', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     subs_status = fields.CharEnumField(max_length=20, enum_type=SubscriptionStatus, default=SubscriptionStatus.Active)
@@ -207,6 +184,57 @@ class ContentTypeSubscriptionORM(Model):
         table = "contenttypesubscription"
         schema = CONTACTS_SCHEMA
 
+class ContactAnalyticsORM(Model):
+    analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    content = fields.ForeignKeyField('models.ContentSubscriptionORM','analytics',null=True,on_delete=fields.NO_ACTION,)
+    week_start_date = fields.DateField(default=datetime.utcnow().date)
+    country = fields.CharField(max_length=5, null=True)
+    region = fields.CharField(max_length=60, null=True)
+    city = fields.CharField(max_length=100, null=True)
+    subscriptions_count = fields.IntField(default=0)
+    unsubscriptions_count = fields.IntField(default=0)
+
+    class Meta:
+        schema = CONTACTS_SCHEMA
+        table = "contactanalytics"
+        unique_together = ("week_start_date", "country", "region", "city")
+
+    @property
+    def to_json(self):
+        return {
+            "analytics_id": str(self.analytics_id),
+            "content_id":str(self.content.content_id) if self.content != None else None,
+            "week_start_date": self.week_start_date.isoformat(),
+            "country": self.country,
+            "region": self.region,
+            "city": self.city,
+            "subscriptions_count": self.subscriptions_count,
+            "unsubscriptions_count": self.unsubscriptions_count,
+        }
+    
+class ContactCreationAnalyticsORM(Model):
+    analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    week_start_date = fields.DateField(default=datetime.utcnow().date)
+    country = fields.CharField(max_length=5, null=True)
+    region = fields.CharField(max_length=60, null=True)
+    city = fields.CharField(max_length=100, null=True)
+    contacts_created_count = fields.IntField(default=0)
+
+    class Meta:
+        schema = CONTACTS_SCHEMA
+        table = "contactcreationanalytics"
+        unique_together = ("week_start_date", "country", "region", "city")
+
+    @property
+    def to_json(self):
+        return {
+            "analytics_id": str(self.analytics_id),
+            "week_start_date": self.week_start_date.isoformat(),
+            "country": self.country,
+            "region": self.region,
+            "city": self.city,
+            "contacts_created_count": self.contacts_created_count,
+        }
 ##################################################################              ##############################################################3333333333
 
 class SubscriptionStatusModel(BaseModel):
@@ -253,7 +281,7 @@ class ContactModel(BaseModel):
     last_name:str
     email:str =None
     phone:str=None
-    app_registered:bool
+    app_registered:bool # BUG because in the landing someone set it to true and access Registered user 
     lang:Lang
     frequency:Frequency
 
@@ -274,18 +302,35 @@ class ContactModel(BaseModel):
             raise ValueError("Value is not the correct phone format")
         return phone  
 
-    @field_validator('lang')
-    def  check_language(cls,lang):
-        if lang not in ('en','fr'):
-            raise ValueError('Value lang is not supported yet only en or fr')
-        return lang
-
     @model_validator(mode="after")
     def check_email_phone(self)->Self:
         if self.phone ==None and self.email == None:
             raise ValueError("Email and phone cant be both null")
         return self
 
+
+class UpdateContactModel(ContactModel):
+    first_name:str | None= None
+    last_name:str | None = None
+    #app_registered:bool| None = None
+    lang:str | None = None
+    frequency:Frequency | None = None
+    
+
+    @model_validator(mode="after")
+    def check_email_phone(self)->Self:
+        return self
+
+    @model_validator(mode="after")
+    def check_value(self)->Self:
+        if not all(self.model_dump().values()):
+            raise ValueError("Cant update with an empty body")
+        return self
+        
+class AppRegisteredContactModel(BaseModel):
+    app_registered:bool
+
+    
 class SecurityModel(BaseModel):
     security_code:int
     security_phrase:str
@@ -330,12 +375,86 @@ async def update_reason(name:str):
     await client.execute_query(q,[name])
 
 async def get_contact_summary(contact_id: str):
-    query = "SELECT * FROM contact_summary WHERE contact_id = $1::UUID"
+    query = "SELECT * FROM contacts.contactsummary WHERE contact_id = $1::UUID"
     client = Tortoise.get_connection('default')
     result = await client.execute_query(query, [contact_id])
-    return result[1][0] if result else None
+    return dict(result[1][0]) if result else None
 
 async def get_all_contact_summary():
-    query = "SELECT * FROM contact_summary"
+    query = "SELECT * FROM contacts.contactsummary"
     client = Tortoise.get_connection('default')
     return await client.execute_query(query,[])
+
+async def bulk_upsert_contact_analytics(analytics_data:dict):
+    values_str = ", ".join(
+        f"ROW('{country}', '{region}', '{city}', {data['subscriptions']}, {data['unsubscriptions']})::contacts.analytics_input"
+        for (country, region, city), data in analytics_data.items()
+    )
+    query = "SELECT * FROM contacts.bulk_upsert_contact_analytics($1)"
+    client = Tortoise.get_connection('default')
+    return await client.execute_query(query, [f"ARRAY[{values_str}]"])
+
+async def calculate_contact_analytics_grouped(group_by_factor: int):
+    query = """
+        SELECT * FROM contacts.calculate_contact_analytics_grouped($1);
+    """
+    client = Tortoise.get_connection('default')
+    rows = await client.execute_query(query, [group_by_factor])
+    return [
+        {
+            "group_number": row[0],
+            "subscriptions_count": row[1],
+            "unsubscriptions_count": row[2],
+        }
+        for row in rows[1]
+    ]
+
+async def bulk_upsert_contact_creation_analytics(analytics_data:dict):
+    values_str = ", ".join(
+        f"ROW('{country}', '{region}', '{city}', {contacts_created})::contacts.creation_analytics_input"
+        for (country, region, city), contacts_created in analytics_data.items()
+    )
+    query = "SELECT * FROM contacts.bulk_upsert_contact_creation_analytics($1)"
+    client = Tortoise.get_connection('default')
+    return await client.execute_query(query, [f"ARRAY[{values_str}]"])
+
+async def calculate_contact_creation_analytics_grouped(group_by_factor: int):
+    query = """
+        SELECT * FROM contacts.calculate_contact_creation_analytics_grouped($1);
+    """
+    client = Tortoise.get_connection('default')
+    rows = await client.execute_query(query, [group_by_factor])
+    return [
+        {
+            "group_number": row[0],
+            "country": row[1],
+            "region": row[2],
+            "city": row[3],
+            "contacts_created_count": row[4],
+        }
+        for row in rows[1]
+    ]
+
+class ContactSummary(TypedDict):
+    contact_id: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    app_registered: Optional[bool] = None
+    lang: Optional[str] = None
+    frequency: Optional[str] = None
+    created_at: str
+    updated_at: str
+    has_security_code: bool
+    has_security_phrase: bool
+    has_voice_embedding: bool
+    email_status: str
+    sms_status: str
+    subscription_count: int
+    newsletter_status: Optional[bool] = None
+    promotion_status: Optional[bool] = None
+    event_status: Optional[bool] = None
+    other_status: Optional[bool] = None
+    content_type_subs_updated_at: Optional[str] = None

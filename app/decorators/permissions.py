@@ -1,23 +1,38 @@
+from abc import ABCMeta, abstractmethod
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
 from app.models.contacts_model import ContactORM
+from app.models.security_model import ChallengeORM, ClientORM
+from app.services.admin_service import AdminService
 from app.services.assets_service import DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR, AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, ContactPermission, ContactPermissionScope, Role, RoutePermission,FuncMetaData
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
+from app.utils.helper import APIFilterInject
 from app.utils.helper import flatten_dict
 
  
 class JWTRouteHTTPPermission(Permission):
     
-    @InjectInMethod
-    def __init__(self,jwtAuthService: JWTAuthService):
+    def __init__(self,accept_inactive=False,accept_expired=False):
         super().__init__()
-        self.jwtAuthService = jwtAuthService
+        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
+        self.accept_inactive = accept_inactive
+        self.accept_expired = accept_expired
     
     def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission):
+        
+        if authPermission == None:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Auth Permission not implemented")
+        
+        if authPermission['status'] == 'inactive' and not self.accept_inactive:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
+        
+        if authPermission['status'] == 'expired' and not self.accept_expired:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
+
         operation_id = func_meta["operation_id"]
         roles= func_meta['roles']
         auth_roles = authPermission["roles"]
@@ -62,22 +77,24 @@ class JWTAssetPermission(Permission):
         self.template_type = template_type
         self.options = options
 
-    def permission(self,template:str, scheduler:SchedulerModel, authPermission:AuthPermission,template_type:RouteAssetType=None):
+    def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
         assetPermission = authPermission['allowed_assets']
         template_type = self.template_type if template_type == None else template_type
         permission = tuple(assetPermission)
-        if template:
-            content = scheduler.model_dump(include={'content'})
-            template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
-            template = self.assetService.asset_rel_path(template,template_type)
-            if not template.startswith(permission):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
-            
         if scheduler == None:
             return True
-        
-        content = flatten_dict(content)
-        return self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options)
+        if template:
+            for content in scheduler.model_dump(include={'content'}):
+                t = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
+                t = self.assetService.asset_rel_path(t,template_type)
+                if not t.startswith(permission):
+                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{t}] not allowed' })
+                
+                content = flatten_dict(content)
+                if not self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options):
+                    return False
+                        
+        return True
 
 
 class JWTQueryAssetPermission(JWTAssetPermission):
@@ -120,5 +137,90 @@ class JWTContactPermission(Permission):
             raise HTTPException(status=403,detail="")
         
         return True
+    
 
+class JWTRefreshTokenPermission(Permission):
+
+    def __init__(self,accept_inactive=False):
+        super().__init__()
+        self.accept_inactive = accept_inactive
+        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
+    
+    async def permission(self,tokens:TokensModel,authPermission:AuthPermission):
+        permission:RefreshPermission = self.jwtAuthService.verify_refresh_permission(tokens.tokens)
+
+        client_id = permission['client_id']
+
+        if permission['status'] != 'active' and not self.accept_inactive:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission not active")
+
+        if client_id != authPermission['client_id']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
+
+        if permission['client_type'] != authPermission['client_type']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client type mismatch")
+
+        if permission['generation_id'] != authPermission['generation_id']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
+
+        if permission['group_id'] != authPermission['group_id']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
+
+        if permission['issued_for'] != authPermission['issued_for']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
+
+        challenge = await ChallengeORM.filter(client=client_id).first()
+        if challenge.challenge_refresh != permission['challenge']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Challenge not valid")
         
+        return True
+
+class ClientTypePermission(Permission):
+
+    def __init__(self,client_type:ClientType,ensure=False):
+        super().__init__()
+        self.ensure =ensure
+        self.client_type = client_type
+
+    async def permission(self,authPermission:AuthPermission):
+
+        client_id = authPermission['client_id']
+        if self.ensure:
+            client = await ClientORM.get(client=client_id)
+            if client.client_type != self.client_type:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not an {self.client_type.value}")
+
+        if not authPermission['client_type'] == self.client_type.value:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client type is not {self.client_type.value}")
+
+        return True     
+class AdminPermission(ClientTypePermission):
+    # only because theres 3 type of client otherwise there would be only the ClientTypePermission class
+
+     def __init__(self, ensure=False):
+        super().__init__(ClientType.Admin, ensure)
+
+class TwilioPermission(ClientTypePermission):
+
+    def __init__(self,ensure=False):
+        super().__init__(ClientType.Twilio, ensure)
+
+class UserPermission(ClientTypePermission):
+
+    def __init__(self,ensure=False,accept_none_auth=False):
+        super().__init__(ClientType.User, ensure)
+        self.accept_none_auth = accept_none_auth
+    
+    async def permission(self, authPermission:None=None):
+        if authPermission == None:
+            return self.accept_none_auth
+        return await super().permission(authPermission)
+
+    
+
+@APIFilterInject
+def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
+    if not authPermission['client_id'] == str(client.client_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
+    
+    return True

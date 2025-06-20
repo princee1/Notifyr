@@ -9,7 +9,7 @@ from app.interface.threads import InfiniteAsyncInterface
 
 
 @_service.AbstractServiceClass
-class NotificationService(_service.Service):
+class NotificationService(_service.BaseService):
     def __init__(self, configService: ConfigService) -> None:
         super().__init__()
         self.configService = ConfigService
@@ -26,7 +26,7 @@ class NotificationService(_service.Service):
         pass
     pass  # BUG we can specify a kid class if we decide to inject a Notification
 
-@_service.ServiceClass
+@_service.Service
 class SystemNotificationService(NotificationService,InfiniteAsyncInterface):
     MAX_TO_BE_SHOWED = 8
     DURATION = 10
@@ -105,7 +105,7 @@ class SystemNotificationService(NotificationService,InfiniteAsyncInterface):
                 pass
             sleep(WAITING)
 
-@_service.ServiceClass
+@_service.Service
 class DiscordService(NotificationService):
     def __init__(self, configService: ConfigService) -> None:
         super().__init__(configService)
