@@ -4,7 +4,7 @@ from fastapi import WebSocket
 from app.container import InjectInMethod
 from app.definition._ws import BaseProtocol, BaseWebSocketRessource, WebSocketRessource
 from app.services.chat_service import ChatService
-from app.services.twilio_service import VoiceService
+from app.services.twilio_service import CallService
 
 
 class TwilioProtocol(BaseProtocol):
@@ -14,10 +14,10 @@ class TwilioProtocol(BaseProtocol):
 class StreamVoiceWebSocket(BaseWebSocketRessource):
     
     @InjectInMethod
-    def __init__(self,chatService:ChatService,voiceService:VoiceService):
+    def __init__(self,chatService:ChatService,callService:CallService):
         super().__init__()
         self.chatService = chatService
-        self.voiceService = voiceService
+        self.callService = callService
 
     @BaseWebSocketRessource.WSEndpoint('stream-call/{chat_id}',TwilioProtocol,set_protocol_key='event')
     def voice_endpoint(self,websocket:WebSocket,chat_id:str):

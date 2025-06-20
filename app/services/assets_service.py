@@ -1,9 +1,10 @@
 from fastapi import HTTPException,status
 
 from app.definition._error import BaseError
+from app.utils.prettyprint import printJSON
 from .config_service import CeleryMode, ConfigService
 from app.utils.fileIO import FDFlag
-from app.classes.template import Asset, HTMLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, Template
+from app.classes.template import Asset, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .security_service import SecurityService
 from .file_service import FileService, FTPService
 from app.definition import _service
@@ -21,6 +22,9 @@ REQUEST_DIRECTORY_SEPARATOR = ':'
 def path(x): return ROOT_PATH+x
 
 class AssetNotFoundError(BaseError):
+    ...
+
+class AssetTypeNotFoundError(BaseError):
     ...
 
 class Extension(Enum):
@@ -90,7 +94,13 @@ class Reader():
                 relpath, flag, encoding)
             keyName = filename if not setTempFile else file
             setTempFile.add(keyName)
-            self.values[relpath] = self.asset(keyName, content, dir)
+            try:
+                self.values[relpath] = self.asset(keyName, content, dir)
+            except SkipTemplateCreationError as e:
+                print(e.args[0])
+                #printJSON(e.args[1])
+            except Exception as e :
+                print(e.__class__,e)
 
             if issubclass_of(Template, self.asset):
                 if self.func != None:
@@ -131,8 +141,8 @@ class ThreadedReader(Reader):
 
 
 @_service.PossibleDep([FTPService])
-@_service.ServiceClass
-class AssetService(_service.Service):
+@_service.Service
+class AssetService(_service.BaseService):
     @inject
     def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService) -> None:
         super().__init__()
@@ -143,6 +153,11 @@ class AssetService(_service.Service):
         self.securityService = securityService
         self.configService = configService
 
+        MLTemplate._globals.update({}) # TODO creates global with the config service BUG duplicates writing
+
+        
+    def build(self):
+
         self.images: dict[str, Asset] = {}
         self.css: dict[str, Asset] = {}
 
@@ -151,7 +166,7 @@ class AssetService(_service.Service):
         self.sms: dict[str, SMSTemplate] = {}
         self.phone: dict[str, PhoneTemplate] = {}
 
-    def build(self):
+
         Reader.fileService = self.fileService
         if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
             return 
@@ -169,8 +184,6 @@ class AssetService(_service.Service):
         self.sms = smsReader.join()
         self.phone = phoneReader.join() 
 
-        print(self.sms)
-            
         
     def loadHTMLData(self, html: HTMLTemplate):
         cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
@@ -256,4 +269,11 @@ class AssetService(_service.Service):
             raise AssetNotFoundError(asset)
         
         return asset in allowed_assets
+    
+    def get_schema(self,asset:RouteAssetType):
+        try:
+            schemas:dict[str,MLTemplate] =getattr(self,asset)
+        except AttributeError:
+            raise AssetTypeNotFoundError
+        return {key:value.schema for key,value in schemas.items() }
             

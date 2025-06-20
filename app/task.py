@@ -5,30 +5,25 @@ from typing_extensions import Literal
 from celery import Celery, shared_task
 from celery.result import AsyncResult
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
-from app.services.config_service import ConfigService,CeleryEnv
-from app.services.email_service import EmailSenderService
-from app.container import Get, build_container
+from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService,CeleryEnv
+from app.services.email_service import EmailSenderService,EmailReaderService
+from app.container import Get, build_container,__DEPENDENCY
 from app.services.security_service import JWTAuthService
-from app.services.twilio_service import SMSService, VoiceService
+from app.services.twilio_service import SMSService, CallService
 from app.utils.prettyprint import PrettyPrinter_
-import shutil
 from flower import VERSION
+from celery import Task
 
 
 ##############################################           ##################################################
 
-IS_SERVER_SCOPE=True
-exe_path = shutil.which("celery").replace(".EXE", "")
-##############################################           ##################################################
-
-c_env:CeleryEnv = 'none'
-if sys.argv[0] == exe_path:
+if sys.argv[0] == CELERY_EXE_PATH:
     PrettyPrinter_.message('Building container for the celery worker')
-    IS_SERVER_SCOPE = False
-    c_env = sys.argv[3]
-    ConfigService.set_celery_env(c_env)
-    PrettyPrinter_.message(c_env)
-    build_container(False)
+    PrettyPrinter_.message(ConfigService._celery_env.value)
+    if ConfigService._celery_env == CeleryMode.purge:
+        build_container(False,dep=[ConfigService])
+    else:
+        build_container(False)
         
 ##############################################           ##################################################
 
@@ -52,7 +47,6 @@ TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 ##############################################           ##################################################
 
 configService: ConfigService = Get(ConfigService)
-configService.isServerScope = IS_SERVER_SCOPE
 
 ##############################################           ##################################################
 
@@ -78,7 +72,7 @@ celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 @functools.wraps(celery_app.task)
 def RegisterTask(heaviness: TaskHeaviness, **kwargs):
     def decorator(task: Callable):
-
+        kwargs['bind'] =True
         TASK_REGISTRY[task_name(task.__qualname__)] = {
             'heaviness': heaviness,
             'task': celery_app.task(**kwargs)(task)
@@ -91,6 +85,7 @@ def RegisterTask(heaviness: TaskHeaviness, **kwargs):
 @functools.wraps(shared_task)
 def SharedTask(heaviness: TaskHeaviness, **kwargs):
     def decorator(task: Callable):
+        kwargs['bind'] =True
         TASK_REGISTRY[task_name(task.__qualname__)] = {
             'heaviness':heaviness,
             'task':shared_task(**kwargs)(task)
@@ -103,40 +98,40 @@ def SharedTask(heaviness: TaskHeaviness, **kwargs):
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_mail(data, meta, images):
+def task_send_template_mail(self:Task,data, meta, images,contact_id=None):
     emailService: EmailSenderService = Get(EmailSenderService)
-    return emailService.sendTemplateEmail(data, meta, images)
+    return emailService.sendTemplateEmail(data, meta, images,contact_id)
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_mail(content, meta, images, attachment):
+def task_send_custom_mail(self:Task,content, meta, images, attachment,contact_id=None):
     emailService: EmailSenderService = Get(EmailSenderService)
-    return emailService.sendCustomEmail(content, meta, images, attachment)
+    return emailService.sendCustomEmail(content, meta, images, attachment,contact_id)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_sms(messages):
+def task_send_custom_sms(self:Task,messages):
     smsService:SMSService = Get(SMSService)
     return smsService.send_custom_sms(messages)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_sms(messages):
+def task_send_template_sms(self:Task,messages):
     smsService:SMSService = Get(SMSService)
     return smsService.send_template_sms(messages)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_voice_call(result,content):
-    voiceService:VoiceService = Get(VoiceService)
-    return voiceService.send_template_voice_call(result,content)
+def task_send_template_voice_call(self:Task,result,content):
+    callService:CallService = Get(CallService)
+    return callService.send_template_voice_call(result,content)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_twiml_voice_call(url,details):
-    voiceService:VoiceService = Get(VoiceService)
-    return voiceService.send_twiml_voice_call(url,details)
+def task_send_twiml_voice_call(self:Task,url,details):
+    callService:CallService = Get(CallService)
+    return callService.send_twiml_voice_call(url,details)
     
     
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_voice_call(body,details):
-    voiceService:VoiceService = Get(VoiceService)
-    return voiceService.send_custom_voice_call(body,details)
+def task_send_custom_voice_call(self:Task,body,details):
+    callService:CallService = Get(CallService)
+    return callService.send_custom_voice_call(body,details)
 
 ##############################################           ##################################################

@@ -1,13 +1,12 @@
+from app.interface.timers import IntervalInterface
 from .config_service import ConfigService
-from app.definition._service import Service,ServiceClass
+from app.definition._service import BaseService,Service,AbstractServiceClass
 from app.utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 
-# TODO refresh template
-
-@ServiceClass
-class FileService(Service):
+@Service
+class FileService(BaseService,):
     # TODO add security layer on some file: encription,decryption
     # TODO add file watcher
     def __init__(self,configService:ConfigService) -> None:
@@ -17,14 +16,14 @@ class FileService(Service):
     def loadJSON(self):
         pass
 
-    def readFileDetail(self, path, flag, enc="utf-8"):
+    def readFileDetail(self, path, flag:FDFlag, enc="utf-8"):
 
         filename  = getFilenameOnly(path)
         content = readFileContent(path, flag, enc)
         dirName = getFileDir(path)
         return filename,content,dirName
     
-    def readFile(self, path,flag,enc= "utf-8"):
+    def readFile(self, path,flag:FDFlag,enc= "utf-8"):
         return readFileContent(path, flag, enc)
     
     def writeFile(self,):
@@ -47,13 +46,19 @@ class FileService(Service):
         
     pass
 
-@ServiceClass
-class FTPService(Service):
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
-        super().__init__()
 
+@AbstractServiceClass
+class BaseFileRetrieverService(BaseService,IntervalInterface):
+    
+    def __init__(self,configService:ConfigService,fileService:FileService):
+        super().__init__()
         self.configService = configService
         self.fileService = fileService
+    
+@Service
+class FTPService(BaseFileRetrieverService):
+    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+        super().__init__(configService,fileService)
         self.ftpClient: FTP
         pass
 
@@ -72,13 +77,12 @@ class FTPService(Service):
             self.ftpClient.close()
     pass
 
-@ServiceClass
-class GitCloneRepoService(Service):
+@Service
+class GitCloneRepoService(BaseFileRetrieverService):
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__()
-        self.configService = configService
-        self.fileService = fileService
+        super().__init__(configService,fileService)
     
     def destroy(self):
         return super().destroy()
     pass
+

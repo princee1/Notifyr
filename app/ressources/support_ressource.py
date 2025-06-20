@@ -11,7 +11,7 @@ from app.websockets.chat_ws import ChatWebSocket
 from app.decorators.handlers import ServiceAvailabilityHandler, WebSocketHandler
 from app.classes.auth_permission import WSPermission,Role
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.utils.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission
 from app.utils.helper import generateId
 
 

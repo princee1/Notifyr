@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votre Newsletter Indispensable sur [Votre Domaine] - Infos & Conseils</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f9f9f9;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        h1,
+        h2,
+        h3 {
+            line-height: 1.2;
+            margin-bottom: 0.8em;
+        }
+
+        h1 {
+            font-size: 2.8em;
+            font-weight: 700;
+            color: #222;
+        }
+
+        h2 {
+            font-size: 2em;
+            font-weight: 600;
+            color: #333;
+            text-align: center;
+            margin-bottom: 1.5em;
+        }
+
+        h3 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 0.5em;
+        }
+
+        p {
+            margin-bottom: 1em;
+        }
+
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+
+        .bg-light {
+            background-color: #fff;
+            /* Fond blanc pour alterner */
+        }
+
+
+        /* Section Héros (Ajustements mineurs) */
+        #hero {
+            background-color: #fff;
+            padding: 80px 20px 60px 20px;
+            /* Moins de padding en bas à cause du formulaire */
+            text-align: center;
+            min-height: auto;
+            /* Ajustement car le formulaire prend plus de place */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #hero .subtitle {
+            font-size: 1.2em;
+            color: #555;
+            max-width: 700px;
+            /* Légèrement plus large */
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 2.5em;
+            /* Plus d'espace avant le formulaire */
+        }
+
+        /* Formulaire Newsletter (Mise à jour pour la grille) */
+        #newsletter-form {
+            margin-top: 20px;
+            max-width: 600px;
+            /* Plus large pour accueillir la grille */
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
+            background-color: #f0f4f8;
+            /* Fond légèrement coloré pour le bloc formulaire */
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            /* Deux colonnes égales par défaut */
+            gap: 15px;
+            /* Espacement entre les champs */
+            margin-bottom: 20px;
+            /* Espace avant le bouton */
+        }
+
+        /* Faire en sorte que certains champs prennent toute la largeur */
+        .form-group-full {
+            grid-column: 1 / -1;
+            /* Prend de la première à la dernière colonne */
+        }
+
+        #newsletter-form input[type="text"],
+        #newsletter-form input[type="email"],
+        #newsletter-form input[type="tel"] {
+            width: 100%;
+            padding: 12px 15px;
+            /* Légèrement moins de padding vertical */
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            font-family: inherit;
+        }
+
+        /* Style spécifique pour les placeholders */
+        #newsletter-form input::placeholder {
+            color: #888;
+            font-size: 0.95em;
+        }
+
+        #newsletter-form button[type="submit"] {
+            width: 100%;
+            padding: 15px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-family: inherit;
+            margin-top: 10px;
+            /* Espace après la grille de champs */
+        }
+
+        #newsletter-form button[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+
+        #form-message {
+            margin-top: 15px;
+            font-size: 0.9em;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        #form-message.success {
+            color: #28a745;
+        }
+
+        /* Vert succès */
+        #form-message.error {
+            color: #dc3545;
+        }
+
+        /* Rouge erreur */
+
+        .privacy-note {
+            font-size: 0.85em;
+            color: #777;
+            margin-top: 30px;
+            /* Plus d'espace après le formulaire */
+        }
+
+        /* Section Bénéfices (Ajustements mineurs) */
+        #benefits {
+            padding: 60px 20px;
+        }
+
+        .benefits-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            /* Ajustement minmax */
+            gap: 30px;
+            margin-top: 30px;
+            text-align: left;
+        }
+
+        .benefit-item {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            /* Ajouter ici le style pour les icônes si utilisées */
+            /* .benefit-icon { font-size: 1.5em; color: #007bff; margin-bottom: 10px; display: block; } */
+        }
+
+        /* Section "À quoi s'attendre" */
+        #what-to-expect {
+            padding: 60px 20px;
+        }
+
+        #what-to-expect ul {
+            list-style: none;
+            /* Enlever les puces par défaut */
+            padding-left: 0;
+            max-width: 700px;
+            margin: 20px auto 0 auto;
+            /* Centrer la liste */
+            text-align: left;
+        }
+
+        #what-to-expect li {
+            padding: 10px 0 10px 30px;
+            /* Espace et padding à gauche pour l'icône */
+            position: relative;
+            /* Pour positionner l'icône */
+            border-bottom: 1px solid #eee;
+            /* Séparateur léger */
+        }
+
+        #what-to-expect li:last-child {
+            border-bottom: none;
+        }
+
+        /* Ajouter une puce personnalisée (coche) */
+        #what-to-expect li::before {
+            content: '✔';
+            /* Ou utiliser une icône Font Awesome: content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; */
+            color: #28a745;
+            /* Couleur verte */
+            position: absolute;
+            left: 0;
+            top: 10px;
+            /* Ajuster position verticale */
+            font-size: 1.1em;
+        }
+
+        /* Section Témoignages */
+        #testimonials {
+            padding: 60px 20px;
+        }
+
+        .testimonials-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .testimonial-item {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            border-left: 5px solid #007bff;
+            /* Accent de couleur */
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+            margin: 0;
+            /* Resetting default blockquote margin */
+        }
+
+        .testimonial-item p {
+            font-style: italic;
+            color: #555;
+            margin-bottom: 15px;
+            quotes: "«" "»";
+            /* Ajouter des guillemets */
+        }
+
+        .testimonial-item p::before {
+            content: open-quote;
+        }
+
+        .testimonial-item p::after {
+            content: close-quote;
+        }
+
+
+        .testimonial-item cite {
+            font-style: normal;
+            font-weight: 600;
+            color: #333;
+            display: block;
+            /* Mettre la citation sur sa propre ligne */
+            margin-top: 10px;
+        }
+
+        /* Section "Qui Sommes-Nous ?" */
+        #about-us {
+            padding: 60px 20px;
+        }
+
+        .about-container {
+            display: flex;
+            /* Utiliser flexbox pour l'image et le texte */
+            flex-direction: column;
+            /* Par défaut sur mobile */
+            align-items: center;
+            /* Centrer sur mobile */
+            gap: 30px;
+            text-align: center;
+            /* Centrer le texte sur mobile */
+        }
+
+        .about-photo {
+            max-width: 150px;
+            /* Taille de la photo */
+            height: 150px;
+            border-radius: 50%;
+            /* Photo ronde */
+            object-fit: cover;
+            /* Assure que l'image couvre bien */
+            margin-bottom: 20px;
+        }
+
+        .about-text {
+            max-width: 650px;
+            /* Limiter largeur du texte */
+        }
+
+        .about-text h2 {
+            margin-bottom: 0.8em;
+        }
+
+
+        /* Pied de Page */
+        footer {
+            background-color: #343a40;
+            /* Fond plus sombre */
+            color: #adb5bd;
+            /* Texte plus clair */
+            text-align: center;
+            padding: 40px 20px;
+            margin-top: 60px;
+            font-size: 0.9em;
+        }
+
+        footer p {
+            margin-bottom: 0.8em;
+        }
+
+        footer a {
+            color: #f8f9fa;
+            /* Liens blancs */
+            margin: 0 5px;
+        }
+
+        footer a:hover {
+            color: #007bff;
+            /* Couleur au survol */
+            text-decoration: none;
+        }
+
+        /* Optionnel: Styles liens sociaux */
+        .social-links a {
+            font-size: 1.5em;
+            /* Taille des icônes */
+            margin: 0 10px;
+            color: #f8f9fa;
+            transition: color 0.3s ease;
+        }
+
+        .social-links a:hover {
+            color: #007bff;
+        }
+
+        .social-links {
+            margin-bottom: 20px;
+        }
+
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+
+            /* Sur mobile, une seule colonne pour le formulaire */
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 2.2em;
+            }
+
+            h2 {
+                font-size: 1.8em;
+            }
+
+            #hero .subtitle {
+                font-size: 1.1em;
+            }
+        }
+
+        @media (min-width: 768px) {
+            h1 {
+                font-size: 3.2em;
+            }
+
+            /* Ajustement taille desktop */
+            #hero .subtitle {
+                font-size: 1.3em;
+            }
+
+            /* Ajustement section "Qui sommes-nous" pour desktop */
+            .about-container {
+                flex-direction: row;
+                /* Image à côté du texte */
+                text-align: left;
+                /* Aligner le texte à gauche */
+                align-items: flex-start;
+                /* Aligner en haut */
+            }
+
+            .about-photo {
+                margin-bottom: 0;
+                margin-right: 30px;
+                /* Espace entre photo et texte */
+                flex-shrink: 0;
+                /* Empêcher l'image de rétrécir */
+            }
+
+        }
+    </style>
+</head>
+
+<body>
+
+    <section id="hero">
+        <div class="container">
+            <h1>Le Savoir de [Votre Domaine] Directement Chez Vous</h1>
+            <p class="subtitle">Conseils d'experts, analyses pointues, et nouveautés exclusives. La newsletter pensée
+                pour les professionnels, les passionnés et les curieux qui veulent garder une longueur d'avance.</p>
+
+            <form id="newsletter-form">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="prenom" class="sr-only">Prénom (Optionnel)</label>
+                        <input type="text" id="prenom" name="prenom" placeholder="Prénom (Optionnel)">
+                    </div>
+                    <div class="form-group">
+                        <label for="nom" class="sr-only">Nom (Optionnel)</label>
+                        <input type="text" id="nom" name="nom" placeholder="Nom (Optionnel)">
+                    </div>
+                    <div class="form-group form-group-full"> <label for="email" class="sr-only">Adresse e-mail
+                            (Requis)</label>
+                        <input type="email" id="email" name="email" placeholder="Adresse e-mail (Requis)" required>
+                    </div>
+                    <div class="form-group form-group-full"> <label for="telephone" class="sr-only">Téléphone
+                            (Optionnel)</label>
+                        <input type="tel" id="telephone" name="telephone" placeholder="Numéro de téléphone (Optionnel)">
+                    </div>
+                </div>
+                <button type="submit">Rejoindre la Communauté !</button>
+                <p id="form-message"></p>
+            </form>
+            <p class="privacy-note">Votre vie privée est importante. Désabonnement en un clic.</p>
+        </div>
+    </section>
+
+    <section id="benefits">
+        <div class="container">
+            <h2>Ce que vous allez recevoir :</h2>
+            <div class="benefits-container">
+                <div class="benefit-item">
+                    <h3>🚀 Analyses Approfondies</h3>
+                    <p>Comprenez les enjeux et les opportunités de [Votre Domaine] grâce à nos décryptages exclusifs.
+                    </p>
+                </div>
+                <div class="benefit-item">
+                    <h3>✨ Conseils Pratiques & Actionnables</h3>
+                    <p>Des stratégies et astuces concrètes à appliquer dès aujourd'hui pour [Objectif spécifique].</p>
+                </div>
+                <div class="benefit-item">
+                    <h3>📰 Veille Stratégique Simplifiée</h3>
+                    <p>Ne perdez plus de temps : nous trions et synthétisons l'actualité la plus pertinente pour vous.
+                    </p>
+                </div>
+                <div class="benefit-item">
+                    <h3>🎁 Accès Anticipé & Offres</h3>
+                    <p>Soyez les premiers informés de nos nouveautés, événements ou promotions spéciales réservées aux
+                        abonnés.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="what-to-expect" class="bg-light">
+        <div class="container">
+            <h2>Concrètement, dans votre boîte mail :</h2>
+            <ul>
+                <li><strong>Fréquence :</strong> Un e-mail chaque [Mardi] matin, pour bien commencer la semaine.</li>
+                <li><strong>Format :</strong> Des contenus concis, bien structurés et agréables à lire, même sur mobile.
+                </li>
+                <li><strong>Contenu :</strong> Un mélange équilibré d'analyses, de conseils pratiques, de news et
+                    parfois, une touche d'humour.</li>
+                <li><strong>Promesse :</strong> Pas de spam, pas de blabla inutile. Uniquement du contenu à forte valeur
+                    ajoutée.</li>
+                <li><strong>Flexibilité :</strong> Vous changez d'avis ? Le lien de désabonnement est présent dans
+                    chaque email.</li>
+            </ul>
+        </div>
+    </section>
+
+    <section id="testimonials">
+        <div class="container">
+            <h2>Ils nous lisent et apprécient :</h2>
+            <div class="testimonials-container">
+                <blockquote class="testimonial-item">
+                    <p>"Enfin une newsletter qui va droit au but ! Les conseils sont vraiment applicables et m'ont aidé
+                        à [Résultat Obtenu]."</p>
+                    <cite>– Sophie D., [Profession/Ville]</cite>
+                </blockquote>
+                <blockquote class="testimonial-item">
+                    <p>"Je recommande vivement ! C'est ma source N°1 pour rester informé sur [Votre Domaine]. Très bien
+                        écrit et toujours pertinent."</p>
+                    <cite>– Marc L., [Profession/Ville]</cite>
+                </blockquote>
+                <blockquote class="testimonial-item">
+                    <p>"Le contenu est de grande qualité. J'attends chaque numéro avec impatience."</p>
+                    <cite>– Chloé R., [Profession/Ville]</cite>
+                </blockquote>
+            </div>
+        </div>
+    </section>
+
+    <section id="about-us" class="bg-light">
+        <div class="container about-container">
+            <div class="about-text">
+                <h2>Derrière cette newsletter...</h2>
+                <p>Je suis [Votre Nom/Nom de l'entreprise], passionné(e) par [Votre Domaine] depuis [Nombre] années. Mon
+                    objectif est de partager avec vous les connaissances et les découvertes qui peuvent réellement faire
+                    la différence.</p>
+                <p>Cette newsletter est le fruit de [Décrire brièvement la source : expérience, recherche, etc.]. Nous
+                    croyons au partage de valeur et à la construction d'une communauté informée et engagée.</p>
+            </div>
+        </div>
+    </section>
+
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 [Votre Nom ou Entreprise]. Tous droits réservés.</p>
+            <p>
+                <a href="#privacy-policy">Politique de Confidentialité</a> |
+                <a href="#terms">Conditions d'utilisation</a>
+            </p>
+        </div>
+    </footer>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            const newsletterForm = document.getElementById('newsletter-form');
+            const prenomInput = document.getElementById('prenom');
+            const nomInput = document.getElementById('nom');
+            const emailInput = document.getElementById('email');
+            const telephoneInput = document.getElementById('telephone'); // Sélectionner le champ téléphone
+            const formMessage = document.getElementById('form-message');
+
+            // Vérifier si tous les éléments nécessaires existent
+            if (newsletterForm && prenomInput && nomInput && emailInput && telephoneInput && formMessage) {
+
+                let error=false;
+
+                newsletterForm.addEventListener('submit', function (event) {
+                    event.preventDefault(); // Empêche l'envoi classique
+
+                    // Récupérer toutes les valeurs (trim pour enlever les espaces inutiles)
+                    const prenom = prenomInput.value.trim();
+                    const nom = nomInput.value.trim();
+                    const email = emailInput.value.trim();
+                    const telephone = telephoneInput.value.trim(); // Récupérer la valeur du téléphone
+
+                    // Validation simple : seul l'email est requis
+                    if (email === "") {
+                        displayMessage("L'adresse e-mail est requise.", "error");
+                        emailInput.focus(); // Met le focus sur le champ email
+                        return;
+                    }
+
+                    // Optionnel : Validation plus poussée du format email (simple regex)
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(email)) {
+                        displayMessage("Veuillez entrer une adresse e-mail valide.", "error");
+                        emailInput.focus();
+                        return;
+                    }
+
+                    // **Simulation d'envoi**
+                    console.log("Données du formulaire (simulation) :");
+                    console.log("Prénom:", prenom || "Non fourni"); // Affiche "Non fourni" si vide
+                    console.log("Nom:", nom || "Non fourni");
+                    console.log("Email:", email);
+                    console.log("Téléphone:", telephone || "Non fourni"); // Affiche "Non fourni" si vide
+
+                    fetch('/contacts/manage/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            "first_name": prenom,
+                            "last_name": nom,
+                            email,
+                            "phone": telephone || null,
+                            "app_registered": true,
+                            "lang": "en",
+                            "frequency": 'always'
+                        }),
+                        keepalive: true
+                    }).catch((reason) => {
+                        console.error(reason);
+                    }).then((response) => {
+                        if (!response.ok) {
+                            error=true;
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    }).then((data) => {
+                        console.log(data);
+                    }).finally(() => {
+                        console.log('Fetch operation completed.');
+                    });
+                    // Afficher message de succès
+                    if (! error)
+                        displayMessage("Merci ! Votre inscription a bien été prise en compte.", "success");
+                    else
+                        displayMessage("Une erreur s'est produite lors de l'inscription, veuillez ressayer plus tard",'error')
+
+                    // Vider les champs du formulaire
+                    prenomInput.value = '';
+                    nomInput.value = '';
+                    emailInput.value = '';
+                    telephoneInput.value = ''; // Vider aussi le champ téléphone
+
+                    // Optionnel : Désactiver le bouton après envoi
+                    const submitButton = newsletterForm.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.textContent = 'Inscription Réussie !';
+                        // Réactiver après un délai si nécessaire
+                        setTimeout(() => {
+                            submitButton.disabled = false;
+                            submitButton.textContent = 'Rejoindre la Communauté !';
+                        }, 5000);
+                    }
+
+                    // Simuler un échec (pour tester)
+                    // displayMessage("Oups ! Une erreur s'est produite. Veuillez réessayer plus tard.", "error");
+
+                });
+            } else {
+                // Log d'erreur si un élément est manquant (aide au débogage)
+                console.error("Erreur : Un ou plusieurs éléments du formulaire sont introuvables.");
+                if (!newsletterForm) console.error("Formulaire #newsletter-form manquant");
+                if (!prenomInput) console.error("Champ #prenom manquant");
+                if (!nomInput) console.error("Champ #nom manquant");
+                if (!emailInput) console.error("Champ #email manquant");
+                if (!telephoneInput) console.error("Champ #telephone manquant");
+                if (!formMessage) console.error("Zone de message #form-message manquante");
+            }
+
+            // Fonction pour afficher les messages
+            function displayMessage(message, type) {
+                formMessage.textContent = message;
+                formMessage.className = type; // Applique la classe 'success' ou 'error'
+            }
+
+        });
+    </script>
+</body>
+
+</html>

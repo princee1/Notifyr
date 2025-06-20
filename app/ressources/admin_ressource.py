@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from random import randint
 from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Query, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.decorators.my_depends import get_blacklist, get_group, get_client
+from app.depends.funcs_dep import get_blacklist, get_group, get_client
+from app.depends.orm_cache import WILDCARD, BlacklistORMCache, ChallengeORMCache, ClientORMCache
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
@@ -11,15 +13,15 @@ from app.services.celery_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant
-from app.utils.dependencies import get_auth_permission, get_query_params, get_request_id
+from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import Role, RoutePermission, AssetsPermission, Scope, TokensModel
 from pydantic import BaseModel,  field_validator
-from app.decorators.handlers import SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
+from app.decorators.handlers import ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe
-from app.utils.helper import parseToBool
+from app.utils.helper import filter_paths, parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from slowapi.util import get_remote_address
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
@@ -32,9 +34,13 @@ CLIENT_PREFIX = 'client'
 
 class AuthPermissionModel(BaseModel):
     allowed_routes: dict[str, RoutePermission] = []
-    allowed_assets: Optional[dict[str, AssetsPermission]] ={}
+    allowed_assets: list[str] =[]
     roles: Optional[list[Role]] = [Role.PUBLIC]
     scope: Scope = None
+
+    @field_validator('allowed_assets')
+    def filter_assets_paths(cls,allowed_assets):
+        return filter_paths(allowed_assets)
 
     @field_validator('scope')
     def enforce_scope(cls,scope):
@@ -83,15 +89,19 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         async with in_transaction():
             client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
             challenge = await ChallengeORM.create(client=client)
-            challenge.expired_at_auth = challenge.created_at_auth + timedelta(seconds=self.configService.AUTH_EXPIRATION)
+            ttl_auth_challenge = timedelta(seconds=self.configService.AUTH_EXPIRATION)
+            challenge.expired_at_auth = challenge.created_at_auth + ttl_auth_challenge
             challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.configService.REFRESH_EXPIRATION)
             await challenge.save()
+
+            await ClientORMCache.Store([client.group.group_id,client.client_id],client,)
+            await ChallengeORMCache.Store(client.client_id,challenge,ttl_auth_challenge)
 
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json})
     
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
-    @UseHandler(ValueErrorHandler)
+    @UseHandler(ValueErrorHandler,ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
     async def update_client(self, updateClient:UpdateClientModel ,client: Annotated[ClientORM, Depends(get_client)],gid: str = Depends(get_query_params('gid', 'id')),rmgrp: str = Depends(get_query_params('rmgrp', False)),authPermission=Depends(get_auth_permission) ):
         
@@ -106,15 +116,19 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
                 await self._revoke_client(client)
             else:
                 await client.save()
+        
+        await ClientORMCache.Invalid([client.group.group_id,client.client_id])
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully updated", "client": client.to_json})
 
 
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
+    @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.Delete('/')
     async def delete_client(self, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         await client.delete()
+        await ClientORMCache.Invalid([client.group.group_id,client.client_id])
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully deleted", "client": client.to_json})
 
     @UseRoles(roles=[Role.CONTACTS])
@@ -137,9 +151,11 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UsePermission(AdminPermission)
     @UsePipe(ForceGroupPipe)
+    @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.Delete('/group/')
     async def delete_group(self, group: Annotated[GroupClientORM, Depends(get_group)], authPermission=Depends(get_auth_permission)):
         await group.delete()
+        await BlacklistORMCache.InvalidAll([group.group_id,WILDCARD])
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Group successfully deleted", "group": group.to_json})
 
     @UseRoles(roles=[Role.CONTACTS])
@@ -210,7 +226,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         self.celeryService: CeleryService = Get(CeleryService)
 
     @UseLimiter(limit_value='20/week')
-    @UseHandler(SecurityClientHandler)
+    @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.POST])
     async def blacklist_tokens(self, group: Annotated[GroupClientORM, Depends(get_group)], client: Annotated[ClientORM, Depends(get_client)], request: Request,time:float =Query(3600,le=36000,ge=3600), authPermission=Depends(get_auth_permission)):
         if group is None and client is None:
@@ -220,12 +236,13 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
             raise GroupIdNotMatchError(str(client.group_id), group.group_id)
 
         blacklist = await self.adminService.blacklist(client, group,time)
-        # if blacklist == None:
-        #     return JSONResponse(status_code=status.HTTP_204_NO_CONTENT,content={"message":"Client already blacklisted"})
+        if blacklist.client != None:
+            await BlacklistORMCache.Store(blacklist.client.client_id,True,time+randint(15,60))
+        
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully blacklisted", "blacklist": blacklist.to_json})
 
     @UseLimiter(limit_value='20/week')
-    @UseHandler(SecurityClientHandler)
+    @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.DELETE])
     async def un_blacklist_tokens(self, group: Annotated[GroupClientORM, Depends(get_group)], client: Annotated[ClientORM, Depends(get_client)], blacklist:Annotated[BlacklistORM,Depends(get_blacklist)], request: Request, authPermission=Depends(get_auth_permission)):
         if blacklist is not None:
@@ -239,10 +256,16 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
             raise GroupIdNotMatchError(str(client.group_id), str(group.group_id))
 
         blacklist = await self.adminService.un_blacklist(client, group)
+
+        if blacklist.client != None:
+            await BlacklistORMCache.Invalid(blacklist.client.client_id)
+        else:
+            await BlacklistORMCache.InvalidAll([blacklist.group.group_id,WILDCARD])
+
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully un-blacklisted", "un_blacklist": blacklist})
 
     @UseLimiter(limit_value='1/day')
-    @UseHandler(SecurityClientHandler)
+    @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, authPermission=Depends(get_auth_permission)):
         old_generation_id = self.jwtAuthService.generation_id
@@ -251,7 +274,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
         client = await ClientORM.filter(client_id=authPermission['client_id']).first()
         auth_token, refresh_token = self.issue_auth(client, authPermission)
-
+        await ChallengeORMCache.InvalidAll()
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
                                                                      "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},
@@ -279,6 +302,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='10/day')
     @UsePipe(ForceClientPipe)
     @UseGuard(AuthenticatedClientGuard)
+    @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         async with in_transaction():    
@@ -287,13 +311,17 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
             if client.can_login:
                 challenge = await ChallengeORM.filter(client=client).first()
                 await self.change_authz_id(challenge)
-            
+                
             await client.save()
+        
+        await ClientORMCache.Invalid([client.group.group_id,client.client_id])
+        await ChallengeORMCache.Invalid(client.client_id)
+
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
 
     @UseLimiter(limit_value='4/day')
     @UsePipe(ForceClientPipe)
-    @UseHandler(SecurityClientHandler)
+    @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
     async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client)], authModel: AuthPermissionModel, request: Request, authPermission=Depends(get_auth_permission)):
@@ -307,6 +335,8 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
             client.authenticated = True
             client.can_login = True
             await client.save()
+
+        await ChallengeORMCache.Invalid(client.client_id)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})

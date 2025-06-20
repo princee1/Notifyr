@@ -5,11 +5,11 @@ from app.container import Get, InjectInMethod
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, WebSocketHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
-from app.services.celery_service import BackgroundTaskService, CeleryService
+from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.security_service import JWTAuthService
-from app.utils.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission
 from app.classes.auth_permission import AuthPermission, MustHave, Role
 from app.websockets.redis_backend_ws  import RedisBackendWebSocket
 from pydantic.fields import Field
@@ -75,10 +75,10 @@ class CeleryRessource(BaseHTTPRessource):
 @HTTPRessource(prefix=BACKGROUND_PREFIX)
 class BackgroundTaskRessource(BaseHTTPRessource):
     
-    def __init__(self,redisService:RedisService,configService:ConfigService,backgroundTaskService:BackgroundTaskService):
+    def __init__(self,redisService:RedisService,configService:ConfigService,taskService:TaskService):
         self.redisService = redisService
         self.configService = configService
-        self.backgroundTask = backgroundTaskService
+        self.backgroundTask = taskService
     
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.Get('/{task_id}')

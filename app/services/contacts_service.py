@@ -1,24 +1,26 @@
 from datetime import datetime, timezone
 from typing import Literal
+from uuid import UUID
 
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import ContactPermissionScope
-from app.definition._service import Service, ServiceClass
+from app.definition._service import BaseService, Service
 from app.errors.contact_error import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.models.contacts_model import *
 from app.services.config_service import ConfigService
+from app.services.link_service import LinkService
 from app.services.security_service import JWTAuthService, SecurityService
 from random import randint
 
 from app.utils.helper import generateId, b64_encode
 
 
-MIN_OPT_IN_CODE = 10000000000000
-MAX_OPT_IN_CODE = 99999999999999
+MIN_OPT_IN_CODE = 100000000
+MAX_OPT_IN_CODE = 999999999
 
 
-@ServiceClass
-class SubscriptionService(Service):
+@Service
+class SubscriptionService(BaseService):
 
     
 
@@ -52,14 +54,15 @@ class SubscriptionService(Service):
         return JSONResponse(content={"detail": "Subscription updated", "subscription": subs}, status_code=200)
 
 
-@ServiceClass
-class ContactsService(Service):
+@Service
+class ContactsService(BaseService):
 
-    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService):
+    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService,linkService:LinkService):
         super().__init__()
         self.securityService = securityService
         self.configService = configService
         self.jwtService = jwtService
+        self.linkService = linkService
 
         self.expiration = 3600000000
 
@@ -154,16 +157,15 @@ class ContactsService(Service):
         user = await ContactORM.create(**contact_info)
         if user.app_registered:
             user.auth_token = self.jwtService.encode_contact_token(
-                user.contact_id, self.expiration, 'create')
+                str(user.contact_id), self.expiration, 'create')
+            
 
         await user.save()
-
-        if user.app_registered:
-            d = user.to_json.copy()
-            d.update({'auth_token', user.auth_token})
-            return d
-
-        return user.to_json
+        # if user.app_registered:
+        #     d = user.to_json.copy()
+        #     d.update({'auth_token': user.auth_token})
+        #     return d
+        return user
 
     async def setup_security(self, contact: ContactORM):
 
@@ -179,14 +181,24 @@ class ContactsService(Service):
         
         update:dict = update.model_dump()
         for key, value in update.items():
-            if value:
+            if value != None:
                 setattr(contact, key, value)
         await contact.save()
         return update
 
 
     async def read_contact(self, contact_id: str):
-        return await get_contact_summary(contact_id)
+        contact = await get_contact_summary(contact_id)
+        if contact != None:
+            for keys,item in contact.items():
+                if isinstance(item,UUID):
+                    contact[keys] = str(item)
+                    continue
+                
+                if isinstance(item,datetime):
+                    contact[keys] = item.isoformat()
+                
+        return contact
 
         user = await ContactORM.filter(contact_id=contact_id).first()
         subs = await SubscriptionContactStatusORM.filter(contact_id=contact_id).first()

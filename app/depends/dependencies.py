@@ -5,58 +5,14 @@ Module to easily manage retrieving user information from the request object.
 from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request, Response,status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
-from .constant import HTTPHeaderConstant
-from .helper import parse_value, reverseDict
-import asyncio
+from app.services.config_service import ConfigService
+from app.utils.constant import HTTPHeaderConstant
+from app.utils.helper import parse_value, reverseDict
+from app.container import Get
 
+configService:ConfigService = Get(ConfigService)
 
 D = TypeVar('D',bound=type)
-
-def APIFilterInject(func:Callable | Type):
-
-    if type(func) == type:
-        annotations = func.__init__.__annotations__.copy()
-    else:
-        annotations = func.__annotations__.copy()
-        annotations.pop('return',None)
-
-    def wrapper(*args,**kwargs):
-        filtered_kwargs = {
-            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
-            for key, value in kwargs.items()
-            if key in annotations
-        }
-        return func(*args, **filtered_kwargs)
-    return wrapper
-
-
-def AsyncAPIFilterInject(func:Callable | Type):
-
-    if type(func) == type:
-        annotations = func.__init__.__annotations__.copy()
-    else:
-        annotations = func.__annotations__.copy()
-        annotations.pop('return',None)
-
-    async def wrapper(*args,**kwargs):
-        filtered_kwargs = {
-            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
-            for key, value in kwargs.items()
-            if key in annotations
-        }
-        return await func(*args, **filtered_kwargs)
-    return wrapper
-
-
-def GetDependency(kwargs:dict[str,Any],key:str|None = None,cls:type|None = None):
-    reversed_kwargs = reverseDict(kwargs)
-    if key == None and cls == None:
-        raise KeyError
-    # if cls:
-    #     for 
-    return 
-
-# TODO: Check if we can raise exception if some header value are not present
 
 def get_user_language(request: Request) -> str:
     """
@@ -107,7 +63,6 @@ def get_response_id(r:Response = None)-> str | None:
         return None
 
 
-
 def get_api_key(request: Request=None) -> str:
     if request:
         return request.headers.get(HTTPHeaderConstant.API_KEY_HEADER)
@@ -130,11 +85,22 @@ def get_admin_token(request: Request = None):
     return APIKeyHeader(name=HTTPHeaderConstant.ADMIN_KEY)
 
 async def get_auth_permission(request: Request):
+    if not configService.SECURITY_FLAG:
+        return None
     if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.authPermission
 
+async def wrapper_auth_permission(request:Request):
+    try:
+        return await get_auth_permission(request)
+    except:
+        return None
+
 async def get_client_from_request(request:Request):
+    if not configService.SECURITY_FLAG:
+        return None
+
     if not hasattr(request.state, "client") or request.state.client is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.client
@@ -144,13 +110,20 @@ async def get_request_id(request: Request):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
     return request.state.request_id
 
-def get_query_params(name,default=None,parse=False,return_none=False,raise_except=False)->Callable[[Request],str|None]:
+def get_query_params(name,default=None,parse=False,return_none=False,raise_except=False,checker:Callable[[Any],bool]=None)->Callable[[Request],str|None]:
     """ return_none: only if parsing was failed choose wether to return None or the string
     """
     def depends(request:Request):
         value = request.query_params.get(name,default)
         if parse and value != None:
-            return parse_value(value,return_none)
+            value = parse_value(value,return_none)
+        
+        if value == None and raise_except:
+            raise HTTPException(400,detail=f'Query {name} not specified')
+
+        if checker:
+            if not checker(value):
+                raise HTTPException(400,detail='Error in params') # TODO raise a better error
         return value
     return depends
 

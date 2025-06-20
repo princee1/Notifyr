@@ -26,6 +26,7 @@ class Role(Enum):
     TWILIO = 'TWILIO'
     SUBSCRIPTION = 'SUBSCRIPTION'
     CLIENT = "CLIENT"
+    LINK = "LINK"
 
 class Scope(Enum):
     SoloDolo = 'SoloDolo'
@@ -47,6 +48,7 @@ class FuncMetaData(TypedDict):
     shared:bool
     limit_obj:dict
     limit_exempt:bool=False
+    default_role:bool =True
 
 
 class RoutePermission(TypedDict):

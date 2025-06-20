@@ -3,14 +3,18 @@ The `BaseResource` class initializes with a `container` attribute assigned from 
 instance imported from `container`.
 """
 from inspect import isclass
-from typing import Any, Callable,Dict, Iterable, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
+from types import NoneType
+from typing import Any, Callable,Dict, Iterable, List, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
+
+from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
-from app.utils.helper import issubclass_of
+from app.utils.helper import copy_response, issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services.assets_service import AssetService
 from app.container import Get, Need
-from app.definition._service import S, Service
+from app.definition._service import S, BaseService
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
@@ -23,6 +27,10 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address,get_ipaddr
 import asyncio
 from asgiref.sync import sync_to_async
+import warnings
+from app.depends.variables import SECURITY_FLAG
+
+
 
 
 configService:ConfigService = Get(ConfigService)
@@ -32,18 +40,27 @@ else:
     storage_uri = configService.SLOW_API_REDIS_URL
 
 PATH_SEPARATOR = "/"
-GlobalLimiter = Limiter(get_ipaddr,storage_uri=storage_uri,headers_enabled=True) # BUG Need to change the datastructure to have more limiter
+GlobalLimiter = Limiter(get_ipaddr,storage_uri=storage_uri,headers_enabled=True)
 RequestLimit =0
 
 
 def get_class_name_from_method(func: Callable) -> str:
     return func.__qualname__.split('.')[0]
 
+class MountMetaData(TypedDict):
+    app:StaticFiles
+    name:str
+    path:str
 
 class ClassMetaData(TypedDict):
     prefix:str
     routers:list
+    add_prefix:bool
     websockets:list[W]
+    mount:List[MountMetaData]
+
+class NoFunctionProvidedWarning(UserWarning):
+    pass
 
 
 
@@ -100,7 +117,7 @@ class HTTPMethod(Enum):
     PUT = 'PUT'
     PATCH = 'PATCH'
     OPTIONS = 'OPTIONS'
-    ALL = 'ALL'
+    HEAD = 'HEAD'
 
     @staticmethod
     def to_strs(methods: list[Any] | Any):
@@ -145,12 +162,14 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             
             setattr(func,'meta', FuncMetaData())
             func.meta['operation_id'] = computed_operation_id
-            func.meta['roles'] = set() # QUESTION by default are routes public ?
+            func.meta['roles'] = {Role.PUBLIC}
             func.meta['excludes'] = set()
             func.meta['options'] =[] 
             func.meta['limit_obj'] =None
             func.meta['limit_exempt']=False
             func.meta['shared']=None
+            func.meta['default_role'] =True
+            
             
             if not mount:
                 return func
@@ -225,7 +244,7 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
             return
         return self.events[event](data)
 
-    def _stack_callback(self): # TODO sync to async if necessary
+    def _stack_callback(self):
         if self.__class__.__name__ not in DECORATOR_METADATA:
             return
         M = DECORATOR_METADATA[self.__class__.__name__]
@@ -273,8 +292,9 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         prefix:str = self.__class__.meta['prefix']
+        add_prefix:bool = self.__class__.meta['add_prefix']
         #prefix = 
-        if not prefix.startswith(PATH_SEPARATOR):
+        if not prefix.startswith(PATH_SEPARATOR) and add_prefix:
             prefix = PATH_SEPARATOR + prefix
         
         self.router = APIRouter(prefix=prefix, on_shutdown=[self.on_shutdown], on_startup=[self.on_startup],dependencies=dependencies)
@@ -362,12 +382,15 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
 R = TypeVar('R', bound=BaseHTTPRessource)
 
 
-def HTTPRessource(prefix:str,routers:list[Type[R]]=[],websockets:list[Type[W]]=[]):
+def HTTPRessource(prefix:str,routers:list[Type[R]]=[],websockets:list[Type[W]]=[],add_prefix=True):
     def class_decorator(cls:Type[R]) ->Type[R]:
         # TODO: support module-level injection 
         cls.meta['prefix'] = prefix
         cls.meta['routers'] = routers
         cls.meta['websockets'] = websockets
+        cls.meta['add_prefix'] = add_prefix
+        cls.meta['mount'] = []
+
         return cls
     return class_decorator
 
@@ -380,12 +403,51 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
                 if handling_func == None:
                     setattr(cls, attr, decorator(**kwargs)(handler))
                 else:
-                    setattr(cls, attr, decorator(*handling_func, **kwargs)(handler))  # BUG can be an source of error if not a tuple
+                    setattr(cls, attr, decorator(*handling_func, **kwargs)(handler))
         return cls
     return None
 
+def stack_decorator(decorated_function,deco_type:Type[DecoratorObj],empty_decorator:bool,default_error:dict,error_type:Type[Exception]):
+    def wrapper(function: Callable):
+
+                @functools.wraps(function)
+                async def callback(*args, **kwargs): # Function that will be called 
+                    if empty_decorator:
+                        return await function(*args, **kwargs)
+
+                    def proxy(deco,f:Callable):
+                        @functools.wraps(deco)
+                        async def delegator(*a,**k):
+                            if type(deco) == type:
+                                obj:DecoratorObj = deco()
+                                return await obj.do(f, *a, **k)
+                            elif isinstance(deco, deco_type):
+                                return await deco.do(f, *a, **k)
+                            else:
+                                return await deco(f, *a, **k)
+                        return delegator
+                        
+                    deco_prime = function
+                    for d in reversed(decorated_function):
+                        deco_prime = proxy(d,deco_prime)
+
+                    try:
+                        return await deco_prime(*args, **kwargs)
+                    except error_type as e:
+
+                        if default_error == None:
+                            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Could not correctly treat the error')
+                    
+                        raise HTTPException(**default_error)
+                    
+                return callback
+    return wrapper
+
 
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams =None):
+    empty_decorator = len(permission_function) == 0
+    if empty_decorator:
+        warnings.warn("No Permission function or object was provided.", NoFunctionProvidedWarning)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UsePermission, permission_function)
@@ -400,6 +462,12 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
             @functools.wraps(function)
             async def callback(*args, **kwargs):
 
+                if not SECURITY_FLAG:
+                    return await function(*args,**kwargs)
+
+                if empty_decorator:
+                    return await function(*args,**kwargs)
+
                 if len(kwargs) < 1:
                     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
@@ -410,7 +478,6 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                 kwargs_prime[SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
                 kwargs_prime[SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER] = func.meta
                 
-                # TODO use the prefix here
                 for permission in permission_function:
                     try:
                         if type(permission) == type:
@@ -438,46 +505,18 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
 def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Handler] | Handler, default_error: HTTPExceptionParams =None):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
+    empty_decorator = len(handler_function) == 0
+    if empty_decorator:
+        warnings.warn("No Handler function or object was provided.", NoFunctionProvidedWarning)
 
+    
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseHandler, handler_function)
         if cls != None:
             return cls
 
-        def wrapper(function: Callable):
+        wrapper = stack_decorator(handler_function,Handler,empty_decorator,default_error,HandlerDefaultException)
 
-            @functools.wraps(function)
-            async def callback(*args, **kwargs): # Function that will be called 
-                if len(handler_function) == 0:
-                    # TODO print a warning
-                    return await function(*args, **kwargs)
-
-                def handler_proxy(handler,f:Callable):
-                    @functools.wraps(handler)
-                    async def delegator(*a,**k):
-                        if type(handler) == type:
-                            handler_obj:Handler = handler()
-                            return await handler_obj.do(f, *a, **k)
-                        elif isinstance(handler, Handler):
-                            return await handler.do(f, *a, **k)
-                        else:
-                            return await handler(f, *a, **k)
-                    return delegator
-                    
-                handler_prime = function
-                for handler in reversed(handler_function):
-                    handler_prime = handler_proxy(handler,handler_prime)
-
-                try:
-                    return await handler_prime(*args, **kwargs)
-                except HandlerDefaultException as e:
-
-                    if default_error == None:
-                        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Could not correctly treat the error')
-                
-                    raise HTTPException(**default_error)
-                
-            return callback
         appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER)
         return func
     return decorator
@@ -485,8 +524,12 @@ def UseHandler(*handler_function: Callable[..., Exception | None| Any] | Type[Ha
 def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Guard, default_error: HTTPExceptionParams =None):
     # INFO guards only purpose is to validate the request
     # NOTE:  be mindful of the order
+    empty_decorator = len(guard_function) == 0
+    if empty_decorator:
+        warnings.warn("No Guard function or object was provided.", NoFunctionProvidedWarning)
 
-    # BUG notify the developper if theres no guard_function mentioned
+
+
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
         cls = common_class_decorator(func, UseGuard, guard_function)
         if cls != None:
@@ -496,23 +539,29 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
             @functools.wraps(target_function)
             async def callback(*args, **kwargs):
+                if empty_decorator ==0:
+                    return await target_function(*args, **kwargs)
+                
+                try:
+                    for guard in guard_function:
+                        if type(guard) == type :
+                            flag, message = await guard().do(*args, **kwargs)
+                        
+                        elif isinstance(guard,Guard):
+                            flag, message = await guard.do(*args, **kwargs)
+                        else:
+                            flag, message = await guard(*args, **kwargs)
+                        
+                        if not isinstance(flag,bool) or not isinstance(message,str):
+                            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
-                for guard in guard_function:
-
-                    # BUG check annotations of the guard function
-                    if type(guard) == type :
-                        flag, message = await guard().do(*args, **kwargs)
-                    
-                    elif isinstance(guard,Guard):
-                        flag, message = await guard.do(*args, **kwargs)
-                    else:
-                        flag, message = await guard(*args, **kwargs)
-
-                    if not flag:
-                        if default_error == None:   
-                            raise HTTPException(
-                                status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
-                        raise HTTPException(**default_error)
+                        if not flag:
+                            raise HTTPException( status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
+                        
+                except GuardDefaultException as e:
+                    if default_error == None:
+                        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Request Validation Aborted')
+                    raise HTTPException(**default_error)
 
                 return await target_function(*args, **kwargs)
             return callback
@@ -523,6 +572,11 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
 def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]]| Any] | Type[Pipe] | Pipe, before: bool = True, default_error: HTTPExceptionParams =None):
     # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
+
+    empty_decorator = len(pipe_function) == 0
+    if empty_decorator:
+        warnings.warn("No Pipe function or object was provided.", NoFunctionProvidedWarning)
+
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UsePipe, pipe_function, before=before)
@@ -569,24 +623,22 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                     raise HTTPException(**default_error)
             return callback
 
-        appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE,touch=0 if before else 0.5)  # TODO 3 or 3.5 if before
+        appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE,touch=0 if before else 0.5)
         return func
     return decorator
 
-def UseInterceptor(interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams =None):
-    raise NotImplementedError
+def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams =None):
+
+    empty_decorator = len(interceptor_function) == 0
+    if empty_decorator:
+        warnings.warn("No Pipe function or object was provided.", NoFunctionProvidedWarning)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(
-            func, UseInterceptor, interceptor_function)
+        cls = common_class_decorator(func, UseInterceptor, interceptor_function)
         if cls != None:
             return cls
 
-        def wrapper(function: Callable):
-            @functools.wraps(function)
-            async def callback(*args, **kwargs):
-                return await interceptor_function(function, *args, **kwargs)
-            return callback
+        wrapper = stack_decorator(interceptor_function,Interceptor,empty_decorator,default_error,InterceptorDefaultException)
 
         appends_funcs_callback(func, wrapper, DecoratorPriority.INTERCEPTOR)
         return func
@@ -597,10 +649,9 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
         cls = common_class_decorator(func, UseRoles,None,roles=roles)
         if cls != None:
             return cls
-        # TODO by default route is public check the todo in BaseHTTPRessource concerning this
         roles_ = set(roles)
         excludes_ = set(excludes).difference(roles_)
-
+        
         try:
             roles_.remove(Role.CUSTOM)
         except KeyError:
@@ -608,6 +659,10 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
 
         meta:FuncMetaData | None = getattr(func,'meta',None)
         if meta is not None:
+            if meta['default_role']:
+                meta['roles'].clear()
+                meta['default_role'] = False
+
             meta['roles'].update(roles_)
             roles_ = meta['roles']
             meta['excludes'].update(excludes_.difference(roles_))
@@ -615,6 +670,64 @@ def UseRoles(roles:list[Role]=[],excludes:list[Role]=[],options:list[Callable]=[
 
         return func
     return decorator
+
+
+def HTTPStatusCode(code:int|str):
+    if isinstance(code,str):
+        if code not in status.__all__:
+            raise ...
+        else:
+            code = status.__getattr__(code)
+    elif isinstance(code,int):
+        ...
+    else:
+        raise
+
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, HTTPStatusCode, code)
+        if cls != None:
+            return cls
+
+        @functools.wraps(func)
+        async def wrapper(*args,**kwargs):
+            if 'response' in kwargs and isinstance(kwargs['response'],Response):
+                kwargs['response'].status_code = code
+
+            if asyncio.iscoroutinefunction(func):
+                return await func(*args,**kwargs)
+            else:
+                return func(*args,**kwargs)
+        
+        return wrapper
+
+    return decorator
+
+        
+
+def response_decorator(func:Callable):
+
+    @functools.wraps(func)
+    async def wrapper(*args,**kwargs):
+        if asyncio.iscoroutinefunction(func):
+            result = await func(*args,**kwargs)
+        else:
+            result = func(*args,**kwargs)
+        response:Response = kwargs.get('response',None)
+        
+        if isinstance(result,Response):
+            ...
+        elif isinstance(result,(dict,list,set,tuple)):
+            result = JSONResponse(result,)
+
+        elif isinstance(result,(int,str,float,bool)):
+            result = PlainTextResponse(str(result))
+        
+        elif result == None:
+            result = JSONResponse({},)
+                
+        return copy_response(result,response)
+
+    return wrapper
 
 @functools.wraps(GlobalLimiter.limit)
 def UseLimiter(**kwargs): #TODO
@@ -633,7 +746,9 @@ def UseLimiter(**kwargs): #TODO
                 RequestLimit+= limit_value
             except:
                 ...
-        return func
+            
+        return response_decorator(func)
+    
     return decorator
 
 @functools.wraps(GlobalLimiter.shared_limit)
@@ -647,7 +762,7 @@ def UseSharingLimiter(**kwargs):
             meta['limit_obj'] = kwargs
             meta['shared']=True
 
-        return func
+        return response_decorator(func)
     return decorator
 
 def ExemptLimiter():
@@ -680,7 +795,7 @@ def PingService(services:list[S|dict]):
                     await cls.pingService(*a,**k)
                     
                 else:    
-                    s: Service = Get(s)
+                    s: BaseService = Get(s)
                     await s.pingService()
 
             result = func(*args,**kwargs)          
@@ -693,6 +808,24 @@ def PingService(services:list[S|dict]):
 
 def Exclude():
     ...
+
+
+def MountDirectory(path:str,app:StaticFiles,name:str):
+    def class_decorator(cls:Type[R]) ->Type[R]:
+        if type(cls)!=HTTPRessourceMetaClass:
+            return
+        meta:ClassMetaData =cls.meta
+        meta['mount'].append(
+            {
+                'app':app,
+                'name':name,
+                'path':path
+            }
+        )
+
+        return cls
+    return class_decorator
+        
     
 def IncludeRessource(*ressources: Type[R]| R):
     def class_decorator(cls:Type[R]) ->Type[R]:

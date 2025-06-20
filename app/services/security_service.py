@@ -1,11 +1,12 @@
 
 from typing import Any, Dict, Literal
 
+from app.classes.rsa import RSA
 from app.definition._interface import Interface, IsInterface
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
-from app.definition._service import AbstractServiceClass, Service, ServiceClass
+from app.definition._service import AbstractServiceClass, BaseService, Service
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 import base64
@@ -47,8 +48,8 @@ class EncryptDecryptInterface(Interface):
         return generate_salt()
 
 
-@ServiceClass
-class JWTAuthService(Service, EncryptDecryptInterface):
+@Service
+class JWTAuthService(BaseService, EncryptDecryptInterface):
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__()
         self.configService = configService
@@ -242,8 +243,8 @@ class JWTAuthService(Service, EncryptDecryptInterface):
         ...
 
 
-@ServiceClass
-class SecurityService(Service, EncryptDecryptInterface):
+@Service
+class SecurityService(BaseService, EncryptDecryptInterface):
 
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__()
@@ -253,7 +254,6 @@ class SecurityService(Service, EncryptDecryptInterface):
     def verify_server_access(self, token: str, sent_ip_addr) -> bool:
         token = self._decode_value(token, self.configService.API_ENCRYPT_TOKEN)
         token = token.split("|")
-        # TODO invalidate with generation id
 
         if len(token) != 3:
             return False
@@ -295,9 +295,19 @@ class SecurityService(Service, EncryptDecryptInterface):
         stored_hash = b64_decode(stored_hash)
         stored_salt = bytes(stored_salt.encode())
         # stored_salt = b64_decode(stored_salt)
-        hashed_provided_password = self.hash_value_with_salt(
-            provided_password, key, stored_salt)
+        hashed_provided_password = self.hash_value_with_salt(provided_password, key, stored_salt)
         return hmac.compare_digest(stored_hash, hashed_provided_password)
     
     def verify_admin_signature(self,):
         ...
+
+    def generate_rsa_key_pair(self,key_size=2048):
+        rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
+        return RSA(password=rsa_secret_pwd,key_size=key_size)
+
+    def generate_rsa_from_encrypted_keys(self,private_key=None,public_key=None):
+        rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
+        return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
+
+        
+    

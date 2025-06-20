@@ -8,7 +8,9 @@ from app.container import InjectInMethod
 from app.interface.events import EventInterface
 from app.services.security_service import JWTAuthService
 from app.utils.constant import HTTPHeaderConstant
-from app.utils.dependencies import get_bearer_token,APIFilterInject
+from app.depends.dependencies import get_bearer_token
+from app.utils.helper import APIFilterInject
+
 import wrapt
 from pydantic import BaseModel
 from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict,Literal
@@ -202,7 +204,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         if self.bypass_auth:
             return True
             
-        auth_token = websocket.headers.get(HTTPHeaderConstant.WS_KEY) # TODO find a key name
+        auth_token = websocket.headers.get(HTTPHeaderConstant.WS_KEY)
         if auth_token == None:
             return False
         try:

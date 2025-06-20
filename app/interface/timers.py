@@ -1,58 +1,77 @@
-import sched
-import time
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from typing import Callable, Any
 import asyncio
+from app.definition._error import BaseError
 from app.definition._interface import Interface, IsInterface
 from abc import abstractmethod
 
 
+class IntervalError(BaseError):
+    ...
+
 @IsInterface
 class SchedulerInterface(Interface):
     def __init__(self):
-        self._scheduler = sched.scheduler(time.time, time.sleep)
+        self._scheduler = AsyncIOScheduler()
+        
+    def schedule(
+        self,
+        delay: float,
+        action: Callable[..., Any],
+        *args,
+        **kwargs
+    ):
+        """Schedule a task with a delay. Supports async and sync functions."""
+        trigger = IntervalTrigger(seconds=delay)
+        if asyncio.iscoroutinefunction(action):
+            self._scheduler.add_job(action, trigger, args=args, kwargs=kwargs)
+        else:
+            self._scheduler.add_job(self._run_sync, trigger, args=(action, *args), kwargs=kwargs)
 
-    def schedule(self, delay: float, priority: int, action, argument=()) -> sched.Event:
-        """Schedule a task with a delay and priority."""
-        event = self._scheduler.enter(delay, priority, action, argument)
-        return event
+    def start(self):
+        self._scheduler.start()
 
-    async def run(self) -> None:
-        """Run the scheduled tasks asynchronously."""
+    async def _run_sync(self, func: Callable[..., Any], *args, **kwargs):
+        """Run a synchronous function asynchronously."""
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._scheduler.run)
+        await loop.run_in_executor(None, func, *args, **kwargs)
 
-    def __cancel(self, event: sched.Event) -> None:
-        """Cancel a scheduled task."""
-        try:
-            self._scheduler.cancel(event)
-        except ValueError:
-            pass  # Event may have already been executed or canceled
-
-    def _is_empty(self) -> bool:
-        """Check if the scheduler has any pending tasks."""
-        return not self._scheduler.queue
-
-    def clear(self) -> None:
-        """Cancel all scheduled tasks."""
-        for event in list(self._scheduler.queue):
-            self.__cancel(event)
+    def shutdown(self):
+        """Shut down the scheduler."""
+        self._scheduler.shutdown()
 
 
 @IsInterface
 class IntervalInterface(Interface):
-    def __init__(self,):
+    def __init__(self,start_now:bool=False,interval:float=None):
         self._task = None
-        self._interval = None
+        self._interval = interval
+        self.start_now = start_now
 
     async def _run_interval(self):
         """Internal method to repeatedly call the callback at specified intervals."""
-        while True:
-            await asyncio.sleep(self._interval)
-            self.callback()
+        if not self.start_now:
+            while True:
+                await asyncio.sleep(self._interval)
+                self.callback()
+        else:
+            while True:
+                self.callback()
+                await asyncio.sleep(self._interval)
 
-    def start_interval(self, interval: float) -> None:
+    def start_interval(self, interval: float=None,start_now:bool=None) -> None:
         """Start a new interval timer."""
         self.stop_interval()  # Stop any running interval
-        self._interval = interval
+        
+        if interval!=None:
+            self._interval = interval
+        
+        if start_now!=None and isinstance(start_now,bool):
+            self.start_now = start_now
+        
+        if self._interval == None or not isinstance(self._interval,(int,float)) or self._interval <0:
+            raise IntervalError(self._interval)
         self._task = asyncio.create_task(self._run_interval())
 
     def stop_interval(self) -> None:
@@ -60,7 +79,7 @@ class IntervalInterface(Interface):
         if self._task is not None:
             self._task.cancel()
             self._task = None
-            self._interval = None
+            #self._interval = None
 
     def is_running(self) -> bool:
         """Check if the interval timer is running."""

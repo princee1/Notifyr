@@ -1,6 +1,8 @@
 src_dir = .
 config_dir = config.app.json
 celery_app = app.task.celery_app
+app_name = Notifyr
+ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
 
 install	:
 	pip install -r requirements_dev.txt
@@ -9,7 +11,7 @@ cleandep:
 	pipreqs --clean requirements_dev.txt
 
 getdep: 
-	pipreqs --savepath requirements_dev.txt --force app/
+	pip freeze > requirements_dev.txt
 
 setenv:
 	cp base.env .env
@@ -33,19 +35,22 @@ del_venv:
 	echo testing
 
 https_pem:
-	 openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
+	openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
 
-run:
-	python ${src_dir}/main.py --config=${config_dir}
+run_dev:
+	python ${src_dir}/main.py --config=${config_dir} --name=${app_name}
+
+run_prod:
+	uvicorn main:app --workers 4 --port 8088
 
 create :
-	python ${src_dir}/main.py --config=${config_dir} --mode=create
+	python ${src_dir}/main.py --config=${config_dir} --mode=create --name=${app_name}
 
 edit:
-	python ${src_dir}/main.py --config=${config_dir} --mode=edit
+	python ${src_dir}/main.py --config=${config_dir} --mode=edit --name=${app_name}
 
 register:
-	python ${src_dir}/main.py --config=${config_dir} --mode=register
+	python ${src_dir}/main.py --config=${config_dir} --mode=register --name=${app_name}
 
 docker:
 	docker-compose up --build
@@ -61,3 +66,6 @@ redbeat:
 
 purge:
 	celery -A ${celery_app} purge
+
+tunnel:
+	ngrok http --url ${ngrok_url} 8088

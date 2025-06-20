@@ -2,7 +2,12 @@
 Contains the FastAPI app
 """
 from dataclasses import dataclass
+
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from app.container import Get
+from app.definition._error import ServerFileError
+from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.ressources import *
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
@@ -19,7 +24,7 @@ import multiprocessing
 import threading
 import sys
 import datetime as dt
-from app.definition._ressource import RESSOURCES, BaseHTTPRessource, GlobalLimiter
+from app.definition._ressource import RESSOURCES, BaseHTTPRessource, ClassMetaData, GlobalLimiter
 from app.interface.events import EventInterface
 from tortoise.contrib.fastapi import register_tortoise
 import ngrok
@@ -30,6 +35,8 @@ AppParameterKey = Literal['title', 'summary', 'description',
                           'ressources', 'middlewares', 'port', 'log_level', 'log_config']
 
 HTTPMode = Literal['HTTPS', 'HTTP']
+
+BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
 
 
 @dataclass
@@ -102,54 +109,24 @@ class Application(EventInterface):
     def add_exception_handlers(self):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-        @self.app.exception_handler(TypeError)
-        async def type_error(request, e:TypeError):
-            print(e)
-            print(e.__cause__)
-            return JSONResponse({'message': 'Type Error'}, status_code=500)
+        def wrapper(exception:type[Exception]):
 
-        @self.app.exception_handler(AttributeError)
-        async def attribute_error(request, e):
-            print(e)
-            print(e.__cause__)
+            @self.app.exception_handler(exception)
+            async def callback(request,e:type[Exception]):
+                print(e.__class__,e.args)
+                return JSONResponse({'message': 'An unexpected error occurred!'}, status_code=500)
 
-            return JSONResponse({'message': 'Attribute Error'}, status_code=500)
 
-        @self.app.exception_handler(OSError)
-        async def os_error(request, e):
-            return JSONResponse({'message': 'OS Error'}, status_code=500)
+        for e in BUILTIN_ERROR:
+            wrapper(e)
 
-        @self.app.exception_handler(KeyError)
-        async def key_error(request, e):
-            print(e)
-            return JSONResponse({'message': 'Error while retrieving an important key '}, status_code=status.HTTP_400_BAD_REQUEST)
 
-        @self.app.exception_handler(NotImplementedError)
-        async def not_implemented_error(request, e):
-            print(e)
-            return JSONResponse({'message': 'The service requested is not available in this version'}, status_code=504)
+        @self.app.exception_handler(ServerFileError)
+        async def serve_file_error(request:Request,e:ServerFileError):
+            #return StaticFiles(e.filename,html=True)
+            #return HTMLResponse()
+            return FileResponse(e.filename,e.status_code,e.headers)# TODO change to html_response
 
-        @self.app.exception_handler(MemoryError)
-        async def memory_error(request, e):
-            return JSONResponse({'message': 'Memory Error'}, status_code=500)
-
-        @self.app.exception_handler(NameError)
-        async def name_error(request, e):
-            print(e)
-            print(e.__cause__)
-
-            return JSONResponse({'message': 'Name Error'}, status_code=500)
-
-        @self.app.exception_handler(TimeoutError)
-        async def timeout_error(request, e):
-            return JSONResponse({'message': 'Timeout Error'}, status_code=500)
-
-        @self.app.exception_handler(Exception)
-        async def base_exception(request, e:Exception):
-            print(e)
-            print(e.__class__)
-            traceback.print_exc()  
-            return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={'message': 'An unexpected error occurred!'})
 
     def set_httpMode(self):
         self.mode = self.configService.HTTP_MODE
@@ -185,6 +162,15 @@ class Application(EventInterface):
     def run(self) -> None:
         self.start_server()
 
+    def _mount_directories(self,ress_type:type[BaseHTTPRessource]):
+        meta:ClassMetaData = ress_type.meta
+        for mount in meta['mount']:
+            path = mount['path']
+            app = mount['app']
+            name = mount['name']
+
+            self.app.mount(path,app,name)
+
     def add_ressources(self):
         self.pretty_printer.show(
             pause_before=1, clear_stack=True, space_line=True)
@@ -194,6 +180,7 @@ class Application(EventInterface):
                 res = ressource_type()
                 self.app.include_router(
                     res.router, responses=res.default_response)
+                self._mount_directories(ressource_type)
                 self.pretty_printer.success(
                     f"[{now}] Ressource {ressource_type.__name__} added successfully", saveable=True)
                 self.pretty_printer.wait(0.1, press_to_continue=False)
@@ -221,22 +208,29 @@ class Application(EventInterface):
         register_tortoise(
             app=self.app,
             db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}",
-            modules={"models": ["app.models.contacts_model","app.models.security_model"]},
+            modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
             generate_schemas=False,
             add_exception_handlers=True,    
         )
 
-    def on_startup(self):
+    async def on_startup(self):
         jwtService = Get(JWTAuthService)
         jwtService.set_generation_id(False)
 
-        celery_service: CeleryService = Get(CeleryService)
-        celery_service.start_interval(60*60)
+        redisService = Get(RedisService)
+        
+        await redisService.create_group()
+        redisService.register_consumer(callbacks_stream=Callbacks_Stream)
 
-    def on_shutdown(self):
-        # for thread in threading.enumerate():
-        #     if thread is not threading.current_thread():
-        #         thread.join()
-        ...
+        taskService:TaskService =  Get(TaskService)
+        #taskService.start()
+
+        celery_service: CeleryService = Get(CeleryService)
+        celery_service.start_interval(10)
+
+    async def on_shutdown(self):
+        redisService:RedisService = Get(RedisService)
+        redisService.to_shutdown = True
+        await redisService.close_connections()
 
 #######################################################                          #####################################################

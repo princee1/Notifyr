@@ -2,7 +2,7 @@
 
 SET search_path = contacts;
 
-CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr', 'en'))
+CREATE DOMAIN Lang AS VARCHAR(15) CHECK (VALUE IN ('fr', 'en'));
 
 CREATE DOMAIN SubscriptionStatus AS VARCHAR(20) CHECK (
     VALUE IN ('Active', 'Inactive')
@@ -52,9 +52,9 @@ CREATE TABLE IF NOT EXISTS Contact (
     auth_token TEXT UNIQUE DEFAULT NULL, --NONCE
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT chk_opt_in_code CHECK (
-        opt_in_code >= 10000000000000
-        AND opt_in_code <= 99999999999999
+    CONSTRAINT opt_in_code CHECK (
+        opt_in_code >= 100000000
+        AND opt_in_code <= 999999999
     )
 );
 
@@ -175,7 +175,7 @@ WHERE
 
 END; $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE VIEW UserSummary AS
+CREATE VIEW ContactSummary AS
 SELECT
     c.contact_id,
     c.first_name,
@@ -245,6 +245,7 @@ DECLARE
     contact_count INT;
 
 BEGIN
+SET search_path = contacts;
 SELECT 
     COUNT(*) 
 INTO 
@@ -265,4 +266,135 @@ $compute_limit$ LANGUAGE plpgsql;
 CREATE TRIGGER limit_contact
 BEFORE INSERT ON Contact
 FOR EACH ROW
-EXECUTE FUNCTION compute_limit(2);
+EXECUTE FUNCTION compute_limit();
+
+CREATE TABLE IF NOT EXISTS ContactAnalytics (
+    analytics_id UUID DEFAULT uuid_generate_v1mc(),
+    week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
+    content_id UUID DEFAULT '00000000-0000-0000-0000-000000000000',
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    subscriptions_count INT DEFAULT 0,
+    unsubscriptions_count INT DEFAULT 0,
+    PRIMARY KEY (analytics_id),
+    UNIQUE (week_start_date,content_id,country,region,city),
+    Foreign Key (content_id) REFERENCES SubsContent(content_id) ON UPDATE CASCADE ON DELETE NO ACTION
+);
+
+CREATE TYPE contact_analytics_input AS (
+    content_id UUID,
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    subscriptions INT,
+    unsubscriptions INT
+);
+
+CREATE OR REPLACE FUNCTION bulk_upsert_contact_analytics(data contact_analytics_input[]) RETURNS VOID AS $$
+DECLARE
+    record contact_analytics_input;
+BEGIN
+    SET search_path = contacts;
+
+    FOREACH record IN ARRAY data
+    LOOP
+        -- Coerce content_id to default if NULL
+        record.content_id := COALESCE(record.content_id, '00000000-0000-0000-0000-000000000000');
+
+        INSERT INTO ContactAnalytics (week_start_date, content_id, country, region, city, subscriptions_count, unsubscriptions_count)
+        VALUES (DATE_TRUNC('week', NOW()), record.content_id, record.country, record.region, record.city, record.subscriptions, record.unsubscriptions)
+        ON CONFLICT (week_start_date, content_id, country, region, city)
+        DO UPDATE SET
+            subscriptions_count = ContactAnalytics.subscriptions_count + EXCLUDED.subscriptions_count,
+            unsubscriptions_count = ContactAnalytics.unsubscriptions_count + EXCLUDED.unsubscriptions_count;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION calculate_contact_analytics_grouped(
+    group_by_factor INT
+) RETURNS TABLE (
+    group_number INT,
+    content_id UUID,
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    subscriptions_count INT,
+    unsubscriptions_count INT
+) AS $$
+BEGIN
+    SET search_path = contacts;
+    RETURN QUERY
+    SELECT
+        FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 7 * 24 * 60 * 60)) + 1 AS group_number,
+        content_id,
+        country,
+        region,
+        city,
+        SUM(subscriptions_count) AS subscriptions_count,
+        SUM(unsubscriptions_count) AS unsubscriptions_count
+    FROM ContactAnalytics
+    GROUP BY group_number, content_id, country, region, city
+    ORDER BY group_number, content_id, country, region, city;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TABLE IF NOT EXISTS ContactCreationAnalytics (
+    analytics_id UUID DEFAULT uuid_generate_v1mc(),
+    week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    contacts_created_count INT DEFAULT 0,
+    PRIMARY KEY (analytics_id),
+    UNIQUE (week_start_date, country, region, city)
+);
+
+CREATE TYPE contact_creation_analytics_input AS (
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    contacts_created INT
+);
+
+CREATE OR REPLACE FUNCTION bulk_upsert_contact_creation_analytics(data contact_creation_analytics_input[]) RETURNS VOID AS $$
+DECLARE
+    record contact_creation_analytics_input;
+BEGIN
+    SET search_path = contacts;
+
+    FOREACH record IN ARRAY data
+    LOOP
+        INSERT INTO ContactCreationAnalytics (week_start_date, country, region, city, contacts_created_count)
+        VALUES (DATE_TRUNC('week', NOW()), record.country, record.region, record.city, record.contacts_created)
+        ON CONFLICT (week_start_date, country, region, city)
+        DO UPDATE SET
+            contacts_created_count = ContactCreationAnalytics.contacts_created_count + EXCLUDED.contacts_created_count;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION calculate_contact_creation_analytics_grouped(
+    group_by_factor INT
+) RETURNS TABLE (
+    group_number INT,
+    country VARCHAR(5),
+    region VARCHAR(60),
+    city VARCHAR(100),
+    contacts_created_count INT
+) AS $$
+BEGIN
+    SET search_path = contacts;
+    RETURN QUERY
+    SELECT
+        FLOOR(EXTRACT(EPOCH FROM (week_start_date - MIN(week_start_date) OVER ())) / (group_by_factor * 7 * 24 * 60 * 60)) + 1 AS group_number,
+        country,
+        region,
+        city,
+        SUM(contacts_created_count) AS contacts_created_count
+    FROM ContactCreationAnalytics
+    GROUP BY group_number, country, region, city
+    ORDER BY group_number, country, region, city;
+END;
+$$ LANGUAGE plpgsql;

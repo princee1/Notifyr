@@ -3,6 +3,7 @@ from app.utils.constant import ConfigAppConstant
 from app.container import Get, InjectInFunction
 from app.services.security_service import SecurityService, JWTAuthService
 from app.services.config_service import ConfigService
+from app.utils.helper import filter_paths
 from app.utils.prettyprint import PrettyPrinter_
 from app.services.file_service import FileService
 from app.utils.question import FuzzyInputHandler, SimpleInputHandler, ask_question, NumberInputHandler, ExpandInputHandler, ConfirmInputHandler, CheckboxInputHandler, one_or_more, one_or_more_invalid_message
@@ -136,19 +137,10 @@ def ask_asset():
 
         return one_or_more(result)
     
-    def _filter(paths):
-        paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
-        results = []
-
-        for path in paths:
-            if not any(path.startswith(d + "\\") for d in results):
-                results.append(path)
-
-
-        return ['assets/'+ p for p in results ]
+    
     answer = ask_question([FuzzyInputHandler('Select assets to be included in the permission (files and folder)',
                                     key,None,one_or_more,choices,invalid_message=one_or_more_invalid_message,instruction='(Press tab to select and enter to answer)')])
-    return _filter(answer[key])
+    return filter_paths(answer[key])
 
 
 def prompt_client_registration(set_gen_id=False):

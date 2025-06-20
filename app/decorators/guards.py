@@ -1,12 +1,16 @@
 from typing import Any, List
 from app.classes.auth_permission import AuthPermission, RefreshPermission
+from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
+from app.depends.class_dep import TrackerInterface
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.link_model import LinkORM
+from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.assets_service import AssetService
-from app.services.celery_service import BackgroundTaskService, CeleryService,task_name
+from app.services.celery_service import TaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
@@ -14,7 +18,7 @@ from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
-from app.utils.helper import flatten_dict,b64_encode
+from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request,status
 
 class CeleryTaskGuard(Guard):
@@ -33,15 +37,20 @@ class CeleryTaskGuard(Guard):
         return True,''
 
 class AssetGuard(Guard):
-    #TODO If a route allowed a certain type asset
-    def __init__(self,content_keys=[],allowed_path=[],options=[]):
+    
+    def __init__(self,content_keys=[],allowed_path=[],options=[],accepted_type=None):
         super().__init__()
         self.assetService = Get(AssetService)       
         self.configService = Get(ConfigService)
         self.options = options
         self.allowed_path = [self.configService.ASSET_DIR +p for p in  allowed_path]
         self.content_keys = content_keys
+        self.accepted_type = accepted_type
 
+    def _filter_allowed(self):
+        if self.accepted_type != None:
+            ...
+            #TODO If a route allowed a certain type asset
     def guard(self,scheduler:SchedulerModel):
         if scheduler == None:
             return True,_
@@ -53,16 +62,18 @@ class AssetGuard(Guard):
         return True,''
                 
 class TaskWorkerGuard(Guard):
-    #TODO Check before hand if the background task and the workers are available to do some job
     def __init__(self, heaviness:TaskHeaviness=None):
         super().__init__()
         self.celeryService = Get(CeleryService)
-        self.bckgroundTaskService = Get(BackgroundTaskService)
+        self.taskService = Get(TaskService)
         self.heaviness = heaviness
     
-    def guard(self,scheduler:SchedulerModel):
+    async def guard(self,scheduler:SchedulerModel):
         task_heaviness:TaskHeaviness = scheduler.heaviness
         ...
+    #TODO Check before hand if the background task and the workers are available to do some job
+    # NOTE Already have a pingService
+
 
 
 class RegisteredContactsGuard(Guard):
@@ -157,6 +168,99 @@ class BlacklistClientGuard(Guard):
         self.adminService = Get(AdminService)
     
     async def guard(self,client:ClientORM):
-        if await self.adminService.is_blacklisted(client):
+        is_blacklist,_ =await self.adminService.is_blacklisted(client)
+
+        if is_blacklist:
             return False,'Client is blacklisted'
+        return True,''
+    
+
+class CarrierTypeGuard(Guard):
+
+    def __init__(self,accept_landline:bool,accept_voip:bool=False,accept_unknown:bool=False,):
+        super().__init__()
+        self.twilioService:TwilioService = Get(TwilioService)
+        self.accept_voip = accept_voip
+        self.accept_unknown = accept_unknown
+        self.accept_landline = accept_landline
+    
+    async def guard(self,otpModel:OTPModel=None,contact:ContactORM=None,scheduler:SchedulerModel=None):
+        if otpModel != None:
+            phone_number = [[otpModel.to]]
+        elif contact != None:
+            phone_number = [[contact.phone]]
+        else:
+
+            phone_number = [[to for to in content.to] for content in scheduler.content]
+        for _phone_number in phone_number:
+            for pn in _phone_number:
+                status_code,data = await self.twilioService.async_phone_lookup(phone_number,True)
+                if status_code != 200:
+                    return False,f'Callee Information not found: {pn}'
+                
+                carrier:dict= data.get('carrier',None)
+                if carrier == None:
+                    return False,f'Carrier Information not found: {pn}'
+
+                carrier_type = carrier.get('type','unknown')
+                if carrier_type ==None:
+                    carrier_type = 'unknown'
+                    
+                if carrier_type == 'voip' and not self.accept_voip:
+                    return False,f'Carrier Type is Voip: {pn}'
+                if carrier_type == 'landline' and not self.accept_landline:
+                    return False,f'Carrier Type is Landline: {pn}'
+                if carrier_type == 'unknown' and not self.accept_unknown:
+                    return False,f'Carrier Type is Unknown: {pn}'
+                
+        return True,''
+
+
+class AccessLinkGuard(Guard):
+    error_file = 'app/static/error-404-page/index.html'
+
+    def __init__(self,return_file:bool):
+        super().__init__()
+        self.return_file = return_file
+
+    def guard(self,link:LinkORM):
+        link_short_id = link.link_short_id
+
+        if link.public:
+            return True,""
+
+        if link.archived:
+            if not self.return_file:
+                return False,f'Link with short_id: {link_short_id} is currently archived'
+            else:
+                raise ServerFileError(self.error_file,status.HTTP_410_GONE)
+    
+        if not link.verified:
+            if not self.return_file:
+                return False, f'Link with short_id: {link_short_id} is not verified'
+            else:
+                raise ServerFileError(self.error_file,status.HTTP_410_GONE)
+            
+        return True,""
+
+    @APIFilterInject
+    @staticmethod
+    def verify_link_guard(link:LinkORM):
+
+        if link.public:
+            return False,'Cannot verify public domain'
+        if link.archived:
+            return False, 'Cannot verify archived domain'
+        if link.verified:
+            return False, 'Already verified'
+
+        return True,''
+
+class TrackGuard(Guard):
+
+    async def guard(self,scheduler:SchedulerModel,tracker:TrackerInterface):
+        if not tracker.will_track:
+            return True,''
+        if scheduler.task_type !='now' or scheduler.task_type!='once':
+            return False,'Cannot track task that are not ran once'
         return True,''

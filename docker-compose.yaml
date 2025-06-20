@@ -1,4 +1,3 @@
-
 services:
   redis:
     image: redis #Queue for the taks
@@ -6,6 +5,8 @@ services:
     restart: always
     ports:
       - 6379:6379
+    volumes:
+      - redis-data:/data
   
   redis-commander:
     container_name: redis-commander
@@ -18,6 +19,13 @@ services:
       - REDIS_HOSTS=local:redis:6379
     ports:
       - 8081:8081
+
+  reacherhq:
+    image: reacherhq/backend
+    container_name: reacherhq
+    ports:
+      - "8080:8080"
+      
     
   mongodb:
     image: mongo:latest
@@ -33,23 +41,23 @@ services:
   
   postgres:
     build:
-      context: ./docker/
-      dockerfile: Dockerfile.postgres
+      context: .
+      dockerfile: docker/Dockerfile.postgres
     image: postgres:15
-    container_name: my-postgres
+    container_name: notifyr-postgres
     restart: always
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_USER: ${POSTGRES_USER} 
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: pgadmin
+    container_name: notifyr-pgadmin
     restart: always
     hostname: pgadmin
     environment:
@@ -60,34 +68,34 @@ services:
     depends_on:
       - postgres
     
-  # celery:
-  #   image: python:3.11
-  #   command: ["make", "celery"]
-  #   container_name: worker
-  #   build:
-  #     context: ./
-  #     dockerfile: Dockerfile
-  #   restart: always
-  #   depends_on:
-  #     - redis
-  #     - redis-commander
-  #   deploy:
-  #     replicas: 5
-    
-  redbeat:
-    container_name: redbeat
-    image: python:3.11
+  celery:
+    image: python:3.11-slim
+    command: ["./spawn_celery_worker.sh", "30" ]
+    container_name: notifyr-worker
     build:
       context: ./
       dockerfile: Dockerfile
     restart: always
+    env_file:
+      - .env
     depends_on:
       - redis
-      - redis-commander
+    
+  redbeat:
+    container_name: redbeat
+    image: python:3.11-slim
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      - redis
     command: ["make ", "redbeat"]
     
   flower:
-    image: python:3.11
+    image: python:3.11-slim
     command: ["make", "flower"]
     container_name: flower
     build:
@@ -98,7 +106,6 @@ services:
       - .env
     depends_on:
       - redis
-      - redis-commander
     ports:
       - "5555:5555"
 
@@ -120,8 +127,47 @@ services:
         - neo4j_data:/data
         - neo4j_logs:/logs
         - neo4j_conf:/conf
+  
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  
 
-
+  twilio:
+    image: node:20.19.0-slim
+    container_name: local-twilio
+    restart: always
+    build:
+      context: ./docker/
+      dockerfile: Dockerfile.twilio
+    ports:
+      - "3000:3000"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+      - NGROK_URL=${NGROK_URL}
+    
+  pgbouncer:
+    image: edoburu/pgbouncer
+    container_name: notifyr-pgbouncer
+    restart: always
+    ports:
+      - "6432:6432" # PgBouncer listens on port 6432
+    volumes:
+      - ./docker/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+      - ./docker/userlist.txt:/etc/pgbouncer/userlist.txt
+    environment:
+      - DB_HOST=notifyr-postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres
+    
 volumes:
   mongo-data:
     driver: local
@@ -135,3 +181,5 @@ volumes:
   neo4j_data:
   neo4j_logs:
   neo4j_conf:
+  redis-data:
+    driver: local

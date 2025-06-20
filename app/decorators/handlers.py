@@ -1,21 +1,30 @@
+from asyncio import CancelledError
+import asyncio
 from typing import Callable
 from app.classes.auth_permission import WSPathNotFoundError
-from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateNotFoundError, TemplateValidationError
-from app.definition._error import BaseError
+from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
+from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
+from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
+from app.container import InjectInMethod
+from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
 from app.definition._service import MethodServiceNotExistsError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
 
-from app.errors.contact_error import ContactAlreadyExistsError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
+from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
+from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
+from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
 from requests.exceptions import SSLError, Timeout
+
+from app.services.logger_service import LoggerService
 
 
 class ServiceAvailabilityHandler(Handler):
@@ -55,6 +64,12 @@ class TemplateHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail='Template not found')
 
+        except TemplateInjectError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Error in the template'
+            )
+
         except TemplateBuildError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                                 detail='Cannot build template with data specified')
@@ -64,6 +79,22 @@ class TemplateHandler(Handler):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
                 'details': error,
                 'message': 'Validation Error'
+            })
+    
+        except TemplateFormatError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+                'message': 'Template format is invalid',
+                'details': e.args[0]
+            })
+
+        except TemplateCreationError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'Failed to create template',
+                'details': e.args[0]
+            })
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
+                'message':'Could not be able to properly display the value'
             })
 
         except SchemaValidationError as e:
@@ -127,6 +158,21 @@ class TwilioHandler(Handler):
         try:
             return await function(*args, **kwargs)
 
+        except TwilioPhoneNumberParseError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Twilio phone number parse error',
+                'detail': str(e)
+            })
+        
+        except TwilioCallBusyError as e:
+            ...
+            
+        except TwilioCallNoAnswerError as e:
+            ...
+        
+        except TwilioCallFailedError as e:
+            ...
+
         except TwilioRestException as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
                 'message': 'Twilio REST API error',
@@ -150,9 +196,9 @@ class ContactsHandler(Handler):
 
             return await function(*args, **kwargs)
 
-        except ContactNotExistsError:
+        except ContactNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
-                                'message': 'The user specified does not exists', })
+                                'message': f'The user: {e.id} specified does not exists', 'ids':[e.id]})
 
         except ContactAlreadyExistsError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
@@ -160,11 +206,15 @@ class ContactsHandler(Handler):
 
         except ContactDoubleOptInAlreadySetError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                                'message': 'Error could not create the user because info are already used', 'detail': e.message})
+                                'message': 'Contact Double opt in is already set',})
 
         except ContactOptInCodeNotMatchError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                                'message': 'Error could not create the user because info are already used', 'detail': e.message})
+                                'message': 'Contact Opt in code does not match',})
+
+
+        except ContactMissingInfoKeyError as e:
+            raise  HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':f'Contact missing {e.info_key} info key'})
 
 
 class TortoiseHandler(Handler):
@@ -340,3 +390,115 @@ class ValueErrorHandler(Handler):
 
 class MotorErrorHandler(Handler):
     ...
+
+
+class AsyncIOHandler(Handler):
+
+    @InjectInMethod
+    def __init__(self, loggerService: LoggerService):
+        super().__init__()
+        self.loggerService = loggerService
+        self.prettyPrinter = self.loggerService.prettyPrinter
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        
+        except asyncio.CancelledError as e:
+            ...
+
+        except LockNotFoundError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'Could not wait for the data input',
+            })
+        except TimeoutError as e:
+            result = e.args[0] if len(e.args) >0 else None
+
+            raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail={
+                'message': 'Timeout error',
+                'result':result
+            })
+        except asyncio.TimeoutError as e:
+            result = e.args[0] if len(e.args) >0 else None
+            raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail={
+                'message': 'Request timed out',
+                'result':result
+            })
+        
+        except KeepAliveTimeoutError as e:
+            result = e.args[0] 
+            raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail={
+                'message': 'Request timed out',
+                'result':result
+            })
+    
+class ReactiveHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except ReactiveSubjectNotFoundError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={
+                'message':'subject id not found'
+            })
+
+
+class StreamDataParserHandler(Handler):
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except SequentialStateError as e:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Sequential state error during data stream: {str(e)}"
+            )
+
+        except ContinuousStateError as e:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Continuous state error during data stream: {str(e)}"
+            )
+
+        except DataParsingError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Error parsing stream data: {str(e)}"
+            )
+
+        except ValidationDataError as e:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Validation error in stream data: {str(e)}"
+            )
+        
+class EmailRelatedHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        
+        try:
+            await super().handle(function, *args, **kwargs)
+        except NotSameDomainEmailError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,)
+
+        except EmailInvalidFormatError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,)
+
+
+class ORMCacheHandler(Handler):
+    
+    async def handle(self, function, *args, **kwargs):
+        return await function(*args,**kwargs)
+
+
+async def handle_http_exception(function, *args, **kwargs):
+    
+    try:
+        return await function(*args,**kwargs)
+    except HTTPException as e:
+        if e.status_code == status.HTTP_404_NOT_FOUND:
+            raise ServerFileError('app/static/error-404-page/index.html',e.status_code)
+        if e.status_code >= 400 and e.status_code< 500:
+            raise ServerFileError('app/static/error-400-page/index.html',e.status_code)
+
+        raise ServerFileError('app/static/error-500-page/index.html',e.status_code)

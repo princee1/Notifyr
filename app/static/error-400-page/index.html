@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>400 - Requête Invalide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* CSS Variables for Themes */
+      :root {
+        /* Light Theme (Default) */
+        --bg-primary: #ffffff;
+        --bg-secondary: #f9fafb;
+        --bg-tertiary: #f3f4f6;
+        --text-primary: #1f2937;
+        --text-secondary: #4b5563;
+        --text-muted: #6b7280;
+        --accent-primary: #2563eb;
+        --accent-secondary: #3b82f6;
+        --border-color: #e5e7eb;
+        --shadow-color: rgba(0, 0, 0, 0.05);
+        --code-bg: #e5e7eb;
+        --code-text: #111827;
+        --hero-gradient-start: #f9fafb;
+        --hero-gradient-end: #f3f4f6;
+        --font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, Helvetica, Arial, sans-serif;
+
+        /* Transitions */
+        --theme-transition: background-color 0.3s ease, color 0.3s ease,
+          border-color 0.3s ease;
+      }
+
+      html[data-theme="dark"] {
+        /* Dark Theme Overrides */
+        --bg-primary: #111111;
+        --bg-secondary: #1f2937;
+        --bg-tertiary: #374151;
+        --text-primary: #f9fafb;
+        --text-secondary: #d1d5db;
+        --text-muted: #9ca3af;
+        --accent-primary: #3b82f6;
+        --accent-secondary: #60a5fa;
+        --border-color: #4b5563;
+        --shadow-color: rgba(0, 0, 0, 0.2);
+        --code-bg: #374151;
+        --code-text: #fcd34d;
+        --hero-gradient-start: #1f2937;
+        --hero-gradient-end: #111111;
+      }
+
+      /* Basic Reset */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        font-family: var(--font-family);
+        line-height: 1.7;
+        background-color: var(--bg-primary);
+        color: var(--text-secondary);
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        transition: var(--theme-transition);
+      }
+
+      /* Theme Toggle Button */
+      #theme-toggle {
+        position: absolute;
+        top: 1.5rem;
+        right: 1.5rem;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 5px;
+        box-shadow: 0 2px 5px var(--shadow-color);
+        z-index: 100;
+        transition: var(--theme-transition), transform 0.2s ease;
+      }
+      #theme-toggle:hover {
+        transform: scale(1.1);
+        border-color: var(--accent-primary);
+      }
+      #theme-toggle svg {
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
+      }
+
+      /* Container */
+      .container {
+        width: 90%;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 2rem 1.5rem;
+        flex-grow: 1;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Call-to-Action Button Style */
+      .cta-button {
+        display: inline-block;
+        background-color: var(--accent-primary);
+        color: #ffffff !important;
+        padding: 0.75rem 1.75rem;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: background-color 0.2s ease, transform 0.2s ease,
+          box-shadow 0.2s ease;
+        box-shadow: 0 4px 10px var(--shadow-color);
+        margin-top: 1.5rem;
+        border: none;
+      }
+      .cta-button:hover {
+        background-color: var(--accent-secondary);
+        color: #ffffff;
+        transform: translateY(-2px);
+        text-decoration: none;
+        box-shadow: 0 6px 15px var(--shadow-color);
+      }
+      
+      p { margin-bottom: 1rem; }
+      a { color: var(--accent-primary); text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
+      a:hover:not(.cta-button) { color: var(--accent-secondary); text-decoration: underline; }
+
+      /* Footer */
+      footer {
+        text-align: center;
+        margin-top: auto;
+        padding: 1.5rem;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        background-color: var(--bg-secondary);
+        border-top: 1px solid var(--border-color);
+        width: 100%;
+        transition: var(--theme-transition);
+      }
+      footer a { color: var(--text-muted); font-weight: 400; transition: color 0.3s ease; }
+      footer a:hover { color: var(--accent-secondary); text-decoration: underline; }
+
+      /* --- Styles specific to Error Pages (404, 400, etc.) --- */
+      .error-page-container {
+          flex-grow: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          text-align: center;
+          padding: 2rem 0;
+      }
+      .error-code {
+          font-size: clamp(6rem, 25vw, 12rem);
+          font-weight: 700;
+          color: var(--accent-primary);
+          line-height: 1;
+          margin-bottom: 0.5rem;
+          text-shadow: 2px 2px 5px var(--shadow-color);
+          transition: color 0.3s ease, text-shadow 0.3s ease;
+      }
+      .error-message {
+          font-size: clamp(1.5rem, 5vw, 2.5rem);
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 1rem;
+          transition: color 0.3s ease;
+      }
+      .error-description {
+          font-size: 1rem;
+          color: var(--text-muted);
+          max-width: 500px;
+          margin-bottom: 1.5rem;
+          transition: color 0.3s ease;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 768px) {
+        #theme-toggle { top: 1rem; right: 1rem; }
+        .cta-button { padding: 0.6rem 1.5rem; font-size: 0.95rem; }
+        .container { width: 95%; padding: 1.5rem 1rem; }
+        .error-message { font-size: clamp(1.2rem, 4vw, 2rem); }
+        .error-description { font-size: 0.95rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <button id="theme-toggle" aria-label="Basculer le thème">
+        <svg viewBox="0 0 24 24" class="sun-icon">
+          <path d="M12 9c-1.65 0-3 1.35-3 3s1.35 3 3 3 3-1.35 3-3-1.35-3-3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm8-4h-2.07c-.38-1.16-1-2.18-1.81-3.02l1.46-1.46c.39-.39.39-1.02 0-1.41-.39-.39-1.02-.39-1.41 0l-1.46 1.46C13.96 4.08 12.94 4 12 4s-1.96.08-2.7.24L7.84 2.78c-.39-.39-1.02-.39-1.41 0-.39.39-.39 1.02 0 1.41l1.46 1.46C7.07 6.82 6.45 7.84 6.07 9H4c-.55 0-1 .45-1 1s.45 1 1 1h2.07c.38 1.16 1 2.18 1.81 3.02l-1.46 1.46c-.39.39-.39 1.02 0 1.41.2.2.45.29.71.29s.51-.1.71-.29l1.46-1.46c.74.81 1.76 1.43 2.92 1.81V20c0 .55.45 1 1 1s1-.45 1-1v-2.07c1.16-.38 2.18-1 3.02-1.81l1.46 1.46c.2.2.45.29.71.29s.51-.1.71-.29c.39-.39.39-1.02 0-1.41l-1.46-1.46c.81-.74 1.43-1.76 1.81-2.92H20c.55 0 1-.45 1-1s-.45-1-1-1z"/></svg>
+        <svg viewBox="0 0 24 24" class="moon-icon" style="display: none;">
+          <path d="M12.3 4.61C10.19 4.2 8.03 4.76 6.28 6.08 4.53 7.4 3.4 9.34 3.16 11.5c-.24 2.16.4 4.28 1.78 5.95 1.38 1.67 3.37 2.69 5.55 2.85 1.82.14 3.6-.37 5.08-1.41.09-.06.17-.13.24-.21.5-.56.8-1.27.8-2.03 0-.9-.42-1.72-1.09-2.27-.67-.55-1.56-.85-2.49-.85-1.3 0-2.49.51-3.38 1.39-.96.96-1.44 2.21-1.44 3.54 0 .17.01.34.04.5.01.08.02.16.04.23.18.78.59 1.48 1.17 2.04.11.11.23.2.36.29.07.04.14.08.21.11.3.15.62.24.95.24 1.04 0 1.98-.51 2.61-1.33.36-.47.58-1.04.62-1.64.04-.6-.1-1.2-.41-1.71-.06-.11-.13-.21-.2-.31-.65-.93-.86-2.07-.58-3.16.28-1.09.98-2.02 1.94-2.62.96-.6 2.11-.87 3.28-.77 1.17.1 2.27.59 3.1 1.38.14.13.33.19.52.19.14 0 .28-.03.41-.1.36-.19.56-.57.51-.96-.05-.39-.34-.71-.72-.81z"/></svg>
+      </button>
+
+      <main class="error-page-container">
+        <h1 class="error-code">400</h1>
+        <h2 class="error-message">Oops! Requête Invalide</h2>
+        <p class="error-description">
+          Nous n'avons pas pu comprendre la demande de votre navigateur. Cela est généralement dû à une erreur de syntaxe. Veuillez retourner à l'accueil et réessayer.
+        </p>
+        <a href="/" class="cta-button">Retour à l'accueil</a>
+        </main>
+    </div>
+    <footer>
+      <p>
+        &copy; 2025 Votre Nom/Entreprise. Tous droits réservés. |
+        <a href="#">Politique de confidentialité</a> |
+        <a href="#">Termes d'utilisation</a>
+      </p>
+    </footer>
+
+    <script>
+      // Script minimaliste pour le toggle de thème (identique au précédent)
+      const themeToggle = document.getElementById("theme-toggle");
+      const htmlElement = document.documentElement;
+      const sunIcon = themeToggle.querySelector('.sun-icon');
+      const moonIcon = themeToggle.querySelector('.moon-icon');
+
+      function applyTheme(theme) {
+          htmlElement.setAttribute('data-theme', theme);
+          if (theme === 'dark') {
+              if (sunIcon) sunIcon.style.display = 'none';
+              if (moonIcon) moonIcon.style.display = 'block';
+          } else {
+              if (sunIcon) sunIcon.style.display = 'block';
+              if (moonIcon) moonIcon.style.display = 'none';
+          }
+          localStorage.setItem('theme', theme);
+      }
+      
+      const savedTheme = localStorage.getItem('theme') || 'light';
+      applyTheme(savedTheme);
+
+      themeToggle.addEventListener("click", () => {
+        const currentTheme = htmlElement.getAttribute("data-theme");
+        const newTheme = currentTheme === "dark" ? "light" : "dark";
+        applyTheme(newTheme);
+      });
+    </script>
+  </body>
+</html>

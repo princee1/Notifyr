@@ -1,19 +1,21 @@
 import functools
-from typing import Annotated, Callable
-from fastapi import Depends, HTTPException, Header, Query, Request, status
+from typing import Annotated, Any, Callable, Literal, TypedDict
+from fastapi import Depends, HTTPException, Header, Query, Response, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role
-from app.container import Get, GetDependsAttr
-from app.errors.security_error import ClientDoesNotExistError
+from app.classes.auth_permission import AuthPermission, ContactPermission, Role
+from app.container import Get, GetAttr
+from app.definition._error import ServerFileError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
-from app.models.security_model import BlacklistORM, ClientORM, GroupClientORM
+from app.models.link_model import LinkORM
+from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM
 from app.services.admin_service import AdminService
-from app.services.celery_service import BackgroundTaskService
+from app.services.celery_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.services.twilio_service import TwilioService
-from app.utils.dependencies import get_auth_permission, get_query_params
+from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
 from tortoise.exceptions import OperationalError
+from .variables import *
+
 
 def AcceptNone(key):
 
@@ -22,10 +24,10 @@ def AcceptNone(key):
         @functools.wraps(func)
         async def wrapper(**kwargs):
             if key not in kwargs:
-                #TODO Raise Warning
+                # TODO Raise Warning
                 return None
             param = kwargs[key]
-            if isinstance(param,str):
+            if isinstance(param, str):
                 if not param:
                     return None
             else:
@@ -108,34 +110,46 @@ def GetClient(bypass: bool = False, accept_admin: bool = False, skip: bool = Fal
     return _get_client
 
 
-verify_twilio_token: Callable = GetDependsAttr(TwilioService, 'verify_twilio_token')
+def Get_Contact(skip_permission:bool,raise_file:bool):
 
-populate_response_with_request_id: Callable = GetDependsAttr(BackgroundTaskService,'populate_response_with_request_id')
+    async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(wrapper_auth_permission)) -> ContactORM:
 
-async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(get_auth_permission)) -> ContactORM:
+        if not skip_permission:
+            if authPermission == None:
+                if Get(ConfigService).SECURITY_FLAG:
+                    raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if Role.CONTACTS not in authPermission['roles']:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Role not allowed")
+            else:
+                if Role.CONTACTS not in authPermission['roles']:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Role not allowed")
 
-    match idtype:
-        case "id":
-            user = await ContactORM.filter(contact_id=contact_id).first()
+        match idtype:
+            case "id":
+                user = await ContactORM.filter(contact_id=contact_id).first()
 
-        case "phone":
-            user = await ContactORM.filter(phone=contact_id).first()
+            case "phone":
+                user = await ContactORM.filter(phone=contact_id).first()
 
-        case "email":
-            user = await ContactORM.filter(email=contact_id).first()
+            case "email":
+                user = await ContactORM.filter(email=contact_id).first()
 
-        case _:
-            raise HTTPException(
-                400, {"message": "idtype not not properly specified"})
+            case _:
+                if raise_file:
+                    raise ServerFileError('app/static/error-400-page/index.html',status.HTTP_400_BAD_REQUEST)
+                else:  
+                    raise HTTPException(400, {"message": "idtype not not properly specified"})
 
-    if user == None:
-        raise HTTPException(404, {"detail": "user does not exists"})
+        if user == None:
+            if not raise_file:
+                raise HTTPException(404, {"detail": "user does not exists"})
+            else:
+                raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
 
-    return user
+
+        return user
+
+    return get_contacts
 
 
 def get_contact_permission(token: str = Query(None)) -> ContactPermission:
@@ -205,7 +219,7 @@ async def verify_admin_signature(x_admin_signature: Annotated[str, Header()]):
 async def get_client(client_id: str = Depends(get_query_params('client_id')), cid: str = Depends(get_query_params('cid', 'id')), authPermission: AuthPermission = Depends(get_auth_permission)):
     try:
         return await GetClient()(client_id=client_id, cid=cid, authPermission=authPermission)
-    except OperationalError as e :
+    except OperationalError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e.args[0])
@@ -215,11 +229,11 @@ async def get_client(client_id: str = Depends(get_query_params('client_id')), ci
 async def get_group(group_id: str = Query(''), gid: str = Query('id'), authPermission: AuthPermission = Depends(get_auth_permission)):
     try:
         return await _get_group(group_id=group_id, gid=gid, authPermission=authPermission)
-    except OperationalError as e :
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e.args[0])
-            )
+    except OperationalError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e.args[0])
+        )
 
 
 async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())], cid: str = Depends(get_query_params('cid', 'id'))):
@@ -227,11 +241,11 @@ async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, De
     configService: ConfigService = Get(ConfigService)
     key = configService.getenv('CLIENT_PASSWORD_HASH_KEY', 'test')
     error = HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid username or password",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid username or password",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+
     try:
         client: ClientORM = await GetClient(skip=True, raise_=False)(client_id=credentials.username, cid=cid, authPermission=None)
     except OperationalError:
@@ -254,15 +268,62 @@ async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, De
 
     return client
 
+
 @ByPassAdminRole()
 @AcceptNone('blacklist_id')
-async def _get_blacklist(blacklist_id:str=None):
+async def _get_blacklist(blacklist_id: str = None):
     blacklist = await BlacklistORM.filter(blacklist_id=blacklist_id).first()
     if blacklist == None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail='Blacklist does not exists')
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail='Blacklist does not exists')
     return blacklist
 
-async def get_blacklist(blacklist_id:str=Depends(get_query_params('blacklist_id', None))):
+
+async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_id', None))):
     return await _get_blacklist(blacklist_id=blacklist_id)
 
-as_async_query = get_query_params('background','false',True)
+
+def GetLink(raise_file_error:bool,raise_err:bool=True):
+
+    async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
+        
+        match lid:
+            case 'id':
+                link = await LinkORM.filter(link_id=link_id).first()
+            
+            case 'name':
+                link = await LinkORM.filter(link_name=link_id).first()
+
+            case 'sid':
+                link = await LinkORM.filter(link_short_id=link_id).first()
+
+            case _:
+                link = None
+        
+        if link == None:
+            if raise_file_error:
+                raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
+            else:
+                if raise_err:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND,"links not found")
+                else:
+                    return None
+            
+        return link
+    
+    return get_link
+
+
+async def get_task(request_id: str = Depends(get_request_id), as_async: bool = Depends(as_async_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query)):
+    taskService: TaskService = Get(TaskService)
+    offload_task: Callable = GetAttr(OffloadTaskService, 'offload_task')
+    if offload_task == None:
+        raise HTTPException(500, detail='Offload task is not available')
+    return taskService._register_tasks(request_id, as_async, runtype, offload_task, ttl, save, return_results,retry)
+
+async def get_challenge(client:ClientORM):
+    return await ChallengeORM.filter(client=client).first()
+
+
+def get_template(template:str):
+    return template

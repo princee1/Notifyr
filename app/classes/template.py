@@ -1,9 +1,9 @@
-
 from enum import Enum
-from typing import Any
+from typing import Any, Self, overload
+from aiohttp_retry import Callable
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from app.definition._error import BaseError
-from app.utils.schema import MLSchemaBuilder
+from app.classes.schema import MLSchemaBuilder
 from app.utils.helper import strict_parseToBool, flatten_dict
 from app.utils.validation import CustomValidator
 # import fitz as pdf
@@ -13,6 +13,9 @@ import os
 import re
 from app.utils.prettyprint import printJSON
 from cerberus import schema_registry
+from jinja2 import Environment, Template as JJ2Template
+from app.utils.transformer import transform,coerce
+
 
 
 class XMLLikeParser(Enum):
@@ -29,16 +32,31 @@ def BODY_SELECTOR(select): return f"body {select}"
 # ============================================================================================================
 
 
+class TemplateAssetError(BaseError):
+    ...
+
 class TemplateNotFoundError(BaseError):
     ...
 
 class TemplateBuildError(BaseError):
     ...
 
+class TemplateInjectError(BaseError):
+    ...
+
 class TemplateValidationError(BaseError):
     ...
 
 class SchemaValidationError(BaseError):
+    ...
+
+class SkipTemplateCreationError(BaseError):
+    ...
+
+class TemplateFormatError(BaseError):
+    ...
+
+class TemplateCreationError(BaseError):
     ...
 # ============================================================================================================
 
@@ -58,12 +76,24 @@ class Asset():
 
 class Template(Asset):
     LANG = None
+    
+    @overload
+    def __init__(self,filename:str, content:str, dirName:str) -> None:
+        ...
 
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
-        super().__init__(filename, content, dirName)
-        self.keys: list[str] = []
-        self.translator = Translator(['translate.google.com', 'translate.google.com'])
-        self.load()
+    @overload
+    def __init__(self,):
+        ...
+    
+    def __init__(self,*args):
+        if len(args) == 3:
+            filename, content, dirName = args
+            super().__init__(filename, content, dirName)
+            self.translator = Translator(['translate.google.com', 'translate.google.com'])
+            self.load()
+        
+        else:
+            self.translator = Translator(['translate.google.com', 'translate.google.com'])
 
     def inject(self, data:  dict) -> bool:
         """
@@ -77,14 +107,15 @@ class Template(Asset):
         """
         pass
 
-    def build(self, lang, data) -> Any:
+    def build(self, lang, data,validate=False) -> Any:
         """
         Build a representation of the template with injected, verified and translated value and return 
         a content output
 
         Override this function and call the super value
         """
-        return self.validate(data)
+        if validate:
+            self.validate(data)
 
     def translate(self, targetLang: str, text: str) -> str:
         """
@@ -92,7 +123,7 @@ class Template(Asset):
         """
         pass
 
-    def validate(self, value: Any) -> bool | None | Exception:
+    def validate(self, value: Any) -> Any | None | Exception:
         """
         Validate the data injected into the template
         """
@@ -104,12 +135,16 @@ class Template(Asset):
         """
         pass
 
+    def clone(self)->Self:
+        ...
+    
     @property
     def routeName(self,): return self.name.replace(os.sep, ROUTE_SEP)
 
 
 
 class MLTemplate(Template):
+    _globals = {}
 
     DefaultValidatorConstructorParamValues = {
         "require_all": True,
@@ -128,25 +163,61 @@ class MLTemplate(Template):
 
     def _built_template(self,content):
         ...
+    
 
-    def inject(self, data: dict):
+    def inject(self, data:dict, re_replace:Callable[[str],str]=None):
+        #return super().inject(data, re_replace)
+        env = Environment()
+        
+        env.filters['sub_url'] = lambda v:v if re_replace == None else re_replace 
+        # for t in self.transform.values():
+        #     if t not in transform:
+        #         raise TemplateInjectError()
+        #     env.filters[t] = transform[t]
+        env.filters.update(transform)
+        env.filters.update(coerce)
+
+        env.globals.update(self._globals)
+
+        content_html = str(self.content_to_inject)
         try:
-            content_html = str(self.content_to_inject)
-            flattened_data = flatten_dict(data)
-            for key in flattened_data:
-                regex = re.compile(rf"{{{{{key}}}}}")
-                content_html = regex.sub( str(flattened_data[key]), content_html)
-
-            return self._built_template(content_html)
-            
+            template = env.from_string(content_html)
+            template = template.render(**data)
+            return self._built_template(template)
         except Exception as e:
-            print(e.__class__)
-            print(e.__cause__)
-            print(e.args)  
-            raise TemplateBuildError          
+            raise TemplateBuildError()
+        
+    if False:
+        def inject(self, data: dict,re_replace:Callable[[str],str]=None)->str:
+            try:
+                content_html = str(self.content_to_inject)
+                flattened_data = flatten_dict(data)
+                for key in flattened_data:
+                    regex = re.compile(rf"{{{{{key}}}}}")
+                    value = str(flattened_data[key])
+                    if key in self.transform:
+                        transformers = self.transform[key]
+                        if isinstance(transformers,list):
+                            for t in transformers:
+                                value = t(value)
+                        else:
+                            value=transformers(value)
+                    
+                    if re_replace:
+                        value = re_replace(value)
 
-    def validate(self, document: dict):
-        # TODO See: https://docs.python-cerberus.org/errors.html
+                    content_html = regex.sub(value, content_html)
+
+                return self._built_template(content_html)
+                
+            except Exception as e:
+                print(e.__class__)
+                print(e.__cause__)
+                print(e.args)  
+                raise TemplateBuildError          
+
+    def _validate(self, document: dict):
+        """See: https://docs.python-cerberus.org/errors.html"""
         if self.schema == None or self.schema == {}:
             return True,document
         Validator = CustomValidator(self.schema)
@@ -185,13 +256,12 @@ class MLTemplate(Template):
         try:
             if self.validation_balise is None:
                 return
-            self.schema = MLSchemaBuilder(self.validation_balise).schema
-            self.keys = self.schema.keys()
+            builder = MLSchemaBuilder(self.validation_balise,self.filename)
+            self.schema = builder.schema
+            self.transform = builder.transform
             self.validation_balise.decompose()
         except SchemaError as e:
-            # TODO raise another error and print the name of the template so the route will not be available
-            printJSON(e.args[0])
-            pass
+            raise SkipTemplateCreationError(self.filename,e.args[0])
 
     def load(self):
         self.bs4 = BeautifulSoup(self.content,self.parser)
@@ -206,21 +276,42 @@ class MLTemplate(Template):
         translated = self.translator.translate(text, dest=targetLang, src=src)
         return translated.text
 
-    def build(self,  data,target_lang):
-        is_valid, data = super().build(target_lang, data)
+    # def build(self,  data,target_lang,validate=False):
+    #     ...
+    
+    def validate(self, value):
+        is_valid, data = self._validate(value)
         if not is_valid:
             raise TemplateValidationError(data)
-        
+        return data
 
 class HTMLTemplate(MLTemplate):
 
+    @overload
     def __init__(self,filename:str,content:str,dirname:str):
-        self.parser = XMLLikeParser.LXML.value
+        ...
 
-        super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
-        self.images: list[tuple[str, str]] = []
-        self.image_needed: list[str] = []
-    
+    @overload
+    def __init__(self,bs4:BeautifulSoup,schema:dict,transform:dict,images:list[tuple[str, str]]):
+        ...
+
+    def __init__(self,*args):
+        if len(args) == 3:
+            filename,content,dirname = args
+            self.parser = XMLLikeParser.HTML.value
+            super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
+            self.images: list[tuple[str, str]] = []
+            self.image_needed: list[str] = []
+
+        elif len(args):
+            bs4, schema, transform, images = args
+            self.parser = XMLLikeParser.HTML.value
+            self.bs4: BeautifulSoup = BeautifulSoup(str(bs4), self.parser)
+            self.schema = schema
+            self.transform = transform
+            self.images = images
+
+
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
         style = self.bs4.select_one("head > style")
         if style is None:
@@ -232,6 +323,7 @@ class HTMLTemplate(MLTemplate):
             style.string=""
         
         style.string += cssContent
+
 
     def exportText(self, content: str):
         bs4 = BeautifulSoup(content, XMLLikeParser.HTML.value)
@@ -259,9 +351,9 @@ class HTMLTemplate(MLTemplate):
     def set_content(self,):
         super().set_content("html5")
 
-    def build(self,data,target_lang):
+    def build(self,data,target_lang,re_replace=None):
         super().build(data,target_lang)
-        content_html, content_text = self.inject(data)
+        content_html, content_text = self.inject(data,re_replace=re_replace)
         content_html = self.translate(target_lang, content_html)
         content_text = self.translate(target_lang, content_text)
         return True, (content_html, content_text)
@@ -269,6 +361,69 @@ class HTMLTemplate(MLTemplate):
     def _built_template(self,content):
         content_text = self.exportText(content)
         return content, content_text
+
+    def add_tracking_pixel(self, tracking_url: str):
+        """
+        Add a tracking pixel to the HTML content.
+
+        Args:
+            tracking_url (str): The URL of the tracking pixel.
+        """
+        if not hasattr(self, 'bs4') or not self.bs4:
+            raise TemplateCreationError("HTML content is not loaded or initialized.")
+        
+        tracking_pixel_tag = self.bs4.new_tag("img", src=tracking_url, width="1", height="1", style="display:none;")
+        body_tag = self.bs4.select_one("body")
+        if body_tag:
+            body_tag.append(tracking_pixel_tag)
+        else:
+            raise TemplateFormatError("No <body> tag found in the HTML content.")
+    
+        self.set_content()
+
+    def add_signature(self, signature_content: str):
+        self.update_footer(signature_content)
+        self.set_content()
+
+    def add_unsubscribe_footer(self, content: str):
+        self.update_footer(content)
+        self.set_content()
+
+    def update_footer(self, content):
+        footer = self.bs4.select_one('footer')
+        if footer is None:
+            footer = Tag(name="footer")
+            body = self.bs4.select_one('body')
+            if body:
+                body.append(footer)
+            else:
+                raise TemplateFormatError("No <body> tag found in the HTML content.")
+        
+        if footer.string is None:
+            footer.string = content
+        else:
+            footer.string += f"\n{content}"
+
+    def set_to_email_tracking_link(self, content: str):
+        body = self.bs4.select_one('body')
+        if body:
+            body.decompose()
+        new_body = BeautifulSoup(content,self.parser)
+        html = self.bs4.select_one("html")
+        html.append(new_body)
+        self.set_content()
+
+    def clone(self)->Self:
+        clone = HTMLTemplate(self.bs4,self.schema,self.transform,self.images) 
+        Template.__init__(clone)
+        return clone
+
+    @property
+    def body(self):
+        body = self.bs4.select_one("body")
+        if body == None:
+            raise TemplateFormatError("No <body> tag found in the HTML content.")
+        return str(body)
     
 
 class PDFTemplate(Template):
@@ -292,10 +447,12 @@ class TWIMLTemplate(MLTemplate):
     
     def set_content(self):
         response = self.bs4.select_one("Response")
+        if not response:
+            raise SkipTemplateCreationError('Response tag not given')
         self.content_to_inject = response.prettify(formatter="html")
     
-    def build(self, data, target_lang):
-        super().build(data, target_lang)
+    def build(self, data, target_lang,validate=False):
+        super().build(data, target_lang,validate)
         body = self.inject(data)
         if False: 
             body = self.translate(target_lang,body) # TODO
@@ -325,6 +482,12 @@ class SMSTemplate(TWIMLTemplate):
 
 class PhoneTemplate(TWIMLTemplate):
     def __init__(self, filename: str, content: str, dirName: str) -> None:
+        self.parser =  XMLLikeParser.XML.value
         super().__init__(filename, content, dirName,"xml","validation")
+    
+    def set_content(self):
+        super().set_content()
+        self.content_to_inject='''<?xml version="1.0" encoding="UTF-8"?>\n'''+self.content_to_inject
+        
 ####################### ########################
 

@@ -73,3 +73,34 @@ VALUES (
         NOW() + INTERVAL '5 minute',
         NOW() + INTERVAL '1 hour'
     );
+
+SELECT emails.create_daily_email_analytics_row();
+
+INSERT INTO
+    twilio.SMSAnalytics (
+        analytics_id,
+        week_start_date,
+        direction,
+        sms_sent,
+        sms_delivered,
+        sms_failed,
+        total_price
+    )
+VALUES (
+        DEFAULT,
+        DATE_TRUNC('week', NOW()),
+        'O',
+        0,
+        0,
+        0,
+        0
+    ),
+    (
+        DEFAULT,
+        DATE_TRUNC('week', CURRENT_DATE),
+        'I',
+        0,
+        0,
+        0,
+        0
+    );
