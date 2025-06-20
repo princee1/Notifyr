@@ -48,7 +48,7 @@ class SubContentBaseModel(BaseModel):
     index:int |None = None
     will_track:bool = False
     sender_type:SenderType='raw'
-    _contact:str|list[str]|None =PrivateAttr(default=None)
+    _contact:str|list[str]|None =PrivateAttr(default=[])
 
 
 class SchedulerModel(BaseModel):
