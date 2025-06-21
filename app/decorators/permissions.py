@@ -216,7 +216,6 @@ class UserPermission(ClientTypePermission):
             return self.accept_none_auth
         return await super().permission(authPermission)
 
-    
 
 @APIFilterInject
 def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
@@ -224,3 +223,9 @@ def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
     
     return True
+
+
+class BalancerPermission(Permission):
+    
+    def permission(self):
+        return True
