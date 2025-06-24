@@ -1,3 +1,3 @@
-module load-balancer
+module balancer
 
 go 1.24.0
