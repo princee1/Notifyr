@@ -99,7 +99,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
                 return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
         else:
-            return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,content='Could not set auth and refresh token')
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED,content='Could not set auth and refresh token')
 
 
 @UseRoles([Role.ADMIN])

@@ -76,6 +76,13 @@ class MethodServiceNotAvailableError(BuildError):
 class MethodServiceNotExistsError(BuildError):
     ...
 
+class MethodServiceNotImplementedError(BuildError):
+    ...
+
+class ServiceNotImplementedError(BuildError):
+    ...
+
+
 #################################            #####################################
 
 WAIT_TIME = 0.1

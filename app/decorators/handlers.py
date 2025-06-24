@@ -8,7 +8,7 @@ from app.classes.template import SchemaValidationError, TemplateBuildError, Temp
 from app.container import InjectInMethod
 from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
-from app.definition._service import MethodServiceNotExistsError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
+from app.definition._service import MethodServiceNotExistsError, MethodServiceNotImplementedError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceNotImplementedError, ServiceTemporaryNotAvailableError
 from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
@@ -48,6 +48,13 @@ class ServiceAvailabilityHandler(Handler):
         except ServiceTemporaryNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                                 detail='Service temporary not available')
+        
+        except ServiceNotImplementedError as e:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail='Service not implemented')
+
+        except MethodServiceNotImplementedError as e:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail='Method Service not implemented')
+            
 
 
 class TemplateHandler(Handler):
@@ -179,7 +186,7 @@ class TwilioHandler(Handler):
             })
 
         except SSLError as e:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'SSL error',
             })
 
