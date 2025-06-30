@@ -1,8 +1,11 @@
+from fastapi import WebSocket
 from app.container import InjectInMethod
 from app.definition._ws import BaseWebSocketRessource,WebSocketRessource
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.health_service import HealthService
+
+PONG ='Pong'
 
 @WebSocketRessource
 class PingPongWebSocket(BaseWebSocketRessource,):
@@ -13,7 +16,10 @@ class PingPongWebSocket(BaseWebSocketRessource,):
         self.healthService=healthService
         self.redisService = redisService
         self.configService = configService
+        
+    @BaseWebSocketRessource.WSEndpoint('/pong/',str,'pong-connection',)
+    def pong(websocket:WebSocket,message:str):
+        print(message)
+        return PONG
 
     
-    
-        

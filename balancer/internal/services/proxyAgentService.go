@@ -17,5 +17,12 @@ type NotifyrApp struct {
 
 type ProxyAgentService struct {
 	
+	NotifyrApps map[string]NotifyrApp;
+
+
 }
 
+
+func (proxy *ProxyAgentService) RegisterApps(){
+
+}
