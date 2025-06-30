@@ -18,6 +18,12 @@ type PingPongClient struct {
 	RetryFreq time.Duration;
 	connected bool;
 	proxyService *ProxyAgentService;
+	securityService *SecurityService;
+}
+
+
+func (client *PingPongClient) RequestPermission(){
+
 }
 
 func (client *PingPongClient) PreparePermission(header any) {
@@ -109,10 +115,22 @@ func (client *PingPongClient) Ping(){
 }
 
 
-
 type HealthService struct {
-	heartbeat float64
+	heartbeat float64;
+	PPClient map[string]PingPongClient;
+	proxyService *ProxyAgentService;
+}
+
+
+func (health *HealthService) CreatePPClient(){
 
 }
 
+func (health *HealthService) StartConnection(){
+
+}
+
+func (health *HealthService) AggregateHealth(){
+	
+}
 
