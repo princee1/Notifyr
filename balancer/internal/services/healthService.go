@@ -5,52 +5,87 @@ import (
 	"log"
 	"net/url"
 	"time"
-
 	"github.com/gorilla/websocket"
 )
 
+const MAX_RETRY uint8 = 10
+const PING_FREQ time.Duration = time.Duration(10)
+const RETRY_FREQ time.Duration = time.Duration(10)
+
 type PingPongClient struct {
-	Name string;
-	instanceId string;
-	Connector *websocket.Conn;
-	URL string;
-	PingFreq time.Duration;
-	RetryFreq time.Duration;
-	connected bool;
-	proxyService *ProxyAgentService;
-	securityService *SecurityService;
+	Name            string
+	Connector       *websocket.Conn
+	URL             string
+	connected       bool
+	proxyService    *ProxyAgentService
+	securityService *SecurityService
 }
 
+func (client *PingPongClient) RequestPermission() error {
 
-func (client *PingPongClient) RequestPermission(){
-
+	// u, err := url.Parse(client.URL)
+	// if err != nil {
+	// 	return fmt.Errorf("invalid URL for %s: %v", client.Name, err)
+	// }
+	// 
+	return nil
 }
 
-func (client *PingPongClient) PreparePermission(header any) {
+func (client *PingPongClient) Disconnect() {
 
-
-}
-
-func (client *PingPongClient) Disconnect(){
-
-}
-
-func (client *PingPongClient) RemoveActiveConnection(){
-
-}
-
-func (client *PingPongClient) Connect(header any) error {
-
-	u, err := url.Parse(client.URL)
+	err := client.Connector.Close()
 	if err != nil {
-		return fmt.Errorf("invalid URL for %s: %v", client.Name, err)
+		log.Printf("failed to close connection for %s: %v", client.Name, err)
+		return
+	}
+	client.connected = false
+	log.Printf("[%s] Disconnected from %s", client.Name, client.URL)
+	return
+}
+
+func (client *PingPongClient) RemoveActiveConnection() {
+
+}
+
+func (client *PingPongClient) Connect()error {
+	client.RequestPermission()
+	return client.ConnectWS(nil)
+}
+
+func (client *PingPongClient) ConnectWS(header any) error {
+	ticker := time.NewTicker(RETRY_FREQ)
+	defer ticker.Stop()
+	var conn *websocket.Conn;
+	var retry int = 0;
+
+	for {
+		<-ticker.C
+
+		u, err := url.Parse(client.URL)
+		if err != nil {
+			return fmt.Errorf("invalid URL for %s: %v", client.Name, err)
+		}
+		_conn, _, err := websocket.DefaultDialer.Dial(u.String(),nil)
+		if err != nil {
+			retry++;
+			if retry == int(MAX_RETRY){
+				return fmt.Errorf("failed to connect %s: %v", client.Name, err)
+			}
+			continue
+		}else{
+			conn = _conn
+			break
+		}
 	}
 
-	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		return fmt.Errorf("failed to connect %s: %v", client.Name, err)
-	}
 	client.Connector = conn
+	client.connected = true
+	client.InitCallback()
+	log.Printf("[%s] Connected to %s", client.Name, client.URL)
+	return nil
+}
+
+func (client *PingPongClient) InitCallback(){
 
 	client.Connector.SetPongHandler(func(appData string) error {
 		_ = client.Connector.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -60,25 +95,21 @@ func (client *PingPongClient) Connect(header any) error {
 	client.Connector.SetCloseHandler(func(code int, text string) error {
 
 		// TODO remove the connection from the map of active connection
-		
+
 		client.connected = false
 		return nil
 	})
-	client.connected = true
-
-	log.Printf("[%s] Connected to %s", client.Name, client.URL)
-	return nil
 }
 
 func (client *PingPongClient) ReadPong() {
 	// Implement the logic for reading pong messages here
-
 	go func() {
 		for {
 			// client.Connector.ReadJSON()
 			_, mess, err := client.Connector.ReadMessage()
 			if err != nil {
 				log.Printf("[%s] Read error: %v", client.Name, err)
+				// TODO disconnect?
 				return
 			}
 			log.Printf("[%s] Received: %s", client.Name, mess)
@@ -86,51 +117,60 @@ func (client *PingPongClient) ReadPong() {
 	}()
 }
 
-func (client *PingPongClient) Run(){
+func (client *PingPongClient) Run() {
 
-	defer client.Connector.Close()
+	defer client.Disconnect()
 	client.ReadPong()
 	client.Ping()
 
 }
 
-func (client *PingPongClient) Ping(){
+func (client *PingPongClient) Ping() {
 
-	ticker := time.NewTicker(client.PingFreq)
+	ticker := time.NewTicker(PING_FREQ)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <- ticker.C:
-			err := client.Connector.WriteMessage(websocket.PingMessage,nil)
-			if err!= nil {
+		case <-ticker.C:
+			err := client.Connector.WriteMessage(websocket.PingMessage, nil)
+			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
 				client.Disconnect()
 				client.RemoveActiveConnection()
-				return 
+				return
 			}
 		}
 	}
-	
-}
 
+}
 
 type HealthService struct {
-	heartbeat float64;
-	PPClient map[string]PingPongClient;
-	proxyService *ProxyAgentService;
+	PPClient     map[string]PingPongClient
+	proxyService *ProxyAgentService
+	securityService *SecurityService
+	active_pp uint
 }
 
 
-func (health *HealthService) CreatePPClient(){
+func (health *HealthService) CreatePPClient(apps *[]string) {
+
+	// for index,value :=range *apps{
+
+	// 	ppClient:= PingPongClient{Name="Instance",URL=value,proxyService=health.proxyService,securityService=health.securityService}
+	// 	health.PPClient[value] = ppClient
+	// 	if ppClient.Connect() != nil{
+
+	// 		continue
+	// 	}
+	// 	ppClient.Run()
+	// }
+}
+
+func (health *HealthService) StartConnection() {
 
 }
 
-func (health *HealthService) StartConnection(){
+func (health *HealthService) AggregateHealth() {
 
 }
-
-func (health *HealthService) AggregateHealth(){
-	
-}
-

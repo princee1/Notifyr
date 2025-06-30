@@ -9,6 +9,7 @@ type AppSpec struct {
 
 type NotifyrApp struct {
 	id string;
+	instanceId string;
 	address string;
 	port uint;
 	roles []string;
@@ -20,7 +21,6 @@ type NotifyrApp struct {
 type ProxyAgentService struct {
 	
 	NotifyrApps map[string]NotifyrApp;
-
 }
 
 
