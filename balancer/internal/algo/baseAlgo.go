@@ -1,3 +1,0 @@
-package algo
-
-// TODO interface
