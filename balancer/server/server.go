@@ -5,7 +5,7 @@ import (
 )
 
 type NotifyrBalancer struct {
-	fiber *fiber.App
+	Fiber *fiber.App
 }
 
 
@@ -17,3 +17,4 @@ func (balancer *NotifyrBalancer) LoadMiddleWare(){
 
 }
 
+func (balancer *NotifyrBalancer) Start(){}

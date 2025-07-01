@@ -146,29 +146,31 @@ func (client *PingPongClient) Ping() {
 }
 
 type HealthService struct {
-	PPClient     map[string]PingPongClient
-	proxyService *ProxyAgentService
-	securityService *SecurityService
+	ppClient     map[string]PingPongClient
+	ProxyService *ProxyAgentService
+	SecurityService *SecurityService
+	ConfigService *ConfigService
 	active_pp uint
 }
 
 
-func (health *HealthService) CreatePPClient(apps *[]string) {
+func (health *HealthService) CreatePPClient() {
 
-	// for index,value :=range *apps{
+	for _,value :=range health.ConfigService.URLS{
 
-	// 	ppClient:= PingPongClient{Name="Instance",URL=value,proxyService=health.proxyService,securityService=health.securityService}
-	// 	health.PPClient[value] = ppClient
-	// 	if ppClient.Connect() != nil{
-
-	// 		continue
-	// 	}
-	// 	ppClient.Run()
-	// }
+		ppClient := PingPongClient{Name: "Instance", URL: value, proxyService: health.ProxyService, securityService: health.SecurityService}
+		health.ppClient[value] = ppClient
+		if ppClient.Connect() != nil{
+			continue
+		}
+	}
 }
 
 func (health *HealthService) StartConnection() {
-
+	for _,client := range health.ppClient{
+		client.Run()
+		health.active_pp++;
+	}
 }
 
 func (health *HealthService) AggregateHealth() {
