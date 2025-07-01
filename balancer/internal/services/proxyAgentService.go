@@ -15,14 +15,28 @@ type NotifyrApp struct {
 	roles []string;
 	spec AppSpec;
 	active bool
+
 }
 
 
 type ProxyAgentService struct {
 	
 	NotifyrApps map[string]NotifyrApp;
+
+
 }
 
+
+
+
+func (proxy *ProxyAgentService) SetAlgo(algo string){
+
+}
+
+func (proxy *ProxyAgentService) CreateAlgo(){
+
+
+}
 
 func (proxy *ProxyAgentService) RegisterApps(){
 
@@ -41,5 +55,6 @@ func (proxy *ProxyAgentService) ProxyRequest(){
 }
 
 func (proxy *ProxyAgentService) ChooseServer() {
+
 
 }
