@@ -16,3 +16,4 @@ from .reactive_service import ReactiveService
 from .link_service import LinkService
 from .model_service import LLMModelService
 from .aws_service import AmazonS3Service,AmazonSESService,AmazonSNSService
+from .health_service import HealthService

@@ -402,9 +402,9 @@ class RedisService(DatabaseService):
         
     async def close_connections(self,):
         for config in self.streams.values():
-            if config['channel_tasks']:
+            if 'channel_tasks' in config and  config['channel_tasks']:
                 config['channel_tasks'].cancel()
-            if config['stream_tasks']:
+            if 'stream_tasks' in config and config['stream_tasks']:
                 config['stream_tasks'].cancel()
             
         len_db = len(self.db.keys())//2
