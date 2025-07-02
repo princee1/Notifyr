@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
+from app.definition._service import ServiceStatus
 from app.ressources import *
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
@@ -219,8 +220,9 @@ class Application(EventInterface):
 
         redisService = Get(RedisService)
         
-        await redisService.create_group()
-        redisService.register_consumer(callbacks_stream=Callbacks_Stream)
+        if redisService.services_status == ServiceStatus.AVAILABLE:
+            await redisService.create_group()
+            redisService.register_consumer(callbacks_stream=Callbacks_Stream)
 
         taskService:TaskService =  Get(TaskService)
         #taskService.start()

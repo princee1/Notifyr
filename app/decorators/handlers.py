@@ -1,6 +1,9 @@
 from asyncio import CancelledError
 import asyncio
 from typing import Callable
+
+from fastapi.exceptions import ResponseValidationError
+from h11 import LocalProtocolError
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -509,3 +512,17 @@ async def handle_http_exception(function, *args, **kwargs):
             raise ServerFileError('app/static/error-400-page/index.html',e.status_code)
 
         raise ServerFileError('app/static/error-500-page/index.html',e.status_code)
+    
+
+
+class FastAPIHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+
+        except ResponseValidationError as e :
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Error while sending the response","error":e.errors()})
+
+        except LocalProtocolError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail=e.error_status_hint)

@@ -2,7 +2,7 @@ from fastapi import Depends, Response, Request, status
 from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
-from app.decorators.handlers import WebSocketHandler
+from app.decorators.handlers import FastAPIHandler, WebSocketHandler
 from app.decorators.permissions import BalancerPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPStatusCode, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
@@ -19,12 +19,14 @@ class AppSpec(BaseModel):
     process_count: int
 
 
-class NotifyInfo(BaseModel):
+class NotifyrInfo(BaseModel):
     spec: AppSpec
+    instance_id: str
 
 
 TOKEN_NAME = 'X-PING-PONG-TOKEN'
 PING_PONG_PREFIX = 'ping-pong'
+
 
 @HTTPRessource(prefix=PING_PONG_PREFIX, websockets=[PingPongWebSocket])
 class PingPongRessource(BaseHTTPRessource):
@@ -39,20 +41,23 @@ class PingPongRessource(BaseHTTPRessource):
 
     # @UseLimiter()
     @UsePermission(BalancerPermission)
+    @UseHandler(FastAPIHandler)
     @UseHandler(WebSocketHandler)
-    @HTTPStatusCode(status.HTTP_101_SWITCHING_PROTOCOLS)
-    @BaseHTTPRessource.Get('/permission/{ws_path}/', response_model=AppSpec, response_description='The Spec of the server')
+    @HTTPStatusCode(status.HTTP_200_OK)
+    @BaseHTTPRessource.Get('/permission/{ws_path}/', response_model=NotifyrInfo, response_description='The Spec of the server')
     def issue_ping_permission(self, ws_path: str, request: Request, response: Response):
         self._check_ws_path(ws_path)
         run_id = self.websockets[PingPongWebSocket.__name__].run_id
         token = self.jwtAuthService.encode_ws_token(run_id, ws_path, 3600)
         response.headers.append(TOKEN_NAME, token)
-        return {'spec': {
-            'cpu_count': 4,
-            'ram': 4096,
-            'weight': 1,
-            'process_count': 8,
-        }}
+        return {
+            'instance_id':self.configService.INSTANCE_ID,
+            'spec': {
+                'cpu_count': 4,
+                'ram': 4096,
+                'weight': 1,
+                'process_count': 8,
+            }}
 
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)

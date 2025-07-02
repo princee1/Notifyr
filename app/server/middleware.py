@@ -30,6 +30,7 @@ class MetaDataMiddleWare(MiddleWare):
         self.configService:ConfigService = Get(ConfigService)
 
         self.instance_id = str(self.configService.INSTANCE_ID)
+        self.process_pid = self.configService.PROCESS_PID
 
 
     @ExcludeOn(['/docs/*','/openapi.json'])
@@ -43,6 +44,7 @@ class MetaDataMiddleWare(MiddleWare):
             process_time = time.time() - start_time
             response.headers["X-Process-Time"] = str(process_time) + ' (s)'
             response.headers["X-Instance-Id"]= self.instance_id
+            response.headers["X-Process-PID"] =self.process_pid
             self.taskService.request_latency.observe(process_time)
             return response
         except HTTPException as e:

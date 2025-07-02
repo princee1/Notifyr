@@ -140,7 +140,8 @@ class ConfigService(_service.BaseService):
 
     def set_config_value(self):
 
-        self.INSTANCE_ID = self.getenv('INSTANCE_ID', 0)
+        self.INSTANCE_ID = self.getenv('INSTANCE_ID', '0')
+        self.PROCESS_PID = str(os.getpid())
 
         self.BASE_DIR = self.getenv("BASE_DIR", './')
         self.ASSET_DIR = self.getenv("ASSETS_DIR", 'assets/')
