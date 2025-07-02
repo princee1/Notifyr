@@ -15,6 +15,7 @@ func (container *Container) Init(){
 	container.configService = &service.ConfigService{}
 	container.securityService = &service.SecurityService{ConfigService: container.configService}
 	container.proxyAgentService = &service.ProxyAgentService{}
+	container.proxyAgentService.CreateAlgo()
 	container.healthService= &service.HealthService{ProxyService: container.proxyAgentService,SecurityService: container.securityService }
 
 	container.configService.LoadEnv()

@@ -7,13 +7,18 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-
+func Welcome(){
+	fmt.Println("")
+}
 
 func main(){
-	fmt.Println("load balancer")
-	var container container.Container= container.Container{}
-	var balancer server.NotifyrBalancer = server.NotifyrBalancer{Container: &container,Fiber: fiber.New()}
 
+	Welcome()
+
+	var container container.Container= container.Container{}
+	container.Init()
+	
+	var balancer server.NotifyrBalancer = server.NotifyrBalancer{Container: &container,Fiber: fiber.New()}
 	balancer.LoadMiddleWare()
 	balancer.LoadRoute()
 	balancer.Start()
