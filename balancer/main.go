@@ -3,12 +3,15 @@ package main
 import (
 	"balancer/container"
 	"balancer/server"
-	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/common-nighthawk/go-figure"
+	"github.com/gookit/color"
+
 )
 
-func Welcome(){
-	fmt.Println("")
+func Welcome() {
+	myFigure := figure.NewFigure("Notifyr Balancer", "slant", true)
+	color.Green.Println(myFigure.String())
 }
 
 func main(){
