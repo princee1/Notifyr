@@ -1,3 +1,4 @@
+import asyncio
 from inspect import getmro
 from abc import ABC
 import json
@@ -32,14 +33,23 @@ def APIFilterInject(func:Callable | Type):
         annotations = func.__annotations__.copy()
         annotations.pop('return',None)
 
-    def wrapper(*args,**kwargs):
+    def sync_wrapper(*args,**kwargs):
         filtered_kwargs = {
             key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
             for key, value in kwargs.items()
             if key in annotations
         }
         return func(*args, **filtered_kwargs)
-    return wrapper
+    
+    async def async_wrapper(*args,**kwargs):
+        filtered_kwargs = {
+            key: (annotations[key](value) if isinstance(value, (str, int, float, bool, list, dict)) and annotations[key] == Literal  else value)
+            for key, value in kwargs.items()
+            if key in annotations
+        }
+        return await func(*args, **filtered_kwargs)
+
+    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
 
 def AsyncAPIFilterInject(func:Callable | Type):
 

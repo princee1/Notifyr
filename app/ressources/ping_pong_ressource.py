@@ -22,6 +22,7 @@ class AppSpec(BaseModel):
 class NotifyrInfo(BaseModel):
     spec: AppSpec
     instance_id: str
+    parent_pid:str
 
 
 TOKEN_NAME = 'X-PING-PONG-TOKEN'
@@ -52,6 +53,7 @@ class PingPongRessource(BaseHTTPRessource):
         response.headers.append(TOKEN_NAME, token)
         return {
             'instance_id':self.configService.INSTANCE_ID,
+            'parent_pid':self.configService.PARENT_PID,
             'spec': {
                 'cpu_count': 4,
                 'ram': 4096,

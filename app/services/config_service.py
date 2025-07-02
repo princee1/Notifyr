@@ -142,6 +142,7 @@ class ConfigService(_service.BaseService):
 
         self.INSTANCE_ID = self.getenv('INSTANCE_ID', '0')
         self.PROCESS_PID = str(os.getpid())
+        self.PARENT_PID = str(os.getppid())
 
         self.BASE_DIR = self.getenv("BASE_DIR", './')
         self.ASSET_DIR = self.getenv("ASSETS_DIR", 'assets/')
