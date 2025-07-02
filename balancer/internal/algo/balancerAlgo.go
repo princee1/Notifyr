@@ -40,28 +40,66 @@ func (round *RoundRobbinAlgo) Next() string {
 // ---------------------------------------        --------------------------------------------  //
 
 type WeightAlgo struct {
-	servers []string
-	weight []uint16
-	
+	Servers []string
+	Weight  []uint64
+	index   uint64
+	mu      sync.Mutex
+	totalWeight uint64
+}
+
+func (weight *WeightAlgo) reset() {
+	weight.mu.Lock()
+	defer weight.mu.Unlock()
+	weight.index = 0
+}
+
+func (weight *WeightAlgo) SetTotalWeight() {
+	for _, w := range weight.Weight {
+		weight.totalWeight += w
+	}
+
+}
+
+func (weight *WeightAlgo) Next() string {
+	i := atomic.AddUint64(&weight.index, 1)
+	if i > 1_000_000_000_000_000 {
+		weight.reset()
+	}
+
+	current := i % weight.totalWeight
+	for idx, w := range weight.Weight {
+		if current < w {
+			return weight.Servers[idx]
+		}
+		current -= w
+	}
+
+	random := RandomAlgo{weight.Servers}
+	return random.Next()
+}
+
+func (weight *WeightAlgo) GetIndex() uint64 {
+	return weight.index
 }
 
 // ---------------------------------------        --------------------------------------------  //
 type LeastConnectionAlgo struct {
-	servers []string;
+	Servers []string;
 	ptr int;
-
 }
 
 // ---------------------------------------        --------------------------------------------  //
 
 type RandomAlgo struct {
 
-	servers []string
+	Servers []string
 }
 
 func (random *RandomAlgo) Next() string {
-	i:=rand.Intn(len(random.servers))
-	return random.servers[i]
+	i:=rand.Intn(len(random.Servers))
+	return random.Servers[i]
 }
 
 // ---------------------------------------        --------------------------------------------  //
+
+var ALGO_TYPE = []string{"random","round","weight"}

@@ -71,6 +71,7 @@ type ConfigService struct {
 	API_KEY         string
 	PORT_START      int64
 	set bool
+	addr string
 	
 }
 
@@ -80,6 +81,11 @@ func (config *ConfigService) Is_Set() bool {
 
 func (config *ConfigService) Has_Apps()bool {
 	return config.URLS != nil
+}
+
+func (config *ConfigService) Addr() string {
+
+	return config.addr
 }
 
 func (config *ConfigService) LoadEnv() {
@@ -93,6 +99,13 @@ func (config *ConfigService) LoadEnv() {
 	api_key,exists := os.LookupEnv("API_KEY")
 	if exists{
 		config.API_KEY = api_key
+	}
+
+	addr,exist:= os.LookupEnv("ADDR")
+	if exist {
+		config.addr = addr
+	}else{
+		config.addr ="127.0.0.1:88"
 	}
 
 	config.PORT_START = parseInt("PORT_START",80)
