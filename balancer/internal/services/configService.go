@@ -32,7 +32,7 @@ func parseInt(envKey string,defaultVal int64) int64 {
 func loadServer(envKey string, portStart int64) []string {
 	_servers, exists := os.LookupEnv(envKey)
 	if !exists {
-		return nil
+		return []string{}
 	}
 
 	servers := []string{}

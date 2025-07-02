@@ -6,31 +6,11 @@ import (
 	"slices"
 )
 
-
-type AppSpec struct {
-	cpuCore      uint
-	processCount uint
-	ram          uint
-	weight       float64
-}
-
-type NotifyrApp struct {
-	id         string
-	instanceId string
-	address    string
-	port       uint
-	roles      []string
-	spec       AppSpec
-	active     bool
-}
-
-
 type ProxyAgentService struct {
-	NotifyrApps map[string]NotifyrApp
-	algos       map[string]algo.Algo
+	HealthService *HealthService
 	ConfigService *ConfigService
-
 	currentAlgo string
+	algos       map[string]algo.Algo
 
 }
 

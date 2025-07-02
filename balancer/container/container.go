@@ -14,12 +14,12 @@ type Container struct {
 func (container *Container) Init(){
 	container.configService = &service.ConfigService{}
 	container.securityService = &service.SecurityService{ConfigService: container.configService}
-	container.proxyAgentService = &service.ProxyAgentService{}
-	container.proxyAgentService.CreateAlgo()
-	container.healthService= &service.HealthService{ProxyService: container.proxyAgentService,SecurityService: container.securityService }
+	container.healthService= &service.HealthService{ConfigService:container.configService, SecurityService: container.securityService }
+	container.proxyAgentService = &service.ProxyAgentService{HealthService: container.healthService,ConfigService: container.configService}
 
 	container.configService.LoadEnv()
-	container.healthService.CreatePPClient()
+	container.proxyAgentService.CreateAlgo()
+	container.healthService.CreatePPClient(container.proxyAgentService)
 	container.healthService.StartConnection()
 }
 

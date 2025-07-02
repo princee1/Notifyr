@@ -12,12 +12,29 @@ const MAX_RETRY uint8 = 10
 const PING_FREQ time.Duration = time.Duration(10)
 const RETRY_FREQ time.Duration = time.Duration(10)
 
+type AppSpec struct {
+	cpuCore      uint
+	processCount uint
+	ram          uint
+	weight       float64
+}
+
+type NotifyrApp struct {
+	id         string
+	instanceId string
+	address    string
+	port       uint
+	roles      []string
+	spec       AppSpec
+	active     bool
+}
+
 type PingPongClient struct {
 	Name            string
 	Connector       *websocket.Conn
 	URL             string
 	connected       bool
-	proxyService    *ProxyAgentService
+	healthService 	*HealthService
 	securityService *SecurityService
 }
 
@@ -32,6 +49,8 @@ func (client *PingPongClient) RequestPermission() error {
 }
 
 func (client *PingPongClient) Disconnect() {
+
+	defer client.RemoveActiveConnection()
 
 	err := client.Connector.Close()
 	if err != nil {
@@ -146,19 +165,19 @@ func (client *PingPongClient) Ping() {
 }
 
 type HealthService struct {
+	notifyrApps map[string]NotifyrApp
 	ppClient     map[string]PingPongClient
-	ProxyService *ProxyAgentService
 	SecurityService *SecurityService
 	ConfigService *ConfigService
 	active_pp uint
 }
 
 
-func (health *HealthService) CreatePPClient() {
+func (health *HealthService) CreatePPClient(proxyService *ProxyAgentService) {
 
 	for _,value :=range health.ConfigService.URLS{
 
-		ppClient := PingPongClient{Name: "Instance", URL: value, proxyService: health.ProxyService, securityService: health.SecurityService}
+		ppClient := PingPongClient{Name: "Instance", URL: value, healthService: health, securityService: health.SecurityService}
 		health.ppClient[value] = ppClient
 		if ppClient.Connect() != nil{
 			continue
@@ -175,4 +194,9 @@ func (health *HealthService) StartConnection() {
 
 func (health *HealthService) AggregateHealth() {
 
+}
+
+func (health *HealthService) ActiveConnection() uint8{
+
+	return 0
 }

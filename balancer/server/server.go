@@ -2,6 +2,7 @@ package server
 
 import (
 	"balancer/container"
+	"fmt"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
@@ -22,6 +23,19 @@ func (balancer *NotifyrBalancer) LoadMiddleWare(){
 }
 
 func (balancer *NotifyrBalancer) Start() {
+
+	if !balancer.Container.GetHealthService().ConfigService.Has_Apps() {
+		errMess:= fmt.Sprintf("Failed to start server: %v", "No Notifyr App Created")
+		log.Print(errMess)
+		panic(errMess)
+	}
+
+	if balancer.Container.GetHealthService().ActiveConnection() <= 0{
+		errMess:= fmt.Sprintf("Failed to start server: %v", "No Notifyr App are currently Connected")
+		log.Print(errMess)
+		panic(errMess)
+	}
+	
 	if err := balancer.Fiber.Listen(balancer.Container.GetConfigService().Addr()); err != nil {
 		log.Printf("Failed to start server: %v", err)
 		panic(err)
