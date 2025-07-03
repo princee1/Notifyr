@@ -102,7 +102,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         return answer
 
     @staticmethod
-    def WSEndpoint(path:str,type_:WebsocketMessage =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current'):
+    def WSEndpoint(path:str,type_:str | bytes | dict | BaseModel |BaseProtocol |None |NoneType =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current'):
 
         if not isinstance(type_,WebsocketMessage):
             raise WebsocketMessageTypeError
@@ -154,6 +154,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                             message:dict = await websocket.receive_json()
                             try:
                                 message = type_(**message)
+                                message = message.model_dump_json()
                             except:
                                 message= {
                                     'error':True
@@ -164,22 +165,25 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 
                         elif type_ == BaseProtocol:
                             message:BaseProtocol = await websocket.receive_json()
+                            err = False
                             try:
                                 message = type_(**message)
                             except:
+                                err=True
                                 message= {
                                     'error':True
                                 }
-                            kwargs_star['message'] = message
-                            key = 'protocol_name' if set_protocol_key == None else 'protocol_name'
-                            c_result = await self._create_ws_answer(func,args,kwargs_star)
-                            h_protocol =APIFilterInject(self.protocol[message[key]])(*args,**kwargs_star)
-                            if handler =='current':
-                                answer =  c_result
-                            elif handler =='handler':
-                                answer = h_protocol 
-                            else:
-                                answer =  self._hybrid_protocol_handler(c_result,h_protocol)
+                            if not err:
+                                kwargs_star['message'] = message
+                                key = 'protocol_name' if set_protocol_key == None else 'protocol_name'
+                                c_result = await self._create_ws_answer(func,args,kwargs_star)
+                                h_protocol =APIFilterInject(self.protocol[message[key]])(*args,**kwargs_star)
+                                if handler =='current':
+                                    answer =  c_result
+                                elif handler =='handler':
+                                    answer = h_protocol 
+                                else:
+                                    answer =  self._hybrid_protocol_handler(c_result,h_protocol)
                             await websocket.send_json(answer)
                         else:
                             await self._create_ws_answer(func,args,kwargs_star)

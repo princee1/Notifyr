@@ -6,18 +6,17 @@ from app.decorators.handlers import FastAPIHandler, WebSocketHandler
 from app.decorators.permissions import BalancerPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPStatusCode, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
+from app.services.celery_service import CeleryService, TaskService
 from app.services.config_service import ConfigService
 from app.services.health_service import HealthService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.websockets.ping_pong_ws import PingPongWebSocket
-
 
 class AppSpec(BaseModel):
     cpu_count: int
     ram: int
     weight: float
     process_count: int
-
 
 class NotifyrInfo(BaseModel):
     spec: AppSpec
@@ -28,17 +27,19 @@ class NotifyrInfo(BaseModel):
 TOKEN_NAME = 'X-PING-PONG-TOKEN'
 PING_PONG_PREFIX = 'ping-pong'
 
-
 @HTTPRessource(prefix=PING_PONG_PREFIX, websockets=[PingPongWebSocket])
 class PingPongRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, healthService: HealthService, securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService):
+    def __init__(self, healthService: HealthService, securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService,taskService:TaskService,celeryService:CeleryService):
         super().__init__()
+
         self.healthService = healthService
         self.securityService = securityService
         self.jwtAuthService = jwtAuthService
         self.configService = configService
+        self.taskService = taskService
+        self.celeryService = celeryService
 
     @UseLimiter(limit_value="1/day")
     @UsePermission(BalancerPermission)

@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import WebSocket
 from app.container import InjectInMethod
 from app.definition._ws import BaseWebSocketRessource,WebSocketRessource
@@ -8,7 +9,7 @@ from app.services.health_service import HealthService
 PONG ='Pong'
 
 @WebSocketRessource
-class PingPongWebSocket(BaseWebSocketRessource,):
+class PingPongWebSocket(BaseWebSocketRessource):
 
     @InjectInMethod
     def __init__(self,healthService:HealthService,redisService:RedisService,configService:ConfigService):
@@ -22,4 +23,6 @@ class PingPongWebSocket(BaseWebSocketRessource,):
         print(message)
         return PONG
 
-    
+    #@BaseWebSocketRessource.WSEndpoint('/state/',str,'app-state',)
+    def state(websocket:WebSocket,message:str):
+        return ''
