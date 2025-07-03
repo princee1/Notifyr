@@ -26,14 +26,14 @@ type AppSpec struct {
 }
 
 type NotifyrApp struct {
-	id         string
-	instanceId string
+	Id         string
+	InstanceId string
 	parent_pid string
 	address    string
 	port       uint
-	roles      []string
-	spec       AppSpec
-	active     bool
+	Roles      []string
+	Spec       AppSpec
+	Active     bool
 }
 
 type PingPongClient struct {
@@ -81,7 +81,9 @@ func (client *PingPongClient) Disconnect() {
 }
 
 func (client *PingPongClient) RemoveActiveConnection() {
+	if err:=client.healthService.RemoveActiveConnection(client.Name); err !=nil {
 
+	}
 }
 
 func (client *PingPongClient) Connect()error {
@@ -179,7 +181,6 @@ func (client *PingPongClient) Ping() {
 			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
 				client.Disconnect()
-				client.RemoveActiveConnection()
 				return
 			}
 		}
@@ -196,7 +197,6 @@ type HealthService struct {
 	mu sync.Mutex
 
 }
-
 
 func (health *HealthService) CreatePPClient(proxyService *ProxyAgentService) {
 
@@ -221,7 +221,21 @@ func (health *HealthService) AggregateHealth() {
 
 }
 
-func (health *HealthService) ActiveConnection() uint8{
+func (health *HealthService) ActiveConnection() uint{
+	health.mu.Lock()
+	defer health.mu.Unlock()
+	return health.active_pp
+}
 
-	return 0
+func (health *HealthService) RemoveActiveConnection(Name string) error{
+	health.mu.Lock()
+	defer health.mu.Unlock()
+	na, ok :=health.notifyrApps[Name]
+	if !ok {
+
+	}else{
+		na.Active = false
+		health.active_pp--;
+	}
+	return nil
 }
