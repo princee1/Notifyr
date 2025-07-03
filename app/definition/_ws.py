@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 import functools
 import time
+from types import NoneType
 from fastapi import HTTPException, WebSocketDisconnect,WebSocketException,WebSocket,status
 from app.classes.auth_permission import WSPermission
 from app.container import InjectInMethod
@@ -27,17 +28,26 @@ class Room:
         self.room_id = generateId(20)
         self.clients:list[WebSocket]  = []
     
-
 class WSConnectionManager:
     def __init__(self): 
         self.rooms: dict[str,Room] = {}
         self.active_connections: list[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
+    def create_room(self,) -> Room:
+        room = Room()
+        self.rooms[room.room_id] = room
+        return room
 
-    def disconnect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket):
+        try:
+            print("state: ",websocket._state._state)
+            await websocket.accept()
+            self.active_connections.append(websocket)
+        except :
+            ...
+
+    def disconnect(self, websocket: WebSocket,code=1000,reason:str|None = None):
+        websocket.close(code,reason)
         self.active_connections.remove(websocket)
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
@@ -46,6 +56,8 @@ class WSConnectionManager:
     async def broadcast(self, message: str):
         for connection in self.active_connections:
             await connection.send_text(message)
+    
+
 
 #########################################                ##############################################
 
@@ -73,7 +85,12 @@ class BaseProtocol(BaseModel):
 
 class WSIdentity:
     ...
-    
+
+WebsocketMessage=Union[str | bytes | dict | BaseModel |BaseProtocol |None |NoneType]
+
+
+class WebsocketMessageTypeError(Exception):
+    ...
 
 class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 
@@ -85,7 +102,10 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         return answer
 
     @staticmethod
-    def WSEndpoint(path:str,type_: str | bytes | dict | BaseModel |BaseProtocol=str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current'):
+    def WSEndpoint(path:str,type_:WebsocketMessage =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current'):
+
+        if not isinstance(type_,WebsocketMessage):
+            raise WebsocketMessageTypeError
 
         def decorator(func:Callable):
             if not hasattr(func,'meta'):
@@ -153,7 +173,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                             kwargs_star['message'] = message
                             key = 'protocol_name' if set_protocol_key == None else 'protocol_name'
                             c_result = await self._create_ws_answer(func,args,kwargs_star)
-                            h_protocol =APIFilterInject(self.protocol[message[key]])(message)
+                            h_protocol =APIFilterInject(self.protocol[message[key]])(*args,**kwargs_star)
                             if handler =='current':
                                 answer =  c_result
                             elif handler =='handler':
@@ -161,6 +181,9 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                             else:
                                 answer =  self._hybrid_protocol_handler(c_result,h_protocol)
                             await websocket.send_json(answer)
+                        else:
+                            await self._create_ws_answer(func,args,kwargs_star)
+                            
 
                 except WebSocketDisconnect:
                     APIFilterInject(BaseWebSocketRessource.on_disconnect)(*args,**kwargs_star)

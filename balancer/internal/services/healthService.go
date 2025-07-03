@@ -3,25 +3,32 @@ package service
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
+	"sync"
 	"time"
+
 	"github.com/gorilla/websocket"
 )
 
 const MAX_RETRY uint8 = 10
 const PING_FREQ time.Duration = time.Duration(10)
 const RETRY_FREQ time.Duration = time.Duration(10)
+const PERMISSION_ROUTE = "ping-pong/permission/_pong_"
+
+const WS_AUTH_KEY = "X-WS-Auth-Key"
 
 type AppSpec struct {
-	cpuCore      uint
-	processCount uint
-	ram          uint
-	weight       float64
+	CpuCore      uint
+	ProcessCount uint
+	Ram          uint
+	Weight       float64
 }
 
 type NotifyrApp struct {
 	id         string
 	instanceId string
+	parent_pid string
 	address    string
 	port       uint
 	roles      []string
@@ -36,15 +43,27 @@ type PingPongClient struct {
 	connected       bool
 	healthService 	*HealthService
 	securityService *SecurityService
+	permission		string
 }
 
-func (client *PingPongClient) RequestPermission() error {
 
-	// u, err := url.Parse(client.URL)
-	// if err != nil {
-	// 	return fmt.Errorf("invalid URL for %s: %v", client.Name, err)
-	// }
-	// 
+func (client *PingPongClient) RequestPermission() error {
+	u, err := url.Parse(client.URL)
+	if err != nil {
+		return fmt.Errorf("invalid URL for %s: %v", client.Name, err)
+	}
+	var app NotifyrApp
+	permission,err := client.securityService.getPongWsPermission(*u,client.Name,&app)
+
+	if err != nil {
+		return fmt.Errorf("failed to request permission for %s: %v", client.Name, err)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to decode permission response for %s: %v", client.Name, err)
+	}
+	
+	client.permission = permission
+	client.healthService.notifyrApps[client.Name] = app
 	return nil
 }
 
@@ -59,7 +78,6 @@ func (client *PingPongClient) Disconnect() {
 	}
 	client.connected = false
 	log.Printf("[%s] Disconnected from %s", client.Name, client.URL)
-	return
 }
 
 func (client *PingPongClient) RemoveActiveConnection() {
@@ -67,11 +85,13 @@ func (client *PingPongClient) RemoveActiveConnection() {
 }
 
 func (client *PingPongClient) Connect()error {
-	client.RequestPermission()
-	return client.ConnectWS(nil)
+	if err :=client.RequestPermission(); err != nil{
+		return err
+	}
+	return client.connectWS()
 }
 
-func (client *PingPongClient) ConnectWS(header any) error {
+func (client *PingPongClient) connectWS() error {
 	ticker := time.NewTicker(RETRY_FREQ)
 	defer ticker.Stop()
 	var conn *websocket.Conn;
@@ -84,7 +104,10 @@ func (client *PingPongClient) ConnectWS(header any) error {
 		if err != nil {
 			return fmt.Errorf("invalid URL for %s: %v", client.Name, err)
 		}
-		_conn, _, err := websocket.DefaultDialer.Dial(u.String(),nil)
+
+		header := http.Header{}
+		header.Add(WS_AUTH_KEY,client.permission)
+		_conn, _, err := websocket.DefaultDialer.Dial(u.String(),header)
 		if err != nil {
 			retry++;
 			if retry == int(MAX_RETRY){
@@ -170,6 +193,8 @@ type HealthService struct {
 	SecurityService *SecurityService
 	ConfigService *ConfigService
 	active_pp uint
+	mu sync.Mutex
+
 }
 
 

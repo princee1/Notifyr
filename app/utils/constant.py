@@ -42,7 +42,7 @@ class HTTPHeaderConstant:
     API_KEY_HEADER = 'X-API-KEY'
     ADMIN_KEY = 'X-Admin-Key'
     CONTACT_TOKEN='X-Contact-TOKEN'
-    WS_KEY = 'X-WS-Key'
+    WS_KEY = 'X-WS-Auth-Key'
     REQUEST_ID = 'x-request-id'
 
 

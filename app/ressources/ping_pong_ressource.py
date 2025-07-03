@@ -40,7 +40,7 @@ class PingPongRessource(BaseHTTPRessource):
         self.jwtAuthService = jwtAuthService
         self.configService = configService
 
-    # @UseLimiter()
+    @UseLimiter(limit_value="1/day")
     @UsePermission(BalancerPermission)
     @UseHandler(FastAPIHandler)
     @UseHandler(WebSocketHandler)
