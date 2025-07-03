@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -29,7 +30,7 @@ func parseInt(envKey string,defaultVal int64) int64 {
 
 }
 
-func loadServer(envKey string, portStart int64) []string {
+func loadServer(envKey string, portStart int64,app_count int64,increment int64) []string {
 	_servers, exists := os.LookupEnv(envKey)
 	if !exists {
 		return []string{}
@@ -39,7 +40,33 @@ func loadServer(envKey string, portStart int64) []string {
 	mapServers := map[string]int64{}
 	portCounter := portStart
 
-	for _, s := range strings.Split(_servers, ",") {
+	config_server := strings.Split(_servers, ",") 
+
+	if app_count >0 &&  len(config_server)==1 {
+		base_url,err := url.Parse(config_server[0])
+		if err != nil {
+			return []string{}
+		}
+		for i:=0;i<int(app_count);i++{
+			var s string;
+			var _port_start int64;
+			if base_url.Port() !=""{
+				_port_start,err = strconv.ParseInt(base_url.Port(),10,64)
+				if err != nil{
+					_port_start = portStart
+				}
+			}else{
+				_port_start = portStart
+			}
+			port:= int(_port_start)+((i+1)*int(increment))
+			s=fmt.Sprintf("%v:%v",base_url.Hostname(),port)
+			servers = append(servers,s )
+		}
+
+		return servers
+	}
+
+	for _, s := range config_server{
 		parsedURL, err := url.Parse(s)
 		if err != nil {
 			continue
@@ -53,7 +80,7 @@ func loadServer(envKey string, portStart int64) []string {
 			if _, exists := mapServers[hostname]; !exists {
 				mapServers[hostname] = portCounter
 			} else {
-				mapServers[hostname]++
+				mapServers[hostname]+=increment
 			}
 			port = strconv.FormatInt(mapServers[hostname], 10)
 		}
@@ -68,10 +95,12 @@ func loadServer(envKey string, portStart int64) []string {
 
 type ConfigService struct {
 	URLS            []string
-	API_KEY         string
+	api_key         string
 	PORT_START      int64
 	set bool
 	addr string
+	port_increment uint
+	app_count int64
 	
 }
 
@@ -80,11 +109,10 @@ func (config *ConfigService) Is_Set() bool {
 }
 
 func (config *ConfigService) Has_Apps()bool {
-	return config.URLS != nil
+	return len(config.URLS) > 0
 }
 
 func (config *ConfigService) Addr() string {
-
 	return config.addr
 }
 
@@ -98,7 +126,7 @@ func (config *ConfigService) LoadEnv() {
 
 	api_key,exists := os.LookupEnv("API_KEY")
 	if exists{
-		config.API_KEY = api_key
+		config.api_key = api_key
 	}
 
 	addr,exist:= os.LookupEnv("ADDR")
@@ -109,6 +137,11 @@ func (config *ConfigService) LoadEnv() {
 	}
 
 	config.PORT_START = parseInt("PORT_START",80)
-	config.URLS = loadServer("NOTIFYR_URLS",config.PORT_START)
+
+	config.port_increment = uint(parseInt("PORT_INCREMENT",1))
+
+	config.app_count = parseInt("APP_COUNT",-1)
+
+	config.URLS = loadServer("NOTIFYR_URLS",config.PORT_START,config.app_count,int64(config.port_increment))
 	config.set = true
 }
