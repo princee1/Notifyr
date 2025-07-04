@@ -18,6 +18,7 @@ const MAX_RETRY uint8 = 10
 const PING_FREQ time.Duration = time.Duration(180*SECOND)
 const RETRY_FREQ time.Duration = time.Duration(20*SECOND)
 const PERMISSION_ROUTE = "ping-pong/permission/_pong_/"
+const PONG_WS_ROUTE = "pong/"
 
 const WS_AUTH_KEY = "X-WS-Auth-Key"
 
@@ -33,7 +34,6 @@ type NotifyrApp struct {
 	InstanceId string
 	parent_pid string
 	address    string
-	port       uint
 	Roles      []string
 	Spec       AppSpec
 	Active     bool
@@ -112,7 +112,7 @@ func (client *PingPongClient) connectWS() error {
 			return fmt.Errorf("invalid URL for %s: %v", client.Name, err)
 		}
 		
-		url:= fmt.Sprintf("ws://%v:%v",u.Hostname(),u.Port())
+		url:= fmt.Sprintf("ws://%v:%v/%v",u.Hostname(),u.Port(),PONG_WS_ROUTE)
 		header := http.Header{}
 		header.Add(WS_AUTH_KEY,client.permission)
 		_conn, _, err := websocket.DefaultDialer.Dial(url,header)

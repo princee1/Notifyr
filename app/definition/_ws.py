@@ -104,7 +104,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
     @staticmethod
     def WSEndpoint(path:str,type_:str | bytes | dict | BaseModel |BaseProtocol |None |NoneType =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current'):
 
-        # if not isinstance(type_,get_args(WebsocketMessage)):
+        # if type_!= None and not isinstance(type_,(str, bytes,dict,BaseModel,BaseProtocol,NoneType)):
         #     raise WebsocketMessageTypeError
 
         def decorator(func:Callable):
@@ -127,11 +127,12 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 kwargs_star['operation_id'] = func.meta['operation_id']
                 kwargs_star['manager'] = manager
 
-                flag = APIFilterInject(BaseWebSocketRessource.on_connect)(*args,**kwargs_star)
-                
+                flag,reason = APIFilterInject(BaseWebSocketRessource.on_connect)(*args,**kwargs_star)
+                print(reason)
                 if not flag:
-                    websocket.close(status.WS_1002_PROTOCOL_ERROR,reason='Auth Token Not Present or not valid')
+                    await websocket.close(status.WS_1002_PROTOCOL_ERROR,reason=f'Auth Token Not Present or not valid: {reason}')
                     return
+                print('ok')
                 await manager.connect(websocket)
                 try:
                     while True:
@@ -250,9 +251,9 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         """
         return websocket
                 
-    def on_connect(self,websocket:WebSocket,operation_id:str):
+    def on_connect(self,websocket:WebSocket,operation_id:str)->tuple[bool,str]:
         if self.bypass_auth:
-            return True
+            return True,''
             
         auth_token = websocket.headers.get(HTTPHeaderConstant.WS_KEY)
         if auth_token == None:
@@ -260,18 +261,18 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         try:
             permission:WSPermission = self.jwtAuthService.decode_token(auth_token)
         except HTTPException as e:
-            return False
+            return False,'Token Invalid'
 
         if self.run_id != permission['run_id']:
-            return False
+            return False,'Invalid token issuer'
 
         if operation_id!= permission['operation_id']:
-            return False
+            return False,'Invalid token route'
 
         if permission['expired_at'] < time.time():
-            return False
+            return False,'Token expired'
         
-        return True
+        return True,''
      
     def on_disconnect(self,websocket:WebSocket):
         ...
