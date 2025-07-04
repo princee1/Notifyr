@@ -12,7 +12,7 @@ import (
 )
 
 
-const SECOND int = 1_000_000_000
+const SECOND int64 = 1_000_000_000
 
 const MAX_RETRY uint8 = 10
 const PING_FREQ time.Duration = time.Duration(180*SECOND)
@@ -98,13 +98,11 @@ func (client *PingPongClient) Connect()error {
 
 func (client *PingPongClient) connectWS() error {
 
+
+	ticker := time.NewTicker(RETRY_FREQ)
+	defer ticker.Stop()
 	var conn *websocket.Conn;
 	var retry int = 0;
-	var retryFreq time.Duration = time.Duration(20*SECOND)
-	var ptr_retryFreq *time.Duration = &retryFreq
-
-	ticker := time.NewTicker(*ptr_retryFreq)
-	defer ticker.Stop()
 
 	for {
 		<-ticker.C
@@ -121,9 +119,10 @@ func (client *PingPongClient) connectWS() error {
 		if err != nil {
 			retry++;
 			if retry == int(MAX_RETRY){
-				return fmt.Errorf("failed to connect %s: %v", client.Name, err)
+				return fmt.Errorf("failed to connect after %v retry... %s: %v",MAX_RETRY,client.Name, err)
 			}
-			retryFreq  = time.Duration(20*retry*SECOND)
+
+			log.Printf("Failed to connected to WS (%s): With attempt %v / %v: Reason %v",client.Name,retry,MAX_RETRY,err)
 			continue
 		}else{
 			conn = _conn
