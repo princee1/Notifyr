@@ -8,8 +8,11 @@ import (
 
 // TODO interface
 
+var ALGO_TYPE = []string{"random","round","weight"}
+
 type Algo interface {
 	Next() string;
+	GetIndex() uint64;
 }
 
 // ---------------------------------------        --------------------------------------------  //
@@ -54,6 +57,9 @@ func (weight *WeightAlgo) reset() {
 }
 
 func (weight *WeightAlgo) SetTotalWeight() {
+	if len(weight.Servers) != len(weight.Weight){
+		
+	}
 	for _, w := range weight.Weight {
 		weight.totalWeight += w
 	}
@@ -100,6 +106,8 @@ func (random *RandomAlgo) Next() string {
 	return random.Servers[i]
 }
 
-// ---------------------------------------        --------------------------------------------  //
+func (random *RandomAlgo) GetIndex() uint64{
+	return 0
+}
 
-var ALGO_TYPE = []string{"random","round","weight"}
+// ---------------------------------------        --------------------------------------------  //

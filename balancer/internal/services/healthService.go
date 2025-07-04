@@ -11,10 +11,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+
+const SECOND int = 1_000_000_000
+
 const MAX_RETRY uint8 = 10
-const PING_FREQ time.Duration = time.Duration(10)
-const RETRY_FREQ time.Duration = time.Duration(10)
-const PERMISSION_ROUTE = "ping-pong/permission/_pong_"
+const PING_FREQ time.Duration = time.Duration(180*SECOND)
+const RETRY_FREQ time.Duration = time.Duration(20*SECOND)
+const PERMISSION_ROUTE = "ping-pong/permission/_pong_/"
 
 const WS_AUTH_KEY = "X-WS-Auth-Key"
 
@@ -94,10 +97,14 @@ func (client *PingPongClient) Connect()error {
 }
 
 func (client *PingPongClient) connectWS() error {
-	ticker := time.NewTicker(RETRY_FREQ)
-	defer ticker.Stop()
+
 	var conn *websocket.Conn;
 	var retry int = 0;
+	var retryFreq time.Duration = time.Duration(20*SECOND)
+	var ptr_retryFreq *time.Duration = &retryFreq
+
+	ticker := time.NewTicker(*ptr_retryFreq)
+	defer ticker.Stop()
 
 	for {
 		<-ticker.C
@@ -106,15 +113,17 @@ func (client *PingPongClient) connectWS() error {
 		if err != nil {
 			return fmt.Errorf("invalid URL for %s: %v", client.Name, err)
 		}
-
+		
+		url:= fmt.Sprintf("ws://%v:%v",u.Hostname(),u.Port())
 		header := http.Header{}
 		header.Add(WS_AUTH_KEY,client.permission)
-		_conn, _, err := websocket.DefaultDialer.Dial(u.String(),header)
+		_conn, _, err := websocket.DefaultDialer.Dial(url,header)
 		if err != nil {
 			retry++;
 			if retry == int(MAX_RETRY){
 				return fmt.Errorf("failed to connect %s: %v", client.Name, err)
 			}
+			retryFreq  = time.Duration(20*retry*SECOND)
 			continue
 		}else{
 			conn = _conn
@@ -194,19 +203,23 @@ type HealthService struct {
 	SecurityService *SecurityService
 	ConfigService *ConfigService
 	active_pp uint
-	mu sync.Mutex
+	mu sync.RWMutex
 
 }
 
 func (health *HealthService) CreatePPClient(proxyService *ProxyAgentService) {
 
-	for _,value :=range health.ConfigService.URLS{
+	health.notifyrApps = map[string]NotifyrApp{}
+	health.ppClient = map[string]PingPongClient{}
 
-		ppClient := PingPongClient{Name: "Instance", URL: value, healthService: health, securityService: health.SecurityService}
-		health.ppClient[value] = ppClient
-		if ppClient.Connect() != nil{
+	for index, value := range health.ConfigService.URLS {
+		name := fmt.Sprintf("Notifyr Instance %v", index)
+		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService}
+		if err := ppClient.Connect(); err != nil {
+			log.Printf("Error connecting PingPongClient %s: %v at addr %v", name, err,ppClient.URL)
 			continue
 		}
+		health.ppClient[value] = ppClient
 	}
 }
 
@@ -222,8 +235,8 @@ func (health *HealthService) AggregateHealth() {
 }
 
 func (health *HealthService) ActiveConnection() uint{
-	health.mu.Lock()
-	defer health.mu.Unlock()
+	health.mu.RLock()
+	defer health.mu.RUnlock()
 	return health.active_pp
 }
 

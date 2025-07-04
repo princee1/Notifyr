@@ -8,7 +8,7 @@ import (
 	"net/url"
 )
 
-const TOKEN_NAME = "X-PING-PONG-TOKEN"
+const TOKEN_NAME = "X-Ping-Pong-Token"
 
 
 type SecurityService struct {

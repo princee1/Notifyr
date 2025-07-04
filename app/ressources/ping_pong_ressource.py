@@ -41,7 +41,7 @@ class PingPongRessource(BaseHTTPRessource):
         self.taskService = taskService
         self.celeryService = celeryService
 
-    @UseLimiter(limit_value="1/day")
+    #@UseLimiter(limit_value="1/day")
     @UsePermission(BalancerPermission)
     @UseHandler(FastAPIHandler)
     @UseHandler(WebSocketHandler)

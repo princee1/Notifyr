@@ -15,7 +15,7 @@ from app.utils.helper import APIFilterInject
 
 import wrapt
 from pydantic import BaseModel
-from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict,Literal
+from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict,Literal, get_args
 from app.utils.prettyprint import PrettyPrinter_
 from app.utils.helper import generateId
 
@@ -104,8 +104,8 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
     @staticmethod
     def WSEndpoint(path:str,type_:str | bytes | dict | BaseModel |BaseProtocol |None |NoneType =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current'):
 
-        if not isinstance(type_,WebsocketMessage):
-            raise WebsocketMessageTypeError
+        # if not isinstance(type_,get_args(WebsocketMessage)):
+        #     raise WebsocketMessageTypeError
 
         def decorator(func:Callable):
             if not hasattr(func,'meta'):
