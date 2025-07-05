@@ -15,7 +15,7 @@ import (
 const SECOND int64 = 1_000_000_000
 
 const MAX_RETRY uint8 = 10
-const PING_FREQ time.Duration = time.Duration(180*SECOND)
+const PING_FREQ time.Duration = time.Duration(10*SECOND)
 const RETRY_FREQ time.Duration = time.Duration(20*SECOND)
 const PERMISSION_ROUTE = "ping-pong/permission/_pong_/"
 const PONG_WS_ROUTE = "pong/"
@@ -185,7 +185,7 @@ func (client *PingPongClient) Ping() {
 	for {
 		select {
 		case <-ticker.C:
-			err := client.Connector.WriteMessage(websocket.PingMessage, nil)
+			err := client.Connector.WriteMessage(websocket.TextMessage, []byte("PING"))
 			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
 				client.Disconnect()

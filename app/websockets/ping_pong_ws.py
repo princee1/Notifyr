@@ -6,7 +6,7 @@ from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.health_service import HealthService
 
-PONG ='Pong'
+PONG =b'PONG'
 
 @WebSocketRessource
 class PingPongWebSocket(BaseWebSocketRessource):
@@ -19,10 +19,9 @@ class PingPongWebSocket(BaseWebSocketRessource):
         self.configService = configService
         
     @BaseWebSocketRessource.WSEndpoint('/pong/',str,'pong-connection',)
-    def pong(websocket:WebSocket,message:str):
-        print(message)
+    def pong(self,websocket:WebSocket,message:str):
         return PONG
 
     #@BaseWebSocketRessource.WSEndpoint('/state/',str,'app-state',)
-    def state(websocket:WebSocket,message:str):
+    def state(self,websocket:WebSocket,message:str):
         return ''

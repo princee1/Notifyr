@@ -45,8 +45,8 @@ class WSConnectionManager:
         except :
             ...
 
-    def disconnect(self, websocket: WebSocket,code=1000,reason:str|None = None):
-        websocket.close(code,reason)
+    async def disconnect(self, websocket: WebSocket,code=1000,reason:str|None = None):
+        await websocket.close(code,reason)
         self.active_connections.remove(websocket)
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
@@ -115,7 +115,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
             func.meta['operation_id'] = BaseWebSocketRessource.build_operation_id(path,name)
 
             @functools.wraps(func)
-            async def wrapper(*args,**kwargs):
+            async def wrapper(*args,**kwargs):         
                 path_conn_manager_ = path if path_conn_manager is None else path_conn_manager
                 self: BaseWebSocketRessource = args[0]
                 manager = self.connection_manager[path_conn_manager_]
@@ -191,7 +191,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 
                 except WebSocketDisconnect:
                     APIFilterInject(BaseWebSocketRessource.on_disconnect)(*args,**kwargs_star)
-                    manager.disconnect(websocket)
+                    await manager.disconnect(websocket)
 
             return wrapper
 

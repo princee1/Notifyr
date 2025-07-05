@@ -21,6 +21,10 @@ func (balancer *NotifyrBalancer) LoadMiddleWare() {
 
 }
 
+func (balancer *NotifyrBalancer) LoadWebSocket(){
+	
+}
+
 func (balancer *NotifyrBalancer) Start() {
 
 	return
