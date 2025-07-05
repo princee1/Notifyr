@@ -15,7 +15,7 @@ import (
 const SECOND int64 = 1_000_000_000
 
 const MAX_RETRY uint8 = 10
-const PING_FREQ time.Duration = time.Duration(10*SECOND)
+const PING_FREQ time.Duration = time.Duration(60*SECOND)
 const RETRY_FREQ time.Duration = time.Duration(20*SECOND)
 const PERMISSION_ROUTE = "ping-pong/permission/_pong_/"
 const PONG_WS_ROUTE = "pong/"
@@ -160,8 +160,12 @@ func (client *PingPongClient) ReadPong() {
 			// client.Connector.ReadJSON()
 			_, mess, err := client.Connector.ReadMessage()
 			if err != nil {
-				log.Printf("[%s] Read error: %v", client.Name, err)
-				// TODO disconnect?
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					log.Printf("[%s] Connection closed: %v", client.Name, err)
+				} else {
+					log.Printf("[%s] Read error: %v", client.Name, err)
+				}
+				// client.Disconnect()
 				return
 			}
 			log.Printf("[%s] Received: %s", client.Name, mess)
@@ -188,7 +192,7 @@ func (client *PingPongClient) Ping() {
 			err := client.Connector.WriteMessage(websocket.TextMessage, []byte("PING"))
 			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
-				client.Disconnect()
+				// client.Disconnect()
 				return
 			}
 		}
