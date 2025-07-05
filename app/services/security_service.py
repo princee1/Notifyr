@@ -161,7 +161,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
             token = self._decode_value(
                 token, self.configService.ON_TOP_SECRET_KEY)
-            decoded = jwt.decode(token, self.configService.JWT_SECRET_KEY,
+            decoded = jwt.decode(token, secret_key,
                                  algorithms=self.configService.JWT_ALGORITHM)
             return decoded
 

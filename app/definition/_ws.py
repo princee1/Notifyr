@@ -40,7 +40,6 @@ class WSConnectionManager:
 
     async def connect(self, websocket: WebSocket):
         try:
-            print("state: ",websocket._state._state)
             await websocket.accept()
             self.active_connections.append(websocket)
         except :
@@ -128,11 +127,11 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 kwargs_star['manager'] = manager
 
                 flag,reason = APIFilterInject(BaseWebSocketRessource.on_connect)(*args,**kwargs_star)
-                print(reason)
+
                 if not flag:
                     await websocket.close(status.WS_1002_PROTOCOL_ERROR,reason=f'Auth Token Not Present or not valid: {reason}')
                     return
-                print('ok')
+                
                 await manager.connect(websocket)
                 try:
                     while True:
@@ -259,7 +258,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         if auth_token == None:
             return False
         try:
-            permission:WSPermission = self.jwtAuthService.decode_token(auth_token)
+            permission:WSPermission = self.jwtAuthService.decode_token(auth_token,'WS_JWT_SECRET_KEY')
         except HTTPException as e:
             return False,'Token Invalid'
 
