@@ -214,16 +214,21 @@ func (health *HealthService) CreatePPClient(proxyService *ProxyAgentService) {
 
 	health.notifyrApps = map[string]NotifyrApp{}
 	health.ppClient = map[string]PingPongClient{}
-
+	var wg sync.WaitGroup;
 	for index, value := range health.ConfigService.URLS {
 		name := fmt.Sprintf("Notifyr Instance %v", index)
 		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService}
-		if err := ppClient.Connect(); err != nil {
-			log.Printf("Error connecting PingPongClient %s: %v at addr %v", name, err,ppClient.URL)
-			continue
-		}
-		health.ppClient[value] = ppClient
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := ppClient.Connect(); err != nil {
+				log.Printf("Error connecting PingPongClient %s: %v at addr %v", name, err,ppClient.URL)
+			}else{
+				health.ppClient[value] = ppClient
+			}
+		}()
 	}
+	defer wg.Wait()
 }
 
 func (health *HealthService) StartConnection() {

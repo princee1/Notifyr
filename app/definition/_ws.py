@@ -190,9 +190,15 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                             
 
                 except WebSocketDisconnect:
+                    ...
+                except RuntimeError:
+                    ...
+                except Exception:
+                    ...
+                finally:
                     APIFilterInject(BaseWebSocketRessource.on_disconnect)(*args,**kwargs_star)
                     await manager.disconnect(websocket)
-
+                    
             return wrapper
 
         return decorator     
