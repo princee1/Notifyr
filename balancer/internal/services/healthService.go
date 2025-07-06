@@ -256,7 +256,8 @@ func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentServ
 	for index, value := range health.ConfigService.URLS {
 		name := fmt.Sprintf("Notifyr Instance %v", index)
 		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService,state: TO_CONNECT}
-		health.ppClient[value] = &ppClient
+		hashed_value := HashURL(value)
+		health.ppClient[hashed_value] = &ppClient
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

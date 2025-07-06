@@ -47,14 +47,6 @@ func (proxy *ProxyAgentService) CreateAlgo() {
 	proxy.currentAlgo = "round"
 }
 
-func (proxy *ProxyAgentService) RegisterApps() {
-
-}
-
-func (proxy *ProxyAgentService) ToggleActiveApps() {
-
-}
-
 func (proxy *ProxyAgentService) SplitRequest() {
 
 }
@@ -63,6 +55,8 @@ func (proxy *ProxyAgentService) ProxyRequest() {
 
 }
 
-func (proxy *ProxyAgentService) ChooseServer() {
-
+func (proxy *ProxyAgentService) ChooseServer()string {
+	var algorithm algo.Algo = proxy.GetCurrentAlgo()
+	server := algorithm.Next()
+	return HashURL(server)
 }
