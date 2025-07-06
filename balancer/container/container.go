@@ -1,6 +1,15 @@
 package container
 
-import service "balancer/internal/services"
+import (
+	service "balancer/internal/services"
+	"time"
+
+	"github.com/common-nighthawk/go-figure"
+	"github.com/gookit/color"
+	"github.com/inancgumus/screen"
+)
+
+const SECOND int64 = 1_000_000_000
 
 
 type Container struct {
@@ -20,6 +29,7 @@ func (container *Container) Init(){
 	container.configService.LoadEnv()
 	container.proxyAgentService.CreateAlgo()
 	container.healthService.CreatePPClient(container.proxyAgentService)
+	container.Welcome(5)
 	container.healthService.StartConnection()
 }
 
@@ -37,4 +47,14 @@ func (container *Container) GetSecurityService() *service.SecurityService {
 
 func (container *Container) GetProxyAgentService() *service.ProxyAgentService {
 	return container.proxyAgentService
+}
+
+
+
+func (container *Container) Welcome(sleep int) {
+	time.Sleep(time.Duration(sleep*int(SECOND)))
+	screen.Clear()
+	screen.MoveTopLeft()
+	myFigure := figure.NewFigure("Notifyr Balancer", "slant", true)
+	color.Green.Println(myFigure.String())
 }

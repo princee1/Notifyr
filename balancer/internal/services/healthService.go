@@ -17,9 +17,9 @@ const SECOND int64 = 1_000_000_000
 const MAX_RETRY uint8 = 10
 const PING_FREQ time.Duration = time.Duration(60*SECOND)
 const RETRY_FREQ time.Duration = time.Duration(20*SECOND)
+
 const PERMISSION_ROUTE = "ping-pong/permission/_pong_/"
 const PONG_WS_ROUTE = "pong/"
-
 const WS_AUTH_KEY = "X-WS-Auth-Key"
 
 type AppSpec struct {
@@ -33,20 +33,21 @@ type NotifyrApp struct {
 	Id         string
 	InstanceId string
 	parent_pid string
-	address    string
 	Roles      []string
-	Spec       AppSpec
-	Active     bool
+	Capabilities []string
+	Spec       AppSpec	
 }
 
 type PingPongClient struct {
 	Name            string
-	Connector       *websocket.Conn
 	URL             string
-	connected       bool
+	Connected       bool
+	IsStarted bool
 	healthService 	*HealthService
 	securityService *SecurityService
 	permission		string
+	app *NotifyrApp
+	connector       *websocket.Conn
 }
 
 
@@ -61,12 +62,10 @@ func (client *PingPongClient) RequestPermission() error {
 	if err != nil {
 		return fmt.Errorf("failed to request permission for %s: %v", client.Name, err)
 	}
-	if err != nil {
-		return fmt.Errorf("failed to decode permission response for %s: %v", client.Name, err)
-	}
-	
+
 	client.permission = permission
-	client.healthService.notifyrApps[client.Name] = app
+	client.app = &app
+	client.IsStarted = true
 	return nil
 }
 
@@ -74,12 +73,12 @@ func (client *PingPongClient) Disconnect() {
 
 	defer client.RemoveActiveConnection()
 
-	err := client.Connector.Close()
+	err := client.connector.Close()
 	if err != nil {
 		log.Printf("failed to close connection for %s: %v", client.Name, err)
 		return
 	}
-	client.connected = false
+	client.Connected = false
 	log.Printf("[%s] Disconnected from %s", client.Name, client.URL)
 }
 
@@ -130,8 +129,8 @@ func (client *PingPongClient) connectWS() error {
 		}
 	}
 
-	client.Connector = conn
-	client.connected = true
+	client.connector = conn
+	client.Connected = true
 	client.InitCallback()
 	log.Printf("[%s] Connected to %s", client.Name, client.URL)
 	return nil
@@ -139,16 +138,16 @@ func (client *PingPongClient) connectWS() error {
 
 func (client *PingPongClient) InitCallback(){
 
-	client.Connector.SetPongHandler(func(appData string) error {
-		_ = client.Connector.SetReadDeadline(time.Now().Add(60 * time.Second))
+	client.connector.SetPongHandler(func(appData string) error {
+		_ = client.connector.SetReadDeadline(time.Now().Add(60 * time.Second))
 		return nil
 	})
 
-	client.Connector.SetCloseHandler(func(code int, text string) error {
+	client.connector.SetCloseHandler(func(code int, text string) error {
 
 		// TODO remove the connection from the map of active connection
 
-		client.connected = false
+		client.Connected = false
 		return nil
 	})
 }
@@ -158,7 +157,7 @@ func (client *PingPongClient) ReadPong() {
 	go func() {
 		for {
 			// client.Connector.ReadJSON()
-			_, mess, err := client.Connector.ReadMessage()
+			_, mess, err := client.connector.ReadMessage()
 			if err != nil {
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 					log.Printf("[%s] Connection closed: %v", client.Name, err)
@@ -189,7 +188,7 @@ func (client *PingPongClient) Ping() {
 	for {
 		select {
 		case <-ticker.C:
-			err := client.Connector.WriteMessage(websocket.TextMessage, []byte("PING"))
+			err := client.connector.WriteMessage(websocket.TextMessage, []byte("PING"))
 			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
 				// client.Disconnect()
@@ -201,18 +200,16 @@ func (client *PingPongClient) Ping() {
 }
 
 type HealthService struct {
-	notifyrApps map[string]NotifyrApp
 	ppClient     map[string]PingPongClient
 	SecurityService *SecurityService
 	ConfigService *ConfigService
-	active_pp uint
+	activePpConnection uint
 	mu sync.RWMutex
 
 }
 
 func (health *HealthService) CreatePPClient(proxyService *ProxyAgentService) {
 
-	health.notifyrApps = map[string]NotifyrApp{}
 	health.ppClient = map[string]PingPongClient{}
 	var wg sync.WaitGroup;
 	for index, value := range health.ConfigService.URLS {
@@ -221,20 +218,24 @@ func (health *HealthService) CreatePPClient(proxyService *ProxyAgentService) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			health.ppClient[value] = ppClient
 			if err := ppClient.Connect(); err != nil {
 				log.Printf("Error connecting PingPongClient %s: %v at addr %v", name, err,ppClient.URL)
 			}else{
-				health.ppClient[value] = ppClient
+				health.mu.Lock()
+				health.activePpConnection++;
+				health.mu.Unlock()
 			}
 		}()
 	}
-	defer wg.Wait()
+	wg.Wait()
+	fmt.Printf("All Ping Pong Request Permission done: %v/%v Active Connection\n",health.activePpConnection,len(health.ConfigService.URLS))
 }
 
 func (health *HealthService) StartConnection() {
 	for _,client := range health.ppClient{
-		client.Run()
-		health.active_pp++;
+		//client.Run()	
+		_,_=fmt.Printf("Client [%v] mock started...\n",client.Name,)
 	}
 }
 
@@ -245,18 +246,17 @@ func (health *HealthService) AggregateHealth() {
 func (health *HealthService) ActiveConnection() uint{
 	health.mu.RLock()
 	defer health.mu.RUnlock()
-	return health.active_pp
+	return health.activePpConnection
 }
 
-func (health *HealthService) RemoveActiveConnection(Name string) error{
+func (health *HealthService) RemoveActiveConnection(Name string) error {
 	health.mu.Lock()
 	defer health.mu.Unlock()
-	na, ok :=health.notifyrApps[Name]
+	_, ok := health.ppClient[Name]
 	if !ok {
-
-	}else{
-		na.Active = false
-		health.active_pp--;
+		return fmt.Errorf("client with name %s not found", Name)
+	} else {
+		health.activePpConnection--
 	}
 	return nil
 }
