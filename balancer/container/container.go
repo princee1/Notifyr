@@ -2,6 +2,7 @@ package container
 
 import (
 	service "balancer/internal/services"
+	"sync"
 	"time"
 
 	"github.com/common-nighthawk/go-figure"
@@ -17,6 +18,7 @@ type Container struct {
 	configService *service.ConfigService
 	securityService *service.SecurityService
 	proxyAgentService *service.ProxyAgentService
+	wg *sync.WaitGroup
 }
 
 
@@ -30,7 +32,12 @@ func (container *Container) Init(){
 	container.proxyAgentService.CreateAlgo()
 	container.healthService.CreatePPClient(container.proxyAgentService)
 	container.Welcome(5)
-	container.healthService.StartConnection()
+	container.wg = container.healthService.StartConnection()
+	container.wg.Wait()
+}
+
+func (container *Container) WaitWS() {
+	container.wg.Wait()
 }
 
 func (container *Container) GetHealthService() *service.HealthService {
@@ -48,8 +55,6 @@ func (container *Container) GetSecurityService() *service.SecurityService {
 func (container *Container) GetProxyAgentService() *service.ProxyAgentService {
 	return container.proxyAgentService
 }
-
-
 
 func (container *Container) Welcome(sleep int) {
 	time.Sleep(time.Duration(sleep*int(SECOND)))
