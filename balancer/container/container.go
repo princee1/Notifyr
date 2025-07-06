@@ -29,7 +29,6 @@ func (container *Container) Init() {
 	container.configService.LoadEnv()
 	container.proxyAgentService.CreateAlgo()
 	container.wg = container.healthService.InitPingPongConnection(container.proxyAgentService)
-	container.Welcome(5)
 }
 
 func (container *Container) WaitWS() {

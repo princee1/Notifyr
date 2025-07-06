@@ -194,6 +194,9 @@ func (client *PingPongClient) Ping(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ticker.C:
+			if !client.Connected{
+				return
+			}
 			err := client.connector.WriteMessage(websocket.TextMessage, []byte("PING"))
 			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
@@ -252,7 +255,7 @@ func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentServ
 	var wg sync.WaitGroup
 	for index, value := range health.ConfigService.URLS {
 		name := fmt.Sprintf("Notifyr Instance %v", index)
-		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService}
+		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService,state: TO_CONNECT}
 		health.ppClient[value] = &ppClient
 		wg.Add(1)
 		go func() {
