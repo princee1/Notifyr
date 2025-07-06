@@ -12,28 +12,24 @@ import (
 
 const SECOND int64 = 1_000_000_000
 
-
 type Container struct {
-	healthService *service.HealthService
-	configService *service.ConfigService
-	securityService *service.SecurityService
+	healthService     *service.HealthService
+	configService     *service.ConfigService
+	securityService   *service.SecurityService
 	proxyAgentService *service.ProxyAgentService
-	wg *sync.WaitGroup
+	wg                *sync.WaitGroup
 }
 
-
-func (container *Container) Init(){
+func (container *Container) Init() {
 	container.configService = &service.ConfigService{}
 	container.securityService = &service.SecurityService{ConfigService: container.configService}
-	container.healthService= &service.HealthService{ConfigService:container.configService, SecurityService: container.securityService }
-	container.proxyAgentService = &service.ProxyAgentService{HealthService: container.healthService,ConfigService: container.configService}
+	container.healthService = &service.HealthService{ConfigService: container.configService, SecurityService: container.securityService}
+	container.proxyAgentService = &service.ProxyAgentService{HealthService: container.healthService, ConfigService: container.configService}
 
 	container.configService.LoadEnv()
 	container.proxyAgentService.CreateAlgo()
-	container.healthService.CreatePPClient(container.proxyAgentService)
+	container.wg = container.healthService.InitPingPongConnection(container.proxyAgentService)
 	container.Welcome(5)
-	container.wg = container.healthService.StartConnection()
-	container.wg.Wait()
 }
 
 func (container *Container) WaitWS() {
@@ -57,7 +53,7 @@ func (container *Container) GetProxyAgentService() *service.ProxyAgentService {
 }
 
 func (container *Container) Welcome(sleep int) {
-	time.Sleep(time.Duration(sleep*int(SECOND)))
+	time.Sleep(time.Duration(sleep * int(SECOND)))
 	screen.Clear()
 	screen.MoveTopLeft()
 	myFigure := figure.NewFigure("Notifyr Balancer", "slant", true)
