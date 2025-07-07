@@ -74,17 +74,16 @@ func (client *PingPongClient) RequestPermission() error {
 	return nil
 }
 
-func (client *PingPongClient) Disconnect() {
+func (client *PingPongClient) Disconnect(code int,reason string) {
 
 	client.state = TO_CONNECT
 	defer client.RemoveActiveConnection()
-
+	client.Connected = false
 	err := client.connector.Close()
 	if err != nil {
 		log.Printf("failed to close connection for %s: %v", client.Name, err)
 		return
 	}
-	client.Connected = false
 	log.Printf("[%s] Disconnected from %s", client.Name, client.URL)
 
 }
@@ -151,10 +150,8 @@ func (client *PingPongClient) initCallback() {
 	})
 
 	client.connector.SetCloseHandler(func(code int, text string) error {
-
 		// TODO remove the connection from the map of active connection
-
-		client.Connected = false
+		client.Disconnect(code,text)
 		return nil
 	})
 }
@@ -172,7 +169,6 @@ func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 			} else {
 				log.Printf("[%s] Read error: %v", client.Name, err)
 			}
-			client.Disconnect()
 			return
 		}
 		log.Printf("[%s] Received: %s", client.Name, mess)
