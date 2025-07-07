@@ -33,13 +33,14 @@ type ProxyMiddleware struct {
 
 func (proxy *ProxyMiddleware) Middleware(c *fiber.Ctx) error{
 
-	return nil
+	return c.Next()
 }
 
 type AccessMiddleware struct {
 	SecurityService *service.SecurityService
 }
 
-func (access *AccessMiddleware) Middleware(c *fiber.Ctx) {
+func (access *AccessMiddleware) Middleware(c *fiber.Ctx) error{
 
+	return c.Next()
 }
