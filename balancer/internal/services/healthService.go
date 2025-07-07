@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 
@@ -74,18 +75,23 @@ func (client *PingPongClient) RequestPermission() error {
 	return nil
 }
 
-func (client *PingPongClient) Disconnect(code int,reason string) {
+func (client *PingPongClient) disconnectCallback(code int, reason string) {
 
 	client.state = TO_CONNECT
 	defer client.RemoveActiveConnection()
 	client.Connected = false
+}
+
+func (client *PingPongClient) Disconnect() {
+	if !client.Connected {
+		return
+	}
 	err := client.connector.Close()
 	if err != nil {
 		log.Printf("failed to close connection for %s: %v", client.Name, err)
 		return
 	}
 	log.Printf("[%s] Disconnected from %s", client.Name, client.URL)
-
 }
 
 func (client *PingPongClient) RemoveActiveConnection() {
@@ -150,8 +156,7 @@ func (client *PingPongClient) initCallback() {
 	})
 
 	client.connector.SetCloseHandler(func(code int, text string) error {
-		// TODO remove the connection from the map of active connection
-		client.Disconnect(code,text)
+		client.disconnectCallback(code, text)
 		return nil
 	})
 }
@@ -159,7 +164,6 @@ func (client *PingPongClient) initCallback() {
 func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 	// Implement the logic for reading pong messages here
 	defer wg.Done()
-	// go func() {
 	for {
 		// client.Connector.ReadJSON()
 		_, mess, err := client.connector.ReadMessage()
@@ -173,16 +177,15 @@ func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 		}
 		log.Printf("[%s] Received: %s", client.Name, mess)
 	}
-	// }()
 }
 
-func (client *PingPongClient) Run(wg *sync.WaitGroup) {
+func (client *PingPongClient) Run(wg *sync.WaitGroup, quit *chan os.Signal) {
 	wg.Add(2)
 	go client.ReadPong(wg)
-	go client.Ping(wg)
+	go client.Ping(wg, quit)
 }
 
-func (client *PingPongClient) Ping(wg *sync.WaitGroup) {
+func (client *PingPongClient) Ping(wg *sync.WaitGroup, quit *chan os.Signal) {
 	//go func(){
 	ticker := time.NewTicker(PING_FREQ)
 	defer ticker.Stop()
@@ -190,7 +193,7 @@ func (client *PingPongClient) Ping(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ticker.C:
-			if !client.Connected{
+			if !client.Connected {
 				return
 			}
 			err := client.connector.WriteMessage(websocket.TextMessage, []byte("PING"))
@@ -199,18 +202,20 @@ func (client *PingPongClient) Ping(wg *sync.WaitGroup) {
 				// client.Disconnect()
 				return
 			}
+		case <-*quit:
+			client.Disconnect()
+			return
 		}
 	}
 	//}()
-
 }
 
-func (client *PingPongClient) Wait(wg *sync.WaitGroup){
+func (client *PingPongClient) Wait(wg *sync.WaitGroup) {
 	wg.Wait()
 	// TODO change the code
 }
 
-func (client *PingPongClient) StateMachine() {
+func (client *PingPongClient) StateMachine(quit *chan os.Signal) {
 	for {
 		var wg sync.WaitGroup
 
@@ -219,22 +224,28 @@ func (client *PingPongClient) StateMachine() {
 		case TO_CONNECT:
 			if err := client.Connect(); err != nil {
 				log.Printf("Error connecting PingPongClient %s: %v at addr %v", client.Name, err, client.URL)
+				client.state = TO_QUIT
 			} else {
 				client.healthService.mu.Lock()
 				client.healthService.activePpConnection++
 				client.healthService.mu.Unlock()
+				client.state = TO_RUN
 			}
-			client.state = TO_RUN
 
 		case TO_RUN:
-			client.Run(&wg)
+			client.Run(&wg, quit)
 			client.Wait(&wg)
 
 		case TO_QUIT:
 			return
 		}
-
 	}
+}
+
+type WaitForConnection struct {
+	wait      chan struct{}
+	IsStarted bool
+	mu        sync.RWMutex
 }
 
 type HealthService struct {
@@ -243,32 +254,38 @@ type HealthService struct {
 	ConfigService      *ConfigService
 	activePpConnection uint
 	mu                 sync.RWMutex
+	wFConn             *WaitForConnection
 }
 
-func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentService) *sync.WaitGroup{
+func (health *HealthService) WFInitChan() {
+	wfc := WaitForConnection{wait: make(chan struct{})}
+	health.wFConn = &wfc
+}
+
+func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentService, quit *chan os.Signal) *sync.WaitGroup {
 
 	health.ppClient = map[string]*PingPongClient{}
 	var wg sync.WaitGroup
 	for index, value := range health.ConfigService.URLS {
 		name := fmt.Sprintf("Notifyr Instance %v", index)
-		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService,state: TO_CONNECT}
+		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService, state: TO_CONNECT}
 		hashed_value := HashURL(value)
 		health.ppClient[hashed_value] = &ppClient
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ppClient.StateMachine()
+			ppClient.StateMachine(quit)
 		}()
 	}
 	return &wg
 }
 
 func (health *HealthService) ActiveServer() []string {
-	var servers  = []string{}
+	var servers = []string{}
 	health.mu.RLock()
 	defer health.mu.RUnlock()
 
-	for _,client := range health.ppClient{
+	for _, client := range health.ppClient {
 		if client.Connected && client.IsStarted {
 			servers = append(servers, client.URL)
 		}
@@ -296,5 +313,21 @@ func (health *HealthService) RemoveActiveConnection(Name string) error {
 	} else {
 		health.activePpConnection--
 	}
+	return nil
+}
+
+func (health *HealthService) WFNotifyrConn() {
+	<-health.wFConn.wait
+}
+
+func (health *HealthService) Disconnect() error {
+
+	health.mu.Lock()
+	defer health.mu.Unlock()
+
+	for _, client := range health.ppClient {
+		client.Disconnect()
+	}
+
 	return nil
 }
