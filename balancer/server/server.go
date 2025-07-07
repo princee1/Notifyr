@@ -39,9 +39,9 @@ func (balancer *NotifyrBalancer) Start() {
 		log.Print(errMess)
 		panic(errMess)
 	}
-
 	balancer.Container.GetHealthService().WFNotifyrConn()
-
+	balancer.Container.Welcome(10)
+	
 	if err := balancer.Fiber.Listen(balancer.Container.GetConfigService().Addr()); err != nil {
 		log.Printf("Failed to start server: %v", err)
 		panic(err)

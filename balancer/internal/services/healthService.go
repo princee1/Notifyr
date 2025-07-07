@@ -75,13 +75,6 @@ func (client *PingPongClient) RequestPermission() error {
 	return nil
 }
 
-func (client *PingPongClient) disconnectCallback(code int, reason string) {
-
-	client.state = TO_CONNECT
-	defer client.RemoveActiveConnection()
-	client.Connected = false
-}
-
 func (client *PingPongClient) Disconnect() {
 	if !client.Connected {
 		return
@@ -89,6 +82,7 @@ func (client *PingPongClient) Disconnect() {
 	err := client.connector.Close()
 	if err != nil {
 		log.Printf("failed to close connection for %s: %v", client.Name, err)
+
 		return
 	}
 	log.Printf("[%s] Disconnected from %s", client.Name, client.URL)
@@ -145,6 +139,7 @@ func (client *PingPongClient) connectWS() error {
 	client.Connected = true
 	client.initCallback()
 	log.Printf("[%s] Connected to %s", client.Name, client.URL)
+	client.healthService.UnBlock()
 	return nil
 }
 
@@ -155,8 +150,11 @@ func (client *PingPongClient) initCallback() {
 		return nil
 	})
 
-	client.connector.SetCloseHandler(func(code int, text string) error {
-		client.disconnectCallback(code, text)
+	client.connector.SetCloseHandler(func(code int, reason string) error {
+		fmt.Printf("Code: %v Reason: %v\n",code,reason)
+		client.state = TO_CONNECT
+		defer client.RemoveActiveConnection()
+		client.Connected = false		
 		return nil
 	})
 }
@@ -199,11 +197,10 @@ func (client *PingPongClient) Ping(wg *sync.WaitGroup, quit *chan os.Signal) {
 			err := client.connector.WriteMessage(websocket.TextMessage, []byte("PING"))
 			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
-				// client.Disconnect()
 				return
 			}
 		case <-*quit:
-			client.Disconnect()
+			ticker.Stop()
 			return
 		}
 	}
@@ -260,6 +257,23 @@ type HealthService struct {
 func (health *HealthService) WFInitChan() {
 	wfc := WaitForConnection{wait: make(chan struct{})}
 	health.wFConn = &wfc
+}
+
+func (health *HealthService) UnBlock(){
+	health.wFConn.mu.RLock()
+	if health.wFConn.IsStarted {
+		health.wFConn.mu.RUnlock()
+		return 
+	}
+	health.wFConn.mu.RUnlock()
+
+
+	health.wFConn.mu.Lock()
+	if !health.wFConn.IsStarted{
+		health.wFConn.IsStarted =true
+		health.wFConn.wait <- struct{}{}
+	}
+	health.wFConn.mu.Unlock()
 }
 
 func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentService, quit *chan os.Signal) *sync.WaitGroup {

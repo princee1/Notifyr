@@ -18,7 +18,7 @@ func main(){
 	
 	balancer.LoadMiddleWare()
 	balancer.LoadRoute()
-	balancer.Start()
+	go balancer.Start()
 
 	balancer.Shutdown()
 }

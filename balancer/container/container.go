@@ -27,7 +27,7 @@ type Container struct {
 func (container *Container) Init() {
 
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM,syscall.SIGINT)
 
 	container.Quit = &quit
 
