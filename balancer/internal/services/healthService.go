@@ -267,6 +267,20 @@ func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentServ
 	return &wg
 }
 
+func (health *HealthService) ActiveServer() []string {
+	var servers  = []string{}
+	health.mu.RLock()
+	defer health.mu.RUnlock()
+
+	for _,client := range health.ppClient{
+		if client.Connected && client.IsStarted {
+			servers = append(servers, client.URL)
+		}
+	}
+
+	return servers
+}
+
 func (health *HealthService) AggregateHealth() {
 
 }

@@ -1,25 +1,45 @@
 package middleware
 
-import service "balancer/internal/services"
+import (
+	service "balancer/internal/services"
+	"fmt"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+
+const PROCESS_TIME_HEADER_NAME = "X-Balancer-Process-Time"
 
 
 type BaseMiddleware interface {
-	Middleware() 
+	Middleware(c *fiber.Ctx)  error
+}
+type MetaDataMiddleware struct {
+	SecurityService *service.SecurityService
 }
 
+func (metadata *MetaDataMiddleware) Middleware(c *fiber.Ctx) error{
+	start:= time.Now()
+	err := c.Next()
+	duration := time.Since(start)
+	c.Set(PROCESS_TIME_HEADER_NAME,fmt.Sprintf("%v",duration))
+	return err
+}
 
 type ProxyMiddleware struct {
-	proxyService *service.ProxyAgentService
+	ProxyService *service.ProxyAgentService
 }
 
-func (proxy *ProxyMiddleware) Middleware() {
+func (proxy *ProxyMiddleware) Middleware(c *fiber.Ctx) error{
 
+	return nil
 }
 
 type AccessMiddleware struct {
-	securityService *service.SecurityService
+	SecurityService *service.SecurityService
 }
 
-func (proxy *AccessMiddleware) Middleware() {
+func (access *AccessMiddleware) Middleware(c *fiber.Ctx) {
 
 }
