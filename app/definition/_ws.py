@@ -56,7 +56,10 @@ class WSConnectionManager:
         for connection in self.active_connections:
             await connection.send_text(message)
     
-
+    async def disconnectAll(self):
+        for ac in self.active_connections:
+            await ac.close(status.WS_1000_NORMAL_CLOSURE,"Server Gracefully Terminated")
+    
 
 #########################################                ##############################################
 
@@ -282,8 +285,9 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
     def on_disconnect(self,websocket:WebSocket):
         ...
     
-    def on_shutdown(self):
-        ...
+    async def on_shutdown(self):
+        for _,m in self.connection_manager.items():
+            await m.disconnectAll()
     
     def on_startup(self):
         ...

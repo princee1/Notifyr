@@ -322,12 +322,15 @@ class BaseHTTPRessource(EventInterface,metaclass=HTTPRessourceMetaClass):
         for ws in self.websockets.values():
             ws.on_startup()
         
-    def on_shutdown(self):
+    async def on_shutdown(self):
         """
         [Important] Ensure to call super when overriding this function 
         """
         for ws in self.websockets.values():
-            ws.on_shutdown()
+            if asyncio.iscoroutinefunction(ws.on_shutdown):
+                await ws.on_shutdown()
+            else:
+                ws.on_shutdown()
 
     def _add_routes(self):
         if self.__class__.__name__ not in ROUTES:

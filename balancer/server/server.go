@@ -42,7 +42,7 @@ func (balancer *NotifyrBalancer) Start() {
 		panic(errMess)
 	}
 	balancer.Container.GetHealthService().WFNotifyrConn()
-	balancer.Container.Welcome(10)
+	balancer.Container.Welcome(5)
 	
 	if err := balancer.Fiber.Listen(balancer.Container.GetConfigService().Addr()); err != nil {
 		log.Printf("Failed to start server: %v", err)
@@ -59,7 +59,6 @@ func (balancer *NotifyrBalancer) Shutdown() {
 	if err := balancer.Fiber.Shutdown(); err != nil {
 		log.Fatal("Server Shutdown Failed:", err)
 	}
-
 	balancer.Container.GetHealthService().Disconnect()
 	balancer.Container.WaitWS()
 	log.Println("Server gracefully stopped.")
