@@ -22,9 +22,11 @@ func (balancer *NotifyrBalancer) LoadMiddleWare() {
 	access := middleware.AccessMiddleware{SecurityService: balancer.Container.GetSecurityService()}
 	metadata := middleware.MetaDataMiddleware{SecurityService: balancer.Container.GetSecurityService()}
 	proxy := middleware.ProxyMiddleware{ProxyService: balancer.Container.GetProxyAgentService()}
+	active := middleware.ActiveMiddleware{HealthService: balancer.Container.GetHealthService()}
 
 	balancer.Fiber.Use(metadata.Middleware)
 	balancer.Fiber.Use(access.Middleware)
+	balancer.Fiber.Use(active.Middleware)
 	balancer.Fiber.Use(proxy.Middleware)
 }
 
