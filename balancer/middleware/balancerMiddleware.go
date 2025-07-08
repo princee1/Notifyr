@@ -54,6 +54,5 @@ type ProxyMiddleware struct {
 }
 
 func (proxy *ProxyMiddleware) Middleware(c *fiber.Ctx) error{
-
-	return c.Next()
+	return proxy.ProxyService.ProxyRequest(c)
 }

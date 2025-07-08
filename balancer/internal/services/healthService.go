@@ -196,7 +196,7 @@ func (client *PingPongClient) initCallback() {
 	})
 }
 
-func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
+func (client *PingPongClient) Pong(wg *sync.WaitGroup) {
 	// Implement the logic for reading pong messages here
 	defer wg.Done()
 	for {
@@ -207,7 +207,7 @@ func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 		}
 		client.mu.RUnlock()
 
-		_, mess, err := client.connector.ReadMessage()
+		_, _, err := client.connector.ReadMessage()
 		if err != nil {
 			// Handle normal WebSocket close codes
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
@@ -228,25 +228,23 @@ func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 
 			} else {
 				// Other non-WebSocket read errors
-
-				log.Printf("[%s] Read error: %v", client.Name, err)
 				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
-					log.Println("Connection closed by client.")
+					// log.Print(" Connection closed by client.")
 				} else {
 					client.Disconnect(false, UNEXPECTED_PEER_READ_ERROR, fmt.Sprintf("%v", err))
+					log.Printf("[%s] Read error: %v", client.Name, err)
 
 				}
 			}
-
 			return
 		}
-		log.Printf("[%s] Received: %s", client.Name, mess)
+		// log.Printf("[%s] Received: %s", client.Name, mess)
 	}
 }
 
 func (client *PingPongClient) Run(wg *sync.WaitGroup) {
 	wg.Add(2)
-	go client.ReadPong(wg)
+	go client.Pong(wg)
 	go client.Ping(wg)
 }
 
