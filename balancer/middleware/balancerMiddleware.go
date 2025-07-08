@@ -4,6 +4,7 @@ import (
 	"balancer/internal/helper"
 	service "balancer/internal/services"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ func (metadata *MetaDataMiddleware) Middleware(c *fiber.Ctx) error{
 	start:= time.Now()
 	err := c.Next()
 	duration := time.Since(start)
-	c.Set(PROCESS_TIME_HEADER_NAME,fmt.Sprintf("%v",duration))
+	c.Set(PROCESS_TIME_HEADER_NAME,fmt.Sprintf("%v (ms)",duration.Milliseconds()))
 	return err
 }
 
@@ -35,7 +36,6 @@ type AccessMiddleware struct {
 }
 
 func (access *AccessMiddleware) Middleware(c *fiber.Ctx) error{
-
 	return c.Next()
 }
 
@@ -58,7 +58,6 @@ type SplitProxyMiddleware struct {
 	ConfigService *service.ConfigService
 }
 
-
 func (splitProxy *SplitProxyMiddleware) Middleware(c *fiber.Ctx) error{
 	
 	split := c.QueryBool("split", false)
@@ -77,5 +76,7 @@ type ProxyMiddleware struct {
 }
 
 func (proxy *ProxyMiddleware) Middleware(c *fiber.Ctx) error{
+	log.Println("Proxy Middleware")
+	log.Println("-------------------------------------")
 	return proxy.ProxyService.ProxyRequest(c)
 }

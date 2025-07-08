@@ -19,14 +19,16 @@ func (balancer *NotifyrBalancer) LoadRoute() {
 }
 
 func (balancer *NotifyrBalancer) LoadMiddleWare() {
-	access := middleware.AccessMiddleware{SecurityService: balancer.Container.GetSecurityService()}
 	metadata := middleware.MetaDataMiddleware{SecurityService: balancer.Container.GetSecurityService()}
-	proxy := middleware.ProxyMiddleware{ProxyService: balancer.Container.GetProxyAgentService()}
+	access := middleware.AccessMiddleware{SecurityService: balancer.Container.GetSecurityService()}
 	active := middleware.ActiveMiddleware{HealthService: balancer.Container.GetHealthService()}
+	split:= middleware.SplitProxyMiddleware{ProxyService: balancer.Container.GetProxyAgentService(),ConfigService: balancer.Container.GetConfigService()}
+	proxy := middleware.ProxyMiddleware{ProxyService: balancer.Container.GetProxyAgentService()}
 
 	balancer.Fiber.Use(metadata.Middleware)
 	balancer.Fiber.Use(access.Middleware)
 	balancer.Fiber.Use(active.Middleware)
+	balancer.Fiber.Use(split)
 	balancer.Fiber.Use(proxy.Middleware)
 }
 
