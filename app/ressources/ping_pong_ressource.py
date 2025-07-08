@@ -60,6 +60,8 @@ class PingPongRessource(BaseHTTPRessource):
                 'ram': 4096,
                 'weight': 1,
                 'process_count': 8,
+                'capabilities':[]
+
             }}
 
     @UseRoles([Role.ADMIN])
