@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	// "log"
 	"net/http"
 	"slices"
 	"strings"
@@ -50,7 +51,7 @@ func (proxy *ProxyAgentService) CreateAlgo() {
 	proxy.algos["random"] = &algo.RandomAlgo{}
 	proxy.algos["round"] = &algo.RoundRobbinAlgo{}
 	// proxy.algos["weight"] = &algo.WeightAlgo{}
-	proxy.currentAlgo = "round"
+	proxy.currentAlgo = "random"
 }
 
 func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
@@ -63,6 +64,7 @@ func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
 	}
 
 	var nextUrls []string = proxy.ChooseServer(canSplit)
+	
 	var wg sync.WaitGroup
 	// var syncBody sync.Map;
 

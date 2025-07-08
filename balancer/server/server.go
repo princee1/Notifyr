@@ -28,7 +28,7 @@ func (balancer *NotifyrBalancer) LoadMiddleWare() {
 	balancer.Fiber.Use(metadata.Middleware)
 	balancer.Fiber.Use(access.Middleware)
 	balancer.Fiber.Use(active.Middleware)
-	balancer.Fiber.Use(split)
+	balancer.Fiber.Use(split.Middleware)
 	balancer.Fiber.Use(proxy.Middleware)
 }
 

@@ -102,8 +102,8 @@ type RandomAlgo struct {
 }
 
 func (random *RandomAlgo) Next(Servers []string) string {
-	i:=rand.Intn(len(random.Servers))
-	return random.Servers[i]
+	i:=rand.Intn(len(Servers))
+	return Servers[i]
 }
 
 func (random *RandomAlgo) GetIndex() uint64{

@@ -4,10 +4,8 @@ import (
 	"balancer/internal/helper"
 	service "balancer/internal/services"
 	"fmt"
-	"log"
 	"strings"
 	"time"
-
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -76,7 +74,5 @@ type ProxyMiddleware struct {
 }
 
 func (proxy *ProxyMiddleware) Middleware(c *fiber.Ctx) error{
-	log.Println("Proxy Middleware")
-	log.Println("-------------------------------------")
 	return proxy.ProxyService.ProxyRequest(c)
 }
