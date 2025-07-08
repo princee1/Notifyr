@@ -46,7 +46,10 @@ class WSConnectionManager:
             ...
 
     async def disconnect(self, websocket: WebSocket,code=1000,reason:str|None = None):
-        await websocket.close(code,reason)
+        try:
+            await websocket.close(code,reason)
+        except RuntimeError:
+            ...
         self.active_connections.remove(websocket)
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
@@ -58,7 +61,10 @@ class WSConnectionManager:
     
     async def disconnectAll(self):
         for ac in self.active_connections:
-            await ac.close(status.WS_1000_NORMAL_CLOSURE,"Server Gracefully Terminated")
+            try:
+                await ac.close(status.WS_1000_NORMAL_CLOSURE,"Server Gracefully Terminated")
+            except RuntimeError:
+                ...
     
 
 #########################################                ##############################################

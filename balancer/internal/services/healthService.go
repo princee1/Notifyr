@@ -1,10 +1,13 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +17,8 @@ import (
 const SECOND int64 = 1_000_000_000
 
 const MAX_RETRY uint8 = 10
+
+const UNEXPECTED_PEER_READ_ERROR = 4001
 const PING_FREQ time.Duration = time.Duration(60 * SECOND)
 const RETRY_FREQ time.Duration = time.Duration(20 * SECOND)
 
@@ -41,6 +46,7 @@ const (
 	TO_CONNECT = iota
 	TO_RUN
 	TO_QUIT
+	TO_IDLE
 )
 
 type PingPongClient struct {
@@ -75,7 +81,9 @@ func (client *PingPongClient) RequestPermission() error {
 	return nil
 }
 
-func (client *PingPongClient) Disconnect(byMe bool) {
+func (client *PingPongClient) Disconnect(byMe bool, code int, reason string) {
+
+	client.mu.Lock()
 
 	if !client.Connected {
 		return
@@ -83,10 +91,31 @@ func (client *PingPongClient) Disconnect(byMe bool) {
 	client.Connected = false
 	if byMe {
 		client.state = TO_QUIT
+	} else {
+
+		switch code {
+		case 1000:
+			client.state = TO_QUIT
+
+		case 1001:
+			client.state = TO_QUIT
+
+		case 1012:
+			client.state = TO_CONNECT
+
+		case UNEXPECTED_PEER_READ_ERROR:
+			client.state = TO_CONNECT
+
+		default:
+			client.state = TO_QUIT
+		}
 	}
+	client.mu.Unlock()
+
 	err := client.connector.Close()
 	if err != nil {
 		log.Printf("failed to close connection for %s: %v", client.Name, err)
+		client.state = TO_QUIT
 		return
 	}
 	log.Printf("[%s] Disconnected from %s", client.Name, client.URL)
@@ -140,9 +169,12 @@ func (client *PingPongClient) connectWS() error {
 	}
 
 	client.connector = conn
-	client.Connected = true
-	client.initCallback()
 
+	client.mu.Lock()
+	client.Connected = true
+	defer client.mu.Unlock()
+
+	client.initCallback()
 	log.Printf("[%s] Connected to %s", client.Name, client.URL)
 	client.healthService.UnBlock()
 
@@ -157,7 +189,9 @@ func (client *PingPongClient) initCallback() {
 	})
 
 	client.connector.SetCloseHandler(func(code int, reason string) error {
-		fmt.Printf("close handler Code: %v Reason: %v \n",code,reason)
+		// 1012
+		log.Printf("[%s] Server closed connection With close Handler. Code: %d, Reason: %s", client.Name, code, reason)
+		client.Disconnect(false, code, reason)
 		return nil
 	})
 }
@@ -166,15 +200,19 @@ func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 	// Implement the logic for reading pong messages here
 	defer wg.Done()
 	for {
+		client.mu.RLock()
 		if !client.Connected {
+			client.mu.RUnlock()
 			return
 		}
+		client.mu.RUnlock()
+
 		_, mess, err := client.connector.ReadMessage()
 		if err != nil {
 			// Handle normal WebSocket close codes
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				closeErr := err.(*websocket.CloseError)
-		
+
 				switch closeErr.Code {
 				case websocket.CloseNormalClosure:
 					log.Printf("[%s] Client initiated normal close: %v", client.Name, err)
@@ -183,16 +221,23 @@ func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 				default:
 					log.Printf("[%s] Normal closure with unhandled code: %v", client.Name, err)
 				}
-		
+
 			} else if websocket.IsUnexpectedCloseError(err) {
 				// Unexpected close (like network errors)
 				log.Printf("[%s] Unexpected connection close: %v", client.Name, err)
 
 			} else {
 				// Other non-WebSocket read errors
+
 				log.Printf("[%s] Read error: %v", client.Name, err)
+				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
+					log.Println("Connection closed by client.")
+				} else {
+					client.Disconnect(false, UNEXPECTED_PEER_READ_ERROR, fmt.Sprintf("%v", err))
+
+				}
 			}
-			
+
 			return
 		}
 		log.Printf("[%s] Received: %s", client.Name, mess)
@@ -213,10 +258,12 @@ func (client *PingPongClient) Ping(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ticker.C:
-
+			client.mu.RLock()
 			if !client.Connected {
+				client.mu.RUnlock()
 				return
 			}
+			client.mu.RUnlock()
 			err := client.connector.WriteMessage(websocket.TextMessage, []byte("PING"))
 			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
@@ -254,7 +301,11 @@ func (client *PingPongClient) StateMachine() {
 			client.Wait(&wg)
 
 		case TO_QUIT:
+			fmt.Printf("[%v] Ping Pong Connector Is Terminated and Will normaly not restart\n", client.Name)
 			return
+
+		case TO_IDLE:
+
 		}
 	}
 }
@@ -319,9 +370,14 @@ func (health *HealthService) ActiveServer() []string {
 	defer health.mu.RUnlock()
 
 	for _, client := range health.ppClient {
-		if client.Connected && client.IsStarted {
+		client.mu.RLock()
+		isConnected := client.Connected
+		client.mu.RUnlock()
+
+		if isConnected && client.IsStarted {
 			servers = append(servers, client.URL)
 		}
+
 	}
 
 	return servers
@@ -359,7 +415,7 @@ func (health *HealthService) Disconnect() error {
 	defer health.mu.Unlock()
 
 	for _, client := range health.ppClient {
-		client.Disconnect(true)
+		client.Disconnect(true, -1, "")
 	}
 
 	return nil

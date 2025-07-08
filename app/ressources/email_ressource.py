@@ -192,8 +192,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
         super().on_startup()
         self.emailReaderService.start_jobs()
     
-    def on_shutdown(self):
-        super().on_shutdown()
+    async def on_shutdown(self):
+        await super().on_shutdown()
         self.emailReaderService.cancel_jobs()
     
     def _get_esp(self,email):
