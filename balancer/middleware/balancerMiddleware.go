@@ -1,14 +1,18 @@
 package middleware
 
 import (
+	"balancer/internal/helper"
 	service "balancer/internal/services"
 	"fmt"
+	"strings"
 	"time"
+
 	"github.com/gofiber/fiber/v2"
 )
 
 
 const PROCESS_TIME_HEADER_NAME = "X-Balancer-Process-Time"
+var SPLITABLE_ROUTES = []string{"/email/template/", "/email/custom/", "twilio/sms/ongoing/template/", "twilio/sms/ongoing/custom/", "twilio/call/ongoing/custom/", "twilio/sms/ongoing/twiml/", "twilio/sms/ongoing/template"}
 
 
 type BaseMiddleware interface {
@@ -46,6 +50,25 @@ func (active *ActiveMiddleware) Middleware(c *fiber.Ctx) error{
 		c.Response().SetStatusCode(fiber.StatusInternalServerError)
 		return c.SendString("No Notifyr App At The moment, try again later")
 	}
+	return c.Next()
+}
+
+type SplitProxyMiddleware struct {
+	ProxyService *service.ProxyAgentService
+	ConfigService *service.ConfigService
+}
+
+
+func (splitProxy *SplitProxyMiddleware) Middleware(c *fiber.Ctx) error{
+	
+	split := c.QueryBool("split", false)
+	var canSplit bool = split
+	if split {
+		routeURL:= strings.Replace(c.OriginalURL(),splitProxy.ConfigService.Addr(),"",-1)
+		canSplit = helper.StartsWithAny(routeURL,SPLITABLE_ROUTES) && c.Method() =="POST"
+	}
+	
+	c.Locals("canSplit",canSplit)
 	return c.Next()
 }
 

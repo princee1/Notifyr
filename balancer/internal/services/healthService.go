@@ -1,6 +1,7 @@
 package service
 
 import (
+	"balancer/internal/helper"
 	"errors"
 	"fmt"
 	"log"
@@ -299,7 +300,7 @@ func (client *PingPongClient) StateMachine() {
 			client.Wait(&wg)
 
 		case TO_QUIT:
-			fmt.Printf("[%v] Ping Pong Connector Is Terminated and Will normaly not restart\n", client.Name)
+			fmt.Printf("[%v] Ping Pong Connector Is Terminated\n", client.Name)
 			return
 
 		case TO_IDLE:
@@ -351,7 +352,7 @@ func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentServ
 	for index, value := range health.ConfigService.URLS {
 		name := fmt.Sprintf("Notifyr Instance %v", index)
 		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService, state: TO_CONNECT}
-		hashed_value := HashURL(value)
+		hashed_value := helper.HashURL(value)
 		health.ppClient[hashed_value] = &ppClient
 		wg.Add(1)
 		go func() {
