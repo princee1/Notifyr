@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	// "log"
 	"net/http"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/gofiber/fiber/v2"
@@ -54,32 +52,41 @@ func (proxy *ProxyAgentService) CreateAlgo() {
 	proxy.currentAlgo = "random"
 }
 
-func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
-	var canSplit bool
+func (proxy *ProxyAgentService) getCanSplit(c *fiber.Ctx) bool{
+	
+	return false
 	v, ok := c.Locals("canSplit").(bool)
 	if !ok {
-		canSplit = false
+		return false
 	} else {
-		canSplit=v
+		return v
 	}
+}
 
+func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
+	var canSplit bool= proxy.getCanSplit(c)
 	var nextUrls []string = proxy.ChooseServer(canSplit)
-	
 	var wg sync.WaitGroup
-	// var syncBody sync.Map;
+	// var syncBody sync.Map=sync.Map{};
+	var syncBody []byte
 
 	for _, nu := range nextUrls {
-		nu = strings.Replace(c.OriginalURL(), proxy.ConfigService.addr, nu, -1)
+		nu +=c.OriginalURL()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			body := c.Body()
-			proxy.CopyRequest(c, &body, nu)
+			_b, err := proxy.CopyRequest(c, &body, nu)
+			if err != nil {
+				_b = []byte(fmt.Sprintf("%v", err))
+			} else {
+				syncBody = _b
+			}
 		}()
 	}
 	wg.Wait()
 
-	return c.Send(c.Body())
+	return c.Send(syncBody)
 }
 
 func (proxy *ProxyAgentService) SetContentIndex(c *fiber.Ctx) ([]byte, error) {
@@ -105,7 +112,7 @@ func (proxy *ProxyAgentService) SetContentIndex(c *fiber.Ctx) ([]byte, error) {
 }
 
 func (proxy *ProxyAgentService) sendRequest(c *fiber.Ctx, newBody *[]byte, nextUrl *string) (*http.Response, error) {
-	reqBody := bytes.NewReader(c.Body())
+	reqBody := bytes.NewReader(*newBody)
 	req, err := http.NewRequest(c.Method(), *nextUrl, reqBody)
 	if err != nil {
 		return nil, err
@@ -124,14 +131,14 @@ func (proxy *ProxyAgentService) sendRequest(c *fiber.Ctx, newBody *[]byte, nextU
 	return resp, nil
 }
 
-func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextUrl string) ([]byte,error) {
+func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextUrl string) ([]byte, error) {
 	// Create a new request with the same method and body
 	var retry int
 
 	for {
 		resp, err := proxy.sendRequest(c, newBody, &nextUrl)
 		if resp == nil {
-			return nil,err
+			return nil, err
 		}
 		if resp.StatusCode == 503 {
 			if retry < 5 {
@@ -149,9 +156,9 @@ func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextU
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil,err
+			return nil, err
 		}
-		return body,nil
+		return body, nil
 	}
 
 }
