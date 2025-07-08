@@ -1,6 +1,7 @@
 package service
 
 import (
+	"balancer/internal/helper"
 	"errors"
 	"fmt"
 	"log"
@@ -196,7 +197,7 @@ func (client *PingPongClient) initCallback() {
 	})
 }
 
-func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
+func (client *PingPongClient) Pong(wg *sync.WaitGroup) {
 	// Implement the logic for reading pong messages here
 	defer wg.Done()
 	for {
@@ -207,7 +208,7 @@ func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 		}
 		client.mu.RUnlock()
 
-		_, mess, err := client.connector.ReadMessage()
+		_, _, err := client.connector.ReadMessage()
 		if err != nil {
 			// Handle normal WebSocket close codes
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
@@ -228,25 +229,23 @@ func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 
 			} else {
 				// Other non-WebSocket read errors
-
-				log.Printf("[%s] Read error: %v", client.Name, err)
 				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
-					log.Println("Connection closed by client.")
+					// log.Print(" Connection closed by client.")
 				} else {
 					client.Disconnect(false, UNEXPECTED_PEER_READ_ERROR, fmt.Sprintf("%v", err))
+					log.Printf("[%s] Read error: %v", client.Name, err)
 
 				}
 			}
-
 			return
 		}
-		log.Printf("[%s] Received: %s", client.Name, mess)
+		// log.Printf("[%s] Received: %s", client.Name, mess)
 	}
 }
 
 func (client *PingPongClient) Run(wg *sync.WaitGroup) {
 	wg.Add(2)
-	go client.ReadPong(wg)
+	go client.Pong(wg)
 	go client.Ping(wg)
 }
 
@@ -301,7 +300,7 @@ func (client *PingPongClient) StateMachine() {
 			client.Wait(&wg)
 
 		case TO_QUIT:
-			fmt.Printf("[%v] Ping Pong Connector Is Terminated and Will normaly not restart\n", client.Name)
+			fmt.Printf("[%v] Ping Pong Connector Is Terminated\n", client.Name)
 			return
 
 		case TO_IDLE:
@@ -353,7 +352,7 @@ func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentServ
 	for index, value := range health.ConfigService.URLS {
 		name := fmt.Sprintf("Notifyr Instance %v", index)
 		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService, state: TO_CONNECT}
-		hashed_value := HashURL(value)
+		hashed_value := helper.HashURL(value)
 		health.ppClient[hashed_value] = &ppClient
 		wg.Add(1)
 		go func() {

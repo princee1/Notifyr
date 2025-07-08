@@ -1,14 +1,17 @@
 package middleware
 
 import (
+	"balancer/internal/helper"
 	service "balancer/internal/services"
 	"fmt"
+	"strings"
 	"time"
 	"github.com/gofiber/fiber/v2"
 )
 
 
 const PROCESS_TIME_HEADER_NAME = "X-Balancer-Process-Time"
+var SPLITABLE_ROUTES = []string{"/email/template/", "/email/custom/", "twilio/sms/ongoing/template/", "twilio/sms/ongoing/custom/", "twilio/call/ongoing/custom/", "twilio/sms/ongoing/twiml/", "twilio/sms/ongoing/template"}
 
 
 type BaseMiddleware interface {
@@ -22,7 +25,7 @@ func (metadata *MetaDataMiddleware) Middleware(c *fiber.Ctx) error{
 	start:= time.Now()
 	err := c.Next()
 	duration := time.Since(start)
-	c.Set(PROCESS_TIME_HEADER_NAME,fmt.Sprintf("%v",duration))
+	c.Set(PROCESS_TIME_HEADER_NAME,fmt.Sprintf("%v (ms)",duration.Milliseconds()))
 	return err
 }
 
@@ -31,7 +34,6 @@ type AccessMiddleware struct {
 }
 
 func (access *AccessMiddleware) Middleware(c *fiber.Ctx) error{
-
 	return c.Next()
 }
 
@@ -49,11 +51,28 @@ func (active *ActiveMiddleware) Middleware(c *fiber.Ctx) error{
 	return c.Next()
 }
 
+type SplitProxyMiddleware struct {
+	ProxyService *service.ProxyAgentService
+	ConfigService *service.ConfigService
+}
+
+func (splitProxy *SplitProxyMiddleware) Middleware(c *fiber.Ctx) error{
+	
+	split := c.QueryBool("split", false)
+	var canSplit bool = split
+	if split {
+		routeURL:= strings.Replace(c.OriginalURL(),splitProxy.ConfigService.Addr(),"",-1)
+		canSplit = helper.StartsWithAny(routeURL,SPLITABLE_ROUTES) && c.Method() =="POST"
+	}
+	
+	c.Locals("canSplit",canSplit)
+	return c.Next()
+}
+
 type ProxyMiddleware struct {
 	ProxyService *service.ProxyAgentService
 }
 
 func (proxy *ProxyMiddleware) Middleware(c *fiber.Ctx) error{
-
-	return c.Next()
+	return proxy.ProxyService.ProxyRequest(c)
 }
