@@ -13,13 +13,12 @@ func main(){
 	container.Welcome(0)
 	container.Init()
 	container.Welcome(5)
-
+	
 	var balancer server.NotifyrBalancer = server.NotifyrBalancer{Container: &container,Fiber: fiber.New()}
 	
 	balancer.LoadMiddleWare()
 	balancer.LoadRoute()
-	balancer.Start()
+	go balancer.Start()
 
-	container.WaitWS()
-
+	balancer.Shutdown()
 }

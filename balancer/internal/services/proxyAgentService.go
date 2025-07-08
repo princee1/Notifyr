@@ -33,26 +33,13 @@ func (proxy *ProxyAgentService) SetAlgo(algoName string) error {
 
 func (proxy *ProxyAgentService) CreateAlgo() {
 	
-	servers:= proxy.ConfigService.URLS
-	weight:= []uint64{1,1,1,1,1,1,1,1,1}
+	// servers:= proxy.ConfigService.URLS
+	// weight:= []uint64{1,1,1,1,1,1,1,1,1}
 	proxy.algos = map[string]algo.Algo{}
-
-	proxy.algos["random"] = &algo.RandomAlgo{Servers:servers}
-	proxy.algos["round"] = &algo.RoundRobbinAlgo{Servers:servers}
-	weightAlgo := algo.WeightAlgo{Servers: servers, Weight: weight}
-	weightAlgo.SetTotalWeight()
-	proxy.algos["weight"] =  &weightAlgo
-	
-
+	proxy.algos["random"] = &algo.RandomAlgo{}
+	proxy.algos["round"] = &algo.RoundRobbinAlgo{}
+	// proxy.algos["weight"] = &algo.WeightAlgo{}
 	proxy.currentAlgo = "round"
-}
-
-func (proxy *ProxyAgentService) RegisterApps() {
-
-}
-
-func (proxy *ProxyAgentService) ToggleActiveApps() {
-
 }
 
 func (proxy *ProxyAgentService) SplitRequest() {
@@ -63,6 +50,9 @@ func (proxy *ProxyAgentService) ProxyRequest() {
 
 }
 
-func (proxy *ProxyAgentService) ChooseServer() {
-
+func (proxy *ProxyAgentService) ChooseServer()string {
+	var servers = proxy.HealthService.ActiveServer()
+	var algorithm algo.Algo = proxy.GetCurrentAlgo()
+	server := algorithm.Next(servers)
+	return HashURL(server)
 }

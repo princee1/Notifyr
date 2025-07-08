@@ -1,10 +1,13 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +17,8 @@ import (
 const SECOND int64 = 1_000_000_000
 
 const MAX_RETRY uint8 = 10
+
+const UNEXPECTED_PEER_READ_ERROR = 4001
 const PING_FREQ time.Duration = time.Duration(60 * SECOND)
 const RETRY_FREQ time.Duration = time.Duration(20 * SECOND)
 
@@ -41,6 +46,7 @@ const (
 	TO_CONNECT = iota
 	TO_RUN
 	TO_QUIT
+	TO_IDLE
 )
 
 type PingPongClient struct {
@@ -54,6 +60,7 @@ type PingPongClient struct {
 	app             *NotifyrApp
 	connector       *websocket.Conn
 	state           int
+	mu              sync.RWMutex
 }
 
 func (client *PingPongClient) RequestPermission() error {
@@ -74,19 +81,44 @@ func (client *PingPongClient) RequestPermission() error {
 	return nil
 }
 
-func (client *PingPongClient) Disconnect() {
+func (client *PingPongClient) Disconnect(byMe bool, code int, reason string) {
 
-	client.state = TO_CONNECT
-	defer client.RemoveActiveConnection()
+	client.mu.Lock()
+
+	if !client.Connected {
+		return
+	}
+	client.Connected = false
+	if byMe {
+		client.state = TO_QUIT
+	} else {
+
+		switch code {
+		case 1000:
+			client.state = TO_QUIT
+
+		case 1001:
+			client.state = TO_QUIT
+
+		case 1012:
+			client.state = TO_CONNECT
+
+		case UNEXPECTED_PEER_READ_ERROR:
+			client.state = TO_CONNECT
+
+		default:
+			client.state = TO_QUIT
+		}
+	}
+	client.mu.Unlock()
 
 	err := client.connector.Close()
 	if err != nil {
 		log.Printf("failed to close connection for %s: %v", client.Name, err)
+		client.state = TO_QUIT
 		return
 	}
-	client.Connected = false
 	log.Printf("[%s] Disconnected from %s", client.Name, client.URL)
-
 }
 
 func (client *PingPongClient) RemoveActiveConnection() {
@@ -137,9 +169,15 @@ func (client *PingPongClient) connectWS() error {
 	}
 
 	client.connector = conn
+
+	client.mu.Lock()
 	client.Connected = true
+	defer client.mu.Unlock()
+
 	client.initCallback()
 	log.Printf("[%s] Connected to %s", client.Name, client.URL)
+	client.healthService.UnBlock()
+
 	return nil
 }
 
@@ -150,11 +188,10 @@ func (client *PingPongClient) initCallback() {
 		return nil
 	})
 
-	client.connector.SetCloseHandler(func(code int, text string) error {
-
-		// TODO remove the connection from the map of active connection
-
-		client.Connected = false
+	client.connector.SetCloseHandler(func(code int, reason string) error {
+		// 1012
+		log.Printf("[%s] Server closed connection With close Handler. Code: %d, Reason: %s", client.Name, code, reason)
+		client.Disconnect(false, code, reason)
 		return nil
 	})
 }
@@ -162,22 +199,49 @@ func (client *PingPongClient) initCallback() {
 func (client *PingPongClient) ReadPong(wg *sync.WaitGroup) {
 	// Implement the logic for reading pong messages here
 	defer wg.Done()
-	// go func() {
 	for {
-		// client.Connector.ReadJSON()
+		client.mu.RLock()
+		if !client.Connected {
+			client.mu.RUnlock()
+			return
+		}
+		client.mu.RUnlock()
+
 		_, mess, err := client.connector.ReadMessage()
 		if err != nil {
+			// Handle normal WebSocket close codes
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				log.Printf("[%s] Connection closed: %v", client.Name, err)
+				closeErr := err.(*websocket.CloseError)
+
+				switch closeErr.Code {
+				case websocket.CloseNormalClosure:
+					log.Printf("[%s] Client initiated normal close: %v", client.Name, err)
+				case websocket.CloseGoingAway:
+					log.Printf("[%s] Server initiated close (going away): %v", client.Name, err)
+				default:
+					log.Printf("[%s] Normal closure with unhandled code: %v", client.Name, err)
+				}
+
+			} else if websocket.IsUnexpectedCloseError(err) {
+				// Unexpected close (like network errors)
+				log.Printf("[%s] Unexpected connection close: %v", client.Name, err)
+
 			} else {
+				// Other non-WebSocket read errors
+
 				log.Printf("[%s] Read error: %v", client.Name, err)
+				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
+					log.Println("Connection closed by client.")
+				} else {
+					client.Disconnect(false, UNEXPECTED_PEER_READ_ERROR, fmt.Sprintf("%v", err))
+
+				}
 			}
-			client.Disconnect()
+
 			return
 		}
 		log.Printf("[%s] Received: %s", client.Name, mess)
 	}
-	// }()
 }
 
 func (client *PingPongClient) Run(wg *sync.WaitGroup) {
@@ -194,22 +258,23 @@ func (client *PingPongClient) Ping(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ticker.C:
-			if !client.Connected{
+			client.mu.RLock()
+			if !client.Connected {
+				client.mu.RUnlock()
 				return
 			}
+			client.mu.RUnlock()
 			err := client.connector.WriteMessage(websocket.TextMessage, []byte("PING"))
 			if err != nil {
 				log.Printf("[%s] Ping error: %v", client.Name, err)
-				// client.Disconnect()
 				return
 			}
 		}
 	}
 	//}()
-
 }
 
-func (client *PingPongClient) Wait(wg *sync.WaitGroup){
+func (client *PingPongClient) Wait(wg *sync.WaitGroup) {
 	wg.Wait()
 	// TODO change the code
 }
@@ -223,22 +288,32 @@ func (client *PingPongClient) StateMachine() {
 		case TO_CONNECT:
 			if err := client.Connect(); err != nil {
 				log.Printf("Error connecting PingPongClient %s: %v at addr %v", client.Name, err, client.URL)
+				client.state = TO_QUIT
 			} else {
 				client.healthService.mu.Lock()
 				client.healthService.activePpConnection++
 				client.healthService.mu.Unlock()
+				client.state = TO_RUN
 			}
-			client.state = TO_RUN
 
 		case TO_RUN:
 			client.Run(&wg)
 			client.Wait(&wg)
 
 		case TO_QUIT:
+			fmt.Printf("[%v] Ping Pong Connector Is Terminated and Will normaly not restart\n", client.Name)
 			return
-		}
 
+		case TO_IDLE:
+
+		}
 	}
+}
+
+type WaitForConnection struct {
+	wait      chan struct{}
+	IsStarted bool
+	mu        sync.RWMutex
 }
 
 type HealthService struct {
@@ -247,16 +322,39 @@ type HealthService struct {
 	ConfigService      *ConfigService
 	activePpConnection uint
 	mu                 sync.RWMutex
+	wFConn             *WaitForConnection
 }
 
-func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentService) *sync.WaitGroup{
+func (health *HealthService) WFInitChan() {
+	wfc := WaitForConnection{wait: make(chan struct{})}
+	health.wFConn = &wfc
+}
+
+func (health *HealthService) UnBlock() {
+	health.wFConn.mu.RLock()
+	if health.wFConn.IsStarted {
+		health.wFConn.mu.RUnlock()
+		return
+	}
+	health.wFConn.mu.RUnlock()
+
+	health.wFConn.mu.Lock()
+	if !health.wFConn.IsStarted {
+		health.wFConn.IsStarted = true
+		health.wFConn.wait <- struct{}{}
+	}
+	health.wFConn.mu.Unlock()
+}
+
+func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentService) *sync.WaitGroup {
 
 	health.ppClient = map[string]*PingPongClient{}
 	var wg sync.WaitGroup
 	for index, value := range health.ConfigService.URLS {
 		name := fmt.Sprintf("Notifyr Instance %v", index)
-		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService,state: TO_CONNECT}
-		health.ppClient[value] = &ppClient
+		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService, state: TO_CONNECT}
+		hashed_value := HashURL(value)
+		health.ppClient[hashed_value] = &ppClient
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -264,6 +362,25 @@ func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentServ
 		}()
 	}
 	return &wg
+}
+
+func (health *HealthService) ActiveServer() []string {
+	var servers = []string{}
+	health.mu.RLock()
+	defer health.mu.RUnlock()
+
+	for _, client := range health.ppClient {
+		client.mu.RLock()
+		isConnected := client.Connected
+		client.mu.RUnlock()
+
+		if isConnected && client.IsStarted {
+			servers = append(servers, client.URL)
+		}
+
+	}
+
+	return servers
 }
 
 func (health *HealthService) AggregateHealth() {
@@ -285,5 +402,21 @@ func (health *HealthService) RemoveActiveConnection(Name string) error {
 	} else {
 		health.activePpConnection--
 	}
+	return nil
+}
+
+func (health *HealthService) WFNotifyrConn() {
+	<-health.wFConn.wait
+}
+
+func (health *HealthService) Disconnect() error {
+
+	health.mu.Lock()
+	defer health.mu.Unlock()
+
+	for _, client := range health.ppClient {
+		client.Disconnect(true, -1, "")
+	}
+
 	return nil
 }

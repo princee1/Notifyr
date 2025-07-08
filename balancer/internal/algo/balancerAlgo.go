@@ -11,13 +11,12 @@ import (
 var ALGO_TYPE = []string{"random","round","weight"}
 
 type Algo interface {
-	Next() string;
+	Next([]string) string;
 	GetIndex() uint64;
 }
 
 // ---------------------------------------        --------------------------------------------  //
 type RoundRobbinAlgo struct {
-	Servers []string;
 	index uint64
 	mu sync.Mutex
 }
@@ -32,22 +31,19 @@ func (round *RoundRobbinAlgo) reset() {
 	round.index = 0
 }
 
-func (round *RoundRobbinAlgo) Next() string {
+func (round *RoundRobbinAlgo) Next(Servers []string) string {
 	i := atomic.AddUint64(&round.index, 1)
 	if i > 1_000_000_000_000_000 {
 		round.reset()
 	}
-	return round.Servers[i%uint64(len(round.Servers))]
+	return Servers[i%uint64(len(Servers))]
 }
 
 // ---------------------------------------        --------------------------------------------  //
 
 type WeightAlgo struct {
-	Servers []string
-	Weight  []uint64
 	index   uint64
 	mu      sync.Mutex
-	totalWeight uint64
 }
 
 func (weight *WeightAlgo) reset() {
@@ -56,32 +52,36 @@ func (weight *WeightAlgo) reset() {
 	weight.index = 0
 }
 
-func (weight *WeightAlgo) SetTotalWeight() {
-	if len(weight.Servers) != len(weight.Weight){
-		
+func (weight *WeightAlgo) setTotalWeight(Servers []string,Weight []uint64) uint64{
+	var totalWeight uint64;
+	if len(Servers) != len(Weight){
 	}
-	for _, w := range weight.Weight {
-		weight.totalWeight += w
+	for _, w := range Weight {
+		totalWeight += w
 	}
+	return totalWeight
 
 }
 
-func (weight *WeightAlgo) Next() string {
+func (weight *WeightAlgo) Next(Servers []string) string {
+	Weight := []uint64{3,4}
+	totalWeight:= weight.setTotalWeight(Servers,Weight)
+
 	i := atomic.AddUint64(&weight.index, 1)
 	if i > 1_000_000_000_000_000 {
 		weight.reset()
 	}
 
-	current := i % weight.totalWeight
-	for idx, w := range weight.Weight {
+	current := i % totalWeight
+	for idx, w := range Weight {
 		if current < w {
-			return weight.Servers[idx]
+			return Servers[idx]
 		}
 		current -= w
 	}
 
-	random := RandomAlgo{weight.Servers}
-	return random.Next()
+	random := RandomAlgo{Servers}
+	return random.Next(Servers)
 }
 
 func (weight *WeightAlgo) GetIndex() uint64 {
@@ -101,7 +101,7 @@ type RandomAlgo struct {
 	Servers []string
 }
 
-func (random *RandomAlgo) Next() string {
+func (random *RandomAlgo) Next(Servers []string) string {
 	i:=rand.Intn(len(random.Servers))
 	return random.Servers[i]
 }

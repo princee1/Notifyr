@@ -2,7 +2,10 @@ package container
 
 import (
 	service "balancer/internal/services"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/common-nighthawk/go-figure"
@@ -18,9 +21,16 @@ type Container struct {
 	securityService   *service.SecurityService
 	proxyAgentService *service.ProxyAgentService
 	wg                *sync.WaitGroup
+	Quit              *chan os.Signal
 }
 
 func (container *Container) Init() {
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM,syscall.SIGINT)
+
+	container.Quit = &quit
+
 	container.configService = &service.ConfigService{}
 	container.securityService = &service.SecurityService{ConfigService: container.configService}
 	container.healthService = &service.HealthService{ConfigService: container.configService, SecurityService: container.securityService}
@@ -28,6 +38,7 @@ func (container *Container) Init() {
 
 	container.configService.LoadEnv()
 	container.proxyAgentService.CreateAlgo()
+	container.healthService.WFInitChan()
 	container.wg = container.healthService.InitPingPongConnection(container.proxyAgentService)
 }
 
