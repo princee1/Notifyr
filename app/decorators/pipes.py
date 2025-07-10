@@ -64,19 +64,21 @@ class TemplateParamsPipe(Pipe):
         self.extension = extension
         self.accept_none = accept_none
     
-    def pipe(self,template:str):
-        if template == '' and self.accept_none:
+    async def pipe(self,template:str):
+        async with self.assetService.statusLock.reader:
+
+            if template == '' and self.accept_none:
+                return {'template':template}
+            
+            template+="."+self.extension
+            asset_routes = self.assetService.exportRouteName(self.template_type)
+            template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
+            template = self.assetService.asset_rel_path(template,self.template_type)
+
+            if template not in asset_routes:
+                raise TemplateNotFoundError(template)
+
             return {'template':template}
-        
-        template+="."+self.extension
-        asset_routes = self.assetService.exportRouteName(self.template_type)
-        template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
-        template = self.assetService.asset_rel_path(template,self.template_type)
-
-        if template not in asset_routes:
-            raise TemplateNotFoundError(template)
-
-        return {'template':template}
         
 class TemplateQueryPipe(TemplateParamsPipe):
     def __init__(self,*allowed_assets:RouteAssetType):
@@ -440,46 +442,48 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
         self.index_ptr = PointerIterator(index_key,split)
         self.assetService = Get(AssetService)
         
-    def pipe(self,template:str,scheduler:SchedulerModel)->Template:
-        assets = getattr(self.assetService,self.template_type,None)
-        if assets == None:
-            raise TemplateAssetError
-        
-        template:Template = assets[template]
-        filtered_content =[]
+    async def pipe(self,template:str,scheduler:SchedulerModel)->Template:
+        async with self.assetService.statusLock.reader:
 
-        if self.will_validate:
-            for content in scheduler.content:
-                ptr = self.ptr(content)
-                idx_ptr = self.index_ptr.ptr(content)  
-                if ptr == None:
-                    ...
-
-                val = self.get_val(ptr)
-                index = self.index_ptr.get_val(idx_ptr)
-                if val == None:
-                    ...
-                
-                try:
-                    val = template.validate(val)
-                    if scheduler.filter_error:
-                        filtered_content.append(content)
-                except Exception as e:
-                    if not scheduler.filter_error:
-                        raise e
-                    else:
-                        scheduler._errors[index] = {
-                            'message':'Error while creating the template',
-                            'error':exception_to_json(e),
-                            'index':index
-                        }
-                        
-                        
+            assets = getattr(self.assetService,self.template_type,None)
+            if assets == None:
+                raise TemplateAssetError
             
-            if len(filtered_content) >0:
-                scheduler.content = filtered_content
+            template:Template = assets[template]
+            filtered_content =[]
+
+            if self.will_validate:
+                for content in scheduler.content:
+                    ptr = self.ptr(content)
+                    idx_ptr = self.index_ptr.ptr(content)  
+                    if ptr == None:
+                        ...
+
+                    val = self.get_val(ptr)
+                    index = self.index_ptr.get_val(idx_ptr)
+                    if val == None:
+                        ...
+                    
+                    try:
+                        val = template.validate(val)
+                        if scheduler.filter_error:
+                            filtered_content.append(content)
+                    except Exception as e:
+                        if not scheduler.filter_error:
+                            raise e
+                        else:
+                            scheduler._errors[index] = {
+                                'message':'Error while creating the template',
+                                'error':exception_to_json(e),
+                                'index':index
+                            }
                             
-        return {'template':template,'scheduler':scheduler}
+                            
+                
+                if len(filtered_content) >0:
+                    scheduler.content = filtered_content
+                                
+            return {'template':template,'scheduler':scheduler}
 
 class ContentIndexPipe(Pipe,PointerIterator):
 

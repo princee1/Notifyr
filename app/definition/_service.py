@@ -43,9 +43,8 @@ class BuildErrorLevel(Enum):
 
 
 class BuildError(BaseException):
-    def __init__(self,service ,*args: object) -> None:
+    def __init__(self,*args: object) -> None:
         super().__init__(*args)
-        self.service = service
     pass
 
 
@@ -99,7 +98,7 @@ class ServiceChangingStateError(BuildError):
 
 #################################            #####################################
 
-WAIT_TIME = 0.1
+WAIT_TIME = 0.05
 
 class BaseService():
 
