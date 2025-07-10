@@ -17,7 +17,7 @@ class RunMode(Enum):
 parser = ArgumentParser(description="Communication Service Application")
 parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunMode.__members__.values()],
                         default='file', type=str, help='Running Mode')
-parser.add_argument('--name', '-n', type=str, default='Notifyr', help='The name of configuration to use')
+parser.add_argument('--name', '-n', type=str, default='default', help='The name of configuration to use')
 parser.add_argument('--config', '-c', default='./config.app.json',
                         type=str, help='Path to the config file')
 parser.add_argument('--pool','-p',type=str,default='solo',choices=['solo','team'],help="Whether there's other instance running too")
@@ -35,7 +35,7 @@ uvicorn_args = None
 
 if sys.argv[0] == exe_path:
     args=None
-    args = parser.parse_args(['-m=file','-n=Notifyr','-c=./config.app.json',])
+    args = parser.parse_args(['-m=file','-n=default','-c=./config.app.json',])
     uvicorn_args = uvicorn_parser.parse_args()
     
 else:
