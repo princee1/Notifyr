@@ -4,7 +4,7 @@ from app.definition._service import __CLASS_DEPENDENCY
 from app.utils.constant import SubConstant
 
 
-def Set_Service_Status(v:Any):
+async def Set_Service_Status(v:Any):
     print(v)
     return
 

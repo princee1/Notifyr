@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum
 import functools
 from typing import Any, overload, Callable, Type, TypeVar, Dict
@@ -6,6 +7,9 @@ from app.utils.constant import DependencyConstant
 from app.utils.helper import issubclass_of
 import warnings
 import datetime as dt
+from typing import TypedDict
+
+from aiorwlock import RWLock
 
 
 AbstractDependency: Dict[str, dict] = {}
@@ -24,6 +28,12 @@ class ServiceStatus(Enum):
     PARTIALLY_AVAILABLE = 4
     WORKS_ALMOST_ATT = 5
 
+class StateProtocol(TypedDict):
+    service:str
+    status:int
+    to_build:bool = False
+    to_destroy:bool =False
+
 
 class BuildErrorLevel(Enum):
     ABORT = 4
@@ -33,8 +43,9 @@ class BuildErrorLevel(Enum):
 
 
 class BuildError(BaseException):
-    def __init__(self, *args: object) -> None:
+    def __init__(self,service ,*args: object) -> None:
         super().__init__(*args)
+        self.service = service
     pass
 
 
@@ -82,6 +93,9 @@ class MethodServiceNotImplementedError(BuildError):
 class ServiceNotImplementedError(BuildError):
     ...
 
+class ServiceChangingStateError(BuildError):
+    ...
+
 
 #################################            #####################################
 
@@ -97,15 +111,25 @@ class BaseService():
         self.service_status: ServiceStatus = None
         self.method_not_available: list[str] = []
         self.service_list:list[BaseService] = []
+        self.statusLock = RWLock()
+        self.stateCounter = 0
 
+
+    @property
+    def is_reader_locked(self)->bool:
+        return self.statusLock.reader_lock.locked
+    
     @staticmethod
     def CheckStatusBeforeHand(func:Callable):
         
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs):
             
             self:BaseService = args[0]
 
+            if self.is_reader_locked:
+                raise ServiceChangingStateError
+    
             match self.service_status :
                 case ServiceStatus.NOT_AVAILABLE :
                     raise ServiceNotAvailableError
@@ -122,7 +146,30 @@ class BaseService():
 
             return func(*args, **kwargs)
         
-        return wrapper
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            
+            self:BaseService = args[0]
+
+            async with self.statusLock.reader as lock:
+
+                match self.service_status :
+                    case ServiceStatus.NOT_AVAILABLE :
+                        raise ServiceNotAvailableError
+                    case ServiceStatus.TEMPORARY_NOT_AVAILABLE:
+                        raise ServiceTemporaryNotAvailableError
+                    case _:
+                        ...
+
+                if not self._builded  or self._destroyed:
+                    raise ServiceNotAvailableError
+
+                if func.__name__ in self.method_not_available:
+                    raise MethodServiceNotAvailableError
+
+            return await func(*args, **kwargs)
+        
+        return async_wrapper if asyncio.iscoroutinefunction(func) else  sync_wrapper
 
     def verify_dependency(self):
         """
@@ -131,8 +178,13 @@ class BaseService():
         ...
 
     @CheckStatusBeforeHand
-    async def pingService(self):
+    async def async_pingService(self):
         ...
+    
+    @CheckStatusBeforeHand
+    def sync_pingService(self):
+        ...
+
     
     def build(self):
         # warnings.warn(

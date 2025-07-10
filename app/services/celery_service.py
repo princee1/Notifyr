@@ -21,6 +21,8 @@ from humanize import naturaltime, naturaldelta
 from prometheus_client import Counter,Histogram,Gauge
 from random import randint
 from dataclasses import field
+from aiorwlock import RWLock
+
 
 P = ParamSpec("P")
 RunType = Literal['parallel','sequential']
@@ -110,7 +112,7 @@ class CeleryService(BaseService, IntervalInterface):
         self.worker_not_available_count = 0
 
         self.timeout_count = 0
-        self.task_lock = asyncio.Lock()
+        self.task_lock = RWLock()
         # NOTE if i cant connect to the redis server there's a problem, if i can connect i can add task to the message broker
 
         # self.redis_client = Redis(host='localhost', port=6379, db=0)# set from config
@@ -249,25 +251,25 @@ class CeleryService(BaseService, IntervalInterface):
             available_workers_count = len(response)
             if available_workers_count == 0:
                 self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
-                async with self.task_lock:
+                async with self.task_lock.writer:
                     self.available_workers_count = 0
 
-            async with self.task_lock:
+            async with self.task_lock.reader:
                 self.available_workers_count = available_workers_count
             self.worker_not_available = self.configService.CELERY_WORKERS_COUNT - \
                 available_workers_count
             self.timeout_count = 0
         except Exception as e:
             self.timeout_count += 1
-            async with self.task_lock:
+            async with self.task_lock.writer:
                 self.available_workers_count = 0
 
     @property
     async def get_available_workers_count(self) -> float:
-        async with self.task_lock:
+        async with self.task_lock.reader:
             return self.available_workers_count
 
-    async def pingService(self, ratio: float = None, count: int = None):
+    async def async_pingService(self, ratio: float = None, count: int = None):
         response_count = await self.get_available_workers_count
         if ratio:
             # TODO check in which interval the ratio is in
@@ -275,7 +277,7 @@ class CeleryService(BaseService, IntervalInterface):
         if count:
             # TODO check in which interval the ratio is in
             ...
-        await BaseService.pingService(self)
+        await BaseService.async_pingService(self)
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
     def callback(self):
@@ -292,8 +294,8 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         self.running_background_tasks_count = 0
         self.running_route_handler = 0
         self.sharing_task: dict[str, TaskManager] = {}
-        self.task_lock = asyncio.Lock()
-        self.route_lock = asyncio.Lock()
+        self.task_lock = RWLock()
+        self.route_lock = RWLock()
         self.server_load: dict[TaskHeaviness, int] = {
             t: 0 for t in TaskHeaviness._value2member_map_.values()}
         
@@ -499,7 +501,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
             
         self._delete_tasks(request_id)
 
-    async def pingService(self, count=None):  # TODO
+    async def async_pingService(self, count=None):  # TODO
         response_count = await self.global_task_count
         load = self.server_load.copy()
 
@@ -507,7 +509,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         if count:
             ...
 
-        return await BaseService.pingService(self)
+        return await BaseService.async_pingService(self)
 
     def check_system_ram():
         ...

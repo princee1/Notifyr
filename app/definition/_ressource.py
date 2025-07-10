@@ -792,11 +792,11 @@ def PingService(services:list[S|dict]):
                     k = s['kwargs']
                     
                     cls:S = Get(s)
-                    await cls.pingService(*a,**k)
+                    await cls.async_pingService(*a,**k)
                     
                 else:    
                     s: BaseService = Get(s)
-                    await s.pingService()
+                    await s.async_pingService()
 
             result = func(*args,**kwargs)          
             if asyncio.iscoroutine(result):
