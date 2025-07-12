@@ -4,7 +4,7 @@ instance imported from `container`.
 """
 from inspect import isclass
 from types import NoneType
-from typing import Any, Callable,Dict, Iterable, List, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
+from typing import Any, Callable,Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -803,6 +803,25 @@ def PingService(services:list[S|dict]):
                 return await result
             return result
         
+        return wrapper
+    return decorator
+
+def UseStatusLock(services:Type[S],lockType:Literal['reader','writer']='writer'):
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func,PingService,None,services=services)
+        if cls != None:
+            return cls
+        
+        @functools.wraps(func)
+        async def wrapper(*args,**kwargs):
+            _service:S  = Get(services)
+            if lockType =='reader':
+                async with _service.statusLock.reader:
+                    return await func(*args,**kwargs)
+            
+            async with _service.statusLock.writer:
+                    return await func(*args,**kwargs)
+            
         return wrapper
     return decorator
 
