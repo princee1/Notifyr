@@ -217,6 +217,20 @@ class PointerIterator:
             if isinstance(ptr,dict):
                 ptr[self.data_key] = new_val
 
+    def del_val(self,ptr:dict|object):
+        exists = self.get_val(ptr)
+        if self._type == object:
+            if exists == None:
+                return None
+            delattr(ptr,self.data_key)
+            return exists
+        else:
+            exists,val= exists
+            if not exists:
+                return None
+            ptr.pop(self.data_key,None)   
+            return val     
+
 ################################   ** Parsing Helper **      #################################
 
 
