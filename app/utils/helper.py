@@ -176,7 +176,8 @@ def get_value_in_list(data,index):
 
 
 class PointerIterator:
-    def __init__(self,var:str,split:str='.'):
+    def __init__(self,var:str,split:str='.',_type:Type[object|dict]=object):
+        self._type= object
         if var== None:
             raise ValueError(f'var cant be None')
         self.ptr_iterator = var.split(split)
@@ -186,7 +187,11 @@ class PointerIterator:
         for sk in self.ptr_iterator[:-1]:
             if ptr == None:
                 break
-            next_ptr =getattr(ptr,sk,None) 
+            if self._type == object:
+                next_ptr =getattr(ptr,sk,None) 
+            else:
+                if isinstance(next_ptr,dict):
+                    next_ptr = next_ptr.get(sk,None)
             ptr = next_ptr
         return ptr
     
@@ -195,12 +200,18 @@ class PointerIterator:
         return self.ptr_iterator[-1]
     
     def get_val(self,ptr):
-        return getattr(ptr,self.data_key,None)
+        if self._type == object:
+            return getattr(ptr,self.data_key,None)
+        if isinstance(ptr,dict):
+            return ptr.get(self.data_key,None)
+        return None
     
     def set_val(self,ptr,new_val):
-        setattr(ptr,self.data_key,new_val)
-
-
+        if self._type == object:
+            setattr(ptr,self.data_key,new_val)
+        else:
+            if isinstance(ptr,dict):
+                ptr[self.data_key] = new_val
 
 ################################   ** Parsing Helper **      #################################
 

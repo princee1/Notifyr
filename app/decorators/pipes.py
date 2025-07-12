@@ -23,7 +23,7 @@ from app.definition._utils_decorator import Pipe
 from app.services.celery_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.constant import SpecialKeyAttributesConstant
-from app.utils.helper import AsyncAPIFilterInject, PointerIterator, copy_response
+from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response
 from app.utils.validation import email_validator, phone_number_validator
 from app.utils.helper import APIFilterInject
 from app.depends.variables import parse_to_phone_format
@@ -500,3 +500,16 @@ class ContentIndexPipe(Pipe,PointerIterator):
             self.set_val(ptr,val)
         
         return {'scheduler':scheduler}
+
+
+
+
+class  GlobalVarReducerRipe(Pipe):
+
+    def __init__(self,separator:str):
+        self.sep= separator
+    
+    def pipe(self,key:str|None):
+        if key != None:
+            key=key.replace(self.sep,DICT_SEP)
+        return {'key':key}

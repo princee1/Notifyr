@@ -18,6 +18,7 @@ from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, Backen
 
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
+from app.errors.global_var_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
@@ -526,3 +527,18 @@ class FastAPIHandler(Handler):
 
         except LocalProtocolError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail=e.error_status_hint)
+
+
+
+class GlobalVarHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except GlobalKeyAlreadyExistsError as e:
+            raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,detail=f"Key {e.key} already exists")
+            
+        
+        except GlobalKeyDoesNotExistsError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f"Key {e.key} does not exists")
+            

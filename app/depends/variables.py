@@ -72,3 +72,7 @@ subject_id_params:Callable[[Request],str] = get_query_params('subject_id',None)
 sid_type_params:Callable[[Request],str] = get_query_params("sid_type","plain",checker=lambda v:v in get_args(SubjectType))
 
 mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_except=True,checker=lambda v:v in get_args(MimeType))
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+global_var_key:Callable[[Request],str] = get_query_params('key',None,True)
