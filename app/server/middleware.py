@@ -44,7 +44,7 @@ class MetaDataMiddleWare(MiddleWare):
             response: Response = await call_next(request)
             process_time = time.time() - start_time
             
-            response.headers["X-Process-Time"] = str(process_time) + ' (s)'
+            response.headers["X-Process-Time"] = f"{process_time * 1000:.1f} (ms)"
             response.headers["X-Instance-Id"]= self.instance_id
             response.headers["X-Process-PID"] =self.process_pid
             response.headers["X-Parent-Process-PID"] = self.parent_pid

@@ -2,20 +2,30 @@ package service
 
 import (
 	"balancer/internal/algo"
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"slices"
+	"sync"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type ProxyAgentService struct {
 	HealthService *HealthService
 	ConfigService *ConfigService
-	currentAlgo string
-	algos       map[string]algo.Algo
-
+	currentAlgo   string
+	algos         map[string]algo.Algo
 }
 
-func (proxy *ProxyAgentService) GetCurrentAlgo() algo.Algo{
-	return proxy.algos[proxy.currentAlgo]
+func (proxy *ProxyAgentService) GetCurrentAlgo() algo.Algo {
+	algo, ok := proxy.algos[proxy.currentAlgo]
+	if ok {
+		return algo
+	}
+	return nil
 }
 
 func (proxy *ProxyAgentService) SetAlgo(algoName string) error {
@@ -32,37 +42,132 @@ func (proxy *ProxyAgentService) SetAlgo(algoName string) error {
 }
 
 func (proxy *ProxyAgentService) CreateAlgo() {
-	
-	servers:= proxy.ConfigService.URLS
-	weight:= []uint64{1,1,1,1,1,1,1,1,1}
+
+	// servers:= proxy.ConfigService.URLS
+	// weight:= []uint64{1,1,1,1,1,1,1,1,1}
 	proxy.algos = map[string]algo.Algo{}
+	proxy.algos["random"] = &algo.RandomAlgo{}
+	proxy.algos["round"] = &algo.RoundRobbinAlgo{}
+	// proxy.algos["weight"] = &algo.WeightAlgo{}
+	proxy.currentAlgo = "random"
+}
 
-	proxy.algos["random"] = &algo.RandomAlgo{Servers:servers}
-	proxy.algos["round"] = &algo.RoundRobbinAlgo{Servers:servers}
-	weightAlgo := algo.WeightAlgo{Servers: servers, Weight: weight}
-	weightAlgo.SetTotalWeight()
-	proxy.algos["weight"] =  &weightAlgo
+func (proxy *ProxyAgentService) getCanSplit(c *fiber.Ctx) bool{
 	
-
-	proxy.currentAlgo = "round"
+	return false
+	v, ok := c.Locals("canSplit").(bool)
+	if !ok {
+		return false
+	} else {
+		return v
+	}
 }
 
-func (proxy *ProxyAgentService) RegisterApps() {
+func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
+	var canSplit bool= proxy.getCanSplit(c)
+	var nextUrls []string = proxy.ChooseServer(canSplit)
+	var wg sync.WaitGroup
+	// var syncBody sync.Map=sync.Map{};
+	var syncBody []byte
+
+	for _, nu := range nextUrls {
+		nu +=c.OriginalURL()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			body := c.Body()
+			_b, err := proxy.CopyRequest(c, &body, nu)
+			if err != nil {
+				_b = []byte(fmt.Sprintf("%v", err))
+			} else {
+				syncBody = _b
+			}
+		}()
+	}
+	wg.Wait()
+
+	return c.Send(syncBody)
+}
+
+func (proxy *ProxyAgentService) SetContentIndex(c *fiber.Ctx) ([]byte, error) {
+	var bodyMap map[string]interface{}
+
+	if err := json.Unmarshal(c.Body(), &bodyMap); err != nil {
+		return nil, err
+	}
+
+	if content, ok := bodyMap["content"].([]interface{}); ok {
+		for i, item := range content {
+			// Assert each item is a map and inject "_index"
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				itemMap["index"] = i
+			}
+		}
+	}
+	modifiedBody, err := json.Marshal(bodyMap)
+	if err != nil {
+		return nil, err
+	}
+	return modifiedBody, nil
+}
+
+func (proxy *ProxyAgentService) sendRequest(c *fiber.Ctx, newBody *[]byte, nextUrl *string) (*http.Response, error) {
+	reqBody := bytes.NewReader(*newBody)
+	req, err := http.NewRequest(c.Method(), *nextUrl, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	// Copy headers from the original request
+	c.Request().Header.VisitAll(func(key, value []byte) {
+		req.Header.Set(string(key), string(value))
+	})
+
+	// Send the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextUrl string) ([]byte, error) {
+	// Create a new request with the same method and body
+	var retry int
+
+	for {
+		resp, err := proxy.sendRequest(c, newBody, &nextUrl)
+		if resp == nil {
+			return nil, err
+		}
+		if resp.StatusCode == 503 {
+			if retry < 5 {
+				continue
+			}
+		}
+		defer resp.Body.Close()
+		// Copy response status, headers, and body back to the Fiber context
+		c.Status(resp.StatusCode)
+
+		for k, v := range resp.Header {
+			for _, vv := range v {
+				c.Set(k, vv)
+			}
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return body, nil
+	}
 
 }
 
-func (proxy *ProxyAgentService) ToggleActiveApps() {
-
-}
-
-func (proxy *ProxyAgentService) SplitRequest() {
-
-}
-
-func (proxy *ProxyAgentService) ProxyRequest() {
-
-}
-
-func (proxy *ProxyAgentService) ChooseServer() {
-
+func (proxy *ProxyAgentService) ChooseServer(split bool) []string {
+	var servers = proxy.HealthService.ActiveServer()
+	if split {
+		return servers
+	}
+	var algorithm algo.Algo = proxy.GetCurrentAlgo()
+	return []string{algorithm.Next(servers)}
 }
