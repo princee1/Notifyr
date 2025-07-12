@@ -16,3 +16,4 @@ from .twilio_ressource import TwilioRessource
 from .app_ressource import AppRessource
 from .link_ressource import LinkRessource
 from .ping_pong_ressource import PingPongRessource
+from .globals_variable_ressource import GlobalAssetVariableRessource
