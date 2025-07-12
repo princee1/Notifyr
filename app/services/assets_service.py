@@ -3,7 +3,7 @@ from fastapi import HTTPException,status
 from app.definition._error import BaseError
 from app.utils.prettyprint import printJSON
 from .config_service import CeleryMode, ConfigService
-from app.utils.fileIO import FDFlag
+from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .security_service import SecurityService
 from .file_service import FileService, FTPService
@@ -13,11 +13,13 @@ from enum import Enum
 import os
 from threading import Thread
 from typing import Any, Callable, Literal, Dict
-from app.utils.helper import issubclass_of
+from app.utils.helper import flatten_dict, issubclass_of
 
 ROOT_PATH = "assets/"
 DIRECTORY_SEPARATOR = '\\'
 REQUEST_DIRECTORY_SEPARATOR = ':'
+ASSETS_GLOBALS_VARIABLES =f"{ROOT_PATH}globals.json"
+
 
 def path(x): return ROOT_PATH+x
 
@@ -147,16 +149,25 @@ class AssetService(_service.BaseService):
     def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService) -> None:
         super().__init__()
         self.fileService = fileService
-        Template.LANG = configService.ASSET_LANG
-
         self.fileService:FileService = fileService
         self.securityService = securityService
         self.configService = configService
 
-        MLTemplate._globals.update({}) # TODO creates global with the config service BUG duplicates writing
+    def _read_globals(self):
+
+        try:
+            self.globals =  JSONFile(ASSETS_GLOBALS_VARIABLES)
+        except:
+            self.globals = JSONFile(ASSETS_GLOBALS_VARIABLES,{})
+        
+        MLTemplate._globals.update(flatten_dict(self.globals.data))
 
         
     def build(self):
+        
+        self._read_globals()
+
+        Template.LANG = self.configService.ASSET_LANG
 
         self.images: dict[str, Asset] = {}
         self.css: dict[str, Asset] = {}
