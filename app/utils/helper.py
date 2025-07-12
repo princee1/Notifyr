@@ -182,7 +182,7 @@ class PointerIterator:
             raise ValueError(f'var cant be None')
         self.ptr_iterator = var.split(split)
     
-    def ptr(self,value:Any):
+    def ptr(self,value:object|dict):
         ptr = value
         for sk in self.ptr_iterator[:-1]:
             if ptr == None:
@@ -190,8 +190,9 @@ class PointerIterator:
             if self._type == object:
                 next_ptr =getattr(ptr,sk,None) 
             else:
-                if isinstance(next_ptr,dict):
-                    next_ptr = next_ptr.get(sk,None)
+                next_ptr = ptr.get(sk,None)
+                if not isinstance(next_ptr,dict):
+                    break
             ptr = next_ptr
         return ptr
     
@@ -203,7 +204,10 @@ class PointerIterator:
         if self._type == object:
             return getattr(ptr,self.data_key,None)
         if isinstance(ptr,dict):
-            return ptr.get(self.data_key,None)
+            try:
+                return True,ptr.get(self.data_key)
+            except:
+                return False,None
         return None
     
     def set_val(self,ptr,new_val):

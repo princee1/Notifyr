@@ -504,12 +504,13 @@ class ContentIndexPipe(Pipe,PointerIterator):
 
 
 
-class  GlobalVarReducerRipe(Pipe):
+class  GlobalPointerIteratorRipe(Pipe):
 
     def __init__(self,separator:str):
         self.sep= separator
     
-    def pipe(self,key:str|None):
-        if key != None:
-            key=key.replace(self.sep,DICT_SEP)
-        return {'key':key}
+    def pipe(self,globalIter:str|None):
+        if globalIter != None:
+            globalIter = PointerIterator(globalIter,self.sep,dict)
+
+        return {'globalIter':globalIter}
