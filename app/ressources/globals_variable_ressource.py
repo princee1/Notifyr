@@ -3,7 +3,7 @@ from fastapi import Depends, Response, status
 from app.container import InjectInMethod
 from app.decorators.handlers import GlobalVarHandler, ServiceAvailabilityHandler
 from app.decorators.pipes import GlobalPointerIteratorRipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UsePipe, UseStatusLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UsePipe, ServiceStatusLock
 from app.errors.global_var_error import GlobalKeyDoesNotExistsError
 from app.services.assets_service import AssetService
 from app.depends.class_dep import Broker
@@ -29,7 +29,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         self.awsS3Service = awsS3Service
         self.ftpService = ftpService
     
-    @UseStatusLock(AssetService,'reader')
+    @ServiceStatusLock(AssetService,'reader')
     @HTTPStatusCode(status.HTTP_200_OK)
     @UsePipe(GlobalPointerIteratorRipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],)
@@ -49,21 +49,21 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         return {"value":val}
         
     
-    @UseStatusLock(AssetService,'writer')
+    @ServiceStatusLock(AssetService,'writer')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UsePipe(GlobalPointerIteratorRipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT],)
     async def update_global(self,response:Response,broker:Annotated[Broker,Depends(Broker)],globalIter:PointerIterator=Depends(global_var_key)):
         ...
 
-    @UseStatusLock(AssetService,'writer')
+    @ServiceStatusLock(AssetService,'writer')
     @HTTPStatusCode(status.HTTP_200_OK)
     @UsePipe(GlobalPointerIteratorRipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE],)
     async def delete_global(self,response:Response,broker:Annotated[Broker,Depends(Broker)],globalIter:PointerIterator=Depends(global_var_key)):
         ...
 
-    @UseStatusLock(AssetService,'writer')
+    @ServiceStatusLock(AssetService,'writer')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UsePipe(GlobalPointerIteratorRipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST],)

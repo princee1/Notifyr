@@ -806,9 +806,9 @@ def PingService(services:list[S|dict]):
         return wrapper
     return decorator
 
-def UseStatusLock(services:Type[S],lockType:Literal['reader','writer']='writer'):
+def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writer'):
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func,PingService,None,services=services)
+        cls = common_class_decorator(func,ServiceStatusLock,None,services=services)
         if cls != None:
             return cls
         
