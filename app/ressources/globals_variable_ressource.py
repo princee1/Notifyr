@@ -20,15 +20,9 @@ from app.utils.helper import APIFilterInject, PointerIterator
 VARIABLES_ROUTE = 'global'
 PARAMS_KEY_SEPARATOR = "@"
 
-
 GLOBAL_KEY_RAISE=1
 GLOBAL_KEY = 0
 
-@APIFilterInject
-async def save_global_pipe(result,):
-    assetService:AssetService = Get(AssetService)
-    print(assetService.globals.data)
-    return result
 
 @PingService([AssetService])
 @UsePermission(JWTRouteHTTPPermission)
@@ -48,7 +42,6 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.PUBLIC])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
-    @UsePipe(save_global_pipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],)
     async def read_global(self,response:Response,broker:Annotated[Broker,Depends(Broker)],globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY]),authPermission=Depends(get_auth_permission)):
 
@@ -70,7 +63,6 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
-    @UsePipe(save_global_pipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE],)
     async def delete_global(self,response:Response,broker:Annotated[Broker,Depends(Broker)],globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY_RAISE]),authPermission=Depends(get_auth_permission)):
         if globalIter == None:
@@ -94,7 +86,6 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
-    @UsePipe(save_global_pipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST,HTTPMethod.PUT],)
     async def upsert_global(self,response:Response,request:Request, broker:Annotated[Broker,Depends(Broker)],globalModel:GlobalVarModel ,globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY]),force:bool=Depends(force_update),authPermission=Depends(get_auth_permission)):
         
