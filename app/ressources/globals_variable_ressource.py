@@ -5,7 +5,7 @@ from app.container import Get, InjectInMethod
 from app.decorators.handlers import GlobalVarHandler, ServiceAvailabilityHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import GlobalPointerIteratorPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UsePermission, UsePipe, ServiceStatusLock, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, ServiceStatusLock, UseRoles
 from app.depends.dependencies import get_auth_permission
 from app.errors.global_var_error import GlobalKeyDoesNotExistsError
 from app.models.global_var_model import GlobalVarModel
@@ -38,6 +38,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         self.ftpService = ftpService
         self.configService = configService
     
+    @UseLimiter('500/minutes')
     @ServiceStatusLock(AssetService,'reader')
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.PUBLIC])
@@ -58,7 +59,8 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
             raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter.var)
         
         return {"value":val}
-        
+
+    @UseLimiter('100/minutes')
     @ServiceStatusLock(AssetService,'writer')
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.ADMIN])
@@ -82,6 +84,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         return {"value":val}
         
 
+    @UseLimiter('50/minutes')
     @ServiceStatusLock(AssetService,'writer')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseRoles([Role.ADMIN])
