@@ -1,9 +1,12 @@
 from typing import Annotated
 from fastapi import Depends, Request, Response, status
+from app.classes.auth_permission import Role
 from app.container import Get, InjectInMethod
 from app.decorators.handlers import GlobalVarHandler, ServiceAvailabilityHandler
+from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import GlobalPointerIteratorPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UsePipe, ServiceStatusLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UsePermission, UsePipe, ServiceStatusLock, UseRoles
+from app.depends.dependencies import get_auth_permission
 from app.errors.global_var_error import GlobalKeyDoesNotExistsError
 from app.models.global_var_model import GlobalVarModel
 from app.services.assets_service import AssetService
@@ -12,7 +15,7 @@ from app.services.aws_service import AmazonS3Service
 from app.depends.variables import global_var_key,force_update
 from app.services.config_service import ConfigService
 from app.services.file_service import FTPService
-from app.utils.helper import PointerIterator
+from app.utils.helper import APIFilterInject, PointerIterator
 
 VARIABLES_ROUTE = 'global'
 PARAMS_KEY_SEPARATOR = "@"
@@ -21,12 +24,14 @@ PARAMS_KEY_SEPARATOR = "@"
 GLOBAL_KEY_RAISE=1
 GLOBAL_KEY = 0
 
-async def save_global_pipe(result):
+@APIFilterInject
+async def save_global_pipe(result,):
     assetService:AssetService = Get(AssetService)
-    assetService.globals.save()
+    print(assetService.globals.data)
     return result
 
 @PingService([AssetService])
+@UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,GlobalVarHandler)
 @HTTPRessource(VARIABLES_ROUTE)
 class GlobalAssetVariableRessource(BaseHTTPRessource):
@@ -41,9 +46,11 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     
     @ServiceStatusLock(AssetService,'reader')
     @HTTPStatusCode(status.HTTP_200_OK)
+    @UseRoles([Role.PUBLIC])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
+    @UsePipe(save_global_pipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],)
-    async def read_global(self,response:Response,broker:Annotated[Broker,Depends(Broker)],globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY])):
+    async def read_global(self,response:Response,broker:Annotated[Broker,Depends(Broker)],globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY]),authPermission=Depends(get_auth_permission)):
 
         data = self.assetService.globals.data
         if globalIter == None:
@@ -51,48 +58,57 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
               
         ptr = globalIter.ptr(data)
         if ptr == None:
-            raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter)
+            raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter.var)
         
         flag,val = globalIter.get_val(ptr)
         if not flag:
-            raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter)
+            raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter.var)
+        
         return {"value":val}
         
     @ServiceStatusLock(AssetService,'writer')
     @HTTPStatusCode(status.HTTP_200_OK)
+    @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
+    @UsePipe(save_global_pipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE],)
-    async def delete_global(self,response:Response,broker:Annotated[Broker,Depends(Broker)],globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY_RAISE])):
-        ptr = globalIter.ptr(self.assetService.globals.data)
-        if ptr == None:
-            raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter)
-        
-        flag,val = globalIter.get_val(ptr)
-        if not flag:
-            raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter)
-        
-        globalIter.del_val(ptr)
-        self.assetService.globals.save()
+    async def delete_global(self,response:Response,broker:Annotated[Broker,Depends(Broker)],globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY_RAISE]),authPermission=Depends(get_auth_permission)):
+        if globalIter == None:
+            ...
+        else:
+            ptr = globalIter.ptr(self.assetService.globals.data)
+            if ptr == None:
+                raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter.var)
+            
+            flag,val = globalIter.get_val(ptr)
+            if not flag:
+                raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter.var)
+            
+            globalIter.del_val(ptr)
+            self.assetService.globals.save()
+            
         return {"value":val}
         
 
     @ServiceStatusLock(AssetService,'writer')
     @HTTPStatusCode(status.HTTP_201_CREATED)
+    @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
+    @UsePipe(save_global_pipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST,HTTPMethod.PUT],)
-    async def upsert_global(self,response:Response,request:Request, broker:Annotated[Broker,Depends(Broker)],globalModel:GlobalVarModel ,globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY]),force:bool=Depends(force_update)):
+    async def upsert_global(self,response:Response,request:Request, broker:Annotated[Broker,Depends(Broker)],globalModel:GlobalVarModel ,globalIter:PointerIterator=Depends(global_var_key[GLOBAL_KEY]),force:bool=Depends(force_update),authPermission=Depends(get_auth_permission)):
         
         if globalIter == None:
             ptr = self.assetService.globals.data
         else:
             ptr = globalIter.ptr(self.assetService.globals.data)
             if ptr == None:
-                raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter)
+                raise GlobalKeyDoesNotExistsError(PARAMS_KEY_SEPARATOR,globalIter.var)
 
-        value = globalModel.model_dump()    
+        value = globalModel.model_dump()  
         
         if force:
-            ptr.update(globalModel)
+            ptr.update(value)
             response.status_code = status.HTTP_204_NO_CONTENT
         else:
             response.status_code = status.HTTP_201_CREATED

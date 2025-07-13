@@ -536,9 +536,9 @@ class GlobalVarHandler(Handler):
         try:
             return await function(*args,**kwargs)
         except GlobalKeyAlreadyExistsError as e:
-            raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,detail=f"Key {e.key} already exists")
+            raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,detail=f"Key '{e.key}' already exists")
             
         
         except GlobalKeyDoesNotExistsError as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f"Key {e.key} does not exists or it is not a JSON")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f"Key '{e.key}' does not exists or it is not a JSON")
             

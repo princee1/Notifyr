@@ -178,6 +178,7 @@ def get_value_in_list(data,index):
 class PointerIterator:
     def __init__(self,var:str,split:str='.',_type:Type[object|dict]=object):
         self._type=_type
+        self.var = var
         if var== None:
             raise ValueError(f'var cant be None')
         self.ptr_iterator = var.split(split)
@@ -204,10 +205,9 @@ class PointerIterator:
         if self._type == object:
             return getattr(ptr,self.data_key,None)
         if isinstance(ptr,dict):
-            try:
-                return True,ptr.get(self.data_key)
-            except:
+            if self.data_key not in ptr:
                 return False,None
+            return True,ptr[self.data_key]
         return None
     
     def set_val(self,ptr,new_val):
