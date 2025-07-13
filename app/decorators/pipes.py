@@ -507,6 +507,7 @@ class ContentIndexPipe(Pipe,PointerIterator):
 class  GlobalPointerIteratorPipe(Pipe):
 
     def __init__(self,separator:str):
+        super().__init__(True)
         self.sep= separator
     
     def pipe(self,globalIter:str|None):

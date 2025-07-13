@@ -14,7 +14,7 @@ from app.services.config_service import ConfigService
 from app.services.file_service import FTPService
 from app.utils.helper import PointerIterator
 
-VARIABLES_ROUTE = 'variable'
+VARIABLES_ROUTE = 'global'
 PARAMS_KEY_SEPARATOR = "@"
 
 
@@ -26,7 +26,7 @@ async def save_global_pipe(result):
     assetService.globals.save()
     return result
 
-@PingService(AssetService)
+@PingService([AssetService])
 @UseHandler(ServiceAvailabilityHandler,GlobalVarHandler)
 @HTTPRessource(VARIABLES_ROUTE)
 class GlobalAssetVariableRessource(BaseHTTPRessource):
