@@ -217,8 +217,7 @@ class UserPermission(ClientTypePermission):
         return await super().permission(authPermission)
 
 
-@APIFilterInject
-def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
+async def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
     if not authPermission['client_id'] == str(client.client_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
     

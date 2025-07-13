@@ -488,7 +488,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                         elif isinstance(permission, Permission):
                             flag = await permission.do(*args, **kwargs_prime)
                         else:
-                            flag = await permission(*args, **kwargs_prime)
+                            flag = await APIFilterInject(permission)(*args, **kwargs_prime)
                         
                         if flag:
                             continue
@@ -553,7 +553,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
                         elif isinstance(guard,Guard):
                             flag, message = await guard.do(*args, **kwargs)
                         else:
-                            flag, message = await guard(*args, **kwargs)
+                            flag, message = await APIFilterInject(guard)(*args, **kwargs)
                         
                         if not isinstance(flag,bool) or not isinstance(message,str):
                             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
@@ -599,7 +599,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                             elif isinstance(pipe, Pipe):
                                 result = await pipe.do(*args, **kwargs_prime)
                             else:
-                                result = await pipe(*args, **kwargs_prime)
+                                result = await APIFilterInject(pipe)(*args, **kwargs_prime)
 
                             if not isinstance(result,dict):
                                 raise PipeDefaultException
@@ -616,7 +616,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                             elif isinstance(pipe, Pipe):
                                 result = await pipe.do(result,**kwargs)
                             else:
-                                result = await pipe(result,**kwargs)
+                                result = await APIFilterInject(pipe)(result,**kwargs)
 
                         return result
                 

@@ -30,7 +30,6 @@ from app.depends.variables import parse_to_phone_format
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
 
-@APIFilterInject
 async def _to_otp_path(template:str):
     template = "otp\\"+template
     return {'template':template}
@@ -298,7 +297,6 @@ class TwilioResponseStatusPipe(Pipe):
         response.status_code = self.status_code
         return result    
 
-@AsyncAPIFilterInject
 async def parse_phone_number(phone_number:str) -> str:
     """
     Parse the phone number to the E.164 format.
@@ -309,17 +307,13 @@ async def parse_phone_number(phone_number:str) -> str:
         'phone_number':phone_number
     }
 
-
-
-@APIFilterInject
-def verify_email_pipe(email:str):
+async def verify_email_pipe(email:str):
     if not email_validator(email):
             raise EmailInvalidFormatError(email)
     return {
         'email':email
     }
 
-@APIFilterInject
 async def force_task_manager_attributes_pipe(taskManager:TaskManager):
     taskManager.return_results = True
     taskManager.meta['save_result'] =False
