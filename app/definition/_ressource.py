@@ -821,9 +821,9 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
             if lockType =='reader':
                 async with _service.statusLock.reader:
                     return await func(*args,**kwargs)
-            
-            async with _service.statusLock.writer:
-                    return await func(*args,**kwargs)
+            else:
+                async with _service.statusLock.writer:
+                        return await func(*args,**kwargs)
             
         return wrapper
     return decorator

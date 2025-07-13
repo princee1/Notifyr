@@ -76,6 +76,7 @@ mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_e
 # ----------------------------------------------                                    ---------------------------------- #
 
 global_var_key:tuple[Callable[[Request],str],Callable[[Request],str]] = get_query_params('key',None,True),get_query_params('key',None,True,raise_except=True)
+
 force_update: Callable[[Request],bool]=get_query_params('force',False,True,raise_except=True)
 # ----------------------------------------------                                    ---------------------------------- #
 
