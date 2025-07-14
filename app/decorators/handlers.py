@@ -423,7 +423,9 @@ class AsyncIOHandler(Handler):
             return await function(*args, **kwargs)
         
         except asyncio.CancelledError as e:
-            ...
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'A Task was Cancelled',
+            })
 
         except LockNotFoundError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
