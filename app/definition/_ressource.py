@@ -790,6 +790,7 @@ def PingService(services:list[S|dict],wait=True):
             return cls
         
         def wrapper(function:Callable):
+            
             @functools.wraps(function)
             async def callback(*args,**kwargs):
                 
@@ -821,8 +822,8 @@ def PingService(services:list[S|dict],wait=True):
                 return result
             
             return callback
-        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
-        return func
+        #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
+        return wrapper(func)
     return decorator
 
 def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writer'):
@@ -844,9 +845,8 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
                             return await func(*args,**kwargs)
             
             return callback
-            
-        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
-        return func
+        #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
+        return wrapper(func)
     return decorator
 
 def Exclude():
