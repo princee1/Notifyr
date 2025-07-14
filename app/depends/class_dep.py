@@ -6,6 +6,7 @@ from app.classes.broker import MessageBroker, SubjectType,exception_to_json
 from app.classes.celery import SchedulerModel
 from app.classes.mail_provider import get_email_provider_name
 from app.definition._error import ServerFileError
+from app.definition._service import ServiceDoesNotExistError, StateProtocol,__CLASS_DEPENDENCY, StateProtocolMalFormatted
 from app.depends.dependencies import get_request_id
 from app.models.call_model import BaseVoiceCallModel
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
@@ -375,7 +376,12 @@ class Broker:
         self.backgroundTasks.add_task(self.redisService.stream_data,channel,value)
         
     
-    def propagate_state(self,protocol):
+    def propagate_state(self,protocol:StateProtocol):
+        if protocol['service'] not in __CLASS_DEPENDENCY:
+            raise ServiceDoesNotExistError
+        if protocol['status'] <1 and protocol['status']>5:
+            raise StateProtocolMalFormatted
+
         self.backgroundTasks.add_task(self.redisService.publish_data,SubConstant.SERVICE_STATUS,protocol)
         
 
