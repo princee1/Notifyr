@@ -568,7 +568,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
             @functools.wraps(target_function)
             async def callback(*args, **kwargs):
-                if empty_decorator == 0:
+                if empty_decorator:
                     return await target_function(*args, **kwargs)
 
                 try:
@@ -653,8 +653,8 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
 
                 except PipeDefaultException:
                     if default_error == None:
-                        raise HTTPException(
-                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    
                     raise HTTPException(**default_error)
             return callback
 
@@ -877,8 +877,7 @@ def ServiceStatusLock(services: Type[S], lockType: Literal['reader', 'writer'] =
         raise TypeError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(
-            func, ServiceStatusLock, None, services=services)
+        cls = common_class_decorator(func, ServiceStatusLock, None, services=services,lockType=lockType,func_name=func_name)
         if cls != None:
             return cls
 
@@ -888,13 +887,16 @@ def ServiceStatusLock(services: Type[S], lockType: Literal['reader', 'writer'] =
             async def callback(*args, **kwargs):
 
                 _service: S = Get(services)
-                
+                                
                 async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
-                    return await func(*args, **kwargs)
+                    _service.check_status(func_name)
+                    if asyncio.iscoroutinefunction(func):
+                        return await func(*args, **kwargs)
+                    return func(*args,**kwargs)
 
             return callback
-        # appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
-        # return func
+        #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
+        #return func
         return wrapper(func)
     return decorator
 
