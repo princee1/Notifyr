@@ -47,6 +47,8 @@ RequestLimit =0
 PING_SERVICE_TOUCH = 0.25
 STATUS_LOCK_TOUCH = 0.50
 
+MIN_TIMEOUT = -1
+
 def get_class_name_from_method(func: Callable) -> str:
     return func.__qualname__.split('.')[0]
 
@@ -794,7 +796,7 @@ def PingService(services:list[S|dict],wait=True):
             @functools.wraps(function)
             async def callback(*args,**kwargs):
 
-                wait_timeout = kwargs.get('wait_timeout',0)
+                wait_timeout = kwargs.get('wait_timeout',MIN_TIMEOUT)
 
                 async def inner_callback():
                     for s in services:
@@ -816,7 +818,7 @@ def PingService(services:list[S|dict],wait=True):
                             else:
                                 s.sync_pingService()
 
-                if wait and wait_timeout>0:
+                if wait and wait_timeout>=0:
                     asyncio.wait_for(inner_callback(),wait_timeout)
                 else:
                     await inner_callback()
@@ -838,16 +840,16 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
         if cls != None:
             return cls
         
-        def wrapper(function: Callable):
+        def wrapper(target_function: Callable):
 
-            @functools.wraps(function)
+            @functools.wraps(target_function)
             async def callback(*args,**kwargs):
 
-                wait_timeout = kwargs.get('wait_timeout',0)
+                wait_timeout = kwargs.get('wait_timeout',MIN_TIMEOUT)
                 _service:S  = Get(services)
                 async def inner_callback(lck,timeout):
                     
-                    if timeout >0:
+                    if timeout >=0:
                         await asyncio.wait_for(lck.acquire(),timeout)
                     else:
                         await lck.acquire()
@@ -861,7 +863,7 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
                 else:
                     lock = _service.statusLock.writer_lock
 
-                await inner_callback(lock,wait_timeout)
+                return await inner_callback(lock,wait_timeout)
             
             return callback
         #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
