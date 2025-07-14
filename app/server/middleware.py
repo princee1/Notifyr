@@ -44,10 +44,10 @@ class MetaDataMiddleWare(MiddleWare):
             response: Response = await call_next(request)
             process_time = time.time() - start_time
             
-            response.headers["X-Process-Time"] = f"{process_time * 1000:.1f} (ms)"
-            response.headers["X-Instance-Id"]= self.instance_id
-            response.headers["X-Process-PID"] =self.process_pid
-            response.headers["X-Parent-Process-PID"] = self.parent_pid
+            response.headers[HTTPHeaderConstant.X_PROCESS_TIME] = f"{process_time * 1000:.1f} (ms)"
+            response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.instance_id
+            response.headers[HTTPHeaderConstant.X_PROCESS_PID] =self.process_pid
+            response.headers[HTTPHeaderConstant.X_PARENT_PROCESS_PID] = self.parent_pid
 
             self.taskService.request_latency.observe(process_time)
             return response

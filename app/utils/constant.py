@@ -44,6 +44,10 @@ class HTTPHeaderConstant:
     CONTACT_TOKEN='X-Contact-TOKEN'
     WS_KEY = 'X-WS-Auth-Key'
     REQUEST_ID = 'x-request-id'
+    X_PROCESS_TIME="X-Process-Time"
+    X_INSTANCE_ID= "X-Instance-Id"
+    X_PROCESS_PID = "X-Process-PID"
+    X_PARENT_PROCESS_PID="X-Parent-Process-PID"
 
 
 class CookieConstant:
