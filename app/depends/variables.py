@@ -12,6 +12,7 @@ from app.services.twilio_service import TwilioService
 
 from app.classes.broker import SubjectType
 from app.classes.email import MimeType
+from app.utils.constant import VariableConstant
 
 
 SECURITY_FLAG=GetAttr(ConfigService,'SECURITY_FLAG')
@@ -81,8 +82,8 @@ force_update: Callable[[Request],bool]=get_query_params('force',False,True,raise
 
 # ----------------------------------------------                                    ---------------------------------- #
 
-wait_timeout_query = Query(0, description="Time in seconds wait for the response", ge=0, le=60*3)
+wait_timeout_query = Query(0, description="Time in seconds wait for the response", ge=0, le=VariableConstant.MAX_WAIT_TIMEOUT)
 
-wait_timeout_query = get_query_params('timeout',0,True,False,checker= lambda v: v >=0 and v<=60)
+wait_timeout_query = get_query_params('timeout',0,True,False,checker= lambda v: v >=0 and v<=VariableConstant.MAX_WAIT_TIMEOUT)
 
 # ----------------------------------------------                                    ---------------------------------- #

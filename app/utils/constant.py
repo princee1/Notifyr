@@ -123,3 +123,5 @@ class LinkConstant(str,Enum):
 
 class VariableConstant:
     WAIT_TIMEOUT = 'wait'
+    MAX_WAIT_TIMEOUT = 60*3
+
