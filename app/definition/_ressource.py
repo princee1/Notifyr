@@ -828,9 +828,9 @@ def PingService(services: list[S | dict], wait=True):
         if cls != None:
             return cls
 
-        def wrapper(function: Callable):
+        def wrapper(target_function: Callable):
 
-            @functools.wraps(function)
+            @functools.wraps(target_function)
             async def callback(*args, **kwargs):
 
                 wait_timeout = kwargs.get('wait_timeout', MIN_TIMEOUT)
@@ -860,15 +860,15 @@ def PingService(services: list[S | dict], wait=True):
                 else:
                     await inner_callback()
 
-                result = func(*args, **kwargs)
+                result = target_function(*args, **kwargs)
                 if asyncio.iscoroutine(result):
                     return await result
                 return result
 
             return callback
-        # appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
-        # return func
-        return wrapper(func)
+        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
+        return func
+    
     return decorator
 
 
@@ -890,14 +890,13 @@ def ServiceStatusLock(services: Type[S], lockType: Literal['reader', 'writer'] =
                                 
                 async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
                     _service.check_status(func_name)
-                    if asyncio.iscoroutinefunction(func):
-                        return await func(*args, **kwargs)
-                    return func(*args,**kwargs)
+                    if asyncio.iscoroutinefunction(target_function):
+                        return await target_function(*args, **kwargs)
+                    return target_function(*args,**kwargs)
 
             return callback
-        #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
-        #return func
-        return wrapper(func)
+        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
+        return func
     return decorator
 
 
