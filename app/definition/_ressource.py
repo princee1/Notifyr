@@ -845,13 +845,12 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
 
                 wait_timeout = kwargs.get('wait_timeout',0)
                 _service:S  = Get(services)
-
                 async def inner_callback(lck,timeout):
                     
                     if timeout >0:
                         await asyncio.wait_for(lck.acquire(),timeout)
                     else:
-                        lck.acquire()
+                        await lck.acquire()
                     _service.check_status(func_name)
                     res = await func(*args,**kwargs)
                     lck.release()
