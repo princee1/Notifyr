@@ -78,12 +78,12 @@ mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_e
 
 global_var_key:tuple[Callable[[Request],str],Callable[[Request],str]] = get_query_params('key',None,True),get_query_params('key',None,True,raise_except=True)
 
-force_update: Callable[[Request],bool]=get_query_params('force',False,True,raise_except=True)
+force_update_query: Callable[[Request],bool]=get_query_params('force',False,True,raise_except=True)
 
 # ----------------------------------------------                                    ---------------------------------- #
 
 wait_timeout_query = Query(0, description="Time in seconds wait for the response", ge=0, le=VariableConstant.MAX_WAIT_TIMEOUT)
 
-wait_timeout_query = get_query_params('timeout',0,True,False,checker= lambda v: v >=0 and v<=VariableConstant.MAX_WAIT_TIMEOUT)
+wait_timeout_query:Callable[[Request],int|float] = get_query_params('timeout',0,True,False,checker= lambda v: v >=0 and v<=VariableConstant.MAX_WAIT_TIMEOUT)
 
 # ----------------------------------------------                                    ---------------------------------- #

@@ -13,7 +13,7 @@ from app.models.global_var_model import GlobalVarModel
 from app.services.assets_service import AssetService
 from app.depends.class_dep import Broker
 from app.services.aws_service import AmazonS3Service
-from app.depends.variables import global_var_key, force_update
+from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import ConfigService
 from app.services.file_service import FTPService
 from app.utils.helper import APIFilterInject, PointerIterator
@@ -26,7 +26,7 @@ GLOBAL_KEY = 0
 
 
 @UsePermission(JWTRouteHTTPPermission)
-@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,GlobalVarHandler)
+@UseHandler(ServiceAvailabilityHandler, AsyncIOHandler, GlobalVarHandler)
 @HTTPRessource(VARIABLES_ROUTE)
 class GlobalAssetVariableRessource(BaseHTTPRessource):
 
@@ -44,7 +44,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET],)
-    async def read_global(self, response: Response,request:Request, globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), authPermission=Depends(get_auth_permission)):
+    async def read_global(self, response: Response, request: Request, globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
         data = self.assetService.globals.data
         if globalIter == None:
@@ -68,7 +68,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE],)
-    async def delete_global(self, response: Response,request:Request, broker: Annotated[Broker, Depends(Broker)], globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY_RAISE]), authPermission=Depends(get_auth_permission)):
+    async def delete_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY_RAISE]), authPermission=Depends(get_auth_permission)):
         if globalIter == None:
             ...
         else:
@@ -95,7 +95,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
-    async def upsert_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], globalModel: GlobalVarModel, globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), force: bool = Depends(force_update), authPermission=Depends(get_auth_permission)):
+    async def upsert_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], globalModel: GlobalVarModel, wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), force: bool = Depends(force_update_query), authPermission=Depends(get_auth_permission)):
 
         if globalIter == None:
             ptr = self.assetService.globals.data
