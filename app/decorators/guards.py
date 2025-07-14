@@ -257,10 +257,11 @@ class AccessLinkGuard(Guard):
         return True,''
 
 class TrackGuard(Guard):
+    allowed=set(['now','once'])
 
     async def guard(self,scheduler:SchedulerModel,tracker:TrackerInterface):
         if not tracker.will_track:
             return True,''
-        if scheduler.task_type !='now' or scheduler.task_type!='once':
+        if scheduler.task_type not in self.allowed:
             return False,'Cannot track task that are not ran once'
         return True,''
