@@ -2,7 +2,7 @@
 from typing import Callable,get_args
 
 from aiohttp_retry import Any
-from fastapi import Request, Response
+from fastapi import Query, Request, Response
 from app.classes.celery import CeleryTask
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
@@ -78,5 +78,9 @@ mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_e
 global_var_key:tuple[Callable[[Request],str],Callable[[Request],str]] = get_query_params('key',None,True),get_query_params('key',None,True,raise_except=True)
 
 force_update: Callable[[Request],bool]=get_query_params('force',False,True,raise_except=True)
+
 # ----------------------------------------------                                    ---------------------------------- #
 
+wait_timeout = Query(0, description="Time in seconds wait for the response", ge=0, le=60*3)
+
+# ----------------------------------------------                                    ---------------------------------- #

@@ -44,6 +44,9 @@ GlobalLimiter = Limiter(get_ipaddr,storage_uri=storage_uri,headers_enabled=True)
 RequestLimit =0
 
 
+PING_SERVICE_TOUCH = 0.25
+STATUS_LOCK_TOUCH = 0.50
+
 def get_class_name_from_method(func: Callable) -> str:
     return func.__qualname__.split('.')[0]
 
@@ -779,7 +782,7 @@ def ExemptLimiter():
         return func
     return decorator
 
-def PingService(services:list[S|dict]):
+def PingService(services:list[S|dict],wait=True):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func,PingService,None,services=services)
@@ -788,6 +791,10 @@ def PingService(services:list[S|dict]):
         
         @functools.wraps(func)
         async def wrapper(*args,**kwargs):
+            
+            wait_timeout = kwargs.get('wait',0)
+
+            
             for s in services:
                 if isinstance(s,dict):
                     cls= s['cls']
@@ -795,18 +802,25 @@ def PingService(services:list[S|dict]):
                     k = s['kwargs']
                     
                     cls:S = Get(s)
-                    await cls.async_pingService(*a,**k)
+                    if wait:
+                        await cls.async_pingService(*a,**k)
+                    else:
+                        cls.sync_pingService(*a,**k)
                     
                 else:    
                     s: BaseService = Get(s)
-                    await s.async_pingService()
+                    if wait:
+                        await s.async_pingService()
+                    else:
+                        cls.sync_pingService()
 
             result = func(*args,**kwargs)          
             if asyncio.iscoroutine(result):
                 return await result
             return result
         
-        return wrapper
+        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
+        return func
     return decorator
 
 def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writer'):
@@ -824,8 +838,9 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
             else:
                 async with _service.statusLock.writer:
                         return await func(*args,**kwargs)
-            
-        return wrapper
+        
+        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
+        return func
     return decorator
 
 def Exclude():

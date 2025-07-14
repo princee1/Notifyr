@@ -64,8 +64,6 @@ class TemplateParamsPipe(Pipe):
         self.accept_none = accept_none
     
     async def pipe(self,template:str):
-        async with self.assetService.statusLock.reader:
-
             if template == '' and self.accept_none:
                 return {'template':template}
             
@@ -437,7 +435,6 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
         self.assetService = Get(AssetService)
         
     async def pipe(self,template:str,scheduler:SchedulerModel)->Template:
-        async with self.assetService.statusLock.reader:
 
             assets = getattr(self.assetService,self.template_type,None)
             if assets == None:
