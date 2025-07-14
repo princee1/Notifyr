@@ -237,9 +237,12 @@ class RedisService(DatabaseService):
                         ...
         else:
             async def handler_wrapper(message):
+                if 'data' not in message: 
+                    return
+                data= json.loads(message["data"])
                 if asyncio.iscoroutinefunction(handler):
-                    return await handler(message)
-                return handler(message)
+                    return await handler(data)
+                return handler(data)
 
         await pubsub.subscribe(**{channels:handler_wrapper}) # TODO Maybe add the function as await
 

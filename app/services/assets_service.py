@@ -177,7 +177,6 @@ class AssetService(_service.BaseService):
         self.sms: dict[str, SMSTemplate] = {}
         self.phone: dict[str, PhoneTemplate] = {}
 
-
         Reader.fileService = self.fileService
         if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
             return 
@@ -195,6 +194,7 @@ class AssetService(_service.BaseService):
         self.sms = smsReader
         self.phone = phoneReader
 
+        self.service_status = _service.ServiceStatus.AVAILABLE
         
     def loadHTMLData(self, html: HTMLTemplate):
         cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
