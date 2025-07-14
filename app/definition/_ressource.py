@@ -793,28 +793,28 @@ def PingService(services:list[S|dict],wait=True):
             
             @functools.wraps(function)
             async def callback(*args,**kwargs):
-                
-                wait_timeout = kwargs.get('wait',0)
-                print(wait_timeout)
-                
-                for s in services:
-                    if isinstance(s,dict):
-                        cls= s['cls']
-                        a = s['args']
-                        k = s['kwargs']
-                        
-                        cls:S = Get(s)
-                        if wait:
-                            await cls.async_pingService(*a,**k)
-                        else:
-                            cls.sync_pingService(*a,**k)
-                        
-                    else:    
-                        s: BaseService = Get(s)
-                        if wait:
-                            await s.async_pingService()
-                        else:
-                            cls.sync_pingService()
+                                
+                async def inner_callback():
+                    for s in services:
+                        if isinstance(s,dict):
+                            cls= s['cls']
+                            a = s['args']
+                            k = s['kwargs']
+                            
+                            cls:S = Get(s)
+                            if wait:
+                                await cls.async_pingService(*a,**k)
+                            else:
+                                cls.sync_pingService(*a,**k)
+                            
+                        else:    
+                            s: BaseService = Get(s)
+                            if wait:
+                                await s.async_pingService()
+                            else:
+                                s.sync_pingService()
+
+                await inner_callback()
 
                 result = func(*args,**kwargs)          
                 if asyncio.iscoroutine(result):
@@ -823,6 +823,7 @@ def PingService(services:list[S|dict],wait=True):
             
             return callback
         #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
+        # return func
         return wrapper(func)
     return decorator
 
@@ -846,6 +847,7 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
             
             return callback
         #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
+        #return func
         return wrapper(func)
     return decorator
 
