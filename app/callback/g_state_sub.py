@@ -9,7 +9,7 @@ from app.utils.constant import SubConstant
 async def Set_Service_Status(v:StateProtocol):
     
     print("Starting..")
-    service:BaseService = _CLASS_DEPENDENCY[v['service']]
+    service:BaseService = Get(_CLASS_DEPENDENCY[v['service']])
     
     async with service.statusLock.writer:
         service.service_status = ServiceStatus(v['status'])

@@ -115,6 +115,7 @@ class Application(EventInterface):
             @self.app.exception_handler(exception)
             async def callback(request,e:type[Exception]):
                 print(e.__class__,e.args)
+                traceback.print_exc()
                 return JSONResponse({'message': 'An unexpected error occurred!'}, status_code=500)
 
 
@@ -220,7 +221,7 @@ class Application(EventInterface):
 
         redisService = Get(RedisService)
         
-        if redisService.services_status == ServiceStatus.AVAILABLE:
+        if redisService.service_status == ServiceStatus.AVAILABLE:
             await redisService.create_group()
             redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
 

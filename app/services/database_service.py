@@ -236,12 +236,10 @@ class RedisService(DatabaseService):
                     except ReactiveSubjectNotFoundError:
                         ...
         else:
-            if asyncio.iscoroutinefunction(handler):
-                def handler_wrapper(message):
-                    return handler(message)
-            else:
-                async def handler_wrapper(message):
+            async def handler_wrapper(message):
+                if asyncio.iscoroutinefunction(handler):
                     return await handler(message)
+                return handler(message)
 
         await pubsub.subscribe(**{channels:handler_wrapper}) # TODO Maybe add the function as await
 
@@ -276,7 +274,7 @@ class RedisService(DatabaseService):
             })
 
             if is_sub:
-                channel_callback = callbacks_sub.get(stream_name,None)# Print later
+                channel_callback = callbacks_sub.get(stream_name,lambda v:print(v))# Print later
                 config['channel_tasks']= asyncio.create_task(self._consume_channel(stream_name,channel_callback))
             
             if is_stream:
