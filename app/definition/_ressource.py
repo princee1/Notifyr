@@ -823,8 +823,7 @@ def ExemptLimiter():
 def PingService(services: list[S | dict], wait=True):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(
-            func, PingService, None, services=services, wait=wait)
+        cls = common_class_decorator( func, PingService, None, services=services, wait=wait)
         if cls != None:
             return cls
 
@@ -844,6 +843,7 @@ def PingService(services: list[S | dict], wait=True):
 
                             cls: S = Get(s)
                             if wait:
+
                                 await cls.async_pingService(*a, **k)
                             else:
                                 cls.sync_pingService(*a, **k)
@@ -872,12 +872,12 @@ def PingService(services: list[S | dict], wait=True):
     return decorator
 
 
-def ServiceStatusLock(services: Type[S], lockType: Literal['reader', 'writer'] = 'writer', func_name: str = ''):
+def ServiceStatusLock(services: Type[S], lockType: Literal['reader', 'writer'] = 'writer', func_name: str = '',infinite_wait:bool=False,lock_route:bool=True):
     if lockType not in ['reader', 'writer']:
         raise TypeError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, ServiceStatusLock, None, services=services,lockType=lockType,func_name=func_name)
+        cls = common_class_decorator(func, ServiceStatusLock, None, services=services,lockType=lockType,func_name=func_name,infinite_wait=infinite_wait,lock_route=lock_route)
         if cls != None:
             return cls
 
@@ -887,12 +887,29 @@ def ServiceStatusLock(services: Type[S], lockType: Literal['reader', 'writer'] =
             async def callback(*args, **kwargs):
 
                 _service: S = Get(services)
-                                
-                async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
-                    _service.check_status(func_name)
-                    if asyncio.iscoroutinefunction(target_function):
-                        return await target_function(*args, **kwargs)
-                    return target_function(*args,**kwargs)
+                wait_timeout = kwargs.get('wait_timeout',MIN_TIMEOUT)
+                as_async = kwargs.get('as_async',True)
+
+                async def inner_callback():
+                    if lock_route:
+                        async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
+                            _service.check_status(func_name)
+                            if asyncio.iscoroutinefunction(target_function):
+                                return await target_function(*args, **kwargs)
+                            return target_function(*args,**kwargs)
+                    else:
+                        async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
+                            _service.check_status(func_name)
+
+                        if asyncio.iscoroutinefunction(target_function):
+                                return await target_function(*args, **kwargs)
+                        return target_function(*args,**kwargs)
+
+                if not infinite_wait and wait_timeout >=0 and as_async:
+                    return await asyncio.wait_for(inner_callback(),wait_timeout)
+                else:
+                    return await inner_callback()
+                #NOTE: This is the only way to wait on the request, the timeout is for the whole request wrapped in the lock instead of only the verification that we wait
 
             return callback
         appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
