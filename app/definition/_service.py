@@ -17,7 +17,7 @@ AbstractServiceClasses: Dict[str, type] = {}
 BuildOnlyIfDependencies: Dict = {}
 PossibleDependencies: Dict[str, list[type]] = {}
 OptionalDependencies: Dict[str, list[type]] = {}
-__CLASS_DEPENDENCY:Dict[str,type]= {}
+_CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []
 
 
@@ -118,7 +118,6 @@ class BaseService():
         self.statusLock = RWLock()
         self.stateCounter = 0
 
-
     @property
     def is_reader_locked(self)->bool:
         return self.statusLock.reader_lock.locked
@@ -188,8 +187,7 @@ class BaseService():
     @CheckStatusBeforeHand
     def sync_pingService(self):
         ...
-
-    
+  
     def build(self):
         # warnings.warn(
         #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
@@ -230,10 +228,11 @@ class BaseService():
             self.build()
             self._builded = True
             self._destroyed = False
+            self.service_status = ServiceStatus.AVAILABLE
+            self.method_not_available = []
             self.prettyPrinter.success(
                 f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
             self.prettyPrinter.wait(WAIT_TIME, False)
-            self.service_status = ServiceStatus.AVAILABLE
 
         except BuildFailureError as e:
             self.prettyPrinter.error(
@@ -304,7 +303,7 @@ class BaseService():
 
     @property
     def name(self):
-        return self.__class__.name
+        return self.__class__.__name__
 
 
 S = TypeVar('S', bound=BaseService)
@@ -321,7 +320,7 @@ def AbstractServiceClass(cls: S) -> S:
 def Service(cls: Type[S]) -> Type[S]:
     if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
         __DEPENDENCY.append(cls)
-        __CLASS_DEPENDENCY[cls.__name__] = cls
+        _CLASS_DEPENDENCY[cls.__name__] = cls
     return cls
 
 
