@@ -832,7 +832,7 @@ def PingService(services: list[S | dict], wait=True):
             @functools.wraps(target_function)
             async def callback(*args, **kwargs):
 
-                wait_timeout = kwargs.get('wait_timeout', MIN_TIMEOUT)
+                wait_timeout = MIN_TIMEOUT
 
                 async def inner_callback():
                     for s in services:

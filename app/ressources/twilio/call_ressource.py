@@ -24,7 +24,7 @@ from app.services.twilio_service import CallService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, ServiceStatusLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
-from app.depends.funcs_dep import get_client,Get_Contact, get_task, get_template, verify_twilio_token, as_async_query, populate_response_with_request_id
+from app.depends.funcs_dep import get_client,Get_Contact, get_task, get_template, verify_twilio_token, as_async_query, populate_response_with_request_id,wait_timeout_query
 from app.depends.class_dep import Broker, KeepAliveQuery, SubjectParams, TwilioTracker
 from app.utils.constant import StreamConstant
 from app.utils.helper import uuid_v1_mc
@@ -56,7 +56,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseHandler(AsyncIOHandler,TemplateHandler)
     @ServiceStatusLock(AssetService,'reader','')
     @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
-    def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str=''):
+    def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
         
         schemas = self.assetService.get_schema('phone')
         if template in schemas:
@@ -70,7 +70,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePipe(_to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'), TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','','',False))
     @BaseHTTPRessource.Post('/otp/{template}',dependencies=[Depends(populate_response_with_request_id)])
-    async def voice_relay_otp(self, template: Annotated[PhoneTemplate,Depends(get_template)], otpModel: OTPModel, request: Request,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
+    async def voice_relay_otp(self, template: Annotated[PhoneTemplate,Depends(get_template)], otpModel: OTPModel, request: Request,taskManager: Annotated[TaskManager, Depends(get_task)], wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
         _, body = template.build(otpModel.content, ...,True)
 
         await taskManager.offload_task('route-focus',s(TaskHeaviness.LIGHT),0,None,self.callService.send_otp_voice_call,body, otpModel)
@@ -104,7 +104,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
     @ServiceStatusLock(AssetService,'reader','')
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
-    async def voice_template(self, template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
+    async def voice_template(self, template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
         
         for content in scheduler.content:
             index= content.index

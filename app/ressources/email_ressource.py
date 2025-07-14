@@ -19,7 +19,7 @@ from fastapi import   HTTPException, Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission
 from app.decorators import permissions, handlers,pipes,guards
 from app.classes.celery import SchedulerModel
-from app.depends.variables import populate_response_with_request_id,email_verifier
+from app.depends.variables import populate_response_with_request_id,email_verifier,wait_timeout_query
 from app.utils.constant import StreamConstant
 from app.utils.helper import APIFilterInject
 from app.depends.variables import track
@@ -57,7 +57,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UsePipe(pipes.TemplateParamsPipe('html','html',True))
     @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler)
     @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
-    def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str=''):
+    def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
         schemas = self.assetService.get_schema('html')
         if template in schemas:
             return schemas[template]
@@ -74,7 +74,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
     @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe('meta'),pipes.TemplateValidationInjectionPipe('html','data','meta.index'),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
-    async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+    async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
         
         for mail_content in scheduler.content:
             

@@ -22,7 +22,7 @@ from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
 from app.services.twilio_service import SMSService
 from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
-from app.depends.funcs_dep import get_task, get_template, verify_twilio_token,populate_response_with_request_id,as_async_query
+from app.depends.funcs_dep import get_task, get_template, verify_twilio_token,populate_response_with_request_id,as_async_query,wait_timeout_query
 from app.utils.constant import SpecialKeyAttributesConstant, StreamConstant
 from app.utils.helper import APIFilterInject, uuid_v1_mc
 
@@ -51,7 +51,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(TemplateParamsPipe('sms','xml',True))
     @UseHandler(AsyncIOHandler,TemplateHandler)
     @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
-    def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission),template:str=''):
+    def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
         
         schemas = self.assetService.get_schema('sms')
         if template and template in schemas:
@@ -69,7 +69,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @PingService([SMSService])
     @UsePipe(_to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'),TemplateValidationInjectionPipe('sms','','',False))
     @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
-    async def sms_relay_otp(self,template:Annotated[SMSTemplate,Depends(get_template)],otpModel:OTPModel,request:Request,response:Response,taskManager: Annotated[TaskManager, Depends(get_task)],authPermission=Depends(get_auth_permission)):
+    async def sms_relay_otp(self,template:Annotated[SMSTemplate,Depends(get_template)],otpModel:OTPModel,request:Request,response:Response,taskManager: Annotated[TaskManager, Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
 
         _,body= template.build(otpModel.content,...,True)
 
@@ -113,7 +113,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @PingService([SMSService])
     @ServiceStatusLock(AssetService,'reader','')
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
-    async def sms_template(self,template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
+    async def sms_template(self,template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
         for content in scheduler.content:
 
             _,result=template.build(self.configService.ASSET_LANG,content.data)
