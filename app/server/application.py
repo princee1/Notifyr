@@ -222,7 +222,7 @@ class Application(EventInterface):
         
         if redisService.services_status == ServiceStatus.AVAILABLE:
             await redisService.create_group()
-            redisService.register_consumer(callbacks_stream=Callbacks_Stream)
+            redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
 
         taskService:TaskService =  Get(TaskService)
         #taskService.start()

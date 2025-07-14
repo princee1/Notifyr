@@ -163,7 +163,7 @@ class RedisService(DatabaseService):
 
             SubConstant.SERVICE_STATUS:self.StreamConfig(
                 sub=True,
-                stream=True
+                stream=False
             )
         }
 

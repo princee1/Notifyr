@@ -185,15 +185,15 @@ class AssetService(_service.BaseService):
         self.images = Reader()(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
         self.css = Reader()(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
 
-        htmlReader: ThreadedReader = ThreadedReader(HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.HTML.value)
-        pdfReader: ThreadedReader = ThreadedReader(PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)
-        smsReader: ThreadedReader = ThreadedReader(SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
-        phoneReader: ThreadedReader = ThreadedReader(PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
+        htmlReader = Reader(HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.HTML.value)
+        pdfReader = Reader(PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)
+        smsReader = Reader(SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
+        phoneReader = Reader(PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
 
-        self.html = htmlReader.join()
-        self.pdf = pdfReader.join()
-        self.sms = smsReader.join()
-        self.phone = phoneReader.join() 
+        self.html = htmlReader
+        self.pdf = pdfReader
+        self.sms = smsReader
+        self.phone = phoneReader
 
         
     def loadHTMLData(self, html: HTMLTemplate):
