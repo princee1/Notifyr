@@ -7,6 +7,7 @@ from app.classes.template import HTMLTemplate
 from app.depends.class_dep import Broker, EmailTracker
 from app.depends.funcs_dep import get_task, get_template
 from app.models.email_model import CustomEmailModel, CustomEmailSchedulerModel, EmailSpamDetectionModel, EmailTemplateModel, EmailTemplateSchedulerModel
+from app.services.assets_service import AssetService
 from app.services.celery_service import TaskManager, TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.link_service import LinkService
@@ -52,8 +53,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
     @UseLimiter(limit_value="10/minutes")
     @UseRoles([Role.PUBLIC])
+    @PingService([AssetService])
     @UsePipe(pipes.TemplateParamsPipe('html','html',True))
-    @UseHandler(handlers.TemplateHandler)
+    @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler)
     @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
     def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str=''):
         schemas = self.assetService.get_schema('html')
@@ -64,8 +66,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])
+    @PingService([AssetService])
     @UsePermission(permissions.JWTAssetPermission('html'))
-    @UseHandler(handlers.TemplateHandler,handlers.ContactsHandler)
+    @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler,handlers.ContactsHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
     @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe('meta'),pipes.TemplateValidationInjectionPipe('html','data','meta.index'),pipes.ContactToInfoPipe('email','meta.To'),)

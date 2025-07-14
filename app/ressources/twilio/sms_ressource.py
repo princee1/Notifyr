@@ -5,7 +5,7 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType, s
 from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
-from app.decorators.handlers import CeleryTaskHandler, ContactsHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
+from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, _to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
@@ -14,6 +14,7 @@ from app.depends.class_dep import Broker, TwilioTracker
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSCustomSchedulerModel, SMSStatusModel, SMSTemplateSchedulerModel
 from app.models.twilio_model import SMSEventORM
+from app.services.assets_service import AssetService
 from app.services.celery_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
@@ -46,8 +47,9 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value="10/minutes")
     @UseRoles([Role.PUBLIC])
+    @PingService([AssetService])
     @UsePipe(TemplateParamsPipe('sms','xml',True))
-    @UseHandler(TemplateHandler)
+    @UseHandler(AsyncIOHandler,TemplateHandler)
     @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
     def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission),template:str=''):
         
@@ -60,16 +62,17 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="10000/minutes")
     @UseRoles([Role.MFA_OTP])
     @UsePipe(_to_otp_path,force_task_manager_attributes_pipe)
-    @UsePipe(TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'))
+    @UsePipe(TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),TemplateParamsPipe('sms','xml'),TemplateValidationInjectionPipe('sms','','',False))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
-    @UseHandler(TemplateHandler)
+    @UseHandler(AsyncIOHandler,TemplateHandler)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
+    @PingService([AssetService])
     @BaseHTTPRessource.HTTPRoute('/otp/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
-    async def sms_relay_otp(self,template:str,otpModel:OTPModel,request:Request,response:Response,taskManager: Annotated[TaskManager, Depends(get_task)],authPermission=Depends(get_auth_permission)):
-        smsTemplate:SMSTemplate = self.assetService.sms[template]
-        _,body= smsTemplate.build(otpModel.content,...)
-        
+    async def sms_relay_otp(self,template:Annotated[SMSTemplate,Depends(get_template)],otpModel:OTPModel,request:Request,response:Response,taskManager: Annotated[TaskManager, Depends(get_task)],authPermission=Depends(get_auth_permission)):
+
+        _,body= template.build(otpModel.content,...,True)
+
         await taskManager.offload_task('route-focus',s(TaskHeaviness.LIGHT),10,None,self.smsService.send_otp,otpModel,body)
         return taskManager.results
         
@@ -100,12 +103,13 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
-    @UseHandler(CeleryTaskHandler,TemplateHandler,ContactsHandler)
+    @UseHandler(CeleryTaskHandler,TemplateHandler,ContactsHandler,AsyncIOHandler)
     @UsePipe(TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UseGuard(CeleryTaskGuard(['task_send_template_sms']))
+    @PingService([AssetService])
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_template(self,template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],authPermission=Depends(get_auth_permission)):
         for content in scheduler.content:

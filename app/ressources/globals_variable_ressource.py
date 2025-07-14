@@ -2,7 +2,7 @@ from typing import Annotated
 from fastapi import Depends, Request, Response, status
 from app.classes.auth_permission import Role
 from app.container import Get, InjectInMethod
-from app.decorators.handlers import GlobalVarHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, ServiceAvailabilityHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import GlobalPointerIteratorPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, ServiceStatusLock, UseRoles
@@ -25,9 +25,8 @@ GLOBAL_KEY_RAISE = 1
 GLOBAL_KEY = 0
 
 
-@PingService([AssetService])
 @UsePermission(JWTRouteHTTPPermission)
-@UseHandler(ServiceAvailabilityHandler, GlobalVarHandler)
+@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,GlobalVarHandler)
 @HTTPRessource(VARIABLES_ROUTE)
 class GlobalAssetVariableRessource(BaseHTTPRessource):
 

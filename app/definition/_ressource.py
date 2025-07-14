@@ -785,7 +785,7 @@ def ExemptLimiter():
 def PingService(services:list[S|dict],wait=True):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func,PingService,None,services=services)
+        cls = common_class_decorator(func,PingService,None,services=services,wait=wait)
         if cls != None:
             return cls
         
@@ -842,15 +842,27 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
 
             @functools.wraps(function)
             async def callback(*args,**kwargs):
+
+                wait_timeout = kwargs.get('wait_timeout',0)
                 _service:S  = Get(services)
-                if lockType =='reader':
-                    async with _service.statusLock.reader:
-                        _service.check_status(func_name)
-                        return await func(*args,**kwargs)
+
+                async def inner_callback(lck,timeout):
+                    
+                    if timeout >0:
+                        await asyncio.wait_for(lck.acquire(),timeout)
+                    else:
+                        lck.acquire()
+                    _service.check_status(func_name)
+                    res = await func(*args,**kwargs)
+                    lck.release()
+                    return res
+
+                if lockType == 'reader':
+                    lock = _service.statusLock.reader_lock
                 else:
-                    async with _service.statusLock.writer:
-                        _service.check_status(func_name)
-                        return await func(*args,**kwargs)
+                    lock = _service.statusLock.writer_lock
+
+                await inner_callback(lock,wait_timeout)
             
             return callback
         #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
