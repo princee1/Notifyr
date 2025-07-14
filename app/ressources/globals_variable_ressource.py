@@ -62,7 +62,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
 
         return {"value": val}
 
-    @UseLimiter(limit_value='100/minutes')
+    @UseLimiter(limit_value='10/hours')
     @ServiceStatusLock(AssetService, 'writer')
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.ADMIN])
@@ -89,7 +89,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
             service=self.assetService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True))
         return {"value": val}
 
-    @UseLimiter(limit_value='50/minutes')
+    @UseLimiter(limit_value='10/hours')
     @ServiceStatusLock(AssetService, 'writer')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseRoles([Role.ADMIN])
