@@ -297,6 +297,10 @@ class BaseService():
     def services_status(self):
         return {s:s.service_status for s in self.service_list}
 
+    @property
+    def name(self):
+        return self.__class__.name
+
 
 S = TypeVar('S', bound=BaseService)
 

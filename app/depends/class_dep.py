@@ -15,7 +15,7 @@ from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, S
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.container import Get
-from app.utils.constant import SpecialKeyAttributesConstant
+from app.utils.constant import SpecialKeyAttributesConstant, SubConstant
 from app.utils.validation import url_validator
 from .variables import *
 from app.services.link_service import LinkService
@@ -374,6 +374,11 @@ class Broker:
 
         self.backgroundTasks.add_task(self.redisService.stream_data,channel,value)
         
+    
+    def propagate_state(self,protocol):
+        self.backgroundTasks.add_task(self.redisService.publish_data,SubConstant.SERVICE_STATUS,protocol)
+        
+
 class KeepAliveQuery:
 
     def __init__(self, response: Response, x_request_id: Annotated[str, Depends(get_request_id)], keep_alive: Annotated[bool, Depends(keep_connection)], timeout: int = Query(0, description="Time in seconds to delay the response", ge=0, le=60*3)):
