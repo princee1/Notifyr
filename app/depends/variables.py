@@ -83,4 +83,6 @@ force_update: Callable[[Request],bool]=get_query_params('force',False,True,raise
 
 wait_timeout_query = Query(0, description="Time in seconds wait for the response", ge=0, le=60*3)
 
+wait_timeout_query = get_query_params('timeout',0,True,False,checker= lambda v: v >=0 and v<=60)
+
 # ----------------------------------------------                                    ---------------------------------- #

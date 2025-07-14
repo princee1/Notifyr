@@ -119,3 +119,7 @@ class EmailHeadersConstant(str,Enum):
 
 class LinkConstant(str,Enum):
     PIXEL = 'pixel'
+
+
+class VariableConstant:
+    WAIT_TIMEOUT = 'wait'

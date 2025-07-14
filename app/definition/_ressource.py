@@ -793,7 +793,9 @@ def PingService(services:list[S|dict],wait=True):
             
             @functools.wraps(function)
             async def callback(*args,**kwargs):
-                                
+
+                wait_timeout = kwargs.get('wait_timeout',0)
+
                 async def inner_callback():
                     for s in services:
                         if isinstance(s,dict):
@@ -814,7 +816,10 @@ def PingService(services:list[S|dict],wait=True):
                             else:
                                 s.sync_pingService()
 
-                await inner_callback()
+                if wait and wait_timeout>0:
+                    asyncio.wait_for(inner_callback(),wait_timeout)
+                else:
+                    await inner_callback()
 
                 result = func(*args,**kwargs)          
                 if asyncio.iscoroutine(result):
@@ -822,12 +827,12 @@ def PingService(services:list[S|dict],wait=True):
                 return result
             
             return callback
-        #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
+        # appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
         # return func
         return wrapper(func)
     return decorator
 
-def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writer'):
+def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writer',func_name:str=''):
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func,ServiceStatusLock,None,services=services)
         if cls != None:
@@ -840,10 +845,12 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
                 _service:S  = Get(services)
                 if lockType =='reader':
                     async with _service.statusLock.reader:
+                        _service.check_status(func_name)
                         return await func(*args,**kwargs)
                 else:
                     async with _service.statusLock.writer:
-                            return await func(*args,**kwargs)
+                        _service.check_status(func_name)
+                        return await func(*args,**kwargs)
             
             return callback
         #appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)

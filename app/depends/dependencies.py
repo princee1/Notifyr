@@ -119,7 +119,7 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
             value = parse_value(value,return_none)
         
         if value == None and raise_except:
-            raise HTTPException(400,detail=f'Query {name} not specified')
+            raise HTTPException(400,detail=f'Query {name} not properly specified')
 
         if checker:
             if not checker(value):

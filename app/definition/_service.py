@@ -122,6 +122,22 @@ class BaseService():
     def is_reader_locked(self)->bool:
         return self.statusLock.reader_lock.locked
     
+
+    def check_status(self,func_name):
+        match self.service_status :
+            case ServiceStatus.NOT_AVAILABLE :
+                raise ServiceNotAvailableError
+            case ServiceStatus.TEMPORARY_NOT_AVAILABLE:
+                raise ServiceTemporaryNotAvailableError
+            case _:
+                ...
+
+        if not self._builded  or self._destroyed:
+            raise ServiceNotAvailableError
+
+        if func_name in self.method_not_available:
+            raise MethodServiceNotAvailableError
+
     @staticmethod
     def CheckStatusBeforeHand(func:Callable):
         
@@ -133,20 +149,7 @@ class BaseService():
             if self.is_reader_locked:
                 raise ServiceChangingStateError
     
-            match self.service_status :
-                case ServiceStatus.NOT_AVAILABLE :
-                    raise ServiceNotAvailableError
-                case ServiceStatus.TEMPORARY_NOT_AVAILABLE:
-                    raise ServiceTemporaryNotAvailableError
-                case _:
-                    ...
-
-            if not self._builded  or self._destroyed:
-                raise ServiceNotAvailableError
-
-            if func.__name__ in self.method_not_available:
-                raise MethodServiceNotAvailableError
-
+            self.check_status(func.__name__)
             return func(*args, **kwargs)
         
         @functools.wraps(func)
@@ -156,20 +159,7 @@ class BaseService():
 
             async with self.statusLock.reader as lock:
 
-                match self.service_status :
-                    case ServiceStatus.NOT_AVAILABLE :
-                        raise ServiceNotAvailableError
-                    case ServiceStatus.TEMPORARY_NOT_AVAILABLE:
-                        raise ServiceTemporaryNotAvailableError
-                    case _:
-                        ...
-
-                if not self._builded  or self._destroyed:
-                    raise ServiceNotAvailableError
-
-                if func.__name__ in self.method_not_available:
-                    raise MethodServiceNotAvailableError
-
+                self.check_status(func.__name__)
             return await func(*args, **kwargs)
         
         return async_wrapper if asyncio.iscoroutinefunction(func) else  sync_wrapper
@@ -187,6 +177,7 @@ class BaseService():
     @CheckStatusBeforeHand
     def sync_pingService(self):
         ...
+  
   
     def build(self):
         # warnings.warn(
