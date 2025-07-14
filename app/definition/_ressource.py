@@ -789,36 +789,38 @@ def PingService(services:list[S|dict],wait=True):
         if cls != None:
             return cls
         
-        @functools.wraps(func)
-        async def wrapper(*args,**kwargs):
-            
-            wait_timeout = kwargs.get('wait',0)
+        def wrapper(function:Callable):
+            @functools.wraps(function)
+            async def callback(*args,**kwargs):
+                
+                wait_timeout = kwargs.get('wait',0)
+                print(wait_timeout)
+                
+                for s in services:
+                    if isinstance(s,dict):
+                        cls= s['cls']
+                        a = s['args']
+                        k = s['kwargs']
+                        
+                        cls:S = Get(s)
+                        if wait:
+                            await cls.async_pingService(*a,**k)
+                        else:
+                            cls.sync_pingService(*a,**k)
+                        
+                    else:    
+                        s: BaseService = Get(s)
+                        if wait:
+                            await s.async_pingService()
+                        else:
+                            cls.sync_pingService()
 
+                result = func(*args,**kwargs)          
+                if asyncio.iscoroutine(result):
+                    return await result
+                return result
             
-            for s in services:
-                if isinstance(s,dict):
-                    cls= s['cls']
-                    a = s['args']
-                    k = s['kwargs']
-                    
-                    cls:S = Get(s)
-                    if wait:
-                        await cls.async_pingService(*a,**k)
-                    else:
-                        cls.sync_pingService(*a,**k)
-                    
-                else:    
-                    s: BaseService = Get(s)
-                    if wait:
-                        await s.async_pingService()
-                    else:
-                        cls.sync_pingService()
-
-            result = func(*args,**kwargs)          
-            if asyncio.iscoroutine(result):
-                return await result
-            return result
-        
+            return callback
         appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
         return func
     return decorator
@@ -829,16 +831,20 @@ def ServiceStatusLock(services:Type[S],lockType:Literal['reader','writer']='writ
         if cls != None:
             return cls
         
-        @functools.wraps(func)
-        async def wrapper(*args,**kwargs):
-            _service:S  = Get(services)
-            if lockType =='reader':
-                async with _service.statusLock.reader:
-                    return await func(*args,**kwargs)
-            else:
-                async with _service.statusLock.writer:
+        def wrapper(function: Callable):
+
+            @functools.wraps(function)
+            async def callback(*args,**kwargs):
+                _service:S  = Get(services)
+                if lockType =='reader':
+                    async with _service.statusLock.reader:
                         return await func(*args,**kwargs)
-        
+                else:
+                    async with _service.statusLock.writer:
+                            return await func(*args,**kwargs)
+            
+            return callback
+            
         appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
         return func
     return decorator
