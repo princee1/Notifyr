@@ -30,6 +30,7 @@ from twilio.base.exceptions import TwilioRestException
 import aiohttp
 import asyncio
 from aiohttp import BasicAuth
+from twilio.rest.api.v2010.account import AccountInstance
 
 @_service.Service
 class TwilioService(_service.BaseService):
@@ -41,7 +42,21 @@ class TwilioService(_service.BaseService):
     def build(self):
         self.client = Client(self.configService.TWILIO_ACCOUNT_SID,
                              self.configService.TWILIO_AUTH_TOKEN)
-
+        try:
+            account = self.client.api.accounts(self.configService.TWILIO_ACCOUNT_SID).fetch()
+            if account.status !=  AccountInstance.Status.ACTIVE:
+                raise _service.BuildFailureError
+            
+            if float(account.balance.fetch().balance)<0:
+                _service.BuildSkipError
+                
+        except TwilioRestException as e:
+                raise _service.BuildFailureError
+    
+    def verify_dependency(self):
+        if not self.configService.TWILIO_ACCOUNT_SID or not self.configService.TWILIO_AUTH_TOKEN:
+            raise _service.BuildFailureError
+            
     def parse_to_phone_format(self, phone_number: str) -> str:
         formatted_number = phone_parser(phone_number)
 
@@ -128,6 +143,13 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
         
         self.logs_url = self.twilio_url + "/status/logs"
         self.partial_results_url = self.twilio_url + "/status/partial-results"
+
+    def verify_dependency(self):
+        if self.twilioService.service_status == _service.ServiceStatus.NOT_AVAILABLE:
+            raise _service.BuildFailureError
+
+        if self.redisService.service_status == _service.ServiceStatus.NOT_AVAILABLE:
+            raise _service.BuildWarningError
 
     def set_url(self,subject_id=None,twilio_tracking=None):
         url = self.status_callback

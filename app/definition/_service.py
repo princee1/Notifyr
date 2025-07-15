@@ -34,6 +34,8 @@ class StateProtocol(TypedDict):
     to_build:bool = False
     to_destroy:bool =False
 
+class BuildReport(TypedDict):
+    ...
 
 class BuildErrorLevel(Enum):
     ABORT = 4
@@ -204,17 +206,11 @@ class BaseService():
     def destroyReport(self):
         pass
 
-    def check_service(self):
-        """
-        Callback to check internally if the state of the service is suffisant to run
-        """
-        ...
     
     # TODO Dependency that use service with failed might not properly, need to handle the view
     def _builder(self):
         try:
             now = dt.datetime.now()
-            self.check_service()
             self.verify_dependency()
             self.build()
             self._builded = True
@@ -246,7 +242,7 @@ class BaseService():
         except BuildSkipError as e: # TODO change color
             self.prettyPrinter.info(
                 f'[{now}] Slight Problem encountered while building the service: {self.__class__.__name__}', saveable=True)
-            self.service_status = ServiceStatus.WORKS_ALMOST_ATT
+            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
             pass
 
         except BuildNotImplementedError as e:
