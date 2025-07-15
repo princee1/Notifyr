@@ -449,7 +449,10 @@ class TortoiseConnectionService(DatabaseService):
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
 
         finally:
-             if conn:
-                conn.close()
+            try:
+                if conn:
+                    conn.close()
+            except:
+                ...
     
     

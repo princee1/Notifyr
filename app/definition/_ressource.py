@@ -820,7 +820,7 @@ def ExemptLimiter():
     return decorator
 
 
-def PingService(services: list[S | dict], wait=True):
+def PingService(services: list[S | dict], wait=True,checker:Callable=None):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator( func, PingService, None, services=services, wait=wait)
@@ -833,6 +833,12 @@ def PingService(services: list[S | dict], wait=True):
             async def callback(*args, **kwargs):
 
                 wait_timeout = MIN_TIMEOUT
+                if checker !=None:
+                    if not APIFilterInject(checker)(**kwargs):
+                        result = target_function(*args, **kwargs)
+                        if asyncio.iscoroutine(result):
+                            return await result
+                        return result
 
                 async def inner_callback():
                     for s in services:

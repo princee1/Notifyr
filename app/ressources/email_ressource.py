@@ -4,6 +4,7 @@ from app.classes.auth_permission import MustHave, Role
 from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import HTMLTemplate
+from app.depends.checker import check_celery_service
 from app.depends.class_dep import Broker, EmailTracker
 from app.depends.funcs_dep import get_task, get_template
 from app.models.email_model import CustomEmailModel, CustomEmailSchedulerModel, EmailSpamDetectionModel, EmailTemplateModel, EmailTemplateSchedulerModel
@@ -67,6 +68,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])
     @PingService([EmailSenderService])
+    @PingService([CeleryService],checker=check_celery_service)
     @ServiceStatusLock(AssetService,'reader','')
     @UsePermission(permissions.JWTAssetPermission('html'))
     @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler,handlers.ContactsHandler)
@@ -119,6 +121,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10000/minutes')
     @UseHandler(handlers.ContactsHandler)
+    @PingService([EmailSenderService])
+    @PingService([CeleryService],checker=check_celery_service)
     @UsePipe(pipes.CeleryTaskPipe,pipes.ContentIndexPipe('meta'),pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
