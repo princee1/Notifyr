@@ -834,7 +834,7 @@ def PingService(services: list[S | dict], wait=True,checker:Callable=None):
 
                 wait_timeout = MIN_TIMEOUT
                 if checker !=None:
-                    if not APIFilterInject(checker)(**kwargs):
+                    if APIFilterInject(checker)(**kwargs):
                         result = target_function(*args, **kwargs)
                         if asyncio.iscoroutine(result):
                             return await result
