@@ -10,6 +10,7 @@ from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ServiceStatus
 from app.ressources import *
+from app.services.database_service import TortoiseConnectionService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
 from app.services.config_service import ConfigService
@@ -203,6 +204,11 @@ class Application(EventInterface):
             self.app.add_middleware(middleware)
         
     def register_tortoise(self):
+
+        tortoiseConnService = Get(TortoiseConnectionService)
+        if tortoiseConnService.services_status != ServiceStatus.AVAILABLE:
+            return
+
         pg_user = self.configService.getenv('POSTGRES_USER')
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
         pg_database = self.configService.getenv('POSTGRES_DB')

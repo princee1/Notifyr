@@ -3,10 +3,10 @@ from urllib.parse import urlparse
 from fastapi import HTTPException, Request, status
 from app.classes.rsa import RSA
 from app.classes.template import HTMLTemplate
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
 from app.models.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
+from app.services.database_service import RedisService, TortoiseConnectionService
 from app.services.reactive_service import ReactiveService
 import qrcode as qr
 import io
@@ -22,9 +22,10 @@ import re
 @Service
 class LinkService(BaseService):
 
-    def __init__(self, configService: ConfigService, redisService: RedisService, reactiveService: ReactiveService, securityService: SecurityService):
+    def __init__(self, configService: ConfigService, redisService: RedisService, reactiveService: ReactiveService, securityService: SecurityService,tortoiseConnService:TortoiseConnectionService):
         super().__init__()
 
+        self.tortoiseConnService = tortoiseConnService
         self.configService = configService
         self.reactiveService = reactiveService
         self.redisService = redisService
@@ -36,6 +37,10 @@ class LinkService(BaseService):
 
     def build(self):
         ...
+
+    def verify_dependency(self):
+        if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError
 
     async def generate_public_signature(self, link: LinkORM):
         rsa: RSA = self.securityService.generate_rsa_key_pair(512)

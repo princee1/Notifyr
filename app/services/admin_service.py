@@ -1,19 +1,25 @@
 from datetime import timedelta
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
 from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,AlreadyBlacklistedClientError
 from app.models.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
+from app.services.database_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 
 
 @Service
 class AdminService(BaseService):
 
-    def __init__(self,jwtAuthService:JWTAuthService):
+    def __init__(self,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService):
         super().__init__()
         self.jwtAuthService = jwtAuthService
+        self.tortoiseConnService = tortoiseConnService
 
     def build(self):
         ...
+    
+    def verify_dependency(self):
+        if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError
     
     async def is_blacklisted(self, client: ClientORM) -> tuple[bool, float | None]:
         blacklist = await BlacklistORM.filter(client=client).first()

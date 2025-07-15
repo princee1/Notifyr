@@ -5,7 +5,7 @@ from app.container import InjectInMethod
 from app.decorators.handlers import ServiceAvailabilityHandler, TwilioHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import parse_phone_number
-from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.dependencies import get_auth_permission
 from app.depends.variables import parse_to_phone_format,carrier_info,callee_info
 from app.ressources.twilio.sms_ressource import SMSRessource
@@ -25,12 +25,14 @@ class TwilioRessource(BaseHTTPRessource):
         self.twilioService = twilioService
         self.callService = callService
 
+    @PingService([TwilioService])
     @UseLimiter(limit_value= '1000/day')
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/balance/',methods=[HTTPMethod.GET])
     def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
         return self.callService.fetch_balance()
     
+    @PingService([TwilioService])
     @UsePipe(parse_phone_number)
     @UseLimiter(limit_value= '10/day')
     @UseRoles([Role.PUBLIC])

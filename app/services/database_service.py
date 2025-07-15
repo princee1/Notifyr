@@ -19,6 +19,7 @@ import json
 import asyncio
 from tortoise import Tortoise
 from app.errors.async_error import ReactiveSubjectNotFoundError
+import psycopg2
 
 MS_1000 = 1000
 
@@ -422,12 +423,33 @@ class TortoiseConnectionService(DatabaseService):
     def __init__(self, configService: ConfigService):
         super().__init__(configService, None)
 
+
+    def verify_dependency(self):
+        pg_user = self.configService.getenv('POSTGRES_USER')
+        pg_password = self.configService.getenv('POSTGRES_PASSWORD')
+        pg_database = self.configService.getenv('POSTGRES_DB')
+
+        if not pg_user or not pg_password or not pg_database:
+            raise BuildFailureError
+
     def build(self):
         try:
-            connection = Tortoise.get_connection('default')
-            if not connection.is_connected():
-                raise ConnectionError("Tortoise ORM is not connected to the database")
+            pg_user = self.configService.getenv('POSTGRES_USER')
+            pg_password = self.configService.getenv('POSTGRES_PASSWORD')
+            pg_database = self.configService.getenv('POSTGRES_DB')
+
+            conn = psycopg2.connect(
+                dbname=pg_database,
+                user=pg_user,
+                password=pg_password,
+                host="localhost",
+                port=5432
+            )
         except Exception as e:
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
+
+        finally:
+             if conn:
+                conn.close()
     
     

@@ -4,10 +4,11 @@ from uuid import UUID
 
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import ContactPermissionScope
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
 from app.errors.contact_error import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.models.contacts_model import *
 from app.services.config_service import ConfigService
+from app.services.database_service import TortoiseConnectionService
 from app.services.link_service import LinkService
 from app.services.security_service import JWTAuthService, SecurityService
 from random import randint
@@ -22,10 +23,17 @@ MAX_OPT_IN_CODE = 999999999
 @Service
 class SubscriptionService(BaseService):
 
-    
+
+    def __init__(self,tortoiseConnService:TortoiseConnectionService):
+        super().__init__()    
+        self.tortoiseConnService= tortoiseConnService
 
     def build(self):
         ...
+    
+    def verify_dependency(self):
+        if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError
 
     async def get_contact_subscription(self, contact: ContactORM, content: ContentSubscriptionORM):
         subs = await SubscriptionORM.filter(contact=contact, content=content).first()
