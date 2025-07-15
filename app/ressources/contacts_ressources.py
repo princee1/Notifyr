@@ -15,6 +15,7 @@ from app.models.contacts_model import AppRegisteredContactModel, ContactORM,Cont
 from app.services.celery_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
+from app.services.database_service import TortoiseConnectionService
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import SMSService, CallService
@@ -32,7 +33,7 @@ CONTACTS_CRUD_PREFIX = 'manage'
 get_contacts = Get_Contact(False,False)
        
 ##############################################                   ##################################################
-
+@PingService([TortoiseConnectionService])
 @UseHandler(TortoiseHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @UseRoles([Role.SUBSCRIPTION])

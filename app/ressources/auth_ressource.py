@@ -11,13 +11,14 @@ from app.decorators.handlers import ORMCacheHandler, SecurityClientHandler, Serv
 from app.depends.funcs_dep import GetClient, get_client_by_password,verify_admin_signature, verify_admin_token,verify_twilio_token
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, TwilioPermission, UserPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ChallengeORMCache, ClientORMCache
 from app.errors.security_error import AuthzIdMisMatchError, ClientDoesNotExistError,ClientTokenHeaderNotProvidedError, CouldNotCreateAuthTokenError
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ChallengeORM, ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
+from app.services.database_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
 from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip
@@ -29,7 +30,7 @@ REFRESH_AUTH_PREFIX = 'refresh'
 GENERATE_AUTH_PREFIX = 'generate'
 AUTH_PREFIX = 'auth'    
 
-
+@PingService([TortoiseConnectionService])
 @UseHandler(TortoiseHandler)   
 @UsePipe(ForceClientPipe)
 @UseHandler(ServiceAvailabilityHandler,SecurityClientHandler)
@@ -101,7 +102,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         else:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED,content='Could not set auth and refresh token')
 
-
+@PingService([TortoiseConnectionService])
 @UseRoles([Role.ADMIN])
 @UseHandler(TortoiseHandler,ServiceAvailabilityHandler)
 @HTTPRessource(GENERATE_AUTH_PREFIX)

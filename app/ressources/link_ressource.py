@@ -8,7 +8,7 @@ from app.decorators.guards import AccessLinkGuard
 from app.decorators.handlers import ORMCacheHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._error import ServerFileError
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import GetLink
 from app.depends.class_dep import Broker, LinkQuery
@@ -49,6 +49,7 @@ async def get_link_cache(link_id:str,)->LinkORM:
 @UseRoles([Role.LINK])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(TortoiseHandler)
+@PingService([LinkService])
 @HTTPRessource(LINK_MANAGER_PREFIX)
 class CRUDLinkRessource(BaseHTTPRessource):
 

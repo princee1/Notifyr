@@ -3,9 +3,11 @@ from fastapi import Depends, Request
 from app.classes.auth_permission import Role
 from app.decorators.handlers import TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, UseHandler, UsePermission, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, UseHandler, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
+from app.services.database_service import TortoiseConnectionService
 
+@PingService([TortoiseConnectionService])
 @UseRoles([Role.ADMIN])
 @UseHandler(TortoiseHandler)
 @UsePermission(JWTRouteHTTPPermission)

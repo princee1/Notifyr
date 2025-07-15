@@ -65,14 +65,20 @@ class SubscriptionService(BaseService):
 @Service
 class ContactsService(BaseService):
 
-    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService,linkService:LinkService):
+    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService,linkService:LinkService,tortoiseConnService:TortoiseConnectionService):
         super().__init__()
         self.securityService = securityService
         self.configService = configService
         self.jwtService = jwtService
         self.linkService = linkService
+        self.tortoiseConnService= tortoiseConnService
 
         self.expiration = 3600000000
+
+
+    def verify_dependency(self):
+        if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError
 
     def build(self):
         ...
