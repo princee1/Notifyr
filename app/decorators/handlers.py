@@ -39,11 +39,11 @@ class ServiceAvailabilityHandler(Handler):
 
         except ServiceNotAvailableError as e:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Service not available')
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Service not available')
 
         except MethodServiceNotAvailableError as e:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Method service not available')
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Method service not available')
 
         except MethodServiceNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
