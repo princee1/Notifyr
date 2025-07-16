@@ -1,31 +1,29 @@
 package middleware
 
 import (
-	"balancer/internal/helper"
 	service "balancer/internal/services"
+	"balancer/internal/utils"
 	"fmt"
 	"strings"
 	"time"
+
 	"github.com/gofiber/fiber/v2"
 )
 
-
-const PROCESS_TIME_HEADER_NAME = "X-Balancer-Process-Time"
 var SPLITABLE_ROUTES = []string{"/email/template/", "/email/custom/", "twilio/sms/ongoing/template/", "twilio/sms/ongoing/custom/", "twilio/call/ongoing/custom/", "twilio/sms/ongoing/twiml/", "twilio/sms/ongoing/template"}
 
-
 type BaseMiddleware interface {
-	Middleware(c *fiber.Ctx)  error
+	Middleware(c *fiber.Ctx) error
 }
 type MetaDataMiddleware struct {
 	SecurityService *service.SecurityService
 }
 
-func (metadata *MetaDataMiddleware) Middleware(c *fiber.Ctx) error{
-	start:= time.Now()
+func (metadata *MetaDataMiddleware) Middleware(c *fiber.Ctx) error {
+	start := time.Now()
 	err := c.Next()
 	duration := time.Since(start)
-	c.Set(PROCESS_TIME_HEADER_NAME,fmt.Sprintf("%v (ms)",duration.Milliseconds()))
+	c.Set(utils.PROCESS_TIME_HEADER_NAME, fmt.Sprintf("%v (ms)", duration.Milliseconds()))
 	return err
 }
 
@@ -33,18 +31,17 @@ type AccessMiddleware struct {
 	SecurityService *service.SecurityService
 }
 
-func (access *AccessMiddleware) Middleware(c *fiber.Ctx) error{
+func (access *AccessMiddleware) Middleware(c *fiber.Ctx) error {
 	return c.Next()
 }
-
 
 type ActiveMiddleware struct {
 	HealthService *service.HealthService
 }
 
-func (active *ActiveMiddleware) Middleware(c *fiber.Ctx) error{
+func (active *ActiveMiddleware) Middleware(c *fiber.Ctx) error {
 
-	if active.HealthService.ActiveConnection() <=0 {
+	if active.HealthService.ActiveConnection() <= 0 {
 		c.Response().SetStatusCode(fiber.StatusInternalServerError)
 		return c.SendString("No Notifyr App At The moment, try again later")
 	}
@@ -52,20 +49,20 @@ func (active *ActiveMiddleware) Middleware(c *fiber.Ctx) error{
 }
 
 type SplitProxyMiddleware struct {
-	ProxyService *service.ProxyAgentService
+	ProxyService  *service.ProxyAgentService
 	ConfigService *service.ConfigService
 }
 
-func (splitProxy *SplitProxyMiddleware) Middleware(c *fiber.Ctx) error{
-	
+func (splitProxy *SplitProxyMiddleware) Middleware(c *fiber.Ctx) error {
+
 	split := c.QueryBool("split", false)
 	var canSplit bool = split
 	if split {
-		routeURL:= strings.Replace(c.OriginalURL(),splitProxy.ConfigService.Addr(),"",-1)
-		canSplit = helper.StartsWithAny(routeURL,SPLITABLE_ROUTES) && c.Method() =="POST"
+		routeURL := strings.Replace(c.OriginalURL(), splitProxy.ConfigService.Addr(), "", -1)
+		canSplit = utils.StartsWithAny(routeURL, SPLITABLE_ROUTES) && c.Method() == "POST"
 	}
-	
-	c.Locals("canSplit",canSplit)
+
+	c.Locals("canSplit", canSplit)
 	return c.Next()
 }
 
@@ -73,6 +70,6 @@ type ProxyMiddleware struct {
 	ProxyService *service.ProxyAgentService
 }
 
-func (proxy *ProxyMiddleware) Middleware(c *fiber.Ctx) error{
+func (proxy *ProxyMiddleware) Middleware(c *fiber.Ctx) error {
 	return proxy.ProxyService.ProxyRequest(c)
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"balancer/internal/algo"
+	"balancer/internal/utils"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,15 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 )
+
+type NotifyrResp struct {
+	header     *http.Header
+	statusCode int
+	body       *[]byte
+}
+
+var BODY_EXCLUDE = []string{"content"}
+const X_REQUEST_ID_KEY = "x_request_id"
 
 type ProxyAgentService struct {
 	HealthService *HealthService
@@ -52,9 +62,8 @@ func (proxy *ProxyAgentService) CreateAlgo() {
 	proxy.currentAlgo = "random"
 }
 
-func (proxy *ProxyAgentService) getCanSplit(c *fiber.Ctx) bool{
-	
-	return false
+func (proxy *ProxyAgentService) getCanSplit(c *fiber.Ctx) bool {
+
 	v, ok := c.Locals("canSplit").(bool)
 	if !ok {
 		return false
@@ -64,51 +73,101 @@ func (proxy *ProxyAgentService) getCanSplit(c *fiber.Ctx) bool{
 }
 
 func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
-	var canSplit bool= proxy.getCanSplit(c)
+	var canSplit bool = proxy.getCanSplit(c)
 	var nextUrls []string = proxy.ChooseServer(canSplit)
 	var wg sync.WaitGroup
-	// var syncBody sync.Map=sync.Map{};
-	var syncBody []byte
+	var syncResp sync.Map = sync.Map{}
+	var syncBodies [][]byte
 
-	for _, nu := range nextUrls {
-		nu +=c.OriginalURL()
+	if canSplit {
+		body, err := proxy.SplitRequest(c, len((nextUrls)))
+		if err != nil {
+			return c.Status(500).SendString(fmt.Sprintf("%v", err))
+		}
+		syncBodies = *body
+
+	} else {
+		syncBodies = [][]byte{
+			c.Body(),
+		}
+	}
+
+	for index, nu := range nextUrls {
+		nu += c.OriginalURL()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			body := c.Body()
-			_b, err := proxy.CopyRequest(c, &body, nu)
-			if err != nil {
-				_b = []byte(fmt.Sprintf("%v", err))
-			} else {
-				syncBody = _b
-			}
+			body := syncBodies[index]
+			proxy.CopyRequest(c, &body, nu, index, &syncResp)
 		}()
 	}
 	wg.Wait()
 
-	return c.Send(syncBody)
+
+	return proxy.MergeRequest(c,&syncResp)
 }
 
-func (proxy *ProxyAgentService) SetContentIndex(c *fiber.Ctx) ([]byte, error) {
+func (proxy *ProxyAgentService) SplitRequest(c *fiber.Ctx, length int) (*[][]byte, error) {
 	var bodyMap map[string]interface{}
+	var copyBodies []map[string]interface{};
 
 	if err := json.Unmarshal(c.Body(), &bodyMap); err != nil {
 		return nil, err
 	}
 
 	if content, ok := bodyMap["content"].([]interface{}); ok {
+		
+		if !utils.IsSlice(content){
+			return nil,fmt.Errorf("cannot split a non list of content",)
+		}
+
+		if len(content) < length{
+			return nil, fmt.Errorf("the length of the content is lower than the number of underlying apps, toggle split to False")
+		}
+
+		for i := 0; i < length; i++ {
+			b:=utils.CopyOneLevelMap(bodyMap, BODY_EXCLUDE)
+			copyBodies = append(copyBodies, b)
+		}
+
+		var a int
+		var b int
+		var index int
+		var c_len = len(content)
+
 		for i, item := range content {
-			// Assert each item is a map and inject "_index"
+			n_i:= i+1
 			if itemMap, ok := item.(map[string]interface{}); ok {
 				itemMap["index"] = i
 			}
+
+			if n_i % length == 1{
+				a = i
+			}
+
+			if n_i % length == 0 || (c_len-n_i <length){ 
+				b=i
+				copyBodies[index]["content"]= content[a:b]
+				index++
+			}
+
 		}
+	} else {
+		return nil,fmt.Errorf("no content specified")
 	}
-	modifiedBody, err := json.Marshal(bodyMap)
-	if err != nil {
-		return nil, err
+
+	var modifiedBody [][]byte = [][]byte{}
+
+	for i:=0;i<length;i++{
+
+		body,err := json.Marshal(copyBodies[i])
+		if err != nil {
+			return nil, err
+		}
+		modifiedBody = append(modifiedBody,body)
 	}
-	return modifiedBody, nil
+	
+	return &modifiedBody, nil
 }
 
 func (proxy *ProxyAgentService) sendRequest(c *fiber.Ctx, newBody *[]byte, nextUrl *string) (*http.Response, error) {
@@ -131,14 +190,14 @@ func (proxy *ProxyAgentService) sendRequest(c *fiber.Ctx, newBody *[]byte, nextU
 	return resp, nil
 }
 
-func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextUrl string) ([]byte, error) {
+func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextUrl string, index int, syncResp *sync.Map) error {
 	// Create a new request with the same method and body
 	var retry int
 
 	for {
 		resp, err := proxy.sendRequest(c, newBody, &nextUrl)
 		if resp == nil {
-			return nil, err
+			return err
 		}
 		if resp.StatusCode == 503 {
 			if retry < 5 {
@@ -147,20 +206,74 @@ func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextU
 		}
 		defer resp.Body.Close()
 		// Copy response status, headers, and body back to the Fiber context
-		c.Status(resp.StatusCode)
 
-		for k, v := range resp.Header {
-			for _, vv := range v {
-				c.Set(k, vv)
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+
+		syncResp.Store(index, NotifyrResp{
+			header:     &resp.Header,
+			statusCode: resp.StatusCode,
+			body:       &bodyBytes,
+		})
+		return nil
+	}
+}
+
+func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) error {
+	mergedResults := []interface{}{}
+    mergedErrors := map[string]interface{}{}
+	mergedMeta :=map[string]interface{}{}
+
+    requestIDsSet := []string{}
+	var _err error=nil;
+	_is_meta_set := false
+
+	syncResp.Range(func(key, value any) bool {
+		
+	
+		p, ok := value.(NotifyrResp)
+		if !ok{
+			return false
+		}
+
+		if p.statusCode != 201  && p.statusCode!=200 {
+			return false
+		}
+		var  payload map[string]interface{}
+		if err := json.Unmarshal(*p.body, &payload); err != nil {
+			_err =err
+			return false
+		}
+
+		if meta,ok:= payload["meta"].(map[string]interface{});ok {
+
+			if !_is_meta_set{
+
+				mergedMeta = utils.CopyOneLevelMap(meta,[]string{X_REQUEST_ID_KEY})
+				requestIDsSet = append(requestIDsSet, fmt.Sprintf("%v",meta[X_REQUEST_ID_KEY]))
+				_is_meta_set = true
+			}else{
+				requestIDsSet = append(requestIDsSet,fmt.Sprintf("%v",meta[X_REQUEST_ID_KEY]))
 			}
 		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return body, nil
-	}
 
+        if results, ok := payload["results"].([]interface{}); ok {
+            mergedResults = append(mergedResults, results...)
+        }
+
+        if errors, ok := payload["errors"].(map[string]interface{}); ok {
+            for k, v := range errors {
+                mergedErrors[k] = v
+            }
+        }
+		return true	
+	})
+	
+	mergedMeta[X_REQUEST_ID_KEY]= requestIDsSet
+
+	return _err
 }
 
 func (proxy *ProxyAgentService) ChooseServer(split bool) []string {

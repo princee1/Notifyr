@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/spaolacci/murmur3"
@@ -25,10 +27,18 @@ func StartsWithAny(str string, prefixes []string) bool {
 	return false
 }
 
-func CopyOneLevelMap(original map[string]interface{}) map[string]interface{} {
+func CopyOneLevelMap(original map[string]interface{},exclude []string) map[string]interface{} {
 	newMap := make(map[string]interface{})
 	for k, v := range original {
+		if slices.Contains(exclude,k){
+			continue
+		}
 		newMap[k] = v
 	}
 	return newMap
+}
+
+
+func IsSlice(value interface{}) bool {
+	return reflect.TypeOf(value).Kind() == reflect.Slice
 }

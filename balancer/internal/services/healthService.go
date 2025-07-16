@@ -1,7 +1,7 @@
 package service
 
 import (
-	"balancer/internal/helper"
+	"balancer/internal/utils"
 	"errors"
 	"fmt"
 	"log"
@@ -352,7 +352,7 @@ func (health *HealthService) InitPingPongConnection(proxyService *ProxyAgentServ
 	for index, value := range health.ConfigService.URLS {
 		name := fmt.Sprintf("Notifyr Instance %v", index)
 		ppClient := PingPongClient{Name: name, URL: value, healthService: health, securityService: health.SecurityService, state: TO_CONNECT}
-		hashed_value := helper.HashURL(value)
+		hashed_value := utils.HashURL(value)
 		health.ppClient[hashed_value] = &ppClient
 		wg.Add(1)
 		go func() {
