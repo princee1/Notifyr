@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/gofiber/fiber/v2"
@@ -223,58 +224,122 @@ func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextU
 
 func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) error {
 	mergedResults := []interface{}{}
-    mergedErrors := map[string]interface{}{}
-	mergedMeta :=map[string]interface{}{}
+	mergedErrors := map[string]interface{}{}
+	mergedMeta := map[string]interface{}{}
+	var status int;
+	MergedBody:=map[string]interface{}{}
 
-    requestIDsSet := []string{}
-	var _err error=nil;
+	requestIDsSet := []string{}
+	var _err error = nil
 	_is_meta_set := false
 
+	// Header merging storage
+	headerValues := map[string][]string{
+		utils.X_PROCESS_TIME:        {},
+		utils.X_INSTANCE_ID:         {},
+		utils.X_PROCESS_PID:         {},
+		utils.X_PARENT_PROCESS_PID:  {},
+		utils.X_REQUEST_ID:          {},
+	}
+	// Ratelimit headers (preserve from first response)
+	rateLimitHeaders := map[string]string{}
+
+	first := true
+
 	syncResp.Range(func(key, value any) bool {
-		
-	
 		p, ok := value.(NotifyrResp)
-		if !ok{
+		if !ok {
 			return false
 		}
 
-		if p.statusCode != 201  && p.statusCode!=200 {
+		if p.statusCode != 200 && p.statusCode != 201 {
 			return false
+		}else{
+			status = p.statusCode
 		}
-		var  payload map[string]interface{}
+
+		// Decode body for meta, results, errors
+		var payload map[string]interface{}
 		if err := json.Unmarshal(*p.body, &payload); err != nil {
-			_err =err
+			_err = err
 			return false
 		}
 
-		if meta,ok:= payload["meta"].(map[string]interface{});ok {
+		// Merge meta
+		if meta, ok := payload["meta"].(map[string]interface{}); ok {
+			reqID := fmt.Sprintf("%v", meta[X_REQUEST_ID_KEY])
+			requestIDsSet = append(requestIDsSet, reqID)
 
-			if !_is_meta_set{
-
-				mergedMeta = utils.CopyOneLevelMap(meta,[]string{X_REQUEST_ID_KEY})
-				requestIDsSet = append(requestIDsSet, fmt.Sprintf("%v",meta[X_REQUEST_ID_KEY]))
+			if !_is_meta_set {
+				mergedMeta = utils.CopyOneLevelMap(meta, []string{X_REQUEST_ID_KEY})
 				_is_meta_set = true
-			}else{
-				requestIDsSet = append(requestIDsSet,fmt.Sprintf("%v",meta[X_REQUEST_ID_KEY]))
 			}
 		}
 
-        if results, ok := payload["results"].([]interface{}); ok {
-            mergedResults = append(mergedResults, results...)
-        }
+		// Merge results
+		if results, ok := payload["results"].([]interface{}); ok {
+			mergedResults = append(mergedResults, results...)
+		}
 
-        if errors, ok := payload["errors"].(map[string]interface{}); ok {
-            for k, v := range errors {
-                mergedErrors[k] = v
-            }
-        }
-		return true	
+		// Merge errors
+		if errors, ok := payload["errors"].(map[string]interface{}); ok {
+			for k, v := range errors {
+				mergedErrors[k] = v
+			}
+		}
+
+		// Merge headers
+		for key := range headerValues {
+			if val := p.header.Get(key); val != "" {
+				headerValues[key] = append(headerValues[key], val)
+			}
+		}
+
+		// Preserve rate limit headers from the first response
+		if first {
+			for _, rlHeader := range utils.RATE_LIMIT_HEADERS {
+				if val := p.header.Get(rlHeader); val != "" {
+					rateLimitHeaders[rlHeader] = val
+				}
+			}
+			first = false
+		}
+
+		return true
 	})
-	
-	mergedMeta[X_REQUEST_ID_KEY]= requestIDsSet
 
-	return _err
+	if _err!=nil{
+		return c.Status(500).SendString(fmt.Sprintf("%v",_err))
+	}
+
+	// Update mergedMeta with all request IDs
+	mergedMeta[X_REQUEST_ID_KEY] = requestIDsSet
+
+	// Set headers in fiber context
+	for key, values := range headerValues {
+		c.Set(key, strings.Join(values, ","))
+	}
+
+	// Set rate-limit headers from the least recent response
+	for k, v := range rateLimitHeaders {
+		c.Set(k, v)
+	}
+
+	// Set body to context if needed
+	// e.g. c.Response().SetBody(mergedBody) if you want to return it directly
+
+	MergedBody["errors"]=mergedErrors
+	MergedBody["results"]=mergedResults
+	MergedBody["meta"]=mergedMeta
+
+	mb,err := json.Marshal(MergedBody)
+	if err!=nil{
+		return c.Status(500).SendString(fmt.Sprintf("%v",_err))
+	}
+
+	return c.Status(status).Send(mb)
 }
+
 
 func (proxy *ProxyAgentService) ChooseServer(split bool) []string {
 	var servers = proxy.HealthService.ActiveServer()
