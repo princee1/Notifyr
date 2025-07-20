@@ -74,14 +74,14 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler,handlers.ContactsHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
-    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe('meta'),pipes.TemplateValidationInjectionPipe('html','data','meta.index'),pipes.ContactToInfoPipe('email','meta.To'),)
+    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data','meta.index'),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
         
         for mail_content in scheduler.content:
             
             datas = []
-            index = mail_content.meta.index
+            index = mail_content.index
             
             if tracker.will_track:
                 To = mail_content.meta.To.copy()
@@ -133,7 +133,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
             
             content = (customEmail_content.html_content, customEmail_content.text_content)
             contents = []
-            index = customEmail_content.meta.index
+            index = customEmail_content.index
 
             if tracker.will_track:
                 To = customEmail_content.meta.To.copy()

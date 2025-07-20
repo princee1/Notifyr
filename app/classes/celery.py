@@ -50,6 +50,8 @@ class SubContentBaseModel(BaseModel):
     sender_type:SenderType='raw'
     _contact:str|list[str]|None =PrivateAttr(default=[])
 
+class SubContentIndexBaseModel(BaseModel):
+    index:int |None = None
 
 class SchedulerModel(BaseModel):
     filter_error:bool=True

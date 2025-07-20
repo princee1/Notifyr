@@ -4,7 +4,7 @@ from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from enum import Enum
 from tortoise import fields, models, Tortoise, run_async
 from tortoise.transactions import in_transaction
-from app.classes.celery import SchedulerModel, SubContentBaseModel
+from app.classes.celery import SchedulerModel, SubContentBaseModel,SubContentIndexBaseModel
 from app.classes.email import MimeType
 from app.classes.mail_provider import SMTPErrorCode
 from app.utils.helper import uuid_v1_mc
@@ -74,14 +74,14 @@ class EmailMetaModel(SubContentBaseModel):
 
 
 
-class EmailTemplateModel(BaseModel):
+class EmailTemplateModel(SubContentIndexBaseModel):
     meta: EmailMetaModel
     data: dict[str, Any]
     attachments: Optional[dict[str, Any]] = {}
     mimeType: MimeType = 'both'
 
 
-class CustomEmailModel(BaseModel):
+class CustomEmailModel(SubContentIndexBaseModel):
     meta: EmailMetaModel
     text_content: str | None = None
     html_content: str | None = None
