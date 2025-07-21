@@ -4,7 +4,6 @@ import (
 	service "balancer/internal/services"
 	"balancer/internal/utils"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -58,7 +57,7 @@ func (splitProxy *SplitProxyMiddleware) Middleware(c *fiber.Ctx) error {
 	split := c.QueryBool("split", false)
 	var canSplit bool = split
 	if split {
-		routeURL := strings.Replace(c.OriginalURL(), splitProxy.ConfigService.Addr(), "", -1)
+		routeURL := c.OriginalURL()
 		canSplit = utils.StartsWithAny(routeURL, SPLITABLE_ROUTES) && c.Method() == "POST"
 	}
 

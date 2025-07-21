@@ -8,4 +8,7 @@ const X_REQUEST_ID = "X-Request-Id"
 const PROCESS_TIME_HEADER_NAME = "X-Balancer-Process-Time"
 
 
+const X_RATELIMIT_RESET = "X-Ratelimit-reset"
+
+
 var RATE_LIMIT_HEADERS []string = []string{"X-Ratelimit-Limit", "X-Ratelimit-Remaining", "X-Ratelimit-Reset","Retry-After"}

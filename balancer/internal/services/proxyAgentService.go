@@ -22,6 +22,7 @@ type NotifyrResp struct {
 }
 
 var BODY_EXCLUDE = []string{"content"}
+
 const X_REQUEST_ID_KEY = "x_request_id"
 
 type ProxyAgentService struct {
@@ -76,12 +77,13 @@ func (proxy *ProxyAgentService) getCanSplit(c *fiber.Ctx) bool {
 func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
 	var canSplit bool = proxy.getCanSplit(c)
 	var nextUrls []string = proxy.ChooseServer(canSplit)
+	nextUrlsLength := len(nextUrls)
 	var wg sync.WaitGroup
 	var syncResp sync.Map = sync.Map{}
 	var syncBodies [][]byte
 
 	if canSplit {
-		body, err := proxy.SplitRequest(c, len((nextUrls)))
+		body, err := proxy.SplitRequest(c, nextUrlsLength)
 		if err != nil {
 			return c.Status(500).SendString(fmt.Sprintf("%v", err))
 		}
@@ -92,8 +94,11 @@ func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
 			c.Body(),
 		}
 	}
-
+	var syncBodiesLength int = len(syncBodies)
 	for index, nu := range nextUrls {
+		if canSplit && syncBodiesLength < nextUrlsLength && index+1 >= syncBodiesLength {
+			break
+		}
 		nu += c.OriginalURL()
 		wg.Add(1)
 		go func() {
@@ -104,70 +109,69 @@ func (proxy *ProxyAgentService) ProxyRequest(c *fiber.Ctx) error {
 	}
 	wg.Wait()
 
-
-	return proxy.MergeRequest(c,&syncResp)
+	return proxy.MergeRequest(c, &syncResp)
 }
 
 func (proxy *ProxyAgentService) SplitRequest(c *fiber.Ctx, length int) (*[][]byte, error) {
 	var bodyMap map[string]interface{}
-	var copyBodies []map[string]interface{};
+	var copyBodies []map[string]interface{}
 
 	if err := json.Unmarshal(c.Body(), &bodyMap); err != nil {
 		return nil, err
 	}
 
 	if content, ok := bodyMap["content"].([]interface{}); ok {
-		
-		if !utils.IsSlice(content){
-			return nil,fmt.Errorf("cannot split a non list of content",)
+
+		if !utils.IsSlice(content) {
+			return nil, fmt.Errorf("cannot split a non list of content")
 		}
 
-		if len(content) < length{
+		if len(content) < length {
 			return nil, fmt.Errorf("the length of the content is lower than the number of underlying apps, toggle split to False")
 		}
 
-		for i := 0; i < length; i++ {
-			b:=utils.CopyOneLevelMap(bodyMap, BODY_EXCLUDE)
-			copyBodies = append(copyBodies, b)
+		var content_len int = len(content)
+		var _index int
+		if length > content_len {
+			length = content_len
 		}
 
-		var a int
-		var b int
-		var index int
-		var c_len = len(content)
-
+		for i := 0; i < length; i++ {
+			baseBody := utils.CopyOneLevelMap(bodyMap, BODY_EXCLUDE)
+			copyBodies = append(copyBodies, baseBody)
+		}
 		for i, item := range content {
-			n_i:= i+1
 			if itemMap, ok := item.(map[string]interface{}); ok {
 				itemMap["index"] = i
 			}
 
-			if n_i % length == 1{
-				a = i
+			index := _index % length
+			if _, ok := copyBodies[index]["content"]; !ok {
+				copyBodies[index]["content"] = []interface{}{}
 			}
-
-			if n_i % length == 0 || (c_len-n_i <length){ 
-				b=i
-				copyBodies[index]["content"]= content[a:b]
-				index++
+			if contentSlice, ok := copyBodies[index]["content"].([]interface{}); ok {
+				copyBodies[index]["content"] = append(contentSlice, item)
+			} else {
+				return nil, fmt.Errorf("unexpected type for content in copyBodies")
 			}
+			_index++
 
 		}
 	} else {
-		return nil,fmt.Errorf("no content specified")
+		return nil, fmt.Errorf("no content specified")
 	}
 
 	var modifiedBody [][]byte = [][]byte{}
 
-	for i:=0;i<length;i++{
+	for i := 0; i < length; i++ {
 
-		body,err := json.Marshal(copyBodies[i])
+		body, err := json.Marshal(copyBodies[i])
 		if err != nil {
 			return nil, err
 		}
-		modifiedBody = append(modifiedBody,body)
+		modifiedBody = append(modifiedBody, body)
 	}
-	
+
 	return &modifiedBody, nil
 }
 
@@ -222,12 +226,15 @@ func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextU
 	}
 }
 
+/*
+Used Chat GPT
+*/
 func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) error {
 	mergedResults := []interface{}{}
 	mergedErrors := map[string]interface{}{}
 	mergedMeta := map[string]interface{}{}
-	var status int;
-	MergedBody:=map[string]interface{}{}
+	var status int
+	MergedBody := map[string]interface{}{}
 
 	requestIDsSet := []string{}
 	var _err error = nil
@@ -235,16 +242,15 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 
 	// Header merging storage
 	headerValues := map[string][]string{
-		utils.X_PROCESS_TIME:        {},
-		utils.X_INSTANCE_ID:         {},
-		utils.X_PROCESS_PID:         {},
-		utils.X_PARENT_PROCESS_PID:  {},
-		utils.X_REQUEST_ID:          {},
+		utils.X_PROCESS_TIME:       {},
+		utils.X_INSTANCE_ID:        {},
+		utils.X_PROCESS_PID:        {},
+		utils.X_PARENT_PROCESS_PID: {},
+		utils.X_REQUEST_ID:         {},
 	}
-	// Ratelimit headers (preserve from first response)
+	// Ratelimit headers (preserve from least recent response based on X-Ratelimit-Reset)
 	rateLimitHeaders := map[string]string{}
-
-	first := true
+	var leastRecentResetTimestamp float64 = -1
 
 	syncResp.Range(func(key, value any) bool {
 		p, ok := value.(NotifyrResp)
@@ -254,7 +260,7 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 
 		if p.statusCode != 200 && p.statusCode != 201 {
 			return false
-		}else{
+		} else {
 			status = p.statusCode
 		}
 
@@ -295,21 +301,24 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 			}
 		}
 
-		// Preserve rate limit headers from the first response
-		if first {
-			for _, rlHeader := range utils.RATE_LIMIT_HEADERS {
-				if val := p.header.Get(rlHeader); val != "" {
-					rateLimitHeaders[rlHeader] = val
+		// Preserve rate limit headers based on the least recent X-Ratelimit-Reset timestamp
+		if resetHeader := p.header.Get(utils.X_RATELIMIT_RESET); resetHeader != "" {
+			if resetTimestamp, err := utils.ParseTimestamp(resetHeader); err == nil {
+				if leastRecentResetTimestamp == -1 || resetTimestamp < leastRecentResetTimestamp {
+					leastRecentResetTimestamp = resetTimestamp
+					for _, rlHeader := range utils.RATE_LIMIT_HEADERS {
+						if val := p.header.Get(rlHeader); val != "" {
+							rateLimitHeaders[rlHeader] = val
+						}
+					}
 				}
 			}
-			first = false
 		}
-
 		return true
 	})
 
-	if _err!=nil{
-		return c.Status(500).SendString(fmt.Sprintf("%v",_err))
+	if _err != nil {
+		return c.Status(500).SendString(fmt.Sprintf("%v", _err))
 	}
 
 	// Update mergedMeta with all request IDs
@@ -317,7 +326,7 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 
 	// Set headers in fiber context
 	for key, values := range headerValues {
-		c.Set(key, strings.Join(values, ","))
+		c.Set(key, strings.Join(values, ", "))
 	}
 
 	// Set rate-limit headers from the least recent response
@@ -326,20 +335,17 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 	}
 
 	// Set body to context if needed
-	// e.g. c.Response().SetBody(mergedBody) if you want to return it directly
+	MergedBody["errors"] = mergedErrors
+	MergedBody["results"] = mergedResults
+	MergedBody["meta"] = mergedMeta
 
-	MergedBody["errors"]=mergedErrors
-	MergedBody["results"]=mergedResults
-	MergedBody["meta"]=mergedMeta
-
-	mb,err := json.Marshal(MergedBody)
-	if err!=nil{
-		return c.Status(500).SendString(fmt.Sprintf("%v",_err))
+	mb, err := json.Marshal(MergedBody)
+	if err != nil {
+		return c.Status(500).SendString(fmt.Sprintf("%v", _err))
 	}
 
 	return c.Status(status).Send(mb)
 }
-
 
 func (proxy *ProxyAgentService) ChooseServer(split bool) []string {
 	var servers = proxy.HealthService.ActiveServer()

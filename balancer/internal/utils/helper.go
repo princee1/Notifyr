@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spaolacci/murmur3"
@@ -41,4 +42,8 @@ func CopyOneLevelMap(original map[string]interface{},exclude []string) map[strin
 
 func IsSlice(value interface{}) bool {
 	return reflect.TypeOf(value).Kind() == reflect.Slice
+}
+
+func ParseTimestamp(time string) (float64,error) {
+	return strconv.ParseFloat(time,64)
 }
