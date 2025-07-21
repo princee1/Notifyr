@@ -23,7 +23,7 @@ func (metadata *MetaDataMiddleware) Middleware(c *fiber.Ctx) error {
 	err := c.Next()
 	duration := time.Since(start)
 	c.Set(utils.PROCESS_TIME_HEADER_NAME, fmt.Sprintf("%v (ms)", duration.Milliseconds()))
-	fmt.Printf("Request: Method=%s, URL=%s, IP=%s, ResponseCode=%d\n", c.Method(), c.OriginalURL(), c.IP(), c.Response().StatusCode())
+	fmt.Printf("\033[1;34mRequest:\033[0m Method=\033[1;32m%s\033[0m, URL=\033[1;32m%s\033[0m, IP=\033[1;32m%s\033[0m, ResponseCode=\033[1;31m%d\033[0m\n", c.Method(), c.OriginalURL(), c.IP(), c.Response().StatusCode())
 	return err
 }
 
