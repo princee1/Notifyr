@@ -123,7 +123,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseHandler(handlers.ContactsHandler)
     @PingService([EmailSenderService])
     @PingService([CeleryService],checker=check_celery_service)
-    @UsePipe(pipes.CeleryTaskPipe,pipes.ContentIndexPipe('meta'),pipes.ContactToInfoPipe('email','meta.To'))
+    @UsePipe(pipes.CeleryTaskPipe,pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])

@@ -33,6 +33,8 @@ summary_query:Callable = get_query_params('summary','false',True)
 
 as_async_query:Callable = get_query_params('background','true',True)
 
+split_query: Callable = get_query_params('split','false',True)
+
 runtype_query:Callable=get_query_params('runtype','sequential',False,checker=lambda v: v in get_args(RunType))
 
 save_results_query:Callable=get_query_params('save','false',True)

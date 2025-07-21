@@ -39,6 +39,7 @@ class TaskMeta(TypedDict):
     as_async:bool
     runtype:RunType
     save_result:bool
+    split:bool
     retry:bool
     ttl:float=3600 # time to live in the redis database
     ttd:float=0
@@ -303,8 +304,8 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         BaseService.__init__(self)
         SchedulerInterface.__init__(self)
 
-    def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool,retry:bool)->TaskManager:
-        meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry)
+    def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool,retry:bool,split:bool)->TaskManager:
+        meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split)
         task = TaskManager(meta=meta,offloadTask=offloadTask,return_results=return_results)
         self.sharing_task[request_id] = task
         return task

@@ -483,7 +483,10 @@ class ContentIndexPipe(Pipe,PointerIterator):
         var = 'index' if not var else var+'.index'
         PointerIterator.__init__(self,var)
 
-    def pipe(self,scheduler:SchedulerModel):
+    def pipe(self,scheduler:SchedulerModel,taskManager:TaskManager):
+        if taskManager.meta['split']:
+            return {'scheduler':scheduler}
+
         for i,content in enumerate(scheduler.content):
             ptr = self.ptr(content)
             index = self.get_val(ptr)
