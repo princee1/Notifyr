@@ -129,10 +129,21 @@ func (client *PingPongClient) RemoveActiveConnection() {
 }
 
 func (client *PingPongClient) Connect() error {
+	if err:=client.healthService.GetIsTerminated();err!=nil{
+		return err
+	}
+
 	if err := client.RequestPermission(); err != nil {
 		return err
 	}
-	return client.connectWS()
+	if err:=client.healthService.GetIsTerminated();err!=nil{
+		return err
+	}
+	if err:=client.connectWS(); err!=nil{
+		return  err
+	}
+	return client.healthService.GetIsTerminated()
+
 }
 
 func (client *PingPongClient) connectWS() error {
@@ -322,6 +333,8 @@ type HealthService struct {
 	activePpConnection uint
 	mu                 sync.RWMutex
 	wFConn             *WaitForConnection
+	terminatedMu sync.RWMutex
+	isTerminated bool
 }
 
 func (health *HealthService) WFInitChan() {
@@ -417,5 +430,20 @@ func (health *HealthService) Disconnect() error {
 		client.Disconnect(true, -1, "")
 	}
 
+	return nil
+}
+
+func (health *HealthService) ForcedlyTerminateConnectionState(){
+	defer health.terminatedMu.Unlock()
+	health.terminatedMu.Lock()
+	health.isTerminated = true
+}
+
+func (health *HealthService) GetIsTerminated() error {
+	defer health.terminatedMu.RUnlock()
+	health.terminatedMu.RLock()
+	if health.isTerminated {
+		return fmt.Errorf("health service is terminated")
+	}
 	return nil
 }
