@@ -127,3 +127,9 @@ class VariableConstant:
     WAIT_TIMEOUT = 'wait'
     MAX_WAIT_TIMEOUT = 60*3
 
+
+class RunModeConstant(Enum):
+    FILE = "file"
+    CREATE = "create"
+    EDIT = "edit"
+    REGISTER = "register"
