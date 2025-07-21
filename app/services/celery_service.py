@@ -328,7 +328,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
             return {
                 'handler':'Route Handler',
-                'offloaded':True,
+                'offloaded':False,
                 'date':now,
                 'expected_tbd':'now',
                 'index':index,
