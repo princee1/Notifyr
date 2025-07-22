@@ -32,6 +32,7 @@ class ValidationHTMLConstant:
 class ConfigAppConstant:
     META_KEY = 'meta'
     APPS_KEY = 'apps'
+    FROM_KEY = 'from'
     GENERATION_ID_KEY = 'generation_id'
     CREATION_DATE_KEY = 'creation_date'
     EXPIRATION_DATE_KEY = 'expiration_date'

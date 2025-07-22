@@ -23,7 +23,7 @@ def validate_config(config_service:ConfigService, config_file, app_name):
     apps_data = config_service.config_json_app.data
     valid = True
 
-    if not apps_data or ConfigAppConstant.META_KEY not in apps_data or ConfigAppConstant.APPS_KEY not in apps_data or not apps_data[ConfigAppConstant.APPS_KEY]:
+    if not apps_data or ConfigAppConstant.META_KEY not in apps_data or ConfigAppConstant.APPS_KEY not in apps_data or not isinstance(apps_data[ConfigAppConstant.APPS_KEY],dict):
         PrettyPrinter_.warning(f"Invalid config file: {config_file} - No apps data found")
         PrettyPrinter_.info(f"Running on CREATING mode")
         return RunModeConstant.CREATE, apps_data, False
@@ -55,8 +55,26 @@ def handle_run_mode(mode, config_service:ConfigService, apps_data, config_file, 
                 exit(0)  # BUG DISABLED FOR NOW
 
             case RunModeConstant.FILE:
-                from app.server.application import AppParameter, RESSOURCES
-                from app.server.middleware import MIDDLEWARE
+                keys_set = set()
+
+                for key,app in apps_data[ConfigAppConstant.APPS_KEY].items():
+                    keys_set.add(key)
+                    
+                    if ConfigAppConstant.FROM_KEY in app and key in keys_set:
+                        from_ = app[ConfigAppConstant.FROM_KEY]
+                        
+                        if from_ == key:
+                            mode =None
+                            break
+                        
+                        port = app['port']
+                        app.clear()
+                        app.update(apps_data[ConfigAppConstant.APPS_KEY][from_].copy())
+                        app['port'] = port
+
+                if mode == None:
+                    continue
+                
                 apps_data = {key: AppParameter.fromJSON(app, RESSOURCES, MIDDLEWARE) for key, app in apps_data[ConfigAppConstant.APPS_KEY].items()}
                 PrettyPrinter_.success(f"Apps Config successfully loaded")
                 break
@@ -73,7 +91,7 @@ def handle_run_mode(mode, config_service:ConfigService, apps_data, config_file, 
 
 # Convert app parameters to JSON
 def app_params_to_json(params: dict[str, Any], metadata={}):
-    from app.utils.constant import ConfigAppConstant
+
     return {
         ConfigAppConstant.META_KEY: metadata,
         ConfigAppConstant.APPS_KEY: {key: param.toJSON() for key, param in params.items()}
