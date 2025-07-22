@@ -110,10 +110,11 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         return answer
 
     @staticmethod
-    def WSEndpoint(path:str,type_:str | bytes | dict | BaseModel |BaseProtocol |None |NoneType =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current'):
+    def WSEndpoint(path:str,type_:str | bytes | dict | BaseModel |BaseProtocol |None |NoneType =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current',prefix="ws/"):
 
         # if type_!= None and not isinstance(type_,(str, bytes,dict,BaseModel,BaseProtocol,NoneType)):
         #     raise WebsocketMessageTypeError
+        path = prefix+path
 
         def decorator(func:Callable):
             if not hasattr(func,'meta'):

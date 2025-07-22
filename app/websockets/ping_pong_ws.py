@@ -18,7 +18,7 @@ class PingPongWebSocket(BaseWebSocketRessource):
         self.redisService = redisService
         self.configService = configService
         
-    @BaseWebSocketRessource.WSEndpoint('/pong/',str,'pong-connection',)
+    @BaseWebSocketRessource.WSEndpoint('/pong/',str,'pong-connection',prefix='')
     def pong(self,websocket:WebSocket,message:str):
         return PONG
 
