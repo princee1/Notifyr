@@ -79,6 +79,7 @@ class ConfigService(_service.BaseService):
             load_dotenv(path)
         self.config_json_app: JSONFile = None
         self.server_config = None
+        self.app_name = None
 
     def relative_path(self, path):
         return self.BASE_DIR + path

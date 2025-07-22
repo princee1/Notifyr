@@ -30,6 +30,8 @@ def validate_config(config_service:ConfigService, config_file, app_name):
 
     if app_name not in apps_data[ConfigAppConstant.APPS_KEY]:
         PrettyPrinter_.error(f'The app configuration name: {app_name} does not exist in the provided file')
+    
+    config_service.app_name = app_name
 
     return RunModeConstant.FILE, apps_data, valid
 

@@ -11,6 +11,7 @@ from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ServiceStatus
 from app.ressources import *
 from app.services.database_service import TortoiseConnectionService
+from app.services.health_service import HealthService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
 from app.services.config_service import ConfigService
@@ -236,6 +237,9 @@ class Application(EventInterface):
 
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(10)
+
+        healthService:HealthService = Get(HealthService)
+        healthService.init_capabilities(self.appParameter.ressources)
 
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
