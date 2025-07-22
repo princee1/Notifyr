@@ -55,12 +55,10 @@ def handle_run_mode(mode, config_service:ConfigService, apps_data, config_file, 
                 exit(0)  # BUG DISABLED FOR NOW
 
             case RunModeConstant.FILE:
-                keys_set = set()
 
                 for key,app in apps_data[ConfigAppConstant.APPS_KEY].items():
-                    keys_set.add(key)
                     
-                    if ConfigAppConstant.FROM_KEY in app and key in keys_set:
+                    if ConfigAppConstant.FROM_KEY in app and key in apps_data[ConfigAppConstant.APPS_KEY].keys():
                         from_ = app[ConfigAppConstant.FROM_KEY]
                         
                         if from_ == key:
