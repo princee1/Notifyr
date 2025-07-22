@@ -3,10 +3,12 @@ package server
 import (
 	"balancer/container"
 	"balancer/middleware"
+	bws "balancer/websocket"
 	"fmt"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/websocket/v2"
 )
 
 type NotifyrBalancer struct {
@@ -22,7 +24,7 @@ func (balancer *NotifyrBalancer) LoadMiddleWare() {
 	metadata := middleware.MetaDataMiddleware{SecurityService: balancer.Container.GetSecurityService()}
 	access := middleware.AccessMiddleware{SecurityService: balancer.Container.GetSecurityService()}
 	active := middleware.ActiveMiddleware{HealthService: balancer.Container.GetHealthService()}
-	split:= middleware.SplitProxyMiddleware{ProxyService: balancer.Container.GetProxyAgentService(),ConfigService: balancer.Container.GetConfigService()}
+	split := middleware.SplitProxyMiddleware{ProxyService: balancer.Container.GetProxyAgentService(), ConfigService: balancer.Container.GetConfigService()}
 	proxy := middleware.ProxyMiddleware{ProxyService: balancer.Container.GetProxyAgentService()}
 
 	balancer.Fiber.Use(metadata.Middleware)
@@ -33,7 +35,14 @@ func (balancer *NotifyrBalancer) LoadMiddleWare() {
 }
 
 func (balancer *NotifyrBalancer) LoadWebSocket() {
+	ws := bws.WebSocket{
+		HealthService: balancer.Container.GetHealthService(),
+		ConfigService: balancer.Container.GetConfigService(),
+		ProxyService: balancer.Container.GetProxyAgentService(),
+	}
 
+	balancer.Fiber.Use("/ws/:path/", ws.WSMiddleware)
+	balancer.Fiber.Get("/ws/:path/", websocket.New(ws.WSHandler))
 }
 
 func (balancer *NotifyrBalancer) Start() {
@@ -45,7 +54,7 @@ func (balancer *NotifyrBalancer) Start() {
 	}
 	balancer.Container.GetHealthService().WFNotifyrConn()
 	balancer.Container.Welcome(2)
-	
+
 	if err := balancer.Fiber.Listen(balancer.Container.GetConfigService().Addr()); err != nil {
 		log.Printf("Failed to start server: %v", err)
 		panic(err)

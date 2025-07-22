@@ -4,6 +4,8 @@ go 1.24.0
 
 require github.com/inancgumus/screen v0.0.0-20190314163918-06e984b86ed3
 
+require github.com/gofiber/websocket/v2 v2.2.1 // indirect
+
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
