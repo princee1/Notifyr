@@ -34,7 +34,6 @@ CALL_ONGOING_PREFIX = 'ongoing'
 get_contacts = Get_Contact(False,False)
 
 
-@PingService([CallService])
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CALL_ONGOING_PREFIX)
@@ -64,6 +63,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             return schemas[template]
         return schemas
 
+    @PingService([CallService])
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
     @ServiceStatusLock(AssetService,'reader')
@@ -77,6 +77,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         await taskManager.offload_task('route-focus',s(TaskHeaviness.LIGHT),0,None,self.callService.send_otp_voice_call,body, otpModel)
         return taskManager.results
 
+    @PingService([CallService])
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
     @UsePipe(TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'),)
@@ -102,6 +103,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @PingService([CeleryService],checker=check_celery_service)
+    @PingService([CallService])
     @UsePipe(CeleryTaskPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
     @ServiceStatusLock(AssetService,'reader')
@@ -123,6 +125,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             await taskManager.offload_task('normal', scheduler, 0, index, self.callService.send_template_voice_call, result, content,twilio_ids)
         return taskManager.results
 
+    @PingService([CallService])
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
     @UsePipe(CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
@@ -148,6 +151,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             await taskManager.offload_task('normal', scheduler, 0, content.index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids)
         return taskManager.results
 
+    @PingService([CallService])
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
     @UsePipe(CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
@@ -175,6 +179,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             await taskManager.offload_task('normal', scheduler, 0, content.index, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id)
         return taskManager.results
 
+    @PingService([CallService])
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.MFA_OTP])
     @UseGuard(RegisteredContactsGuard)
