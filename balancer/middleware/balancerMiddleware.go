@@ -11,6 +11,8 @@ import (
 
 var SPLITABLE_ROUTES = []string{"/email/template/", "/email/custom/", "twilio/sms/ongoing/template/", "twilio/sms/ongoing/custom/", "twilio/call/ongoing/custom/", "twilio/sms/ongoing/twiml/", "twilio/sms/ongoing/template"}
 
+
+
 type BaseMiddleware interface {
 	Middleware(c *fiber.Ctx) error
 }
@@ -32,7 +34,7 @@ type AccessMiddleware struct {
 }
 
 func (access *AccessMiddleware) Middleware(c *fiber.Ctx) error {
-	return c.Next()
+	return access.SecurityService.VerifyAccessAuth(c)
 }
 
 type ActiveMiddleware struct {
