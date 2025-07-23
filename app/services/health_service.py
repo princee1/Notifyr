@@ -52,3 +52,26 @@ class HealthService(BaseService):
     @property
     def capabilities(self):
         return self._capabilities
+
+    @property
+    def workers_count(self):
+        return 1
+
+    @property
+    def weight(self):
+        return 1
+
+    @property
+    def notifyr_app_info(self)->dict:
+        return {
+            'InstanceId':self.configService.INSTANCE_ID,
+            'ParentPid':self.configService.PARENT_PID,
+            'Capabilities':self.capabilities,
+            'Spec':{
+                'CpuCount':self.cpu_count,
+                'Ram':self.ram_size_gb,
+                'Weight':self.weight,
+                'Workers':self.workers_count
+            }
+
+        }

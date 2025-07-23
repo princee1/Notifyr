@@ -13,15 +13,16 @@ from app.services.security_service import JWTAuthService, SecurityService
 from app.websockets.ping_pong_ws import PingPongWebSocket
 
 class AppSpec(BaseModel):
-    cpu_count: int
-    ram: int
-    weight: float
-    process_count: int
+    CpuCount: int
+    Ram: float
+    Weight: float
+    Workers: int
 
 class NotifyrInfo(BaseModel):
-    spec: AppSpec
-    instance_id: str
-    parent_pid:str
+    Spec: AppSpec
+    InstanceId: str
+    ParentPid:str
+    Capabilities:list[str]
 
 
 TOKEN_NAME = 'X-PING-PONG-TOKEN'
@@ -52,18 +53,8 @@ class PingPongRessource(BaseHTTPRessource):
         run_id = self.websockets[PingPongWebSocket.__name__].run_id
         token = self.jwtAuthService.encode_ws_token(run_id, ws_path, 3600)
         response.headers.append(TOKEN_NAME, token)
-        return {
-            'instance_id':self.configService.INSTANCE_ID,
-            'parent_pid':self.configService.PARENT_PID,
-            'spec': {
-                'cpu_count': 4,
-                'ram': 4096,
-                'weight': 1,
-                'process_count': 8,
-                'capabilities':[]
-
-            }}
-
+        return self.healthService.notifyr_app_info
+    
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/')
@@ -75,6 +66,7 @@ class PingPongRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/')
     def set_health_config(self, authPermission: AuthPermission = Depends(get_auth_permission)):
         ...
+
 
 
 # TODO add a custom auth key for the connection with the load balancer

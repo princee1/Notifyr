@@ -28,17 +28,15 @@ const PONG_WS_ROUTE = "pong/"
 const WS_AUTH_KEY = "X-WS-Auth-Key"
 
 type AppSpec struct {
-	CpuCore      uint
-	ProcessCount uint
-	Ram          uint
+	CpuCount      uint
+	Workers 	uint
+	Ram          float64
 	Weight       float64
 }
 
 type NotifyrApp struct {
-	Id           string
 	InstanceId   string
-	parent_pid   string
-	Roles        []string
+	Parent_pid   string
 	Capabilities []string
 	Spec         AppSpec
 }
