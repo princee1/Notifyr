@@ -230,6 +230,25 @@ func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextU
 Used Chat GPT
 */
 func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) error {
+
+	var canSplit bool = proxy.getCanSplit(c)
+	if !canSplit {
+		if resp,ok:= syncResp.Load(0);ok{
+			resp,_:= resp.(NotifyrResp)
+			for key, values := range *resp.header {
+				for _, value := range values {
+					c.Append(key, value)
+				}
+			}
+			c.Status(resp.statusCode)
+			return c.Send(*resp.body)
+
+		}else{
+			err := "Error while getting the response from the sync map"
+			return c.Status(500).SendString(err)
+		}
+	}
+
 	mergedResults := []interface{}{}
 	mergedErrors := map[string]interface{}{}
 	mergedMeta := map[string]interface{}{}
