@@ -28,7 +28,7 @@ from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
 
-async def _to_otp_path(template:str):
+async def to_otp_path(template:str):
     template = "otp\\"+template
     return {'template':template}
 
