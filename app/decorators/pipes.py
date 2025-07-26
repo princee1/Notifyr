@@ -498,9 +498,10 @@ class ContentIndexPipe(Pipe,PointerIterator):
         super().__init__(True)
         var = 'index' if not var else var+'.index'
         PointerIterator.__init__(self,var)
+        self.configService = Get(ConfigService)
 
     def pipe(self,scheduler:SchedulerModel,taskManager:TaskManager):
-        if taskManager.meta['split']:
+        if taskManager.meta['split']: # TODO check whether i am in a pool or not
             return {'scheduler':scheduler}
 
         for i,content in enumerate(scheduler.content):
