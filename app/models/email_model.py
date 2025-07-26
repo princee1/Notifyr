@@ -149,10 +149,14 @@ def map_smtp_error_to_status(error_code: SMTPErrorCode | str) -> EmailStatus:
 
     return mapping.get(error_code, EmailStatus.FAILED)
 
-class EmailTemplateSchedulerModel(SchedulerModel):
+class BaseEmailSchedulerModel(SchedulerModel):
+    signature_data:dict[str,Any] = {}
+
+class EmailTemplateSchedulerModel(BaseEmailSchedulerModel):
     content: EmailTemplateModel | list[EmailTemplateModel]
 
-class CustomEmailSchedulerModel(SchedulerModel):
+
+class CustomEmailSchedulerModel(BaseEmailSchedulerModel):
     content: CustomEmailModel | list[CustomEmailModel]
 
 
