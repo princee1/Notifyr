@@ -100,11 +100,11 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @PingService([CeleryService],checker=check_celery_service)
     @ServiceStatusLock(AssetService,'reader','')
     @UsePermission(permissions.JWTAssetPermission('html'),permissions.JWTSignatureAssetPermission())
-    @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler,handlers.ContactsHandler)
+    @UseHandler(handlers.AsyncIOHandler(),handlers.TemplateHandler(),handlers.ContactsHandler())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
-    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard)
+    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe())
-    @UsePipe(pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data','meta.index'),pipes.ContactToInfoPipe('email','meta.To'),)
+    @UsePipe(pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data','meta.index'),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],signature:Annotated[HTMLTemplate,Depends(signature_query)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
@@ -114,7 +114,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         for mail_content in scheduler.content:
             
             datas = []
-            index = mail_content.index
+            index = mail_content.index 
             
             if tracker.will_track:
                 To = mail_content.meta.To.copy()
@@ -156,13 +156,13 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
 
     @UseLimiter(limit_value='10000/minutes')
-    @UseHandler(handlers.ContactsHandler)
+    @UseHandler(handlers.ContactsHandler())
     @PingService([EmailSenderService])
     @PingService([CeleryService],checker=check_celery_service)
     @UsePermission(permissions.JWTSignatureAssetPermission())
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe())
-    @UsePipe(pipes.CeleryTaskPipe,pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
-    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard)
+    @UsePipe(pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
+    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
     async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],signature:Annotated[HTMLTemplate,Depends(signature_query)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
@@ -221,7 +221,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10/day')
     @UseRoles([Role.PUBLIC])
-    @UseHandler(handlers.EmailRelatedHandler)
+    @UseHandler(handlers.EmailRelatedHandler())
     @BaseHTTPRessource.HTTPRoute("/spam-detection/",methods=[HTTPMethod.POST],mount=False)
     async def email_spam_detection(self,emailSpam:EmailSpamDetectionModel, request:Request):
         ...
@@ -229,7 +229,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10/day')
     @UseRoles([Role.PUBLIC])
-    @UseHandler(handlers.EmailRelatedHandler)
+    @UseHandler(handlers.EmailRelatedHandler())
     @UsePipe(pipes.verify_email_pipe)
     @BaseHTTPRessource.HTTPRoute("/verify/{email}",methods=[HTTPMethod.GET],mount=False)
     async def verify_email(self,email:str,request:Request,verifier:Literal['smtp','reacherhq']=Depends(email_verifier)):
