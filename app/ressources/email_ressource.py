@@ -46,11 +46,13 @@ class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterfac
 
     
 async def to_signature_path(signature:str|None):
+    
+    if signature == "":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,'signature query parameter not properly set;missing a non empty string value')
     if signature == None:
         return {}
     signature = "signature\\"+signature
     return {'signature':signature}
-
 
 
 EMAIL_PREFIX = "email"
