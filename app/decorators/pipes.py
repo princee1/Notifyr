@@ -77,12 +77,15 @@ class TemplateParamsPipe(Pipe):
         
 class TemplateSignatureQueryPipe(TemplateParamsPipe):
     def __init__(self):
-        super().__init__('html', 'html', True)
+        super().__init__('html', 'html', False)
 
     async def pipe(self, signature:str|None):
         if signature == None:
             return {}
-        return await super().pipe(signature)
+        val:dict =  await super().pipe(signature)
+        return {
+            'signature':val['template']
+        }
 
 class TemplateQueryPipe(TemplateParamsPipe):
     def __init__(self,*allowed_assets:RouteAssetType):

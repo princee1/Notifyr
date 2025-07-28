@@ -1,5 +1,6 @@
 from typing import Annotated, Callable, Literal
 import aiohttp
+from aiohttp_retry import Tuple
 from app.classes.auth_permission import MustHave, Role
 from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
@@ -37,11 +38,10 @@ class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterfac
             return {}
 
         signature:HTMLTemplate = self._inject_template(signature)
-        if self.will_validate:
-            sign_data = scheduler.model_dump(include=('signature_data'))
-            sign_data = signature.validate(sign_data)
-            scheduler.signature_data = sign_data
-        
+        sign_data = scheduler.signature_data
+        sign_data = signature.validate(sign_data)
+        _,signature = signature.build(sign_data)
+
         return {'signature':signature}
 
     
@@ -106,10 +106,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe())
     @UsePipe(pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data','meta.index'),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
-    async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],signature:Annotated[HTMLTemplate,Depends(signature_query)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
-
-        if signature!=None:
-            signature.build(scheduler.signature_data)
+    async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],signature:Annotated[Tuple[str,str],Depends(signature_query)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
         for mail_content in scheduler.content:
             
@@ -156,7 +153,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
 
     @UseLimiter(limit_value='10000/minutes')
-    @UseHandler(handlers.ContactsHandler())
+    @UseHandler(handlers.ContactsHandler(),handlers.TemplateHandler())
     @PingService([EmailSenderService])
     @PingService([CeleryService],checker=check_celery_service)
     @UsePermission(permissions.JWTSignatureAssetPermission())
@@ -165,12 +162,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
-    async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],signature:Annotated[HTMLTemplate,Depends(signature_query)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
-
-        if signature!=None:
-            _,(_,sign_text)=signature.build(scheduler.signature_data)
-        else:
-            sign_text = None
+    async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],signature:Annotated[Tuple[str,str],Depends(signature_query)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         
         for customEmail_content in scheduler.content:
             
@@ -202,8 +194,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
                         email_content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
                         email_content = self.linkService.create_tracking_pixel(content[0],email_id=eid,contact_id=contact_id,esp=add_params['esp']),content[1]
 
-                        if sign_text!=None:
-                            email_content = email_content[0]+"\n"+sign_text,email_content[1]
+                        if signature!=None:
+                            email_content = email_content[0],email_content[1]+"\n"+signature[1]
                             
                         contents.append(email_content)
             else:
