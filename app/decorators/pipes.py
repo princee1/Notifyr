@@ -453,10 +453,13 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterfa
     
     SCHEDULER_TEMPLATE_ERROR_KEY = 'template'
 
-    def __init__(self,template_type:RouteAssetType ,data_key:str,index_key:str, will_validate:bool = True,split:str='.'):
+    def __init__(self,template_type:RouteAssetType ,data_key:str,index_key:str='', will_validate:bool = True,split:str='.'):
         super().__init__(True)
         PointerIterator.__init__(self,data_key,split)
-        InjectTemplateInterface.__init__(self,Get(AssetService),template_type,will_validate)
+        self.template_type=template_type
+        self.will_validate= will_validate
+        index_key = 'index' if not index_key else index_key+'.index'
+
         self.index_ptr = PointerIterator(index_key,split)
         
     async def pipe(self,template:str,scheduler:SchedulerModel)->Template:
@@ -481,6 +484,7 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterfa
                         if scheduler.filter_error:
                             filtered_content.append(content)
                     except Exception as e:
+                        print(val)
                         if not scheduler.filter_error:
                             raise e
                         else:
@@ -489,8 +493,8 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterfa
                                 'error':exception_to_json(e),
                                 'index':index
                             }
-                                         
-                if len(filtered_content) >0:
+                            
+                if scheduler.filter_error:
                     scheduler.content = filtered_content
                                 
             return {'template':template,'scheduler':scheduler}
