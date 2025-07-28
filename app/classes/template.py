@@ -115,7 +115,7 @@ class Template(Asset):
         Override this function and call the super value
         """
         if validate:
-            self.validate(data)
+            return self.validate(data)
 
     def translate(self, targetLang: str, text: str) -> str:
         """
@@ -351,9 +351,14 @@ class HTMLTemplate(MLTemplate):
     def set_content(self,):
         super().set_content("html5")
 
-    def build(self,data,target_lang,re_replace=None):
-        super().build(data,target_lang)
+    def build(self,data,target_lang=None,re_replace=None,validate=False):
+        _data = super().build(data,target_lang,validate)
+        if validate:
+            data = _data
+        
         content_html, content_text = self.inject(data,re_replace=re_replace)
+        if not target_lang or target_lang == Template.LANG:
+            return True, (content_html, content_text)
         content_html = self.translate(target_lang, content_html)
         content_text = self.translate(target_lang, content_text)
         return True, (content_html, content_text)

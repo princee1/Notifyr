@@ -21,17 +21,15 @@ from app.services.email_service import EmailReaderService, EmailSenderService
 from fastapi import   HTTPException, Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission
 from app.decorators import permissions, handlers,pipes,guards
-from app.classes.celery import SchedulerModel
 from app.depends.variables import populate_response_with_request_id,email_verifier,wait_timeout_query,signature_query
 from app.utils.constant import StreamConstant
-from app.utils.helper import APIFilterInject
-from app.depends.variables import track
 
 class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterface):
 
     def __init__(self):
         super().__init__(True)
         pipes.InjectTemplateInterface.__init__(self,Get(AssetService),'html',True)
+        self.configService=Get(ConfigService)
     
     async def pipe(self,signature:str,scheduler:BaseEmailSchedulerModel):
         if signature == None:
@@ -39,9 +37,7 @@ class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterfac
 
         signature:HTMLTemplate = self._inject_template(signature)
         sign_data = scheduler.signature_data
-        sign_data = signature.validate(sign_data)
-        _,signature = signature.build(sign_data)
-
+        _,signature = signature.build(sign_data,self.configService.ASSET_LANG,validate=True)
         return {'signature':signature}
 
     
