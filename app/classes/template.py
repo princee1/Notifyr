@@ -107,7 +107,7 @@ class Template(Asset):
         """
         pass
 
-    def build(self, lang, data,validate=False) -> Any:
+    def build(self, data, lang=None, validate=False) -> Any:
         """
         Build a representation of the template with injected, verified and translated value and return 
         a content output

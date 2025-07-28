@@ -37,7 +37,7 @@ class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterfac
 
         signature:HTMLTemplate = self._inject_template(signature)
         sign_data = scheduler.signature_data
-        _,signature = signature.build(sign_data,self.configService.ASSET_LANG,validate=True)
+        _,signature = signature.build(sign_data,target_lang= self.configService.ASSET_LANG,validate=True)
         return {'signature':signature}
 
     

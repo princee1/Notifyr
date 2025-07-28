@@ -89,8 +89,10 @@ class TemplateHandler(Handler):
             )
 
         except TemplateBuildError as e:
+            detail = e.args[0] if e.args and len(e.args)>=1 else 'Cannot build template with data specified'
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='Cannot build template with data specified')
+                                detail={'detail': detail,
+                                'message': 'Template build error'})
 
         except TemplateValidationError as e:
             error = e.args[0]
