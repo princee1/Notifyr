@@ -32,6 +32,10 @@ async def to_otp_path(template:str):
     template = "otp\\"+template
     return {'template':template}
 
+async def register_scheduler(scheduler:SchedulerModel,taskManager:TaskManager):
+    taskManager.register_scheduler(scheduler)
+    return {}
+
 class AuthPermissionPipe(Pipe):
 
     @InjectInMethod
@@ -459,7 +463,7 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterfa
         self.template_type=template_type
         self.will_validate= will_validate
         index_key = 'index' if not index_key else index_key+'.index'
-
+        InjectTemplateInterface.__init__(self,Get(AssetService),template_type,will_validate)
         self.index_ptr = PointerIterator(index_key,split)
         
     async def pipe(self,template:str,scheduler:SchedulerModel)->Template:
@@ -484,7 +488,6 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterfa
                         if scheduler.filter_error:
                             filtered_content.append(content)
                     except Exception as e:
-                        print(val)
                         if not scheduler.filter_error:
                             raise e
                         else:
