@@ -14,13 +14,14 @@ from typing import Callable, Iterable, Literal, Self, Type, TypedDict
 from bs4 import BeautifulSoup
 
 from app.interface.timers import IntervalInterface
+from app.services.aws_service import AmazonSESService
 from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
 from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, MailAPI, IMAPSearchFilter as Search, SMTPErrorCode, get_email_provider_name, get_error_description
-from app.utils.tools import Time
+from app.utils.tools import Time,Mock
 
 from app.utils.constant import EmailHostConstant
 from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameDomainEmailError, extract_email_id_from_msgid
@@ -61,17 +62,22 @@ class BaseEmailService(_service.BaseService, RedisEventInterface):
 
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
+                use_ses = kwargs.get('use_ses',False)
+
                 self: BaseEmailService = args[0]
                 if not isinstance(self, BaseEmailService):
                     self = self.__class__.service
 
-                connector = self.connect()
-                if connector == None:
-                    return
+                if not use_ses:
+                    connector = self.connect()
+                    if connector == None:
+                        return
 
-                if not self.authenticate(connector):
-                    return
-                kwargs['connector'] = connector
+                    if not self.authenticate(connector):
+                        return
+                
+                    kwargs['connector'] = connector
+
                 if asyncio.iscoroutinefunction(func):
                     result = await func(*args, **kwargs)
                 else:
@@ -82,8 +88,8 @@ class BaseEmailService(_service.BaseService, RedisEventInterface):
                 else:
                     if isinstance(result, (list, tuple)):
                         result = result[0]
-
-                self.logout(connector)
+                if not use_ses:
+                    self.logout(connector)
                 return result
 
             @functools.wraps(func)
@@ -203,7 +209,7 @@ class BaseEmailService(_service.BaseService, RedisEventInterface):
 @_service.Service
 class EmailSenderService(BaseEmailService):
     # BUG cant resolve an abstract class
-    def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
+    def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService,awsSESService:AmazonSESService):
         super().__init__(configService, loggerService, redisService)
         self.type_ = 'SMTP'
         self.fromEmails: set[str] = set()
@@ -214,6 +220,8 @@ class EmailSenderService(BaseEmailService):
 
         self.emailHost = EmailHostConstant._member_map_[
             self.configService.SMTP_EMAIL_HOST]
+    
+        self.awsSESService = awsSESService
 
     def _load_valid_from_email(self):
         config_str: str = ...
@@ -270,12 +278,14 @@ class EmailSenderService(BaseEmailService):
             # TODO Depends on the error code
         return False
 
+    @Mock()
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
     def sendTemplateEmail(self, data, meta, images,contact_id=None, connector: smtp.SMTP = None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(data, meta, images)
         return self._send_message(email, contact_ids=contact_id, connector=connector)
 
+    @Mock()
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
     def sendCustomEmail(self, content, meta, images, attachment,contact_id=None, connector: smtp.SMTP = None):
         meta = EmailMetadata(**meta)
@@ -292,19 +302,22 @@ class EmailSenderService(BaseEmailService):
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
         return self._send_message(email,contact_ids=contact_ids, connector=connector)
 
-    def _send_message(self, email: EmailBuilder, connector: smtp.SMTP, contact_ids:list[ str] = []):
+    def _send_message(self, email: EmailBuilder, connector: smtp.SMTP, contact_ids:list[ str] = [],use_ses=False):
         replies = []
         events = []
         for i,(emailID, message) in enumerate(email.create_for_recipient()):
 
             try:
-                event_id = str(uuid_v1_mc())
-                now = datetime.now(timezone.utc).isoformat()
-                reply_ = None
-                reply_ = connector.sendmail(email.emailMetadata.From, email.To[i], message, rcpt_options=[
-                                            'NOTIFY=SUCCESS,FAILURE,DELAY'])
-                email_status = EmailStatus.SENT.value
-                description = "Email successfully sent."
+                if not use_ses:
+                    event_id = str(uuid_v1_mc())
+                    now = datetime.now(timezone.utc).isoformat()
+                    reply_ = None
+                    reply_ = connector.sendmail(email.emailMetadata.From, email.To[i], message, rcpt_options=[
+                                                'NOTIFY=SUCCESS,FAILURE,DELAY'])
+                    email_status = EmailStatus.SENT.value
+                    description = "Email successfully sent."
+                else:
+                    ...
 
             except smtp.SMTPRecipientsRefused as e:
                 email_status = EmailStatus.BLOCKED.value

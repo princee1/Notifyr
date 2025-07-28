@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Email Signature</title>
+    <style>
+        .signature {
+            font-family: Arial, sans-serif;
+            color: #333;
+            border-top: 1px solid #ccc;
+            padding-top: 10px;
+            margin-top: 20px;
+            width: 320px;
+        }
+        .company {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #0056b3;
+        }
+        .person {
+            margin-top: 6px;
+            font-size: 1em;
+        }
+        .title {
+            font-size: 0.95em;
+            color: #666;
+        }
+    </style>
+
+    <validation>
+        <validation-item id="person" type="string" empty="False" maxlength="100"></validation-item>
+        <validation-item id="title" type="string" empty="True" maxlength="60"></validation-item>
+    </validation>
+</head>
+<body>
+    <div class="signature">
+        <div class="company" id="companyName">{{COMPANY_NAME}}</div>
+        <div class="person">
+            <span id="personName">{{ person}}</span>
+            <span class="title" id="personTitle">{{title}}</span>
+        </div>
+    </div>
+</body>
+</html>

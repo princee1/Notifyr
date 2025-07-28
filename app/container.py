@@ -354,7 +354,13 @@ class Container():
         obj: BaseService = typ(**params)
         
         if flag:
-            obj.service_list= list(params.values())
+            dep_services = {}
+
+            for s in params.values():
+                c = s.__class__ 
+                dep_services[c]=s
+            
+            obj.dependant_services= dep_services
             willBuild = self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.FLAG_BUILD_KEY]
             if willBuild:
                 obj._builder()  # create the dependency but not calling the builder

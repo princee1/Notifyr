@@ -6,7 +6,7 @@ from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.email import EmailInvalidFormatError
-from app.classes.template import Template, TemplateAssetError, TemplateNotFoundError
+from app.classes.template import HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import KeepAliveQuery
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
@@ -25,14 +25,16 @@ from app.services.twilio_service import TwilioService
 from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response
 from app.utils.validation import email_validator, phone_number_validator
-from app.utils.helper import APIFilterInject
-from app.depends.variables import parse_to_phone_format
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
 
-async def _to_otp_path(template:str):
+async def to_otp_path(template:str):
     template = "otp\\"+template
     return {'template':template}
+
+async def register_scheduler(scheduler:SchedulerModel,taskManager:TaskManager):
+    taskManager.register_scheduler(scheduler)
+    return {}
 
 class AuthPermissionPipe(Pipe):
 
@@ -77,6 +79,18 @@ class TemplateParamsPipe(Pipe):
 
             return {'template':template}
         
+class TemplateSignatureQueryPipe(TemplateParamsPipe):
+    def __init__(self):
+        super().__init__('html', 'html', False)
+
+    async def pipe(self, signature:str|None):
+        if signature == None:
+            return {}
+        val:dict =  await super().pipe(signature)
+        return {
+            'signature':val['template']
+        }
+
 class TemplateQueryPipe(TemplateParamsPipe):
     def __init__(self,*allowed_assets:RouteAssetType):
         super().__init__(None)
@@ -422,25 +436,39 @@ class ContactToInfoPipe(Pipe,PointerIterator):
         
         return {'scheduler':scheduler}
 
-class TemplateValidationInjectionPipe(Pipe,PointerIterator):
+
+class InjectTemplateInterface:
+
+
+    def __init__(self,assetService:AssetService,template_type:RouteAssetType,will_validate:bool):
+        self.assetService = assetService
+        self.template_type = template_type
+        self.will_validate= will_validate
+
+
+    def _inject_template(self,template:str):
+        assets = getattr(self.assetService,self.template_type,None)
+        if assets == None:
+            raise TemplateAssetError
+        
+        return assets[template]
+
+class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterface):
     
     SCHEDULER_TEMPLATE_ERROR_KEY = 'template'
 
-    def __init__(self,template_type:RouteAssetType ,data_key:str,index_key:str, will_validate:bool = True,split:str='.'):
+    def __init__(self,template_type:RouteAssetType ,data_key:str,index_key:str='', will_validate:bool = True,split:str='.'):
         super().__init__(True)
         PointerIterator.__init__(self,data_key,split)
         self.template_type=template_type
         self.will_validate= will_validate
+        index_key = 'index' if not index_key else index_key+'.index'
+        InjectTemplateInterface.__init__(self,Get(AssetService),template_type,will_validate)
         self.index_ptr = PointerIterator(index_key,split)
-        self.assetService = Get(AssetService)
         
     async def pipe(self,template:str,scheduler:SchedulerModel)->Template:
 
-            assets = getattr(self.assetService,self.template_type,None)
-            if assets == None:
-                raise TemplateAssetError
-            
-            template:Template = assets[template]
+            template = self._inject_template(template)
             filtered_content =[]
 
             if self.will_validate:
@@ -469,9 +497,7 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator):
                                 'index':index
                             }
                             
-                            
-                
-                if len(filtered_content) >0:
+                if scheduler.filter_error:
                     scheduler.content = filtered_content
                                 
             return {'template':template,'scheduler':scheduler}
@@ -482,9 +508,10 @@ class ContentIndexPipe(Pipe,PointerIterator):
         super().__init__(True)
         var = 'index' if not var else var+'.index'
         PointerIterator.__init__(self,var)
+        self.configService = Get(ConfigService)
 
     def pipe(self,scheduler:SchedulerModel,taskManager:TaskManager):
-        if taskManager.meta['split']:
+        if taskManager.meta['split']: # TODO check whether i am in a pool or not
             return {'scheduler':scheduler}
 
         for i,content in enumerate(scheduler.content):

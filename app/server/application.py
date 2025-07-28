@@ -207,7 +207,7 @@ class Application(EventInterface):
     def register_tortoise(self):
 
         tortoiseConnService = Get(TortoiseConnectionService)
-        if tortoiseConnService.services_status != ServiceStatus.AVAILABLE:
+        if tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
             return
 
         pg_user = self.configService.getenv('POSTGRES_USER')

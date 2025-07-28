@@ -243,7 +243,7 @@ class AssetService(_service.BaseService):
     def asset_rel_path(self,path,asset_type):
         return f"{self.configService.ASSET_DIR}{asset_type}\\{path}"
         
-    def verify_asset_permission(self,content,model_keys,assetPermission,options):
+    def verify_asset_permission(self,content:dict,model_keys:list[str],assetPermission,options:list[Callable[[Any],bool]]):
         
         permission = tuple(assetPermission)
         for keys in model_keys:

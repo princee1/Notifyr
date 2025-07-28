@@ -427,6 +427,18 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
         return cls
     return None
 
+def filter_type_function(functions, flag=True):
+    temp_pipe_func = []
+
+    for p in functions:
+        if type(p) == type:
+            if flag:
+                p= p()
+            else:
+                p=p(False)
+        temp_pipe_func.append(p)
+
+    return temp_pipe_func
 
 def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[Exception]):
     def wrapper(function: Callable):
@@ -471,6 +483,8 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
     if empty_decorator:
         warnings.warn(
             "No Permission function or object was provided.", NoFunctionProvidedWarning)
+        
+    permission_function = filter_type_function(permission_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UsePermission, permission_function)
@@ -537,6 +551,8 @@ def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[H
     if empty_decorator:
         warnings.warn("No Handler function or object was provided.",
                       NoFunctionProvidedWarning)
+        
+    handler_function = filter_type_function(handler_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseHandler, handler_function)
@@ -556,8 +572,9 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
     # NOTE:  be mindful of the order
     empty_decorator = len(guard_function) == 0
     if empty_decorator:
-        warnings.warn("No Guard function or object was provided.",
-                      NoFunctionProvidedWarning)
+        warnings.warn("No Guard function or object was provided.",NoFunctionProvidedWarning)
+
+    guard_function = filter_type_function(guard_function)
 
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
         cls = common_class_decorator(func, UseGuard, guard_function)
@@ -610,6 +627,9 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
     if empty_decorator:
         warnings.warn("No Pipe function or object was provided.",
                       NoFunctionProvidedWarning)
+    
+    pipe_function = filter_type_function(pipe_function, before)
+    
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(
@@ -663,13 +683,14 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
         return func
     return decorator
 
-
 def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams = None):
 
     empty_decorator = len(interceptor_function) == 0
     if empty_decorator:
-        warnings.warn("No Pipe function or object was provided.",
-                      NoFunctionProvidedWarning)
+        warnings.warn("No Pipe function or object was provided.",NoFunctionProvidedWarning)
+
+
+    interceptor_function = filter_type_function(interceptor_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(

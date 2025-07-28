@@ -115,8 +115,8 @@ class BaseService():
         self._destroyed: bool = False
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         self.service_status: ServiceStatus = None
-        self.method_not_available: list[str] = []
-        self.service_list:list[BaseService] = []
+        self.method_not_available: set[str] = set()
+        self.dependant_services:dict[Type[BaseService],BaseService] = {}
         self.statusLock = RWLock()
         self.stateCounter = 0
 
@@ -216,7 +216,7 @@ class BaseService():
             self._builded = True
             self._destroyed = False
             self.service_status = ServiceStatus.AVAILABLE
-            self.method_not_available = []
+            self.method_not_available = set()
             self.prettyPrinter.success(
                 f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
             self.prettyPrinter.wait(WAIT_TIME, False)
@@ -285,8 +285,8 @@ class BaseService():
             self.destroyReport()
     
     @property
-    def services_status(self):
-        return {s:s.service_status for s in self.service_list}
+    def dependant_services_status(self):
+        return {c:s.service_status for c,s in self.dependant_services.items()}
 
     @property
     def name(self):

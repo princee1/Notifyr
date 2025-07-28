@@ -76,26 +76,45 @@ class JWTAssetPermission(Permission):
         self.model_keys=model_keys
         self.template_type = template_type
         self.options = options
+        self.model_keys_size = len(self.model_keys) == 0
 
     def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
         assetPermission = authPermission['allowed_assets']
         template_type = self.template_type if template_type == None else template_type
         permission = tuple(assetPermission)
+        
+        if template:
+            t = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
+            t = self.assetService.asset_rel_path(t,template_type)
+            if not t.startswith(permission):
+                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{t}] not allowed' })
+        
         if scheduler == None:
             return True
-        if template:
-            for content in scheduler.model_dump(include={'content'}):
-                t = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
-                t = self.assetService.asset_rel_path(t,template_type)
-                if not t.startswith(permission):
-                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{t}] not allowed' })
-                
-                content = flatten_dict(content)
-                if not self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options):
-                    return False
-                        
+
+        if len(self.model_keys) == 0:
+            return True
+        
+        if not self.model_keys_size:
+            return True
+
+        for content in scheduler.model_dump(include={'content'}):
+            content = flatten_dict(content)
+            if not self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options):
+                return False
+                                
         return True
 
+
+class JWTSignatureAssetPermission(JWTAssetPermission):
+
+    def __init__(self):
+        super().__init__('html')
+    
+    def permission(self, authPermission:AuthPermission, signature:str|None):
+        if signature == None:
+            return True
+        return super().permission(authPermission, signature, None, None)
 
 class JWTQueryAssetPermission(JWTAssetPermission):
      

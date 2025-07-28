@@ -47,11 +47,18 @@ class TaskMeta(TypedDict):
 
 @dataclass        
 class TaskManager():
+    
     meta: TaskMeta
     offloadTask: Callable
     return_results:bool
+    scheduler: SchedulerModel = field(default=None)
     taskConfig: list[TaskConfig] = field(default_factory=list)
     task_result: list[dict] = field(default_factory=list)
+
+    def register_scheduler(self, scheduler: SchedulerModel):
+        if not isinstance(scheduler, SchedulerModel):
+            raise TypeError("Scheduler must be an instance of SchedulerModel")
+        self.scheduler = scheduler
 
     async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel, delay: float, index: int | None, callback: Callable, *args, **kwargs):
         values = await self.offloadTask(algorithm, scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['as_async'], index, callback, *args, **kwargs)
@@ -82,17 +89,8 @@ class TaskManager():
         return {
             'meta': meta,
             'results': self.task_result,
-            'errors':self.errors
+            'errors':self.scheduler._errors if self.scheduler else {},
         }
-    
-    @property
-    def errors(self):
-        if len(self.taskConfig) == 0:
-            return {}
-        elif isinstance(self.taskConfig[0]['scheduler'],s):
-            return {}
-        else:
-            return self.taskConfig[0]['scheduler']._errors
 
     @property
     def schedule_ttd(self):
