@@ -226,15 +226,9 @@ func (proxy *ProxyAgentService) CopyRequest(c *fiber.Ctx, newBody *[]byte, nextU
 	}
 }
 
-/*
-Used Chat GPT
-*/
-func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) error {
-
-	var canSplit bool = proxy.getCanSplit(c)
-	if !canSplit {
-		if resp,ok:= syncResp.Load(0);ok{
-			resp,_:= resp.(NotifyrResp)
+func (proxy *ProxyAgentService) ReturnRequest(c *fiber.Ctx, syncResp *sync.Map) error {
+	if resp, ok := syncResp.Load(0); ok {
+			resp, _ := resp.(NotifyrResp)
 			for key, values := range *resp.header {
 				for _, value := range values {
 					c.Append(key, value)
@@ -243,10 +237,21 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 			c.Status(resp.statusCode)
 			return c.Send(*resp.body)
 
-		}else{
+		} else {
 			err := "Error while getting the response from the sync map"
 			return c.Status(500).SendString(err)
 		}
+}
+
+/*
+Used Chat GPT
+*/
+func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) error {
+
+	var canSplit bool = proxy.getCanSplit(c)
+
+	if !canSplit {
+		return proxy.ReturnRequest(c, syncResp)
 	}
 
 	mergedResults := []interface{}{}
@@ -258,6 +263,7 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 	requestIDsSet := []string{}
 	var _err error = nil
 	_is_meta_set := false
+	_is_resp_400_error := false
 
 	// Header merging storage
 	headerValues := map[string][]string{
@@ -278,6 +284,7 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 		}
 
 		if p.statusCode != 200 && p.statusCode != 201 {
+			_is_resp_400_error = p.statusCode >= 400 && p.statusCode < 500
 			return false
 		} else {
 			status = p.statusCode
@@ -335,6 +342,10 @@ func (proxy *ProxyAgentService) MergeRequest(c *fiber.Ctx, syncResp *sync.Map) e
 		}
 		return true
 	})
+
+	if _is_resp_400_error {
+		return proxy.ReturnRequest(c, syncResp)
+	}
 
 	if _err != nil {
 		return c.Status(500).SendString(fmt.Sprintf("%v", _err))
