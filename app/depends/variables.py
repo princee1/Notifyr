@@ -76,7 +76,7 @@ sid_type_params:Callable[[Request],str] = get_query_params("sid_type","plain",ch
 
 mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_except=True,checker=lambda v:v in get_args(MimeType))
 
-signature_query:Callable[[Request],str] = get_query_params("sign",None,False)
+#signature_query:Callable[[Request],str] = get_query_params("sign",None,False)
 # ----------------------------------------------                                    ---------------------------------- #
 
 global_var_key:tuple[Callable[[Request],str],Callable[[Request],str]] = get_query_params('key',None,True),get_query_params('key',None,True,raise_except=True)

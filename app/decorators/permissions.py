@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
 from app.models.contacts_model import ContactORM
+from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
 from app.services.assets_service import DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR, AssetService, RouteAssetType
@@ -111,10 +112,13 @@ class JWTSignatureAssetPermission(JWTAssetPermission):
     def __init__(self):
         super().__init__('html')
     
-    def permission(self, authPermission:AuthPermission, signature:str|None):
-        if signature == None:
+    def permission(self, authPermission:AuthPermission, scheduler:BaseEmailSchedulerModel):
+        if  scheduler.signature == None:
             return True
-        return super().permission(authPermission, signature, None, None)
+        if scheduler.signature.template == "":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Signature template not provided")
+        
+        return super().permission(authPermission, scheduler.signature, None, None)
 
 class JWTQueryAssetPermission(JWTAssetPermission):
      

@@ -21,7 +21,7 @@ from app.services.email_service import EmailReaderService, EmailSenderService
 from fastapi import   HTTPException, Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission
 from app.decorators import permissions, handlers,pipes,guards
-from app.depends.variables import populate_response_with_request_id,email_verifier,wait_timeout_query,signature_query
+from app.depends.variables import populate_response_with_request_id,email_verifier,wait_timeout_query
 from app.utils.constant import StreamConstant
 
 class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterface):
@@ -32,27 +32,26 @@ class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterfac
         self.configService=Get(ConfigService)
         self.bs4 = bs4
 
-    async def pipe(self,signature:str,scheduler:BaseEmailSchedulerModel):
-        if signature == None:
+    async def pipe(self,scheduler:BaseEmailSchedulerModel):
+        if scheduler.signature == None:
             return {}
 
-        signature:HTMLTemplate = self._inject_template(signature)
-        sign_data = scheduler.signature_data
-        _,signature = signature.build(sign_data,target_lang= self.configService.ASSET_LANG,validate=True,bs4=self.bs4)
-        return {'signature':signature}
-
-    
-async def to_signature_path(signature:str|None):
-    
-    if signature == "":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST,'signature query parameter not properly set;missing a non empty string value')
-    if signature == None:
+        signature:HTMLTemplate = self._inject_template(scheduler.signature.template)
+        sign_data = scheduler.signature.data
+        _,_signature = signature.build(sign_data,target_lang= self.configService.ASSET_LANG,validate=True,bs4=self.bs4)
+        scheduler._signature = _signature
         return {}
-    signature = "signature\\"+signature
-    return {'signature':signature}
 
-async def force_signature(signature:str|None):
-    return {'signature':None}
+    
+async def to_signature_path(scheduler:BaseEmailSchedulerModel):    
+    if scheduler.signature != None:
+        scheduler.signature.template = "signature\\"+scheduler.signature.template
+    return {}
+
+async def force_signature(scheduler:BaseEmailSchedulerModel):
+    if scheduler.signature != None:
+        scheduler.signature.template = None
+    return {}
 
 EMAIL_PREFIX = "email"
 
@@ -105,8 +104,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature)
     @UsePipe(pipes.register_scheduler,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
-    async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],signature:Annotated[Tuple[str,str],Depends(signature_query)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
+    async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
+        signature:Tuple[str,str] = scheduler._signature
         for mail_content in scheduler.content:
             
             datas = []
@@ -163,7 +163,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
-    async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],signature:Annotated[Tuple[str,str],Depends(signature_query)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+    async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+        signature:Tuple[str,str] = scheduler._signature
         
         for customEmail_content in scheduler.content:
             
