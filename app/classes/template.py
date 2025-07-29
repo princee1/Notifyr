@@ -351,15 +351,19 @@ class HTMLTemplate(MLTemplate):
     def set_content(self,):
         super().set_content("html5")
 
-    def build(self,data,target_lang=None,re_replace=None,validate=False):
+    def build(self,data,target_lang=None,re_replace=None,validate=False,bs4=False):
         _data = super().build(data,target_lang,validate)
         if validate:
             data = _data
         
         content_html, content_text = self.inject(data,re_replace=re_replace)
         if not target_lang or target_lang == Template.LANG:
+            if bs4:
+                content_html = str(BeautifulSoup(content_html, self.parser).select("body")[0])
             return True, (content_html, content_text)
         content_html = self.translate(target_lang, content_html)
+        if bs4:
+            content_html = BeautifulSoup(content_html, self.parser).select("body")[0]
         content_text = self.translate(target_lang, content_text)
         return True, (content_html, content_text)
     
@@ -398,11 +402,11 @@ class HTMLTemplate(MLTemplate):
         footer = self.bs4.select_one('footer')
         if footer is None:
             footer = Tag(name="footer")
-            body = self.bs4.select_one('body')
-            if body:
-                body.append(footer)
+            html = self.bs4.select_one('html')
+            if html:
+                html.append(footer)
             else:
-                raise TemplateFormatError("No <body> tag found in the HTML content.")
+                raise TemplateFormatError("No <html> tag found in the HTML content.")
         
         if footer.string is None:
             footer.string = content

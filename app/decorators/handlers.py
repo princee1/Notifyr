@@ -97,20 +97,20 @@ class TemplateHandler(Handler):
         except TemplateValidationError as e:
             error = e.args[0]
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'details': error,
+                'error': error,
                 'message': 'Validation Error'
             })
     
         except TemplateFormatError as e:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
                 'message': 'Template format is invalid',
-                'details': e.args[0]
+                'error': e.args[0]
             })
 
         except TemplateCreationError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'Failed to create template',
-                'details': e.args[0]
+                'error': e.args[0]
             })
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
@@ -120,7 +120,7 @@ class TemplateHandler(Handler):
         except SchemaValidationError as e:
             error = e.args[0]
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
-                'details': error,
+                'error': error,
                 'message': 'Validation Error'
             })
 

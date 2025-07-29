@@ -26,18 +26,19 @@ from app.utils.constant import StreamConstant
 
 class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterface):
 
-    def __init__(self):
+    def __init__(self,bs4:bool=False):
         super().__init__(True)
         pipes.InjectTemplateInterface.__init__(self,Get(AssetService),'html',True)
         self.configService=Get(ConfigService)
-    
+        self.bs4 = bs4
+
     async def pipe(self,signature:str,scheduler:BaseEmailSchedulerModel):
         if signature == None:
             return {}
 
         signature:HTMLTemplate = self._inject_template(signature)
         sign_data = scheduler.signature_data
-        _,signature = signature.build(sign_data,target_lang= self.configService.ASSET_LANG,validate=True)
+        _,signature = signature.build(sign_data,target_lang= self.configService.ASSET_LANG,validate=True,bs4=self.bs4)
         return {'signature':signature}
 
     
@@ -99,7 +100,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseHandler(handlers.AsyncIOHandler(),handlers.TemplateHandler(),handlers.ContactsHandler())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
-    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe())
+    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True))
     @UsePipe(pipes.register_scheduler,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],signature:Annotated[Tuple[str,str],Depends(signature_query)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
@@ -128,23 +129,25 @@ class EmailTemplateRessource(BaseHTTPRessource):
                     add_params = self._get_esp(To[j])
                     self.linkService.set_tracking_link(_template,eid,add_params=add_params)
                     tracking_link_callback = self.linkService.create_link_re(eid,add_params=add_params,contact_id=contact_id) # FIXME if its a list change it 
-                    self.linkService.create_tracking_pixel(template,eid,contact_id,add_params['esp'])
+                    self.linkService.create_tracking_pixel(_template,eid,contact_id,add_params['esp'])
                     broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
                     broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
                 
                     if signature !=None:
-                        _template.add_signature(signature.body)
+                        _template.add_signature(signature[0])
 
                     _,data = _template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
                     data = parse_mime_content(data,mail_content.mimeType)
                     datas.append(data)
             else:
+                if signature !=None:
+                        template.add_signature(signature[0])
                 _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
                 datas = parse_mime_content(data,mail_content.mimeType)
                 mail_content.meta._Message_ID = tracker.make_msgid
 
             meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
-            await taskManager.offload_task('worker_focus',scheduler,0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
+            await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
 
@@ -191,11 +194,15 @@ class EmailTemplateRessource(BaseHTTPRessource):
                         email_content = self.linkService.create_tracking_pixel(content[0],email_id=eid,contact_id=contact_id,esp=add_params['esp']),content[1]
 
                         if signature!=None:
-                            email_content = email_content[0],email_content[1]+"\n"+signature[1]
+                            email_content = email_content[0],email_content[1]+("\n"*4)+signature[1]
                             
                         contents.append(email_content)
             else:
-                contents = content
+                if signature != None:
+                    _content = content[0],content[1]+"\n"+signature[1]
+                else:
+                    _content = content
+                contents = _content
                 customEmail_content.meta._Message_ID = tracker.make_msgid
 
             meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
