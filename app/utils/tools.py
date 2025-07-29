@@ -85,11 +85,15 @@ def Mock(sleep:float=2,result:Any = None):
     def wrapper(func:Callable):
 
         @wraps(func)
-        async def callback(*args,**kwargs):
+        async def callback_async(*args,**kwargs):
             await asyncio.sleep(sleep)
             return result
 
-        return callback
+        @wraps(func)
+        def callback_sync(*args,**kwargs):
+            return result
+
+        return callback_async if asyncio.iscoroutinefunction(func) else callback_sync    
 
     return wrapper
 

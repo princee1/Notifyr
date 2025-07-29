@@ -17,6 +17,7 @@ from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.container import Get
 from app.utils.constant import SpecialKeyAttributesConstant, SubConstant
+from app.utils.tools import Mock
 from app.utils.validation import url_validator
 from .variables import *
 from app.services.link_service import LinkService
@@ -345,6 +346,7 @@ class Broker:
         self.request = request
         self.response = response
 
+    @Mock()
     def publish(self,channel:str,sid_type:SubjectType,subject_id:str, value:Any,state:Literal['next','complete']='next'):
 
         if self.configService.pool:
@@ -365,6 +367,7 @@ class Broker:
 
             self.backgroundTasks.add_task(self.redisService.publish_data,channel,message_broker)
 
+    @Mock()
     def stream(self,channel,value,handler=None,args=None,kwargs=None):
         
         async def callback():
