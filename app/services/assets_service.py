@@ -1,6 +1,7 @@
 from fastapi import HTTPException,status
 
 from app.definition._error import BaseError
+from app.services.aws_service import AmazonS3Service
 from app.utils.prettyprint import printJSON
 from .config_service import CeleryMode, ConfigService
 from app.utils.fileIO import FDFlag, JSONFile
@@ -146,12 +147,13 @@ class ThreadedReader(Reader):
 @_service.Service
 class AssetService(_service.BaseService):
     @inject
-    def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService) -> None:
+    def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService,amazonS3Service:AmazonS3Service) -> None:
         super().__init__()
         self.fileService = fileService
         self.fileService:FileService = fileService
         self.securityService = securityService
         self.configService = configService
+        self.amazonS3Service = amazonS3Service
 
     def _read_globals(self):
 
