@@ -51,6 +51,8 @@ async def to_signature_path(signature:str|None):
     signature = "signature\\"+signature
     return {'signature':signature}
 
+async def force_signature(signature:str|None):
+    return {'signature':None}
 
 EMAIL_PREFIX = "email"
 
@@ -100,7 +102,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseHandler(handlers.AsyncIOHandler(),handlers.TemplateHandler(),handlers.ContactsHandler())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
-    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True))
+    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature)
     @UsePipe(pipes.register_scheduler,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],signature:Annotated[Tuple[str,str],Depends(signature_query)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
@@ -156,7 +158,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @PingService([EmailSenderService])
     @PingService([CeleryService],checker=check_celery_service)
     @UsePermission(permissions.JWTSignatureAssetPermission())
-    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe())
+    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(),force_signature)
     @UsePipe(pipes.register_scheduler,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
