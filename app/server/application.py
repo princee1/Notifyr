@@ -32,6 +32,8 @@ from app.interface.events import EventInterface
 from tortoise.contrib.fastapi import register_tortoise
 import ngrok
 import traceback
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
 
 
 AppParameterKey = Literal['title', 'summary', 'description',
@@ -240,6 +242,8 @@ class Application(EventInterface):
 
         healthService:HealthService = Get(HealthService)
         healthService.init_capabilities(self.appParameter.ressources)
+
+        FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
 
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)

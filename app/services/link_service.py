@@ -1,6 +1,6 @@
 from typing import Callable
 from urllib.parse import urlparse
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, Request, Response, status
 from app.classes.rsa import RSA
 from app.classes.template import HTMLTemplate
 from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
@@ -11,12 +11,31 @@ from app.services.reactive_service import ReactiveService
 import qrcode as qr
 import io
 from app.services.security_service import SecurityService
+from app.utils.constant import AN_HOUR
 from app.utils.helper import b64_encode, generateId
 import aiohttp
 import json
 from app.utils.tools import Cache
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 import re
+from fastapi_cache.decorator import cache
+from fastapi_cache.coder import JsonCoder
+
+def ip_lookup_key_builder(
+    func: Callable,
+    namespace: str = "",
+    *,
+    request: Request = None,
+    response: Response = None,
+    **kwargs,
+):
+    args = kwargs.get('args', [])
+    return "-".join([
+        namespace,
+        func.__name__,
+        args[1]
+    ])
+
 
 
 @Service
@@ -110,7 +129,7 @@ class LinkService(BaseService):
             **ip_data
         }
 
-    @Cache(10)
+    @cache(AN_HOUR*2,coder=JsonCoder,key_builder=ip_lookup_key_builder, namespace="")
     async def ip_lookup(self, ip_address):
         headers = {
             "Accept": "application/json",

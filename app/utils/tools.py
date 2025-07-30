@@ -56,7 +56,7 @@ def Cache(maxsize:float=100):
     def callback(func:Callable):
     
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def async_wrapper(*args, **kwargs):
             key = hash_args((args, kwargs))
             if key in cache:
                 print(f"Cache hit for key: {key}")
@@ -65,11 +65,25 @@ def Cache(maxsize:float=100):
             result = await func(*args, **kwargs)
             cache[key] = result
             return result
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            key = hash_args((args, kwargs))
+            if key in cache:
+                print(f"Cache hit for key: {key}")
+                return cache[key]
+            print(f"Cache miss for key: {key}")
+            result = func(*args, **kwargs)
+            cache[key] = result
+            return result
         
 
-        return wrapper
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
     return callback
-        
+
+
+    
+
 def Mock(sleep:float=2,result:Any = None):
     """
     A decorator to mock asynchronous function execution by introducing a delay.
