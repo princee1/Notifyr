@@ -15,11 +15,10 @@ from app.utils.constant import AN_HOUR
 from app.utils.helper import b64_encode, generateId
 import aiohttp
 import json
-from app.utils.tools import Cache
+from app.utils.tools import Cache, MyJSONCoder
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 import re
 from fastapi_cache.decorator import cache
-from fastapi_cache.coder import JsonCoder
 
 def ip_lookup_key_builder(
     func: Callable,
@@ -129,7 +128,7 @@ class LinkService(BaseService):
             **ip_data
         }
 
-    @cache(AN_HOUR*2,coder=JsonCoder,key_builder=ip_lookup_key_builder, namespace="")
+    @Cache('redis')(AN_HOUR*2,coder=MyJSONCoder,key_builder=ip_lookup_key_builder, namespace="")
     async def ip_lookup(self, ip_address):
         headers = {
             "Accept": "application/json",
