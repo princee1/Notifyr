@@ -21,7 +21,7 @@ from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
-from app.services.celery_service import CeleryService, TaskManager, task_name
+from app.services.task_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response

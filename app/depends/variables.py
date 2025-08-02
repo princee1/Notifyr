@@ -6,7 +6,7 @@ from fastapi import Query, Request, Response
 from app.classes.celery import CeleryTask
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
-from app.services.celery_service import CeleryService, RunType, TaskService
+from app.services.task_service import CeleryService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.twilio_service import TwilioService
 

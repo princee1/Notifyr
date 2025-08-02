@@ -2,7 +2,7 @@ from fastapi import WebSocket
 from pydantic import BaseModel
 from app.container import InjectInMethod
 from app.definition._ws import BaseProtocol, WebSocketRessource, BaseWebSocketRessource
-from app.services.celery_service import CeleryService
+from app.services.task_service import CeleryService
 
 @WebSocketRessource
 class RedisBackendWebSocket(BaseWebSocketRessource):

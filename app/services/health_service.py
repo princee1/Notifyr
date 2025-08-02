@@ -1,5 +1,6 @@
 from app.definition._service import InjectWithCondition, Service,BaseService
-#from app.services.celery_service import CeleryService, TaskService
+from app.definition._service import Service
+from app.services.task_service import  CeleryService
 from app.services.config_service import ConfigService
 from app.services.notification_service import DiscordService, NotificationService,SystemNotificationService
 import psutil
