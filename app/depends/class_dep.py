@@ -6,7 +6,7 @@ from app.classes.broker import MessageBroker, SubjectType,exception_to_json
 from app.classes.celery import SchedulerModel
 from app.classes.mail_provider import get_email_provider_name
 from app.definition._error import ServerFileError
-from app.definition._service import ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormatted
+from app.definition._service import ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
 from app.depends.dependencies import get_request_id
 from app.models.call_model import BaseVoiceCallModel
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
@@ -386,7 +386,7 @@ class Broker:
         try:
             ServiceStatus(protocol['status'])
         except:
-            raise StateProtocolMalFormatted
+            raise StateProtocolMalFormattedError
 
         self.backgroundTasks.add_task(self.redisService.publish_data,SubConstant.SERVICE_STATUS,protocol)
         

@@ -26,13 +26,12 @@
 24. Cache the ip_lookup in redis
 25. Keep the public in the database and finish the private verification
 26. Have an (AI) algortihm that chooses whether to run in the background task or to send to the Celery worker with strategies design pattern (will use statistic function)
-27. FOR NOW cant track multiple email sent at once
-28. verify template format
-29. Implement Campaign analytics
-30. Add email headers to specify if it is transactional
-31. Add analytics on session converted
-32. Make sure the date of the scheduler are coordinated
-33. Finish All Ping Service and work finish workers option
-34. Publish the state of all the Services using pubsub so everybody can be at the state
-35. Implements logs
-36. Manage duplication when receiving a request, we will receive multiple OPENED event
+27. verify template format
+28. Implement Campaign analytics
+29. Add email headers to specify if it is transactional
+30. Add analytics on session converted
+31. Make sure the date of the scheduler are coordinated
+32. Finish All Ping Service and work finish workers option
+33. Publish the state of all the Services using pubsub so everybody can be at the state
+34. Implements logs
+35. Manage duplication when receiving a request, we will receive multiple OPENED event

@@ -11,7 +11,7 @@ from app.classes.template import SchemaValidationError, TemplateBuildError, Temp
 from app.container import InjectInMethod
 from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
-from app.definition._service import MethodServiceNotExistsError, MethodServiceNotImplementedError, ServiceDoesNotExistError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceNotImplementedError, ServiceTemporaryNotAvailableError, StateProtocolMalFormatted
+from app.definition._service import MethodServiceNotExistsError, MethodServiceNotImplementedError, ServiceDoesNotExistError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceNotImplementedError, ServiceTemporaryNotAvailableError, StateProtocolMalFormattedError
 from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
@@ -59,7 +59,7 @@ class ServiceAvailabilityHandler(Handler):
         except MethodServiceNotImplementedError as e:
             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail='Method Service not implemented')
             
-        except StateProtocolMalFormatted as e:
+        except StateProtocolMalFormattedError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                                 detail='State Protocol MalFormatted')
 
@@ -96,7 +96,7 @@ class TemplateHandler(Handler):
 
         except TemplateValidationError as e:
             error = e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
                 'error': error,
                 'message': 'Validation Error'
             })
