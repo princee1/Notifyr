@@ -1,9 +1,13 @@
 from functools import wraps
+import json
 from time import perf_counter,time,time_ns
-from typing import Callable
+from typing import Callable, Literal
 from aiohttp_retry import Any
 from cachetools import LRUCache
 import asyncio
+
+from fastapi_cache.coder import JsonCoder,object_hook
+from fastapi_cache.decorator import cache
 
 
 
@@ -49,27 +53,90 @@ def Time(func: Callable):
         return result
     return wrapper_async if asyncio.iscoroutinefunction(func) else wrapper
 
-def Cache(maxsize:float=100):
-    
-    cache = LRUCache(maxsize)
 
-    def callback(func:Callable):
+class MyJSONCoder(JsonCoder):
     
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            key = hash_args((args, kwargs))
-            if key in cache:
-                print(f"Cache hit for key: {key}")
-                return cache[key]
-            print(f"Cache miss for key: {key}")
-            result = await func(*args, **kwargs)
-            cache[key] = result
-            return result
+    @classmethod
+    def decode(cls, value: bytes|str) -> Any:
+        """Decode bytes to JSON object."""
+        if isinstance(value, str):
+            return json.loads(value, object_hook=object_hook)
+        try:
+            return super().decode(value)
+        except Exception as e:
+            print(f"Decoding error: {e}")
+            return None
+
+
+def Cache(cache_type:Literal['in-memory', 'redis'] = 'in-memory'):
+    
+    def InMemoryCache(maxsize: int = 1000):
+        """
+        A decorator to cache function results in memory using LRUCache.
+        Args:
+            maxsize (int): Maximum size of the cache. Defaults to 1000.
+        Returns:
+            Callable: A decorator that caches the function's return value.
+        """
         
 
-        return wrapper
-    return callback
+
+        if not isinstance(maxsize, int) or maxsize <= 0:
+            raise ValueError("maxsize must be a positive integer")
+
+        cache = LRUCache(maxsize)
+
+        def callback(func:Callable):
         
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                key = hash_args((args, kwargs))
+                if key in cache:
+                    print(f"Cache hit for key: {key}")
+                    return cache[key]
+                print(f"Cache miss for key: {key}")
+                result = await func(*args, **kwargs)
+                cache[key] = result
+                return result
+
+            @wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                key = hash_args((args, kwargs))
+                if key in cache:
+                    print(f"Cache hit for key: {key}")
+                    return cache[key]
+                print(f"Cache miss for key: {key}")
+                result = func(*args, **kwargs)
+                cache[key] = result
+                return result
+            
+
+            return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+        return callback
+
+    @wraps(cache)
+    def RedisCache(*args, **kwargs):
+        """
+        A decorator to cache function results using Redis.
+        Args:
+            **kwargs: Additional keyword arguments for the cache configuration.
+        Returns:
+            Callable: A decorator that caches the function's return value.
+        """
+        def callback(func:Callable):
+            return cache(*args, **kwargs)(func)
+
+        return callback
+
+    if cache_type == 'in-memory':
+        return InMemoryCache
+    elif cache_type == 'redis':
+        return RedisCache
+    else:
+        raise ValueError("Invalid cache type. Choose 'in-memory' or 'redis'.")
+
+    
+
 def Mock(sleep:float=2,result:Any = None):
     """
     A decorator to mock asynchronous function execution by introducing a delay.
@@ -85,11 +152,15 @@ def Mock(sleep:float=2,result:Any = None):
     def wrapper(func:Callable):
 
         @wraps(func)
-        async def callback(*args,**kwargs):
+        async def callback_async(*args,**kwargs):
             await asyncio.sleep(sleep)
             return result
 
-        return callback
+        @wraps(func)
+        def callback_sync(*args,**kwargs):
+            return result
+
+        return callback_async if asyncio.iscoroutinefunction(func) else callback_sync    
 
     return wrapper
 

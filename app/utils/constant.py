@@ -2,6 +2,9 @@ from enum import Enum
 from typing_extensions import Literal
 ########################  ** Dependencies **   ########################################
 
+
+AN_HOUR = 60*60
+
 class DependencyConstant:
     TYPE_KEY = "type"
     DEP_KEY = "dep"

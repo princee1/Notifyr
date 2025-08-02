@@ -68,6 +68,17 @@ class CeleryRessource(BaseHTTPRessource):
         return JSONResponse(status_code=status.HTTP_201_CREATED,content={
             'redis-token':token,
         })
+    
+    @UseRoles([Role.ADMIN],options=[MustHave(Role.ADMIN)])
+    @UseHandler(CeleryTaskHandler)
+    @BaseHTTPRessource.Delete('/purge/{queue}/{task_id}',mount=False)
+    def purge_celery_task(self,queue:str, task_id:str, authPermission:AuthPermission = Depends(get_auth_permission)):
+        """
+        Purge a specific task from the celery queue.
+        """
+        return self.celeryService.purge(queue_name=queue, task_id=task_id)
+    
+
 
 @UseHandler(ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)

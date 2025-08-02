@@ -100,7 +100,7 @@ class ServiceChangingStateError(BuildError):
 class ServiceDoesNotExistError(BuildError):
     ...
 
-class StateProtocolMalFormatted(BuildError):
+class StateProtocolMalFormattedError(BuildError):
     ...
 
 #################################            #####################################

@@ -279,6 +279,18 @@ class CeleryService(BaseService, IntervalInterface):
         await BaseService.async_pingService(self)
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
+    def purge(self,queue_name: str = None,task_id: str = None):
+        """
+        Purge the Celery queue.
+        If queue_name is provided, it will purge that specific queue.
+        If not, it will purge all queues.
+        """
+        if queue_name:
+            count = celery_app.control.purge(queue=queue_name)
+        else:
+            count = celery_app.control.purge()
+        return {'message': 'Celery queue purged successfully.', 'count': count}
+
     def callback(self):
         asyncio.create_task(self._check_workers_status())
 

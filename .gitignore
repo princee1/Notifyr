@@ -173,6 +173,4 @@ config.app.json
 yahoo.secrets.txt
 email.test.py
 .vscode
-
-database/*.md
 GOAL

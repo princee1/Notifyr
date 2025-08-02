@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Callable, List, Literal, Optional, Self, TypeVar, TypedDict
+from typing import Any, Callable, List, Literal, Optional, Self, Tuple, TypeVar, TypedDict
 from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from enum import Enum
 from tortoise import fields, models, Tortoise, run_async
@@ -149,8 +149,14 @@ def map_smtp_error_to_status(error_code: SMTPErrorCode | str) -> EmailStatus:
 
     return mapping.get(error_code, EmailStatus.FAILED)
 
+
+class EmailSignatureModel(BaseModel):
+    template:str
+    data:dict[str,Any] = {}
+
 class BaseEmailSchedulerModel(SchedulerModel):
-    signature_data:dict[str,Any] = {}
+    signature:EmailSignatureModel = None
+    _signature:Tuple[str,str] = PrivateAttr(None)
 
 class EmailTemplateSchedulerModel(BaseEmailSchedulerModel):
     content: EmailTemplateModel | list[EmailTemplateModel]

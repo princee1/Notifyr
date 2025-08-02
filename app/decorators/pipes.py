@@ -12,6 +12,7 @@ from app.depends.class_dep import KeepAliveQuery
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status, SubscriptionORM
+from app.models.email_model import BaseEmailSchedulerModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
@@ -83,13 +84,13 @@ class TemplateSignatureQueryPipe(TemplateParamsPipe):
     def __init__(self):
         super().__init__('html', 'html', False)
 
-    async def pipe(self, signature:str|None):
-        if signature == None:
+    async def pipe(self,scheduler: BaseEmailSchedulerModel):
+        if scheduler.signature == None:
             return {}
-        val:dict =  await super().pipe(signature)
-        return {
-            'signature':val['template']
-        }
+        val:dict =  await super().pipe(scheduler.signature.template)
+        scheduler.signature.template = val['template']
+        return {}
+        
 
 class TemplateQueryPipe(TemplateParamsPipe):
     def __init__(self,*allowed_assets:RouteAssetType):
