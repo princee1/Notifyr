@@ -49,8 +49,7 @@ async def to_signature_path(scheduler:BaseEmailSchedulerModel):
     return {}
 
 async def force_signature(scheduler:BaseEmailSchedulerModel):
-    if scheduler.signature != None:
-        scheduler.signature.template = None
+    scheduler._signature = None
     return {}
 
 EMAIL_PREFIX = "email"
