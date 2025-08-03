@@ -188,7 +188,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             kwargs = {
                 'path': path,
                 'endpoint': func.__name__,
-                'operation_id': operation_id,
+                'operation_id': computed_operation_id,
                 'dependencies': dependencies,
                 'summary': func.__doc__,
                 'response_model': response_model,
