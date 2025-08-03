@@ -368,10 +368,10 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
     async def _create_task_(self, scheduler:SchedulerModel |s, task, request_id:str,delay:float,index):
         now = dt.datetime.now().isoformat()
-        async with self.task_lock.writer:
-            self.server_load[scheduler.heaviness] += 1
-            self.running_background_tasks_count+=1
-            print(self.running_background_tasks_count)
+        # async with self.task_lock.writer:
+        #     self.server_load[scheduler.heaviness] += 1
+        #     self.running_background_tasks_count+=1
+        #     print(self.running_background_tasks_count)
 
         #delay = self._compute_ttd()
 
@@ -403,8 +403,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
     @property
     async def global_task_count(self):
-        async with self.task_lock.reader:
-            return self.running_background_tasks_count
+        # async with self.task_lock.reader:
+        #     return self.running_background_tasks_count
+        return 1
 
     @property    
     async def global_route_handler_count(self):
@@ -458,9 +459,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                             await self.redisService.store_bkg_result(result, request_id,ttl)
                     
                     if runType =='parallel':
-                        async with self.task_lock.writer:
-                            self.running_background_tasks_count -= 1  # Decrease count after tasks complete
-                            self.server_load[heaviness_] -= 1 # TODO better estimate
+                        # async with self.task_lock.writer:
+                        #     self.running_background_tasks_count -= 1  # Decrease count after tasks complete
+                        #     self.server_load[heaviness_] -= 1 # TODO better estimate
                         self.background_task_count.dec()
                         
                     return result
@@ -477,9 +478,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                             await self.redisService.store_bkg_result(result, request_id,ttl)
                     
                     if runType=='parallel':
-                        async with self.task_lock.writer:
-                            self.running_background_tasks_count -= 1  # Decrease count after tasks complete
-                            self.server_load[heaviness_] -= 1 # TODO better estimate
+                        # async with self.task_lock.writer:
+                        #     self.running_background_tasks_count -= 1  # Decrease count after tasks complete
+                        #     self.server_load[heaviness_] -= 1 # TODO better estimate
                         self.background_task_count.dec()
 
                 
@@ -506,9 +507,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
         if runType == 'sequential':
             await self.redisService.store_bkg_result(data, request_id,ttl)
-            async with self.task_lock.writer:
-                self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
-                self.server_load[heaviness_] -= 1 # TODO better estimate
+            # async with self.task_lock.writer:
+            #     self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
+            #     self.server_load[heaviness_] -= 1 # TODO better estimate
             self.background_task_count.dec(task_len)
             
         self._delete_tasks(request_id)
