@@ -544,7 +544,6 @@ class OffloadTaskService(BaseService):
 
     async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
 
-        print(await self.celeryService.get_available_workers_count)
         # TODO choose algorightm
         if algorithm == 'normal':
              return await self._normal_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
