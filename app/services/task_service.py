@@ -264,7 +264,7 @@ class CeleryService(BaseService, IntervalInterface):
                 self.available_workers_count = 0
 
     @property
-    async def get_available_workers_count(self) -> float:
+    async def get_available_workers_count(self) -> int:
         async with self.task_lock.reader:
             return self.available_workers_count
 
@@ -371,6 +371,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         async with self.task_lock.writer:
             self.server_load[scheduler.heaviness] += 1
             self.running_background_tasks_count+=1
+            print(self.running_background_tasks_count)
 
         #delay = self._compute_ttd()
 
@@ -541,6 +542,8 @@ class OffloadTaskService(BaseService):
         ...
 
     async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
+
+        print(await self.celeryService.get_available_workers_count)
         # TODO choose algorightm
         if algorithm == 'normal':
              return await self._normal_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
