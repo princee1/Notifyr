@@ -219,8 +219,11 @@ class AssetService(_service.BaseService):
                 html.loadImage(imagesPath,imageContent)
             except KeyError as e:
                 pass
-        
+       
+        html.add_tracking_pixel()
+        html.add_signature()
         html.set_content()
+        
 
     def exportRouteName(self,attributeName:RouteAssetType)-> list[str] | None:
         """

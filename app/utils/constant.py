@@ -138,3 +138,9 @@ class RunModeConstant(Enum):
     CREATE = "create"
     EDIT = "edit"
     REGISTER = "register"
+
+class HTMLTemplateConstant:
+    _tracking_url = '_tracking_url'
+    _signature = '_signature'
+
+    values= {_tracking_url,_signature}

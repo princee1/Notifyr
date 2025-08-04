@@ -106,45 +106,27 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
-        signature:Tuple[str,str] = scheduler._signature
+        signature:Tuple[str,str]|None = scheduler._signature
+
         for mail_content in scheduler.content:
             
             datas = []
             index = mail_content.index 
             
             if tracker.will_track:
-                To = mail_content.meta.To.copy()
+                To = mail_content.meta.To
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(mail_content)):
-                    if tracking_event_data == None:
-                        scheduler._errors[index] = {
-                            'message':'Cant track more than one email when it is set as individual at the moment',
-                            'key':To,
-                            'index':index
-                        }
+                    flag=self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
+                    if flag == None:
                         continue
+                    tracking_link_callback,tracking_url = flag
 
-                    _template = template.clone()
-                    event_tracking,email_tracking = tracking_event_data['track']
-                    eid = tracking_event_data['email_id']
-                    contact_id =tracking_event_data['contact_id']
-
-                    add_params = self._get_esp(To[j])
-                    self.linkService.set_tracking_link(_template,eid,add_params=add_params)
-                    tracking_link_callback = self.linkService.create_link_re(eid,add_params=add_params,contact_id=contact_id) # FIXME if its a list change it 
-                    self.linkService.create_tracking_pixel(_template,eid,contact_id,add_params['esp'])
-                    broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
-                    broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
-                
-                    if signature !=None:
-                        _template.add_signature(signature[0])
-
-                    _,data = _template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback)
+                    _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback,tracking_url=tracking_url, signature=signature)
                     data = parse_mime_content(data,mail_content.mimeType)
                     datas.append(data)
             else:
-                if signature !=None:
-                        template.add_signature(signature[0])
-                _,data = template.build(mail_content.data,self.configService.ASSET_LANG)
+                
+                _,data = template.build(mail_content.data,self.configService.ASSET_LANG,signature=signature)
                 datas = parse_mime_content(data,mail_content.mimeType)
                 mail_content.meta._Message_ID = tracker.make_msgid
 
@@ -173,33 +155,20 @@ class EmailTemplateRessource(BaseHTTPRessource):
             index = customEmail_content.index
 
             if tracker.will_track:
-                To = customEmail_content.meta.To.copy()
+                To = customEmail_content.meta.To
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(customEmail_content)):
-                        if tracking_event_data == None:
-                            scheduler._errors[index] = {
-                            'message':'Cant track more than one email when it is set as individual at the moment',
-                            'key':To,
-                            'index':index
-                            }    
-                            continue
+                    flag = self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
+                    if flag == None:
+                        continue
+                    tracking_link_callback,tracking_url = flag
                         
-                        add_params = self._get_esp(To[j])
-                        eid = tracking_event_data['email_id']
-                        contact_id = tracking_event_data['contact_id']
+                    email_content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
+                    email_content = content[0],content[1]
 
-                        tracking_link_callback:Callable[[str],str] = self.linkService.create_link_re(eid,add_params=add_params,contact_id=contact_id) # FIXME if its a list change it 
-                        event_tracking,email_tracking = tracking_event_data['track']
-
-                        broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
-                        broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
-
-                        email_content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
-                        email_content = self.linkService.create_tracking_pixel(content[0],email_id=eid,contact_id=contact_id,esp=add_params['esp']),content[1]
-
-                        if signature!=None:
-                            email_content = email_content[0],email_content[1]+("\n"*4)+signature[1]
-                            
-                        contents.append(email_content)
+                    if signature!=None:
+                        email_content = email_content[0],email_content[1]+("\n"*4)+signature[1]
+                        
+                    contents.append(email_content)
             else:
                 if signature != None:
                     _content = content[0],content[1]+"\n"+signature[1]
@@ -256,3 +225,22 @@ class EmailTemplateRessource(BaseHTTPRessource):
         else:
             return {}
 
+    def _generate_tracking_metadata(self,broker:Broker,To:list[str],tracking_event_data:dict,index:int,j:int,scheduler:CustomEmailSchedulerModel|EmailTemplateSchedulerModel)->Tuple[Callable,str|None]:
+        if tracking_event_data == None:
+            scheduler._errors[index] = {
+                'message':'Cant track more than one email when it is set as individual at the moment',
+                'key':To,
+                'index':index
+            }
+            return None
+        
+        add_params = self._get_esp(To[j])
+        (event_tracking,email_tracking),eid,contact_id = tracking_event_data['track'],tracking_event_data['email_id'],tracking_event_data['contact_id']
+        
+
+        broker.stream(StreamConstant.EMAIL_TRACKING,email_tracking)
+        broker.stream(StreamConstant.EMAIL_EVENT_STREAM,event_tracking)
+        tracking_url = self.linkService.create_tracking_pixel('raw_url',eid,contact_id,)
+        tracking_link_callback = self.linkService.create_link_re(eid,add_params=add_params,contact_id=contact_id) # FIXME if its a list change it 
+        
+        return tracking_link_callback,tracking_url

@@ -4,7 +4,9 @@ from aiohttp_retry import Callable
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from app.definition._error import BaseError
 from app.classes.schema import MLSchemaBuilder
+from app.utils.constant import HTMLTemplateConstant
 from app.utils.helper import strict_parseToBool, flatten_dict
+from app.utils.tools import Time
 from app.utils.validation import CustomValidator
 # import fitz as pdf
 from cerberus import DocumentError, SchemaError
@@ -17,6 +19,17 @@ from jinja2 import Environment, Template as JJ2Template
 from app.utils.transformer import transform,coerce
 
 
+TRACKING_PIXEL_CODE = '''
+{% if _tracking_url %}
+  <img src="{{ _tracking_url }}" width="1" height="1" style="display:none;" alt="">
+{% endif %}
+'''
+
+FOOTER_SIGNATURE_CODE='''
+{% if _signature %}
+  <div>{{ _signature }}</div>
+{% endif %}
+'''
 
 class XMLLikeParser(Enum):
     HTML = "html.parser"
@@ -351,11 +364,20 @@ class HTMLTemplate(MLTemplate):
     def set_content(self,):
         super().set_content("html5")
 
-    def build(self,data,target_lang=None,re_replace=None,validate=False,bs4=False):
-        _data = super().build(data,target_lang,validate)
-        if validate:
-            data = _data
+    def build(self,data:dict,target_lang=None,re_replace=None,validate=False,bs4=False,tracking_url=None,signature=None):
+
+        if len(HTMLTemplateConstant.values.intersection(data.keys())) > 0: 
+            raise TemplateInjectError("Data contains reserved keys: {}".format(HTMLTemplateConstant.values))
         
+        if validate:
+            data = super().build(data,target_lang,validate)
+        
+        if tracking_url:
+            data[HTMLTemplateConstant._tracking_url] = tracking_url
+
+        if signature:
+            data[HTMLTemplateConstant._signature] = signature[1]
+
         content_html, content_text = self.inject(data,re_replace=re_replace)
         if not target_lang or target_lang == Template.LANG:
             if bs4:
@@ -371,7 +393,7 @@ class HTMLTemplate(MLTemplate):
         content_text = self.exportText(content)
         return content, content_text
 
-    def add_tracking_pixel(self, tracking_url: str):
+    def add_tracking_pixel(self):
         """
         Add a tracking pixel to the HTML content.
 
@@ -381,24 +403,25 @@ class HTMLTemplate(MLTemplate):
         if not hasattr(self, 'bs4') or not self.bs4:
             raise TemplateCreationError("HTML content is not loaded or initialized.")
         
-        tracking_pixel_tag = self.bs4.new_tag("img", src=tracking_url, width="1", height="1", style="display:none;")
+        tracking_pixel_tag = self.bs4.new_tag("div", attrs={"style": "display:none;"},string=TRACKING_PIXEL_CODE)
         body_tag = self.bs4.select_one("body")
         if body_tag:
             body_tag.append(tracking_pixel_tag)
         else:
             raise TemplateFormatError("No <body> tag found in the HTML content.")
     
-        self.set_content()
+        #self.set_content()
 
-    def add_signature(self, signature_content: str):
+    def add_signature(self):
+        signature_content = ("\n"*5)+FOOTER_SIGNATURE_CODE
         self.update_footer(signature_content)
+        #self.set_content()
+
+    def add_unsubscribe_footer(self):
+        self.update_footer()
         self.set_content()
 
-    def add_unsubscribe_footer(self, content: str):
-        self.update_footer(content)
-        self.set_content()
-
-    def update_footer(self, content):
+    def update_footer(self,content: str = ""):
         footer = self.bs4.select_one('footer')
         if footer is None:
             footer = Tag(name="footer")
