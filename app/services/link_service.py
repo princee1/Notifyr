@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Literal
 from urllib.parse import urlparse
 from fastapi import HTTPException, Request, Response, status
 from app.classes.rsa import RSA
@@ -196,7 +196,7 @@ class LinkService(BaseService):
         base64_img = b64_encode(img_io.read())
         return f'data:image/png;base64,{base64_img}'
 
-    def create_tracking_pixel(self, template: HTMLTemplate | str | None, email_id: str, contact_id: str = None, esp=None) -> str:
+    def create_tracking_pixel(self,format:Literal['html','raw_url'],email_id: str, contact_id: str = None, esp=None) -> str:
         """
         Generate a tracking pixel URL for the given email ID.
 
@@ -210,7 +210,7 @@ class LinkService(BaseService):
         esp = f'&esp={esp}' if esp else 'Untracked Provider'
         tracking_path = f"/link/p/p.png/?message_id={email_id}{contact_id}{esp}"
         url = self.BASE_URL(tracking_path)
-        if template == None:
+        if  format== 'html':
             return f"""
                     <!DOCTYPE html>
                     <html lang="en">
@@ -222,15 +222,13 @@ class LinkService(BaseService):
                     </body>
                     </html>
                     """
-        elif isinstance(template, HTMLTemplate):
-            template.add_tracking_pixel(url)
         else:
-            return template
+            return url
 
-    def create_link_re(self, message_tracking_id, contact_id=None, add_params={}):
+    def create_link_re(self, message_tracking_id, contact_id=None, add_params:dict={}) -> Callable[[str], str]:
 
         def callback(content: str) -> str:
-
+            esp = add_params.get('esp',None)
             if content == None:
                 return None
 
@@ -267,26 +265,6 @@ class LinkService(BaseService):
             return new_content
 
         return callback
-
-    def set_tracking_link(self, template: HTMLTemplate, message_tracking_id: str, contact_id: str = None, add_params: dict = {}) -> str:
-        """
-        Replace every link in the given content with a new tracking URL.
-
-        Args:
-            message_tracking_id (str): The message tracking ID to include in the query.
-            contact_id (str): The contact ID to include in the query.
-            content (str): The content containing links to be replaced.
-
-        Returns:
-            str: The content with replaced tracking links.
-        """
-        params = {
-            **add_params
-        }
-        callback = self.create_link_re(
-            message_tracking_id, contact_id, add_params=params)
-        new_content = callback(template.body)
-        template.set_to_email_tracking_link(new_content)
 
     def generate_html(self, img_data):
         html_content = f"""

@@ -283,7 +283,7 @@ class PrettyPrinter:
             self.warning('Press to continue', saveable=False, position='both')
             try:
                 input('')
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, EOFError):
                 self.info(message='Exiting gracefully')
                 exit(0)
         clear_line()

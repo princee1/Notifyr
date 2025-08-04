@@ -264,7 +264,7 @@ class CeleryService(BaseService, IntervalInterface):
                 self.available_workers_count = 0
 
     @property
-    async def get_available_workers_count(self) -> float:
+    async def get_available_workers_count(self) -> int:
         async with self.task_lock.reader:
             return self.available_workers_count
 
@@ -368,9 +368,10 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
     async def _create_task_(self, scheduler:SchedulerModel |s, task, request_id:str,delay:float,index):
         now = dt.datetime.now().isoformat()
-        async with self.task_lock.writer:
-            self.server_load[scheduler.heaviness] += 1
-            self.running_background_tasks_count+=1
+        # async with self.task_lock.writer:
+        #     self.server_load[scheduler.heaviness] += 1
+        #     self.running_background_tasks_count+=1
+        #     print(self.running_background_tasks_count)
 
         #delay = self._compute_ttd()
 
@@ -402,8 +403,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
     @property
     async def global_task_count(self):
-        async with self.task_lock.reader:
-            return self.running_background_tasks_count
+        # async with self.task_lock.reader:
+        #     return self.running_background_tasks_count
+        return 1
 
     @property    
     async def global_route_handler_count(self):
@@ -457,9 +459,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                             await self.redisService.store_bkg_result(result, request_id,ttl)
                     
                     if runType =='parallel':
-                        async with self.task_lock.writer:
-                            self.running_background_tasks_count -= 1  # Decrease count after tasks complete
-                            self.server_load[heaviness_] -= 1 # TODO better estimate
+                        # async with self.task_lock.writer:
+                        #     self.running_background_tasks_count -= 1  # Decrease count after tasks complete
+                        #     self.server_load[heaviness_] -= 1 # TODO better estimate
                         self.background_task_count.dec()
                         
                     return result
@@ -476,9 +478,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                             await self.redisService.store_bkg_result(result, request_id,ttl)
                     
                     if runType=='parallel':
-                        async with self.task_lock.writer:
-                            self.running_background_tasks_count -= 1  # Decrease count after tasks complete
-                            self.server_load[heaviness_] -= 1 # TODO better estimate
+                        # async with self.task_lock.writer:
+                        #     self.running_background_tasks_count -= 1  # Decrease count after tasks complete
+                        #     self.server_load[heaviness_] -= 1 # TODO better estimate
                         self.background_task_count.dec()
 
                 
@@ -505,9 +507,9 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
         if runType == 'sequential':
             await self.redisService.store_bkg_result(data, request_id,ttl)
-            async with self.task_lock.writer:
-                self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
-                self.server_load[heaviness_] -= 1 # TODO better estimate
+            # async with self.task_lock.writer:
+            #     self.running_background_tasks_count -= task_len  # Decrease count after tasks complete
+            #     self.server_load[heaviness_] -= 1 # TODO better estimate
             self.background_task_count.dec(task_len)
             
         self._delete_tasks(request_id)
@@ -541,6 +543,7 @@ class OffloadTaskService(BaseService):
         ...
 
     async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
+
         # TODO choose algorightm
         if algorithm == 'normal':
              return await self._normal_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)

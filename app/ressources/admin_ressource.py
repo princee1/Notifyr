@@ -9,8 +9,8 @@ from app.depends.orm_cache import WILDCARD, BlacklistORMCache, ChallengeORMCache
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
-from app.services.celery_service import CeleryService
 from app.services.database_service import TortoiseConnectionService
+from app.services.task_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant
