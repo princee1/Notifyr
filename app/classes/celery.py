@@ -42,6 +42,7 @@ class TaskType(Enum):
 
 TaskTypeLiteral = Literal['rrule','solar','crontab','now','once']  #'timedelta','datetime'
 SenderType =Literal['raw','subs','contact']
+AlgorithmType = Literal['normal','mix','worker_focus','route-focus']
 
 class SubContentBaseModel(BaseModel):
     as_contact:bool = False
@@ -65,6 +66,9 @@ class SchedulerModel(BaseModel):
     content: Any | list[Any]
     heaviness: Any = None
     _errors:dict[int,dict|str] = PrivateAttr({})
+    #_message:list[str] = PrivateAttr(default_factory=list)
+    _message:list[dict[int,str]] = PrivateAttr(default_factory=list)
+    
 
     @field_validator('heaviness')
     def check_heaviness(cls, heaviness:Any):
@@ -108,3 +112,23 @@ class TaskRetryError(BaseError):
     def __init__(self,error, *args):
         super().__init__(*args)
         self.error=error
+
+
+UNSUPPORTED_TASKS = 549
+
+
+WARNING_MESSAGE = {
+    UNSUPPORTED_TASKS:{
+    "name":"unsupported_task",
+    "message":   "This task is not supported in the current environment, we now used the celery worker to run this task"
+}}
+
+def add_warning_messages(warning_code:int, scheduler:SchedulerModel,index=None):
+
+    if warning_code not in WARNING_MESSAGE.keys():
+        raise ValueError(f"Warning code {warning_code} is not defined")
+    if warning_code in scheduler._message:
+        return
+
+    scheduler._message[warning_code]= WARNING_MESSAGE[warning_code].copy()
+    scheduler._message[warning_code]['index'] = index
