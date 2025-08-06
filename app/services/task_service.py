@@ -60,8 +60,8 @@ class TaskManager():
             raise TypeError("Scheduler must be an instance of SchedulerModel")
         self.scheduler = scheduler
 
-    async def offload_task(self, algorithm: AlgorithmType, scheduler: SchedulerModel, delay: float, index: int | None, callback: Callable, *args, **kwargs):
-        values = await self.offloadTask(algorithm, scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['as_async'], index, callback, *args, **kwargs)
+    async def offload_task(self,delay: float, index: int | None, callback: Callable, *args,_s:s|None=None, **kwargs):
+        values = await self.offloadTask(self.meta['algorithm'], self.scheduler if _s is None else _s, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['as_async'], index, callback, *args, **kwargs)
         self.task_result.append(values)
 
     def append_taskConfig(self,task,scheduler,delay):

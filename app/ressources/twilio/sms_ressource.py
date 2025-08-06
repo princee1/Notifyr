@@ -7,7 +7,7 @@ from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
-from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, register_scheduler, to_otp_path, force_task_manager_attributes_pipe
+from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, ServiceStatusLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.depends.checker import check_celery_service
@@ -74,7 +74,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
         _,body= template.build(otpModel.content,...,True)
 
-        await taskManager.offload_task('route-focus',s(TaskHeaviness.LIGHT),10,None,self.smsService.send_otp,otpModel,body)
+        await taskManager.offload_task(10,None,self.smsService.send_otp,otpModel,body,_s=s(TaskHeaviness.LIGHT))
         return taskManager.results
         
 
@@ -101,13 +101,13 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
                     twilio_ids.append(tid)
             
-            await taskManager.offload_task('normal',scheduler,0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids)
+            await taskManager.offload_task(0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids)
         return taskManager.results
         
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
     @UseHandler(CeleryTaskHandler,TemplateHandler,ContactsHandler,AsyncIOHandler)
-    @UsePipe(register_scheduler,TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
+    @UsePipe(RegisterSchedulerPipe,TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
@@ -130,7 +130,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
                     twilio_ids.append(tid)
 
-            await taskManager.offload_task('normal',scheduler,0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids)
+            await taskManager.offload_task(0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids)
         return taskManager.results
 
 
