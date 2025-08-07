@@ -46,7 +46,7 @@ retry_query:Callable= get_query_params('retry','false',True)
 
 algorithm_query:Callable = get_query_params('algorithm','normal',True,checker=lambda v: v in get_args(AlgorithmType))
 
-strategy_query:Callable = get_query_params('strategy','random',True,checker=lambda v: v in get_args(StrategyType))
+strategy_query:Callable = get_query_params('strategy','softmax',True,checker=lambda v: v in get_args(StrategyType))
 
 # ----------------------------------------------                                    ---------------------------------- #
 

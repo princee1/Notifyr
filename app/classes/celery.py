@@ -58,7 +58,7 @@ class TaskType(Enum):
 
 TaskTypeLiteral = Literal['rrule','solar','crontab','now','once']  #'timedelta','datetime'
 SenderType =Literal['raw','subs','contact']
-AlgorithmType = Literal['normal','mix','worker_focus','route-focus']
+AlgorithmType = Literal['normal','mix','worker','route']
 
 class SubContentBaseModel(BaseModel):
     as_contact:bool = False
