@@ -31,6 +31,9 @@ FOOTER_SIGNATURE_CODE='''
 {% endif %}
 '''
 
+CONTENT_HTML=0
+CONTENT_TEXT=1
+
 class XMLLikeParser(Enum):
     HTML = "html.parser"
     LXML = "lxml"

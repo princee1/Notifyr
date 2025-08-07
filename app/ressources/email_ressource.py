@@ -4,7 +4,7 @@ from aiohttp_retry import Tuple
 from app.classes.auth_permission import MustHave, Role
 from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
-from app.classes.template import HTMLTemplate
+from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
 from app.definition._utils_decorator import Pipe
 from app.depends.checker import check_celery_service
 from app.depends.class_dep import Broker, EmailTracker
@@ -54,6 +54,9 @@ async def force_signature(scheduler:BaseEmailSchedulerModel):
     return {}
 
 EMAIL_PREFIX = "email"
+
+TRACKING_META_CALLBACK = 0
+TRACKING_META_URL = 1
 
 DEFAULT_RESPONSE = {
     status.HTTP_202_ACCEPTED: {
@@ -116,12 +119,11 @@ class EmailTemplateRessource(BaseHTTPRessource):
             if tracker.will_track:
                 To = mail_content.meta.To
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(mail_content)):
-                    flag=self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
-                    if flag == None:
+                    tracking_meta=self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
+                    if tracking_meta == None:
                         continue
-                    tracking_link_callback,tracking_url = flag
 
-                    _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback,tracking_url=tracking_url, signature=signature)
+                    _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_meta[TRACKING_META_CALLBACK],tracking_url=tracking_meta[TRACKING_META_URL], signature=signature)
                     data = parse_mime_content(data,mail_content.mimeType)
                     datas.append(data)
             else:
@@ -157,21 +159,21 @@ class EmailTemplateRessource(BaseHTTPRessource):
             if tracker.will_track:
                 To = customEmail_content.meta.To
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(customEmail_content)):
-                    flag = self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
-                    if flag == None:
+                    tracking_meta = self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
+                    if tracking_meta == None:
                         continue
-                    tracking_link_callback,tracking_url = flag
-                        
-                    email_content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
-                    email_content = content[0],content[1]
+                    tracking_link_callback,tracking_url = tracking_meta[TRACKING_META_CALLBACK], tracking_meta[TRACKING_META_URL]
+
+                    email_content = tracking_link_callback(content[CONTENT_HTML]),tracking_link_callback(content[CONTENT_TEXT])
+                    email_content = content[CONTENT_HTML],content[CONTENT_TEXT]
 
                     if signature!=None:
-                        email_content = email_content[0],email_content[1]+("\n"*4)+signature[1]
-                        
+                        email_content = email_content[CONTENT_HTML],email_content[CONTENT_TEXT]+("\n"*4)+signature[1]
+
                     contents.append(email_content)
             else:
                 if signature != None:
-                    _content = content[0],content[1]+"\n"+signature[1]
+                    _content = content[CONTENT_HTML],content[CONTENT_TEXT]+"\n"+signature[1]
                 else:
                     _content = content
                 contents = _content

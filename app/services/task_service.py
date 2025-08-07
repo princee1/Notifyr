@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict
+from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict, get_args
 import typing
 from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
 from app.classes.celery import CeleryTask, SchedulerModel
@@ -54,6 +54,11 @@ class TaskManager():
     scheduler: SchedulerModel = field(default=None)
     taskConfig: list[TaskConfig] = field(default_factory=list)
     task_result: list[dict] = field(default_factory=list)
+
+    def set_algorithm(self, algorithm: AlgorithmType):
+        if algorithm not in get_args(AlgorithmType):
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
+        self.meta['algorithm'] = algorithm
 
     def register_scheduler(self, scheduler: SchedulerModel):
         if not isinstance(scheduler, SchedulerModel):
@@ -234,11 +239,14 @@ class CeleryService(BaseService, IntervalInterface):
         if scheduler.task_type == 'now':
             self.redis_client.expire(
                 f'celery-task-meta-{scheduler.task_name}', 3600)  # Expire in 1 hour
-
-    def build(self):
+    
+    def verify_dependency(self):
         if self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
             raise BuildFailureError
 
+    def build(self):
+        ...
+        
     @property
     def set_next_timeout(self):
         if self.timeout_count >= 30:
@@ -557,15 +565,17 @@ class OffloadTaskService(BaseService):
             
         if algorithm == 'route-focus':
             return await self._route_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
+        
+        if algorithm == 'mix':
+            return await self._mix_offload(scheduler, delay,is_retry, x_request_id,index,callback, *args, **kwargs)
 
     async def _normal_offload(self, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):
         
         if scheduler.task_type == TaskType.NOW.value:
-            if await self.select_task_env(scheduler.heaviness):
+            if await self.select_task_env(scheduler.heaviness).startswith('route'):
                 return await self._route_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
-
 
     async def _route_offload(self,scheduler,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
         if as_async:
@@ -577,9 +587,18 @@ class OffloadTaskService(BaseService):
                 return await self.taskService.run_task_in_route_handler(scheduler,is_retry,index,callback,*args,**kwargs)
             
     async def _mix_offload(self,scheduler,delay,is_retry, x_request_id: str,index:int, callback: Callable, *args, **kwargs):
-        ...
+        
+        env = await self.select_task_env(scheduler.heaviness)
+        if env == 'route':
+            return await self._route_offload(scheduler, delay,is_retry, x_request_id, True,index,callback, *args, **kwargs)
+        elif env == 'worker':
+            return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
+        elif env == 'route-background':
+            return await self._route_offload(scheduler, delay,is_retry, x_request_id, False,index,callback, *args, **kwargs)
+        else:
+            raise ValueError(f"Unsupported environment: {env}")
 
-    async def select_task_env(self,task_heaviness:TaskHeaviness,task_cost:int=0)->bool:
+    async def select_task_env(self,task_heaviness:TaskHeaviness,task_cost:int=0,)->Literal['worker','route','route-background']:
         available_workers_count = await self.celeryService.get_available_workers_count
         celery_workers_count= self.configService.CELERY_WORKERS_COUNT
         

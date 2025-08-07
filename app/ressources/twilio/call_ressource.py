@@ -72,8 +72,9 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'), TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','','',False))
     @BaseHTTPRessource.Post('/otp/{template}',dependencies=[Depends(populate_response_with_request_id)])
     async def voice_relay_otp(self, template: Annotated[PhoneTemplate,Depends(get_template)], otpModel: OTPModel, request: Request,taskManager: Annotated[TaskManager, Depends(get_task)], wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
+        
         _, body = template.build(otpModel.content, ...,True)
-
+        taskManager.set_algorithm('route-focus')
         await taskManager.offload_task(0,None,self.callService.send_otp_voice_call,body, otpModel,_s=s(TaskHeaviness.LIGHT))
         return taskManager.results
 

@@ -66,8 +66,8 @@ class SchedulerModel(BaseModel):
     content: Any | list[Any]
     heaviness: Any = None
     _errors:dict[int,dict|str] = PrivateAttr({})
-    #_message:list[str] = PrivateAttr(default_factory=list)
-    _message:list[dict[int,str]] = PrivateAttr(default_factory=list)
+    _message:dict[int,str] = PrivateAttr({})
+    
     
 
     @field_validator('heaviness')
