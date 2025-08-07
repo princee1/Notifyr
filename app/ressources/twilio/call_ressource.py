@@ -75,7 +75,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         
         _, body = template.build(otpModel.content, ...,True)
         taskManager.set_algorithm('route-focus')
-        await taskManager.offload_task(0,None,self.callService.send_otp_voice_call,body, otpModel,_s=s(TaskHeaviness.LIGHT))
+        await taskManager.offload_task(1,0,None,self.callService.send_otp_voice_call,body, otpModel,_s=s(TaskHeaviness.LIGHT))
         return taskManager.results
 
     @PingService([CallService])
@@ -113,6 +113,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         
         for content in scheduler.content:
             index= content.index
+            cost = len(content.to)
             content = content.model_dump(exclude=('as_contact','index','will_track','sender_type'))
             _, result = template.build(content, ...,False)
             twilio_ids = []
@@ -123,7 +124,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
                     broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
                     twilio_ids.append(tid)
 
-            await taskManager.offload_task(0, index, self.callService.send_template_voice_call, result, content,twilio_ids)
+            await taskManager.offload_task(cost,0, index, self.callService.send_template_voice_call, result, content,twilio_ids)
         return taskManager.results
 
     @PingService([CallService])
@@ -138,7 +139,8 @@ class OnGoingCallRessource(BaseHTTPRessource):
     async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], taskManager: Annotated[TaskManager, Depends(get_task)], authPermission=Depends(get_auth_permission)):
 
         for content in scheduler.content:
-        
+            
+            cost = len(content.to)
             details = content.model_dump(exclude={'url','as_contact','index','will_track','sender_type'})
             url = content.url
             twilio_ids = []
@@ -149,7 +151,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
                     broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
                     twilio_ids.append(tid)
 
-            await taskManager.offload_task( 0, content.index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids)
+            await taskManager.offload_task(cost, 0, content.index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids)
         return taskManager.results
 
     @PingService([CallService])
@@ -169,6 +171,8 @@ class OnGoingCallRessource(BaseHTTPRessource):
             lang = content.language
             loop = content.loop
             twilio_id = []
+            cost = len(content.to)
+
 
             if tracker.will_track:
                 for tid,event,tracking_event_data in tracker.pipe_call_track_event_data(scheduler.content):
@@ -177,7 +181,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
                     twilio_id.append(tid)
 
-            await taskManager.offload_task(0, content.index, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id)
+            await taskManager.offload_task(cost,0, content.index, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id)
         return taskManager.results
 
     @PingService([CallService])

@@ -74,7 +74,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
         _,body= template.build(otpModel.content,...,True)
         taskManager.set_algorithm('route-focus')
-        await taskManager.offload_task(10,None,self.smsService.send_otp,otpModel,body,_s=s(TaskHeaviness.LIGHT))
+        await taskManager.offload_task(1,10,None,self.smsService.send_otp,otpModel,body,_s=s(TaskHeaviness.LIGHT))
         return taskManager.results
         
 
@@ -93,6 +93,8 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         for content in scheduler.content:
             message = content.model_dump(exclude=('as_contact','index','will_track','sender_type'))
             twilio_ids = []
+            cost = len(content.to)
+
 
             if tracker.will_track:
                 for tid,event,tracking_event_data in tracker.pipe_sms_track_event_data(content):
@@ -101,7 +103,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
                     twilio_ids.append(tid)
             
-            await taskManager.offload_task(0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids)
+            await taskManager.offload_task(cost,0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids)
         return taskManager.results
         
     @UseLimiter(limit_value="5000/minutes")
@@ -118,7 +120,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_template(self,template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
         for content in scheduler.content:
-
+            cost = len(content.to)
             _,result=template.build(self.configService.ASSET_LANG,content.data)
             message = {'body':result,'to':content.to,'from_':content.from_}
 
@@ -130,7 +132,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
                     twilio_ids.append(tid)
 
-            await taskManager.offload_task(0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids)
+            await taskManager.offload_task(cost,0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids)
         return taskManager.results
 
 
