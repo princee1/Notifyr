@@ -4,7 +4,7 @@ from types import NoneType
 from fastapi import HTTPException,status
 from ordered_set import OrderedSet
 from pydantic import BaseModel, PrivateAttr, field_validator
-from typing import Any,Iterable, Literal, Optional, TypedDict, NotRequired
+from typing import Any,Iterable, Literal, Optional, Self, TypedDict, NotRequired
 from app.definition._error import BaseError
 from pydantic import BaseModel
 import time
@@ -23,12 +23,28 @@ class CeleryTaskNameNotExistsError(BaseError):
 class CelerySchedulerOptionError(BaseError):
     ...
 
+
+
 class TaskHeaviness(Enum):
     VERY_LIGHT = 1  # Minimal effort required
     LIGHT = 2       # Some effort, but not demanding
     MODERATE = 3    # Balanced workload
     HEAVY = 4       # Challenging and requires focus
     VERY_HEAVY = 5  # Extremely demanding and time-consuming
+
+COST_LEVELS = {
+    TaskHeaviness.VERY_LIGHT: 0.1,
+    TaskHeaviness.LIGHT: 0.5,
+    TaskHeaviness.MODERATE: 1.0,
+    TaskHeaviness.HEAVY: 2.0,
+    TaskHeaviness.VERY_HEAVY: 5.0
+}
+
+
+def Compute_cost(cost:float,heaviness:TaskHeaviness):
+    return cost * COST_LEVELS[heaviness]
+
+
 
 
 class TaskType(Enum):
@@ -68,8 +84,6 @@ class SchedulerModel(BaseModel):
     _errors:dict[int,dict|str] = PrivateAttr({})
     _message:dict[int,str] = PrivateAttr({})
     
-    
-
     @field_validator('heaviness')
     def check_heaviness(cls, heaviness:Any):
         if heaviness is not None:

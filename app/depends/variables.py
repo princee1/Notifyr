@@ -4,6 +4,7 @@ from typing import Callable,get_args
 from aiohttp_retry import Any
 from fastapi import Query, Request, Response
 from app.classes.celery import AlgorithmType, CeleryTask
+from app.classes.env_selector import StrategyType
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
 from app.services.task_service import CeleryService, RunType, TaskService
@@ -44,6 +45,8 @@ get_task_results:Callable= get_query_params('get_task_results','true',True)
 retry_query:Callable= get_query_params('retry','false',True)
 
 algorithm_query:Callable = get_query_params('algorithm','normal',True,checker=lambda v: v in get_args(AlgorithmType))
+
+strategy_query:Callable = get_query_params('strategy','random',True,checker=lambda v: v in get_args(StrategyType))
 
 # ----------------------------------------------                                    ---------------------------------- #
 
