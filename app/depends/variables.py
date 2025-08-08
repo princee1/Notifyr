@@ -44,9 +44,13 @@ get_task_results:Callable= get_query_params('get_task_results','true',True)
 
 retry_query:Callable= get_query_params('retry','false',True)
 
-algorithm_query:Callable = get_query_params('algorithm','normal',True,checker=lambda v: v in get_args(AlgorithmType))
+algorithm_query:Callable = get_query_params('algorithm','route',True,checker=lambda v: v in get_args(AlgorithmType))
 
 strategy_query:Callable = get_query_params('strategy','softmax',True,checker=lambda v: v in get_args(StrategyType))
+
+wait_timeout_query = Query(0, description="Time in seconds wait for the response", ge=0, le=VariableConstant.MAX_WAIT_TIMEOUT)
+
+wait_timeout_query:Callable[[Request],int|float] = get_query_params('timeout','-1',True,False,checker= lambda v: v >=-1 and v<=VariableConstant.MAX_WAIT_TIMEOUT)
 
 # ----------------------------------------------                                    ---------------------------------- #
 
@@ -87,11 +91,5 @@ mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_e
 global_var_key:tuple[Callable[[Request],str],Callable[[Request],str]] = get_query_params('key',None,True),get_query_params('key',None,True,raise_except=True)
 
 force_update_query: Callable[[Request],bool]=get_query_params('force',False,True,raise_except=True)
-
-# ----------------------------------------------                                    ---------------------------------- #
-
-wait_timeout_query = Query(0, description="Time in seconds wait for the response", ge=0, le=VariableConstant.MAX_WAIT_TIMEOUT)
-
-wait_timeout_query:Callable[[Request],int|float] = get_query_params('timeout','-1',True,False,checker= lambda v: v >=-1 and v<=VariableConstant.MAX_WAIT_TIMEOUT)
 
 # ----------------------------------------------                                    ---------------------------------- #

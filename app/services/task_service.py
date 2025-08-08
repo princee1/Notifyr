@@ -575,7 +575,7 @@ class OffloadTaskService(BaseService):
             return await self._route_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
         
         if algorithm == 'mix':
-            return await self._mix_offload(strategy,scheduler, delay,is_retry, x_request_id,index,callback, *args, **kwargs)
+            return await self._mix_offload(strategy,cost,scheduler, delay,is_retry, x_request_id,index,callback, *args, **kwargs)
 
     async def _normal_offload(self,strategy:StrategyType, cost:float, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):
 
