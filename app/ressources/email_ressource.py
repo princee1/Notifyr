@@ -4,7 +4,7 @@ from aiohttp_retry import Tuple
 from app.classes.auth_permission import MustHave, Role
 from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
-from app.classes.template import HTMLTemplate
+from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
 from app.definition._utils_decorator import Pipe
 from app.depends.checker import check_celery_service
 from app.depends.class_dep import Broker, EmailTracker
@@ -55,6 +55,9 @@ async def force_signature(scheduler:BaseEmailSchedulerModel):
 
 EMAIL_PREFIX = "email"
 
+TRACKING_META_CALLBACK = 0
+TRACKING_META_URL = 1
+
 DEFAULT_RESPONSE = {
     status.HTTP_202_ACCEPTED: {
         'message': 'email task received successfully'}
@@ -102,7 +105,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature)
-    @UsePipe(pipes.register_scheduler,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
+    @UsePipe(pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
@@ -112,16 +115,15 @@ class EmailTemplateRessource(BaseHTTPRessource):
             
             datas = []
             index = mail_content.index 
+            To = mail_content.meta.To
             
             if tracker.will_track:
-                To = mail_content.meta.To
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(mail_content)):
-                    flag=self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
-                    if flag == None:
+                    tracking_meta=self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
+                    if tracking_meta == None:
                         continue
-                    tracking_link_callback,tracking_url = flag
 
-                    _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_link_callback,tracking_url=tracking_url, signature=signature)
+                    _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_meta[TRACKING_META_CALLBACK],tracking_url=tracking_meta[TRACKING_META_URL], signature=signature)
                     data = parse_mime_content(data,mail_content.mimeType)
                     datas.append(data)
             else:
@@ -131,7 +133,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 mail_content.meta._Message_ID = tracker.make_msgid
 
             meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
-            await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
+            await taskManager.offload_task(len(To),0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
 
@@ -141,7 +143,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @PingService([CeleryService],checker=check_celery_service)
     @UsePermission(permissions.JWTSignatureAssetPermission())
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(),force_signature)
-    @UsePipe(pipes.register_scheduler,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
+    @UsePipe(pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
@@ -153,32 +155,32 @@ class EmailTemplateRessource(BaseHTTPRessource):
             content = (customEmail_content.html_content, customEmail_content.text_content)
             contents = []
             index = customEmail_content.index
+            To = customEmail_content.meta.To
 
             if tracker.will_track:
-                To = customEmail_content.meta.To
                 for j,tracking_event_data in enumerate(tracker.pipe_email_data(customEmail_content)):
-                    flag = self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
-                    if flag == None:
+                    tracking_meta = self._generate_tracking_metadata(broker,To,tracking_event_data,index,j,scheduler)
+                    if tracking_meta == None:
                         continue
-                    tracking_link_callback,tracking_url = flag
-                        
-                    email_content = tracking_link_callback(content[0]),tracking_link_callback(content[1])
-                    email_content = content[0],content[1]
+                    tracking_link_callback,tracking_url = tracking_meta[TRACKING_META_CALLBACK], tracking_meta[TRACKING_META_URL]
+
+                    email_content = tracking_link_callback(content[CONTENT_HTML]),tracking_link_callback(content[CONTENT_TEXT])
+                    email_content = content[CONTENT_HTML],content[CONTENT_TEXT]
 
                     if signature!=None:
-                        email_content = email_content[0],email_content[1]+("\n"*4)+signature[1]
-                        
+                        email_content = email_content[CONTENT_HTML],email_content[CONTENT_TEXT]+("\n"*4)+signature[1]
+
                     contents.append(email_content)
             else:
                 if signature != None:
-                    _content = content[0],content[1]+"\n"+signature[1]
+                    _content = content[CONTENT_HTML],content[CONTENT_TEXT]+"\n"+signature[1]
                 else:
                     _content = content
                 contents = _content
                 customEmail_content.meta._Message_ID = tracker.make_msgid
 
             meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
-            await taskManager.offload_task('normal',scheduler,0,index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
+            await taskManager.offload_task(len(To),0,index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])

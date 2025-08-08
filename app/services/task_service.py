@@ -1,9 +1,10 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict
+from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict, get_args
 import typing
-from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, TaskRetryError, TaskHeaviness, TaskType, s
+from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, Compute_cost, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
 from app.classes.celery import CeleryTask, SchedulerModel
+from app.classes.env_selector import EnvSelection, StrategyType, get_selector
 from app.definition._service import BuildFailureError, BaseService, Service, ServiceStatus,BuildWarningError
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.database_service import RedisService
@@ -26,7 +27,6 @@ from aiorwlock import RWLock
 
 P = ParamSpec("P")
 RunType = Literal['parallel','sequential']
-Algorithm = Literal['normal', 'worker_focus','route-focus']
 
 
 class TaskConfig(TypedDict):
@@ -37,6 +37,8 @@ class TaskConfig(TypedDict):
 class TaskMeta(TypedDict):
     x_request_id:str
     as_async:bool
+    algorithm:AlgorithmType
+    strategy:StrategyType
     runtype:RunType
     save_result:bool
     split:bool
@@ -54,15 +56,25 @@ class TaskManager():
     scheduler: SchedulerModel = field(default=None)
     taskConfig: list[TaskConfig] = field(default_factory=list)
     task_result: list[dict] = field(default_factory=list)
+    cost:float = field(default=0.0)
+
+    def set_algorithm(self, algorithm: AlgorithmType):
+        if algorithm not in get_args(AlgorithmType):
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
+        self.meta['algorithm'] = algorithm
 
     def register_scheduler(self, scheduler: SchedulerModel):
         if not isinstance(scheduler, SchedulerModel):
             raise TypeError("Scheduler must be an instance of SchedulerModel")
         self.scheduler = scheduler
 
-    async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel, delay: float, index: int | None, callback: Callable, *args, **kwargs):
-        values = await self.offloadTask(algorithm, scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['as_async'], index, callback, *args, **kwargs)
+    async def offload_task(self,cost:float,delay: float, index: int | None, callback: Callable, *args,_s:s|None=None, **kwargs):
+        scheduler = self.scheduler if _s is None else _s
+        cost = Compute_cost(cost, scheduler.heaviness)
+
+        values = await self.offloadTask(self.meta['strategy'],cost,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['as_async'], index, callback, *args, **kwargs)
         self.task_result.append(values)
+        self.cost += cost
 
     def append_taskConfig(self,task,scheduler,delay):
 
@@ -88,8 +100,10 @@ class TaskManager():
         meta.pop('tt',None)
         return {
             'meta': meta,
+            'cost': self.cost,
             'results': self.task_result,
             'errors':self.scheduler._errors if self.scheduler else {},
+            'message': self.scheduler._message if self.scheduler else [],
         }
 
     @property
@@ -233,11 +247,14 @@ class CeleryService(BaseService, IntervalInterface):
         if scheduler.task_type == 'now':
             self.redis_client.expire(
                 f'celery-task-meta-{scheduler.task_name}', 3600)  # Expire in 1 hour
-
-    def build(self):
+    
+    def verify_dependency(self):
         if self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
             raise BuildFailureError
 
+    def build(self):
+        ...
+        
     @property
     def set_next_timeout(self):
         if self.timeout_count >= 30:
@@ -255,7 +272,7 @@ class CeleryService(BaseService, IntervalInterface):
 
             async with self.task_lock.reader:
                 self.available_workers_count = available_workers_count
-            self.worker_not_available = self.configService.CELERY_WORKERS_COUNT - \
+            self.worker_not_available_count = self.configService.CELERY_WORKERS_COUNT - \
                 available_workers_count
             self.timeout_count = 0
         except Exception as e:
@@ -314,8 +331,8 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         BaseService.__init__(self)
         SchedulerInterface.__init__(self)
 
-    def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool,retry:bool,split:bool)->TaskManager:
-        meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split)
+    def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool,retry:bool,split:bool,algorithm:AlgorithmType,strategy:StrategyType)->TaskManager:
+        meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy)
         task = TaskManager(meta=meta,offloadTask=offloadTask,return_results=return_results)
         self.sharing_task[request_id] = task
         return task
@@ -542,31 +559,31 @@ class OffloadTaskService(BaseService):
     def build(self):
         ...
 
-    async def offload_task(self, algorithm: Algorithm, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
+    async def offload_task(self,strategy:StrategyType,cost: float, algorithm: AlgorithmType, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
 
-        # TODO choose algorightm
+        if algorithm == 'route' and isinstance(scheduler, SchedulerModel) and scheduler.task_type != TaskType.NOW.value:
+            algorithm = 'worker'
+            add_warning_messages(UNSUPPORTED_TASKS, scheduler, index=None)
+
         if algorithm == 'normal':
-             return await self._normal_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
-        if algorithm == 'worker_focus':
+             return await self._normal_offload(strategy,cost,scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
+
+        if algorithm == 'worker':
             return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
             
-        if algorithm == 'route-focus':
+        if algorithm == 'route':
             return await self._route_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
+        
+        if algorithm == 'mix':
+            return await self._mix_offload(strategy,cost,scheduler, delay,is_retry, x_request_id,index,callback, *args, **kwargs)
 
-    async def _normal_offload(self, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):
-        # TODO check celery worker,
+    async def _normal_offload(self,strategy:StrategyType, cost:float, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):
+
         if scheduler.task_type == TaskType.NOW.value:
-            if as_async:
-                if asyncio.iscoroutine(callback):
-                    return await self.taskService.add_async_task(scheduler,x_request_id,delay,index,callback)
-                return await self.taskService.add_task(scheduler, x_request_id, delay, index,callback, *args, **kwargs)
-            
-            else:
-                return await self.taskService.run_task_in_route_handler(scheduler,is_retry,index,callback,*args,**kwargs)
-                
+            if (await self.select_task_env(strategy,cost)).startswith('route'):
+                return await self._route_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
-
 
     async def _route_offload(self,scheduler,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
         if as_async:
@@ -576,3 +593,32 @@ class OffloadTaskService(BaseService):
             
         else:
                 return await self.taskService.run_task_in_route_handler(scheduler,is_retry,index,callback,*args,**kwargs)
+
+    async def _mix_offload(self,strategy:StrategyType,cost,scheduler,delay,is_retry, x_request_id: str,index:int, callback: Callable, *args, **kwargs):
+        env = await self.select_task_env(strategy,cost)
+        if env == 'route':
+            return await self._route_offload(scheduler, delay,is_retry, x_request_id, True,index,callback, *args, **kwargs)
+        elif env == 'worker':
+            return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
+        elif env == 'route-background':
+            return await self._route_offload(scheduler, delay,is_retry, x_request_id, False,index,callback, *args, **kwargs)
+        else:
+            raise ValueError(f"Unsupported environment: {env}")
+
+    async def select_task_env(self,strategy:StrategyType,task_cost:float)->EnvSelection:
+        p1 = await self.celeryService.get_available_workers_count
+        if p1 < 0:
+            p1 = 0
+
+        workers_count = self.configService.CELERY_WORKERS_COUNT
+
+        p2  = p1 / workers_count if workers_count > 0 else 0
+        p3 = task_cost
+
+        return get_selector(strategy).select(p1, p2, p3)
+
+
+
+
+        
+        

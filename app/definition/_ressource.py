@@ -841,10 +841,10 @@ def ExemptLimiter():
     return decorator
 
 
-def PingService(services: list[S | dict], wait=True,checker:Callable=None):
+def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=None):
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator( func, PingService, None, services=services, wait=wait)
+        cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait)
         if cls != None:
             return cls
 
@@ -869,7 +869,7 @@ def PingService(services: list[S | dict], wait=True,checker:Callable=None):
                             k = s['kwargs']
 
                             cls: S = Get(s)
-                            if wait:
+                            if infinite_wait:
 
                                 await cls.async_pingService(*a, **k)
                             else:
@@ -877,12 +877,12 @@ def PingService(services: list[S | dict], wait=True,checker:Callable=None):
 
                         else:
                             s: BaseService = Get(s)
-                            if wait:
+                            if infinite_wait:
                                 await s.async_pingService()
                             else:
                                 s.sync_pingService()
 
-                if wait and wait_timeout >= 0:
+                if not infinite_wait and wait_timeout >= 0:
                     asyncio.wait_for(inner_callback(), wait_timeout)
                 else:
                     await inner_callback()

@@ -7,7 +7,7 @@ from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
-from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, register_scheduler, to_otp_path, force_task_manager_attributes_pipe
+from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, ServiceStatusLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
 from app.depends.checker import check_celery_service
@@ -73,8 +73,8 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     async def sms_relay_otp(self,template:Annotated[SMSTemplate,Depends(get_template)],otpModel:OTPModel,request:Request,response:Response,taskManager: Annotated[TaskManager, Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
 
         _,body= template.build(otpModel.content,...,True)
-
-        await taskManager.offload_task('route-focus',s(TaskHeaviness.LIGHT),10,None,self.smsService.send_otp,otpModel,body)
+        taskManager.set_algorithm('route')
+        await taskManager.offload_task(1,10,None,self.smsService.send_otp,otpModel,body,_s=s(TaskHeaviness.LIGHT))
         return taskManager.results
         
 
@@ -93,6 +93,8 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         for content in scheduler.content:
             message = content.model_dump(exclude=('as_contact','index','will_track','sender_type'))
             twilio_ids = []
+            cost = len(content.to)
+
 
             if tracker.will_track:
                 for tid,event,tracking_event_data in tracker.pipe_sms_track_event_data(content):
@@ -101,13 +103,13 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
                     twilio_ids.append(tid)
             
-            await taskManager.offload_task('normal',scheduler,0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids)
+            await taskManager.offload_task(cost,0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids)
         return taskManager.results
         
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
     @UseHandler(CeleryTaskHandler,TemplateHandler,ContactsHandler,AsyncIOHandler)
-    @UsePipe(register_scheduler,TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
+    @UsePipe(RegisterSchedulerPipe,TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
@@ -118,7 +120,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_template(self,template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
         for content in scheduler.content:
-
+            cost = len(content.to)
             _,result=template.build(self.configService.ASSET_LANG,content.data)
             message = {'body':result,'to':content.to,'from_':content.from_}
 
@@ -130,7 +132,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
                     twilio_ids.append(tid)
 
-            await taskManager.offload_task('normal',scheduler,0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids)
+            await taskManager.offload_task(cost,0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids)
         return taskManager.results
 
 

@@ -1,10 +1,10 @@
-from typing import Any, Callable, Coroutine, Literal
+from typing import Any, Callable, Coroutine, Literal, get_args
 
 from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.broker import exception_to_json
-from app.classes.celery import SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
+from app.classes.celery import AlgorithmType, SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
@@ -33,9 +33,20 @@ async def to_otp_path(template:str):
     template = "otp\\"+template
     return {'template':template}
 
-async def register_scheduler(scheduler:SchedulerModel,taskManager:TaskManager):
-    taskManager.register_scheduler(scheduler)
-    return {}
+
+class RegisterSchedulerPipe(Pipe):
+    def __init__(self,algorithm:AlgorithmType=None):
+        super().__init__(True)
+        if algorithm and algorithm not in get_args(AlgorithmType):
+            raise ValueError('Algorithm not allowed')
+            
+        self.algorithm = algorithm
+
+    async def pipe(self,scheduler:SchedulerModel,taskManager:TaskManager):
+        taskManager.register_scheduler(scheduler)
+        if self.algorithm:
+            taskManager.meta['algorithm'] = self.algorithm
+        return {}
 
 class AuthPermissionPipe(Pipe):
 

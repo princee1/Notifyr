@@ -314,12 +314,12 @@ def GetLink(raise_file_error:bool,raise_err:bool=True):
     return get_link
 
 
-async def get_task(request_id: str = Depends(get_request_id), as_async: bool = Depends(as_async_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query)):
+async def get_task(request_id: str = Depends(get_request_id), as_async: bool = Depends(as_async_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query)):
     taskService: TaskService = Get(TaskService)
-    offload_task: Callable = GetAttr(OffloadTaskService, 'offload_task')
+    offload_task: Callable = GetAttr(OffloadTaskService, OffloadTaskService.offload_task.__name__)
     if offload_task == None:
         raise HTTPException(500, detail='Offload task is not available')
-    return taskService._register_tasks(request_id, as_async, runtype, offload_task, ttl, save, return_results,retry,split)
+    return taskService._register_tasks(request_id, as_async, runtype, offload_task, ttl, save, return_results,retry,split,algorithm,strategy)
 
 async def get_challenge(client:ClientORM):
     return await ChallengeORM.filter(client=client).first()
