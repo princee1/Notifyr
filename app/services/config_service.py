@@ -192,7 +192,7 @@ class ConfigService(_service.BaseService):
         self.IMAP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(
             self.getenv("IMAP_EMAIL_LOG_LEVEL"), self.SMTP_EMAIL_LOG_LEVEL)
 
-        self.ASSET_LANG = self.getenv("ASSET_LANG")
+        self.ASSET_LANG = self.getenv("ASSET_LANG",'en')
 
         self.TWILIO_ACCOUNT_SID = self.getenv("TWILIO_ACCOUNT_SID")
         self.TWILIO_AUTH_TOKEN = self.getenv("TWILIO_AUTH_TOKEN")
@@ -220,7 +220,7 @@ class ConfigService(_service.BaseService):
 
         # REDIS CONFIG #
 
-        self.REDIS_URL = self.getenv("REDIS_URL")
+        self.REDIS_URL = self.getenv("REDIS_URL","redis://127.0.0.1")
 
         # SLOW API CONFIG #
 
