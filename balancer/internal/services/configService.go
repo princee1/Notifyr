@@ -147,3 +147,7 @@ func (config *ConfigService) LoadEnv() {
 func (config *ConfigService) GetAppCount() int64 {
 	return config.app_count
 }
+
+func (config *ConfigService) VerifyAccessAuth(token string) bool {
+	return token == config.api_key
+}
