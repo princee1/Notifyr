@@ -12,6 +12,8 @@ from app.interface.email import EmailSendInterface
 class EmailSenderService(_service.BaseService):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, awsSESService: AmazonSESService, smtpEmailService: SMTPEmailService,emailApiService: EmailAPIService) -> None:
+        super().__init__()
+
         self.configService = configService
         self.awsSESService = awsSESService
         self.smtpEmailService = smtpEmailService
@@ -33,6 +35,7 @@ class EmailSenderService(_service.BaseService):
 @_service.Service
 class EmailReaderService(_service.BaseService):
     def __init__(self, configService: ConfigService, awsSESService: AmazonSESService, imapEmailService: IMAPEmailService,emailApiService: EmailAPIService) -> None:
+        super().__init__()
 
         self.awsSESService = awsSESService
         self.imapEmailService = imapEmailService
@@ -40,3 +43,9 @@ class EmailReaderService(_service.BaseService):
         self.emailApiService = emailApiService
 
     
+    def start_jobs(self):
+        self.imapEmailService.start_jobs()
+
+    
+    def cancel_jobs(self):
+        self.imapEmailService.cancel_jobs()

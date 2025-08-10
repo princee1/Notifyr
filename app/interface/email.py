@@ -16,4 +16,9 @@ class EmailSendInterface(Interface):
 
 @IsInterface
 class EmailReadInterface(Interface):
-    ...
+    
+    def start_jobs():
+        ...
+    
+    def cancel_jobs():
+        ...

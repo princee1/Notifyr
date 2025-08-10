@@ -7,6 +7,7 @@ from base64 import urlsafe_b64encode, urlsafe_b64decode
 
 from app.definition._service import BaseService, Service
 from app.interface.email import EmailSendInterface,EmailReadInterface
+from app.services.config_service import ConfigService
 
 
 class MailAPI():
@@ -74,10 +75,13 @@ class MicrosoftGraphMailAPI(MailAPI):
 @Service
 class EmailAPIService(BaseService,EmailSendInterface,EmailReadInterface):
     
-    def __init__(self):
+    def __init__(self,configService:ConfigService):
         super().__init__()
         EmailReadInterface.__init__(self)
         EmailSendInterface.__init__(self)
+
+
+        self.configService= configService
 
     def build(self):
         ...
