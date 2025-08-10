@@ -1,4 +1,5 @@
 
+from typing_extensions import Literal
 from app.definition import _service
 from app.services.aws_service import AmazonSESService
 from app.services.config_service import ConfigService
@@ -8,10 +9,9 @@ from app.utils.tools import Mock
 from app.interface.email import EmailSendInterface
 
 @_service.Service
-class EmailSenderService(_service.BaseService, EmailSendInterface):
+class EmailSenderService(_service.BaseService):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, awsSESService: AmazonSESService, smtpEmailService: SMTPEmailService,emailApiService: EmailAPIService) -> None:
-        EmailSendInterface.__init__(self)
         self.configService = configService
         self.awsSESService = awsSESService
         self.smtpEmailService = smtpEmailService
@@ -20,16 +20,15 @@ class EmailSenderService(_service.BaseService, EmailSendInterface):
     def verify_dependency(self):
         ...
 
+    def select(self,service:Literal['smtp','aws','api']='smtp',sender=None)->EmailSendInterface:
+        if service == 'smtp':
+            return self.smtpEmailService
+        if 'aws':
+            return self.awsSESService
+
     def build(self):
         
-        
-        setattr(self,self.sendTemplateEmail.__name__,self.smtpEmailService.sendTemplateEmail)
-        setattr(self,self.sendCustomEmail.__name__,self.smtpEmailService.sendCustomEmail)
-        
-        if False:
-            setattr(self,self.sendTemplateEmail.__name__,Mock()(self.sendTemplateEmail))
-            setattr(self,self.sendCustomEmail.__name__,Mock()(self.sendCustomEmail))
-
+        ...
 
 @_service.Service
 class EmailReaderService(_service.BaseService):

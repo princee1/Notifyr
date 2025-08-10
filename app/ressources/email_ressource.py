@@ -9,6 +9,7 @@ from app.definition._utils_decorator import Pipe
 from app.depends.checker import check_celery_service
 from app.depends.class_dep import Broker, EmailTracker
 from app.depends.funcs_dep import get_task, get_template
+from app.interface.email import EmailSendInterface
 from app.models.email_model import BaseEmailSchedulerModel, CustomEmailModel, CustomEmailSchedulerModel, EmailSpamDetectionModel, EmailTemplateModel, EmailTemplateSchedulerModel
 from app.services.assets_service import AssetService
 from app.services.task_service import TaskManager, TaskService, CeleryService
@@ -132,7 +133,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 mail_content.meta._Message_ID = tracker.make_msgid
 
             meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
-            await taskManager.offload_task(len(To),0,index,self.emailService.sendTemplateEmail,datas, meta, template.images)
+            await taskManager.offload_task(len(To),0,index,self.emailService.select().sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
 
@@ -179,7 +180,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 customEmail_content.meta._Message_ID = tracker.make_msgid
 
             meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
-            await taskManager.offload_task(len(To),0,index,self.emailService.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
+            await taskManager.offload_task(len(To),0,index,self.emailService.select().sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])

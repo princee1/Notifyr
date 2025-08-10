@@ -226,13 +226,6 @@ class SMTPEmailService(BaseEmailService):
     
         self.awsSESService = awsSESService
 
-    def _load_valid_from_email(self):
-        config_str: str = ...
-        config_str = config_str.strip()
-        emails = config_str.split('|')
-        emails = [email for email in emails if email_validator(email)]
-        self.fromEmails.update(emails)
-
     def logout(self, connector: smtp.SMTP):
         try:
             connector.quit()
