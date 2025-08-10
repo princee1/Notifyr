@@ -30,7 +30,7 @@ func (security *SecurityService) VerifyAccessAuth(c *fiber.Ctx) error {
 	if accessAuth == ""{
 		return c.SendStatus(401)
 	}
-	if accessAuth != security.ConfigService.api_key{
+	if !security.ConfigService.VerifyAccessAuth(accessAuth) {
 		return c.SendStatus(403)
 	}
 	return c.Next()
