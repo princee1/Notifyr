@@ -214,7 +214,7 @@ class Application(EventInterface):
 
         pg_user = self.configService.getenv('POSTGRES_USER')
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
-        pg_database = self.configService.getenv('POSTGRES_DB')
+        pg_database = tortoiseConnService.DATABASE_NAME
         pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
         register_tortoise(
             app=self.app,
