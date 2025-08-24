@@ -25,8 +25,7 @@ services:
     container_name: reacherhq
     ports:
       - "8080:8080"
-      
-    
+         
   mongodb:
     image: mongo:latest
     container_name: my-mongo
@@ -70,7 +69,7 @@ services:
     
   celery:
     image: python:3.11-slim
-    command: ["./spawn_celery_worker.sh", "30" ]
+    command: ["./spawn_celery_worker.sh", "5" ]
     container_name: notifyr-worker
     build:
       context: ./
@@ -137,6 +136,24 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
   
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: notifyr-vault
+    ports:
+      - "8200:8200"
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.vault
+
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN_ID}
+      VAULT_ADDR: "http://0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK
+    restart: always
+    volumes:
+      - ./vault/audit:/vault/audit
+      - ./vault/data:/vault/data
 
   twilio:
     image: node:20.19.0-slim
@@ -169,6 +186,9 @@ services:
       - postgres
     
 volumes:
+  vault-data:
+    driver: local
+
   mongo-data:
     driver: local
 

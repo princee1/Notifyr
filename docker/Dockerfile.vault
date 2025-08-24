@@ -1,0 +1,6 @@
+FROM hashicorp/vault:1.17
+
+COPY --chmod=755 ./scripts/vault-init.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

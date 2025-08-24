@@ -261,6 +261,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
 
             return await redisService.delete_all(REDIS_CACHE_KEY,p,is_s_p)
 
+        @Time
         @staticmethod
         async def Cache(key,*args,expiry:int|None|Callable[[Any],int]=expiry,when_cond:Any=None,**kwargs):
             

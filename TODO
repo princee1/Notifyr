@@ -32,3 +32,4 @@
 30. Publish the state of all the Services using pubsub so everybody can be at the state
 31. Implements logs
 32. Manage duplication when receiving a request, we will receive multiple OPENED event
+33. Add Memcached for rate limiting, S3 storage like for development, ELK for logs, add the sperate 2 docker files one for prod and one for dev
