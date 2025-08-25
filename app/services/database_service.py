@@ -5,13 +5,15 @@ from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
 from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
-from app.utils.constant import StreamConstant, SubConstant
+from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import CeleryMode, ConfigService
 from .file_service import FileService
 from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
+from odmantic.exceptions import BaseEngineException
+
 from redis.asyncio import Redis
 from redis import Redis as SyncRedis
 from redis.exceptions import ResponseError
@@ -20,8 +22,12 @@ import asyncio
 from tortoise import Tortoise
 from app.errors.async_error import ReactiveSubjectNotFoundError
 import psycopg2
+from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
 
 MS_1000 = 1000
+ENGINE_KEY = 'engine'
+DB_KEY = 'db'
+
 
 class RedisStreamDoesNotExistsError(BaseError):
     ...
@@ -38,34 +44,35 @@ class DatabaseService(BaseService):
 
 @Service
 class MongooseService(DatabaseService): # Chat data
-    DB = Literal['agent','chat']
+    COLLECTION_REF = Literal['agent','chat','profile']
+    DATABASE_NAME=  MongooseDBConstant.DATABASE_NAME
 
     #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
-        self.db_ref:dict[MongooseService.DB,Any] =  {}
         self.mongo_uri = self.configService.getenv('MONGO_URI')
     
     def build(self):
         try:    
-            agentDB_name =self.configService.getenv('MONGO_AGENT_DB')
-            chatDB_name = self.configService.getenv('MONGO_CHAT_DB')
 
             self.client = AsyncIOMotorClient(self.mongo_uri)
-            self.agent_engine = AIOEngine(self.client,agentDB_name)
-            self.chat_engine = AIOEngine(self.client,chatDB_name)
-            
-            self.db_ref['agent'] = {
-                'engine':self.agent_engine,
-                'db':AsyncIOMotorDatabase(self.client,agentDB_name)
-            }
-            self.db_ref['chat'] = {
-                'engine':self.chat_engine,
-                'db':AsyncIOMotorDatabase(self.client,chatDB_name)
-            }
+            self.motor_db = AsyncIOMotorDatabase(self.client,self.DATABASE_NAME)
+            self.engine = AIOEngine(self.client,self.DATABASE_NAME)
+
+        except ConnectionFailure as e:
+            raise BuildFailureError(f"MongoDB connection error: {e}")
+        except ConfigurationError as e:
+            raise BuildFailureError(f"MongoDB configuration error: {e}")
+
+        except BaseEngineException as e:
+            raise BuildFailureError(f"ODMantic engine error: {e}")
+
+        except ServerSelectionTimeoutError as e:
+            raise BuildFailureError(f"MongoDB server selection timeout: {e}")
+
         except Exception as e: # TODO
             print(e) 
-            raise ...    
+            raise BuildFailureError(f"Unexpected error: {e}") 
 
 @Service
 class RedisService(DatabaseService):
@@ -419,6 +426,7 @@ class RedisService(DatabaseService):
             
 @Service
 class TortoiseConnectionService(DatabaseService):
+    DATABASE_NAME = 'notifyr'
 
     def __init__(self, configService: ConfigService):
         super().__init__(configService, None)
@@ -427,19 +435,17 @@ class TortoiseConnectionService(DatabaseService):
     def verify_dependency(self):
         pg_user = self.configService.getenv('POSTGRES_USER')
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
-        pg_database = self.configService.getenv('POSTGRES_DB')
 
-        if not pg_user or not pg_password or not pg_database:
+        if not pg_user or not pg_password:
             raise BuildFailureError
 
     def build(self):
         try:
             pg_user = self.configService.getenv('POSTGRES_USER')
             pg_password = self.configService.getenv('POSTGRES_PASSWORD')
-            pg_database = self.configService.getenv('POSTGRES_DB')
 
             conn = psycopg2.connect(
-                dbname=pg_database,
+                dbname=self.DATABASE_NAME,
                 user=pg_user,
                 password=pg_password,
                 host="localhost",
