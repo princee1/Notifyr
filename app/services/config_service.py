@@ -167,6 +167,7 @@ class ConfigService(_service.BaseService):
         self.OAUTH_CLIENT_ID = self.getenv('OAUTH_CLIENT_ID')
         self.OAUTH_CLIENT_SECRET = self.getenv('OAUTH_CLIENT_SECRET')
         self.OAUTH_OUTLOOK_TENANT_ID = self.getenv('OAUTH_TENANT_ID')
+        
 
         self.SEND_MAIL_METHOD = self.getenv("SEND_MAIL_METHOD", 'SMTP')
         self.SMTP_EMAIL_HOST = self.getenv("SMTP_EMAIL_HOST").upper()
