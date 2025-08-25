@@ -22,6 +22,7 @@ from app.errors.global_var_error import GlobalKeyAlreadyExistsError, GlobalKeyDo
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
+from app.models.profile_model import ProfileModelTypeDoesNotExists
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -29,6 +30,7 @@ from tortoise.exceptions import OperationalError, DBConnectionError, ValidationE
 from requests.exceptions import SSLError, Timeout
 
 from app.services.logger_service import LoggerService
+from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 
 class ServiceAvailabilityHandler(Handler):
@@ -553,3 +555,15 @@ class GlobalVarHandler(Handler):
         except GlobalKeyDoesNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f"Key '{e.key}' does not exists or it is not a JSON")
             
+
+class ProfileHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        
+        except PydanticValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors())
+        
+        except ProfileModelTypeDoesNotExists as e:
+            raise 

@@ -181,13 +181,3 @@ class AuthToken():
     scope: Optional[str] 
     mail_provider: str
 
-from pydantic import BaseModel
-
-class MongooseAuthToken(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: TokenType
-    expires_in: float
-    acquired_at: float
-    scope: Optional[str] 
-    mail_provider: str
