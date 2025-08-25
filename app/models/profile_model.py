@@ -3,7 +3,7 @@ from enum import Enum
 from ssl import SSLSession
 from typing import Optional, Type
 from typing_extensions import Literal
-from odmantic import Model, Field, Reference,sync
+from odmantic import Model, Field, Reference
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.profile import ProfileModelAuthToken, ProfilModelConstant, ProfileState
 from app.definition._error import BaseError
@@ -43,11 +43,11 @@ class ProfileModel(Model, collection=MongooseDBConstant.PROFILE_COLLECTION):
         return getattr(cls,'_secret_key',[])
 
 
-@sync(ProfileModel)
-async def update_metadata(session: SSLSession, instance: ProfileModel):
-    instance.last_modified = datetime.utcnow()
-    if instance.id is not None:  # Means it's an update, not a new insert
-        instance.version += 1
+# @sync(ProfileModel)
+# async def update_metadata(session: SSLSession, instance: ProfileModel):
+#     instance.last_modified = datetime.utcnow()
+#     if instance.id is not None:  # Means it's an update, not a new insert
+#         instance.version += 1
 ######################################################                   ####################################################33
 
 
