@@ -5,6 +5,7 @@ from typing import Optional, Type
 from typing_extensions import Literal
 from odmantic import Model, Field, Reference,sync
 from app.classes.mail_provider import AuthToken, TokenType
+from app.classes.profile import ProfileModelAuthToken, ProfilModelConstant, ProfileState
 from app.definition._error import BaseError
 from app.utils.constant import EmailHostConstant, MongooseDBConstant
 from pydantic import EmailStr, constr, PrivateAttr
@@ -17,43 +18,9 @@ ServiceMode = Literal['smtp','aws','api','imap']
 SMTPConnMode = Literal['tls','ssl','normal']
 
 
-
-EMAIL_PROFILE_TYPE = 'email'
-
-class MongooseAuthToken(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: TokenType
-    expires_in: float
-    acquired_at: float
-    scope: Optional[str] 
-    mail_provider: str
-    
-    secret_key:ClassVar[list[str]]= ['access_token','refresh_token']
-
 ######################################################                   ####################################################33
     
 class ErrorProfileModel(Model,collection=MongooseDBConstant.PROFILE_COLLECTION):
-    ...
-
-######################################################                   ####################################################33
-
-
-class ProfilModelConstant:
-    OUTLOOK_API=f'{EMAIL_PROFILE_TYPE}:outlook-api'
-    GMAIL_API=f'{EMAIL_PROFILE_TYPE}:gmail-api'
-    AWS=f'{EMAIL_PROFILE_TYPE}:aws'
-    IMAP=f'{EMAIL_PROFILE_TYPE}:imap'
-    SMTP=f'{EMAIL_PROFILE_TYPE}:smtp'
-    TWILIO='twilio'
-
-class ProfileModelTypeDoesNotExistsError(BaseError):
-    
-    def __init__(self, e, *args):
-        super().__init__(*args)
-        self.error = e
-
-class ProfileState(Enum):
     ...
 
 ######################################################  Profile Model                 ####################################################33
@@ -103,7 +70,7 @@ class ProtocolProfileModel(EmailProfileModel):
 
 
 class APIEmailProfileModel(EmailProfileModel):
-    oauth_tokens: MongooseAuthToken = Field(...,description="The tokens")
+    oauth_tokens: ProfileModelAuthToken = Field(...,description="The tokens")
 
 ######################################################                   ####################################################33
 
@@ -113,7 +80,7 @@ class SMTPProfileModel(ProtocolProfileModel):
     password: Optional[str] = Field(..., description="The SMTP password")
     smtp_server: str = Field(..., description="The SMTP server address")
     smtp_port: int = Field(..., description="The SMTP server port")
-    oauth_tokens: MongooseAuthToken = Field(...,description="The tokens")
+    oauth_tokens: ProfileModelAuthToken = Field(...,description="The tokens")
     secret_key:ClassVar[list[str]] = ['password']
 
 class IMAPProfileModel(ProtocolProfileModel):
@@ -133,7 +100,7 @@ class AWSProfileModel(EmailProfileModel):
 
 class GMailAPIProfileModel(APIEmailProfileModel):
     profile_type:str = Field(ProfilModelConstant.GMAIL_API, const=True)
-    oauth_tokens: MongooseAuthToken = Field(...,description="The tokens")
+    oauth_tokens: ProfileModelAuthToken = Field(...,description="The tokens")
 
 class OutlookAPIProfileModel(APIEmailProfileModel):
     profile_type:str = Field(ProfilModelConstant.OUTLOOK_API, const=True)
