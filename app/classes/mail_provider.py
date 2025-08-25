@@ -2,8 +2,7 @@ from dataclasses import dataclass, field
 import smtplib as smtp
 import imaplib as imap
 from enum import Enum
-from typing import Callable, Iterable, Literal, Self, overload
-from .mail_oauth_access import GoogleFlowType,MailOAuthFactory
+from typing import Callable, Iterable, Literal, Optional, Self, overload
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from base64 import urlsafe_b64encode, urlsafe_b64decode
@@ -168,3 +167,27 @@ def get_email_provider_name(email):
         return provider_map.get(subdomain, "Untracked Provider")
     except (IndexError, AttributeError):
         return "Untracked Provider"
+
+
+TokenType = Literal['bearer', 'basic']
+
+@dataclass
+class AuthToken():
+    access_token: str
+    refresh_token: str
+    token_type: TokenType
+    expires_in: float
+    acquired_at: float
+    scope: Optional[str] 
+    mail_provider: str
+
+from pydantic import BaseModel
+
+class MongooseAuthToken(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: TokenType
+    expires_in: float
+    acquired_at: float
+    scope: Optional[str] 
+    mail_provider: str
