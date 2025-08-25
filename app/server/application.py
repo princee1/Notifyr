@@ -184,6 +184,11 @@ class Application(EventInterface):
             try:
                 now = dt.datetime.now()
                 res = ressource_type()
+                meta:ClassMetaData = ressource_type.meta
+                
+                if not meta['mount_ressource']:
+                    continue
+                
                 self.app.include_router(
                     res.router, responses=res.default_response)
                 self._mount_directories(ressource_type)
