@@ -212,20 +212,15 @@ class BaseEmailService(_service.BaseService, RedisEventInterface,EmailSendInterf
 @_service.Service
 class SMTPEmailService(BaseEmailService):
     # BUG cant resolve an abstract class
-    def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService,awsSESService:AmazonSESService):
+    def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         super().__init__(configService, loggerService, redisService)
         self.type_ = 'SMTP'
         self.fromEmails: set[str] = set()
         self.connMethod = self.configService.SMTP_EMAIL_CONN_METHOD.lower()
         self.tlsConn: bool = SMTPConfig.setConnFlag(self.connMethod)
-        self.hostPort = SMTPConfig.setHostPort(
-            self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
-
-        self.emailHost = EmailHostConstant._member_map_[
-            self.configService.SMTP_EMAIL_HOST]
+        self.hostPort = SMTPConfig.setHostPort(self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
+        self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
     
-        self.awsSESService = awsSESService
-
     def logout(self, connector: smtp.SMTP):
         try:
             connector.quit()
