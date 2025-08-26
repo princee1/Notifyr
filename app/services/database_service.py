@@ -356,12 +356,6 @@ class RedisService(DatabaseService):
         except Exception as e:
             raise BuildFailureError(e.args)
  
-    async def refund(self, limit_request_id:str):
-        redis = self.db[1]
-        if not await self.retrieve(1,limit_request_id):
-            return
-        return await redis.decr(limit_request_id)
-
     @check_db
     async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
