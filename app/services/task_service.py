@@ -12,7 +12,8 @@ from app.utils.constant import HTTPHeaderConstant, StreamConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import ConfigService
 from app.utils.helper import flatten_dict, generateId
-from app.task import TASK_REGISTRY, celery_app, AsyncResult, task_name
+from app.task import TASK_REGISTRY, celery_app, task_name
+from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
 from app.utils.helper import generateId
 import datetime as dt

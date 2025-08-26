@@ -82,7 +82,7 @@ class AmazonSNSService(BaseService):
         except (BotoCoreError, ClientError) as e:
             raise AmazonSNSError(f"Failed to subscribe to SES events: {e}")
 
-@BaseService
+@Service
 class AmazonSecretManagerService(BaseService):
 
     def __init__(self,configService:ConfigService):
