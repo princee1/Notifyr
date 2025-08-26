@@ -3,7 +3,7 @@ from enum import Enum
 from ssl import SSLSession
 from typing import Optional, Type
 from typing_extensions import Literal
-from odmantic import Model, Field, Reference,sync
+from odmantic import Model, Field, Reference
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.profile import ProfileModelAuthToken, ProfilModelConstant, ProfileState
 from app.definition._error import BaseError
@@ -20,11 +20,17 @@ SMTPConnMode = Literal['tls','ssl','normal']
 
 ######################################################                   ####################################################33
     
-class ErrorProfileModel(Model,collection=MongooseDBConstant.PROFILE_COLLECTION):
-    ...
+class ErrorProfileModel(Model):
+    profile_id:str
+    error_code:int
+    error_name:str
+    error_description:str
+
+    class Config:
+        collection = MongooseDBConstant.PROFILE_COLLECTION
 
 ######################################################  Profile Model                 ####################################################33
-class ProfileModel(Model, collection=MongooseDBConstant.PROFILE_COLLECTION):
+class ProfileModel(Model):
     profile_type: ProfileType = Field(..., description="The type of profile")
     profile_state: ProfileState
     secret_key:ClassVar[list[str]] = []
@@ -32,6 +38,8 @@ class ProfileModel(Model, collection=MongooseDBConstant.PROFILE_COLLECTION):
     last_modified: datetime = datetime.utcnow()
     version: int = 1
 
+    class Config:
+        collection=MongooseDBConstant.PROFILE_COLLECTION
 
     def __init_subclass__(cls, **kwargs):
         setattr(cls,'_secret_key',cls.secret_key.copy())
@@ -43,11 +51,11 @@ class ProfileModel(Model, collection=MongooseDBConstant.PROFILE_COLLECTION):
         return getattr(cls,'_secret_key',[])
 
 
-@sync(ProfileModel)
-async def update_metadata(session: SSLSession, instance: ProfileModel):
-    instance.last_modified = datetime.utcnow()
-    if instance.id is not None:  # Means it's an update, not a new insert
-        instance.version += 1
+# @sync(ProfileModel)
+# async def update_metadata(session: SSLSession, instance: ProfileModel):
+#     instance.last_modified = datetime.utcnow()
+#     if instance.id is not None:  # Means it's an update, not a new insert
+#         instance.version += 1
 ######################################################                   ####################################################33
 
 
