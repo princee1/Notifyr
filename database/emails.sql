@@ -52,9 +52,6 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
     FOREIGN KEY (contact_id) REFERENCES contacts.Contact (contact_id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
-
-ALTER TABLE EmailTracking ADD COLUMN delivered BOOLEAN DEFAULT FALSE
-
 CREATE TABLE IF NOT EXISTS TrackingEvent (
     event_id UUID DEFAULT uuid_generate_v1mc (),
     email_id UUID NOT NULL,

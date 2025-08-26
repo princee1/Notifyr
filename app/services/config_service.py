@@ -25,7 +25,7 @@ class MODE(Enum):
                 return MODE.DEV_MODE
             case MODE.PROD_MODE.value:
                 return MODE.PROD_MODE
-            case MODE.TEST_MODE:
+            case MODE.TEST_MODE.value:
                 return MODE.TEST_MODE
             case _:
                 return MODE.DEV_MODE
@@ -144,28 +144,25 @@ class ConfigService(_service.BaseService):
         self.INSTANCE_ID = self.getenv('INSTANCE_ID', '0')
         self.PROCESS_PID = str(os.getpid())
         self.PARENT_PID = str(os.getppid())
-
+        
         self.BASE_DIR = self.getenv("BASE_DIR", './')
         self.ASSET_DIR = self.getenv("ASSETS_DIR", 'assets/')
-        self.SECURITY_FLAG: bool = ConfigService.parseToBool(
-            self.getenv('SECURITY_FLAG'), True)
+        self.ASSET_LANG = self.getenv("ASSET_LANG",'en')
+        self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), True)
 
-        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8088)
+        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8080)
+        self.ADDR=self.getenv('ADDR','0.0.0.0')
 
-        self.MODE = MODE.toMode(self.getenv('MODE'))
-        self.LOG_LEVEL = ConfigService.parseToInt(self.getenv("LOG_LEVEL"), 2)
+        self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
         self.HTTP_MODE = self.getenv("HTTP_MODE",'HTTP')
         self.HTTPS_CERTIFICATE = self.getenv("HTTPS_CERTIFICATE", 'cert.pem')
         self.HTTPS_KEY = self.getenv("HTTPS_KEY", 'key.pem')
 
         self.NGROK_DOMAIN = self.getenv("NGROK_DOMAIN", None)
 
-        self.OAUTH_METHOD_RETRIEVER = self.getenv(
-            'OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
-        self.OAUTH_JSON_KEY_FILE = self.getenv(
-            'OAUTH_JSON_KEY_FILE')  # JSON key file
-        self.OAUTH_TOKEN_DATA_FILE = self.getenv(
-            'OAUTH_DATA_FILE', 'mail_provider.tokens.json')
+        self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
+        self.OAUTH_JSON_KEY_FILE = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
+        self.OAUTH_TOKEN_DATA_FILE = self.getenv('OAUTH_DATA_FILE', 'mail_provider.tokens.json')
         self.OAUTH_CLIENT_ID = self.getenv('OAUTH_CLIENT_ID')
         self.OAUTH_CLIENT_SECRET = self.getenv('OAUTH_CLIENT_SECRET')
         self.OAUTH_OUTLOOK_TENANT_ID = self.getenv('OAUTH_TENANT_ID')
@@ -173,14 +170,12 @@ class ConfigService(_service.BaseService):
 
         self.SEND_MAIL_METHOD = self.getenv("SEND_MAIL_METHOD", 'SMTP')
         self.SMTP_EMAIL_HOST = self.getenv("SMTP_EMAIL_HOST").upper()
-        self.SMTP_EMAIL_PORT = ConfigService.parseToInt(
-            self.getenv("SMTP_EMAIL_PORT"))
+        self.SMTP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("SMTP_EMAIL_PORT"))
         self.SMTP_EMAIL = self.getenv("SMTP_EMAIL")
         self.SMTP_ADDR_SERVER = self.getenv('SMTP_ADDR_SERVER')
         self.SMTP_PASS = self.getenv("SMTP_EMAIL_PASS")
         self.SMTP_EMAIL_CONN_METHOD = self.getenv("SMTP_EMAIL_CONN_METHOD",'tls')
-        self.SMTP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(
-            self.getenv("SMTP_EMAIL_LOG_LEVEL"), 0)
+        self.SMTP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"), 0)
 
         self.READ_MAIL_METHOD = self.getenv("READ_MAIL_METHOD", 'IMAP')
         self.IMAP_EMAIL_HOST = self.getenv(
@@ -194,8 +189,6 @@ class ConfigService(_service.BaseService):
             "IMAP_EMAIL_CONN_METHOD", self.SMTP_EMAIL_CONN_METHOD)
         self.IMAP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(
             self.getenv("IMAP_EMAIL_LOG_LEVEL"), self.SMTP_EMAIL_LOG_LEVEL)
-
-        self.ASSET_LANG = self.getenv("ASSET_LANG",'en')
 
         self.TWILIO_ACCOUNT_SID = self.getenv("TWILIO_ACCOUNT_SID")
         self.TWILIO_AUTH_TOKEN = self.getenv("TWILIO_AUTH_TOKEN")
@@ -211,13 +204,10 @@ class ConfigService(_service.BaseService):
         self.API_EXPIRATION = ConfigService.parseToInt(
             self.getenv("API_EXPIRATION"), 360000000)
 
-        self.AUTH_EXPIRATION = ConfigService.parseToInt(
-            self.getenv("AUTH_EXPIRATION"), 3600*2)
-        self.REFRESH_EXPIRATION = ConfigService.parseToInt(
-            self.getenv("REFRESH_EXPIRATION"), 3600 * 20)
+        self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 3600*2)
+        self.REFRESH_EXPIRATION = ConfigService.parseToInt(self.getenv("REFRESH_EXPIRATION"), 3600 * 20)
 
-        self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(
-            self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
+        self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
 
@@ -227,28 +217,22 @@ class ConfigService(_service.BaseService):
 
         # SLOW API CONFIG #
 
-        self.SLOW_API_REDIS_URL = self.REDIS_URL + \
-            self.getenv("SLOW_API_STORAGE_URL", '/1')
+        self.SLOW_API_REDIS_URL = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL", '/1')
 
         # CELERY CONFIG #
 
-        self.CELERY_MESSAGE_BROKER_URL = self.REDIS_URL + \
-            self.getenv("CELERY_MESSAGE_BROKER_URL", '/0')
-        self.CELERY_BACKEND_URL = self.REDIS_URL + \
-            self.getenv("CELERY_BACKEND_URL", '/0')
-        self.REDBEAT_REDIS_URL = self.REDIS_URL + \
-            self.getenv("REDBEAT_REDIS_URL", self.CELERY_MESSAGE_BROKER_URL)
+        self.CELERY_MESSAGE_BROKER_URL = self.REDIS_URL + self.getenv("CELERY_MESSAGE_BROKER_URL", '/0')
+        self.CELERY_BACKEND_URL = self.REDIS_URL + self.getenv("CELERY_BACKEND_URL", '/0')
+        self.REDBEAT_REDIS_URL = self.REDIS_URL + self.getenv("REDBEAT_REDIS_URL", self.CELERY_MESSAGE_BROKER_URL)
 
-        self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(
-            self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
+        self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT", 1)
 
         # CHAT CONFIG #
 
-        self.CHAT_EXPIRATION = ConfigService.parseToInt(
-            self.getenv("CHAT_EXPIRATION"), 3600)
+        self.CHAT_EXPIRATION = ConfigService.parseToInt(self.getenv("CHAT_EXPIRATION"), 3600)
     
-        self.HOSTNAME = self.getenv('Domain',socket.getfqdn())
+        self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
 
     def verify(self):
         if self.API_EXPIRATION < self.AUTH_EXPIRATION:
@@ -283,6 +267,7 @@ class ConfigService(_service.BaseService):
 
     def set_server_config(self, config):
         if config == None:
+            #self.server_config= ServerConfig(app='python',host=self.ADDR,port)
             return 
         self.server_config = ServerConfig(app=config.app, host=config.host, port=config.port,
                                           reload=config.reload, workers=config.workers, log_level=config.log_level)

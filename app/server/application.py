@@ -14,7 +14,7 @@ from app.services.health_service import HealthService
 from app.services.rate_limiter_service import RateLimiterService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService, MODE
 from app.services.security_service import JWTAuthService, SecurityService
 from fastapi import Request, Response, FastAPI
 from slowapi.middleware import SlowAPIMiddleware
@@ -75,7 +75,6 @@ class Application(EventInterface):
             #return StaticFiles(e.filename,html=True)
             #return HTMLResponse()
             return FileResponse(e.filename,e.status_code,e.headers)# TODO change to html_response
-
 
     def set_httpMode(self):
         self.mode = self.configService.HTTP_MODE
@@ -146,9 +145,11 @@ class Application(EventInterface):
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
         pg_database = tortoiseConnService.DATABASE_NAME
         pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
+        pg_host ='0.0.0.0' if  self.configService.MODE == MODE.PROD_MODE else 'localhost'
+        
         register_tortoise(
             app=self.app,
-            db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}",
+            db_url=f"postgres://{pg_user}:{pg_password}@{pg_host}:5432/{pg_database}",
             modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
             generate_schemas=False,
             add_exception_handlers=True,    

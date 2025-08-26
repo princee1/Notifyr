@@ -131,11 +131,10 @@ class TwilioService(_service.BaseService):
 
 @_service.AbstractServiceClass
 class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
-    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService,redisService:RedisService) -> None:
+    def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService) -> None:
         super().__init__()
         self.configService = configService
         self.twilioService = twilioService
-        self.assetService = assetService
         RedisEventInterface.__init__(self,redisService)
         
         mode = self.configService['TWILIO_MODE']
@@ -220,8 +219,8 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
 @_service.Service
 class SMSService(BaseTwilioCommunication):
 
-    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService,redisService:RedisService):
-        super().__init__(configService, twilioService, assetService,redisService)
+    def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService):
+        super().__init__(configService, twilioService,redisService)
         self.status_callback = self.logs_url + '?type=sms'
 
     def response_extractor(self, message: MessageInstance) -> dict:
@@ -306,8 +305,8 @@ class SMSService(BaseTwilioCommunication):
 class CallService(BaseTwilioCommunication):
     status_callback_event = ['initiated', 'ringing', 'answered', 'completed','busy','failed','no-answer']
 
-    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService,redisService:RedisService):
-        super().__init__(configService, twilioService, assetService,redisService)
+    def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService):
+        super().__init__(configService, twilioService,redisService)
         self.status_callback = self.logs_url + '?type=call'
         self.gather_url = self.twilio_url + '/gather'
 
@@ -476,13 +475,13 @@ class CallService(BaseTwilioCommunication):
 
 class FaxService(BaseTwilioCommunication):
 
-    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
-        super().__init__(configService, twilioService, assetService)
+    def __init__(self, configService: ConfigService, twilioService: TwilioService):
+        super().__init__(configService, twilioService)
 
 
 class ConversationService(BaseTwilioCommunication):
-    def __init__(self, configService: ConfigService, twilioService: TwilioService, assetService: AssetService):
-        super().__init__(configService, twilioService, assetService)
+    def __init__(self, configService: ConfigService, twilioService: TwilioService):
+        super().__init__(configService, twilioService)
 
     def build(self):
         self.conversations = self.twilioService.client.conversations

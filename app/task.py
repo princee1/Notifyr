@@ -1,29 +1,26 @@
 import functools
 import sys
 from typing import Any, Callable
-from typing_extensions import Literal
 from celery import Celery, shared_task
-from celery.result import AsyncResult
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService,CeleryEnv
-from app.services.email_service import EmailSenderService,EmailReaderService
 from app.container import Get, build_container,__DEPENDENCY
-from app.services.security_service import JWTAuthService
-from app.services.twilio_service import SMSService, CallService
 from app.utils.prettyprint import PrettyPrinter_
 from flower import VERSION
 from celery import Task
+from app.services import *
 
 
 ##############################################           ##################################################
 
 if sys.argv[0] == CELERY_EXE_PATH:
-    PrettyPrinter_.message('Building container for the celery worker')
-    PrettyPrinter_.message(ConfigService._celery_env.value)
-    if ConfigService._celery_env == CeleryMode.purge:
+    PrettyPrinter_.message(f'Building container for the celery {ConfigService._celery_env.value}')
+    if ConfigService._celery_env != CeleryMode.worker:
         build_container(False,dep=[ConfigService])
     else:
-        build_container(False)
+        dependency = __DEPENDENCY.copy()
+        dependency.remove(AssetService)
+        build_container(False,dep=dependency)
         
 ##############################################           ##################################################
 
@@ -63,10 +60,12 @@ celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
 celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL
 celery_app.conf.timezone = "UTC"
 
-celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
-celery_app.autodiscover_tasks(
-    ['app.ressources'], related_name='email_ressource')
-celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
+if ConfigService._celery_env == CeleryMode.none:
+
+    celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
+    celery_app.autodiscover_tasks(
+        ['app.ressources'], related_name='email_ressource')
+    celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 
 
 @functools.wraps(celery_app.task)
