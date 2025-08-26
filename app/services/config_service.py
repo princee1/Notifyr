@@ -150,6 +150,8 @@ class ConfigService(_service.BaseService):
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(
             self.getenv('SECURITY_FLAG'), True)
 
+        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8088)
+
         self.MODE = MODE.toMode(self.getenv('MODE'))
         self.LOG_LEVEL = ConfigService.parseToInt(self.getenv("LOG_LEVEL"), 2)
         self.HTTP_MODE = self.getenv("HTTP_MODE",'HTTP')
