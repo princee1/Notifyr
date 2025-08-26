@@ -1,9 +1,6 @@
-#FROM python:3.11-slim
-
 FROM python:3.11-alpine
 
-#RUN apt-get update && apt-get install -y make
-
+# Install make only
 RUN apk add --no-cache make
 
 RUN useradd -m celery
@@ -22,9 +19,7 @@ COPY ./Makefile .
 
 COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
 
-#RUN chmod +x ./spawn_celery_worker.sh
-
-RUN pip install -r requirements_dev.txt
+RUN make install
 
 RUN pip show celery
 

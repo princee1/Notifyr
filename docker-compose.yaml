@@ -69,8 +69,8 @@ services:
       - postgres
     
   celery:
-    image: python:3.11-slim
-    command: ["./spawn_celery_worker.sh", "30" ]
+    image: python:3.11-apline
+    command: ["./spawn_celery_worker.sh", "2" ]
     container_name: notifyr-worker
     build:
       context: ./
@@ -137,7 +137,6 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
   
-
   twilio:
     image: node:20.19.0-slim
     container_name: local-twilio
@@ -168,6 +167,22 @@ services:
     depends_on:
       - postgres
     
+  server:
+    image: python:3.11-apline
+    container_name: notifyr-server
+    command: ['uvicorn', 'main:app', '--workers ${WORKERS_COUNT}','--port ${APP_PORT}']
+    ports:
+      - "8080-8100:8080"
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+      - mongodb
+
 volumes:
   mongo-data:
     driver: local
