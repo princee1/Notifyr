@@ -184,6 +184,11 @@ class Application(EventInterface):
             try:
                 now = dt.datetime.now()
                 res = ressource_type()
+                meta:ClassMetaData = ressource_type.meta
+                
+                if not meta['mount_ressource']:
+                    continue
+                
                 self.app.include_router(
                     res.router, responses=res.default_response)
                 self._mount_directories(ressource_type)
@@ -214,7 +219,7 @@ class Application(EventInterface):
 
         pg_user = self.configService.getenv('POSTGRES_USER')
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
-        pg_database = self.configService.getenv('POSTGRES_DB')
+        pg_database = tortoiseConnService.DATABASE_NAME
         pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
         register_tortoise(
             app=self.app,

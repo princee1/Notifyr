@@ -87,7 +87,6 @@ class EmailHostConstant(Enum):
     AOL = 'AOL'
     ICLOUD = 'ICLOUD'
 
-
 ########################                     ########################################
 
 class StreamConstant:
@@ -144,3 +143,14 @@ class HTMLTemplateConstant:
     _signature = '_signature'
 
     values= {_tracking_url,_signature}
+
+
+########################                     ########################################
+class MongooseDBConstant:
+    AGENT_COLLECTION = 'agent'
+    PROFILE_COLLECTION = 'profile'
+    CHAT_COLLECTION = 'chat'
+
+    DATABASE_NAME = 'notifyr'
+
+    

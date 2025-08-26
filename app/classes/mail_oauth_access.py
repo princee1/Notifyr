@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from msal import ConfidentialClientApplication
 from typing import Any, Optional, Type, TypeVar, TypedDict, overload
+from app.classes.mail_provider import AuthToken
 from app.utils.fileIO import JSONFile
 from app.utils.prettyprint import PrettyPrinter
 from requests import post, Request,Response
@@ -71,24 +72,12 @@ OOB_STR = 'oob'
 
 GrantType = Literal['authorization_code', 'refresh_token']
 YahooFamily = Literal['YAHOO', 'AOL']
-TokenType = Literal['bearer', 'basic']
-
-
-@dataclass
-class AuthToken(TypedDict):
-    access_token: str
-    refresh_token: str
-    token_type: TokenType
-    expires_in: float
-    acquired_at: float
-    scope: Optional[str] 
-    mail_provider: str
 
 
 #########################################################                ##################################################
 class OAuth:
 
-    def __init__(self, client_id: str, client_secret: str, scope: list[str], baseurl: str,mail_provider:str,json_key =None,state:str |None =None ):
+    def __init__(self, client_id: str, client_secret: str, scope: list[str], baseurl: str,mail_provider:str,json_key =None,state:str |None =None,save_to_file=True ):
         self.client_id = client_id
         self.client_secret = client_secret
         self.scope = scope
@@ -98,12 +87,19 @@ class OAuth:
         self.temp_data: Any = None
         self.json_key_file = json_key
         self.mail_provider = mail_provider
+        self.save_to_file=save_to_file
 
 
-    def load_authToken(self,filepath:str):
-        self.filepath=filepath
-        self.token_jsonFile = JSONFile(self.filepath) # VERIFY Security Issues
-        tokens = self.token_jsonFile.data
+    def load_authToken(self,filedata:str|dict):
+        if isinstance(filedata,str) and self.save_to_file:
+            self.filepath=filedata
+            self.token_jsonFile = JSONFile(self.filepath) # VERIFY Security Issues
+            tokens = self.token_jsonFile.data
+        elif isinstance(filedata,dict) and not self.save_to_file:
+            tokens = filedata
+        else:
+            ...
+
         
         if tokens != None and isinstance(tokens,dict):
             self.auth_tokens = AuthToken(**tokens)
@@ -113,8 +109,10 @@ class OAuth:
         return self.exists
 
     def save(self):
-        self.token_jsonFile.load(self.auth_tokens)
-        self.token_jsonFile.save()
+        if self.save_to_file:
+            self.token_jsonFile.load(self.auth_tokens)
+            self.token_jsonFile.save()
+        
 
     @property
     def state(self):
@@ -182,6 +180,7 @@ class GoogleLibraryFlow(OAuth):
         baseurl: Optional[str] = None,
         state: Optional[str] = None,
         json_key_file: Optional[str] = None,
+        save_to_file=True
     ):
         # Use either the client credentials or the JSON key file
         if json_key_file:
@@ -189,8 +188,9 @@ class GoogleLibraryFlow(OAuth):
             self.auth_tokens = None
             self.scope = [GMAIL_SCOPE]
             self.mail_provider = mail_provider
+            self.save_to_file = save_to_file
         else:
-            super().__init__(client_id, client_secret,[GMAIL_SCOPE], baseurl,mail_provider, state)
+            super().__init__(client_id, client_secret,[GMAIL_SCOPE], baseurl,mail_provider, state,save_to_file=save_to_file)
 
     def grant_access_token(self):
         if hasattr(self, 'json_key_file') and self.json_key_file:
@@ -244,7 +244,7 @@ class GoogleLibraryFlow(OAuth):
             })
 
 class GoogleServiceOauth(OAuth):
-    def __init__(self, json_key_file: str,mail_provider:str):
+    def __init__(self, json_key_file: str,mail_provider:str,save_to_file=True):
         """
         Initialize the service account with the JSON key file and scope.
         :param json_key_file: Path to the service account JSON key file.
@@ -255,6 +255,7 @@ class GoogleServiceOauth(OAuth):
         self.credentials = None
         self.auth_tokens = None
         self.mail_provider = mail_provider
+        self.save_to_file = save_to_file
 
     def grant_access_token(self):
         """
@@ -298,8 +299,8 @@ class GoogleServiceOauth(OAuth):
         return self.auth_tokens.access_token
 
 class OutlookOauth(OAuth):
-    def __init__(self, client_id: str, client_secret: str, tenant_id: str):
-        super().__init__(client_id, client_secret, '', '')#TODO add scope  # BUG add url 
+    def __init__(self, client_id: str, client_secret: str, tenant_id: str,save_to_file=True):
+        super().__init__(client_id, client_secret, '', '',save_to_file=save_to_file)#TODO add scope  # BUG add url 
 
         self.tenant_id = tenant_id
         self.authority = f'https://login.microsoftonline.com/{self.tenant_id}'
@@ -315,8 +316,8 @@ class OutlookOauth(OAuth):
 #########################################################                ##################################################
 
 class OAuthFlow(OAuth):
-    def __init__(self, client_id: str, client_secret: str, scope: list[str], base_url: str,mail_provider:str,state=None):
-        super().__init__(client_id, client_secret, scope, base_url,mail_provider,state)
+    def __init__(self, client_id: str, client_secret: str, scope: list[str], base_url: str,mail_provider:str,state=None,save_to_file=True):
+        super().__init__(client_id, client_secret, scope, base_url,mail_provider,state,save_to_file=save_to_file)
         self.authHeaders = {}
         self.authBody = {}
         self.authParams = {}
@@ -387,8 +388,8 @@ class OAuthFlow(OAuth):
 
 class GmailHTTPOAuth(OAuthFlow):
 
-    def __init__(self, client_id:str, client_secret:str,mail_provider:str):
-        super().__init__(client_id, client_secret, GMAIL_SCOPE, GOOGLE_ACCOUNTS_BASE_URL,mail_provider)
+    def __init__(self, client_id:str, client_secret:str,mail_provider:str,save_to_file=True):
+        super().__init__(client_id, client_secret, GMAIL_SCOPE, GOOGLE_ACCOUNTS_BASE_URL,mail_provider,save_to_file=save_to_file)
         self.authParams['client_id'] = self.client_id
         self.authParams['client_secret'] = self.client_secret
 
@@ -455,10 +456,10 @@ class YahooFamilyOAuth(OAuthFlow):
     Yahoo and Aol
     '''
 
-    def __init__(self, client_id: str, client_secret: str, mail_provider:str,yFamily: YahooFamily = 'YAHOO'):
+    def __init__(self, client_id: str, client_secret: str, mail_provider:str,yFamily: YahooFamily = 'YAHOO',save_to_file=True):
         self.yFamily = yFamily
         baseurl = YAHOO_BASE_URL if yFamily == 'YAHOO' else AOL_BASE_URL
-        super().__init__(client_id, client_secret, None, baseurl,mail_provider)
+        super().__init__(client_id, client_secret, None, baseurl,mail_provider,save_to_file=save_to_file)
         self.authBody['redirect_uri'] = OOB_STR
         self.bearer = b64_encode(f'{client_id}:{client_secret}')
         self.authHeaders['Authorization'] = 'Basic ' + self.bearer
@@ -529,7 +530,7 @@ GoogleFlowType = Literal['service_account','oauth_custom','oauth_automatic']
 class MailOAuthFactoryError(Exception):
     ...
 
-def MailOAuthFactory(emailHost:EmailHostConstant,kwargs:dict[str,Any],google_oauth_flow:Literal[GoogleFlowType]=None,json_file:str =None)->OAuth | OAuthFlow:
+def MailOAuthFactory(emailHost:EmailHostConstant,kwargs:dict[str,Any],google_oauth_flow:GoogleFlowType=None,json_file:str =None)->OAuth | OAuthFlow:
     match emailHost:
         case EmailHostConstant.AOL:
             kwargs['yFamily'] = 'AOL'

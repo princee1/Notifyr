@@ -65,6 +65,10 @@ class ClassMetaData(TypedDict):
     add_prefix: bool
     websockets: list[W]
     mount: List[MountMetaData]
+    mount_ressource:bool
+    ressource_id:str
+    parent:list[Type]
+
 
 
 class NoFunctionProvidedWarning(UserWarning):
@@ -360,7 +364,8 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
 
     def _mount_included_router(self):
         routers = set(self.__class__.meta['routers'])
-        for route in list(routers):
+        routers:list[Type[R]] = list(routers)
+        for route in routers:
             r: BaseHTTPRessource = route()
             self.router.include_router(r.router,)
 
@@ -400,14 +405,17 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
 R = TypeVar('R', bound=BaseHTTPRessource)
 
 
-def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Type[W]] = [], add_prefix=True):
+def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Type[W]] = [], add_prefix=True,mount=True):
     def class_decorator(cls: Type[R]) -> Type[R]:
         # TODO: support module-level injection
+        meta: ClassMetaData= cls.meta
         cls.meta['prefix'] = prefix
-        cls.meta['routers'] = routers
+        cls.meta['routers'] = list(set(routers))
         cls.meta['websockets'] = websockets
         cls.meta['add_prefix'] = add_prefix
         cls.meta['mount'] = []
+        cls.meta['mount_ressource'] = mount
+        meta['ressource_id'] = prefix
 
         return cls
     return class_decorator
