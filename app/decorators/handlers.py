@@ -22,7 +22,7 @@ from app.errors.global_var_error import GlobalKeyAlreadyExistsError, GlobalKeyDo
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
-from app.models.profile_model import ProfileModelTypeDoesNotExists
+from app.classes.profile import ProfileModelTypeDoesNotExistsError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -565,5 +565,5 @@ class ProfileHandler(Handler):
         except PydanticValidationError as e:
             raise HTTPException(status_code=422, detail=e.errors())
         
-        except ProfileModelTypeDoesNotExists as e:
+        except ProfileModelTypeDoesNotExistsError as e:
             raise 

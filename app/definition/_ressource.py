@@ -12,7 +12,7 @@ from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import copy_response, issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
-from app.services.assets_service import AssetService
+from app.services import AssetService, RateLimiterService
 from app.container import Get, Need
 from app.definition._service import S, BaseService
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -23,8 +23,6 @@ from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
 from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
-from slowapi import Limiter
-from slowapi.util import get_remote_address, get_ipaddr
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
@@ -32,19 +30,15 @@ from app.depends.variables import SECURITY_FLAG
 
 
 configService: ConfigService = Get(ConfigService)
-if configService.MODE == MODE.DEV_MODE:
-    storage_uri = None
-else:
-    storage_uri = configService.SLOW_API_REDIS_URL
+rateLimitService:RateLimiterService = Get(RateLimiterService)
 
-PATH_SEPARATOR = "/"
-GlobalLimiter = Limiter(
-    get_ipaddr, storage_uri=storage_uri, headers_enabled=True)
 RequestLimit = 0
 
 
 PING_SERVICE_TOUCH = 0.25
 STATUS_LOCK_TOUCH = 0.50
+PATH_SEPARATOR = "/"
+
 
 MIN_TIMEOUT = -1
 
@@ -285,15 +279,15 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             shared = meta['shared']
 
             if meta['limit_exempt']:
-                func_attr = GlobalLimiter.exempt(func_attr)
+                func_attr = rateLimitService.GlobalLimiter.exempt(func_attr)
                 setattr(self, func_name, func_attr)
                 return
 
             if limit_obj:
                 if not shared:
-                    func_attr = GlobalLimiter.limit(**limit_obj)(func_attr)
+                    func_attr = rateLimitService.GlobalLimiter.limit(**limit_obj)(func_attr)
                 else:
-                    func_attr = GlobalLimiter.shared_limit(
+                    func_attr = rateLimitService.GlobalLimiter.shared_limit(
                         **limit_obj)(func_attr)
 
                 setattr(self, func_name, func_attr)
@@ -799,7 +793,7 @@ def response_decorator(func: Callable):
     return wrapper
 
 
-@functools.wraps(GlobalLimiter.limit)
+@functools.wraps(rateLimitService.GlobalLimiter.limit)
 def UseLimiter(**kwargs):  # TODO
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseLimiter, None, **kwargs)
@@ -822,7 +816,7 @@ def UseLimiter(**kwargs):  # TODO
     return decorator
 
 
-@functools.wraps(GlobalLimiter.shared_limit)
+@functools.wraps(rateLimitService.GlobalLimiter.shared_limit)
 def UseSharingLimiter(**kwargs):
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseLimiter, None, **kwargs)

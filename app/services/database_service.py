@@ -7,7 +7,7 @@ from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
 from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant
 from app.utils.transformer import none_to_empty_str
-from .config_service import CeleryMode, ConfigService
+from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
 from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
@@ -51,6 +51,21 @@ class MongooseService(DatabaseService): # Chat data
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
         self.mongo_uri = self.configService.getenv('MONGO_URI')
+
+    async def save(self, model,*args):
+        return await self.engine.save(model,*args)
+    
+    async def find(self,model,*args):
+        return await self.engine.find(model,*args)
+
+    async def find_one(self,model,*args):
+        return await self.engine.find_one(model,*args)
+    
+    async def delete(self,model,*args):
+        return await self.engine.delete(model,*args)
+
+    async def count(self,model,*args):
+        return await self.engine.count(model,*args)
     
     def build(self):
         try:    
@@ -356,12 +371,6 @@ class RedisService(DatabaseService):
         except Exception as e:
             raise BuildFailureError(e.args)
  
-    async def refund(self, limit_request_id:str):
-        redis = self.db[1]
-        if not await self.retrieve(1,limit_request_id):
-            return
-        return await redis.decr(limit_request_id)
-
     @check_db
     async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
@@ -444,11 +453,12 @@ class TortoiseConnectionService(DatabaseService):
             pg_user = self.configService.getenv('POSTGRES_USER')
             pg_password = self.configService.getenv('POSTGRES_PASSWORD')
 
+            pg_host ='0.0.0.0' if  self.configService.MODE == MODE.PROD_MODE else 'localhost'
             conn = psycopg2.connect(
                 dbname=self.DATABASE_NAME,
                 user=pg_user,
                 password=pg_password,
-                host="localhost",
+                host=pg_host,
                 port=5432
             )
         except Exception as e:

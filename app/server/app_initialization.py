@@ -1,15 +1,8 @@
-from typing import Any
 from app.container import Get
-from app.server.application import AppParameter, RESSOURCES
-from app.server.apps_registration import createApps, editApps,bootstrap_fastapi_server
-from app.server.access_registration import prompt_client_registration
-from app.server.middleware import MIDDLEWARE
+from app.server.application import Application
 from app.utils.constant import ConfigAppConstant, RunModeConstant
 from app.services.config_service import ConfigService
 from app.utils.prettyprint import PrettyPrinter_
-from app.utils.question import ask_question,ConfirmInputHandler
-
-
 
 # Initialize configuration service and load configuration
 def initialize_config_service(config_file,uvicorn_args):
@@ -19,86 +12,21 @@ def initialize_config_service(config_file,uvicorn_args):
     return config_service
 
 # Validate configuration and determine initial mode
-def validate_config(config_service:ConfigService, config_file, app_name):
+def validate_config(config_service:ConfigService, config_file):
     apps_data = config_service.config_json_app.data
-    valid = True
 
-    if not apps_data or ConfigAppConstant.META_KEY not in apps_data or ConfigAppConstant.APPS_KEY not in apps_data or not isinstance(apps_data[ConfigAppConstant.APPS_KEY],dict):
+    if not apps_data or ConfigAppConstant.META_KEY not in apps_data:
         PrettyPrinter_.warning(f"Invalid config file: {config_file} - No apps data found")
         PrettyPrinter_.info(f"Running on CREATING mode")
-        return RunModeConstant.CREATE, apps_data, False
+        return False
 
-    if app_name not in apps_data[ConfigAppConstant.APPS_KEY]:
-        PrettyPrinter_.error(f'The app configuration name: {app_name} does not exist in the provided file')
-    
-    config_service.app_name = app_name
-
-    return RunModeConstant.FILE, apps_data, valid
-
-# Handle different run modes
-def handle_run_mode(mode, config_service:ConfigService, apps_data, config_file, valid):
-    while True:
-        match mode:
-            case RunModeConstant.CREATE:
-                if config_service.config_json_app.exists and valid:
-                    PrettyPrinter_.warning(f"Config file {config_file} already exists", saveable=False)
-                    overwrite = ask_question([ConfirmInputHandler('Do you want to overwrite the file?', name='overwrite_config', default=True)])['overwrite_config']
-                    if not overwrite:
-                        mode = RunModeConstant.FILE
-                        continue
-
-                apps_data = createApps()
-                config_service.config_json_app.load(app_params_to_json(apps_data))
-                PrettyPrinter_.success(f"Apps successfully created", position='left')
-                break
-
-            case RunModeConstant.EDIT:
-                PrettyPrinter_.error("{EDIT} mode disabled for now")
-                exit(0)  # BUG DISABLED FOR NOW
-
-            case RunModeConstant.FILE:
-
-                for key,app in apps_data[ConfigAppConstant.APPS_KEY].items():
-                    
-                    if ConfigAppConstant.FROM_KEY in app and key in apps_data[ConfigAppConstant.APPS_KEY].keys():
-                        from_ = app[ConfigAppConstant.FROM_KEY]
-                        
-                        if from_ == key:
-                            mode =None
-                            break
-                        
-                        port = app['port']
-                        app.clear()
-                        app.update(apps_data[ConfigAppConstant.APPS_KEY][from_].copy())
-                        app['port'] = port
-
-                if mode == None:
-                    continue
-                
-                apps_data = {key: AppParameter.fromJSON(app, RESSOURCES, MIDDLEWARE) for key, app in apps_data[ConfigAppConstant.APPS_KEY].items()}
-                PrettyPrinter_.success(f"Apps Config successfully loaded")
-                break
-
-            case RunModeConstant.REGISTER:
-                PrettyPrinter_.error("{EDIT} mode disabled for now")
-                exit(0)  # BUG DISABLED FOR NOW
-
-            case _:
-                PrettyPrinter_.error(f"Errors while loading apps")
-                exit(0)
-
-    return apps_data
-
-# Convert app parameters to JSON
-def app_params_to_json(params: dict[str, Any], metadata={}):
-
-    return {
-        ConfigAppConstant.META_KEY: metadata,
-        ConfigAppConstant.APPS_KEY: {key: param.toJSON() for key, param in params.items()}
-    }
+    return True
 
 
-def build_apps_data(config_file,app_name,uvicorn_args):
+def build_apps_data(config_file,uvicorn_args):
     config_service = initialize_config_service(config_file,uvicorn_args)
-    mode, apps_data, valid = validate_config(config_service, config_file, app_name)
-    return handle_run_mode(mode, config_service, apps_data, config_file, valid)
+    if not validate_config(config_service, config_file):
+        exit(-1)
+    
+def bootstrap_fastapi_server(port:int,log_level:str):
+    return Application(port,log_level)

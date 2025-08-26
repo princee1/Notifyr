@@ -59,6 +59,8 @@ class MetaDataMiddleWare(MiddleWare):
             self.taskService.connection_count.dec()
 
 class LoadBalancerMiddleWare(MiddleWare):
+    priority = MiddlewarePriority.LOAD_BALANCER
+
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
         self.configService: ConfigService = Get(ConfigService)
@@ -99,6 +101,7 @@ class SecurityMiddleWare(MiddleWare):
        
 class AnalyticsMiddleware(MiddleWare):
     priority = MiddlewarePriority.ANALYTICS
+    
     async def dispatch(self, request, call_next):
         return await call_next(request)
 
