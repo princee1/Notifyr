@@ -56,10 +56,10 @@ docker:
 	docker-compose up --build
 
 celery:
-	celery -A ${celery_app} worker --pool=solo --loglevel=info
+	celery -A ${celery_app} worker --pool=solo --loglevel=info 
 
 celery-docker:
-	celery -A ${celery_app} worker --loglevel=info --concurrency=10
+	celery -A ${celery_app} worker --pool=gevent --concurrency=100  --loglevel=info --max-tasks-per-child=100 --max-memory-per-child=200000
 
 flower:
 	celery -A ${celery_app} flower --port=5555

@@ -18,18 +18,17 @@ services:
     environment:
       - REDIS_HOSTS=local:redis:6379
     ports:
-      - 8081:8081
+      - 6060:6060
 
   reacherhq:
     image: reacherhq/backend
     container_name: reacherhq
     ports:
-      - "8080:8080"
-      
-    
+      - "8040:8040"
+          
   mongodb:
     image: mongo:latest
-    container_name: my-mongo
+    container_name: notifyr-mongo
     restart: always
     ports:
       - "27017:27017"
@@ -64,43 +63,34 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
-      - "8080:8088"
+      - "7070:7070"
     depends_on:
       - postgres
     
   celery:
-    image: python:3.11-apline
-    command: ["./spawn_celery_worker.sh", "2" ]
+    image: python:3.11-slim
+    command: ["./spawn_celery_worker.sh", "2", "true" ]
     container_name: notifyr-worker
     build:
-      context: ./
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/Dockerfile.celery
     restart: always
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - REDIS_URL=redis://redis    
     env_file:
       - .env
     depends_on:
       - redis
-    
-  redbeat:
-    container_name: redbeat
-    image: python:3.11-slim
-    build:
-      context: ./
-      dockerfile: Dockerfile
-    env_file:
-      - .env
-    restart: always
-    depends_on:
-      - redis
-    command: ["make ", "redbeat"]
-    
+  
   flower:
     image: python:3.11-slim
     command: ["make", "flower"]
-    container_name: flower
+    container_name: notifyr-flower
     build:
-      context: ./
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/Dockerfile.celery
     restart: always
     env_file:
       - .env
@@ -136,20 +126,7 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-  
-  twilio:
-    image: node:20.19.0-slim
-    container_name: local-twilio
-    restart: always
-    build:
-      context: ./docker/
-      dockerfile: Dockerfile.twilio
-    ports:
-      - "3000:3000"
-    environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-      - NGROK_URL=${NGROK_URL}
-    
+      
   pgbouncer:
     image: edoburu/pgbouncer
     container_name: notifyr-pgbouncer
@@ -168,20 +145,36 @@ services:
       - postgres
     
   server:
-    image: python:3.11-apline
+    image: python:3.11-slim
     container_name: notifyr-server
-    command: ['uvicorn', 'main:app', '--workers ${WORKERS_COUNT}','--port ${APP_PORT}']
+    command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','${ADDR}','--port' ,'${APP_PORT}']
     ports:
-      - "8080-8100:8080"
+      - "8088-8100:8088-8100"
     build:
       context: ./
       dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://redis
+      - MONGO_URI=mongo://0.0.0.0:27017
+      - ADDR=0.0.0.0 
+      - APP_PORT=8088   
+      - WORKERS_COUNT=4
+      - MODE=pr
     env_file:
       - .env
     depends_on:
       - redis
       - postgres
       - mongodb
+
+  balancer:
+    container_name: notifyr-balancer
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.balancer
+    ports:
+      - 8080
+
 
 volumes:
   mongo-data:

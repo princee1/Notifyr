@@ -1,35 +1,23 @@
-#FROM python:3.11-slim
+FROM python:3.11-slim AS builder
 
-FROM python:3.11-alpine
+COPY ./requirements.txt .
 
-#RUN apt-get update && apt-get install -y make
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN apk add --no-cache make
+FROM python:3.11-slim
 
-RUN useradd -m celery
+RUN useradd -m server
 
-USER celery
+USER server
 
 WORKDIR /usr/src/
 
-COPY ./assets ./assets/
+COPY --from=builder /usr/local/lib/python*/site-packages /usr/local/lib/python*/site-packages
 
-COPY ./app ./app/
+COPY ./assets .
 
-COPY ./requirements_dev.txt .
+COPY ./app .
 
-COPY ./Makefile .
+COPY ./main.py .
 
-COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
-
-#RUN chmod +x ./spawn_celery_worker.sh
-
-RUN pip install -r requirements_dev.txt
-
-RUN pip show celery
-
-ENV PATH="/home/celery/.local/bin:${PATH}"
-
-#ENV PATH="/home/uvicorn/.local/bin:${PATH}"
-
-RUN celery --version
+COPY ./config.app.json .

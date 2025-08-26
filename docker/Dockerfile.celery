@@ -1,7 +1,6 @@
-FROM python:3.11-alpine
+FROM python:3.11-slim
 
-# Install make only
-RUN apk add --no-cache make
+RUN apt-get update && apt-get install -y --no-install-recommends make  && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m celery
 
@@ -21,10 +20,8 @@ COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
 
 RUN make install
 
-RUN pip show celery
+RUN pip install gevent
 
 ENV PATH="/home/celery/.local/bin:${PATH}"
-
-#ENV PATH="/home/uvicorn/.local/bin:${PATH}"
 
 RUN celery --version
