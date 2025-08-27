@@ -54,6 +54,24 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifyr
 
+  vault-prod:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.vault
+    container_name: notifyr-vault-prod
+    cap_add: ["IPC_LOCK"]
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+    volumes:
+      - vault-data:/vault/data
+      - vault-shared:/vault/shared
+      - vault-secrets:/vault/secrets
+    secrets:
+      - approle_role_id
+    restart: unless-stopped
+
   pgadmin:
     image: dpage/pgadmin4
     container_name: notifyr-pgadmin
@@ -126,20 +144,6 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-  
-
-  twilio:
-    image: node:20.19.0-slim
-    container_name: local-twilio
-    restart: always
-    build:
-      context: ./docker/
-      dockerfile: Dockerfile.twilio
-    ports:
-      - "3000:3000"
-    environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-      - NGROK_URL=${NGROK_URL}
     
   pgbouncer:
     image: edoburu/pgbouncer
@@ -158,27 +162,24 @@ services:
     depends_on:
       - postgres
     
-  server:
-    image: python:3.11-slim
-    container_name: notifyr-server
-    command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','${ADDR}','--port' ,'${APP_PORT}']
+  app:
+    image: python:3.11.4-slim
+    container_name: notifyr-app
+    command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
     ports:
-      - "8088-8100:8088-8100"
+      - "8088-8100:8088"
     build:
       context: ./
       dockerfile: Dockerfile
     environment:
       - REDIS_URL=redis://redis
       - MONGO_URI=mongo://0.0.0.0:27017
-      - ADDR=0.0.0.0 
-      - APP_PORT=8088   
       - WORKERS_COUNT=4
-      - MODE=pr
+      - MODE=prod
     env_file:
       - .env
     depends_on:
       - redis
-      - postgres
       - mongodb
 
   balancer:
@@ -191,8 +192,9 @@ services:
 
 
 volumes:
-  vault-data:
-    driver: local
+  vault-data: {}
+  vault-shared: {}   # holds secret_id
+  #vault-secrets: {}  # holds root_token/unseal_key (optional, only for admin access)
 
   mongo-data:
     driver: local
@@ -208,3 +210,7 @@ volumes:
   neo4j_conf:
   redis-data:
     driver: local
+
+secrets:
+  approle_role_id:
+    file: ./bootstrap/role_id.txt   # created after first container init

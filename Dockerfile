@@ -1,18 +1,14 @@
-FROM python:3.11-slim AS builder
+FROM python:3.11.4-slim
 
-COPY ./requirements.txt .
+RUN useradd -m uvicorn
 
-RUN pip install --no-cache-dir -r requirements.txt
-
-FROM python:3.11-slim
-
-RUN useradd -m server
-
-USER server
+USER uvicorn
 
 WORKDIR /usr/src/
 
-COPY --from=builder /usr/local/lib/python*/site-packages /usr/local/lib/python*/site-packages
+COPY ./requirements_dev.txt .
+
+RUN pip install --no-cache-dir -r requirements_dev.txt
 
 COPY ./assets .
 
@@ -21,3 +17,7 @@ COPY ./app .
 COPY ./main.py .
 
 COPY ./config.app.json .
+
+ENV PATH="/home/uvicorn/.local/bin:${PATH}"
+
+RUN uvicorn --version

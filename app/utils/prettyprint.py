@@ -21,7 +21,7 @@ pprinter = pprint.PrettyPrinter()
 
 ########################################################################
 
-text = '<<<  N o t i f y r  Server>>>'
+text = '<<<  N o t i f y r  App>>>'
 justify = 'left'
 
 figlet = pyfiglet.Figlet(font='standard')

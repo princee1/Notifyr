@@ -1,6 +1,55 @@
-FROM hashicorp/vault:1.17
+FROM hashicorp/vault:1.16
 
-COPY --chmod=755 ./scripts/vault-init.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Install dependencies
+USER root
+RUN apk add --no-cache bash curl jq busybox-suid
 
-ENTRYPOINT ["/entrypoint.sh"]
+# Add Vault config, scripts, policies
+
+RUN  cat <<EOF > /vault/config/vault.hcl
+ui = true
+disable_mlock = true
+
+storage "raft" {
+  path    = "/vault/data"
+  node_id = "vault-node-1"
+}
+
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = "true"   # TODO: enable TLS in prod
+  # tls_cert_file = "/vault/certs/server.crt"
+  # tls_key_file  = "/vault/certs/server.key"
+}
+
+audit "file" {
+  path   = "/vault/logs/audit.log"
+  format = "json"
+}
+EOF
+
+RUN cat <<EOF >vault/policies/app-policy.hcl
+
+EOF
+
+# Use the Vault Secret ID Cron Rotation ${VAULT_SECRET_ID_CRON_ROTATION}
+RUN cat <<EOF > /etc/crontabs/root
+*/10 * * * * /usr/local/bin/vault-rotator.sh 
+EOF
+
+
+COPY --chmod=755 ./scripts/vault-init.sh /usr/local/bin/entrypoint.sh
+# COPY setup-approle.sh /usr/local/bin/setup-approle.sh
+COPY --chmod=755 ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh
+
+RUN chmod +x /usr/local/bin/*.sh
+
+# Add non-root user
+RUN adduser -D -u 1000 vaultuser \
+    && mkdir -p /vault/data /vault/logs /vault/shared /vault/secrets \
+    && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared \
+    && chmod 700 /vault/data /vault/logs /vault/shared /vault/secrets
+
+
+# Entrypoint
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
