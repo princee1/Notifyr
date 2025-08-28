@@ -1,4 +1,3 @@
-/database/init.sh text eol=lf
-/scripts/db-init.sh text eol=lf
-/scripts/spawn_celery_worker.sh text eol=lf
+/scripts/*.sh text eol=lf
+
 

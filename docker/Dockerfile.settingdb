@@ -1,0 +1,23 @@
+FROM node:18-alpine
+
+# install json-server
+RUN npm install -g json-server
+
+WORKDIR /data
+
+RUN cat <<EOF > /data/db.json
+{
+    "settings":{
+
+        "AUTH_EXPIRATION":7200,
+        "REFRESH_EXPIRATION":72000,
+        "CHAT_EXPIRATION":3600,
+        "ASSET_LANG":"en"
+        
+    },
+    "health": { "status": "ok" }
+}
+EOF
+
+ENTRYPOINT [ ]
+CMD ["json-server","--watch", "/data/db.json", "--host", "0.0.0.0", "--port" ,"3000"]

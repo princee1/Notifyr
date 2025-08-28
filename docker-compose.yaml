@@ -1,4 +1,17 @@
 services:
+
+
+  settingdb:
+    image: json-server:custom
+    container_name: notifyr-settingdb
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.settingdb
+    ports:
+      - "3000:3000"
+    volumes:
+      - settingdb-data:/data
+
   redis:
     image: redis #Queue for the taks
     container_name: redis
@@ -67,7 +80,7 @@ services:
     volumes:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
-      - vault-secrets:/vault/secrets
+      #- vault-secrets:/vault/secrets
     secrets:
       - approle_role_id
     restart: unless-stopped
@@ -192,6 +205,7 @@ services:
 
 
 volumes:
+
   vault-data: {}
   vault-shared: {}   # holds secret_id
   #vault-secrets: {}  # holds root_token/unseal_key (optional, only for admin access)
@@ -204,6 +218,9 @@ volumes:
 
   assets-data:
     driver: local
+  
+  settingdb-data:
+
 
   neo4j_data:
   neo4j_logs:
