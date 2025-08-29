@@ -65,5 +65,6 @@ async def Set_Service_Variables(message:VariableProtocol):
         traceback.print_exc()
 
 G_State_Subs = {
-    SubConstant.SERVICE_STATUS:Set_Service_Status
+    SubConstant.SERVICE_STATUS:Set_Service_Status,
+    SubConstant.SERVICE_VARIABLES:Set_Service_Variables,
 }
