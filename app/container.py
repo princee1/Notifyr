@@ -102,7 +102,9 @@ class Container():
             raise ValueError
         self.__bind(type_, to=obj, scope=scope)
         
-    def get(self, typ: Type[S], scope=None, all=False) -> dict[type, Type[S]] | Type[S]:
+    def get(self, typ: Type[S] |str, scope=None, all=False) -> dict[type, Type[S]] | Type[S]:
+        typ = self._str_to_service(typ)
+
         if not all and isabstract(typ.__name__):
             raise InvalidDependencyError
 
@@ -114,6 +116,13 @@ class Container():
             return provider
 
         return self.__app.get(typ, scope)
+
+    def _str_to_service(self, typ):
+        if isinstance(typ,str):
+            if not typ in self.DEPENDENCY_MetaData:
+                raise NotInDependenciesError(typ)
+            typ = self.DEPENDENCY_MetaData[typ][DependencyConstant.TYPE_KEY]
+        return typ
 
     def getFromClassName(self, classname: str, scope=None):
         return self.__app.get(self.DEPENDENCY_MetaData[classname][DependencyConstant.TYPE_KEY], scope)
@@ -370,6 +379,8 @@ class Container():
         return obj
 
     def need(self, typ: Type[S]) -> Type[S]:
+        typ = self._str_to_service(typ)
+
         if not self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY]:
             dependency: Type[S] = self.get(typ)
             try:

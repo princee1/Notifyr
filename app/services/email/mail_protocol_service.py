@@ -133,7 +133,7 @@ class BaseEmailService(_service.BaseService, RedisEventInterface,EmailSendInterf
 
         return callback
 
-    def build(self):
+    def build(self,build_state=-1):
         if self.emailHost in [EmailHostConstant.ICLOUD, EmailHostConstant.GMAIL, EmailHostConstant.GMAIL_RELAY, EmailHostConstant.GMAIL_RESTRICTED] and self.configService.SMTP_PASS != None:
             return
 
@@ -167,7 +167,7 @@ class BaseEmailService(_service.BaseService, RedisEventInterface,EmailSendInterf
         self.service_status = _service.ServiceStatus.AVAILABLE
         self.prettyPrinter.show()
 
-    def destroy(self):
+    def destroy(self,destroy_state=-1):
         ...
 
     def authenticate(self): pass
@@ -613,7 +613,7 @@ class IMAPEmailService(BaseEmailService):
         except:
             ...
 
-    def build(self):
+    def build(self,build_state=-1):
         ...
 
     def search_email(self, *command: str, connector: imap.IMAP4 | imap.IMAP4_SSL = None):

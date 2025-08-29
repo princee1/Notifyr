@@ -384,7 +384,8 @@ class Broker:
         if protocol['service'] not in _CLASS_DEPENDENCY.keys():
             raise ServiceDoesNotExistError
         try:
-            ServiceStatus(protocol['status'])
+            if protocol['status'] is not None:
+                ServiceStatus(protocol['status'])
         except:
             raise StateProtocolMalFormattedError
 

@@ -20,7 +20,7 @@ class OutgoingFaxRessource(BaseHTTPRessource):
     
 FAX_PREFIX = "fax"
 
-@HTTPRessource(FAX_PREFIX,routers=[IncomingFaxRessource, OutgoingFaxRessource])
+@HTTPRessource(FAX_PREFIX,routers=[IncomingFaxRessource, OutgoingFaxRessource],mount=False)
 class FaxRessource(BaseHTTPRessource):
     @InjectInMethod
     def __init__(self,) -> None:

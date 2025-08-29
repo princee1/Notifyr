@@ -14,7 +14,7 @@ class AdminService(BaseService):
         self.jwtAuthService = jwtAuthService
         self.tortoiseConnService = tortoiseConnService
 
-    def build(self):
+    def build(self,build_state=-1):
         ...
     
     def verify_dependency(self):

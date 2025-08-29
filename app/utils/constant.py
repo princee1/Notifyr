@@ -109,6 +109,8 @@ class StreamConstant:
 
 class SubConstant:
     SERVICE_STATUS = 'service-status'
+    SERVICE_VARIABLES = 'service-variables'
+    PROCESS_TERMINATE = 'process-terminate' 
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'
@@ -150,7 +152,24 @@ class MongooseDBConstant:
     AGENT_COLLECTION = 'agent'
     PROFILE_COLLECTION = 'profile'
     CHAT_COLLECTION = 'chat'
+    WORKFLOW_COLLECTION ='workflow'
 
     DATABASE_NAME = 'notifyr'
 
+
+
+########################                     ########################################
+
+class SettingDBConstant:
+    BASE_JSON_DB='settings'
+    HEALTH_JSON_DB='health'
     
+    AUTH_EXPIRATION_SETTING='AUTH_EXPIRATION'
+    REFRESH_EXPIRATION_SETTING='REFRESH_EXPIRATION'
+    CHAT_EXPIRATION_SETTING='CHAT_EXPIRATION'
+    ASSET_LANG_SETTING='ASSET_LANG'
+    _available_db_key=[AUTH_EXPIRATION_SETTING,REFRESH_EXPIRATION_SETTING,CHAT_EXPIRATION_SETTING,ASSET_LANG_SETTING]
+
+    def __init__(self):
+        self._available_db_key_ = [x for x in dir(self.__class__) if x.endswith('_SETTING')]
+

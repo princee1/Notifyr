@@ -1,5 +1,7 @@
 import functools
 from typing import Any, Callable, Dict, Self, TypedDict
+import aiohttp
+import requests
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
@@ -9,11 +11,10 @@ from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError
+from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from odmantic.exceptions import BaseEngineException
-
 from redis.asyncio import Redis
 from redis import Redis as SyncRedis
 from redis.exceptions import ResponseError
@@ -23,6 +24,7 @@ from tortoise import Tortoise
 from app.errors.async_error import ReactiveSubjectNotFoundError
 import psycopg2
 from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
+from app.utils.constant import SettingDBConstant
 
 MS_1000 = 1000
 ENGINE_KEY = 'engine'
@@ -67,7 +69,7 @@ class MongooseService(DatabaseService): # Chat data
     async def count(self,model,*args):
         return await self.engine.count(model,*args)
     
-    def build(self):
+    def build(self,build_state=-1):
         try:    
 
             self.client = AsyncIOMotorClient(self.mongo_uri)
@@ -339,7 +341,7 @@ class RedisService(DatabaseService):
 
         return wrapper
 
-    def build(self):
+    def build(self,build_state=-1):
         host = self.configService.REDIS_URL
         host = "localhost"
         self.redis_celery = Redis(host=host,db=0)
@@ -448,7 +450,7 @@ class TortoiseConnectionService(DatabaseService):
         if not pg_user or not pg_password:
             raise BuildFailureError
 
-    def build(self):
+    def build(self,build_state=-1):
         try:
             pg_user = self.configService.getenv('POSTGRES_USER')
             pg_password = self.configService.getenv('POSTGRES_PASSWORD')
@@ -471,4 +473,63 @@ class TortoiseConnectionService(DatabaseService):
             except:
                 ...
     
+@Service  
+class JSONServerDBService(DatabaseService):
     
+    def __init__(self,configService:ConfigService,fileService:FileService,redisService:RedisService):
+        super().__init__(configService, fileService)
+        self.json_server_url = configService.SETTING_DB_URL
+        self.redisService = redisService
+    
+    def build(self,build_state=-1):
+        try:
+            response = requests.get(f"{self.json_server_url}/health",timeout=1)
+            if response.json()["status"] == "ok":
+                ...
+            else:
+                raise BuildFailureError
+
+        except TimeoutError:
+            raise BuildWarningError
+
+        except requests.RequestException:
+            raise BuildFailureError
+
+        except KeyError:
+            raise BuildWarningError
+    
+
+    def get_setting(self)->dict:
+        try:
+        
+            response=  requests.get(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}")
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise BuildWarningError(f"Error fetching data: {response.status_code}")
+        except:
+            raise BuildWarningError("Error connecting to JSON server")
+
+    async def aio_get_setting(self)->dict:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}") as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+        except Exception:
+            self.redisService.publish_data(SubConstant.SERVICE_STATUS,StateProtocol(service=self.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
+            print("Error connecting to JSON server while getting settings")
+
+    async def save_settings(self,data:Any):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.put(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}",json=data) as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+                    else:
+                        ...
+        except Exception:
+            self.redisService.publish_data(SubConstant.SERVICE_STATUS,StateProtocol(service=self.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
+            print("Error connecting to JSON server while saving settings")
+
+

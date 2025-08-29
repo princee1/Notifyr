@@ -126,7 +126,7 @@ class ConfigService(_service.BaseService):
             pass
         return default
 
-    def build(self):
+    def build(self,build_state=-1):
         self.set_config_value()
         self.verify()
 
@@ -150,7 +150,7 @@ class ConfigService(_service.BaseService):
         self.ASSET_LANG = self.getenv("ASSET_LANG",'en')
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), True)
 
-        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8080)
+        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8088)
         self.ADDR=self.getenv('ADDR','0.0.0.0')
 
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
@@ -211,6 +211,9 @@ class ConfigService(_service.BaseService):
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
 
+        # SETTING DB CONFIG #
+        self.SETTING_DB_URL = self.getenv("SETTING_DB_URL","http://127.0.0.1:3000")
+
         # REDIS CONFIG #
 
         self.REDIS_URL = self.getenv("REDIS_URL","redis://127.0.0.1")
@@ -258,7 +261,7 @@ class ConfigService(_service.BaseService):
         # apps_data = config_json_app.data
         self.config_json_app = config_json_app
 
-    def destroy(self):
+    def destroy(self,destroy_state=-1):
         return super().destroy()
 
     @property

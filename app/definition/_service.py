@@ -1,7 +1,7 @@
 import asyncio
 from enum import Enum
 import functools
-from typing import Any, overload, Callable, Type, TypeVar, Dict
+from typing import Any, Literal, overload, Callable, Type, TypeVar, Dict
 from app.utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from app.utils.constant import DependencyConstant
 from app.utils.helper import issubclass_of
@@ -21,18 +21,55 @@ _CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []
 
 
+DEFAULT_BUILD_STATE = -1
+DEFAULT_DESTROY_STATE = -1
+
+
 class ServiceStatus(Enum):
     AVAILABLE = 1
+    """
+    The service is fully operational and available for use.
+    """
     NOT_AVAILABLE = 2
+    """
+    The service is not available and cannot be used."""
     TEMPORARY_NOT_AVAILABLE=3
+    """
+    The service is temporarily not available, possibly due to maintenance or transient issues."""
     PARTIALLY_AVAILABLE = 4
+    """
+    The service is operational but may have some limitations or issues that affect its performance or reliability."""
     WORKS_ALMOST_ATT = 5
+    """
+    The service is operational but may have some features or functionalities that are not fully working as expected, potentially leading to minor issues or inconveniences for users.
+    """
+
+
+class Report(TypedDict):
+    service: str
+    status: str
+    timestamp: str
+    reason: str | None= None
+    variables: dict[str,Any] | None= None
+
+PROCESS_SERVICE_REPORT:dict[str, list[Report]] = {}
+
 
 class StateProtocol(TypedDict):
     service:str
-    status:int
+    status:int | None = None
     to_build:bool = False
     to_destroy:bool =False
+    callback_state_function:str = None
+    build_state:int = DEFAULT_BUILD_STATE
+    destroy_state:int = DEFAULT_DESTROY_STATE
+    force_sync_verify:bool = False
+    bypass_async_verify:bool = False
+
+class VariableProtocol(TypedDict):
+    service:str
+    variables:dict[str,Any] = None
+    variables_function:str = None
 
 class BuildReport(TypedDict):
     ...
@@ -74,6 +111,13 @@ class BuildNotImplementedError(BuildError):
     ...
 
 
+STATUS_TO_ERROR_MAP = {
+    ServiceStatus.NOT_AVAILABLE: BuildFailureError,
+    ServiceStatus.TEMPORARY_NOT_AVAILABLE: BuildWarningError,
+    ServiceStatus.PARTIALLY_AVAILABLE: BuildWarningError,
+    ServiceStatus.WORKS_ALMOST_ATT: BuildSkipError,
+}
+
 #################################            #####################################
 
 class ServiceNotAvailableError(BuildError):
@@ -108,6 +152,7 @@ class StateProtocolMalFormattedError(BuildError):
 WAIT_TIME = 0.05
 
 class BaseService():
+    CONTEXT:Literal['sync','async'] = 'sync'
 
     def __init__(self) -> None:
         self.build_status: BuildErrorLevel = None
@@ -119,6 +164,8 @@ class BaseService():
         self.dependant_services:dict[Type[BaseService],BaseService] = {}
         self.statusLock = RWLock()
         self.stateCounter = 0
+
+        self.pretty_print_wait_time = WAIT_TIME
 
     @property
     def is_reader_locked(self)->bool:
@@ -166,11 +213,18 @@ class BaseService():
         
         return async_wrapper if asyncio.iscoroutinefunction(func) else  sync_wrapper
 
+    async def async_verify_dependency(self):
+        """
+        Callback to check if the state of the service dependency is suffisant to run
+        """
+        self.method_not_available = set()
+
     def verify_dependency(self):
         """
         Callback to check if the state of the service dependency is suffisant to run
         """
-        ...
+        self.method_not_available = set()
+        
 
     @CheckStatusBeforeHand
     async def async_pingService(self):
@@ -179,14 +233,14 @@ class BaseService():
     @CheckStatusBeforeHand
     def sync_pingService(self):
         ...
-  
-  
-    def build(self):
+
+
+    def build(self,build_state:int=DEFAULT_BUILD_STATE):
         # warnings.warn(
         #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
         raise BuildNotImplementedError
 
-    def destroy(self):
+    def destroy(self,destroy_state:int=DEFAULT_DESTROY_STATE):
         warnings.warn(
             f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
         pass
@@ -200,26 +254,45 @@ class BaseService():
     def __str__(self) -> str:
         return f"Service: {self.__class__.__name__} Hash: {self.__hash__()}"
 
-    def buildReport(self):
-        pass
+    def report(self,state:Literal['destroy','build','variable']='build',variables:dict[str,Any]=None,reason:str=None, state_value:int=None):
+        
+        if self.name not in PROCESS_SERVICE_REPORT:
+            PROCESS_SERVICE_REPORT[self.name] = []
 
-    def destroyReport(self):
+        PROCESS_SERVICE_REPORT[self.name].append({
+            'timestamp': dt.datetime.now().isoformat(),
+            'state_name': state,
+            'status': self.service_status.name,
+            'variables': variables,
+            'reason': reason,
+            'state_value': state_value
+        })
         pass
-
     
     # TODO Dependency that use service with failed might not properly, need to handle the view
-    def _builder(self):
+    def _builder(self,quiet:bool=False,build_state:int = -1,force_sync_verify:bool=False):
         try:
             now = dt.datetime.now()
-            self.verify_dependency()
-            self.build()
+            
+            if self.CONTEXT == 'sync' or force_sync_verify:
+                self.method_not_available = set()
+                self.verify_dependency()
+            
+            self.build(build_state=build_state)
             self._builded = True
             self._destroyed = False
-            self.service_status = ServiceStatus.AVAILABLE
-            self.method_not_available = set()
-            self.prettyPrinter.success(
-                f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
-            self.prettyPrinter.wait(WAIT_TIME, False)
+
+            self.service_status = self.service_status if self.service_status != None else ServiceStatus.AVAILABLE
+            
+            if self.service_status in STATUS_TO_ERROR_MAP:
+                if not quiet:
+                    raise STATUS_TO_ERROR_MAP[self.service_status](f'Service {self.__class__.__name__} has status {self.service_status} after build')
+            else:
+                if not quiet:
+                    self.prettyPrinter.success(
+                        f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
+            if not quiet:
+                self.prettyPrinter.wait(self.pretty_print_wait_time, False)
 
         except BuildFailureError as e:
             self.prettyPrinter.error(
@@ -260,11 +333,11 @@ class BaseService():
 
 
         finally:
-            self.buildReport()
+            self.report(reason='Service Built' if self._builded else 'Service Not Built',state_value=build_state)
 
-    def _destroyer(self):
+    def _destroyer(self,quiet:bool=False,destroy_state:int = DEFAULT_DESTROY_STATE):
         try:
-            self.destroy()
+            self.destroy(destroy_state=destroy_state)
             self._destroyed = True
             self._builded = False
             pass
@@ -282,7 +355,7 @@ class BaseService():
             pass
 
         finally:
-            self.destroyReport()
+            self.report('destroy',reason='Service Destroyed' if self._destroyed else 'Service Not Destroyed',state_value=destroy_state)
     
     @property
     def dependant_services_status(self):
@@ -331,7 +404,7 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[BaseService]):
     class SA(BaseS):pass
     class SB(BaseS):pass
     class TestS:
-        def build(self):
+        def build(self,build_state=-1):
             self.counter = rnd.randint(0,5)
             pass
 

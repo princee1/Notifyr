@@ -28,7 +28,7 @@ class EmailSenderService(_service.BaseService):
         if 'aws':
             return self.awsSESService
 
-    def build(self):
+    def build(self,build_state=-1):
         
         ...
 

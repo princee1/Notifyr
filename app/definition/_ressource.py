@@ -404,7 +404,7 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
         # TODO: support module-level injection
         meta: ClassMetaData= cls.meta
         cls.meta['prefix'] = prefix
-        cls.meta['routers'] = list(set(routers))
+        cls.meta['routers'] = [r for r in list(set(routers)) if r.meta['mount_ressource']]
         cls.meta['websockets'] = websockets
         cls.meta['add_prefix'] = add_prefix
         cls.meta['mount'] = []

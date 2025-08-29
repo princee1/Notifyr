@@ -28,7 +28,7 @@ class SubscriptionService(BaseService):
         super().__init__()    
         self.tortoiseConnService= tortoiseConnService
 
-    def build(self):
+    def build(self,build_state=-1):
         ...
     
     def verify_dependency(self):
@@ -80,7 +80,7 @@ class ContactsService(BaseService):
         if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError
 
-    def build(self):
+    def build(self,build_state=-1):
         ...
 
     @property
