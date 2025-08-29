@@ -9,13 +9,14 @@ from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessour
 from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_auth_permission
 from app.errors.global_var_error import GlobalKeyDoesNotExistsError
-from app.models.global_var_model import GlobalVarModel
+from app.models.properties_model import GlobalVarModel, SettingsModel
 from app.services.assets_service import AssetService
 from app.depends.class_dep import Broker
 from app.services.aws_service import AmazonS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import ConfigService
 from app.services.file_service import FTPService
+from app.services.setting_service import SettingService
 from app.utils.helper import APIFilterInject, PointerIterator
 
 VARIABLES_ROUTE = 'global'
@@ -120,3 +121,31 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         self.assetService.globals.save()
         broker.propagate_state(StateProtocol(
             service=self.assetService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True))
+
+
+SETTINGS_ROUTE = 'settings'
+
+@HTTPRessource(SETTINGS_ROUTE)
+class SettingsRessource(BaseHTTPRessource):
+    
+    @InjectInMethod
+    def __init__(self,configService:ConfigService,settingService:SettingService):
+        super().__init__()
+        self.configService = configService
+        self.settingService = settingService
+
+    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET],)
+    async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
+        return self.settingService.data
+
+    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
+    async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, authPermission=Depends(get_auth_permission)):
+
+        self.settingService.data.update(settingsModel.model_dump())
+        return self.settingService.data
+
+PROPERTIES_PREFIX = 'properties'
+
+@HTTPRessource(PROPERTIES_PREFIX,routers=[SettingsRessource,GlobalAssetVariableRessource])
+class PropertiesRessource(BaseHTTPRessource):
+    pass

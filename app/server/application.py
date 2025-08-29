@@ -3,13 +3,13 @@ Contains the FastAPI app
 """
 from dataclasses import dataclass
 
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ServiceStatus
 from app.ressources import *
-from app.services.database_service import TortoiseConnectionService
+from app.services.database_service import RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
 from app.services.rate_limiter_service import RateLimiterService
 from app.utils.prettyprint import PrettyPrinter_
@@ -104,7 +104,7 @@ class Application(EventInterface):
     def add_ressources(self):
         self.pretty_printer.show(
             pause_before=1, clear_stack=True, space_line=True)
-        for ressource_type in RESSOURCES.values():
+        for ressource_type in BASE_RESSOURCES:
             try:
                 now = dt.datetime.now()
                 res = ressource_type()

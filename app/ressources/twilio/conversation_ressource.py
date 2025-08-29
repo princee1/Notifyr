@@ -11,3 +11,12 @@ CONVERSATION_INCOMING_PREFIX="conversation-incoming"
 @HTTPRessource(CONVERSATION_INCOMING_PREFIX)
 class ConversationIncomingRessource(BaseHTTPRessource):
     ...
+
+@HTTPRessource("conversation",routers=[CONVERSATION_ONGOING_PREFIX, CONVERSATION_INCOMING_PREFIX],mount=False)
+class ConversationRessource(BaseHTTPRessource):
+    ...
+
+    def __init__(self):
+        super().__init__(None,None)
+    
+    

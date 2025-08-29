@@ -10,13 +10,14 @@ from app.depends.dependencies import get_auth_permission
 from app.depends.variables import parse_to_phone_format,carrier_info,callee_info
 from app.ressources.twilio.sms_ressource import SMSRessource
 from app.ressources.twilio.call_ressource import CallRessource
-#from app.ressources.fax_ressource import FaxRessource
+from app.ressources.twilio.fax_ressource import FaxRessource
 from app.services.twilio_service import TwilioService, CallService
+from app.ressources.twilio.conversation_ressource import ConversationRessource
 
 
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
-@HTTPRessource('twilio',routers=[SMSRessource,CallRessource])
+@HTTPRessource('twilio',routers=[SMSRessource,CallRessource,ConversationRessource,FaxRessource])
 class TwilioRessource(BaseHTTPRessource):
 
     @InjectInMethod
