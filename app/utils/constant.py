@@ -160,7 +160,7 @@ class MongooseDBConstant:
 ########################                     ########################################
 
 class SettingDBConstant:
-    BASE_JSON_DB='setting'
+    BASE_JSON_DB='settings'
     HEALTH_JSON_DB='health'
     
     AUTH_EXPIRATION_SETTING='AUTH_EXPIRATION'

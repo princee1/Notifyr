@@ -27,10 +27,22 @@ DEFAULT_DESTROY_STATE = -1
 
 class ServiceStatus(Enum):
     AVAILABLE = 1
+    """
+    The service is fully operational and available for use.
+    """
     NOT_AVAILABLE = 2
+    """
+    The service is not available and cannot be used."""
     TEMPORARY_NOT_AVAILABLE=3
+    """
+    The service is temporarily not available, possibly due to maintenance or transient issues."""
     PARTIALLY_AVAILABLE = 4
+    """
+    The service is operational but may have some limitations or issues that affect its performance or reliability."""
     WORKS_ALMOST_ATT = 5
+    """
+    The service is operational but may have some features or functionalities that are not fully working as expected, potentially leading to minor issues or inconveniences for users.
+    """
 
 
 class Report(TypedDict):
@@ -150,6 +162,8 @@ class BaseService():
         self.statusLock = RWLock()
         self.stateCounter = 0
 
+        self.pretty_print_wait_time = WAIT_TIME
+
     @property
     def is_reader_locked(self)->bool:
         return self.statusLock.reader_lock.locked
@@ -265,7 +279,7 @@ class BaseService():
                     self.prettyPrinter.success(
                         f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
             if not quiet:
-                self.prettyPrinter.wait(WAIT_TIME, False)
+                self.prettyPrinter.wait(self.pretty_print_wait_time, False)
 
         except BuildFailureError as e:
             self.prettyPrinter.error(

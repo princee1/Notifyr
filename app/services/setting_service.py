@@ -27,12 +27,12 @@ class SettingService(BaseService):
         self.jsonServerService = jsonServerService
         
     def verify_dependency(self):
-        if self.jsonServerService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE != MODE.DEV_MODE:
+        if self.jsonServerService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
             self.method_not_available = {'aio_get_settings'}
 
     def build(self,build_state:int=SETTING_SERVICE_SYNC_BUILD_STATE):
-        if self.configService.MODE == MODE.DEV_MODE:
+        if self.configService.MODE == MODE.DEV_MODE and False: # ERROR Force to use the JSON server even in dev mode for now
             self._read_setting_json_file()
         else:
             self._data = DEFAULT_SETTING
@@ -48,13 +48,12 @@ class SettingService(BaseService):
                 case _:
                     self._data = self.jsonServerService.get_setting()
 
-
     def _read_setting_json_file(self):
         self.jsonFile = JSONFile(DEV_MODE_SETTING_FILE)
         if not self.jsonFile.exists or self.jsonFile.data == None:
             self.jsonFile.data = DEFAULT_SETTING
-        else:
-            self._data = self.jsonFile.data
+        
+        self._data = self.jsonFile.data
 
     async def aio_get_settings(self):
         if self.configService.MODE == MODE.DEV_MODE:

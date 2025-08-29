@@ -133,11 +133,11 @@ SETTINGS_ROUTE = 'settings'
 @HTTPRessource(SETTINGS_ROUTE)
 class SettingsRessource(BaseHTTPRessource):
     
-    @InjectInMethod
-    def __init__(self,configService:ConfigService,settingService:SettingService):
+    
+    def __init__(self):
         super().__init__()
-        self.configService = configService
-        self.settingService = settingService
+        self.configService = Get(ConfigService)
+        self.settingService = Get(SettingService)
 
     #@PingService([SettingService])
     @UseRoles([Role.PUBLIC])
