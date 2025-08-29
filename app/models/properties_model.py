@@ -9,7 +9,17 @@ class GlobalVarModel(BaseModel):
     model_config = {
         "extra": "allow"
     }
-    
+
+
+min_auth = 10 * SECONDS_IN_A_HOUR
+max_auth = 100 * SECONDS_IN_A_HOUR
+
+min_refresh = 1 * SECONDS_IN_A_HOUR * 24
+max_refresh = 14 * SECONDS_IN_A_HOUR * 24
+
+min_chat = SECONDS_IN_A_HOUR * 1
+max_chat = SECONDS_IN_A_HOUR * 2
+
 
 class SettingsModel(BaseModel):
     AUTH_EXPIRATION: int = None
@@ -24,16 +34,16 @@ class SettingsModel(BaseModel):
     def settings_validator(self)->Self:
         
         if self.AUTH_EXPIRATION is not None:
-            if self.AUTH_EXPIRATION >= SECONDS_IN_A_HOUR * 10 or self.AUTH_EXPIRATION <= SECONDS_IN_A_HOUR * 100:
-                raise ValueError('AUTH_EXPIRATION must be between 10 hours and 100 hours')
-            
+            if not (self.AUTH_EXPIRATION >= min_auth and self.AUTH_EXPIRATION <= max_auth):
+                raise ValueError(f'AUTH_EXPIRATION must be between 10 hours({min_auth}) and 100 hours({max_auth})')
+
         if self.REFRESH_EXPIRATION is not None:
-            if self.REFRESH_EXPIRATION >= SECONDS_IN_A_HOUR * 24 * 1 or self.REFRESH_EXPIRATION <= SECONDS_IN_A_HOUR * 24 * 14:
-                raise ValueError('REFRESH_EXPIRATION must be between 1 day and 14 days')
+            if not (self.REFRESH_EXPIRATION >= min_refresh and self.REFRESH_EXPIRATION <= max_refresh):
+                raise ValueError(f'REFRESH_EXPIRATION must be between 1 day({min_refresh}) and 14 days({max_refresh})')
 
         if self.CHAT_EXPIRATION is not None:
-            if self.CHAT_EXPIRATION >= SECONDS_IN_A_HOUR * 1 or self.CHAT_EXPIRATION <= SECONDS_IN_A_HOUR * 2:
-                raise ValueError('CHAT_EXPIRATION must be between 1 hour and 30 days')
+            if not (self.CHAT_EXPIRATION >= min_chat and self.CHAT_EXPIRATION <= max_chat):
+                raise ValueError(f'CHAT_EXPIRATION must be between 1 hour({min_chat}) and 2 hours({max_chat})')
 
         if self.ASSET_LANG is not None:
             if self.ASSET_LANG not in AVAILABLE_LANG:

@@ -150,7 +150,7 @@ class ConfigService(_service.BaseService):
         self.ASSET_LANG = self.getenv("ASSET_LANG",'en')
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), True)
 
-        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8080)
+        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8088)
         self.ADDR=self.getenv('ADDR','0.0.0.0')
 
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())

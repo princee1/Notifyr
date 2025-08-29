@@ -14,7 +14,8 @@ async def Set_Service_Status(message:StateProtocol):
         service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
         
         async with service.statusLock.writer:
-            service.service_status = ServiceStatus(message['status'])
+            if message['status'] is not None:
+                service.service_status = ServiceStatus(message['status'])
         
         async with service.statusLock.writer:
             if message['to_destroy']:

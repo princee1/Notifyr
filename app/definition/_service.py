@@ -57,7 +57,7 @@ PROCESS_SERVICE_REPORT:dict[str, list[Report]] = {}
 
 class StateProtocol(TypedDict):
     service:str
-    status:int
+    status:int | None = None
     to_build:bool = False
     to_destroy:bool =False
     callback_state_function:str = None

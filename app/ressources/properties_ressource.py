@@ -149,25 +149,31 @@ class SettingsRessource(BaseHTTPRessource):
     
     @PingService([JSONServerDBService])
     @UseRoles([Role.ADMIN])
-    @UseLimiter(limit_value='1/min')
+    @UseLimiter(limit_value='1/minutes')
     @ServiceStatusLock(SettingService,'writer')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
     async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission),default = Query(False)):
         if default:
             settings = DEFAULT_SETTING
         else:
-            settings = settingsModel.model_dump(exclude=True)
-        current_data = self.settingService.data
+            settings = settingsModel.model_dump(exclude_none=True)
 
-        if settingsModel.AUTH_EXPIRATION is not None and current_data[SettingDBConstant.REFRESH_EXPIRATION_SETTING] <= settingsModel.REFRESH_EXPIRATION *2:
+        current_data = self.settingService.data
+        
+        if settings == {} or settings == current_data:
+            return current_data
+        
+        current_data.update(settings)
+
+        if settingsModel.AUTH_EXPIRATION is not None and settingsModel.REFRESH_EXPIRATION is not None and current_data[SettingDBConstant.REFRESH_EXPIRATION_SETTING] <= settingsModel.REFRESH_EXPIRATION * 2:
             raise ValueError('REFRESH_EXPIRATION must be at least two times greater than AUTH_EXPIRATION')
 
-        await self.settingService.update_setting(settings)
+        await self.settingService.update_setting(current_data)
         broker.propagate_state(StateProtocol(
-            service=self.settingService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True, callback_state_function=self.settingService.aio_get_settings.__name__,
+            service=self.settingService.name, status=None, to_build=True, to_destroy=False, callback_state_function=self.settingService.aio_get_settings.__name__,
             build_state=SETTING_SERVICE_ASYNC_BUILD_STATE))
-        settings.update(current_data)
-        return settings
+        
+        return current_data
 
 
 PROPERTIES_PREFIX = 'properties'
