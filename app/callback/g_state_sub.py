@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 from typing import Any
 from app.container import Get
@@ -20,12 +21,24 @@ async def Set_Service_Status(message:StateProtocol):
                 service.destroy()
             
             if message['to_build']:
-                service.build()
+                if 'build_function' in message and message['build_function'] != None:
+                    build_function = getattr(service,message['build_function'],None)
+                    if build_function != None and callable(build_function):
+                        if asyncio.iscoroutinefunction(build_function):
+                            await build_function()
+                        else:
+                            build_function()
+                else:
+                    service.build()
             
         print("Ending...")
         return
     except Exception as e:
         traceback.print_exc()
+
+async def Set_Service_Variables(message:dict):
+    ...
+
 
 G_State_Subs = {
     SubConstant.SERVICE_STATUS:Set_Service_Status

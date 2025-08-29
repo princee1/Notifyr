@@ -474,7 +474,7 @@ class TortoiseConnectionService(DatabaseService):
                 ...
     
 @Service  
-class JSONServerService(DatabaseService):
+class JSONServerDBService(DatabaseService):
     
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService, fileService)
@@ -518,7 +518,7 @@ class JSONServerService(DatabaseService):
         except Exception:
             print("Error connecting to JSON server while getting settings")
 
-    async def save_setting(self,data:Any):
+    async def save_settings(self,data:Any):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.put(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}",json=data) as resp:

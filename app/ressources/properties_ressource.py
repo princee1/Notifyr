@@ -1,5 +1,6 @@
 from typing import Annotated
 from fastapi import Depends, Request, Response, status
+from fastapi.params import Query
 from app.classes.auth_permission import Role
 from app.container import Get, InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, ServiceAvailabilityHandler
@@ -8,15 +9,17 @@ from app.decorators.pipes import GlobalPointerIteratorPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, ServiceStatusLock, UseRoles
 from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_auth_permission
-from app.errors.global_var_error import GlobalKeyDoesNotExistsError
+from app.errors.properties_error import GlobalKeyDoesNotExistsError
 from app.models.properties_model import GlobalVarModel, SettingsModel
 from app.services.assets_service import AssetService
 from app.depends.class_dep import Broker
 from app.services.aws_service import AmazonS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import ConfigService
+from app.services.database_service import JSONServerDBService
 from app.services.file_service import FTPService
-from app.services.setting_service import SettingService
+from app.services.setting_service import DEFAULT_SETTING, SettingService
+from app.utils.constant import SettingDBConstant
 from app.utils.helper import APIFilterInject, PointerIterator
 
 VARIABLES_ROUTE = 'global'
@@ -125,6 +128,8 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
 
 SETTINGS_ROUTE = 'settings'
 
+@UsePermission(JWTRouteHTTPPermission)
+@UseHandler(ServiceAvailabilityHandler, AsyncIOHandler)
 @HTTPRessource(SETTINGS_ROUTE)
 class SettingsRessource(BaseHTTPRessource):
     
@@ -134,18 +139,61 @@ class SettingsRessource(BaseHTTPRessource):
         self.configService = configService
         self.settingService = settingService
 
+    #@PingService([SettingService])
+    @UseRoles([Role.PUBLIC])
+    @UseLimiter(limit_value='1000/minutes')
+    @ServiceStatusLock(SettingService,'reader')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET],)
     async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
         return self.settingService.data
-
+    
+    @PingService([JSONServerDBService])
+    @UseRoles([Role.ADMIN])
+    @UseLimiter(limit_value='1/min')
+    @ServiceStatusLock(SettingService,'writer')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
-    async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, authPermission=Depends(get_auth_permission)):
+    async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission),default = Query(False)):
+        if default:
+            settings = DEFAULT_SETTING
+        else:
+            settings = settingsModel.model_dump(exclude=True)
+        current_data = self.settingService.data
 
-        self.settingService.data.update(settingsModel.model_dump())
-        return self.settingService.data
+        if settingsModel.AUTH_EXPIRATION is not None and current_data[SettingDBConstant.REFRESH_EXPIRATION_SETTING] <= settingsModel.REFRESH_EXPIRATION *2:
+            raise ValueError('REFRESH_EXPIRATION must be at least two times greater than AUTH_EXPIRATION')
+
+        await self.settingService.update(settings)
+        broker.propagate_state(StateProtocol(
+            service=self.settingService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True, build_function=self.settingService.aio_get_settings.__name__))
+        settings.update(current_data)
+        return settings
+
 
 PROPERTIES_PREFIX = 'properties'
-
 @HTTPRessource(PROPERTIES_PREFIX,routers=[SettingsRessource,GlobalAssetVariableRessource])
 class PropertiesRessource(BaseHTTPRessource):
-    pass
+    
+
+    @UseLimiter(limit_value='100/hours')
+    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.OPTIONS],)
+    def properties_options(self,request:Request):
+        return {
+            "available_routes":[
+                {
+                    "path":f"/{PROPERTIES_PREFIX}/{VARIABLES_ROUTE}",
+                    "description":"Manage global variables",
+                    "mount_ressource":SettingsRessource.meta['mount_ressource'],
+                    "allowed_methods":[
+                        "GET","POST","PUT","DELETE","OPTIONS"
+                    ]
+                },
+                {
+                    "path":f"/{PROPERTIES_PREFIX}/{SETTINGS_ROUTE}",
+                    "description":"Manage application settings",
+                    "mount_ressource":GlobalAssetVariableRessource.meta['mount_ressource'],
+                    "allowed_methods":[
+                        "GET","POST","PUT","OPTIONS"
+                    ]
+                }
+            ]
+        }

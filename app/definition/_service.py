@@ -33,6 +33,7 @@ class StateProtocol(TypedDict):
     status:int
     to_build:bool = False
     to_destroy:bool =False
+    build_function:str = None
 
 class BuildReport(TypedDict):
     ...

@@ -1,6 +1,6 @@
 from app.definition._service import BaseService, Service
 from app.services.config_service import ConfigService, MODE
-from app.services.database_service import JSONServerService
+from app.services.database_service import JSONServerDBService
 from app.utils.fileIO import JSONFile
 from app.utils.constant import SettingDBConstant
 
@@ -17,7 +17,7 @@ DEFAULT_SETTING = {
 @Service
 class SettingService(BaseService):
     
-    def __init__(self,configService:ConfigService,jsonServerService:JSONServerService):
+    def __init__(self,configService:ConfigService,jsonServerService:JSONServerDBService):
         super().__init__()
         self.configService = configService
         self.jsonServerService = jsonServerService
