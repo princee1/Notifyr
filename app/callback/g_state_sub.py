@@ -2,7 +2,7 @@ import asyncio
 import traceback
 from typing import Any
 from app.container import Get
-from app.definition._service import _CLASS_DEPENDENCY, BaseService, ServiceStatus,StateProtocol
+from app.definition._service import _CLASS_DEPENDENCY, BaseService, ServiceStatus,StateProtocol, VariableProtocol
 from app.utils.constant import SubConstant
 
 
@@ -21,24 +21,44 @@ async def Set_Service_Status(message:StateProtocol):
                 service._destroyer(True)
             
             if message['to_build']:
-                if 'build_function' in message and message['build_function'] != None:
-                    build_function = getattr(service,message['build_function'],None)
-                    if build_function != None and callable(build_function):
-                        if asyncio.iscoroutinefunction(build_function):
-                            await build_function()
-                        else:
-                            build_function()
-                else:
-                    service._builder(True)
-            
+                service._builder(True)
+
+            if 'callback_state_function' in message and message['callback_state_function'] != None:
+                callback_state_function = getattr(service,message['callback_state_function'],None)
+                if callback_state_function != None and callable(callback_state_function):
+                    if asyncio.iscoroutinefunction(callback_state_function):
+                        var_ = await callback_state_function()
+                    else:
+                        var_ = callback_state_function()
+
+                service.report('variable',var_)
+
         print("Ending...")
         return
     except Exception as e:
         traceback.print_exc()
 
-async def Set_Service_Variables(message:dict):
-    ...
-
+async def Set_Service_Variables(message:VariableProtocol):
+    try:
+        print("Starting..")
+        service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
+        async with service.statusLock.writer:
+            if message['variables'] is not None:
+                for key,value in message['variables'].items():
+                    if hasattr(service,key):
+                        setattr(service,key,value)
+                    
+            if message['variables_function'] is not None:
+                variables_function = getattr(service,message['variables_function'],None)
+                if variables_function != None and callable(variables_function):
+                    if asyncio.iscoroutinefunction(variables_function):
+                        await variables_function()
+                    else:
+                        variables_function()
+        print("Ending...")
+        return
+    except Exception as e:
+        traceback.print_exc()
 
 G_State_Subs = {
     SubConstant.SERVICE_STATUS:Set_Service_Status

@@ -13,6 +13,9 @@ DEFAULT_SETTING = {
     SettingDBConstant.ASSET_LANG_SETTING: "en"
 }
 
+SYNC_BUILD_STATE = DEFAULT_BUILD_STATE = -1
+ASYNC_BUILD_STATE = 1
+
 
 @Service
 class SettingService(BaseService):
@@ -26,8 +29,8 @@ class SettingService(BaseService):
         if self.jsonServerService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE != MODE.DEV_MODE:
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
             self.method_not_available = {'aio_get_settings'}
-            
-    def build(self):
+
+    def build(self,build_state:int=SYNC_BUILD_STATE):
         if self.configService.MODE == MODE.DEV_MODE:
             self._read_setting_json_file()
         else:
@@ -47,6 +50,8 @@ class SettingService(BaseService):
         else:
             self._data = DEFAULT_SETTING
             self._data = await self.jsonServerService.aio_get_setting()
+        
+        return self._data
 
     async def update(self,new_data:dict):
         if self.configService.MODE == MODE.DEV_MODE:
@@ -54,7 +59,7 @@ class SettingService(BaseService):
             self.jsonFile.save()
             return 
         
-        return await self.jsonServerService.save_setting(new_data)
+        return await self.jsonServerService.save_settings(new_data)
 
     @property
     def AUTH_EXPIRATION(self):

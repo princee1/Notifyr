@@ -164,7 +164,7 @@ class SettingsRessource(BaseHTTPRessource):
 
         await self.settingService.update(settings)
         broker.propagate_state(StateProtocol(
-            service=self.settingService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True, build_function=self.settingService.aio_get_settings.__name__))
+            service=self.settingService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True, callback_state_function=self.settingService.aio_get_settings.__name__,build_state=1))
         settings.update(current_data)
         return settings
 

@@ -11,6 +11,7 @@ from app.services.config_service import ConfigService
 from app.services.health_service import HealthService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.websockets.ping_pong_ws import PingPongWebSocket
+from app.definition._service import PROCESS_SERVICE_REPORT
 
 class AppSpec(BaseModel):
     CpuCount: int
@@ -60,6 +61,19 @@ class PingPongRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Get('/')
     def check_health(self, authPermission: AuthPermission = Depends(get_auth_permission)):
         ...
+
+    @UseLimiter(limit_value="5/minutes")
+    @UseRoles([Role.ADMIN])
+    @UsePermission(JWTRouteHTTPPermission)
+    @BaseHTTPRessource.Get('/report')
+    def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission)):
+        return {
+            'instance_id':self.configService.INSTANCE_ID,
+            'parent_pid':self.configService.PARENT_PID,
+            'process_pid':self.configService.PROCESS_PID,
+            'report':PROCESS_SERVICE_REPORT
+        }
+
 
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
