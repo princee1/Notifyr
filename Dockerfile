@@ -8,15 +8,15 @@ WORKDIR /usr/src/
 
 COPY ./requirements_dev.txt .
 
-RUN pip install --no-cache-dir -r requirements_dev.txt
+COPY ./assets ./assets/
 
-COPY ./assets .
-
-COPY ./app .
+COPY ./app/ ./app/
 
 COPY ./main.py .
 
 COPY ./config.app.json .
+
+RUN pip install --no-cache-dir -r requirements_dev.txt
 
 ENV PATH="/home/uvicorn/.local/bin:${PATH}"
 

@@ -39,11 +39,12 @@ BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,Mem
 class Application(EventInterface):
 
     # TODO if it important add other on_start_up and on_shutdown hooks
-    def __init__(self,port:int,log_level:str):
+    def __init__(self,port:int,log_level:str,host:str):
         self.log_level = log_level
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
         self.port = self.configService.APP_PORT if port <=0 else port
+        self.host = host
         self.rateLimiterService: RateLimiterService = Get(RateLimiterService)
         self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,
                            on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
@@ -84,10 +85,10 @@ class Application(EventInterface):
 
     def start(self):
         if self.mode == 'HTTPS':
-            uvicorn.run(self.app, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
+            uvicorn.run(self.app,host=self.host, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
                         ssl_certfile=self.configService.HTTPS_CERTIFICATE,log_level=self.log_level)
         else:
-            uvicorn.run(self.app, port=self.port, loop="asyncio",log_level=self.log_level)
+            uvicorn.run(self.app, host=self.host, port=self.port, loop="asyncio",log_level=self.log_level)
 
     def stop_server(self):
         pass

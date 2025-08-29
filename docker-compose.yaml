@@ -99,7 +99,7 @@ services:
       - postgres
     
   celery:
-    image: python:3.11-slim
+    image: notifyr:celery
     command: ["./spawn_celery_worker.sh", "2", "true" ]
     container_name: notifyr-worker
     build:
@@ -176,20 +176,21 @@ services:
       - postgres
     
   app:
-    image: python:3.11.4-slim
+    image: notifyr:fastapi
     container_name: notifyr-app
-    command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
+    command: ["python", "main.py","-H=0.0.0.0","-p=8088",'-t=solo']
+    #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
     ports:
       - "8088-8100:8088"
     build:
       context: ./
       dockerfile: Dockerfile
     environment:
-      - REDIS_URL=redis://redis
-      - MONGO_URI=mongo://mongodb:27017
+      - REDIS_URL=redis://0.0.0.0
+      - MONGO_URI=mongo://0.0.0.0:27017
       - WORKERS_COUNT=4
       - MODE=prod
-      - SETTING_DB_URL=http://settingdb:3000
+      - SETTING_DB_URL=http://0.0.0.0:3000
     env_file:
       - .env
     depends_on:
