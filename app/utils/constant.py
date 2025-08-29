@@ -109,6 +109,7 @@ class StreamConstant:
 
 class SubConstant:
     SERVICE_STATUS = 'service-status'
+    SERVICE_VARIABLES = 'service-variables'
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'

@@ -1,4 +1,4 @@
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, Service, ServiceStatus
 from app.services.config_service import ConfigService, MODE
 from app.services.database_service import JSONServerDBService
 from app.utils.fileIO import JSONFile
@@ -22,7 +22,11 @@ class SettingService(BaseService):
         self.configService = configService
         self.jsonServerService = jsonServerService
         
-    
+    def verify_dependency(self):
+        if self.jsonServerService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE != MODE.DEV_MODE:
+            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+            self.method_not_available = {'aio_get_settings'}
+            
     def build(self):
         if self.configService.MODE == MODE.DEV_MODE:
             self._read_setting_json_file()

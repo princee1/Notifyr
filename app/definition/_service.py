@@ -75,6 +75,13 @@ class BuildNotImplementedError(BuildError):
     ...
 
 
+STATUS_TO_ERROR_MAP = {
+    ServiceStatus.NOT_AVAILABLE: BuildFailureError,
+    ServiceStatus.TEMPORARY_NOT_AVAILABLE: BuildWarningError,
+    ServiceStatus.PARTIALLY_AVAILABLE: BuildWarningError,
+    ServiceStatus.WORKS_ALMOST_ATT: BuildSkipError,
+}
+
 #################################            #####################################
 
 class ServiceNotAvailableError(BuildError):
@@ -209,18 +216,26 @@ class BaseService():
 
     
     # TODO Dependency that use service with failed might not properly, need to handle the view
-    def _builder(self):
+    def _builder(self,quiet:bool=False):
         try:
             now = dt.datetime.now()
+            self.method_not_available = set()
             self.verify_dependency()
             self.build()
             self._builded = True
             self._destroyed = False
-            self.service_status = ServiceStatus.AVAILABLE
-            self.method_not_available = set()
-            self.prettyPrinter.success(
-                f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
-            self.prettyPrinter.wait(WAIT_TIME, False)
+
+            self.service_status = self.service_status if self.service_status != None else ServiceStatus.AVAILABLE
+            
+            if self.service_status in STATUS_TO_ERROR_MAP:
+                if not quiet:
+                    raise STATUS_TO_ERROR_MAP[self.service_status](f'Service {self.__class__.__name__} has status {self.service_status} after build')
+            else:
+                if not quiet:
+                    self.prettyPrinter.success(
+                        f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
+            if not quiet:
+                self.prettyPrinter.wait(WAIT_TIME, False)
 
         except BuildFailureError as e:
             self.prettyPrinter.error(
@@ -263,7 +278,7 @@ class BaseService():
         finally:
             self.buildReport()
 
-    def _destroyer(self):
+    def _destroyer(self,quiet:bool=False):
         try:
             self.destroy()
             self._destroyed = True

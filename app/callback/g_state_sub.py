@@ -18,7 +18,7 @@ async def Set_Service_Status(message:StateProtocol):
         
         async with service.statusLock.writer:
             if message['to_destroy']:
-                service.destroy()
+                service._destroyer(True)
             
             if message['to_build']:
                 if 'build_function' in message and message['build_function'] != None:
@@ -29,7 +29,7 @@ async def Set_Service_Status(message:StateProtocol):
                         else:
                             build_function()
                 else:
-                    service.build()
+                    service._builder(True)
             
         print("Ending...")
         return
