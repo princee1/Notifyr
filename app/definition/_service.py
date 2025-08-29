@@ -49,8 +49,8 @@ class StateProtocol(TypedDict):
     to_build:bool = False
     to_destroy:bool =False
     callback_state_function:str = None
-    build_state:int = -1
-    destroy_state:int = -1
+    build_state:int = DEFAULT_BUILD_STATE
+    destroy_state:int = DEFAULT_DESTROY_STATE
 
 class VariableProtocol(TypedDict):
     service:str
@@ -230,17 +230,18 @@ class BaseService():
     def __str__(self) -> str:
         return f"Service: {self.__class__.__name__} Hash: {self.__hash__()}"
 
-    def report(self,state:Literal['destroy','build','variable']='build',variables:dict[str,Any]=None,reason:str=None):
+    def report(self,state:Literal['destroy','build','variable']='build',variables:dict[str,Any]=None,reason:str=None, state_value:int=None):
         
         if self.name not in PROCESS_SERVICE_REPORT:
             PROCESS_SERVICE_REPORT[self.name] = []
 
         PROCESS_SERVICE_REPORT[self.name].append({
             'timestamp': dt.datetime.now().isoformat(),
-            'state': state,
+            'state_name': state,
             'status': self.service_status.name,
             'variables': variables,
-            'reason': reason
+            'reason': reason,
+            'state_value': state_value
         })
         pass
     
@@ -305,7 +306,7 @@ class BaseService():
 
 
         finally:
-            self.report(reason='Service Built' if self._builded else 'Service Not Built')
+            self.report(reason='Service Built' if self._builded else 'Service Not Built',state_value=build_state)
 
     def _destroyer(self,quiet:bool=False,destroy_state:int = DEFAULT_DESTROY_STATE):
         try:
@@ -327,7 +328,7 @@ class BaseService():
             pass
 
         finally:
-            self.report('destroy',reason='Service Destroyed' if self._destroyed else 'Service Not Destroyed')
+            self.report('destroy',reason='Service Destroyed' if self._destroyed else 'Service Not Destroyed',state_value=destroy_state)
     
     @property
     def dependant_services_status(self):

@@ -18,7 +18,7 @@ from app.depends.variables import global_var_key, force_update_query, wait_timeo
 from app.services.config_service import ConfigService
 from app.services.database_service import JSONServerDBService
 from app.services.file_service import FTPService
-from app.services.setting_service import DEFAULT_SETTING, SettingService
+from app.services.setting_service import SETTING_SERVICE_ASYNC_BUILD_STATE, DEFAULT_SETTING, SettingService
 from app.utils.constant import SettingDBConstant
 from app.utils.helper import APIFilterInject, PointerIterator
 
@@ -162,9 +162,10 @@ class SettingsRessource(BaseHTTPRessource):
         if settingsModel.AUTH_EXPIRATION is not None and current_data[SettingDBConstant.REFRESH_EXPIRATION_SETTING] <= settingsModel.REFRESH_EXPIRATION *2:
             raise ValueError('REFRESH_EXPIRATION must be at least two times greater than AUTH_EXPIRATION')
 
-        await self.settingService.update(settings)
+        await self.settingService.update_setting(settings)
         broker.propagate_state(StateProtocol(
-            service=self.settingService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True, callback_state_function=self.settingService.aio_get_settings.__name__,build_state=1))
+            service=self.settingService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True, callback_state_function=self.settingService.aio_get_settings.__name__,
+            build_state=SETTING_SERVICE_ASYNC_BUILD_STATE))
         settings.update(current_data)
         return settings
 

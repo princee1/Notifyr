@@ -2,7 +2,7 @@ import asyncio
 import traceback
 from typing import Any
 from app.container import Get
-from app.definition._service import _CLASS_DEPENDENCY, BaseService, ServiceStatus,StateProtocol, VariableProtocol
+from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, ServiceStatus,StateProtocol, VariableProtocol
 from app.utils.constant import SubConstant
 
 
@@ -18,10 +18,10 @@ async def Set_Service_Status(message:StateProtocol):
         
         async with service.statusLock.writer:
             if message['to_destroy']:
-                service._destroyer(True)
+                service._destroyer(True,message.get('destroy_state',DEFAULT_DESTROY_STATE))
             
             if message['to_build']:
-                service._builder(True)
+                service._builder(True,message.get('build_state',DEFAULT_BUILD_STATE))
 
             if 'callback_state_function' in message and message['callback_state_function'] != None:
                 callback_state_function = getattr(service,message['callback_state_function'],None)
@@ -31,7 +31,7 @@ async def Set_Service_Status(message:StateProtocol):
                     else:
                         var_ = callback_state_function()
 
-                service.report('variable',var_)
+                service.report('variable',var_,)
 
         print("Ending...")
         return

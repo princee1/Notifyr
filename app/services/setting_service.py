@@ -13,8 +13,9 @@ DEFAULT_SETTING = {
     SettingDBConstant.ASSET_LANG_SETTING: "en"
 }
 
-SYNC_BUILD_STATE = DEFAULT_BUILD_STATE = -1
-ASYNC_BUILD_STATE = 1
+SETTING_SERVICE_SYNC_BUILD_STATE = DEFAULT_BUILD_STATE = -1
+SETTING_SERVICE_ASYNC_BUILD_STATE = 1
+SETTING_SERVICE_DEFAULT_SETTING_BUILD_STATE = 0
 
 
 @Service
@@ -30,12 +31,23 @@ class SettingService(BaseService):
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
             self.method_not_available = {'aio_get_settings'}
 
-    def build(self,build_state:int=SYNC_BUILD_STATE):
+    def build(self,build_state:int=SETTING_SERVICE_SYNC_BUILD_STATE):
         if self.configService.MODE == MODE.DEV_MODE:
             self._read_setting_json_file()
         else:
             self._data = DEFAULT_SETTING
-            self._data = self.jsonServerService.get_setting()
+            match build_state:
+                case -1: # SYNC_BUILD_STATE
+                    self._data = self.jsonServerService.get_setting()
+                
+                case 0:
+                    ... # Keep the default setting
+
+                case 1: # ASYNC_BUILD_STATE: calling the aio_get_settings later is required
+                    ...
+                case _:
+                    self._data = self.jsonServerService.get_setting()
+
 
     def _read_setting_json_file(self):
         self.jsonFile = JSONFile(DEV_MODE_SETTING_FILE)
@@ -53,7 +65,7 @@ class SettingService(BaseService):
         
         return self._data
 
-    async def update(self,new_data:dict):
+    async def update_setting(self,new_data:dict):
         if self.configService.MODE == MODE.DEV_MODE:
             self._data.update(new_data)
             self.jsonFile.save()
