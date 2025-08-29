@@ -238,7 +238,7 @@ class BaseService():
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
         # warnings.warn(
         #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
-        raise BuildNotImplementedError
+        raise BuildNotImplementedError(f"{self.name} not implemented")
 
     def destroy(self,destroy_state:int=DEFAULT_DESTROY_STATE):
         warnings.warn(
@@ -293,16 +293,19 @@ class BaseService():
                         f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
             if not quiet:
                 self.prettyPrinter.wait(self.pretty_print_wait_time, False)
-
+            
+            reason = 'Service Built'
         except BuildFailureError as e:
             self.prettyPrinter.error(
                 f'[{now}] Error while building the service: {self.__class__.__name__}. Service using this dependency will not function properly', saveable=True)
             self.service_status = ServiceStatus.NOT_AVAILABLE
-            pass
+            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
         except BuildAbortError as e:
             self.prettyPrinter.error(
                 f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
+            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            
             exit(-1)
 
         except BuildWarningError as e:
@@ -310,12 +313,14 @@ class BaseService():
             self.prettyPrinter.warning(
                 f'[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
             self.service_status = ServiceStatus.WORKS_ALMOST_ATT
-
+            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
             self.prettyPrinter.info(
                 f'[{now}] Slight Problem encountered while building the service: {self.__class__.__name__}', saveable=True)
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+
             pass
 
         except BuildNotImplementedError as e:
@@ -323,17 +328,20 @@ class BaseService():
                 f'[{now}] Service Not Implemented Yet: {self.__class__.__name__} ', saveable=True)
             self.prettyPrinter.wait(WAIT_TIME, False)
             self.service_status = ServiceStatus.NOT_AVAILABLE
+            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
         except Exception as e:
             print(e)
             print(e.__class__)
             self.prettyPrinter.error(
                 f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
+            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            
             exit(-1)    
 
 
         finally:
-            self.report(reason='Service Built' if self._builded else 'Service Not Built',state_value=build_state)
+            self.report(reason=reason,state_value=build_state)
 
     def _destroyer(self,quiet:bool=False,destroy_state:int = DEFAULT_DESTROY_STATE):
         try:

@@ -31,10 +31,30 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from .app_meta import *
 from .middleware import MIDDLEWARE
+from app.definition._service import PROCESS_SERVICE_REPORT
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
 BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
+
+_shutdown_hooks=[]
+_startup_hooks=[]
+
+def register_hook(state:Literal['shutdown','startup'],active=True):
+        
+    def callback(func:Callable):
+        if not active:
+            return func
+        
+        func_name = func.__name__
+        
+        if state == 'shutdown':
+            _shutdown_hooks.append(func_name)
+        else:
+            _startup_hooks.append(func_name)
+        return func
+
+    return callback
 
 class Application(EventInterface):
 
@@ -46,8 +66,7 @@ class Application(EventInterface):
         self.port = self.configService.APP_PORT if port <=0 else port
         self.host = host
         self.rateLimiterService: RateLimiterService = Get(RateLimiterService)
-        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,
-                           on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
+        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
         self.app.state.limiter = self.rateLimiterService.GlobalLimiter
         self.register_tortoise()
         self.add_exception_handlers()
@@ -156,6 +175,7 @@ class Application(EventInterface):
             add_exception_handlers=True,    
         )
 
+    @register_hook('startup')
     async def on_startup(self):
 
         BaseService.CONTEXT = 'async'
@@ -179,9 +199,23 @@ class Application(EventInterface):
 
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
 
+    @register_hook('startup',False)
+    def print_report_on_startup(self):
+        self.pretty_printer.json(PROCESS_SERVICE_REPORT,saveable=False)
+
+    @register_hook('shutdown',active=True)
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
         await redisService.close_connections()
 
+
+    @property
+    def shutdown_hooks(self):
+        return [getattr(self,x) for x in _shutdown_hooks]
+
+    @property
+    def startup_hooks(self):
+        return [getattr(self,x) for x in _startup_hooks]
+    
 #######################################################                          #####################################################

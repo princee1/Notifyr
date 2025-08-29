@@ -487,9 +487,9 @@ class JSONServerDBService(DatabaseService):
             if response.json()["status"] == "ok":
                 ...
             else:
-                raise BuildFailureError
+                raise BuildFailureError(f"Status Code: {response.status_code}, Reason: {response.reason}")
 
-        except TimeoutError:
+        except TimeoutError as e:
             raise BuildWarningError
 
         except requests.RequestException:

@@ -98,9 +98,9 @@ services:
     depends_on:
       - postgres
     
-  celery:
+  worker:
     image: notifyr:celery
-    command: ["./spawn_celery_worker.sh", "2", "true" ]
+    command: ["./spawn_celery_worker.sh", "1", "true" ]
     container_name: notifyr-worker
     build:
       context: .
@@ -110,6 +110,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
       - REDIS_URL=redis://redis    
+      - MODE=prod
     env_file:
       - .env
     depends_on:
