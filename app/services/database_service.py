@@ -69,7 +69,7 @@ class MongooseService(DatabaseService): # Chat data
     async def count(self,model,*args):
         return await self.engine.count(model,*args)
     
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         try:    
 
             self.client = AsyncIOMotorClient(self.mongo_uri)
@@ -341,7 +341,7 @@ class RedisService(DatabaseService):
 
         return wrapper
 
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         host = self.configService.REDIS_URL
         host = "localhost"
         self.redis_celery = Redis(host=host,db=0)
@@ -450,7 +450,7 @@ class TortoiseConnectionService(DatabaseService):
         if not pg_user or not pg_password:
             raise BuildFailureError
 
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         try:
             pg_user = self.configService.getenv('POSTGRES_USER')
             pg_password = self.configService.getenv('POSTGRES_PASSWORD')
@@ -480,7 +480,7 @@ class JSONServerDBService(DatabaseService):
         super().__init__(configService, fileService)
         self.json_server_url = configService.SETTING_DB_URL
     
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         try:
             response = requests.get(f"{self.json_server_url}/health",timeout=1)
             if response.json()["status"] == "ok":

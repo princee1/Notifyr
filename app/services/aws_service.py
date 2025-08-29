@@ -25,7 +25,7 @@ class AmazonSESService(BaseService):
         super().__init__()
         self.configService = configService
     
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         return super().build()
         self.ses_client = boto3.client(
             'ses',
@@ -62,7 +62,7 @@ class AmazonSNSService(BaseService):
         super().__init__()
         self.configService = configService
 
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         return super().build()
         self.sns_client = boto3.client(
             'sns',

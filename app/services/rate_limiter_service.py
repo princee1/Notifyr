@@ -12,7 +12,7 @@ class RateLimiterService(BaseService):
         self.configService = configService
         self.redisService = redisService
 
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
 
         if self.configService.MODE == MODE.DEV_MODE:
             storage_uri = None

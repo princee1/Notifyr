@@ -124,7 +124,7 @@ class ReactiveService(BaseService,IntervalInterface):
     def publish(self):
         ...
     
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         ...
     
 

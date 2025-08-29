@@ -19,7 +19,7 @@ class HealthService(BaseService):
         self.notificationService = discordService
         self.rateLimiterService = rateLimiterService
 
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         self.process = psutil.Process()
            
     @property

@@ -377,7 +377,7 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[BaseService]):
     class SA(BaseS):pass
     class SB(BaseS):pass
     class TestS:
-        def build(self,build_state=-1)
+        def build(self,build_state=-1):
             self.counter = rnd.randint(0,5)
             pass
 

@@ -253,7 +253,7 @@ class CeleryService(BaseService, IntervalInterface):
         if self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
             raise BuildFailureError
 
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         ...
         
     @property
@@ -407,7 +407,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
             'index':index,
                 'message': f"[{name}] - Task added successfully", 'heaviness': str(scheduler.heaviness), 'estimate_tbd': naturaldelta(new_delay),}
 
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         try:
             self.connection_count = Gauge('http_connections','Active Connection Count')
             self.request_latency = Histogram("http_request_duration_seconds", "Request duration in seconds")
@@ -557,7 +557,7 @@ class OffloadTaskService(BaseService):
         self.celeryService = celeryService
         self.taskService = taskService
 
-    def build(self,build_state=-1)
+    def build(self,build_state=-1):
         ...
 
     async def offload_task(self,strategy:StrategyType,cost: float, algorithm: AlgorithmType, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
