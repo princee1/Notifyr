@@ -455,12 +455,11 @@ class TortoiseConnectionService(DatabaseService):
             pg_user = self.configService.getenv('POSTGRES_USER')
             pg_password = self.configService.getenv('POSTGRES_PASSWORD')
 
-            pg_host ='0.0.0.0' if  self.configService.MODE == MODE.PROD_MODE else 'localhost'
             conn = psycopg2.connect(
                 dbname=self.DATABASE_NAME,
                 user=pg_user,
                 password=pg_password,
-                host=pg_host,
+                host=self.configService.POSTGRES_HOST,
                 port=5432
             )
         except Exception as e:

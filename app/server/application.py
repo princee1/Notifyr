@@ -165,11 +165,10 @@ class Application(EventInterface):
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
         pg_database = tortoiseConnService.DATABASE_NAME
         pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
-        pg_host ='0.0.0.0' if  self.configService.MODE == MODE.PROD_MODE else 'localhost'
-        
+
         register_tortoise(
             app=self.app,
-            db_url=f"postgres://{pg_user}:{pg_password}@{pg_host}:5432/{pg_database}",
+            db_url=f"postgres://{pg_user}:{pg_password}@{self.configService.POSTGRES_HOST}:5432/{pg_database}",
             modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
             generate_schemas=False,
             add_exception_handlers=True,    

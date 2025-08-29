@@ -3,6 +3,7 @@ from typing import Any, Dict, Literal
 
 from app.classes.rsa import RSA
 from app.definition._interface import Interface, IsInterface
+from app.services.setting_service import SettingService
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
@@ -50,10 +51,11 @@ class EncryptDecryptInterface(Interface):
 
 @Service
 class JWTAuthService(BaseService, EncryptDecryptInterface):
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService) -> None:
         super().__init__()
         self.configService = configService
         self.fileService = fileService
+        self.settingService = settingService
 
     def set_generation_id(self, gen=False) -> None:
         if gen:
@@ -82,7 +84,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             salt = str(self.salt)
             created_time = time.time()
             permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
-                                        expired_at=created_time + self.configService.AUTH_EXPIRATION*0.5, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
+                                        expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
                                         salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id,authz_id=authz_id)
             token = self._encode_token(permission)
             return token
@@ -95,7 +97,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             salt = str(self.salt)
             created_time = time.time()
             permission = RefreshPermission(client_id=client_id, generation_id=self.generation_id, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
-                                           expired_at=created_time + self.configService.REFRESH_EXPIRATION*0.5,group_id=group_id,client_type=client_type.value)
+                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id,client_type=client_type.value)
             token = self._encode_token(permission)
             return token
         except Exception as e:
@@ -302,11 +304,11 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         ...
 
     def generate_rsa_key_pair(self,key_size=2048):
-        rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
+        rsa_secret_pwd = self.configService.RSA_SECRET_PASSWORD
         return RSA(password=rsa_secret_pwd,key_size=key_size)
 
     def generate_rsa_from_encrypted_keys(self,private_key=None,public_key=None):
-        rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
+        rsa_secret_pwd = self.configService.RSA_SECRET_PASSWORD
         return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
 
         
