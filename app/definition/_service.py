@@ -63,6 +63,8 @@ class StateProtocol(TypedDict):
     callback_state_function:str = None
     build_state:int = DEFAULT_BUILD_STATE
     destroy_state:int = DEFAULT_DESTROY_STATE
+    force_sync_verify:bool = False
+    bypass_async_verify:bool = False
 
 class VariableProtocol(TypedDict):
     service:str
@@ -150,6 +152,7 @@ class StateProtocolMalFormattedError(BuildError):
 WAIT_TIME = 0.05
 
 class BaseService():
+    CONTEXT:Literal['sync','async'] = 'sync'
 
     def __init__(self) -> None:
         self.build_status: BuildErrorLevel = None
@@ -210,11 +213,18 @@ class BaseService():
         
         return async_wrapper if asyncio.iscoroutinefunction(func) else  sync_wrapper
 
+    async def async_verify_dependency(self):
+        """
+        Callback to check if the state of the service dependency is suffisant to run
+        """
+        self.method_not_available = set()
+
     def verify_dependency(self):
         """
         Callback to check if the state of the service dependency is suffisant to run
         """
-        ...
+        self.method_not_available = set()
+        
 
     @CheckStatusBeforeHand
     async def async_pingService(self):
@@ -260,11 +270,14 @@ class BaseService():
         pass
     
     # TODO Dependency that use service with failed might not properly, need to handle the view
-    def _builder(self,quiet:bool=False,build_state:int = -1):
+    def _builder(self,quiet:bool=False,build_state:int = -1,force_sync_verify:bool=False):
         try:
             now = dt.datetime.now()
-            self.method_not_available = set()
-            self.verify_dependency()
+            
+            if self.CONTEXT == 'sync' or force_sync_verify:
+                self.method_not_available = set()
+                self.verify_dependency()
+            
             self.build(build_state=build_state)
             self._builded = True
             self._destroyed = False

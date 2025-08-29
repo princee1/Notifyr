@@ -22,7 +22,10 @@ async def Set_Service_Status(message:StateProtocol):
                 service._destroyer(True,message.get('destroy_state',DEFAULT_DESTROY_STATE))
             
             if message['to_build']:
-                service._builder(True,message.get('build_state',DEFAULT_BUILD_STATE))
+                if not message.get('bypass_async_verify',False):
+                    await service.async_verify_dependency()
+                
+                service._builder(True,message.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=message.get('force_sync_verify',False))
 
             if 'callback_state_function' in message and message['callback_state_function'] != None:
                 callback_state_function = getattr(service,message['callback_state_function'],None)

@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
-from app.definition._service import ServiceStatus
+from app.definition._service import BaseService, ServiceStatus
 from app.ressources import *
 from app.services.database_service import RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
@@ -156,6 +156,9 @@ class Application(EventInterface):
         )
 
     async def on_startup(self):
+
+        BaseService.CONTEXT = 'async'
+
         jwtService = Get(JWTAuthService)
         jwtService.set_generation_id(False)
 

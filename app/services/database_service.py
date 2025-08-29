@@ -11,7 +11,7 @@ from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError
+from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from odmantic.exceptions import BaseEngineException
@@ -476,9 +476,10 @@ class TortoiseConnectionService(DatabaseService):
 @Service  
 class JSONServerDBService(DatabaseService):
     
-    def __init__(self,configService:ConfigService,fileService:FileService):
+    def __init__(self,configService:ConfigService,fileService:FileService,redisService:RedisService):
         super().__init__(configService, fileService)
         self.json_server_url = configService.SETTING_DB_URL
+        self.redisService = redisService
     
     def build(self,build_state=-1):
         try:
@@ -516,6 +517,7 @@ class JSONServerDBService(DatabaseService):
                     if resp.status == 200:
                         return await resp.json()
         except Exception:
+            self.redisService.publish_data(SubConstant.SERVICE_STATUS,StateProtocol(service=self.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
             print("Error connecting to JSON server while getting settings")
 
     async def save_settings(self,data:Any):
@@ -527,6 +529,7 @@ class JSONServerDBService(DatabaseService):
                     else:
                         ...
         except Exception:
+            self.redisService.publish_data(SubConstant.SERVICE_STATUS,StateProtocol(service=self.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
             print("Error connecting to JSON server while saving settings")
 
 

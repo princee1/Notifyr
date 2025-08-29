@@ -28,6 +28,11 @@ class SettingService(BaseService):
         super().__init__()
         self.configService = configService
         self.jsonServerService = jsonServerService
+    
+    async def async_verify_dependency(self):
+        await super().async_verify_dependency()
+        async with self.jsonServerService.statusLock.reader:
+            return self.verify_dependency()
         
     def verify_dependency(self):
         if self.jsonServerService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
