@@ -14,10 +14,10 @@ async def Set_Service_Status(message:StateProtocol):
         service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
         
         async with service.statusLock.writer:
+
             if message['status'] is not None:
                 service.service_status = ServiceStatus(message['status'])
         
-        async with service.statusLock.writer:
             if message['to_destroy']:
                 service._destroyer(True,message.get('destroy_state',DEFAULT_DESTROY_STATE))
             
@@ -47,18 +47,21 @@ async def Set_Service_Variables(message:VariableProtocol):
         print("Starting..")
         service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
         async with service.statusLock.writer:
+
             if message['variables'] is not None:
                 for key,value in message['variables'].items():
                     if hasattr(service,key):
                         setattr(service,key,value)
                     
             if message['variables_function'] is not None:
+
                 variables_function = getattr(service,message['variables_function'],None)
                 if variables_function != None and callable(variables_function):
                     if asyncio.iscoroutinefunction(variables_function):
                         await variables_function()
                     else:
                         variables_function()
+    
         print("Ending...")
         return
     except Exception as e:
