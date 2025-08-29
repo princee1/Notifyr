@@ -186,9 +186,10 @@ services:
       dockerfile: Dockerfile
     environment:
       - REDIS_URL=redis://redis
-      - MONGO_URI=mongo://0.0.0.0:27017
+      - MONGO_URI=mongo://mongodb:27017
       - WORKERS_COUNT=4
       - MODE=prod
+      - SETTING_DB_URL=http://settingdb:3000
     env_file:
       - .env
     depends_on:
