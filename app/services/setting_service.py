@@ -28,6 +28,8 @@ class SettingService(BaseService):
         super().__init__()
         self.configService = configService
         self.jsonServerService = jsonServerService
+
+        self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','no'))
     
     async def async_verify_dependency(self):
         await super().async_verify_dependency()
@@ -42,7 +44,7 @@ class SettingService(BaseService):
             self.service_status = ServiceStatus.AVAILABLE
 
     def build(self,build_state:int=SETTING_SERVICE_SYNC_BUILD_STATE):
-        if self.configService.MODE == MODE.DEV_MODE and False: # ERROR Force to use the JSON server even in dev mode for now
+        if self.configService.MODE == MODE.DEV_MODE and self.use_settings_file:
             self._read_setting_json_file()
         else:
             self._data = DEFAULT_SETTING
@@ -83,7 +85,7 @@ class SettingService(BaseService):
         return self._data
 
     async def update_setting(self,new_data:dict):
-        if self.configService.MODE == MODE.DEV_MODE and False: # ERROR Force to use the JSON server even in dev mode for now
+        if self.configService.MODE == MODE.DEV_MODE and self.use_settings_file:
             self._data.update(new_data)
             self.jsonFile.save()
             return 
