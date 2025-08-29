@@ -12,5 +12,5 @@ class LoggerService(_service.BaseService):
         super().__init__()
         self.configService = configService
     
-    def build(self):
+    def build(self,build_state=-1)
        ...

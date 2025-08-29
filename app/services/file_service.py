@@ -41,7 +41,7 @@ class FileService(BaseService,):
     def addWatcher(self,path,):
         pass
 
-    def build(self):
+    def build(self,build_state=-1)
         ...
         
     pass
@@ -70,7 +70,7 @@ class FTPService(BaseFileRetrieverService):
         except:
             pass
 
-    def destroy(self):
+    def destroy(self,destroy_state=-1)
         try:
             self.ftpClient.quit()
         except:
@@ -82,7 +82,7 @@ class GitCloneRepoService(BaseFileRetrieverService):
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
         super().__init__(configService,fileService)
     
-    def destroy(self):
+    def destroy(self,destroy_state=-1)
         return super().destroy()
     pass
 

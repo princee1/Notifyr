@@ -83,7 +83,7 @@ class EmailAPIService(BaseService,EmailSendInterface,EmailReadInterface):
 
         self.configService= configService
 
-    def build(self):
+    def build(self,build_state=-1)
         ...
 
 

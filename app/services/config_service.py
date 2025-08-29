@@ -126,7 +126,7 @@ class ConfigService(_service.BaseService):
             pass
         return default
 
-    def build(self):
+    def build(self,build_state=-1)
         self.set_config_value()
         self.verify()
 
@@ -261,7 +261,7 @@ class ConfigService(_service.BaseService):
         # apps_data = config_json_app.data
         self.config_json_app = config_json_app
 
-    def destroy(self):
+    def destroy(self,destroy_state=-1)
         return super().destroy()
 
     @property

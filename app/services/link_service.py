@@ -53,7 +53,7 @@ class LinkService(BaseService):
             'PROD_URL', "")+v
         self.IPINFO_API_KEY = self.configService['IPINFO_API_KEY']
 
-    def build(self):
+    def build(self,build_state=-1)
         ...
 
     def verify_dependency(self):

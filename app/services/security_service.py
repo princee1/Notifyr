@@ -239,7 +239,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
 
-    def build(self):
+    def build(self,build_state=-1)
         ...
 
 
@@ -276,7 +276,7 @@ class SecurityService(BaseService, EncryptDecryptInterface):
             str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
         return self._encode_value(data, self.configService.API_ENCRYPT_TOKEN)
 
-    def build(self):
+    def build(self,build_state=-1)
         ...
 
     def hash_value_with_salt(self, value, key, salt):

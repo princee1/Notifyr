@@ -165,7 +165,7 @@ class AssetService(_service.BaseService):
         MLTemplate._globals.update(flatten_dict(self.globals.data))
 
         
-    def build(self):
+    def build(self,build_state=-1)
         
         self._read_globals()
 
@@ -271,7 +271,7 @@ class AssetService(_service.BaseService):
 
         return True
     
-    def destroy(self): pass
+    def destroy(self,destroy_state=-1) pass
 
     def encryptPdf(self, name):
         KEY=""
