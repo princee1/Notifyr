@@ -12,7 +12,7 @@ parser = ArgumentParser(description="Notifyr")
 parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunModeConstant.__members__.values()],
                         default='file', type=str, help='Running Mode')
 parser.add_argument('--port','-p',default=-1,type=int,help='Specify the port, if not it will run using the port set a the env variable')
-parser.add_argument("--log-level", default="info", choices=["critical", "error", "warning", "info", "debug", "trace"])
+parser.add_argument("--log-level", '-l',default="info", choices=["critical", "error", "warning", "info", "debug", "trace"])
 parser.add_argument('--config', '-c', default='./config.app.json',
                         type=str, help='Path to the config file')
 parser.add_argument('--team','-t',type=str,default='solo',choices=['solo','team'],help="Whether there's other instance running too")
