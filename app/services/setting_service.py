@@ -18,7 +18,7 @@ DEFAULT_SETTING = {
 class SettingService(BaseService):
     
     def __init__(self,configService:ConfigService,jsonServerService:JSONServerService):
-        
+        super().__init__()
         self.configService = configService
         self.jsonServerService = jsonServerService
         

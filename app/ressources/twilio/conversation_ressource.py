@@ -12,7 +12,7 @@ CONVERSATION_INCOMING_PREFIX="conversation-incoming"
 class ConversationIncomingRessource(BaseHTTPRessource):
     ...
 
-@HTTPRessource("conversation",routers=[CONVERSATION_ONGOING_PREFIX, CONVERSATION_INCOMING_PREFIX],mount=False)
+@HTTPRessource("conversation",routers=[ConversationIncomingRessource, ConversationOnGoingRessource],mount=False)
 class ConversationRessource(BaseHTTPRessource):
     ...
 
