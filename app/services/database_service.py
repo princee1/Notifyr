@@ -1,5 +1,7 @@
 import functools
 from typing import Any, Callable, Dict, Self, TypedDict
+import aiohttp
+import requests
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
@@ -13,7 +15,6 @@ from app.definition._service import BuildFailureError, BaseService,AbstractServi
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from odmantic.exceptions import BaseEngineException
-
 from redis.asyncio import Redis
 from redis import Redis as SyncRedis
 from redis.exceptions import ResponseError
@@ -23,6 +24,7 @@ from tortoise import Tortoise
 from app.errors.async_error import ReactiveSubjectNotFoundError
 import psycopg2
 from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
+from app.utils.constant import SettingDBConstant
 
 MS_1000 = 1000
 ENGINE_KEY = 'engine'
@@ -471,4 +473,60 @@ class TortoiseConnectionService(DatabaseService):
             except:
                 ...
     
+@Service  
+class JSONServerService(DatabaseService):
     
+    def __init__(self,configService:ConfigService,fileService:FileService):
+        super().__init__(configService, fileService)
+        self.json_server_url = configService.SETTING_DB_URL
+    
+    def build(self):
+        try:
+            response = requests.get(f"{self.json_server_url}/health",timeout=1)
+            if response.json()["status"] == "ok":
+                ...
+            else:
+                raise BuildFailureError
+
+        except TimeoutError:
+            raise BuildWarningError
+
+        except requests.RequestException:
+            raise BuildFailureError
+
+        except KeyError:
+            raise BuildWarningError
+    
+
+    def get_setting(self)->dict:
+        try:
+        
+            response=  requests.get(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}")
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise BuildWarningError(f"Error fetching data: {response.status_code}")
+        except:
+            raise BuildWarningError("Error connecting to JSON server")
+
+    async def aio_get_setting(self)->dict:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}") as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+        except Exception:
+            print("Error connecting to JSON server while getting settings")
+
+    async def save_setting(self,data:Any):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.put(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}",json=data) as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+                    else:
+                        ...
+        except Exception:
+            print("Error connecting to JSON server while saving settings")
+
+

@@ -211,6 +211,9 @@ class ConfigService(_service.BaseService):
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
 
+        # SETTING DB CONFIG #
+        self.SETTING_DB_URL = self.getenv("SETTING_DB_URL","http://127.0.0.1:3000")
+
         # REDIS CONFIG #
 
         self.REDIS_URL = self.getenv("REDIS_URL","redis://127.0.0.1")
