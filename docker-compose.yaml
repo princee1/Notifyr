@@ -180,6 +180,8 @@ services:
     #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
     ports:
       - "8088-8100:8088"
+    volumes:
+      - ./rate_limits.json:/run/secrets/rate_limits:ro
     build:
       context: ./
       dockerfile: Dockerfile

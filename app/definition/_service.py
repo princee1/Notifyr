@@ -312,13 +312,13 @@ class BaseService():
             # TODO might to change the color because of the error since, it will be for malfunction dependent service
             self.prettyPrinter.warning(
                 f'[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
-            self.service_status = ServiceStatus.WORKS_ALMOST_ATT
+            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
             self.prettyPrinter.info(
                 f'[{now}] Slight Problem encountered while building the service: {self.__class__.__name__}', saveable=True)
-            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+            self.service_status = ServiceStatus.WORKS_ALMOST_ATT
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
             pass
