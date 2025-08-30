@@ -4,6 +4,7 @@ celery_app = app.task.celery_app
 app_name = default
 ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
 
+################################     VIRTUAL ENVIRONNEMENT            ###################################
 install	:
 	pip install -r requirements_dev.txt
 
@@ -12,13 +13,6 @@ cleandep:
 
 getdep: 
 	pip freeze > requirements_dev.txt
-
-setenv:
-	cp base.env .env
-
-clean:
-	find . -name "__pycache__" -type d -exec rm -rf {} +
-	find . -name "*.pyc" -type f -delete
 
 venv:
 	python -m venv .venv
@@ -31,11 +25,22 @@ activate:
 deactivate:
 	deactivate
 
-del_venv:
-	echo testing
+################################   ENV AND CACHE              ###################################
+
+setenv:
+	cp base.env .env
+
+clean:
+	find . -name "__pycache__" -type d -exec rm -rf {} +
+	find . -name "*.pyc" -type f -delete
+
+###############################     HTTPS               #######################################
 
 https_pem:
 	openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
+
+
+###############################      RUNNING THE CODE IN DEV MODE                     #######################################
 
 run_dev:
 	python ${src_dir}/main.py --config=${config_dir} --port=-1
@@ -43,23 +48,15 @@ run_dev:
 run_prod:
 	uvicorn main:app --workers 4 --port 8088
 
-create :
-	python ${src_dir}/main.py --config=${config_dir} --mode=create --name=${app_name}
 
-edit:
-	python ${src_dir}/main.py --config=${config_dir} --mode=edit --name=${app_name}
+###############################      CELERY                     #######################################
 
-register:
-	python ${src_dir}/main.py --config=${config_dir} --mode=register --name=${app_name}
-
-docker:
-	docker-compose up --build
 
 celery:
 	celery -A ${celery_app} worker --pool=solo --loglevel=info 
 
 celery-docker:
-	celery -A ${celery_app} worker --pool=gevent --concurrency=100  --loglevel=info --max-tasks-per-child=100 --max-memory-per-child=200000
+	celery -A ${celery_app} worker --pool=gevent --concurrency=100  --loglevel=info --max-tasks-per-child=2000 --max-memory-per-child=200000
 
 flower:
 	celery -A ${celery_app} flower --port=5555
@@ -70,12 +67,17 @@ redbeat:
 purge:
 	celery -A ${celery_app} purge
 
+###############################     NGROK                      #######################################
+
+
 tunnel:
 	ngrok http --url ${ngrok_url} 8088
 
 tunnel_lb:
-	ngrok http --url ${ngrok_url} 88
+	ngrok http --url ${ngrok_url} 8080
 
-docker-server:
-	API_SCALE?=5
-	docker compose up --scale server=$(API_SCALE)
+###############################     DOCKER            #######################################
+
+docker-worker:
+	docker-compose up -d --no-deps --scale worker=3 worker
+

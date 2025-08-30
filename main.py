@@ -5,12 +5,16 @@ from app.utils.prettyprint import PrettyPrinter_
 import shutil
 import sys
 
+from app.utils.validation import host_validator
+
 exe_path = shutil.which("uvicorn").replace(".EXE", "")
 
 parser = ArgumentParser(description="Notifyr")
 
 parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunModeConstant.__members__.values()],
                         default='file', type=str, help='Running Mode')
+
+parser.add_argument("--host", '-H',type=host_validator, default="127.0.0.1", help="Host to bind to")
 parser.add_argument('--port','-p',default=-1,type=int,help='Specify the port, if not it will run using the port set a the env variable')
 parser.add_argument("--log-level", '-l',default="info", choices=["critical", "error", "warning", "info", "debug", "trace"])
 parser.add_argument('--config', '-c', default='./config.app.json',
@@ -32,7 +36,7 @@ uvicorn_args = None
 if sys.argv[0] == exe_path:
     args=None
     uvicorn_args = uvicorn_parser.parse_args()
-    args = parser.parse_args(['-m=file',f'-p={uvicorn_args.port}',f'-l={uvicorn_args.log_level}','-c=./config.app.json','-t=team',])
+    args = parser.parse_args(['-m=file',f'-p={uvicorn_args.port}',f'-l={uvicorn_args.log_level}','-c=./config.app.json','-t=team',f'-H={uvicorn_args.host}'])
     
     
 else:
@@ -53,8 +57,8 @@ PrettyPrinter_.info('Starting applications...')
 PrettyPrinter_.space_line()
 
 if __name__ == '__main__':
-    bootstrap_fastapi_server(args.port,args.log_level).start()
+    bootstrap_fastapi_server(args.port,args.log_level,args.host).start()
     
 else:
-    app = bootstrap_fastapi_server(args.port,args.log_level).app
+    app = bootstrap_fastapi_server(args.port,args.log_level,args.host).app
 

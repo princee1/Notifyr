@@ -10,13 +10,14 @@ from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.database_service import TortoiseConnectionService
+from app.services.setting_service import SettingService
 from app.services.task_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
-from app.definition._ressource import PingService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter
+from app.definition._ressource import PingService, ServiceStatusLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import Role, RoutePermission, AssetsPermission, Scope, TokensModel
 from pydantic import BaseModel,  field_validator
@@ -72,8 +73,11 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         self.jwtAuthService = jwtAuthService
         self.adminService = adminService
 
-        self.key = self.configService.getenv('CLIENT_PASSWORD_HASH_KEY','test')
+        self.settingService = Get(SettingService)
 
+        self.key = self.configService.CLIENT_PASSWORD_HASH_KEY
+
+    @ServiceStatusLock(SettingService,'reader')
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/')
     async def create_client(self, client: ClientModel,gid: str = Depends(get_query_params('gid', 'id')), authPermission=Depends(get_auth_permission)):
@@ -90,9 +94,9 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         async with in_transaction():
             client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
             challenge = await ChallengeORM.create(client=client)
-            ttl_auth_challenge = timedelta(seconds=self.configService.AUTH_EXPIRATION)
+            ttl_auth_challenge = timedelta(seconds=self.settingService.AUTH_EXPIRATION)
             challenge.expired_at_auth = challenge.created_at_auth + ttl_auth_challenge
-            challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.configService.REFRESH_EXPIRATION)
+            challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.settingService.REFRESH_EXPIRATION)
             await challenge.save()
 
             await ClientORMCache.Store([client.group.group_id,client.client_id],client,)
@@ -268,6 +272,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
+    @ServiceStatusLock(SettingService,'reader')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, authPermission=Depends(get_auth_permission)):
         old_generation_id = self.jwtAuthService.generation_id
@@ -284,6 +289,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
                                                                      "new_generation_id": new_generation_id})
 
     @UseLimiter(limit_value='1/day')
+    @ServiceStatusLock(SettingService,'reader')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
     async def un_revoke_all_tokens(self, request: Request, generation: GenerationModel, authPermission=Depends(get_auth_permission)):
@@ -324,6 +330,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='4/day')
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
+    @ServiceStatusLock(SettingService,'reader')
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
     async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client)], authModel: AuthPermissionModel, request: Request, authPermission=Depends(get_auth_permission)):

@@ -322,10 +322,10 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         self.default_response: Dict[int | str,
                                     Dict[str, Any]] | None = router_default_response
 
-    def get(self, dep: Type[S], scope=None, all=False) -> Type[S]:
+    def get(self, dep: Type[S]|str, scope=None, all=False) -> Type[S]:
         return Get(dep, scope, all)
 
-    def need(self, dep: Type[S]) -> Type[S]:
+    def need(self, dep: Type[S]|str) -> Type[S]:
         return Need(dep)
 
     def on_startup(self):

@@ -343,7 +343,7 @@ class RedisService(DatabaseService):
 
     def build(self,build_state=-1):
         host = self.configService.REDIS_URL
-        host = "localhost"
+        host = host.replace('redis://','')
         self.redis_celery = Redis(host=host,db=0)
         self.redis_limiter = Redis(host=host,db=1)
         self.redis_cache = Redis(host=host,db=3,decode_responses=True)
@@ -455,12 +455,11 @@ class TortoiseConnectionService(DatabaseService):
             pg_user = self.configService.getenv('POSTGRES_USER')
             pg_password = self.configService.getenv('POSTGRES_PASSWORD')
 
-            pg_host ='0.0.0.0' if  self.configService.MODE == MODE.PROD_MODE else 'localhost'
             conn = psycopg2.connect(
                 dbname=self.DATABASE_NAME,
                 user=pg_user,
                 password=pg_password,
-                host=pg_host,
+                host=self.configService.POSTGRES_HOST,
                 port=5432
             )
         except Exception as e:
@@ -483,20 +482,20 @@ class JSONServerDBService(DatabaseService):
     
     def build(self,build_state=-1):
         try:
-            response = requests.get(f"{self.json_server_url}/health",timeout=1)
+            response = requests.get(f"{self.json_server_url}/health",timeout=10)
             if response.json()["status"] == "ok":
                 ...
             else:
-                raise BuildFailureError
+                raise BuildFailureError(f"Status Code: {response.status_code}, Reason: {response.reason}")
 
-        except TimeoutError:
-            raise BuildWarningError
+        except TimeoutError as e:
+            raise BuildWarningError(e.args)
 
-        except requests.RequestException:
-            raise BuildFailureError
+        except requests.RequestException as e:
+            raise BuildFailureError(e.args)
 
-        except KeyError:
-            raise BuildWarningError
+        except KeyError as e:
+            raise BuildWarningError(e.args)
     
 
     def get_setting(self)->dict:

@@ -2,8 +2,8 @@ services:
 
 
   settingdb:
-    image: json-server:custom
-    container_name: notifyr-settingdb
+    image: json-server:latest
+    #container_name: ntfyr-settingdb
     build:
       context: .
       dockerfile: ./docker/Dockerfile.settingdb
@@ -14,7 +14,7 @@ services:
 
   redis:
     image: redis #Queue for the taks
-    container_name: redis
+    #container_name: ntfyr-redis
     restart: always
     ports:
       - 6379:6379
@@ -41,7 +41,7 @@ services:
           
   mongodb:
     image: mongo:latest
-    container_name: notifyr-mongo
+    #container_name: ntfyr-mongo
     restart: always
     ports:
       - "27017:27017"
@@ -56,7 +56,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.postgres
     image: postgres:15
-    container_name: notifyr-postgres
+    #container_name: ntfyr-postgres
     restart: always
     ports:
       - "5432:5432"
@@ -67,11 +67,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifyr
 
-  vault-prod:
+  vault:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.vault
-    container_name: notifyr-vault-prod
+    #container_name: ntfyr-vault-prod
     cap_add: ["IPC_LOCK"]
     ports:
       - "8200:8200"
@@ -87,7 +87,7 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: notifyr-pgadmin
+    container_name: pgadmin
     restart: always
     hostname: pgadmin
     environment:
@@ -98,27 +98,49 @@ services:
     depends_on:
       - postgres
     
-  celery:
-    image: python:3.11-slim
-    command: ["./spawn_celery_worker.sh", "2", "true" ]
-    container_name: notifyr-worker
+  worker:
+    image: notifyr:celery
+    command: ["./spawn_celery_worker.sh", "1", "false" ]
+    #container_name: ntfyr-worker
+    # deploy:
+    #   replicas: 3
+    # labels: 
+    #   - "com.docker.compose.service=worker"   
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
     restart: always
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - REDIS_URL=redis://redis    
+    environment:   
+      - MODE=prod
     env_file:
       - .env
     depends_on:
       - redis
-  
+      # - beat
+
+  beat:
+    image: notifyr:redbeat
+    command: ["make", "redbeat"]
+    #container_name: ntfyr-redbeat
+    # labels:
+    #   - com.docker.compose.service=beat
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.celery
+    restart:  always
+    environment:
+      - MODE=prod
+    env_file:
+      - .env 
+    depends_on:
+      - redis
+
   flower:
-    image: python:3.11-slim
+    image: notifyr:flower
     command: ["make", "flower"]
-    container_name: notifyr-flower
+    #container_name: ntfyr-flower
+    # labels:
+    #   - com.docker.compose.servie=flower
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
@@ -132,7 +154,7 @@ services:
 
   neo4j:
     image: neo4j:5.15
-    container_name: neo4j
+    container_name: ntfyr-neo4j
     restart: unless-stopped
     ports:
       - "7687:7687"
@@ -160,7 +182,7 @@ services:
     
   pgbouncer:
     image: edoburu/pgbouncer
-    container_name: notifyr-pgbouncer
+    #container_name: ntfyr-pgbouncer
     restart: always
     ports:
       - "6432:6432" # PgBouncer listens on port 6432
@@ -168,7 +190,7 @@ services:
       - ./docker/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
       - ./docker/userlist.txt:/etc/pgbouncer/userlist.txt
     environment:
-      - DB_HOST=notifyr-postgres
+      - DB_HOST=ntfyr-postgres
       - DB_PORT=5432
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
@@ -176,33 +198,36 @@ services:
       - postgres
     
   app:
-    image: python:3.11.4-slim
-    container_name: notifyr-app
-    command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
+    image: notifyr:fastapi
+    #container_name: ntfyr-app
+    labels: 
+      - "com.docker.compose.service=app"
+    command: ["python", "main.py","-H=0.0.0.0","-p=8088",'-t=solo']
+    #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
     ports:
-      - "8088-8100:8088"
+      - 8088:8088
+    volumes:
+      - ./rate_limits.json:/run/secrets/rate_limits:ro
     build:
       context: ./
       dockerfile: Dockerfile
     environment:
-      - REDIS_URL=redis://redis
-      - MONGO_URI=mongo://mongodb:27017
-      - WORKERS_COUNT=4
       - MODE=prod
-      - SETTING_DB_URL=http://settingdb:3000
     env_file:
       - .env
     depends_on:
       - redis
       - mongodb
 
-  balancer:
-    container_name: notifyr-balancer
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.balancer
-    ports:
-      - 8080
+  # balancer:
+  #   #container_name: ntfyr-balancer
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.balancer
+  #   env_file:
+  #     - ./balancer/.env
+  #   ports:
+  #     - 8080:8080
 
 
 volumes:

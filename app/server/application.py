@@ -31,22 +31,42 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from .app_meta import *
 from .middleware import MIDDLEWARE
+from app.definition._service import PROCESS_SERVICE_REPORT
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
 BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
 
+_shutdown_hooks=[]
+_startup_hooks=[]
+
+def register_hook(state:Literal['shutdown','startup'],active=True):
+        
+    def callback(func:Callable):
+        if not active:
+            return func
+        
+        func_name = func.__name__
+        
+        if state == 'shutdown':
+            _shutdown_hooks.append(func_name)
+        else:
+            _startup_hooks.append(func_name)
+        return func
+
+    return callback
+
 class Application(EventInterface):
 
     # TODO if it important add other on_start_up and on_shutdown hooks
-    def __init__(self,port:int,log_level:str):
+    def __init__(self,port:int,log_level:str,host:str):
         self.log_level = log_level
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
         self.port = self.configService.APP_PORT if port <=0 else port
+        self.host = host
         self.rateLimiterService: RateLimiterService = Get(RateLimiterService)
-        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,
-                           on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
+        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
         self.app.state.limiter = self.rateLimiterService.GlobalLimiter
         self.register_tortoise()
         self.add_exception_handlers()
@@ -84,10 +104,10 @@ class Application(EventInterface):
 
     def start(self):
         if self.mode == 'HTTPS':
-            uvicorn.run(self.app, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
+            uvicorn.run(self.app,host=self.host, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
                         ssl_certfile=self.configService.HTTPS_CERTIFICATE,log_level=self.log_level)
         else:
-            uvicorn.run(self.app, port=self.port, loop="asyncio",log_level=self.log_level)
+            uvicorn.run(self.app, host=self.host, port=self.port, loop="asyncio",log_level=self.log_level)
 
     def stop_server(self):
         pass
@@ -145,16 +165,16 @@ class Application(EventInterface):
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
         pg_database = tortoiseConnService.DATABASE_NAME
         pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
-        pg_host ='0.0.0.0' if  self.configService.MODE == MODE.PROD_MODE else 'localhost'
-        
+
         register_tortoise(
             app=self.app,
-            db_url=f"postgres://{pg_user}:{pg_password}@{pg_host}:5432/{pg_database}",
+            db_url=f"postgres://{pg_user}:{pg_password}@{self.configService.POSTGRES_HOST}:5432/{pg_database}",
             modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
             generate_schemas=False,
             add_exception_handlers=True,    
         )
 
+    @register_hook('startup')
     async def on_startup(self):
 
         BaseService.CONTEXT = 'async'
@@ -178,9 +198,23 @@ class Application(EventInterface):
 
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
 
+    @register_hook('startup',active=False)
+    def print_report_on_startup(self):
+        self.pretty_printer.json(PROCESS_SERVICE_REPORT,saveable=False)
+
+    @register_hook('shutdown',active=True)
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
         await redisService.close_connections()
 
+
+    @property
+    def shutdown_hooks(self):
+        return [getattr(self,x) for x in _shutdown_hooks]
+
+    @property
+    def startup_hooks(self):
+        return [getattr(self,x) for x in _startup_hooks]
+    
 #######################################################                          #####################################################

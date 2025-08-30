@@ -144,16 +144,19 @@ class ConfigService(_service.BaseService):
         self.INSTANCE_ID = self.getenv('INSTANCE_ID', '0')
         self.PROCESS_PID = str(os.getpid())
         self.PARENT_PID = str(os.getppid())
+        self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
+        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8088)
+        self.ADDR=self.getenv('ADDR','0.0.0.0')
+
+        self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
+
         
         self.BASE_DIR = self.getenv("BASE_DIR", './')
         self.ASSET_DIR = self.getenv("ASSETS_DIR", 'assets/')
         self.ASSET_LANG = self.getenv("ASSET_LANG",'en')
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), True)
 
-        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8088)
-        self.ADDR=self.getenv('ADDR','0.0.0.0')
 
-        self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
         self.HTTP_MODE = self.getenv("HTTP_MODE",'HTTP')
         self.HTTPS_CERTIFICATE = self.getenv("HTTPS_CERTIFICATE", 'cert.pem')
         self.HTTPS_KEY = self.getenv("HTTPS_KEY", 'key.pem')
@@ -178,17 +181,13 @@ class ConfigService(_service.BaseService):
         self.SMTP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"), 0)
 
         self.READ_MAIL_METHOD = self.getenv("READ_MAIL_METHOD", 'IMAP')
-        self.IMAP_EMAIL_HOST = self.getenv(
-            "IMAP_EMAIL_HOST", self.SMTP_EMAIL_HOST).upper()
-        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(
-            self.getenv("IMAP_EMAIL_PORT"))
+        self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST", self.SMTP_EMAIL_HOST).upper()
+        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))
         self.IMAP_EMAIL = self.getenv("IMAP_EMAIL", self.SMTP_EMAIL)
         self.IMAP_ADDR_SERVER = self.getenv('IMAP_ADDR_SERVER')
         self.IMAP_PASS = self.getenv("IMAP_EMAIL_PASS", self.SMTP_PASS)
-        self.IMAP_EMAIL_CONN_METHOD = self.getenv(
-            "IMAP_EMAIL_CONN_METHOD", self.SMTP_EMAIL_CONN_METHOD)
-        self.IMAP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(
-            self.getenv("IMAP_EMAIL_LOG_LEVEL"), self.SMTP_EMAIL_LOG_LEVEL)
+        self.IMAP_EMAIL_CONN_METHOD = self.getenv("IMAP_EMAIL_CONN_METHOD", self.SMTP_EMAIL_CONN_METHOD)
+        self.IMAP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_LOG_LEVEL"), self.SMTP_EMAIL_LOG_LEVEL)
 
         self.TWILIO_ACCOUNT_SID = self.getenv("TWILIO_ACCOUNT_SID")
         self.TWILIO_AUTH_TOKEN = self.getenv("TWILIO_AUTH_TOKEN")
@@ -198,29 +197,42 @@ class ConfigService(_service.BaseService):
 
         self.JWT_SECRET_KEY = self.getenv("JWT_SECRET_KEY")
         self.JWT_ALGORITHM = self.getenv("JWT_ALGORITHM",'HS256')
-        self.API_KEY = self.getenv("API_KEY")
         self.ON_TOP_SECRET_KEY = self.getenv("ON_TOP_SECRET_KEY")
         self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
-        self.API_EXPIRATION = ConfigService.parseToInt(
-            self.getenv("API_EXPIRATION"), 360000000)
 
-        self.AUTH_EXPIRATION = ConfigService.parseToInt(self.getenv("AUTH_EXPIRATION"), 3600*2)
-        self.REFRESH_EXPIRATION = ConfigService.parseToInt(self.getenv("REFRESH_EXPIRATION"), 3600 * 20)
-
+        self.API_EXPIRATION = ConfigService.parseToInt(self.getenv("API_EXPIRATION"), 360000000)
         self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
+        
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
+        self.API_KEY = self.getenv("API_KEY")
+
+
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
+        self.CONTACT_JWT_SECRET_KEY= self.getenv('CONTACT_JWT_SECRET_KEY','test')
+
+        self.CLIENT_PASSWORD_HASH_KEY= self.getenv('CLIENT_PASSWORD_HASH_KEY','test')
+
+        self.RSA_SECRET_PASSWORD = self.getenv('RSA_SECRET_PASSWORD','test')
+
+
+        # MONGODB CONFIG #
+
+        self.MONGO_URI = self.getenv('MONGO_URI','mongodb://localhost:27017' if self.MODE == MODE.DEV_MODE else 'mongodb://mongodb:27017')
 
         # SETTING DB CONFIG #
-        self.SETTING_DB_URL = self.getenv("SETTING_DB_URL","http://127.0.0.1:3000")
+        self.SETTING_DB_URL = self.getenv("SETTING_DB_URL","http://localhost:3000" if self.MODE == MODE.DEV_MODE else "http://settingdb:3000")
 
         # REDIS CONFIG #
 
-        self.REDIS_URL = self.getenv("REDIS_URL","redis://127.0.0.1")
+        self.REDIS_URL = self.getenv("REDIS_URL","redis://localhost" if self.MODE == MODE.DEV_MODE else "redis://redis")
 
         # SLOW API CONFIG #
 
         self.SLOW_API_REDIS_URL = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL", '/1')
+
+        # POSTGRES DB CONFIG #
+
+        self.POSTGRES_HOST = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
         # CELERY CONFIG #
 
@@ -229,16 +241,11 @@ class ConfigService(_service.BaseService):
         self.REDBEAT_REDIS_URL = self.REDIS_URL + self.getenv("REDBEAT_REDIS_URL", self.CELERY_MESSAGE_BROKER_URL)
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
-        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT", 1)
+        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT", 1)        
 
-        # CHAT CONFIG #
-
-        self.CHAT_EXPIRATION = ConfigService.parseToInt(self.getenv("CHAT_EXPIRATION"), 3600)
-    
-        self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
 
     def verify(self):
-        if self.API_EXPIRATION < self.AUTH_EXPIRATION:
+
             # self.API_EXPIRATION = self.AUTH_EXPIRATION
             # raise _service.BuildWarningError("API_EXPIRATION cannot be less than AUTH_EXPIRATION")
             ...
