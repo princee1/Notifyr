@@ -198,7 +198,7 @@ class Application(EventInterface):
 
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
 
-    @register_hook('startup',False)
+    @register_hook('startup',active=False)
     def print_report_on_startup(self):
         self.pretty_printer.json(PROCESS_SERVICE_REPORT,saveable=False)
 

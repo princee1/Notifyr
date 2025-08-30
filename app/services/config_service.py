@@ -181,17 +181,13 @@ class ConfigService(_service.BaseService):
         self.SMTP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"), 0)
 
         self.READ_MAIL_METHOD = self.getenv("READ_MAIL_METHOD", 'IMAP')
-        self.IMAP_EMAIL_HOST = self.getenv(
-            "IMAP_EMAIL_HOST", self.SMTP_EMAIL_HOST).upper()
-        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(
-            self.getenv("IMAP_EMAIL_PORT"))
+        self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST", self.SMTP_EMAIL_HOST).upper()
+        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))
         self.IMAP_EMAIL = self.getenv("IMAP_EMAIL", self.SMTP_EMAIL)
         self.IMAP_ADDR_SERVER = self.getenv('IMAP_ADDR_SERVER')
         self.IMAP_PASS = self.getenv("IMAP_EMAIL_PASS", self.SMTP_PASS)
-        self.IMAP_EMAIL_CONN_METHOD = self.getenv(
-            "IMAP_EMAIL_CONN_METHOD", self.SMTP_EMAIL_CONN_METHOD)
-        self.IMAP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(
-            self.getenv("IMAP_EMAIL_LOG_LEVEL"), self.SMTP_EMAIL_LOG_LEVEL)
+        self.IMAP_EMAIL_CONN_METHOD = self.getenv("IMAP_EMAIL_CONN_METHOD", self.SMTP_EMAIL_CONN_METHOD)
+        self.IMAP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_LOG_LEVEL"), self.SMTP_EMAIL_LOG_LEVEL)
 
         self.TWILIO_ACCOUNT_SID = self.getenv("TWILIO_ACCOUNT_SID")
         self.TWILIO_AUTH_TOKEN = self.getenv("TWILIO_AUTH_TOKEN")
@@ -221,14 +217,14 @@ class ConfigService(_service.BaseService):
 
         # MONGODB CONFIG #
 
-        self.MONGO_URI = self.getenv('MONGO_URI','mongodb://127.0.0.1:27017' if self.MODE == MODE.DEV_MODE else 'mongodb://mongodb:27017')
+        self.MONGO_URI = self.getenv('MONGO_URI','mongodb://localhost:27017' if self.MODE == MODE.DEV_MODE else 'mongodb://mongodb:27017')
 
         # SETTING DB CONFIG #
-        self.SETTING_DB_URL = self.getenv("SETTING_DB_URL","http://127.0.0.1:3000" if self.MODE == MODE.DEV_MODE else "http://settingdb:3000")
+        self.SETTING_DB_URL = self.getenv("SETTING_DB_URL","http://localhost:3000" if self.MODE == MODE.DEV_MODE else "http://settingdb:3000")
 
         # REDIS CONFIG #
 
-        self.REDIS_URL = self.getenv("REDIS_URL","redis://127.0.0.1" if self.MODE == MODE.DEV_MODE else "redis://redis")
+        self.REDIS_URL = self.getenv("REDIS_URL","redis://localhost" if self.MODE == MODE.DEV_MODE else "redis://redis")
 
         # SLOW API CONFIG #
 
@@ -236,7 +232,7 @@ class ConfigService(_service.BaseService):
 
         # POSTGRES DB CONFIG #
 
-        self.POSTGRES_HOST = self.getenv('POSTGRES_HOST','127.0.0.1' if self.MODE == MODE.DEV_MODE else '0.0.0.0')
+        self.POSTGRES_HOST = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
         # CELERY CONFIG #
 

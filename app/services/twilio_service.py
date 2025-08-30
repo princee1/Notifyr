@@ -5,6 +5,7 @@ https://www.youtube.com/watch?v=-AChTCBoTUM
 import functools
 from typing import Annotated, Callable, Coroutine, Literal
 from fastapi import HTTPException, Header, Request
+import requests
 from app.classes.template import SMSTemplate
 from app.definition import _service
 from app.interface.redis_event import RedisEventInterface
@@ -51,7 +52,12 @@ class TwilioService(_service.BaseService):
                 _service.BuildSkipError
                 
         except TwilioRestException as e:
-                raise _service.BuildFailureError
+                raise _service.BuildFailureError(e.details)
+        except requests.exceptions.ConnectTimeout as e:
+            raise _service.BuildFailureError()
+        except Exception as e:
+            raise _service.BuildFailureError(e.args)
+
     
     def verify_dependency(self):
         if not self.configService.TWILIO_ACCOUNT_SID or not self.configService.TWILIO_AUTH_TOKEN:

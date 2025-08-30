@@ -106,10 +106,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.celery
     restart: always
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - REDIS_URL=redis://redis    
+    environment:   
       - MODE=prod
     env_file:
       - .env
@@ -187,11 +184,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     environment:
-      - REDIS_URL=redis://0.0.0.0
-      - MONGO_URI=mongo://0.0.0.0:27017
-      - WORKERS_COUNT=4
       - MODE=prod
-      - SETTING_DB_URL=http://0.0.0.0:3000
     env_file:
       - .env
     depends_on:
