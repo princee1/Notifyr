@@ -8,7 +8,7 @@ USER celery
 
 WORKDIR /usr/src/
 
-COPY ./assets ./assets/
+# COPY ./assets ./assets/
 
 COPY ./app ./app/
 

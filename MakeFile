@@ -74,7 +74,7 @@ tunnel:
 	ngrok http --url ${ngrok_url} 8088
 
 tunnel_lb:
-	ngrok http --url ${ngrok_url} 88
+	ngrok http --url ${ngrok_url} 8080
 
 docker-server:
 	API_SCALE?=5
