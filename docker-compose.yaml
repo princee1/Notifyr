@@ -3,7 +3,7 @@ services:
 
   settingdb:
     image: json-server:latest
-    container_name: ntfyr-settingdb
+    #container_name: ntfyr-settingdb
     build:
       context: .
       dockerfile: ./docker/Dockerfile.settingdb
@@ -14,7 +14,7 @@ services:
 
   redis:
     image: redis #Queue for the taks
-    container_name: redis
+    #container_name: ntfyr-redis
     restart: always
     ports:
       - 6379:6379
@@ -41,7 +41,7 @@ services:
           
   mongodb:
     image: mongo:latest
-    container_name: ntfyr-mongo
+    #container_name: ntfyr-mongo
     restart: always
     ports:
       - "27017:27017"
@@ -56,7 +56,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.postgres
     image: postgres:15
-    container_name: ntfyr-postgres
+    #container_name: ntfyr-postgres
     restart: always
     ports:
       - "5432:5432"
@@ -67,11 +67,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifyr
 
-  vault-prod:
+  vault:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.vault
-    container_name: ntfyr-vault-prod
+    #container_name: ntfyr-vault-prod
     cap_add: ["IPC_LOCK"]
     ports:
       - "8200:8200"
@@ -100,12 +100,12 @@ services:
     
   worker:
     image: notifyr:celery
-    command: ["./spawn_celery_worker.sh", "3", "false" ]
-    container_name: ntfyr-worker
-    deploy:
-      replicas: 3
-    labels: 
-      - "com.docker.compose.service=worker"   
+    command: ["./spawn_celery_worker.sh", "1", "false" ]
+    #container_name: ntfyr-worker
+    # deploy:
+    #   replicas: 3
+    # labels: 
+    #   - "com.docker.compose.service=worker"   
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
@@ -121,7 +121,7 @@ services:
   beat:
     image: notifyr:redbeat
     command: ["make", "redbeat"]
-    container_name: ntfyr-redbeat
+    #container_name: ntfyr-redbeat
     # labels:
     #   - com.docker.compose.service=beat
     build:
@@ -138,7 +138,7 @@ services:
   flower:
     image: notifyr:flower
     command: ["make", "flower"]
-    container_name: ntfyr-flower
+    #container_name: ntfyr-flower
     # labels:
     #   - com.docker.compose.servie=flower
     build:
@@ -182,7 +182,7 @@ services:
     
   pgbouncer:
     image: edoburu/pgbouncer
-    container_name: ntfyr-pgbouncer
+    #container_name: ntfyr-pgbouncer
     restart: always
     ports:
       - "6432:6432" # PgBouncer listens on port 6432
@@ -220,7 +220,7 @@ services:
       - mongodb
 
   # balancer:
-  #   container_name: ntfyr-balancer
+  #   #container_name: ntfyr-balancer
   #   build:
   #     context: .
   #     dockerfile: docker/Dockerfile.balancer

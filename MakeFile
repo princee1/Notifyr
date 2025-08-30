@@ -78,11 +78,6 @@ tunnel_lb:
 
 ###############################     DOCKER            #######################################
 
-
-docker-app:
-	APP_SCALE?=5
-	docker compose up --scale app=$(APP_SCALE)
-
 docker-worker:
-	WORKER_SCALE?=3
-	docker compose up --scale worker=$(WORKER_SCALE)
+	docker-compose up -d --no-deps --scale worker=3 worker
+
