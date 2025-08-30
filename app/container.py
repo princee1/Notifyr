@@ -541,7 +541,7 @@ def Injectable(scope: Any |None = None ):
         return cls
     return class_decorator
 
-def Get(typ: Type[S], scope=None, all=False) -> dict[str, Type[S]] | Type[S]:
+def Get(typ: Type[S]|str, scope=None, all=False) -> dict[str, Type[S]] | Type[S]:
     """
     The `Get` function retrieves a service from a container based on the specified type, scope, and
     whether to retrieve all instances if it`s an AbstractService  [or in a multibind context].
@@ -565,7 +565,7 @@ def Register(typ:Type[S],scope=None)->Type[S]:
     CONTAINER.register_new_dep(typ,scope)
     return Get(typ,scope)
 
-def Need(typ: Type[S]) -> Type[S]:
+def Need(typ: Type[S]|str) -> Type[S]:
     """
     The function `Need` takes a type parameter `Service` and returns the result of calling the `need`
     method on the `CONTAINER` object with the specified type.

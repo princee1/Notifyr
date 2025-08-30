@@ -33,10 +33,10 @@ PING_PONG_PREFIX = 'ping-pong'
 class PingPongRessource(BaseHTTPRessource):
 
     @InjectInMethod
-    def __init__(self, healthService: HealthService, securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService,taskService:TaskService,celeryService:CeleryService):
+    def __init__(self, securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService,taskService:TaskService,celeryService:CeleryService):
         super().__init__()
 
-        self.healthService = healthService
+        self.healthService = self.get(HealthService)
         self.securityService = securityService
         self.jwtAuthService = jwtAuthService
         self.configService = configService
