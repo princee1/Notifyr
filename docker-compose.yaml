@@ -1,6 +1,4 @@
 services:
-
-
   settingdb:
     image: json-server:latest
     #container_name: ntfyr-settingdb
@@ -20,7 +18,7 @@ services:
       - 6379:6379
     volumes:
       - redis-data:/data
-  
+
   redis-commander:
     container_name: redis-commander
     hostname: redis-commander
@@ -38,7 +36,7 @@ services:
     container_name: reacherhq
     ports:
       - "8040:8040"
-          
+
   mongodb:
     image: mongo:latest
     #container_name: ntfyr-mongo
@@ -50,7 +48,7 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-  
+
   postgres:
     build:
       context: .
@@ -63,7 +61,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${POSTGRES_USER} 
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifyr
 
@@ -86,7 +84,7 @@ services:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
       - vault-secrets:/vault/secrets
-      - vault-audit:/vault/logs 
+      - vault-audit:/vault/logs
     secrets:
       - approle_role_id
     #restart: always
@@ -97,7 +95,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
-
 
   pgadmin:
     image: dpage/pgadmin4
@@ -111,20 +108,20 @@ services:
       - "7070:7070"
     depends_on:
       - postgres
-    
+
   worker:
     image: notifyr:celery
-    command: ["./spawn_celery_worker.sh", "1", "false" ]
+    command: ["./spawn_celery_worker.sh", "1", "false"]
     #container_name: ntfyr-worker
     # deploy:
     #   replicas: 3
-    # labels: 
-    #   - "com.docker.compose.service=worker"   
+    # labels:
+    #   - "com.docker.compose.service=worker"
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
     restart: always
-    environment:   
+    environment:
       - MODE=prod
     env_file:
       - .env
@@ -141,11 +138,11 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
-    restart:  always
+    restart: always
     environment:
       - MODE=prod
     env_file:
-      - .env 
+      - .env
     depends_on:
       - redis
 
@@ -181,10 +178,10 @@ services:
       - NEO4J_dbms_default__database=${NEO4J_DATABASE}
 
     volumes:
-        - neo4j_data:/data
-        - neo4j_logs:/logs
-        - neo4j_conf:/conf
-  
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_conf:/conf
+
   prometheus:
     image: prom/prometheus
     container_name: prometheus
@@ -193,7 +190,7 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    
+
   pgbouncer:
     image: edoburu/pgbouncer
     #container_name: ntfyr-pgbouncer
@@ -210,13 +207,13 @@ services:
       - DB_PASSWORD=${POSTGRES_PASSWORD}
     depends_on:
       - postgres
-    
+
   app:
     image: notifyr:fastapi
     #container_name: ntfyr-app
-    labels: 
+    labels:
       - "com.docker.compose.service=app"
-    command: ["python", "main.py","-H=0.0.0.0","-p=8088",'-t=solo']
+    command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
     #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
     ports:
       - 8088:8088
@@ -243,13 +240,11 @@ services:
   #   ports:
   #     - 8080:8080
 
-
 volumes:
-
   vault-data: {}
-  vault-shared: {}   # holds secret_id
-  vault-secrets: {}  # holds root_token/unseal_key (optional, only for admin access)
-  vault-audit:  {}
+  vault-shared: {} # holds secret_id
+  vault-secrets: {} # holds root_token/unseal_key (optional, only for admin access)
+  vault-audit: {}
 
   mongo-data:
     driver: local
@@ -259,9 +254,8 @@ volumes:
 
   assets-data:
     driver: local
-  
-  settingdb-data:
 
+  settingdb-data:
 
   neo4j_data:
   neo4j_logs:
@@ -271,4 +265,4 @@ volumes:
 
 secrets:
   approle_role_id:
-    file: ./bootstrap/role_id.txt   # created after first container init
+    file: ./bootstrap/role_id.txt # created after first container init
