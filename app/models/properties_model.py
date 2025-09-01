@@ -2,6 +2,7 @@ from typing import Self
 from pydantic import BaseModel, model_validator
 
 from app.classes.template import AVAILABLE_LANG
+from app.utils.constant import SettingDBConstant
 
 SECONDS_IN_A_HOUR = 3600
 
@@ -20,12 +21,15 @@ max_refresh = 14 * SECONDS_IN_A_HOUR * 24
 min_chat = SECONDS_IN_A_HOUR * 1
 max_chat = SECONDS_IN_A_HOUR * 2
 
+max_contact_expiration = SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING *1.8
+
 
 class SettingsModel(BaseModel):
     AUTH_EXPIRATION: int = None
     REFRESH_EXPIRATION: int = None
     CHAT_EXPIRATION: int = None
     ASSET_LANG: str = None
+    CONTACT_TOKEN_EXPIRATION:int =None
     
     def copy(self) -> Self:
         return SettingsModel(**self.model_dump())
@@ -52,6 +56,11 @@ class SettingsModel(BaseModel):
         if self.AUTH_EXPIRATION is not None and self.REFRESH_EXPIRATION is not None:
             if self.REFRESH_EXPIRATION <= self.AUTH_EXPIRATION * 2:
                 raise ValueError('REFRESH_EXPIRATION must be at least two times greater than AUTH_EXPIRATION')
+            
+        
+        if self.CONTACT_TOKEN_EXPIRATION is not None:
+            if not (self.CONTACT_TOKEN_EXPIRATION <= SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING and self.CONTACT_TOKEN_EXPIRATION >= max_contact_expiration):
+                raise ValueError(f'CONTACT_TOKEN_EXPIRATION must be in [{SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING} , {max_contact_expiration}] ')
 
     
         return self

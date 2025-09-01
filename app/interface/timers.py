@@ -54,10 +54,10 @@ class IntervalInterface(Interface):
         if not self.start_now:
             while True:
                 await asyncio.sleep(self._interval)
-                self.callback()
+                await self._run_callback()
         else:
             while True:
-                self.callback()
+                await self._run_callback()
                 await asyncio.sleep(self._interval)
 
     def start_interval(self, interval: float=None,start_now:bool=None) -> None:
@@ -87,3 +87,9 @@ class IntervalInterface(Interface):
 
     def callback(self):
         ...
+    
+    async def _run_callback(self):
+        if asyncio.iscoroutinefunction(self.callback):
+            await self.callback()
+        else:
+            self.callback()
