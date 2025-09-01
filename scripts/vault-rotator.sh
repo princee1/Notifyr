@@ -10,7 +10,7 @@ ROOT_TOKEN=$(cat "$VAULT_SECRETS_DIR/root_token.txt")
 RESP=$(
   curl -sS -X POST \
     -H "X-Vault-Token: ${ROOT_TOKEN}" \
-    "${VAULT_ADDR}/v1/auth/approle/role/my-app-role/secret-id"
+    "${VAULT_ADDR}/v1/auth/approle/role/$NOTIFYR_APP_ROLE/secret-id"
 )
 
 SECRET_ID=$(echo "$RESP" | jq -r '.data.secret_id')

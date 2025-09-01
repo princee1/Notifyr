@@ -71,28 +71,32 @@ services:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.vault
-    #container_name: ntfyr-vault
+    container_name: ntfyr-vault
+    labels:
+      - com.docker.compose.service=vault
     image: hashicorp/vault:1.16
     cap_add: ["IPC_LOCK"]
     ports:
       - "8200:8200"
     environment:
       VAULT_ADDR: "http://0.0.0.0:8200"
+      NOTIFYR_APP_ROLE: "notifyr-app-role"
+      VAULT_CONTAINER_READY: "false"
     volumes:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
       - vault-secrets:/vault/secrets
+      - vault-audit:/vault/logs 
     secrets:
       - approle_role_id
     #restart: always
-    stop_grace_period: 5m
-    # healthcheck:
-    #   test: ["CMD", "vault", "status"]
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 10
-    #   start_period: 60s
-
+    #stop_grace_period: 5m
+    healthcheck:
+      test: ["CMD-SHELL", '[ "$VAULT_CONTAINER_READY" = "true" ]']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
 
 
   pgadmin:
@@ -245,6 +249,7 @@ volumes:
   vault-data: {}
   vault-shared: {}   # holds secret_id
   vault-secrets: {}  # holds root_token/unseal_key (optional, only for admin access)
+  vault-audit:  {}
 
   mongo-data:
     driver: local

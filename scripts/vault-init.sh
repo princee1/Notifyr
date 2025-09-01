@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 #set -euo pipefail
 
 VAULT_CONFIG=/vault/config/vault.hcl
@@ -27,9 +28,11 @@ if [ "$IS_INITIALIZED" = "false" ]; then
   UNSEAL_KEY=$(echo "$INIT_OUT" | jq -r '.unseal_keys_b64[0]')
   ROOT_TOKEN=$(echo "$INIT_OUT" | jq -r '.root_token')
 
-  echo -n "$UNSEAL_KEY" > "$VAULT_SECRETS_DIR/unseal_key.b64"
+  echo -n "$UNSEAL_KEY" > "$VAULT_SECRETS_DIR/unseal_key.b64" 
   echo -n "$ROOT_TOKEN" > "$VAULT_SECRETS_DIR/root_token.txt"
   chmod 600 "$VAULT_SECRETS_DIR"/* || true
+
+  # The root_token and the unseal key will stay in the container as secrets
 
   vault operator unseal "$UNSEAL_KEY"
   
@@ -68,17 +71,20 @@ vault secrets enable -path=secret -version=2 kv || true
 
 vault policy write app-policy /vault/policies/app-policy.hcl
 
-vault write auth/approle/role/my-app-role \
+vault write auth/approle/role/$NOTIFYR_APP_ROLE \
   token_policies="app-policy" \
   token_ttl="30m" \
   token_max_ttl="24h" \
   secret_id_ttl="30m" \
-  secret_id_num_uses=1 \
+  secret_id_num_uses=0 \
   enable_local_secret_ids=true
 
-ROLE_ID=$(vault read -format=json auth/approle/role/my-app-role/role-id | jq -r .data.role_id)
+ROLE_ID=$(vault read -format=json auth/approle/role/$NOTIFYR_APP_ROLE/role-id | jq -r .data.role_id)
 echo -n "$ROLE_ID" > "$VAULT_SECRETS_DIR/role_id.txt"
 chmod 600 "$VAULT_SECRETS_DIR/role_id.txt"
+
+# The role_id will be store in secrets and shared with the app container 
+# The secret_id will be store in a shared volume be shared with the container 
 
 #/usr/local/bin/setup-approle.sh "$VAULT_SECRETS_DIR"
 
@@ -95,4 +101,7 @@ chmod 700 /vault/data
 
 # Drop privileges to vaultuser for the main Vault process
 echo "Dropping Vault process to vaultuser..."
+
+export VAULT_CONTAINER_READY = "true"
+
 exec su-exec vaultuser vault server -config="${VAULT_CONFIG}"
