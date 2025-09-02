@@ -4,6 +4,7 @@
 
 VAULT_CONFIG=/vault/config/vault.hcl
 VAULT_SECRETS_DIR=/vault/secrets
+NOTIFYR_APP_ROLE="notifyr-app-role"
 export VAULT_ADDR="http://127.0.0.1:8200"
 
 #################################               ##############################################
@@ -31,12 +32,10 @@ unseal_vault(){
 }
 
 init_vault(){
-   INIT_OUT=$(vault operator init -format=json -key-shares=1 -key-threshold=1)
+  INIT_OUT=$(vault operator init -format=json -key-shares=1 -key-threshold=1)
 
   UNSEAL_KEY=$(echo "$INIT_OUT" | jq -r '.unseal_keys_b64[0]')
   ROOT_TOKEN=$(echo "$INIT_OUT" | jq -r '.root_token')
-
-  
 
   # The root_token and the unseal key will stay in the container as secrets
   echo -n "$UNSEAL_KEY" > "$VAULT_SECRETS_DIR/unseal_key.b64" 
@@ -45,9 +44,8 @@ init_vault(){
   chown root:root "$VAULT_SECRETS_DIR/root_token.txt"
   chmod 600 "$VAULT_SECRETS_DIR/root_token.txt"   # rw------- for root only
 
-  # unseal_key.b64: root can read/write, vault user can read
-  chown root:vault "$VAULT_SECRETS_DIR/unseal_key.b64"  # vault is the group
-  chmod 640 "$VAULT_SECRETS_DIR/unseal_key.b64"         # rw-r----- (owner=root, group=vault)
+  chown root:vaultuser "$VAULT_SECRETS_DIR/unseal_key.b64"
+  chmod 640 "$VAULT_SECRETS_DIR/unseal_key.b64"
 
   vault operator unseal "$UNSEAL_KEY"
 
@@ -65,7 +63,7 @@ set_approle(){
 
   vault policy write app-policy /vault/policies/app-policy.hcl
 
-  vault write auth/approle/role/$NOTIFYR_APP_ROLE \
+  vault write auth/approle/role/"$NOTIFYR_APP_ROLE" \
     token_policies="app-policy" \
     token_ttl="30m" \
     token_max_ttl="24h" \
@@ -75,7 +73,7 @@ set_approle(){
 
   # The role_id will be store in secrets and shared with the app container 
   # The secret_id will be store in a shared volume be shared with the container 
-  ROLE_ID=$(vault read -format=json auth/approle/role/$NOTIFYR_APP_ROLE/role-id | jq -r .data.role_id)
+  ROLE_ID=$(vault read -format=json auth/approle/role/"$NOTIFYR_APP_ROLE"/role-id | jq -r .data.role_id)
   echo -n "$ROLE_ID" > "$VAULT_SECRETS_DIR/role_id.txt"
 
   chmod 644 "$VAULT_SECRETS_DIR/role_id.txt"
@@ -110,40 +108,25 @@ create_default_key(){
 #################################               ##############################################
 
 # Start Vault as root in background
-su-exec vaultuser vault server -config="${VAULT_CONFIG}" &
+vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
 
 wait_for_server 
 
-# Check initialization
-IS_INITIALIZED=$(vault status -format=json | jq -r '.initialized')
+init_vault
 
-if [ "$IS_INITIALIZED" = "false" ]; then
+wait_active_server
 
-  init_vault
+set_approle
 
-  wait_active_server
+create_default_key
 
-  set_approle
+chown -R vaultuser:vaultuser /vault/data
+chmod 700 /vault/data
 
-  create_default_key
+kill "$VAULT_PID"
+wait "$VAULT_PID" || true
 
-  # Start cron job as root for secret_id rotation
-  crond
-
-  chown -R vaultuser:vaultuser /vault/data
-  chmod 700 /vault/data
-
-  export VAULT_CONTAINER_READY="true"
-  
-  wait "$VAULT_PID"
-  #exec su-exec vaultuser wait "${VAULT_PID}" 
-
-else
-
-  unseal_vault
-  export VAULT_CONTAINER_READY="true"
-
-fi
+echo "Vault Initialization finished"
 
 #################################               ##############################################

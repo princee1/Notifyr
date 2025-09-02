@@ -48,19 +48,27 @@ RUN cat <<EOF > /etc/crontabs/root
 */10 * * * * /usr/local/bin/vault-rotator.sh 
 EOF
 
+# Set correct permissions
+RUN chmod 0644 /etc/crontabs/root
 
-COPY --chmod=755 ./scripts/vault-init.sh /usr/local/bin/entrypoint.sh
-# COPY setup-approle.sh /usr/local/bin/setup-approle.sh
+COPY --chmod=755 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
+COPY --chown=755 ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 COPY --chmod=755 ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh
 
 RUN chmod +x /usr/local/bin/*.sh
 
 # Add non-root user
-RUN adduser -D -u 1500 vaultuser \
+RUN adduser -D -u 1500 -g vaultuser vaultuser \
     && mkdir -p /vault/data /vault/logs /vault/shared /vault/secrets \
     && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared \
-    && chmod 700 /vault/data /vault/logs /vault/shared /vault/secrets
+    && chmod 700 /vault/data /vault/logs /vault/shared
 
+RUN chown root:vaultuser /vault/secrets \
+  && chmod 750 /vault/secrets       # rwxr-x--- 
+
+RUN ./usr/local/bin/vault-init.sh
+
+#USER vaultuser TODO need to find a way to run the crond as root and keep the rest of the container as vaultuser
 
 # Entrypoint
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/vault-entrypoint.sh"]
