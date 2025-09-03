@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-# Start cron in the background (as root)
-crond -f & 
-CRON_PID=$!
-
 VAULT_CONFIG=/vault/config/vault.hcl
 VAULT_SECRETS_DIR=/vault/secrets
 
@@ -17,6 +13,24 @@ wait_for_server() {
   done
 }
 
+wait_active_server(){
+  for i in {1..30}; do
+    HA_STATUS=$(vault status -format=json | jq -r '.ha_enabled')
+    IS_ACTIVE=$(vault status -format=json | jq -r '.active')
+    if [ "$HA_STATUS" = "true" ] && [ "$IS_ACTIVE" = "true" ]; then
+      echo "Vault node is active leader"
+      break
+    fi
+    if [ "$HA_STATUS" = "false" ]; then
+      echo "Vault is not running in HA mode (single node) — safe to continue"
+      break
+    fi
+    echo "Waiting for Vault to become active..."
+    sleep 2
+  done
+}
+
+
 unseal_vault(){
 
   IS_SEALED=$(vault status -format=json | jq -r '.sealed')
@@ -27,6 +41,9 @@ unseal_vault(){
   fi
 }
 
+# Start the Cron deamon
+crond -b -L /var/log/cron/cron.log
+
 # Start Vault in background
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
@@ -34,6 +51,8 @@ VAULT_PID=$!
 wait_for_server 
 
 unseal_vault
+
+wait_active_server
 
 export VAULT_CONTAINER_READY="true"
 

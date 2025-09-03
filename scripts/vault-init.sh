@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
-#set -euo pipefail
-
 VAULT_CONFIG=/vault/config/vault.hcl
 VAULT_SECRETS_DIR=/vault/secrets
+VAULT_SHARED_DIR=/vault/shared
+
 NOTIFYR_APP_ROLE="notifyr-app-role"
+NOTIFYR_ROTATE_APP_ROLE="notifiyr-rotate-app-role"
+
 export VAULT_ADDR="http://127.0.0.1:8200"
 
 #################################               ##############################################
@@ -53,10 +55,6 @@ init_vault(){
 
 set_approle(){
   
-  ROOT_TOKEN=$(cat "$VAULT_SECRETS_DIR/root_token.txt")
-  export VAULT_TOKEN="$ROOT_TOKEN"
-
-
   # Setup AppRole and policy
   vault auth enable approle || true
   vault secrets enable -path=secret -version=2 kv || true
@@ -74,12 +72,31 @@ set_approle(){
   # The role_id will be store in secrets and shared with the app container 
   # The secret_id will be store in a shared volume be shared with the container 
   ROLE_ID=$(vault read -format=json auth/approle/role/"$NOTIFYR_APP_ROLE"/role-id | jq -r .data.role_id)
+
+  SECRET_ID=$(vault write -format=json -force auth/approle/role/"$NOTIFYR_APP_ROLE"/secret-id | jq -r .data.secret_id)
+
   echo -n "$ROLE_ID" > "$VAULT_SECRETS_DIR/role_id.txt"
+  echo -n "$SECRET_ID" > "$VAULT_SHARED_DIR/secret-id.txt"
+
+  chown root:vaultuser "$VAULT_SHARED_DIR/secret-id.txt"
+  chmod 664 "$VAULT_SHARED_DIR/secret-id.txt"
 
   chmod 644 "$VAULT_SECRETS_DIR/role_id.txt"
   chown root:root "$VAULT_SECRETS_DIR/role_id.txt"
 
-  unset VAULT_TOKEN
+}
+
+set_rotate_approle() {
+
+  vault policy write "$NOTIFYR_ROTATE_APP_ROLE" /vault/policies/rotate-approle.hcl
+
+  TOKEN=$(vault token create -policy="$NOTIFYR_ROTATE_APP_ROLE"-period=24h -format=json | jq -r .auth.client_token)
+
+  echo "$TOKEN" > "$VAULT_SECRETS_DIR/rotate-token.txt"
+
+  chown vaultuser:vaultuser "$VAULT_SECRETS_DIR/rotate-token.txt"
+
+  chmod 640 "$VAULT_SECRETS_DIR/rotate-token.txt"
 
 }
 
@@ -103,10 +120,10 @@ wait_active_server(){
 create_default_key(){
 
   echo "Creating default key"
+
 }
 
 #################################               ##############################################
-
 # Start Vault as root in background
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
@@ -117,12 +134,22 @@ init_vault
 
 wait_active_server
 
+ROOT_TOKEN=$(cat "$VAULT_SECRETS_DIR/root_token.txt")
+
+export VAULT_TOKEN="$ROOT_TOKEN"
+
 set_approle
+
+set_rotate_approle
 
 create_default_key
 
+unset VAULT_TOKEN
+
 chown -R vaultuser:vaultuser /vault/data
 chmod 700 /vault/data
+
+
 
 kill "$VAULT_PID"
 wait "$VAULT_PID" || true

@@ -2,7 +2,8 @@ FROM hashicorp/vault:1.16
 
 # Install dependencies
 USER root
-RUN apk add --no-cache bash curl jq busybox-suid
+
+RUN apk add --no-cache bash curl jq busybox-suid 
 
 # Add Vault config, scripts, policies
 RUN touch /vault/config/vault.hcl
@@ -33,23 +34,32 @@ audit "file" {
 }
 EOF
 
-RUN mkdir /vault/policies/ && touch /vault/policies/app-policy.hcl
+RUN mkdir /vault/policies/ 
+
+RUN touch /vault/policies/app-policy.hcl /vault/policies/rotate-approle.hcl
 
 RUN cat <<EOF > /vault/policies/app-policy.hcl
 
-path "secret/data/notifyr/*" {
+path "secret/notifyr/*" {
   capabilities = ["read", "list"]
 }
 
 EOF
 
-# Use the Vault Secret ID Cron Rotation ${VAULT_SECRET_ID_CRON_ROTATION}
-RUN cat <<EOF > /etc/crontabs/root
-*/10 * * * * /usr/local/bin/vault-rotator.sh 
+RUN cat <<EOF > /vault/policies/rotate-approle.hcl
+
+path "auth/approle/role/rotate/secret-id" {
+  capabilities = [ "create", "read", "update" ]
+}
+
+# Optional: Allow looking up existing secret_ids
+# path "auth/approle/role/rotate/secret-id/lookup" {
+#   capabilities = [ "read" ]
+# }
 EOF
 
 # Set correct permissions
-RUN chmod 0644 /etc/crontabs/root
+#RUN chmod 0644 /etc/crontabs/root
 
 COPY --chmod=755 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
 COPY --chown=755 ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
@@ -61,14 +71,29 @@ RUN chmod +x /usr/local/bin/*.sh
 RUN adduser -D -u 1500 -g vaultuser vaultuser \
     && mkdir -p /vault/data /vault/logs /vault/shared /vault/secrets \
     && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared \
-    && chmod 700 /vault/data /vault/logs /vault/shared
+    && chmod 700 /vault/data /vault/logs
 
 RUN chown root:vaultuser /vault/secrets \
   && chmod 750 /vault/secrets       # rwxr-x--- 
 
 RUN ./usr/local/bin/vault-init.sh
 
-#USER vaultuser TODO need to find a way to run the crond as root and keep the rest of the container as vaultuser
+RUN cat <<EOF > /etc/crontabs/vaultuser
+*/10 * * * * /usr/local/bin/vault-rotator.sh >> /var/log/cron_vault_rotator.log 2>&1
+EOF
+
+RUN chown vaultuser:vaultuser /etc/crontabs/vaultuser && chmod 600 /etc/crontabs/vaultuser
+
+
+# RUN touch /var/spool/cron/crontabs/vaultuser \
+#     && chown vaultuser:vaultuser /var/spool/cron/crontabs/vaultuser \
+#     && chmod 600 /var/spool/cron/crontabs/vaultuser
+  
+# RUN cat <<EOF > /var/spool/cron/crontabs/vaultuser
+# */10 * * * * /usr/local/bin/vault-rotator.sh >> /var/log/cron_vault_rotator.log 2>&1
+# EOF
+
+USER vaultuser 
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/vault-entrypoint.sh"]
