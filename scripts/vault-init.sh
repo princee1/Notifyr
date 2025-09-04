@@ -77,8 +77,14 @@ set_approle(){
   echo -n "$ROLE_ID" > "$VAULT_SECRETS_DIR/role_id.txt"
   echo -n "$SECRET_ID" > "$VAULT_SHARED_DIR/secret-id.txt"
   
+  TIMESTAMP=$(date +%s)
+  echo -n "secret=$TIMESTAMP" > "$VAULT_SHARED_DIR/seed-time.txt"
+
   chown root:vaultuser "$VAULT_SHARED_DIR/secret-id.txt"
   chmod 664 "$VAULT_SHARED_DIR/secret-id.txt"
+
+  chown root:vaultuser "$VAULT_SHARED_DIR/seed-time.txt"
+  chmod 664 "$VAULT_SHARED_DIR/seed.txt"
 
   chmod 644 "$VAULT_SECRETS_DIR/role_id.txt"
   chown root:root "$VAULT_SECRETS_DIR/role_id.txt"
