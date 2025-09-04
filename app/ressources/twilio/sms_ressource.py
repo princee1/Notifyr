@@ -15,6 +15,7 @@ from app.depends.class_dep import Broker, TwilioTracker
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSCustomSchedulerModel, SMSStatusModel, SMSTemplateSchedulerModel
 from app.models.twilio_model import SMSEventORM
+from app.services.setting_service import SettingService
 from app.services.task_service import TaskManager, TaskService, CeleryService, OffloadTaskService
 from app.services.assets_service import AssetService
 from app.services.chat_service import ChatService
@@ -45,6 +46,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         self.contactService: ContactsService = contactService
         self.configService:ConfigService = configService
         self.offloadService= offloadService
+        self.settingService = Get(SettingService)
 
     @UseLimiter(limit_value="10/minutes")
     @UseRoles([Role.PUBLIC])
@@ -121,7 +123,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     async def sms_template(self,template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
         for content in scheduler.content:
             cost = len(content.to)
-            _,result=template.build(self.configService.ASSET_LANG,content.data)
+            _,result=template.build(content.data,self.settingService.ASSET_LANG)
             message = {'body':result,'to':content.to,'from_':content.from_}
 
             twilio_ids=[]

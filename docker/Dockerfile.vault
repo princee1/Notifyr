@@ -1,12 +1,16 @@
 FROM hashicorp/vault:1.16
 
-# Install dependencies
+# Use root for setup
 USER root
-RUN apk add --no-cache bash curl jq busybox-suid
 
-# Add Vault config, scripts, policies
+# Install dependencies
+RUN apk add --no-cache bash curl jq tini ca-certificates
 
-RUN  cat <<EOF > /vault/config/vault.hcl
+# Create Vault config directories
+RUN mkdir -p /vault/config /vault/data /vault/logs /vault/shared /vault/secrets /home/vaultuser /vault/cron/
+
+# Vault config
+RUN cat <<EOF > /vault/config/vault.hcl
 ui = true
 disable_mlock = true
 
@@ -17,10 +21,12 @@ storage "raft" {
 
 listener "tcp" {
   address     = "0.0.0.0:8200"
-  tls_disable = "true"   # TODO: enable TLS in prod
-  # tls_cert_file = "/vault/certs/server.crt"
-  # tls_key_file  = "/vault/certs/server.key"
+  cluster_address = "127.0.0.1:8201"
+  tls_disable = "true"
 }
+
+api_addr     = "http://127.0.0.1:8200"
+cluster_addr = "http://127.0.0.1:8201"
 
 audit "file" {
   path   = "/vault/logs/audit.log"
@@ -28,28 +34,66 @@ audit "file" {
 }
 EOF
 
-RUN cat <<EOF >vault/policies/app-policy.hcl
+# Vault policies
+RUN mkdir -p /vault/policies
+RUN cat <<EOF > /vault/policies/app-policy.hcl
+
+path "secret/notifyr/tokens/*" {
+  capabilities = ["read", "list"]
+}
+
+path "secret/notifyr/profiles/*" {
+  capabilities = ["read","list","create","update"]
+}
 
 EOF
 
-# Use the Vault Secret ID Cron Rotation ${VAULT_SECRET_ID_CRON_ROTATION}
-RUN cat <<EOF > /etc/crontabs/root
-*/10 * * * * /usr/local/bin/vault-rotator.sh 
+RUN cat <<EOF > /vault/policies/rotate-approle.hcl
+
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+
+path "auth/approle/role/notifyr-app-role/secret-id" {
+  capabilities = ["update","create","read"]
+}
+
 EOF
-
-
-COPY --chmod=755 ./scripts/vault-init.sh /usr/local/bin/entrypoint.sh
-# COPY setup-approle.sh /usr/local/bin/setup-approle.sh
-COPY --chmod=755 ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh
-
-RUN chmod +x /usr/local/bin/*.sh
 
 # Add non-root user
-RUN adduser -D -u 1000 vaultuser \
-    && mkdir -p /vault/data /vault/logs /vault/shared /vault/secrets \
-    && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared \
-    && chmod 700 /vault/data /vault/logs /vault/shared /vault/secrets
+RUN adduser -D -u 1500 -g vaultuser vaultuser \
+    && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared /home/vaultuser /vault/cron \
+    && chmod 700 /vault/data /vault/logs /home/vaultuser /vault/cron \
+    && chown root:vaultuser /vault/secrets \
+    && chmod 750 /vault/secrets
 
+# Copy scripts with correct permissions
+COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
+
+# Initialize Vault (can run as root for setup)
+RUN /usr/local/bin/vault-init.sh
+
+# Install supercronic
+ENV SUPERCRONIC_VERSION=0.2.31
+ADD https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_VERSION}/supercronic-linux-amd64 /usr/local/bin/supercronic
+RUN chmod 755 /usr/local/bin/supercronic
+
+COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
+COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh
+
+RUN chmod +x /usr/local/bin/vault-entrypoint.sh
+RUN chmod 770 /usr/local/bin/vault-rotator.sh
+
+RUN touch /vault/cron/crontab
+
+RUN cat <<EOF > /vault/cron/crontab
+0 * * * * /usr/local/bin/vault-rotator.sh >> /vault/logs/vault-rotator.log 2>&1
+EOF
+
+# Switch to non-root user
+USER vaultuser
+
+ENTRYPOINT ["/sbin/tini", "--"]
 
 # Entrypoint
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/local/bin/vault-entrypoint.sh"]

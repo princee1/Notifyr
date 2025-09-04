@@ -168,8 +168,24 @@ class SettingDBConstant:
     REFRESH_EXPIRATION_SETTING='REFRESH_EXPIRATION'
     CHAT_EXPIRATION_SETTING='CHAT_EXPIRATION'
     ASSET_LANG_SETTING='ASSET_LANG'
-    _available_db_key=[AUTH_EXPIRATION_SETTING,REFRESH_EXPIRATION_SETTING,CHAT_EXPIRATION_SETTING,ASSET_LANG_SETTING]
+    CONTACT_TOKEN_EXPIRATION_SETTING='CONTACT_TOKEN_EXPIRATION'
+
+    #_available_db_key=[AUTH_EXPIRATION_SETTING,REFRESH_EXPIRATION_SETTING,CHAT_EXPIRATION_SETTING,ASSET_LANG_SETTING,CONTACT_TOKEN_EXPIRATION_SETTING]
 
     def __init__(self):
-        self._available_db_key_ = [x for x in dir(self.__class__) if x.endswith('_SETTING')]
+
+        self.available_setting_key = []
+        self.available_db_key = []
+
+        for x in dir(self.__class__):
+            if x.endswith('_SETTING'):
+                self.available_setting_key.append(x)
+            
+            elif x.endswith('_DB'):
+                self.available_db_key.append(x)
+
+
+
+
+
 
