@@ -41,20 +41,8 @@ unseal_vault(){
   fi
 }
 
+
+echo "Starting cron in foreground..."
 # Start the Cron deamon
-crond -b -L /var/log/cron/cron.log
+crond -f -l 8 -d 8 -c /var/spool/cron/crontabs
 
-# Start Vault in background
-vault server -config="${VAULT_CONFIG}" &
-VAULT_PID=$!
-
-wait_for_server 
-
-unseal_vault
-
-wait_active_server
-
-export VAULT_CONTAINER_READY="true"
-
-# Bring it to the foreground
-wait "$VAULT_PID"

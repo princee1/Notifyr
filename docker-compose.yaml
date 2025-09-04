@@ -65,6 +65,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifyr
 
+
   vault:
     build:
       context: .

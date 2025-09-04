@@ -65,8 +65,6 @@ COPY --chmod=755 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
 COPY --chown=755 ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 COPY --chmod=755 ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh
 
-RUN chmod +x /usr/local/bin/*.sh
-
 # Add non-root user
 RUN adduser -D -u 1500 -g vaultuser vaultuser \
     && mkdir -p /vault/data /vault/logs /vault/shared /vault/secrets \
@@ -76,22 +74,30 @@ RUN adduser -D -u 1500 -g vaultuser vaultuser \
 RUN chown root:vaultuser /vault/secrets \
   && chmod 750 /vault/secrets       # rwxr-x--- 
 
+RUN chown vaultuser:vaultuser /usr/local/bin/vault-rotator.sh
+
+RUN chmod 770 /usr/local/bin/vault-rotator.sh
+
+RUN chmod +x /usr/local/bin/*.sh
+
 RUN ./usr/local/bin/vault-init.sh
 
-RUN cat <<EOF > /etc/crontabs/vaultuser
-*/10 * * * * /usr/local/bin/vault-rotator.sh >> /var/log/cron_vault_rotator.log 2>&1
-EOF
-
-RUN chown vaultuser:vaultuser /etc/crontabs/vaultuser && chmod 600 /etc/crontabs/vaultuser
-
-
-# RUN touch /var/spool/cron/crontabs/vaultuser \
-#     && chown vaultuser:vaultuser /var/spool/cron/crontabs/vaultuser \
-#     && chmod 600 /var/spool/cron/crontabs/vaultuser
-  
-# RUN cat <<EOF > /var/spool/cron/crontabs/vaultuser
+# RUN cat <<EOF > /etc/crontabs/vaultuser
+# */1 * * * *   /bin/echo "test" > /home/vaultuser/test.txt
 # */10 * * * * /usr/local/bin/vault-rotator.sh >> /var/log/cron_vault_rotator.log 2>&1
 # EOF
+
+# RUN chown vaultuser:vaultuser /etc/crontabs/vaultuser 
+
+RUN touch /var/spool/cron/crontabs/vaultuser \
+    && chown vaultuser:vaultuser /var/spool/cron/crontabs/vaultuser
+#   && chmod 600 /var/spool/cron/crontabs/vaultuser
+
+
+RUN cat <<EOF > /var/spool/cron/crontabs/vaultuser
+*/1 * * * *   /bin/echo "test" > /home/vaultuser/test.txt
+*/10 * * * * /usr/local/bin/vault-rotator.sh
+EOF
 
 USER vaultuser 
 
