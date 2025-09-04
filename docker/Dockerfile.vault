@@ -37,23 +37,25 @@ EOF
 # Vault policies
 RUN mkdir -p /vault/policies
 RUN cat <<EOF > /vault/policies/app-policy.hcl
-path "secret/notifyr/*" {
+
+path "secret/notifyr/tokens/*" {
   capabilities = ["read", "list"]
 }
+
+path "secret/notifyr/profiles/*" {
+  capabilities = ["read","list","create","update"]
+}
+
 EOF
 
 RUN cat <<EOF > /vault/policies/rotate-approle.hcl
-
-path "auth/approle/role/notifyr-rotate-app-role/secret-id" {
-  capabilities = ["create", "read", "update"]
-}
 
 path "auth/token/renew-self" {
   capabilities = ["update"]
 }
 
 path "auth/approle/role/notifyr-app-role/secret-id" {
-  capabilities = ["update"]
+  capabilities = ["update","create","read"]
 }
 
 EOF
