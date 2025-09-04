@@ -138,6 +138,19 @@ class ConfigService(_service.BaseService):
         if isinstance(val, str) and not val == "":
             return val
         return default
+    
+
+    def get_value_from_mode(self,dev_value,prod_value,test_value=None,):
+        match self.MODE:
+            case MODE.DEV_MODE:
+                return dev_value
+            case MODE.PROD_MODE:
+                return prod_value
+
+            case MODE.TEST_MODE:
+                return test_value
+            case _:
+                return dev_value
 
     def set_config_value(self):
 
@@ -145,17 +158,16 @@ class ConfigService(_service.BaseService):
         self.PROCESS_PID = str(os.getpid())
         self.PARENT_PID = str(os.getppid())
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
+
         self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8088)
         self.ADDR=self.getenv('ADDR','0.0.0.0')
 
         self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
-
         
         self.BASE_DIR = self.getenv("BASE_DIR", './')
         self.ASSET_DIR = self.getenv("ASSETS_DIR", 'assets/')
-        self.ASSET_LANG = self.getenv("ASSET_LANG",'en')
+        
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), True)
-
 
         self.HTTP_MODE = self.getenv("HTTP_MODE",'HTTP')
         self.HTTPS_CERTIFICATE = self.getenv("HTTPS_CERTIFICATE", 'cert.pem')
@@ -206,7 +218,6 @@ class ConfigService(_service.BaseService):
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.API_KEY = self.getenv("API_KEY")
 
-
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
         self.CONTACT_JWT_SECRET_KEY= self.getenv('CONTACT_JWT_SECRET_KEY','test')
 
@@ -214,6 +225,10 @@ class ConfigService(_service.BaseService):
 
         self.RSA_SECRET_PASSWORD = self.getenv('RSA_SECRET_PASSWORD','test')
 
+
+        # HASHI CORP VAULT CONFIG #
+
+        self.VAULT_ADDR = self.getenv('VAULT_ADDR','http:127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http:0.0.0.0:8200')
 
         # MONGODB CONFIG #
 

@@ -12,6 +12,7 @@ from app.depends.funcs_dep import get_task, get_template
 from app.interface.email import EmailSendInterface
 from app.models.email_model import BaseEmailSchedulerModel, CustomEmailModel, CustomEmailSchedulerModel, EmailSpamDetectionModel, EmailTemplateModel, EmailTemplateSchedulerModel
 from app.services.assets_service import AssetService
+from app.services.setting_service import SettingService
 from app.services.task_service import TaskManager, TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.link_service import LinkService
@@ -31,6 +32,7 @@ class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterfac
         super().__init__(True)
         pipes.InjectTemplateInterface.__init__(self,Get(AssetService),'html',True)
         self.configService=Get(ConfigService)
+        self.settingService = Get(SettingService)
         self.bs4 = bs4
 
     async def pipe(self,scheduler:BaseEmailSchedulerModel):
@@ -39,7 +41,7 @@ class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterfac
 
         signature:HTMLTemplate = self._inject_template(scheduler.signature.template)
         sign_data = scheduler.signature.data
-        _,_signature = signature.build(sign_data,target_lang= self.configService.ASSET_LANG,validate=True,bs4=self.bs4)
+        _,_signature = signature.build(sign_data,target_lang= self.settingService.ASSET_LANG,validate=True,bs4=self.bs4)
         scheduler._signature = _signature
         return {}
 
@@ -80,6 +82,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
         self.taskService: TaskService = taskService
         self.emailReaderService:EmailReaderService = emailReaderService
         self.linkService= Get(LinkService)
+        self.settingService = Get(SettingService)
 
     
     @UseLimiter(limit_value="10/minutes")
@@ -123,12 +126,12 @@ class EmailTemplateRessource(BaseHTTPRessource):
                     if tracking_meta == None:
                         continue
 
-                    _,data = template.build(mail_content.data,self.configService.ASSET_LANG,tracking_meta[TRACKING_META_CALLBACK],tracking_url=tracking_meta[TRACKING_META_URL], signature=signature)
+                    _,data = template.build(mail_content.data,self.settingService.ASSET_LANG,tracking_meta[TRACKING_META_CALLBACK],tracking_url=tracking_meta[TRACKING_META_URL], signature=signature)
                     data = parse_mime_content(data,mail_content.mimeType)
                     datas.append(data)
             else:
                 
-                _,data = template.build(mail_content.data,self.configService.ASSET_LANG,signature=signature)
+                _,data = template.build(mail_content.data,self.settingService.ASSET_LANG,signature=signature)
                 datas = parse_mime_content(data,mail_content.mimeType)
                 mail_content.meta._Message_ID = tracker.make_msgid
 
