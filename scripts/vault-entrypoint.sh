@@ -2,6 +2,8 @@
 
 VAULT_CONFIG=/vault/config/vault.hcl
 VAULT_SECRETS_DIR=/vault/secrets
+VAULT_SHARED_DIR=/vault/shared
+
 
 wait_for_server() {
   # Wait for listener

@@ -89,12 +89,12 @@ services:
       - approle_role_id
     #restart: always
     #stop_grace_period: 5m
-    healthcheck:
-      test: ["CMD-SHELL", '[ "$VAULT_CONTAINER_READY" = "true" ]']
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
+    # healthcheck:
+    #   test: ["CMD-SHELL", '[ "$VAULT_CONTAINER_READY" = "true" ]']
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 5
+    #   start_period: 120s
 
   pgadmin:
     image: dpage/pgadmin4
