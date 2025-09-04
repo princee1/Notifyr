@@ -85,7 +85,6 @@ services:
       - vault-shared:/vault/shared
       - vault-secrets:/vault/secrets
       - vault-audit:/vault/logs
-      - cron-log:/var/log/cron/
     secrets:
       - approle_role_id
     #restart: always
@@ -246,7 +245,6 @@ volumes:
   vault-shared: {} # holds secret_id
   vault-secrets: {} # holds root_token/unseal_key (optional, only for admin access)
   vault-audit: {}
-  cron-log: {}
 
   mongo-data:
     driver: local

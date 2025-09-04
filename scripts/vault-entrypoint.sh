@@ -25,7 +25,7 @@ wait_active_server(){
       echo "Vault is not running in HA mode (single node) — safe to continue"
       break
     fi
-    echo "Waiting for Vault to become active..."
+    #echo "Waiting for Vault to become active..."
     sleep 2
   done
 }
@@ -41,8 +41,27 @@ unseal_vault(){
   fi
 }
 
+# Start Vault in background
+vault server -config="${VAULT_CONFIG}" &
+VAULT_PID=$!
 
-echo "Starting cron in foreground..."
+wait_for_server 
+
+unseal_vault
+
+wait_active_server
+
+echo "++++++++++++++++++++++++++++++++++++++++++++++       +++++++++++++++++++++++++++++++++++++++++"
+echo "                                    Server active!"
+
 # Start the Cron deamon
-crond -f -l 8 -d 8 -c /var/spool/cron/crontabs
+echo "Starting the cron task"
+supercronic -debug /vault/cron/crontab >> /vault/logs/supercronic.log 2>&1 &
+
+echo "++++++++++++++++++++++++++++++++++++++++++++++       +++++++++++++++++++++++++++++++++++++++++"
+
+export VAULT_CONTAINER_READY="true"
+
+# Bring it to the foreground
+wait "$VAULT_PID"
 
