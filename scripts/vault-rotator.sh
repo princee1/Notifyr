@@ -19,12 +19,14 @@ RESP=$(curl -s \
     --request POST \
     "$VAULT_ADDR/v1/auth/approle/role/$NOTIFYR_APP_ROLE/secret-id")
     
-echo "$RESP"
-
 NEW_SECRET=$(echo "$RESP" | jq -r .data.secret_id)
 
+echo "Successfully got the secret_id"
+
 # Store the new secret_id securely
-echo "$NEW_SECRET" > "$VAULT_SHARED_DIR/secret-id.txt"
+echo -n "$NEW_SECRET" > "$VAULT_SHARED_DIR/secret-id.txt"
+
+echo "Secret id stored successfully"
 
 echo "++++++++++++++++++++++++++++++++++  ++++++++++++++++++++++++++++++++++++++"
 

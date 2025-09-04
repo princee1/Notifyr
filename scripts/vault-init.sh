@@ -5,7 +5,6 @@ VAULT_SECRETS_DIR=/vault/secrets
 VAULT_SHARED_DIR=/vault/shared
 
 NOTIFYR_APP_ROLE="notifyr-app-role"
-NOTIFYR_ROTATE_APP_ROLE="notifiyr-rotate-app-role"
 
 export VAULT_ADDR="http://127.0.0.1:8200"
 
@@ -64,7 +63,7 @@ set_approle(){
   vault write auth/approle/role/"$NOTIFYR_APP_ROLE" \
     token_policies="app-policy" \
     token_ttl="30m" \
-    token_max_ttl="24h" \
+    token_max_ttl="2h" \
     secret_id_ttl="30m" \
     secret_id_num_uses=0 \
     enable_local_secret_ids=true
@@ -77,7 +76,7 @@ set_approle(){
 
   echo -n "$ROLE_ID" > "$VAULT_SECRETS_DIR/role_id.txt"
   echo -n "$SECRET_ID" > "$VAULT_SHARED_DIR/secret-id.txt"
-
+  
   chown root:vaultuser "$VAULT_SHARED_DIR/secret-id.txt"
   chmod 664 "$VAULT_SHARED_DIR/secret-id.txt"
 
@@ -88,11 +87,11 @@ set_approle(){
 
 set_rotate_approle() {
 
-  vault policy write "$NOTIFYR_ROTATE_APP_ROLE" /vault/policies/rotate-approle.hcl
+  vault policy write rotator /vault/policies/rotate-approle.hcl
 
-  TOKEN=$(vault token create -policy="$NOTIFYR_ROTATE_APP_ROLE"-period=24h -format=json | jq -r .auth.client_token)
+  TOKEN=$(vault token create -policy=rotator -period=24h -format=json | jq -r .auth.client_token)
 
-  echo "$TOKEN" > "$VAULT_SECRETS_DIR/rotate-token.txt"
+  echo -n "$TOKEN" > "$VAULT_SECRETS_DIR/rotate-token.txt"
 
   chown vaultuser:vaultuser "$VAULT_SECRETS_DIR/rotate-token.txt"
 

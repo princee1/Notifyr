@@ -87,7 +87,7 @@ RUN chmod 770 /usr/local/bin/vault-rotator.sh
 RUN touch /vault/cron/crontab
 
 RUN cat <<EOF > /vault/cron/crontab
-*/30 * * * * /usr/local/bin/vault-rotator.sh >> /vault/logs/vault-rotator.log 2>&1
+0 * * * * /usr/local/bin/vault-rotator.sh >> /vault/logs/vault-rotator.log 2>&1
 EOF
 
 # Switch to non-root user

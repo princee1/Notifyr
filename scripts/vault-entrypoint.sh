@@ -58,6 +58,10 @@ echo "                                    Server active!"
 echo "Starting the cron task"
 supercronic -debug /vault/cron/crontab >> /vault/logs/supercronic.log 2>&1 &
 
+
+TIMESTAMP=$(date +%s)
+echo -n "supercronic=$TIMESTAMP" > "$VAULT_SHARED_DIR/seed-time.txt"
+
 echo "++++++++++++++++++++++++++++++++++++++++++++++       +++++++++++++++++++++++++++++++++++++++++"
 
 export VAULT_CONTAINER_READY="true"
