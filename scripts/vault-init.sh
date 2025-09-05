@@ -62,9 +62,9 @@ set_approle(){
 
   vault write auth/approle/role/"$NOTIFYR_APP_ROLE" \
     token_policies="app-policy" \
-    token_ttl="30m" \
-    token_max_ttl="2h" \
-    secret_id_ttl="30m" \
+    token_ttl="45m" \
+    token_max_ttl="90m" \
+    secret_id_ttl="2h" \
     secret_id_num_uses=0 \
     enable_local_secret_ids=true
 

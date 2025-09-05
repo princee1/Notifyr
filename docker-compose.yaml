@@ -1,7 +1,7 @@
 services:
   settingdb:
     image: json-server:latest
-    #container_name: ntfyr-settingdb
+    container_name: settingdb
     build:
       context: .
       dockerfile: ./docker/Dockerfile.settingdb
@@ -12,7 +12,7 @@ services:
 
   redis:
     image: redis #Queue for the taks
-    #container_name: ntfyr-redis
+    container_name: redis
     restart: always
     ports:
       - 6379:6379
@@ -39,7 +39,7 @@ services:
 
   mongodb:
     image: mongo:latest
-    #container_name: ntfyr-mongo
+    container_name: mongo
     restart: always
     ports:
       - "27017:27017"
@@ -54,7 +54,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.postgres
     image: postgres:15
-    #container_name: ntfyr-postgres
+    container_name: postgres
     restart: always
     ports:
       - "5432:5432"
@@ -70,7 +70,7 @@ services:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.vault
-    container_name: ntfyr-vault
+    container_name: vault
     labels:
       - com.docker.compose.service=vault
     image: hashicorp/vault:1.16

@@ -43,7 +43,7 @@ path "notifyr/tokens/*" {
 }
 
 path "notifyr/profiles/*" {
-  capabilities = ["read","list","create","update"]
+  capabilities = ["read","list","create","update","delete"]
 }
 
 EOF
