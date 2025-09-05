@@ -122,9 +122,23 @@ wait_active_server(){
   done
 }
 
-create_default_key(){
+create_default_token(){
+
+  TOKENS="JWT_SECRET_KEY ON_TOP_SECRET_KEY CONTACTS_HASH_KEY CONTACT_JWT_SECRET_KEY CLIENT_PASSWORD_HASH_KEY RSA_SECRET_PASSWORD API_ENCRYPT_TOKEN"
+
+  ARGS=""
+  for token in $TOKENS
+  do
+    TEMP=$(pwgen -s 128 1)
+    ARGS="$ARGS $token=$TEMP"
+  done
+
+  vault kv put notifyr/tokens $ARGS
+
+  vault kv put notifyr/tokens JWT_ALGORITHM="HS256"
 
   echo "Creating default key"
+
 
 }
 
@@ -147,14 +161,12 @@ set_approle
 
 set_rotate_approle
 
-create_default_key
+create_default_token
 
 unset VAULT_TOKEN
 
 chown -R vaultuser:vaultuser /vault/data
 chmod 700 /vault/data
-
-
 
 kill "$VAULT_PID"
 wait "$VAULT_PID" || true

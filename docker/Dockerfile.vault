@@ -4,7 +4,7 @@ FROM hashicorp/vault:1.16
 USER root
 
 # Install dependencies
-RUN apk add --no-cache bash curl jq tini ca-certificates
+RUN apk add --no-cache bash curl jq tini ca-certificates pwgen
 
 # Create Vault config directories
 RUN mkdir -p /vault/config /vault/data /vault/logs /vault/shared /vault/secrets /home/vaultuser /vault/cron/
@@ -38,11 +38,11 @@ EOF
 RUN mkdir -p /vault/policies
 RUN cat <<EOF > /vault/policies/app-policy.hcl
 
-path "secret/notifyr/tokens/*" {
+path "notifyr/tokens/*" {
   capabilities = ["read", "list"]
 }
 
-path "secret/notifyr/profiles/*" {
+path "notifyr/profiles/*" {
   capabilities = ["read","list","create","update"]
 }
 
