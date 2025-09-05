@@ -248,7 +248,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 @Service
 class SecurityService(BaseService, EncryptDecryptInterface):
 
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService) -> None:
         super().__init__()
         self.configService = configService
         self.fileService = fileService
@@ -264,7 +264,7 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         if ip_addr != sent_ip_addr:
             return False
 
-        if time.time() - float(token[1]) > self.configService.API_EXPIRATION:
+        if time.time() - float(token[1]) > self.settingService.API_EXPIRATION:
             return False
 
         if token[2] != self.configService.API_KEY:
