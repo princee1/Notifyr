@@ -65,7 +65,7 @@ class SettingService(BaseService):
         if not self.jsonFile.exists or self.jsonFile.data == None:
             self.jsonFile.data = DEFAULT_SETTING
         
-        self._data = self.jsonFile.data
+        self._data = self.jsonFile.data[SettingDBConstant.BASE_JSON_DB]
 
     async def aio_get_settings(self):
         if self.configService.MODE == MODE.DEV_MODE:
