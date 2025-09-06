@@ -11,7 +11,7 @@ services:
       - settingdb-data:/data
 
   redis:
-    image: redis #Queue for the taks
+    image: redis:latest #Queue for the taks
     container_name: redis
     restart: always
     ports:
@@ -39,7 +39,7 @@ services:
 
   mongodb:
     image: mongo:latest
-    container_name: mongo
+    container_name: mongodb
     restart: always
     ports:
       - "27017:27017"
@@ -117,6 +117,9 @@ services:
     #   replicas: 3
     # labels:
     #   - "com.docker.compose.service=worker"
+    volumes:
+      - vault-shared:/vault/shared
+      - vault-secrets:/vault/secrets
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
@@ -132,7 +135,7 @@ services:
   beat:
     image: notifyr:redbeat
     command: ["make", "redbeat"]
-    #container_name: ntfyr-redbeat
+    container_name: beat
     # labels:
     #   - com.docker.compose.service=beat
     build:
@@ -219,6 +222,8 @@ services:
       - 8088:8088
     volumes:
       - ./rate_limits.json:/run/secrets/rate_limits:ro
+      - vault-shared:/vault/shared:ro
+      - vault-secrets:/vault/secrets:ro
     build:
       context: ./
       dockerfile: Dockerfile

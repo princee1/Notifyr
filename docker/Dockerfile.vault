@@ -65,7 +65,19 @@ RUN adduser -D -u 1500 -g vaultuser vaultuser \
     && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared /home/vaultuser /vault/cron \
     && chmod 700 /vault/data /vault/logs /home/vaultuser /vault/cron \
     && chown root:vaultuser /vault/secrets \
-    && chmod 750 /vault/secrets
+    && chmod 755 /vault/secrets /vault/shared
+
+# Install supercronic
+ENV SUPERCRONIC_VERSION=0.2.31
+ADD https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_VERSION}/supercronic-linux-amd64 /usr/local/bin/supercronic
+RUN chmod 755 /usr/local/bin/supercronic
+
+RUN touch /vault/cron/crontab
+
+RUN cat <<EOF > /vault/cron/crontab
+0 * * * * /usr/local/bin/vault-rotator.sh >> /vault/logs/vault-rotator.log 2>&1
+EOF
+
 
 # Copy scripts with correct permissions
 COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
@@ -73,22 +85,11 @@ COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
 # Initialize Vault (can run as root for setup)
 RUN /usr/local/bin/vault-init.sh
 
-# Install supercronic
-ENV SUPERCRONIC_VERSION=0.2.31
-ADD https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_VERSION}/supercronic-linux-amd64 /usr/local/bin/supercronic
-RUN chmod 755 /usr/local/bin/supercronic
-
 COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh
 
 RUN chmod +x /usr/local/bin/vault-entrypoint.sh
 RUN chmod 770 /usr/local/bin/vault-rotator.sh
-
-RUN touch /vault/cron/crontab
-
-RUN cat <<EOF > /vault/cron/crontab
-0 * * * * /usr/local/bin/vault-rotator.sh >> /vault/logs/vault-rotator.log 2>&1
-EOF
 
 # Switch to non-root user
 USER vaultuser

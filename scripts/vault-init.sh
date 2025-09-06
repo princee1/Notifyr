@@ -103,6 +103,8 @@ set_rotate_approle() {
 
   chmod 640 "$VAULT_SECRETS_DIR/rotate-token.txt"
 
+  echo "Setting up Rotate App Role"
+
 }
 
 wait_active_server(){
@@ -147,21 +149,36 @@ create_default_token(){
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
 
+
+echo "***************************                     *********************"
 wait_for_server 
+echo "***************************                     *********************"
 
+echo "***************************                     *********************"
 init_vault
+echo "***************************                     *********************"
 
+
+echo "***************************                     *********************"
 wait_active_server
+echo "***************************                     *********************"
+
 
 ROOT_TOKEN=$(cat "$VAULT_SECRETS_DIR/root_token.txt")
 
 export VAULT_TOKEN="$ROOT_TOKEN"
 
+echo "***************************                     *********************"
 set_approle
+echo "***************************                     *********************"
 
+echo "***************************                     *********************"
 set_rotate_approle
+echo "***************************                     *********************"
 
+echo "***************************                     *********************"
 create_default_token
+echo "***************************                     *********************"
 
 unset VAULT_TOKEN
 
