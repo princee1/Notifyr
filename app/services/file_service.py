@@ -1,7 +1,7 @@
 from app.interface.timers import IntervalInterface
 from .config_service import ConfigService
 from app.definition._service import BaseService,Service,AbstractServiceClass
-from app.utils.fileIO import FDFlag, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
+from app.utils.fileIO import FDFlag, get_file_info, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 
@@ -13,15 +13,16 @@ class FileService(BaseService,):
         super().__init__()
         self.configService = configService
         
-    def loadJSON(self):
-        pass
-
     def readFileDetail(self, path, flag:FDFlag, enc="utf-8"):
 
         filename  = getFilenameOnly(path)
         content = readFileContent(path, flag, enc)
         dirName = getFileDir(path)
+
         return filename,content,dirName
+
+    def get_file_info(self,path):
+        return get_file_info(path)
     
     def readFile(self, path,flag:FDFlag,enc= "utf-8"):
         return readFileContent(path, flag, enc)
