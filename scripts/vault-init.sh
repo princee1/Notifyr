@@ -62,9 +62,9 @@ set_approle(){
 
   vault write auth/approle/role/"$NOTIFYR_APP_ROLE" \
     token_policies="app-policy" \
-    token_ttl="30m" \
-    token_max_ttl="2h" \
-    secret_id_ttl="30m" \
+    token_ttl="45m" \
+    token_max_ttl="90m" \
+    secret_id_ttl="2h" \
     secret_id_num_uses=0 \
     enable_local_secret_ids=true
 
@@ -103,6 +103,8 @@ set_rotate_approle() {
 
   chmod 640 "$VAULT_SECRETS_DIR/rotate-token.txt"
 
+  echo "Setting up Rotate App Role"
+
 }
 
 wait_active_server(){
@@ -122,9 +124,23 @@ wait_active_server(){
   done
 }
 
-create_default_key(){
+create_default_token(){
+
+  TOKENS="JWT_SECRET_KEY ON_TOP_SECRET_KEY CONTACTS_HASH_KEY CONTACT_JWT_SECRET_KEY CLIENT_PASSWORD_HASH_KEY RSA_SECRET_PASSWORD API_ENCRYPT_TOKEN"
+
+  ARGS=""
+  for token in $TOKENS
+  do
+    TEMP=$(pwgen -s 128 1)
+    ARGS="$ARGS $token=$TEMP"
+  done
+
+  vault kv put notifyr/tokens $ARGS
+
+  vault kv put notifyr/tokens JWT_ALGORITHM="HS256"
 
   echo "Creating default key"
+
 
 }
 
@@ -133,28 +149,41 @@ create_default_key(){
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
 
+
+echo "***************************                     *********************"
 wait_for_server 
+echo "***************************                     *********************"
 
+echo "***************************                     *********************"
 init_vault
+echo "***************************                     *********************"
 
+
+echo "***************************                     *********************"
 wait_active_server
+echo "***************************                     *********************"
+
 
 ROOT_TOKEN=$(cat "$VAULT_SECRETS_DIR/root_token.txt")
 
 export VAULT_TOKEN="$ROOT_TOKEN"
 
+echo "***************************                     *********************"
 set_approle
+echo "***************************                     *********************"
 
+echo "***************************                     *********************"
 set_rotate_approle
+echo "***************************                     *********************"
 
-create_default_key
+echo "***************************                     *********************"
+create_default_token
+echo "***************************                     *********************"
 
 unset VAULT_TOKEN
 
 chown -R vaultuser:vaultuser /vault/data
 chmod 700 /vault/data
-
-
 
 kill "$VAULT_PID"
 wait "$VAULT_PID" || true

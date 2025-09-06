@@ -182,7 +182,6 @@ class ConfigService(_service.BaseService):
         self.OAUTH_CLIENT_SECRET = self.getenv('OAUTH_CLIENT_SECRET')
         self.OAUTH_OUTLOOK_TENANT_ID = self.getenv('OAUTH_TENANT_ID')
         
-
         self.SEND_MAIL_METHOD = self.getenv("SEND_MAIL_METHOD", 'SMTP')
         self.SMTP_EMAIL_HOST = self.getenv("SMTP_EMAIL_HOST").upper()
         self.SMTP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("SMTP_EMAIL_PORT"))
@@ -207,16 +206,15 @@ class ConfigService(_service.BaseService):
         self.TWILIO_PROD_URL = self.getenv("TWILIO_PROD_URL", None)
         self.TWILIO_TEST_URL = self.getenv("TWILIO_TEST_URL", None)
 
+        self.ADMIN_KEY = self.getenv("ADMIN_KEY")
+        self.API_KEY = self.getenv("API_KEY")
+        self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
+
         self.JWT_SECRET_KEY = self.getenv("JWT_SECRET_KEY")
         self.JWT_ALGORITHM = self.getenv("JWT_ALGORITHM",'HS256')
         self.ON_TOP_SECRET_KEY = self.getenv("ON_TOP_SECRET_KEY")
-        self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
-
-        self.API_EXPIRATION = ConfigService.parseToInt(self.getenv("API_EXPIRATION"), 360000000)
-        self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
         
-        self.ADMIN_KEY = self.getenv("ADMIN_KEY")
-        self.API_KEY = self.getenv("API_KEY")
+        self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
 
         self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
         self.CONTACT_JWT_SECRET_KEY= self.getenv('CONTACT_JWT_SECRET_KEY','test')
@@ -228,7 +226,7 @@ class ConfigService(_service.BaseService):
 
         # HASHI CORP VAULT CONFIG #
 
-        self.VAULT_ADDR = self.getenv('VAULT_ADDR','http:127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http:0.0.0.0:8200')
+        self.VAULT_ADDR = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
 
         # MONGODB CONFIG #
 

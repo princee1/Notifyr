@@ -1,5 +1,6 @@
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from dataclasses import dataclass
+import datetime
 from enum import Enum
 import os
 import sys
@@ -99,6 +100,13 @@ def getFileDir(path: str):
 
 def getFilenameOnly(path: str):
     return os.path.split(path)[1]
+
+def get_file_info(path):
+    stat = os.stat(path)
+    size = stat.st_size  # Size in bytes
+    last_modified = datetime.datetime.fromtimestamp(stat.st_mtime)  # Last modification time as datetime
+    return size, last_modified
+
 
 
 @dataclass

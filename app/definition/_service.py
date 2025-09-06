@@ -43,6 +43,10 @@ class ServiceStatus(Enum):
     """
     The service is operational but may have some features or functionalities that are not fully working as expected, potentially leading to minor issues or inconveniences for users.
     """
+    MAJOR_SYSTEM_FAILURE=6
+    """
+    The fact that the service does not work will not permit the program to properly run
+    """
 
 
 class Report(TypedDict):
@@ -116,6 +120,7 @@ STATUS_TO_ERROR_MAP = {
     ServiceStatus.TEMPORARY_NOT_AVAILABLE: BuildWarningError,
     ServiceStatus.PARTIALLY_AVAILABLE: BuildWarningError,
     ServiceStatus.WORKS_ALMOST_ATT: BuildSkipError,
+    ServiceStatus.MAJOR_SYSTEM_FAILURE:BuildAbortError
 }
 
 #################################            #####################################
@@ -149,7 +154,7 @@ class StateProtocolMalFormattedError(BuildError):
 
 #################################            #####################################
 
-WAIT_TIME = 0.05
+WAIT_TIME = 1
 
 class BaseService():
     CONTEXT:Literal['sync','async'] = 'sync'
@@ -304,8 +309,9 @@ class BaseService():
         except BuildAbortError as e:
             self.prettyPrinter.error(
                 f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
+            print(e)
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
-            
+            self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
             exit(-1)
 
         except BuildWarningError as e:
@@ -336,7 +342,7 @@ class BaseService():
             self.prettyPrinter.error(
                 f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
-            
+            self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
             exit(-1)    
 
 

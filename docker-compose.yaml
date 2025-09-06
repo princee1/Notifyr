@@ -1,7 +1,7 @@
 services:
   settingdb:
     image: json-server:latest
-    #container_name: ntfyr-settingdb
+    container_name: settingdb
     build:
       context: .
       dockerfile: ./docker/Dockerfile.settingdb
@@ -11,8 +11,8 @@ services:
       - settingdb-data:/data
 
   redis:
-    image: redis #Queue for the taks
-    #container_name: ntfyr-redis
+    image: redis:latest #Queue for the taks
+    container_name: redis
     restart: always
     ports:
       - 6379:6379
@@ -39,7 +39,7 @@ services:
 
   mongodb:
     image: mongo:latest
-    #container_name: ntfyr-mongo
+    container_name: mongodb
     restart: always
     ports:
       - "27017:27017"
@@ -54,7 +54,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.postgres
     image: postgres:15
-    #container_name: ntfyr-postgres
+    container_name: postgres
     restart: always
     ports:
       - "5432:5432"
@@ -70,7 +70,7 @@ services:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.vault
-    container_name: ntfyr-vault
+    container_name: vault
     labels:
       - com.docker.compose.service=vault
     image: hashicorp/vault:1.16
@@ -117,6 +117,9 @@ services:
     #   replicas: 3
     # labels:
     #   - "com.docker.compose.service=worker"
+    volumes:
+      - vault-shared:/vault/shared
+      - vault-secrets:/vault/secrets
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
@@ -132,7 +135,7 @@ services:
   beat:
     image: notifyr:redbeat
     command: ["make", "redbeat"]
-    #container_name: ntfyr-redbeat
+    container_name: beat
     # labels:
     #   - com.docker.compose.service=beat
     build:
@@ -219,6 +222,8 @@ services:
       - 8088:8088
     volumes:
       - ./rate_limits.json:/run/secrets/rate_limits:ro
+      - vault-shared:/vault/shared:ro
+      - vault-secrets:/vault/secrets:ro
     build:
       context: ./
       dockerfile: Dockerfile

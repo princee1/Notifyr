@@ -19,3 +19,4 @@ from .aws_service import AmazonS3Service,AmazonSESService,AmazonSNSService
 from .health_service import HealthService
 from .rate_limiter_service import RateLimiterService
 from .setting_service import SettingService,DEFAULT_SETTING
+from .secret_service import HCVaultService

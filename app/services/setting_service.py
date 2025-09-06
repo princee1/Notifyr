@@ -3,20 +3,10 @@ from app.models.properties_model import SettingsModel
 from app.services.config_service import ConfigService, MODE
 from app.services.database_service import JSONServerDBService
 from app.utils.fileIO import JSONFile
-from app.utils.constant import SettingDBConstant
+from app.utils.constant import SettingDBConstant,DEFAULT_SETTING
 
 DEV_MODE_SETTING_FILE = './setting_db.json'
 
-SECONDS_IN_A_HOUR = 3600
-
-DEFAULT_SETTING = {
-    SettingDBConstant.AUTH_EXPIRATION_SETTING: SECONDS_IN_A_HOUR * 10,
-    SettingDBConstant.REFRESH_EXPIRATION_SETTING: SECONDS_IN_A_HOUR * 24 * 1,
-    SettingDBConstant.CHAT_EXPIRATION_SETTING: 3600,
-    SettingDBConstant.ASSET_LANG_SETTING: "en",
-    SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING:360000000
-    
-}
 
 SETTING_SERVICE_SYNC_BUILD_STATE = DEFAULT_BUILD_STATE = -1
 SETTING_SERVICE_ASYNC_BUILD_STATE = 1
@@ -75,7 +65,7 @@ class SettingService(BaseService):
         if not self.jsonFile.exists or self.jsonFile.data == None:
             self.jsonFile.data = DEFAULT_SETTING
         
-        self._data = self.jsonFile.data
+        self._data = self.jsonFile.data[SettingDBConstant.BASE_JSON_DB]
 
     async def aio_get_settings(self):
         if self.configService.MODE == MODE.DEV_MODE:

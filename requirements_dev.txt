@@ -68,6 +68,7 @@ httpcore==0.9.1
 httplib2==0.22.0
 httpx==0.13.3
 humanize==4.12.2
+hvac==2.3.0
 hyperframe==5.2.0
 idna==2.10
 injector==0.21.0
@@ -115,6 +116,7 @@ pydantic==2.10.6
 pydantic_core==2.27.2
 pyfiglet==0.7
 Pygments==2.19.1
+pyhcl==0.4.5
 PyJWT==2.10.1
 pymongo==4.11.3
 pyparsing==3.2.1
