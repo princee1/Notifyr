@@ -91,9 +91,11 @@ class HCVaultService(BaseService,IntervalInterface):
             if not self.client.ha_status['is_self']:
                 self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
 
-            print(self.client.generate_root_status)
-            print(self.client.rekey_status)
-            print(self.client.seal_status)
+            if not self.client.seal_status['initialized']:
+                raise BuildAbortError('Vault Db is not initialized')
+            
+            if self.client.seal_status['sealed']:
+                raise BuildAbortError('Cant access vault since it sealed')
             
         except hvac.exceptions.InvalidRequest as e:
             raise BuildAbortError(f'"Invalid:", {e}')
