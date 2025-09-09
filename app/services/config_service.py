@@ -230,7 +230,7 @@ class ConfigService(_service.BaseService):
 
         # MONGODB CONFIG #
 
-        self.MONGO_URI = self.getenv('MONGO_URI','mongodb://localhost:27017' if self.MODE == MODE.DEV_MODE else 'mongodb://mongodb:27017')
+        self.MONGO_HOST = self.getenv('MONGO_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'mongodb')
 
         # SETTING DB CONFIG #
         self.SETTING_DB_URL = self.getenv("SETTING_DB_URL","http://localhost:3000" if self.MODE == MODE.DEV_MODE else "http://settingdb:3000")

@@ -52,7 +52,7 @@ class MongooseService(DatabaseService): # Chat data
     #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__(configService,fileService)
-        self.mongo_uri = self.configService.getenv('MONGO_URI')
+        self.mongo_uri = F'mongodb://{self.configService.MONGO_HOST}:27017'
 
     async def save(self, model,*args):
         return await self.engine.save(model,*args)
