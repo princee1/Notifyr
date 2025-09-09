@@ -1,4 +1,4 @@
-FROM hashicorp/vault:1.16
+FROM hashicorp/vault:latest
 
 # Use root for setup
 USER root
@@ -38,12 +38,61 @@ EOF
 RUN mkdir -p /vault/policies
 RUN cat <<EOF > /vault/policies/app-policy.hcl
 
-path "notifyr/tokens/*" {
-  capabilities = ["read", "list"]
+# ---- Notifyr ENGINE ----
+
+path "notifyr-secrets/" {
+  capabilities = ["list"]
 }
 
-path "notifyr/profiles/*" {
-  capabilities = ["read","list","create","update","delete"]
+# ---- tokens ----
+path "notifyr-secrets/tokens" {
+  capabilities = ["read","list"]
+}
+
+# ---- profiles ----
+
+path "notifyr-secrets/profiles" {
+  capabilities =["read","list"]
+}
+
+path "notifyr-secrets/profiles/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+# ---- messages ----
+
+path "notifyr-secrets/messages" {
+  capabilities = ["read","list"]
+}
+
+
+path "notifyr-secrets/messages/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+# ---- Transit ENGINE ----
+
+path "transit/" {
+  capabilities = ["list"]
+}
+
+# ---- profiles-transit ----
+path "transit/encrypt/profiles-key" {
+  capabilities = ["update"]
+}
+
+path "transit/decrypt/profiles-key" {
+  capabilities = ["update"]
+}
+
+# ---- secret message-transit ----
+
+path "transit/encrypt/messages-key" {
+  capabilities = ["update"]
+}
+
+path "transit/decrypt/messages-key" {
+  capabilities = ["update"]
 }
 
 EOF
@@ -56,6 +105,10 @@ path "auth/token/renew-self" {
 
 path "auth/approle/role/notifyr-app-role/secret-id" {
   capabilities = ["update","create","read"]
+}
+
+path "transit/keys/*/rotate" {
+  capabilities = ["update"]
 }
 
 EOF
@@ -76,8 +129,8 @@ RUN touch /vault/cron/crontab
 
 RUN cat <<EOF > /vault/cron/crontab
 0 * * * * /usr/local/bin/vault-rotator.sh >> /vault/logs/vault-rotator.log 2>&1
+0 0 * * * /usr/local/bin/vault-transit-rotator.sh >> /vault/logs/vault-transit-rotator.log 2>&1
 EOF
-
 
 # Copy scripts with correct permissions
 COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
@@ -87,9 +140,10 @@ RUN /usr/local/bin/vault-init.sh
 
 COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh
+COPY --chown=vaultuser:vaultuser ./scripts/vault-transit-rotator.sh /usr/local/bin/vault-transit-rotator.sh
 
 RUN chmod +x /usr/local/bin/vault-entrypoint.sh
-RUN chmod 770 /usr/local/bin/vault-rotator.sh
+RUN chmod 770 /usr/local/bin/vault-rotator.sh /usr/local/bin/vault-transit-rotator.sh
 
 # Switch to non-root user
 USER vaultuser

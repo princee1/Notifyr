@@ -52,11 +52,21 @@ init_vault(){
 
 }
 
+setup_engine(){
+  vault secrets enable -path=notifyr-secrets -seal-wrap -version=1 kv
+  vault secrets enable -path=notifyr-transit transit 
+  vault secrets enable -path=notifyr-database database
+
+  vault write -f notifyr-transit/keys/profiles-key
+  vault write -f notifyr-transit/keys/messages-key
+  vault write -f notifyr-transit/keys/chat-key
+
+}
+
 set_approle(){
   
   # Setup AppRole and policy
   vault auth enable approle || true
-  vault secrets enable -path=secret -version=2 kv || true
 
   vault policy write app-policy /vault/policies/app-policy.hcl
 
@@ -99,7 +109,7 @@ set_rotate_approle() {
 
   echo -n "$TOKEN" > "$VAULT_SECRETS_DIR/rotate-token.txt"
 
-  chown vaultuser:vaultuser "$VAULT_SECRETS_DIR/rotate-token.txt"
+  chown root:vaultuser "$VAULT_SECRETS_DIR/rotate-token.txt"
 
   chmod 640 "$VAULT_SECRETS_DIR/rotate-token.txt"
 
@@ -135,20 +145,15 @@ create_default_token(){
     ARGS="$ARGS $token=$TEMP"
   done
 
-  vault kv put notifyr/tokens $ARGS
-
-  vault kv put notifyr/tokens JWT_ALGORITHM="HS256"
+  vault kv put notifyr-secrets/tokens $ARGS
 
   echo "Creating default key"
-
-
 }
 
 #################################               ##############################################
 # Start Vault as root in background
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
-
 
 echo "***************************                     *********************"
 wait_for_server 
@@ -158,15 +163,18 @@ echo "***************************                     *********************"
 init_vault
 echo "***************************                     *********************"
 
-
 echo "***************************                     *********************"
 wait_active_server
 echo "***************************                     *********************"
 
-
 ROOT_TOKEN=$(cat "$VAULT_SECRETS_DIR/root_token.txt")
 
 export VAULT_TOKEN="$ROOT_TOKEN"
+
+echo "***************************                     *********************"
+setup_engine
+echo "***************************                     *********************"
+
 
 echo "***************************                     *********************"
 set_approle
