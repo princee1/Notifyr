@@ -73,10 +73,13 @@ path "notifyr-secrets/messages/*" {
 
 # ---- Generation ID ---- 
 
-path "notifyr-generation/" {
-  capabilities=["create","update","read","delete"]
+path "notifyr-generation/data/generation-id" {
+  capabilities = ["create", "update", "read", "delete"]
 }
 
+path "notifyr-generation/metadata/generation-id" {
+  capabilities = ["read", "list", "delete"]
+}
 
 # ---- Transit ENGINE ----
 
