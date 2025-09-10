@@ -3,17 +3,6 @@ FROM hashicorp/vault:latest
 # Use root for setup
 USER root
 
-
-ARG POSTGRES_USER
-ARG POSTGRES_PASSWORD
-
-ARG MONGO_INITDB_ROOT_USERNAME
-ARG MONGO_INITDB_ROOT_PASSWORD
-
-ARG POSTGRES_HOST=postgres
-ARG MONGO_HOST=mongodb
-
-
 # Install dependencies
 RUN apk add --no-cache bash curl jq tini ca-certificates pwgen
 
@@ -47,6 +36,7 @@ EOF
 
 # Vault policies
 RUN mkdir -p /vault/policies
+
 RUN cat <<EOF > /vault/policies/app-policy.hcl
 
 # ---- Notifyr ENGINE ----
@@ -128,6 +118,19 @@ path "notifyr-database/rotate-root/*" {
 
 EOF
 
+RUN cat <<EOF > /vault/policies/db-config.hcl 
+
+path "notifyr-database/config/*" {
+  capabilities = ["write","update"]
+}
+
+path "notifyr-database/rotate-root/*" {
+  capabilities=["update"]
+}
+
+
+EOF
+
 # Add non-root user
 RUN adduser -D -u 1500 -g vaultuser vaultuser \
     && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared /home/vaultuser /vault/cron \
@@ -143,22 +146,23 @@ RUN chmod 755 /usr/local/bin/supercronic
 RUN touch /vault/cron/crontab
 
 RUN cat <<EOF > /vault/cron/crontab
-0 * * * * /usr/local/bin/vault-rotator.sh >> /vault/logs/vault-rotator.log 2>&1
+0 * * * * /usr/local/bin/vault-secret-id-rotator.sh >> /vault/logs/vault-secret-id-rotator.log 2>&1
 0 0 * * * /usr/local/bin/vault-transit-rotator.sh >> /vault/logs/vault-transit-rotator.log 2>&1
+0 0 0 * * /usr/local/bin/vault-db-admin-rotator.sh >> /vault/logs/vault-db-admin-rotator.log 2>&1
 EOF
 
 # Copy scripts with correct permissions
 COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
 
 # Initialize Vault (can run as root for setup)
-RUN /usr/local/bin/vault-init.sh ${POSTGRES_USER} ${POSTGRES_PASSWORD} ${MONGO_INITDB_ROOT_USERNAME} ${MONGO_INITDB_ROOT_PASSWORD} ${POSTGRES_HOST} ${MONGO_HOST}
+RUN /usr/local/bin/vault-init.sh 
 
 COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
-COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh
-COPY --chown=vaultuser:vaultuser ./scripts/vault-transit-rotator.sh /usr/local/bin/vault-transit-rotator.sh
+COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator/*.sh /usr/local/bin/
+
 
 RUN chmod +x /usr/local/bin/vault-entrypoint.sh
-RUN chmod 770 /usr/local/bin/vault-rotator.sh /usr/local/bin/vault-transit-rotator.sh
+RUN chmod 770 /usr/local/bin/*-rotator.sh 
 
 # Switch to non-root user
 USER vaultuser

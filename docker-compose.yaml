@@ -67,13 +67,6 @@ services:
 
   vault:
     build:
-      args:
-        - POSTGRES_USER=${POSTGRES_USER}
-        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-        - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
-        - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
-        - POSTGRES_HOST=0.0.0.0
-        - MONGO_HOST=0.0.0.0
       context: .
       dockerfile: ./docker/Dockerfile.vault
     container_name: vault
@@ -83,11 +76,14 @@ services:
     cap_add: ["IPC_LOCK"]
     ports:
       - "8200:8200"
-    env_file:
-      - .env
     environment:
-      VAULT_ADDR: "http://0.0.0.0:8200"
       VAULT_CONTAINER_READY: "false"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      MONGO_HOST: ${MONGO_HOST}
     volumes:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
@@ -279,3 +275,7 @@ volumes:
 secrets:
   approle_role_id:
     file: ./bootstrap/role_id.txt # created after first container init
+
+networks:
+  notifyr-net:
+    driver: bridge
