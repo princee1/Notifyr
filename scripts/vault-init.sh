@@ -202,14 +202,14 @@ setup_database_config(){
   local mongo_role
   mongo_role="mongo-ntfy-role"
 
-  vault write database/config/mongodb \
+  vault write notifyr-database/config/mongodb \
     plugin_name="mongodb-database-plugin" \
-    allowed_roles='"$mongo_role"' \
+    allowed_roles="$mongo_role"\
     connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin" \
     username="$MONGO_INITDB_ROOT_USERNAME" \
     password="$MONGO_INITDB_ROOT_PASSWORD"
   
-  vault write database/roles/$mongo_role \
+  vault write notifyr-database/roles/$mongo_role \
     db_name="mongodb" \
     creation_statements='{ "db": "notifyr", "roles": [
     { "role": "readWrite", "db": "notifyr", "collection":"agent" }] },
