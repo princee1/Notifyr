@@ -212,10 +212,10 @@ setup_database_config(){
   vault write notifyr-database/roles/$mongo_role \
     db_name="mongodb" \
     creation_statements='{ "db": "notifyr", "roles": [
-    { "role": "readWrite", "db": "notifyr", "collection":"agent" }] },
+    { "role": "readWrite", "db": "notifyr", "collection":"agent" },
     { "role": "readWrite", "db": "notifyr", "collection":"profile" },
     { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
-    { "role": "readWrite", "db": "notifyr", "collection":"chat" }' \
+    { "role": "readWrite", "db": "notifyr", "collection":"chat" }]}' \
     default_ttl="2h" \
     max_ttl="4h"
 
