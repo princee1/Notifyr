@@ -9,9 +9,10 @@ from pathlib import Path
 from app.services.database_service import RedisService
 import hvac
 from os import system
-
 from app.services.file_service import FileService
+from app.utils.constant import VaultConstant
 from app.utils.fileIO import FDFlag
+from app.utils.helper import b64_decode,b64_encode
 
 # @Service
 # class SecretService(BaseService):
@@ -23,19 +24,7 @@ from app.utils.fileIO import FDFlag
 #         self.awsSecretService = awsSecretService
 #         self.hashiVaultService = hashiVaultService
         
-
-def VAULT_SECRET_DIR(file:str)->str:
-    return f'../../vault/secrets/{file}'
-
-def VAULT_SHARED_DIR(file:str)->str:
-    return f'../../vault/shared/{file}'
-
-
-SECRET_ID_FILE= 'secret-id.txt' 
-ROLE_ID_FILE = 'role_id.txt' # in the secrets shared by the vault
-SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
-
-
+DEFAULT_JWT_ALGORITHM = 'HS256'
 
 
 @Service
@@ -46,6 +35,7 @@ class HCVaultService(BaseService,IntervalInterface):
         self.configService = configService
         self.fileService = fileService
         IntervalInterface.__init__(self,False,1000)
+        self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
 
     def verify_dependency(self):
         ...
@@ -54,20 +44,30 @@ class HCVaultService(BaseService,IntervalInterface):
         
         if self.configService.MODE == MODE.DEV_MODE:
             self._dev_token_login()
+            self.read_tokens()
         else:
             self.client = hvac.Client(self.configService.VAULT_ADDR)
-            self.role_id = self._read_volume_file(ROLE_ID_FILE,'secrets')
-            self.secret_id = self._read_volume_file(SECRET_ID_FILE,'shared')
-            self.supercronic_start_time = self._read_volume_file(SUPERCRONIC_SEED_TIME_FILE,'shared')
+            self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets')
+            self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared')
+            seed_time = self._read_volume_file(VaultConstant.SUPERCRONIC_SEED_TIME_FILE,'shared')
+
+            if seed_time and isinstance(seed_time,str):
+                self.supercronic_start_time = float(seed_time.split('=')[1])
+
             self.vault_approle_login()
-            
+            print("Lookup key:",self.client.lookup_token())
+            self.read_tokens()
+                     
     async def callback(self):
         async with self.statusLock.writer as locK:
-            self.secret_id = self._read_volume_file(SECRET_ID_FILE,'shared',False)
+            self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',False)
+
+##############################################                          ##################################333
+
 
     def _read_volume_file(self,filename:str,t:Literal['shared','secrets'],raise_:bool=True):
 
-        callback = VAULT_SHARED_DIR if t == 'shared' else VAULT_SECRET_DIR
+        callback = VaultConstant.VAULT_SHARED_DIR if t == 'shared' else VaultConstant.VAULT_SECRET_DIR
         filename_ = callback(filename)
         content:str = self.fileService.readFile(filename_,FDFlag.READ)
         _,last_modified = self.fileService.get_file_info(filename_)
@@ -81,7 +81,9 @@ class HCVaultService(BaseService,IntervalInterface):
         return content
 
     def destroy(self, destroy_state = DEFAULT_DESTROY_STATE):
-        self.client.logout()
+
+        self.logout()
+        self.revoke_auth_token()
 
     def vault_approle_login(self):
         try:
@@ -110,6 +112,9 @@ class HCVaultService(BaseService,IntervalInterface):
         except requests.exceptions.Timeout as e:
             raise BuildAbortError("Vault request timed out: {e}")
 
+##############################################                          ##################################333
+
+
     def vault_auth(self):
         if not self._vault_auth():
             self.service_status = ServiceStatus.NOT_AVAILABLE
@@ -124,50 +129,113 @@ class HCVaultService(BaseService,IntervalInterface):
         except:
             ...
 
-    def delete(self):
-        self.client
+##############################################                          ##################################333
+
+    def renew_auth_token(self):
+        self.client.renew_token()
+
+    def revoke_auth_token(self):
+        self.client.revoke_token()
+
+    def logout(self):
+        self.client.logout()
+
+##############################################                          ##################################333
     
-    def list(self):
-        ...
+    def read_profile(self,profiles_id:str):
+        data = self._kv_read(VaultConstant.PROFILES_SECRETS,profiles_id)
+        for k,v in data.items():
+            data[k]= self._decrypt_transit(v,VaultConstant.PROFILES_KEY)
+        return data
+
+    def put_profiles(self,profiles_id:str,data:dict):
+        for k,v in data.items():
+            data[k] = self._encrypt_transit(v,VaultConstant.PROFILES_KEY)
+        data = {
+            profiles_id:data
+        }
+        return self._kv_put(VaultConstant.PROFILES_SECRETS,profiles_id,data)
+
+    def delete_profiles(self,profiles_id:str):
+        return self._kv_delete(VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT,profiles_id)
+
+    def read_tokens(self):
+        self.tokens = self._kv_read(VaultConstant.TOKENS_SECRETS)
+
+##############################################                          ##################################333
+
+    def _encrypt_transit(self,plaintext:str,key:VaultConstant.NotifyrTransitKeyType):
+        encoded_text = b64_encode(plaintext)
+        encrypt_response = self.client.secrets.transit.encrypt_data(
+            name=key,
+            plaintext=encoded_text,
+            mount_point=VaultConstant.NOTIFYR_TRANSIT_MOUNTPOINT
+        )
+        return encrypt_response["data"]["ciphertext"]
     
-    def read(self):
-        self.client
+    def _decrypt_transit(self,ciphertext:str,key:VaultConstant.NotifyrTransitKeyType):
+        decrypted_response = self.client.secrets.transit.decrypt_data(
+            name=key,
+            ciphertext=ciphertext,
+            mount_point=VaultConstant.NOTIFYR_TRANSIT_MOUNTPOINT
+        )
+        encoded_response = decrypted_response['data']['plaintext']
+        return b64_decode(encoded_response)
     
-    def write(self):
-        self.client
+    def _kv_read(self,sub_mount:VaultConstant.NotifyrSecretType,path:str=''):
+        read_response = self.client.secrets.kv.v1.read_secret(
+        path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount,path),
+        mount_point=VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT,
+        )
+        if 'data' in read_response:
+            return read_response['data']
+        return {}
+
+    def _kv_put(self,sub_mount:VaultConstant.NotifyrSecretType,data:dict,path:str=''):
+        self.client.secrets.kv.v1.create_or_update_secret(
+        path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount,path),
+        secret=data,
+        mount_point=VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT,)
+    
+    def _kv_delete(self,sub_mount:VaultConstant.NotifyrSecretType,path:str):
+        return self.client.secrets.kv.v1.delete_secret(
+            path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount,path),
+            mount_point=VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT
+                )
+
+##############################################                          ##################################333
 
     @property
     def JWT_SECRET_KEY(self):
-        return 
+        return self.tokens.get('JWT_SECRET_KEY',None)
     
     @property
     def JWT_ALGORITHM(self):
-        ...
+        return self._jwt_algorithm
 
     @property
     def ON_TOP_SECRET_KEY(self):
-        ...
+        return self.tokens.get('ON_TOP_SECRET_KEY',None)
     
     @property
     def API_ENCRYPT_TOKEN(self):
-        ...
+        return self.tokens.get('API_ENCRYPT_TOKEN',None)
     
     @property
     def CONTACTS_HASH_KEY(self):
-        ...
+        return self.tokens.get('CONTACTS_HASH_KEY',None)
     
     @property
     def CONTACT_JWT_SECRET_KEY(self):
-        ...
+        return self.tokens.get('CONTACT_JWT_SECRET_KEY')
     
     @property
     def CLIENT_PASSWORD_HASH_KEY(self):
-        ...
+        return self.tokens.get('CLIENT_PASSWORD_HASH_KEY',None)
     
     @property
     def RSA_PASSWORD(self):
-        ...
-
+        return self.tokens.get('RSA_PASSWORD',None)
 
 
     
