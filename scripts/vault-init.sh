@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -e
+
 
 VAULT_CONFIG=/vault/config/vault.hcl
 VAULT_SECRETS_DIR=/vault/secrets
@@ -52,11 +54,22 @@ init_vault(){
 
 }
 
+setup_engine(){
+  vault secrets enable -path=notifyr-generation -seal-wrap -version=2 kv
+  vault secrets enable -path=notifyr-secrets -seal-wrap -version=1 kv
+  vault secrets enable -path=notifyr-transit transit 
+  vault secrets enable -path=notifyr-database database
+
+  vault write -f notifyr-transit/keys/profiles-key
+  vault write -f notifyr-transit/keys/messages-key
+  vault write -f notifyr-transit/keys/chat-key
+
+}
+
 set_approle(){
   
   # Setup AppRole and policy
   vault auth enable approle || true
-  vault secrets enable -path=secret -version=2 kv || true
 
   vault policy write app-policy /vault/policies/app-policy.hcl
 
@@ -99,7 +112,7 @@ set_rotate_approle() {
 
   echo -n "$TOKEN" > "$VAULT_SECRETS_DIR/rotate-token.txt"
 
-  chown vaultuser:vaultuser "$VAULT_SECRETS_DIR/rotate-token.txt"
+  chown root:vaultuser "$VAULT_SECRETS_DIR/rotate-token.txt"
 
   chmod 640 "$VAULT_SECRETS_DIR/rotate-token.txt"
 
@@ -135,20 +148,68 @@ create_default_token(){
     ARGS="$ARGS $token=$TEMP"
   done
 
-  vault kv put notifyr/tokens $ARGS
+  vault kv put notifyr-secrets/tokens $ARGS
 
-  vault kv put notifyr/tokens JWT_ALGORITHM="HS256"
+  local generation_id
+  generation_id=$(pwgen -s 32 1)
+
+  vault kv put notifyr-generation/generation-id GENERATION_ID="$generation_id"
+
+  local generated_at
+  generated_at=$(date +%Y-%m-%dT%H:%M:%S)
+  
+  vault kv metadata put -custom-metadata=generated_at="$generated_at" notifyr-generation/generation-id
 
   echo "Creating default key"
-
-
 }
 
-#################################               ##############################################
+setup_database_config(){
+  
+  vault write notifyr-database/roles/postgres-ntfr-role \
+      db_name="postgres" \
+      default_ttl="2h" \
+      max_ttl="4h" \
+      creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
+                          GRANT vault_ntrfyr_app_role TO \"{{name}}\";" \
+      rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
+      revocation_statements="REVOKE vault_ntrfyr_app_role FROM \"{{name}}\"; 
+                            DROP ROLE IF EXISTS \"{{name}}\";" 
+   
+  vault write notifyr-database/roles/mongo-ntfy-role \
+    db_name="mongodb" \
+    creation_statements='{ "db": "notifyr", "roles": [
+    { "role": "readWrite", "db": "notifyr", "collection":"agent" },
+    { "role": "readWrite", "db": "notifyr", "collection":"profile" },
+    { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
+    { "role": "readWrite", "db": "notifyr", "collection":"chat" }]}' \
+    default_ttl="2h" \
+    max_ttl="4h"
+
+  vault policy write db-config-policy /vault/policies/db-config.hcl
+
+  DB_TOKEN=$(vault token create \
+    -orphan \
+    -use-limit=7 \
+    -ttl=2h \
+    -renewable=false \
+    -policy=db-config-policy \
+    -format=json | jq -r '.auth.client_token')
+
+  local db_token_file
+  db_token_file="one_shot_db_token"
+
+  echo -n "$DB_TOKEN" > "$VAULT_SECRETS_DIR/$db_token_file.txt"
+
+  chown root:vaultuser "$VAULT_SECRETS_DIR/$db_token_file.txt"
+
+  chmod 640 "$VAULT_SECRETS_DIR/$db_token_file.txt"
+  
+}
+
+#################################               ####################################y##########
 # Start Vault as root in background
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
-
 
 echo "***************************                     *********************"
 wait_for_server 
@@ -158,15 +219,17 @@ echo "***************************                     *********************"
 init_vault
 echo "***************************                     *********************"
 
-
 echo "***************************                     *********************"
 wait_active_server
 echo "***************************                     *********************"
 
-
 ROOT_TOKEN=$(cat "$VAULT_SECRETS_DIR/root_token.txt")
 
 export VAULT_TOKEN="$ROOT_TOKEN"
+
+echo "***************************                     *********************"
+setup_engine
+echo "***************************                     *********************"
 
 echo "***************************                     *********************"
 set_approle
@@ -178,6 +241,10 @@ echo "***************************                     *********************"
 
 echo "***************************                     *********************"
 create_default_token
+echo "***************************                     *********************"
+
+echo "***************************                     *********************"
+setup_database_config
 echo "***************************                     *********************"
 
 unset VAULT_TOKEN

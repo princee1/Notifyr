@@ -1,6 +1,6 @@
 FROM python:3.11.4-slim
 
-RUN useradd -m notifyr -u 1500
+RUN useradd -m notifyr
 
 USER notifyr
 

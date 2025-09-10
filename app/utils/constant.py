@@ -157,7 +157,13 @@ class MongooseDBConstant:
     DATABASE_NAME = 'notifyr'
 
 
+    def __init__(self):
+        self.available_collection = []
 
+        for x in dir(self.__class__):
+            if x.endswith('_COLLECTION'):
+                self.available_collection.append(x)
+            
 ########################                     ########################################
 
 class SettingDBConstant:
@@ -198,4 +204,45 @@ DEFAULT_SETTING = {
 }
 
 
+########################                     ########################################
 
+class VaultConstant:
+
+    SECRET_ID_FILE= 'secret-id.txt' 
+    ROLE_ID_FILE = 'role_id.txt' # in the secrets shared by the vault
+    SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
+
+    
+    @staticmethod
+    def VAULT_SECRET_DIR(file:str)->str:
+        return f'../../vault/secrets/{file}'
+
+    @staticmethod
+    def VAULT_SHARED_DIR(file:str)->str:
+        return f'../../vault/shared/{file}'
+
+
+    NotifyrSecretType = Literal['tokens','profiles','messages']
+    TOKENS_SECRETS = 'tokens'
+    PROFILES_SECRETS = 'profiles'
+    MESSAGES_SECRETS = 'messages'
+
+
+    NotifyrTransitKeyType = Literal['profiles-key','messages-key']
+    SECRETS_MESSAGE_KEY = 'secret-messages-key'
+    PROFILES_KEY = 'profiles-key'
+
+
+    NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
+    NOTIFYR_TRANSIT_MOUNTPOINT = 'notifyr-transit'
+    NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
+
+
+
+    @staticmethod
+    def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType,path=''):
+        return f'{sub_mount}/{path}'
+
+    @staticmethod
+    def DATABASE_ENGINE_BASE_PATH(sub_mount:NotifyrTransitKeyType,path=''):
+        return f'{sub_mount}/{path}'
