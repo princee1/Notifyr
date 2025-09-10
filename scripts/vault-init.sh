@@ -164,13 +164,27 @@ setup_database_config(){
       revocation_statements="REVOKE vault_ntrfyr_app_role FROM \"{{name}}\"; 
                             DROP ROLE IF EXISTS \"{{name}}\";" 
 
-  vault write database/roles/mongo-ntfy-role \
+  vault write -f notifyr-database/rotate-root/postgres
+
+  echo " ---- Mongo DB  ----"
+
+  local mongo_role
+  mongo_role="mongo-ntfy-role"
+
+  vault write notifyr-database/config/mongodb \
+    plugin_name="mongodb-database-plugin" \
+    allowed_roles="$mongo_role"\
+    connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin" \
+    username="$MONGO_INITDB_ROOT_USERNAME" \
+    password="$MONGO_INITDB_ROOT_PASSWORD"
+  
+  vault write notifyr-database/roles/$mongo_role \
     db_name="mongodb" \
     creation_statements='{ "db": "notifyr", "roles": [
-    { "role": "readWrite", "db": "notifyr", "collection":"agent" }] },
+    { "role": "readWrite", "db": "notifyr", "collection":"agent" },
     { "role": "readWrite", "db": "notifyr", "collection":"profile" },
     { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
-    { "role": "readWrite", "db": "notifyr", "collection":"chat" }' \
+    { "role": "readWrite", "db": "notifyr", "collection":"chat" }]}' \
     default_ttl="2h" \
     max_ttl="4h"
 
