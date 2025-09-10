@@ -65,9 +65,15 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifyr
 
-
   vault:
     build:
+      args:
+        - POSTGRES_USER=${POSTGRES_USER}
+        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+        - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+        - POSTGRES_HOST=0.0.0.0
+        - MONGO_HOST=0.0.0.0
       context: .
       dockerfile: ./docker/Dockerfile.vault
     container_name: vault
@@ -77,6 +83,8 @@ services:
     cap_add: ["IPC_LOCK"]
     ports:
       - "8200:8200"
+    env_file:
+      - .env
     environment:
       VAULT_ADDR: "http://0.0.0.0:8200"
       VAULT_CONTAINER_READY: "false"
@@ -102,8 +110,8 @@ services:
     restart: always
     hostname: pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_DEFAULT_EMAIL: test@test.com
+      PGADMIN_DEFAULT_PASSWORD: test
     ports:
       - "7070:7070"
     depends_on:

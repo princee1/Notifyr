@@ -3,6 +3,17 @@ FROM hashicorp/vault:latest
 # Use root for setup
 USER root
 
+
+ARG POSTGRES_USER
+ARG POSTGRES_PASSWORD
+
+ARG MONGO_INITDB_ROOT_USERNAME
+ARG MONGO_INITDB_ROOT_PASSWORD
+
+ARG POSTGRES_HOST=postgres
+ARG MONGO_HOST=mongodb
+
+
 # Install dependencies
 RUN apk add --no-cache bash curl jq tini ca-certificates pwgen
 
@@ -111,6 +122,10 @@ path "transit/keys/*/rotate" {
   capabilities = ["update"]
 }
 
+path "notifyr-database/rotate-root/*" {
+  capabilities=["update"]
+}
+
 EOF
 
 # Add non-root user
@@ -136,7 +151,7 @@ EOF
 COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
 
 # Initialize Vault (can run as root for setup)
-RUN /usr/local/bin/vault-init.sh
+RUN /usr/local/bin/vault-init.sh ${POSTGRES_USER} ${POSTGRES_PASSWORD} ${MONGO_INITDB_ROOT_USERNAME} ${MONGO_INITDB_ROOT_PASSWORD} ${POSTGRES_HOST} ${MONGO_HOST}
 
 COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator.sh /usr/local/bin/vault-rotator.sh

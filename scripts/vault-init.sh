@@ -1,4 +1,25 @@
 #!/usr/bin/env bash
+set -e
+
+POSTGRES_USER=$1
+POSTGRES_PASSWORD=$2
+
+MONGO_INITDB_ROOT_USERNAME=$3
+MONGO_INITDB_ROOT_PASSWORD=$4
+
+POSTGRES_HOST=${5:-postgres}
+MONGO_HOST=${6:-mongodb}
+
+
+echo "POSTGRES_USER=$POSTGRES_USER"
+echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+
+echo "MONGO_INITDB_ROOT_USERNAME=$MONGO_INITDB_ROOT_USERNAME"
+echo "MONGO_INITDB_ROOT_PASSWORD=$MONGO_INITDB_ROOT_PASSWORD"
+
+echo "MONGO_HOST=$MONGO_HOST"
+echo "POSTGRES_HOST=$POSTGRES_HOST"
+
 
 VAULT_CONFIG=/vault/config/vault.hcl
 VAULT_SECRETS_DIR=/vault/secrets
@@ -150,7 +171,58 @@ create_default_token(){
   echo "Creating default key"
 }
 
-#################################               ##############################################
+setup_database_config(){
+
+  echo "---- Postgres SQL ----"
+
+  local pg_role
+  pg_role="postgres-ntfr-role"
+ 
+  vault write notifyr-database/config/postgres \
+    plugin_name="postgresql-database-plugin" \
+    allowed_roles="$pg_role" \
+    connection_url="postgresql://{{username}}:{{password}}@$POSTGRES_HOST:5432/notifyr" \
+    username="$POSTGRES_USER" \
+    password="$POSTGRES_PASSWORD"
+
+  vault write notifyr-database/roles/$pg_role \
+      db_name="postgres" \
+      default_ttl="2h" \
+      max_ttl="4h" \
+      creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
+                          GRANT vault_ntrfyr_app_role TO \"{{name}}\";" \
+      rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
+      revocation_statements="REVOKE vault_ntrfyr_app_role FROM \"{{name}}\"; 
+                            DROP ROLE IF EXISTS \"{{name}}\";" 
+
+  vault write -f notifyr-database/rotate-root/postgres
+
+  echo " ---- Mongo DB  ----"
+
+  local mongo_role
+  mongo_role="mongo-ntfy-role"
+
+  vault write database/config/mongodb \
+    plugin_name="mongodb-database-plugin" \
+    allowed_roles='"$mongo_role"' \
+    connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin" \
+    username="$MONGO_INITDB_ROOT_USERNAME" \
+    password="$MONGO_INITDB_ROOT_PASSWORD"
+  
+  vault write database/roles/$mongo_role \
+    db_name="mongodb" \
+    creation_statements='{ "db": "notifyr", "roles": [
+    { "role": "readWrite", "db": "notifyr", "collection":"agent" }] },
+    { "role": "readWrite", "db": "notifyr", "collection":"profile" },
+    { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
+    { "role": "readWrite", "db": "notifyr", "collection":"chat" }' \
+    default_ttl="2h" \
+    max_ttl="4h"
+
+    vault write -f notifyr-database/rotate-root/mongodb
+}
+
+#################################               ####################################y##########
 # Start Vault as root in background
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
@@ -175,7 +247,6 @@ echo "***************************                     *********************"
 setup_engine
 echo "***************************                     *********************"
 
-
 echo "***************************                     *********************"
 set_approle
 echo "***************************                     *********************"
@@ -186,6 +257,10 @@ echo "***************************                     *********************"
 
 echo "***************************                     *********************"
 create_default_token
+echo "***************************                     *********************"
+
+echo "***************************                     *********************"
+setup_database_config
 echo "***************************                     *********************"
 
 unset VAULT_TOKEN
