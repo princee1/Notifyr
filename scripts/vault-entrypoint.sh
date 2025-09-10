@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -e
 
 VAULT_CONFIG=/vault/config/vault.hcl
@@ -51,27 +50,33 @@ create_database_config(){
 
   ONE_SHOT_DB_TOKEN=$(cat "$VAULT_SECRETS_DIR/one_shot_db_token.txt")
 
-  vault login "$ONE_SHOT_DB_TOKEN"
+  export VAULT_ADDR="http://127.0.0.1:8200"
+
+  vault login -no-print "$ONE_SHOT_DB_TOKEN"
 
   vault write notifyr-database/config/postgres \
     plugin_name="postgresql-database-plugin" \
     allowed_roles="$pg_role" \
     connection_url="postgresql://{{username}}:{{password}}@$PG_HOST:5432/notifyr" \
+    max_open_connections=20 \
+    max_idle_connections=10 \
     username="$POSTGRES_USER" \
     password="$POSTGRES_PASSWORD"
 
   vault write -f notifyr-database/rotate-root/postgres
   
-  vault write database/config/mongodb \
+  vault write notifyr-database/config/mongodb \
     plugin_name="mongodb-database-plugin" \
-    allowed_roles='"$mongo_role"' \
+    allowed_roles="$mongo_role" \
     connection_url="mongodb://{{username}}:{{password}}@$M_HOST:27017/admin" \
     username="$MONGO_INITDB_ROOT_USERNAME" \
     password="$MONGO_INITDB_ROOT_PASSWORD"
 
   vault write -f notifyr-database/rotate-root/mongodb
 
-  vault logout "$ONE_SHOT_DB_TOKEN"
+  vault token revoke -self
+
+  export VAULT_ADDR="http://0.0.0.0:8200"
 }
 
 # Start Vault in background
@@ -82,13 +87,14 @@ wait_for_server
 
 unseal_vault
 
+wait_active_server
+
 if grep -q "secret" "$VAULT_SHARED_DIR/seed-time.txt"; then
   create_database_config
 else
   echo "database config already setup"
 fi
 
-wait_active_server
 
 echo "++++++++++++++++++++++++++++++++++++++++++++++       +++++++++++++++++++++++++++++++++++++++++"
 echo "                                    Server active!"

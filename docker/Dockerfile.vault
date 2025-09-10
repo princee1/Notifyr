@@ -71,6 +71,13 @@ path "notifyr-secrets/messages/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
+# ---- Generation ID ---- 
+
+path "notifyr-generation/" {
+  capabilities=["create","update","read","delete"]
+}
+
+
 # ---- Transit ENGINE ----
 
 path "transit/" {
@@ -121,13 +128,12 @@ EOF
 RUN cat <<EOF > /vault/policies/db-config.hcl 
 
 path "notifyr-database/config/*" {
-  capabilities = ["write","update"]
+  capabilities = ["update","create"]
 }
 
 path "notifyr-database/rotate-root/*" {
   capabilities=["update"]
 }
-
 
 EOF
 
@@ -148,7 +154,7 @@ RUN touch /vault/cron/crontab
 RUN cat <<EOF > /vault/cron/crontab
 0 * * * * /usr/local/bin/vault-secret-id-rotator.sh >> /vault/logs/vault-secret-id-rotator.log 2>&1
 0 0 * * * /usr/local/bin/vault-transit-rotator.sh >> /vault/logs/vault-transit-rotator.log 2>&1
-0 0 0 * * /usr/local/bin/vault-db-admin-rotator.sh >> /vault/logs/vault-db-admin-rotator.log 2>&1
+0 0 1 * * /usr/local/bin/vault-db-admin-rotator.sh >> /vault/logs/vault-db-admin-rotator.log 2>&1
 EOF
 
 # Copy scripts with correct permissions

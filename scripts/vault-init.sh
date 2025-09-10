@@ -55,6 +55,7 @@ init_vault(){
 }
 
 setup_engine(){
+  vault secrets enable -path=notifyr-generation -seal-wrap -version=2 kv
   vault secrets enable -path=notifyr-secrets -seal-wrap -version=1 kv
   vault secrets enable -path=notifyr-transit transit 
   vault secrets enable -path=notifyr-database database
@@ -149,6 +150,16 @@ create_default_token(){
 
   vault kv put notifyr-secrets/tokens $ARGS
 
+  local generation_id
+  generation_id=$(pwgen -s 32 1)
+
+  vault kv put notifyr-generation/generation-id GENERATION_ID="$generation_id"
+
+  local generated_at
+  generated_at=$(date +%Y-%m-%dT%H:%M:%S)
+  
+  vault kv metadata put -custom-metadata=generated_at="$generated_at" notifyr-generation/generation-id
+
   echo "Creating default key"
 }
 
@@ -163,22 +174,8 @@ setup_database_config(){
       rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
       revocation_statements="REVOKE vault_ntrfyr_app_role FROM \"{{name}}\"; 
                             DROP ROLE IF EXISTS \"{{name}}\";" 
-
-  vault write -f notifyr-database/rotate-root/postgres
-
-  echo " ---- Mongo DB  ----"
-
-  local mongo_role
-  mongo_role="mongo-ntfy-role"
-
-  vault write notifyr-database/config/mongodb \
-    plugin_name="mongodb-database-plugin" \
-    allowed_roles="$mongo_role"\
-    connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin" \
-    username="$MONGO_INITDB_ROOT_USERNAME" \
-    password="$MONGO_INITDB_ROOT_PASSWORD"
-  
-  vault write notifyr-database/roles/$mongo_role \
+   
+  vault write notifyr-database/roles/mongo-ntfy-role \
     db_name="mongodb" \
     creation_statements='{ "db": "notifyr", "roles": [
     { "role": "readWrite", "db": "notifyr", "collection":"agent" },
@@ -191,10 +188,11 @@ setup_database_config(){
   vault policy write db-config-policy /vault/policies/db-config.hcl
 
   DB_TOKEN=$(vault token create \
-    -use-limit=6 \
-    -ttl=5m \
+    -orphan \
+    -use-limit=7 \
+    -ttl=2h \
     -renewable=false \
-    -policy=one-shot-policy \
+    -policy=db-config-policy \
     -format=json | jq -r '.auth.client_token')
 
   local db_token_file

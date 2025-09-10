@@ -77,6 +77,7 @@ services:
     ports:
       - "8200:8200"
     environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
       VAULT_CONTAINER_READY: "false"
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -89,8 +90,8 @@ services:
       - vault-shared:/vault/shared
       - vault-secrets:/vault/secrets
       - vault-audit:/vault/logs
-    secrets:
-      - approle_role_id
+    depends_on:
+      - mongodb
     #restart: always
     #stop_grace_period: 5m
     # healthcheck:
