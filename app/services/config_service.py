@@ -208,20 +208,8 @@ class ConfigService(_service.BaseService):
 
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.API_KEY = self.getenv("API_KEY")
-        self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
-
-        self.JWT_SECRET_KEY = self.getenv("JWT_SECRET_KEY")
-        self.JWT_ALGORITHM = self.getenv("JWT_ALGORITHM",'HS256')
-        self.ON_TOP_SECRET_KEY = self.getenv("ON_TOP_SECRET_KEY")
         
-        self.API_ENCRYPT_TOKEN = self.getenv("API_ENCRYPT_TOKEN")
-
-        self.CONTACTS_HASH_KEY = self.getenv("CONTACTS_HASH_KEY")
-        self.CONTACT_JWT_SECRET_KEY= self.getenv('CONTACT_JWT_SECRET_KEY','test')
-
-        self.CLIENT_PASSWORD_HASH_KEY= self.getenv('CLIENT_PASSWORD_HASH_KEY','test')
-
-        self.RSA_SECRET_PASSWORD = self.getenv('RSA_SECRET_PASSWORD','test')
+        self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
 
 
         # HASHI CORP VAULT CONFIG #

@@ -1,3 +1,4 @@
+import datetime
 from typing import Literal, TypedDict
 import requests
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
@@ -8,6 +9,7 @@ import hvac
 from app.services.file_service import FileService
 from app.utils.constant import VaultConstant
 from app.utils.fileIO import FDFlag
+from datetime import datetime
 
 DEFAULT_JWT_ALGORITHM = 'HS256'
 
@@ -16,10 +18,23 @@ class VaultTokenMeta(TypedDict):
     accessor: str
     creation_time: int
     creation_ttl: int
-    expire_time: str
+    expire_time: datetime
     explicit_max_ttl: int
-    issue_time: str
+    issue_time: datetime
     ttl: int
+
+def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
+    data = vault_lookup["data"]
+    return {
+        "renewable": data["renewable"],
+        "accessor": data["accessor"],
+        "creation_time": data["creation_time"],
+        "creation_ttl": data["creation_ttl"],
+        "expire_time": datetime.fromisoformat(data["expire_time"].replace("Z", "+00:00")),
+        "explicit_max_ttl": data["explicit_max_ttl"],
+        "issue_time": datetime.fromisoformat(data["issue_time"].replace("Z", "+00:00")),
+        "ttl": data["ttl"],
+    }
 
 
 @Service
@@ -58,7 +73,7 @@ class HCVaultService(BaseService,IntervalInterface):
         if not self.client.is_authenticated():
             return False
         
-        self.token_meta = VaultTokenMeta(**self.client.lookup_token()['data'])
+        self.token_meta = parse_vault_token_meta(self.client.lookup_token())
         
         self._kv1_engine = KV1VaultEngine(self.client)
         self._kv2_engine = KV2VaultEngine(self.client)

@@ -395,10 +395,10 @@ class MongooseService(DatabaseService): # Chat data
     DATABASE_NAME=  MongooseDBConstant.DATABASE_NAME
 
     #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
-    def __init__(self,configService:ConfigService,fileService:FileService,secretService:HCVaultService):
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService):
         super().__init__(configService,fileService)
         self.mongo_uri = F'mongodb://{self.configService.MONGO_HOST}:27017'
-        self.secretService = secretService
+        self.vaultService = vaultService
 
     async def save(self, model,*args):
         return await self.engine.save(model,*args)
@@ -441,9 +441,9 @@ class MongooseService(DatabaseService): # Chat data
 class TortoiseConnectionService(DatabaseService):
     DATABASE_NAME = 'notifyr'
 
-    def __init__(self, configService: ConfigService,secretService:HCVaultService):
+    def __init__(self, configService: ConfigService,vaultService:HCVaultService):
         super().__init__(configService, None)
-        self.secretService = secretService
+        self.vaultService = vaultService
 
 
     def verify_dependency(self):
@@ -456,7 +456,7 @@ class TortoiseConnectionService(DatabaseService):
 
     def build(self,build_state=-1):
         try:
-            self.creds = self.secretService.generate_postgres_creds()
+            self.creds = self.vaultService.generate_postgres_creds()
             print(self.creds)
             pg_user = self.configService.getenv('POSTGRES_USER')
             pg_password = self.configService.getenv('POSTGRES_PASSWORD')
