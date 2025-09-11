@@ -232,10 +232,15 @@ class VaultConstant:
     SECRETS_MESSAGE_KEY = 'secret-messages-key'
     PROFILES_KEY = 'profiles-key'
 
+    NotifyrDynamicSecretsRole= Literal['postgres','mongo']
+    MONGO_ROLE='mongo'
+    POSTGRES_ROLE='postgres'
+
 
     NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
-    NOTIFYR_TRANSIT_MOUNTPOINT = 'notifyr-transit'
+    NOTIFYR_TRANSIT_MOUNT_POINT = 'notifyr-transit'
     NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
+    NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
 
 
     @staticmethod
