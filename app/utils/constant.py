@@ -3,7 +3,7 @@ from typing_extensions import Literal
 ########################  ** Dependencies **   ########################################
 
 
-AN_HOUR = 60*60
+SECONDS_IN_AN_HOUR = 60*60
 
 class DependencyConstant:
     TYPE_KEY = "type"
@@ -176,6 +176,7 @@ class SettingDBConstant:
     ASSET_LANG_SETTING='ASSET_LANG'
     CONTACT_TOKEN_EXPIRATION_SETTING='CONTACT_TOKEN_EXPIRATION'
     API_EXPIRATION_SETTING='API_EXPIRATION'
+    ALL_ACCESS_EXPIRATION_SETTING='ALL_ACCESS_EXPIRATION_SETTING'
 
     #_available_db_key=[AUTH_EXPIRATION_SETTING,REFRESH_EXPIRATION_SETTING,CHAT_EXPIRATION_SETTING,ASSET_LANG_SETTING,CONTACT_TOKEN_EXPIRATION_SETTING]
 
@@ -192,15 +193,14 @@ class SettingDBConstant:
                 self.available_db_key.append(x)
 
 
-SECONDS_IN_A_HOUR = 3600
-
 DEFAULT_SETTING = {
-    SettingDBConstant.AUTH_EXPIRATION_SETTING: SECONDS_IN_A_HOUR * 10,
-    SettingDBConstant.REFRESH_EXPIRATION_SETTING: SECONDS_IN_A_HOUR * 24 * 1,
-    SettingDBConstant.CHAT_EXPIRATION_SETTING: 3600,
+    SettingDBConstant.AUTH_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR * 10,
+    SettingDBConstant.REFRESH_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR * 24 * 1,
+    SettingDBConstant.CHAT_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR,
     SettingDBConstant.ASSET_LANG_SETTING: "en",
     SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING:360000000,
     SettingDBConstant.API_EXPIRATION_SETTING: 360000000,
+    SettingDBConstant.ALL_ACCESS_EXPIRATION_SETTING: 36000000000,
 }
 
 
@@ -238,7 +238,6 @@ class VaultConstant:
     NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
 
 
-
     @staticmethod
     def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType,path=''):
         return f'{sub_mount}/{path}'
@@ -246,3 +245,21 @@ class VaultConstant:
     @staticmethod
     def DATABASE_ENGINE_BASE_PATH(sub_mount:NotifyrTransitKeyType,path=''):
         return f'{sub_mount}/{path}'
+    
+
+
+class VaultTTLSyncConstant:
+    SECRET_ID_ROTATION = SECONDS_IN_AN_HOUR
+    TRANSIT_ROTATION = SECONDS_IN_AN_HOUR*24
+
+    SECRET_ID_TTL= SECONDS_IN_AN_HOUR*2
+    VAULT_TOKEN_TTL=60*45
+    VAULT_TOKEN_MAX_TTL=60*90
+
+    POSTGRES_AUTH_TTL=SECONDS_IN_AN_HOUR*2
+    POSTGRES_MAX_TTL=SECONDS_IN_AN_HOUR*4
+
+    MONGODB_AUTH_TTL=SECONDS_IN_AN_HOUR*2
+    MONGODB_MAX_TTL=SECONDS_IN_AN_HOUR*4
+
+    
