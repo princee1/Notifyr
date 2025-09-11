@@ -7,11 +7,12 @@ from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
 from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
+from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, StateProtocol
+from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceStatus, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from odmantic.exceptions import BaseEngineException
@@ -43,53 +44,6 @@ class DatabaseService(BaseService):
             super().__init__()
             self.configService= configService
             self.fileService = fileService
-
-@Service
-class MongooseService(DatabaseService): # Chat data
-    COLLECTION_REF = Literal['agent','chat','profile']
-    DATABASE_NAME=  MongooseDBConstant.DATABASE_NAME
-
-    #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
-    def __init__(self,configService:ConfigService,fileService:FileService):
-        super().__init__(configService,fileService)
-        self.mongo_uri = F'mongodb://{self.configService.MONGO_HOST}:27017'
-
-    async def save(self, model,*args):
-        return await self.engine.save(model,*args)
-    
-    async def find(self,model,*args):
-        return await self.engine.find(model,*args)
-
-    async def find_one(self,model,*args):
-        return await self.engine.find_one(model,*args)
-    
-    async def delete(self,model,*args):
-        return await self.engine.delete(model,*args)
-
-    async def count(self,model,*args):
-        return await self.engine.count(model,*args)
-    
-    def build(self,build_state=-1):
-        try:    
-
-            self.client = AsyncIOMotorClient(self.mongo_uri)
-            self.motor_db = AsyncIOMotorDatabase(self.client,self.DATABASE_NAME)
-            self.engine = AIOEngine(self.client,self.DATABASE_NAME)
-
-        except ConnectionFailure as e:
-            raise BuildFailureError(f"MongoDB connection error: {e}")
-        except ConfigurationError as e:
-            raise BuildFailureError(f"MongoDB configuration error: {e}")
-
-        except BaseEngineException as e:
-            raise BuildFailureError(f"ODMantic engine error: {e}")
-
-        except ServerSelectionTimeoutError as e:
-            raise BuildFailureError(f"MongoDB server selection timeout: {e}")
-
-        except Exception as e: # TODO
-            print(e) 
-            raise BuildFailureError(f"Unexpected error: {e}") 
 
 @Service
 class RedisService(DatabaseService):
@@ -436,14 +390,64 @@ class RedisService(DatabaseService):
             await self.db[i].close()
             
 @Service
+class MongooseService(DatabaseService): # Chat data
+    COLLECTION_REF = Literal['agent','chat','profile']
+    DATABASE_NAME=  MongooseDBConstant.DATABASE_NAME
+
+    #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
+    def __init__(self,configService:ConfigService,fileService:FileService,secretService:HCVaultService):
+        super().__init__(configService,fileService)
+        self.mongo_uri = F'mongodb://{self.configService.MONGO_HOST}:27017'
+        self.secretService = secretService
+
+    async def save(self, model,*args):
+        return await self.engine.save(model,*args)
+    
+    async def find(self,model,*args):
+        return await self.engine.find(model,*args)
+
+    async def find_one(self,model,*args):
+        return await self.engine.find_one(model,*args)
+    
+    async def delete(self,model,*args):
+        return await self.engine.delete(model,*args)
+
+    async def count(self,model,*args):
+        return await self.engine.count(model,*args)
+    
+    def build(self,build_state=-1):
+        try:    
+
+            self.client = AsyncIOMotorClient(self.mongo_uri)
+            self.motor_db = AsyncIOMotorDatabase(self.client,self.DATABASE_NAME)
+            self.engine = AIOEngine(self.client,self.DATABASE_NAME)
+
+        except ConnectionFailure as e:
+            raise BuildFailureError(f"MongoDB connection error: {e}")
+        except ConfigurationError as e:
+            raise BuildFailureError(f"MongoDB configuration error: {e}")
+
+        except BaseEngineException as e:
+            raise BuildFailureError(f"ODMantic engine error: {e}")
+
+        except ServerSelectionTimeoutError as e:
+            raise BuildFailureError(f"MongoDB server selection timeout: {e}")
+
+        except Exception as e: # TODO
+            print(e) 
+            raise BuildFailureError(f"Unexpected error: {e}") 
+
+@Service
 class TortoiseConnectionService(DatabaseService):
     DATABASE_NAME = 'notifyr'
 
-    def __init__(self, configService: ConfigService):
+    def __init__(self, configService: ConfigService,secretService:HCVaultService):
         super().__init__(configService, None)
+        self.secretService = secretService
 
 
     def verify_dependency(self):
+        
         pg_user = self.configService.getenv('POSTGRES_USER')
         pg_password = self.configService.getenv('POSTGRES_PASSWORD')
 
@@ -452,6 +456,8 @@ class TortoiseConnectionService(DatabaseService):
 
     def build(self,build_state=-1):
         try:
+            self.creds = self.secretService.generate_postgres_creds()
+            print(self.creds)
             pg_user = self.configService.getenv('POSTGRES_USER')
             pg_password = self.configService.getenv('POSTGRES_PASSWORD')
 

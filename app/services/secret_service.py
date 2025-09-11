@@ -1,5 +1,4 @@
-from typing import Literal
-
+from typing import Literal, TypedDict
 import requests
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceStatus
@@ -11,6 +10,17 @@ from app.utils.constant import VaultConstant
 from app.utils.fileIO import FDFlag
 
 DEFAULT_JWT_ALGORITHM = 'HS256'
+
+class VaultTokenMeta(TypedDict):
+    renewable: bool
+    accessor: str
+    creation_time: int
+    creation_ttl: int
+    expire_time: str
+    explicit_max_ttl: int
+    issue_time: str
+    ttl: int
+
 
 @Service
 class HCVaultService(BaseService,IntervalInterface):
@@ -31,22 +41,36 @@ class HCVaultService(BaseService,IntervalInterface):
             self._dev_token_login()
             self.read_tokens()
         else:
-            self.client = hvac.Client(self.configService.VAULT_ADDR)
-            self.set_engine()
-            self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets')
-            self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared')
             seed_time = self._read_volume_file(VaultConstant.SUPERCRONIC_SEED_TIME_FILE,'shared')
-
             if seed_time and isinstance(seed_time,str):
                 self.supercronic_start_time = float(seed_time.split('=')[1])
 
             self.vault_approle_login()
-            print("Lookup key:",self.client.lookup_token())
             self.read_tokens()
+            
+    def _create_client(self):
+        self.client = hvac.Client(self.configService.VAULT_ADDR)
+
+        self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets')
+        self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared')
+        self.client.auth.approle.login(self.role_id,self.secret_id)
+
+        if not self.client.is_authenticated():
+            return False
+        
+        self.token_meta = VaultTokenMeta(**self.client.lookup_token()['data'])
+        
+        self._kv1_engine = KV1VaultEngine(self.client)
+        self._kv2_engine = KV2VaultEngine(self.client)
+        self._transit_engine = TransitVaultEngine(self.client)
+        self._database_engine = DatabaseVaultEngine(self.client)
+
+        return True
 
     async def callback(self):
         async with self.statusLock.writer as locK:
-            self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',False)
+            # self.renew_auth_token()
+            self._create_client()
 
     def _read_volume_file(self,filename:str,t:Literal['shared','secrets'],raise_:bool=True):
 
@@ -64,13 +88,13 @@ class HCVaultService(BaseService,IntervalInterface):
         return content
 
     def destroy(self, destroy_state = DEFAULT_DESTROY_STATE):
-        self.logout()
+        self.client.logout()
 
 ##############################################                          ##################################333
 
     def vault_approle_login(self):
         try:
-            if not self._vault_auth():
+            if not self._create_client():
                 raise BuildAbortError('Not authenticated')
             
             if not self.client.ha_status['is_self']:
@@ -96,12 +120,8 @@ class HCVaultService(BaseService,IntervalInterface):
             raise BuildAbortError("Vault request timed out: {e}")
 
     def vault_auth(self):
-        if not self._vault_auth():
+        if not self._create_client():
             self.service_status = ServiceStatus.NOT_AVAILABLE
-
-    def _vault_auth(self):
-        self.client.auth.approle.login(self.role_id,self.secret_id)
-        return self.client.is_authenticated()
   
     def _dev_token_login(self):
         try:
@@ -112,22 +132,18 @@ class HCVaultService(BaseService,IntervalInterface):
     def renew_auth_token(self):
         self.client.renew_token()
 
-    def logout(self):
-        self.client.logout()
+##############################################                          ##################################333
 
-    def set_engine(self):
-        self._kv1_engine = KV1VaultEngine(self.client)
-        self._kv2_engine = KV2VaultEngine(self.client)
-        self._transit_engine = TransitVaultEngine(self.client)
-        self._database_engine = DatabaseVaultEngine
+    def renew_lease(self,lease_id,increment):
+        ...
 
 ##############################################                          ##################################333
 
     def generate_mongo_creds(self):
-        ...
+        return self._database_engine.generate_credentials(VaultConstant.MONGO_ROLE)
     
     def generate_postgres_creds(self):
-        ...
+        return self._database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE)
 
 ##############################################                          ##################################333
 
@@ -159,6 +175,7 @@ class HCVaultService(BaseService,IntervalInterface):
     @property
     def JWT_SECRET_KEY(self):
         return self.tokens.get('JWT_SECRET_KEY',None)
+
     
     @property
     def JWT_ALGORITHM(self):
@@ -178,7 +195,11 @@ class HCVaultService(BaseService,IntervalInterface):
     
     @property
     def CONTACT_JWT_SECRET_KEY(self):
-        return self.tokens.get('CONTACT_JWT_SECRET_KEY')
+        return self.tokens.get('CONTACT_JWT_SECRET_KEY',None)
+
+    @property
+    def WS_JWT_SECRET_KEY(self):
+        return self.tokens.get('WS_JWT_SECRET_KEY',None)
     
     @property
     def CLIENT_PASSWORD_HASH_KEY(self):
