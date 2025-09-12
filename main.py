@@ -12,12 +12,11 @@ exe_path = shutil.which("uvicorn").replace(".EXE", "")
 parser = ArgumentParser(description="Notifyr")
 
 parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunModeConstant.__members__.values()],
-                        default='file', type=str, help='Running Mode')
+                        default='server', type=str, help='Running Mode')
 
 parser.add_argument("--host", '-H',type=host_validator, default="127.0.0.1", help="Host to bind to")
 parser.add_argument('--port','-p',default=8088,type=port_validator,help='Specify the port, if not it will run using the port set a the env variable')
 parser.add_argument("--log-level", '-l',default="info", choices=["critical", "error", "warning", "info", "debug", "trace"])
-parser.add_argument('--config', '-c', default='./config.app.json',type=str, help='Path to the config file')
 parser.add_argument('--team','-t',type=str,default='solo',choices=['solo','team'],help="Whether there's other instance running too")
 parser.add_argument('--workers','-w',type=int,default=1,help="Specify the number of workers")
 
@@ -35,18 +34,20 @@ uvicorn_args = None
 if sys.argv[0] == exe_path:
     args=None
     uvicorn_args = uvicorn_parser.parse_args()
-    args = parser.parse_args(['-m=file',f'-p={uvicorn_args.port}',f'-l={uvicorn_args.log_level}','-c=./config.app.json','-t=team',f'-H={uvicorn_args.host}',f'-w={uvicorn_args.workers}'])
-    
+    args = parser.parse_args(['-m=server',f'-p={uvicorn_args.port}',f'-l={uvicorn_args.log_level}','-t=team',f'-H={uvicorn_args.host}',f'-w={uvicorn_args.workers}'])
+    setattr(args,'reload',uvicorn_args.reload)
 else:
     args = parser.parse_args()
+    setattr(args,'reload',False)
+
 
 ########################################################################
 from app.container import build_container, Get
 build_container()
 ########################################################################
 
-from app.server.app_initialization import bootstrap_fastapi_server,build_apps_data
-build_apps_data(args.config,uvicorn_args)
+from app.server.app_initialization import bootstrap_fastapi_server,initialize_config_service
+initialize_config_service(args)
 
 # Main entry point
 

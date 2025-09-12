@@ -45,10 +45,10 @@ class CeleryMode(Enum):
     purge = 'purge'
 
 class ServerConfig(TypedDict):
-    app: str
     host: str
     port: int
-    reload: True
+    reload: bool
+    team: Literal['team','solo']
     workers: int
     log_level: Literal["critical", "error",
                        "warning", "info", "debug", "trace"]
@@ -77,7 +77,6 @@ class ConfigService(_service.BaseService):
         if not load_dotenv(ENV, verbose=True):
             path = find_dotenv(ENV)
             load_dotenv(path)
-        self.config_json_app: JSONFile = None
         self.server_config = None
         self.app_name = None
 
@@ -257,13 +256,6 @@ class ConfigService(_service.BaseService):
     def get(self, key):
         return self.getenv(key)
 
-    def load_configApp(self, config_file: str):
-        config_file = self.relative_path(config_file)
-        config_json_app = JSONFile(config_file)
-        config_file = config_file if config_json_app.exists else None
-        # apps_data = config_json_app.data
-        self.config_json_app = config_json_app
-
     def destroy(self,destroy_state=-1):
         return super().destroy()
 
@@ -273,11 +265,10 @@ class ConfigService(_service.BaseService):
 
     def set_server_config(self, config):
         if config == None:
-            #self.server_config= ServerConfig(app='python',host=self.ADDR,port)
             return 
-        self.server_config = ServerConfig(app=config.app, host=config.host, port=config.port,
-                                          reload=config.reload, workers=config.workers, log_level=config.log_level)
-
+        self.server_config = ServerConfig(host=config.host, port=config.port,
+                                          reload=config.reload, workers=config.workers, log_level=config.log_level,
+                                          team=config.team)
     @property
     def pool(self):
-        return False
+        return self.server_config["team"] == 'team'

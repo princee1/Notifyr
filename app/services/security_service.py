@@ -60,24 +60,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.vaultService = vaultService
 
     def set_generation_id(self, gen=False) -> None:
-        if gen:
-            self.generation_id = generateId(ID_LENGTH)
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][
-                ConfigAppConstant.GENERATION_ID_KEY] = self.generation_id
-            current_utc = datetime.now(timezone.utc)
-            expired_ = current_utc.timestamp() + self.settingService.ALL_ACCESS_EXPIRATION
-            expired_utc = datetime.fromtimestamp(expired_, timezone.utc)
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.CREATION_DATE_KEY] = current_utc.strftime(
-                "%Y-%m-%d %H:%M:%S")
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_DATE_KEY] = expired_utc.strftime(
-                "%Y-%m-%d %H:%M:%S")
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][
-                ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY] = expired_
-            self.configService.config_json_app.save()
-
-        else:
-            self.generation_id = self.configService.config_json_app.data[
-                ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY]
+        ...
 
     def encode_auth_token(self,authz_id,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
         try:

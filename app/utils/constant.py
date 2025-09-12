@@ -136,9 +136,7 @@ class VariableConstant:
 
 
 class RunModeConstant(Enum):
-    FILE = "file"
-    CREATE = "create"
-    EDIT = "edit"
+    SERVER = "server"
     REGISTER = "register"
 
 class HTMLTemplateConstant:
