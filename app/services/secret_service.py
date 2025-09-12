@@ -60,14 +60,16 @@ class HCVaultService(BaseService,IntervalInterface):
             if seed_time and isinstance(seed_time,str):
                 self.supercronic_start_time = float(seed_time.split('=')[1])
 
-            self.vault_approle_login()
+            self.vault_approle_login(build_state)
+            print(self.client.token)
             self.read_tokens()
             
-    def _create_client(self):
+    def _create_client(self,build_state:int):
         self.client = hvac.Client(self.configService.VAULT_ADDR)
+        _raise = build_state==DEFAULT_BUILD_STATE
 
-        self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets')
-        self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared')
+        self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets',_raise)
+        self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',_raise)
         self.client.auth.approle.login(self.role_id,self.secret_id)
 
         if not self.client.is_authenticated():
@@ -85,7 +87,7 @@ class HCVaultService(BaseService,IntervalInterface):
     async def callback(self):
         async with self.statusLock.writer as locK:
             # self.renew_auth_token()
-            self._create_client()
+            self._create_client(0)
 
     def _read_volume_file(self,filename:str,t:Literal['shared','secrets'],raise_:bool=True):
 
@@ -107,9 +109,9 @@ class HCVaultService(BaseService,IntervalInterface):
 
 ##############################################                          ##################################333
 
-    def vault_approle_login(self):
+    def vault_approle_login(self,build_state):
         try:
-            if not self._create_client():
+            if not self._create_client(build_state):
                 raise BuildAbortError('Not authenticated')
             
             if not self.client.ha_status['is_self']:

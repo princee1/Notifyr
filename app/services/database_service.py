@@ -5,6 +5,7 @@ import requests
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
+from app.classes.vault_engine import VaultDatabaseCredentials
 from app.definition._error import BaseError
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
@@ -12,7 +13,7 @@ from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceStatus, StateProtocol
+from app.definition._service import DEFAULT_BUILD_STATE, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceStatus, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from odmantic.exceptions import BaseEngineException
@@ -40,10 +41,28 @@ class RedisDatabaseDoesNotExistsError(BaseError):
 
 @AbstractServiceClass
 class DatabaseService(BaseService): 
-    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
             super().__init__()
             self.configService= configService
             self.fileService = fileService
+            self.vaultService = vaultService
+            self.creds:VaultDatabaseCredentials = {}
+
+    def renew_db_creds(self):
+        lease_id = self.creds['lease_id']
+        self.vaultService.renew_lease(lease_id,3600)
+    
+    @property
+    def db_user(self):
+        return self.creds.get('data',dict()).get('username',None)
+        
+    @property
+    def db_password(self):
+        return self.creds.get('data',dict()).get('password',None)
+
+
+
+
 
 @Service
 class RedisService(DatabaseService):
@@ -61,7 +80,7 @@ class RedisService(DatabaseService):
     GROUP = 'NOTIFYR-GROUP'
     
     def __init__(self,configService:ConfigService,reactiveService:ReactiveService):
-        super().__init__(configService,None)
+        super().__init__(configService,None,None)
         self.configService = configService
         self.reactiveService = reactiveService
         self.to_shutdown = False
@@ -396,9 +415,7 @@ class MongooseService(DatabaseService): # Chat data
 
     #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService):
-        super().__init__(configService,fileService)
-        self.mongo_uri = F'mongodb://{self.configService.MONGO_HOST}:27017'
-        self.vaultService = vaultService
+        super().__init__(configService,fileService,vaultService)
 
     async def save(self, model,*args):
         return await self.engine.save(model,*args)
@@ -415,36 +432,57 @@ class MongooseService(DatabaseService): # Chat data
     async def count(self,model,*args):
         return await self.engine.count(model,*args)
     
-    def build(self,build_state=-1):
+
+    def verify_dependency(self):
+        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError('Vault Service Cant issue creds')
+    
+    def build(self,build_state=DEFAULT_BUILD_STATE):
         try:    
+            self.service_status=ServiceStatus.NOT_AVAILABLE
 
-            self.client = AsyncIOMotorClient(self.mongo_uri)
-            self.motor_db = AsyncIOMotorDatabase(self.client,self.DATABASE_NAME)
-            self.engine = AIOEngine(self.client,self.DATABASE_NAME)
-
+            self.db_connection()
+            
+            self.service_status = ServiceStatus.AVAILABLE
         except ConnectionFailure as e:
-            raise BuildFailureError(f"MongoDB connection error: {e}")
+            if build_state == DEFAULT_BUILD_STATE:
+                raise BuildFailureError(f"MongoDB connection error: {e}")
+            
         except ConfigurationError as e:
-            raise BuildFailureError(f"MongoDB configuration error: {e}")
+            if build_state == DEFAULT_BUILD_STATE:
+                raise BuildFailureError(f"MongoDB configuration error: {e}")
 
         except BaseEngineException as e:
-            raise BuildFailureError(f"ODMantic engine error: {e}")
+            if build_state == DEFAULT_BUILD_STATE:
+                raise BuildFailureError(f"ODMantic engine error: {e}")
 
         except ServerSelectionTimeoutError as e:
-            raise BuildFailureError(f"MongoDB server selection timeout: {e}")
+            if build_state == DEFAULT_BUILD_STATE:
+                raise BuildFailureError(f"MongoDB server selection timeout: {e}")
 
         except Exception as e: # TODO
             print(e) 
-            raise BuildFailureError(f"Unexpected error: {e}") 
+            if build_state == DEFAULT_BUILD_STATE:
+                raise BuildFailureError(f"Unexpected error: {e}") 
+
+    def db_connection(self):
+        self.creds = self.vaultService.generate_mongo_creds()
+        self.client = AsyncIOMotorClient(self.mongo_uri)
+        self.motor_db = AsyncIOMotorDatabase(self.client,self.DATABASE_NAME)
+        self.engine = AIOEngine(self.client,self.DATABASE_NAME)
+
+    @property
+    def mongo_uri(self):
+        return F'mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017'
+
+        
 
 @Service
 class TortoiseConnectionService(DatabaseService):
     DATABASE_NAME = 'notifyr'
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
-        super().__init__(configService, None)
-        self.vaultService = vaultService
-
+        super().__init__(configService, None,vaultService)
 
     def verify_dependency(self):
         
@@ -458,13 +496,11 @@ class TortoiseConnectionService(DatabaseService):
         try:
             self.creds = self.vaultService.generate_postgres_creds()
             print(self.creds)
-            pg_user = self.configService.getenv('POSTGRES_USER')
-            pg_password = self.configService.getenv('POSTGRES_PASSWORD')
 
             conn = psycopg2.connect(
                 dbname=self.DATABASE_NAME,
-                user=pg_user,
-                password=pg_password,
+                user=self.db_user,
+                password=self.db_password,
                 host=self.configService.POSTGRES_HOST,
                 port=5432
             )
@@ -478,6 +514,20 @@ class TortoiseConnectionService(DatabaseService):
             except:
                 ...
     
+    @property
+    def postgres_uri(self):
+        return f"postgres://{self.db_user}:{self.db_password}@{self.configService.POSTGRES_HOST}:5432/{self.DATABASE_NAME}",
+        
+
+    async def init_connection(self,):
+        await self.close_connections()
+        await Tortoise.init(
+            db_url=self.postgres_uri,
+            modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
+        )
+
+    async def close_connections(self):
+        await Tortoise.close_connections()    
 @Service  
 class JSONServerDBService(DatabaseService):
     

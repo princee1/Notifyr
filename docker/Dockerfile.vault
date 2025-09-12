@@ -86,24 +86,38 @@ path "notifyr-generation/metadata/generation-id" {
 path "transit/" {
   capabilities = ["list"]
 }
-
-# ---- profiles-transit ----
-path "transit/encrypt/profiles-key" {
+# Encrypt and decrypt data
+path "notifyr-transit/encrypt/*" {
   capabilities = ["update"]
 }
 
-path "transit/decrypt/profiles-key" {
+path "notifyr-transit/decrypt/*" {
   capabilities = ["update"]
 }
 
-# ---- secret message-transit ----
-
-path "transit/encrypt/messages-key" {
+# Sign data
+path "notifyr-transit/sign/*" {
   capabilities = ["update"]
 }
 
-path "transit/decrypt/messages-key" {
+# Verify signature
+path "notifyr-transit/verify/*" {
   capabilities = ["update"]
+}
+
+# Optional: to read key info (like key config or key versions)
+path "notifyr-transit/keys/*" {
+  capabilities = ["read"]
+}
+
+# ---- Database ENGINE ----
+
+path "notifyr-database/creds/*" {
+  capabilities = ["read"]
+}
+
+path "notifyr-database/roles" {
+  capabilities = ["list"]
 }
 
 EOF

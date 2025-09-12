@@ -203,6 +203,9 @@ class DatabaseVaultEngine(VaultEngine):
 
     def generate_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole)->VaultDatabaseCredentials:
         role+=self._role_prefix
-        credentialss = self.client.secrets.database.generate_credentials(name=role)
+        credentialss = self.client.secrets.database.generate_credentials(
+            name=role,
+            mount_point=VaultConstant.NOTIFYR_DB_MOUNT_POINT
+            )
         return VaultDatabaseCredentials(**credentialss)
     

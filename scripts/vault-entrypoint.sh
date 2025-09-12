@@ -56,23 +56,23 @@ create_database_config(){
 
   vault write notifyr-database/config/postgres \
     plugin_name="postgresql-database-plugin" \
-    allowed_roles="$pg_role" \
+    allowed_roles="postgres-ntfr-role" \
     connection_url="postgresql://{{username}}:{{password}}@$PG_HOST:5432/notifyr" \
     max_open_connections=20 \
     max_idle_connections=10 \
     username="$POSTGRES_USER" \
     password="$POSTGRES_PASSWORD"
 
-  vault write -f notifyr-database/rotate-root/postgres
+  #vault write -f notifyr-database/rotate-root/postgres
   
   vault write notifyr-database/config/mongodb \
     plugin_name="mongodb-database-plugin" \
-    allowed_roles="$mongo_role" \
+    allowed_roles="mongo-ntfr-role" \
     connection_url="mongodb://{{username}}:{{password}}@$M_HOST:27017/admin" \
     username="$MONGO_INITDB_ROOT_USERNAME" \
     password="$MONGO_INITDB_ROOT_PASSWORD"
 
-  vault write -f notifyr-database/rotate-root/mongodb
+  # vault write -f notifyr-database/rotate-root/mongodb
 
   vault token revoke -self
 

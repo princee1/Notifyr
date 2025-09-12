@@ -175,7 +175,7 @@ setup_database_config(){
       revocation_statements="REVOKE vault_ntrfyr_app_role FROM \"{{name}}\"; 
                             DROP ROLE IF EXISTS \"{{name}}\";" 
    
-  vault write notifyr-database/roles/mongo-ntfy-role \
+  vault write notifyr-database/roles/mongo-ntfr-role \
     db_name="mongodb" \
     creation_statements='{ "db": "notifyr", "roles": [
     { "role": "readWrite", "db": "notifyr", "collection":"agent" },

@@ -228,9 +228,10 @@ class VaultConstant:
     MESSAGES_SECRETS = 'messages'
 
 
-    NotifyrTransitKeyType = Literal['profiles-key','messages-key']
-    SECRETS_MESSAGE_KEY = 'secret-messages-key'
+    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key']
+    SECRETS_MESSAGE_KEY = 'messages-key'
     PROFILES_KEY = 'profiles-key'
+    CHAT_KEY='chat-key'
 
     NotifyrDynamicSecretsRole= Literal['postgres','mongo']
     MONGO_ROLE='mongo'
@@ -244,11 +245,11 @@ class VaultConstant:
 
 
     @staticmethod
-    def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType,path=''):
+    def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType,path:str=''):
         return f'{sub_mount}/{path}'
 
     @staticmethod
-    def DATABASE_ENGINE_BASE_PATH(sub_mount:NotifyrTransitKeyType,path=''):
+    def DATABASE_ENGINE_BASE_PATH(sub_mount:NotifyrTransitKeyType,path:str=''):
         return f'{sub_mount}/{path}'
     
 
