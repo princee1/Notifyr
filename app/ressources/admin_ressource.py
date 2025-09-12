@@ -10,6 +10,7 @@ from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.database_service import TortoiseConnectionService
+from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
 from app.services.task_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
@@ -74,8 +75,9 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         self.adminService = adminService
 
         self.settingService = Get(SettingService)
+        self.vaultService = Get(HCVaultService)
 
-        self.key = self.configService.CLIENT_PASSWORD_HASH_KEY
+        self.key = self.vaultService.CLIENT_PASSWORD_HASH_KEY
 
     @ServiceStatusLock(SettingService,'reader')
     @UsePermission(AdminPermission)

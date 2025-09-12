@@ -85,6 +85,15 @@ class SettingService(BaseService):
         return await self.jsonServerService.save_settings(new_data)
 
     @property
+    def API_EXPIRATION(self):
+        return self._data.get(SettingDBConstant.API_EXPIRATION_SETTING,DEFAULT_SETTING[SettingDBConstant.API_EXPIRATION_SETTING])
+        
+
+    @property
+    def ALL_ACCESS_EXPIRATION(self):
+        return self._data.get(SettingDBConstant.ALL_ACCESS_EXPIRATION_SETTING,DEFAULT_SETTING[SettingDBConstant.ALL_ACCESS_EXPIRATION_SETTING])
+
+    @property
     def AUTH_EXPIRATION(self):
         return self._data.get(SettingDBConstant.AUTH_EXPIRATION_SETTING,DEFAULT_SETTING[SettingDBConstant.AUTH_EXPIRATION_SETTING])
 
@@ -99,6 +108,10 @@ class SettingService(BaseService):
     @property
     def ASSET_LANG(self):
         return self._data.get(SettingDBConstant.ASSET_LANG_SETTING,DEFAULT_SETTING[SettingDBConstant.ASSET_LANG_SETTING])
+
+    @property
+    def CONTACT_TOKEN_EXPIRATION(self):
+        return self._data.get(SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING,DEFAULT_SETTING[SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING])
 
     @property
     def data(self):

@@ -845,6 +845,33 @@ def ExemptLimiter():
 
 def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=None):
 
+    async def return_result(tf:Callable,a,k):
+        result = tf(*a, **k)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
+
+    async def inner_callback():
+        for s in services:
+            if isinstance(s, dict):
+                cls = s['cls']
+                a = s['args']
+                k = s['kwargs']
+
+                cls: S = Get(s)
+                if infinite_wait:
+
+                    await cls.async_pingService(*a, **k)
+                else:
+                    cls.sync_pingService(*a, **k)
+
+            else:
+                s: BaseService = Get(s)
+                if infinite_wait:
+                    await s.async_pingService()
+                else:
+                    s.sync_pingService()
+
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait)
         if cls != None:
@@ -858,41 +885,15 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
                 wait_timeout = MIN_TIMEOUT
                 if checker !=None:
                     if APIFilterInject(checker)(**kwargs):
-                        result = target_function(*args, **kwargs)
-                        if asyncio.iscoroutine(result):
-                            return await result
-                        return result
-
-                async def inner_callback():
-                    for s in services:
-                        if isinstance(s, dict):
-                            cls = s['cls']
-                            a = s['args']
-                            k = s['kwargs']
-
-                            cls: S = Get(s)
-                            if infinite_wait:
-
-                                await cls.async_pingService(*a, **k)
-                            else:
-                                cls.sync_pingService(*a, **k)
-
-                        else:
-                            s: BaseService = Get(s)
-                            if infinite_wait:
-                                await s.async_pingService()
-                            else:
-                                s.sync_pingService()
+                        return await return_result(target_function,args,kwargs)
 
                 if not infinite_wait and wait_timeout >= 0:
                     asyncio.wait_for(inner_callback(), wait_timeout)
                 else:
                     await inner_callback()
 
-                result = target_function(*args, **kwargs)
-                if asyncio.iscoroutine(result):
-                    return await result
-                return result
+                return await return_result(target_function,args,kwargs)
+
 
             return callback
         appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
@@ -904,6 +905,12 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
 def ServiceStatusLock(services: Type[S], lockType: Literal['reader', 'writer'] = 'writer', func_name: str = '',infinite_wait:bool=False,lock_route:bool=True):
     if lockType not in ['reader', 'writer']:
         raise TypeError
+
+    async def return_result(tf:Callable,a,k):
+        result = tf(*a, **k)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, ServiceStatusLock, None, services=services,lockType=lockType,func_name=func_name,infinite_wait=infinite_wait,lock_route=lock_route)
@@ -923,16 +930,12 @@ def ServiceStatusLock(services: Type[S], lockType: Literal['reader', 'writer'] =
                     if lock_route:
                         async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
                             _service.check_status(func_name)
-                            if asyncio.iscoroutinefunction(target_function):
-                                return await target_function(*args, **kwargs)
-                            return target_function(*args,**kwargs)
+                            return await return_result(target_function,args,kwargs)
                     else:
                         async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
                             _service.check_status(func_name)
 
-                        if asyncio.iscoroutinefunction(target_function):
-                                return await target_function(*args, **kwargs)
-                        return target_function(*args,**kwargs)
+                        return await return_result(target_function,args,kwargs)
 
                 if not infinite_wait and wait_timeout >=0 and as_async:
                     return await asyncio.wait_for(inner_callback(),wait_timeout)

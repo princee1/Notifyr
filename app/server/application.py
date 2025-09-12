@@ -68,7 +68,7 @@ class Application(EventInterface):
         self.rateLimiterService: RateLimiterService = Get(RateLimiterService)
         self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
         self.app.state.limiter = self.rateLimiterService.GlobalLimiter
-        self.register_tortoise()
+
         self.add_exception_handlers()
         self.add_middlewares()
         self.add_ressources()
@@ -155,24 +155,7 @@ class Application(EventInterface):
         for middleware in sorted(MIDDLEWARE.values(), key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
         
-    def register_tortoise(self):
-
-        tortoiseConnService = Get(TortoiseConnectionService)
-        if tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
-            return
-
-        pg_user = self.configService.getenv('POSTGRES_USER')
-        pg_password = self.configService.getenv('POSTGRES_PASSWORD')
-        pg_database = tortoiseConnService.DATABASE_NAME
-        pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
-
-        register_tortoise(
-            app=self.app,
-            db_url=f"postgres://{pg_user}:{pg_password}@{self.configService.POSTGRES_HOST}:5432/{pg_database}",
-            modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
-            generate_schemas=False,
-            add_exception_handlers=True,    
-        )
+    
 
     @register_hook('startup')
     async def on_startup(self):
@@ -194,9 +177,24 @@ class Application(EventInterface):
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(10)
 
-        healthService:HealthService = Get(HealthService)
-
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
+    
+    @register_hook('startup')
+    async def register_tortoise(self):
+
+        tortoiseConnService = Get(TortoiseConnectionService)
+        if tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            return
+        
+        await tortoiseConnService.init_connection()
+
+    @register_hook('shutdown')
+    async def close_tortoise(self):
+        tortoiseConnService = Get(TortoiseConnectionService)
+        if tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            return
+
+        await tortoiseConnService.close_connections()
 
     @register_hook('startup',active=False)
     def print_report_on_startup(self):

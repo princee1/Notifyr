@@ -139,7 +139,7 @@ wait_active_server(){
 
 create_default_token(){
 
-  TOKENS="JWT_SECRET_KEY ON_TOP_SECRET_KEY CONTACTS_HASH_KEY CONTACT_JWT_SECRET_KEY CLIENT_PASSWORD_HASH_KEY RSA_SECRET_PASSWORD API_ENCRYPT_TOKEN"
+  TOKENS="JWT_SECRET_KEY ON_TOP_SECRET_KEY CONTACTS_HASH_KEY CONTACT_JWT_SECRET_KEY CLIENT_PASSWORD_HASH_KEY RSA_SECRET_PASSWORD API_ENCRYPT_TOKEN WS_SECRET_JWT_KEY"
 
   ARGS=""
   for token in $TOKENS
@@ -175,7 +175,7 @@ setup_database_config(){
       revocation_statements="REVOKE vault_ntrfyr_app_role FROM \"{{name}}\"; 
                             DROP ROLE IF EXISTS \"{{name}}\";" 
    
-  vault write notifyr-database/roles/mongo-ntfy-role \
+  vault write notifyr-database/roles/mongo-ntfr-role \
     db_name="mongodb" \
     creation_statements='{ "db": "notifyr", "roles": [
     { "role": "readWrite", "db": "notifyr", "collection":"agent" },

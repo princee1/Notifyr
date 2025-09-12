@@ -11,7 +11,7 @@ from app.services.reactive_service import ReactiveService
 import qrcode as qr
 import io
 from app.services.security_service import SecurityService
-from app.utils.constant import AN_HOUR
+from app.utils.constant import SECONDS_IN_AN_HOUR
 from app.utils.helper import b64_encode, generateId
 import aiohttp
 import json
@@ -128,7 +128,7 @@ class LinkService(BaseService):
             **ip_data
         }
 
-    @Cache('redis')(AN_HOUR*2,coder=MyJSONCoder,key_builder=ip_lookup_key_builder, namespace="")
+    @Cache('redis')(SECONDS_IN_AN_HOUR*2,coder=MyJSONCoder,key_builder=ip_lookup_key_builder, namespace="")
     async def ip_lookup(self, ip_address):
         headers = {
             "Accept": "application/json",

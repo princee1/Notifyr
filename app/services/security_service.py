@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 import os
 import hmac
 import hashlib
+from app.services.secret_service import HCVaultService
 
 
 SEPARATOR = "|"
@@ -51,11 +52,12 @@ class EncryptDecryptInterface(Interface):
 
 @Service
 class JWTAuthService(BaseService, EncryptDecryptInterface):
-    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
         self.configService = configService
         self.fileService = fileService
         self.settingService = settingService
+        self.vaultService = vaultService
 
     def set_generation_id(self, gen=False) -> None:
         if gen:
@@ -63,7 +65,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             self.configService.config_json_app.data[ConfigAppConstant.META_KEY][
                 ConfigAppConstant.GENERATION_ID_KEY] = self.generation_id
             current_utc = datetime.now(timezone.utc)
-            expired_ = current_utc.timestamp() + self.configService.ALL_ACCESS_EXPIRATION
+            expired_ = current_utc.timestamp() + self.settingService.ALL_ACCESS_EXPIRATION
             expired_utc = datetime.fromtimestamp(expired_, timezone.utc)
             self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.CREATION_DATE_KEY] = current_utc.strftime(
                 "%Y-%m-%d %H:%M:%S")
@@ -131,7 +133,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         salt = str(self.salt)
         permission = WSPermission(
             operation_id=operation_id, expired_at=expired_at, created_at=now, run_id=run_id, salt=salt)
-        return self._encode_token(permission, 'WS_JWT_SECRET_KEY')
+        return self._encode_token(permission, self.vaultService.WS_JWT_SECRET_KEY,False)
 
     def encode_contact_token(self, contact_id: str, expiration: float, scope: ContactPermissionScope):
         now = time.time()
@@ -139,32 +141,28 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         salt = str(self.salt)
         permission = ContactPermission(
             expired_at=expiration, create_at=now, scope=scope, contact_id=contact_id, salt=salt)
-        return self._encode_token(permission, 'CONTACT_JWT_SECRET_KEY')
+        return self._encode_token(permission, self.vaultService.CONTACT_JWT_SECRET_KEY,False)
 
-    def _encode_token(self, obj, secret_key: str = None):
+    def _encode_token(self, obj, secret_key: str = None, lookup=True):
         if secret_key == None:
-            secret_key = self.configService.JWT_SECRET_KEY
+            secret_key = self.vaultService.JWT_SECRET_KEY
         else:
-            secret_key = self.configService.getenv(
-                secret_key, self.configService.JWT_SECRET_KEY)
-        encoded = jwt.encode(
-            obj, secret_key, algorithm=self.configService.JWT_ALGORITHM)
-        token = self._encode_value(
-            encoded, self.configService.ON_TOP_SECRET_KEY)
+            if lookup:
+                secret_key = self.vaultService.tokens.get(secret_key,self.vaultService.JWT_SECRET_KEY)
+
+        encoded = jwt.encode(obj, secret_key, algorithm=self.vaultService.JWT_ALGORITHM)
+        token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY)
         return token
 
     def decode_token(self, token: str, secret_key: str = None) -> dict:
         try:
             if secret_key == None:
-                secret_key = self.configService.JWT_SECRET_KEY
+                secret_key = self.vaultService.JWT_SECRET_KEY
             else:
-                secret_key = self.configService.getenv(
-                    secret_key, self.configService.JWT_SECRET_KEY)
+                secret_key = self.vaultService.tokens(secret_key, self.vaultService.JWT_SECRET_KEY)
 
-            token = self._decode_value(
-                token, self.configService.ON_TOP_SECRET_KEY)
-            decoded = jwt.decode(token, secret_key,
-                                 algorithms=self.configService.JWT_ALGORITHM)
+            token = self._decode_value(token, self.vaultService.ON_TOP_SECRET_KEY)
+            decoded = jwt.decode(token, secret_key,algorithms=self.vaultService.JWT_ALGORITHM)
             return decoded
 
         # TODO: For each exception, we should return a specific error message
@@ -248,13 +246,15 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 @Service
 class SecurityService(BaseService, EncryptDecryptInterface):
 
-    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
         self.configService = configService
         self.fileService = fileService
+        self.settingService= settingService
+        self.vaultService = vaultService
 
     def verify_server_access(self, token: str, sent_ip_addr) -> bool:
-        token = self._decode_value(token, self.configService.API_ENCRYPT_TOKEN)
+        token = self._decode_value(token, self.vaultService.API_ENCRYPT_TOKEN)
         token = token.split("|")
 
         if len(token) != 3:
@@ -276,7 +276,7 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         time.sleep(random()/100)
         data = ip_address + SEPARATOR +  \
             str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
-        return self._encode_value(data, self.configService.API_ENCRYPT_TOKEN)
+        return self._encode_value(data, self.vaultService.API_ENCRYPT_TOKEN)
 
     def build(self,build_state=-1):
         ...
@@ -304,11 +304,11 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         ...
 
     def generate_rsa_key_pair(self,key_size=2048):
-        rsa_secret_pwd = self.configService.RSA_SECRET_PASSWORD
+        rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
         return RSA(password=rsa_secret_pwd,key_size=key_size)
 
     def generate_rsa_from_encrypted_keys(self,private_key=None,public_key=None):
-        rsa_secret_pwd = self.configService.RSA_SECRET_PASSWORD
+        rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
         return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
 
         
