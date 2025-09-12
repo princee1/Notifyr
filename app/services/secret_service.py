@@ -1,4 +1,5 @@
 import datetime
+import time
 from typing import Literal, TypedDict
 import requests
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
@@ -63,12 +64,16 @@ class HCVaultService(BaseService,IntervalInterface):
             seed_time = self._read_volume_file(VaultConstant.SUPERCRONIC_SEED_TIME_FILE,'shared')
             if seed_time and isinstance(seed_time,str):
                 self.supercronic_start_time = float(seed_time.split('=')[1])
-                self._secret_id_crontab_interval = cron_interval(self._secret_id_crontab,self.supercronic_start_time)
+                self.compute_next_tick_time()
 
             self.vault_approle_login(build_state)
             print(self.client.lookup_token())
             print(self.client.token)
             self.read_tokens()
+
+    def compute_next_tick_time(self):
+        tick_delay = time_until_next_tick(self._secret_id_crontab)
+        self.next_tick = time.time() + tick_delay
             
     def _create_client(self,build_state:int):
         self.client = hvac.Client(self.configService.VAULT_ADDR)
@@ -94,24 +99,24 @@ class HCVaultService(BaseService,IntervalInterface):
 
     async def callback(self):
 
-        async with self.statusLock.writer as locK:
-            tick_ratio = time_until_next_tick(self._secret_id_crontab)/self._secret_id_crontab_interval
-            creation_state = DEFAULT_BUILD_STATE if  tick_ratio < 0.1 else 1
-
+        async with self.statusLock.writer as locK:            
+            creation_state = DEFAULT_BUILD_STATE if  time.time() > self.next_tick() else 0
+            self.compute_next_tick_time()
             try:
-                print(self.renew_auth_token())
-                return
-
                 if not self._create_client(creation_state):
-                    self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
+                    self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
                 else:
                     self.service_status = ServiceStatus.AVAILABLE
-            except:
-                ...
-
-
-                
-
+            except BuildAbortError:
+                self.service_status = ServiceStatus.NOT_AVAILABLE
+            except Exception as e:
+                print(e,e.__class__) 
+                try:
+                    self.renew_auth_token()
+                    self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+                except:
+                    self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
+    
 
     def _read_volume_file(self,filename:str,t:Literal['shared','secrets'],raise_:bool=True):
 

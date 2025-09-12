@@ -2,10 +2,14 @@ import asyncio
 import functools
 import traceback
 from typing import Callable
+from app.container import Get
+from app.definition._service import ServiceStatus
+from app.depends.tools import LockLogicDecorator
 from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM, bulk_upsert_email_analytics
 from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
 from app.models.contacts_model import ContactORM, bulk_upsert_contact_analytics, bulk_upsert_contact_creation_analytics
 from app.models.twilio_model import CallEventORM, CallStatusEnum, CallTrackingORM, SMSEventORM, SMSStatusEnum,SMSTrackingORM, bulk_upsert_call_analytics, bulk_upsert_sms_analytics
+from app.services.database_service import TortoiseConnectionService
 from app.utils.constant import StreamConstant
 from tortoise.transactions import in_transaction
 from app.utils.transformer import empty_str_to_none
@@ -634,3 +638,5 @@ Events_Stream = {
     StreamConstant.CONTACT_SUBS_EVENT:Add_Contact_Subs_Event,
     StreamConstant.CONTACT_CREATION_EVENT:Add_Contact_Creation_Event,
 }
+
+Events_Stream = LockLogicDecorator(Events_Stream)

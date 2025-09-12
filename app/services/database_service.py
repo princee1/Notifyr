@@ -66,7 +66,14 @@ class DatabaseService(BaseService):
     def db_password(self):
         return self.creds.get('data',dict()).get('password',None)
 
-
+    async def check_vault_status(self):
+        temp_service = None 
+        async with self.vaultService.statusLock.reader:
+            if self.vaultService.service_status == ServiceStatus.AVAILABLE:
+                ...
+            else: 
+                temp_service = self.vaultService.service_status
+        return temp_service
 
 
 
@@ -423,7 +430,7 @@ class MongooseService(DatabaseService,IntervalInterface): # Chat data
     #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService):
         super().__init__(configService,fileService,vaultService)
-        IntervalInterface.__init__(self,False,VaultTTLSyncConstant.MONGODB_AUTH_TTL+self.random_buffer_interval())
+        IntervalInterface.__init__(self,False,VaultTTLSyncConstant.MONGODB_AUTH_TTL-self.random_buffer_interval())
 
     async def save(self, model,*args):
         return await self.engine.save(model,*args)
@@ -480,11 +487,8 @@ class MongooseService(DatabaseService,IntervalInterface): # Chat data
         self.engine = AIOEngine(self.client,self.DATABASE_NAME)
 
     async def callback(self):
-        temp_service = None 
-        async with self.vaultService.statusLock.reader:
-            if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-                temp_service = ServiceStatus.TEMPORARY_NOT_AVAILABLE 
-    
+        temp_service = await self.check_vault_status()
+        
         async with self.statusLock.writer:
             if temp_service == None:
                 self.db_connection()
@@ -501,7 +505,7 @@ class TortoiseConnectionService(DatabaseService,IntervalInterface):
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
         super().__init__(configService, None,vaultService)
-        IntervalInterface.__init__(self, False,VaultTTLSyncConstant.POSTGRES_AUTH_TTL+self.random_buffer_interval())
+        IntervalInterface.__init__(self, False,VaultTTLSyncConstant.POSTGRES_AUTH_TTL-self.random_buffer_interval())
 
     def verify_dependency(self):
         
@@ -533,6 +537,7 @@ class TortoiseConnectionService(DatabaseService,IntervalInterface):
 
     def generate_creds(self):
         self.creds = self.vaultService.generate_postgres_creds()
+        print(self.creds)
     
     @property
     def postgres_uri(self):
@@ -550,14 +555,14 @@ class TortoiseConnectionService(DatabaseService,IntervalInterface):
         await Tortoise.close_connections()    
     
     async def callback(self):
-        async with self.vaultService.statusLock.reader:
-            if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-                return 
-
+        temp_service = await self.check_vault_status()
+        
         async with self.statusLock.writer:
-            self.generate_creds()
-            await self.init_connection(True)
-
+            if temp_service == None:
+                self.generate_creds()
+                await self.init_connection(True)
+            else:
+                self.service_status = temp_service
 
 @Service  
 class JSONServerDBService(DatabaseService):

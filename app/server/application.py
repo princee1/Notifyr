@@ -157,9 +157,7 @@ class Application(EventInterface):
         
         for middleware in sorted(MIDDLEWARE.values(), key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
-        
-    
-
+            
     @register_hook('startup')
     async def on_startup(self):
 
@@ -176,7 +174,6 @@ class Application(EventInterface):
 
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
 
-
     @register_hook('startup',)
     def start_tickers(self):
         taskService:TaskService =  Get(TaskService)
@@ -192,8 +189,7 @@ class Application(EventInterface):
         tortoiseConnService.start_interval()
 
         mongooseService = Get(MongooseService)
-        mongooseService.stop_interval()
-
+        mongooseService.start_interval()
     
     @register_hook('shutdown')
     def stop_tickers(self):
@@ -202,13 +198,11 @@ class Application(EventInterface):
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
 
-        services: IntervalInterface = [tortoiseConnService,celery_service,mongooseService]
+        services: list[IntervalInterface] = [tortoiseConnService,celery_service,mongooseService]
 
         for s in services:
-            services.stop_interval()
+            s.stop_interval()
 
-
-    
     @register_hook('startup')
     async def register_tortoise(self):
 
@@ -235,7 +229,6 @@ class Application(EventInterface):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
         await redisService.close_connections()
-
 
     @property
     def shutdown_hooks(self):

@@ -851,26 +851,27 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
             return await result
         return result
 
-    async def inner_callback():
+    async def inner_callback(route_params):
         for s in services:
             if isinstance(s, dict):
                 cls = s['cls']
-                a = s['args']
                 k = s['kwargs']
-
+                if not isinstance(k,dict):
+                    k = {}
+                k['_route_params'] = route_params
                 cls: S = Get(s)
                 if infinite_wait:
-
-                    await cls.async_pingService(*a, **k)
+                    await cls.async_pingService(**k)
                 else:
-                    cls.sync_pingService(*a, **k)
-
+                    cls.sync_pingService(**k)
             else:
                 s: BaseService = Get(s)
+                k = {}
+                k['_route_params'] = route_params
                 if infinite_wait:
-                    await s.async_pingService()
+                    await s.async_pingService(**k)
                 else:
-                    s.sync_pingService()
+                    s.sync_pingService(**k)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait)
@@ -888,9 +889,9 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
                         return await return_result(target_function,args,kwargs)
 
                 if not infinite_wait and wait_timeout >= 0:
-                    asyncio.wait_for(inner_callback(), wait_timeout)
+                    asyncio.wait_for(inner_callback(kwargs), wait_timeout)
                 else:
-                    await inner_callback()
+                    await inner_callback(kwargs)
 
                 return await return_result(target_function,args,kwargs)
 
