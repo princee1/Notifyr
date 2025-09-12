@@ -28,5 +28,5 @@ def build_apps_data(config_file,uvicorn_args):
     if not validate_config(config_service, config_file):
         exit(-1)
     
-def bootstrap_fastapi_server(port:int,log_level:str,host:str):
+def bootstrap_fastapi_server(port:int=None,log_level:str=None,host:str=None):
     return Application(port,log_level,host)

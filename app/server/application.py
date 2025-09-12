@@ -59,12 +59,13 @@ def register_hook(state:Literal['shutdown','startup'],active=True):
 class Application(EventInterface):
 
     # TODO if it important add other on_start_up and on_shutdown hooks
-    def __init__(self,port:int,log_level:str,host:str):
+    def __init__(self,port:int=None,log_level:str=None,host:str=None):
         self.log_level = log_level
+        self.host = host
+        self.port =port
+
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
-        self.port = self.configService.APP_PORT if port <=0 else port
-        self.host = host
         self.rateLimiterService: RateLimiterService = Get(RateLimiterService)
         self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
         self.app.state.limiter = self.rateLimiterService.GlobalLimiter

@@ -7,9 +7,10 @@ from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.vault_engine import VaultDatabaseCredentials
 from app.definition._error import BaseError
+from app.interface.timers import IntervalInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant
+from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultTTLSyncConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
@@ -409,13 +410,15 @@ class RedisService(DatabaseService):
             await self.db[i].close()
             
 @Service
-class MongooseService(DatabaseService): # Chat data
+class MongooseService(DatabaseService,IntervalInterface): # Chat data
     COLLECTION_REF = Literal['agent','chat','profile']
     DATABASE_NAME=  MongooseDBConstant.DATABASE_NAME
+
 
     #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService):
         super().__init__(configService,fileService,vaultService)
+        IntervalInterface.__init__(self,False,VaultTTLSyncConstant.MONGODB_AUTH_TTL*VaultTTLSyncConstant.db_creds_sync)
 
     async def save(self, model,*args):
         return await self.engine.save(model,*args)
@@ -432,7 +435,6 @@ class MongooseService(DatabaseService): # Chat data
     async def count(self,model,*args):
         return await self.engine.count(model,*args)
     
-
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError('Vault Service Cant issue creds')
@@ -467,22 +469,26 @@ class MongooseService(DatabaseService): # Chat data
 
     def db_connection(self):
         self.creds = self.vaultService.generate_mongo_creds()
+        print(self.creds)
         self.client = AsyncIOMotorClient(self.mongo_uri)
         self.motor_db = AsyncIOMotorDatabase(self.client,self.DATABASE_NAME)
         self.engine = AIOEngine(self.client,self.DATABASE_NAME)
+
+    async def callback(self):
+        async with self.statusLock.writer:
+            self.db_connection()
 
     @property
     def mongo_uri(self):
         return F'mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017'
 
-        
-
 @Service
-class TortoiseConnectionService(DatabaseService):
+class TortoiseConnectionService(DatabaseService,IntervalInterface):
     DATABASE_NAME = 'notifyr'
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
         super().__init__(configService, None,vaultService)
+        IntervalInterface.__init__(self, False, VaultTTLSyncConstant.db_creds_sync*VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
 
     def verify_dependency(self):
         
@@ -494,9 +500,7 @@ class TortoiseConnectionService(DatabaseService):
 
     def build(self,build_state=-1):
         try:
-            self.creds = self.vaultService.generate_postgres_creds()
-            print(self.creds)
-
+            self.generate_creds()
             conn = psycopg2.connect(
                 dbname=self.DATABASE_NAME,
                 user=self.db_user,
@@ -513,14 +517,17 @@ class TortoiseConnectionService(DatabaseService):
                     conn.close()
             except:
                 ...
+
+    def generate_creds(self):
+        self.creds = self.vaultService.generate_postgres_creds()
     
     @property
     def postgres_uri(self):
-        return f"postgres://{self.db_user}:{self.db_password}@{self.configService.POSTGRES_HOST}:5432/{self.DATABASE_NAME}",
+        return f"postgres://{self.db_user}:{self.db_password}@{self.configService.POSTGRES_HOST}:5432/{self.DATABASE_NAME}"
         
-
-    async def init_connection(self,):
-        await self.close_connections()
+    async def init_connection(self,close=False):
+        if close:
+            await self.close_connections()
         await Tortoise.init(
             db_url=self.postgres_uri,
             modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
@@ -528,11 +535,18 @@ class TortoiseConnectionService(DatabaseService):
 
     async def close_connections(self):
         await Tortoise.close_connections()    
+    
+    async def callback(self):
+        async with self.statusLock.writer:
+            self.generate_creds()
+            await self.init_connection(True)
+
+
 @Service  
 class JSONServerDBService(DatabaseService):
     
     def __init__(self,configService:ConfigService,fileService:FileService,redisService:RedisService):
-        super().__init__(configService, fileService)
+        super().__init__(configService, fileService,None)
         self.json_server_url = configService.SETTING_DB_URL
         self.redisService = redisService
     

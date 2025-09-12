@@ -159,9 +159,6 @@ class ConfigService(_service.BaseService):
         self.PARENT_PID = str(os.getppid())
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
 
-        self.APP_PORT=ConfigService.parseToInt(self.getenv("APP_PORT"), 8088)
-        self.ADDR=self.getenv('ADDR','0.0.0.0')
-
         self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
         
         self.BASE_DIR = self.getenv("BASE_DIR", './')
@@ -209,8 +206,6 @@ class ConfigService(_service.BaseService):
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.API_KEY = self.getenv("API_KEY")
         
-        self.ALL_ACCESS_EXPIRATION = ConfigService.parseToInt(self.getenv("ALL_ACCESS_EXPIRATION"), 36000000000)
-
 
         # HASHI CORP VAULT CONFIG #
 
