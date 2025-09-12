@@ -28,6 +28,7 @@ from app.errors.async_error import ReactiveSubjectNotFoundError
 import psycopg2
 from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
 from app.utils.constant import SettingDBConstant
+from random import randint,random
 
 MS_1000 = 1000
 ENGINE_KEY = 'engine'
@@ -43,11 +44,15 @@ class RedisDatabaseDoesNotExistsError(BaseError):
 @AbstractServiceClass
 class DatabaseService(BaseService): 
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
-            super().__init__()
-            self.configService= configService
-            self.fileService = fileService
-            self.vaultService = vaultService
-            self.creds:VaultDatabaseCredentials = {}
+        super().__init__()
+        self.configService= configService
+        self.fileService = fileService
+        self.vaultService = vaultService
+        self.creds:VaultDatabaseCredentials = {}
+    
+    @staticmethod
+    def random_buffer_interval():
+        return 60*random() + randint(20,40)
 
     def renew_db_creds(self):
         lease_id = self.creds['lease_id']
@@ -418,7 +423,7 @@ class MongooseService(DatabaseService,IntervalInterface): # Chat data
     #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService):
         super().__init__(configService,fileService,vaultService)
-        IntervalInterface.__init__(self,False,VaultTTLSyncConstant.MONGODB_AUTH_TTL*VaultTTLSyncConstant.db_creds_sync)
+        IntervalInterface.__init__(self,False,VaultTTLSyncConstant.MONGODB_AUTH_TTL+self.random_buffer_interval())
 
     async def save(self, model,*args):
         return await self.engine.save(model,*args)
@@ -475,8 +480,16 @@ class MongooseService(DatabaseService,IntervalInterface): # Chat data
         self.engine = AIOEngine(self.client,self.DATABASE_NAME)
 
     async def callback(self):
+        temp_service = None 
+        async with self.vaultService.statusLock.reader:
+            if self.vaultService.service_status != ServiceStatus.AVAILABLE:
+                temp_service = ServiceStatus.TEMPORARY_NOT_AVAILABLE 
+    
         async with self.statusLock.writer:
-            self.db_connection()
+            if temp_service == None:
+                self.db_connection()
+            else:
+                self.service_status = temp_service
 
     @property
     def mongo_uri(self):
@@ -488,7 +501,7 @@ class TortoiseConnectionService(DatabaseService,IntervalInterface):
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
         super().__init__(configService, None,vaultService)
-        IntervalInterface.__init__(self, False, VaultTTLSyncConstant.db_creds_sync*VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
+        IntervalInterface.__init__(self, False,VaultTTLSyncConstant.POSTGRES_AUTH_TTL+self.random_buffer_interval())
 
     def verify_dependency(self):
         
@@ -537,6 +550,10 @@ class TortoiseConnectionService(DatabaseService,IntervalInterface):
         await Tortoise.close_connections()    
     
     async def callback(self):
+        async with self.vaultService.statusLock.reader:
+            if self.vaultService.service_status != ServiceStatus.AVAILABLE:
+                return 
+
         async with self.statusLock.writer:
             self.generate_creds()
             await self.init_connection(True)

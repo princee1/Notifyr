@@ -48,15 +48,16 @@ class IntervalInterface(Interface):
         self._task = None
         self._interval = interval
         self.start_now = start_now
+        self.active = True
 
     async def _run_interval(self):
         """Internal method to repeatedly call the callback at specified intervals."""
         if not self.start_now:
-            while True:
+            while self.active:
                 await asyncio.sleep(self._interval)
                 await self._run_callback()
         else:
-            while True:
+            while self.active:
                 await self._run_callback()
                 await asyncio.sleep(self._interval)
 
@@ -64,6 +65,7 @@ class IntervalInterface(Interface):
         """Start a new interval timer."""
         self.stop_interval()  # Stop any running interval
         
+        self.active = True
         if interval!=None:
             self._interval = interval
         
@@ -80,6 +82,7 @@ class IntervalInterface(Interface):
             self._task.cancel()
             self._task = None
             #self._interval = None
+        self.active = False
 
     def is_running(self) -> bool:
         """Check if the interval timer is running."""

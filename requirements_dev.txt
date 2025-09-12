@@ -32,6 +32,7 @@ click-didyoumean==0.3.1
 click-plugins==1.1.1
 click-repl==0.3.0
 colorama==0.4.6
+croniter==6.0.0
 cryptography==41.0.4
 Deprecated==1.2.14
 device_detector==5.0.1

@@ -8,10 +8,12 @@ from app.container import Get
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import BaseService, ServiceStatus
+from app.interface.timers import IntervalInterface
 from app.ressources import *
-from app.services.database_service import RedisService, TortoiseConnectionService
+from app.services.database_service import MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
 from app.services.rate_limiter_service import RateLimiterService
+from app.services.secret_service import HCVaultService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
 from app.services.config_service import ConfigService, MODE
@@ -172,13 +174,40 @@ class Application(EventInterface):
             await redisService.create_group()
             redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
 
+        FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
+
+
+    @register_hook('startup',)
+    def start_tickers(self):
         taskService:TaskService =  Get(TaskService)
         #taskService.start()
+
+        vaultService: HCVaultService = Get(HCVaultService) 
+        vaultService.start_interval()
 
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(10)
 
-        FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
+        tortoiseConnService = Get(TortoiseConnectionService)
+        tortoiseConnService.start_interval()
+
+        mongooseService = Get(MongooseService)
+        mongooseService.stop_interval()
+
+    
+    @register_hook('shutdown')
+    def stop_tickers(self):
+
+        tortoiseConnService = Get(TortoiseConnectionService)
+        celery_service: CeleryService = Get(CeleryService)
+        mongooseService = Get(MongooseService)
+
+        services: IntervalInterface = [tortoiseConnService,celery_service,mongooseService]
+
+        for s in services:
+            services.stop_interval()
+
+
     
     @register_hook('startup')
     async def register_tortoise(self):

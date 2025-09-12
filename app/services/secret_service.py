@@ -7,9 +7,11 @@ from app.interface.timers import IntervalInterface
 from app.services.config_service import MODE, ConfigService
 import hvac
 from app.services.file_service import FileService
-from app.utils.constant import VaultConstant
+from app.utils.constant import VaultConstant, VaultTTLSyncConstant
 from app.utils.fileIO import FDFlag
 from datetime import datetime
+
+from app.utils.helper import cron_interval, time_until_next_tick
 
 DEFAULT_JWT_ALGORITHM = 'HS256'
 
@@ -39,12 +41,14 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
 
 @Service
 class HCVaultService(BaseService,IntervalInterface):
+
+    _secret_id_crontab='0 * * * *'
     
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__()
         self.configService = configService
         self.fileService = fileService
-        IntervalInterface.__init__(self,False,1000)
+        IntervalInterface.__init__(self,False,VaultTTLSyncConstant.SECRET_ID_TTL)
         self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
 
     def verify_dependency(self):
@@ -59,8 +63,10 @@ class HCVaultService(BaseService,IntervalInterface):
             seed_time = self._read_volume_file(VaultConstant.SUPERCRONIC_SEED_TIME_FILE,'shared')
             if seed_time and isinstance(seed_time,str):
                 self.supercronic_start_time = float(seed_time.split('=')[1])
+                self._secret_id_crontab_interval = cron_interval(self._secret_id_crontab,self.supercronic_start_time)
 
             self.vault_approle_login(build_state)
+            print(self.client.lookup_token())
             print(self.client.token)
             self.read_tokens()
             
@@ -68,8 +74,10 @@ class HCVaultService(BaseService,IntervalInterface):
         self.client = hvac.Client(self.configService.VAULT_ADDR)
         _raise = build_state==DEFAULT_BUILD_STATE
 
-        self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets',_raise)
-        self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',_raise)
+        if build_state == DEFAULT_BUILD_STATE:
+            self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets',_raise)
+            self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',_raise)
+
         self.client.auth.approle.login(self.role_id,self.secret_id)
 
         if not self.client.is_authenticated():
@@ -85,9 +93,25 @@ class HCVaultService(BaseService,IntervalInterface):
         return True
 
     async def callback(self):
+
         async with self.statusLock.writer as locK:
-            # self.renew_auth_token()
-            self._create_client(0)
+            tick_ratio = time_until_next_tick(self._secret_id_crontab)/self._secret_id_crontab_interval
+            creation_state = DEFAULT_BUILD_STATE if  tick_ratio < 0.1 else 1
+
+            try:
+                print(self.renew_auth_token())
+                return
+
+                if not self._create_client(creation_state):
+                    self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
+                else:
+                    self.service_status = ServiceStatus.AVAILABLE
+            except:
+                ...
+
+
+                
+
 
     def _read_volume_file(self,filename:str,t:Literal['shared','secrets'],raise_:bool=True):
 
@@ -135,10 +159,6 @@ class HCVaultService(BaseService,IntervalInterface):
             raise BuildAbortError(f"Vault server not reachable: {e}")
         except requests.exceptions.Timeout as e:
             raise BuildAbortError("Vault request timed out: {e}")
-
-    def vault_auth(self):
-        if not self._create_client():
-            self.service_status = ServiceStatus.NOT_AVAILABLE
   
     def _dev_token_login(self):
         try:
@@ -147,7 +167,7 @@ class HCVaultService(BaseService,IntervalInterface):
             ...
 
     def renew_auth_token(self):
-        self.client.renew_token()
+        return self.client.auth.token.renew_self()
 
 ##############################################                          ##################################333
 
@@ -184,10 +204,13 @@ class HCVaultService(BaseService,IntervalInterface):
     def read_tokens(self):
         self.tokens = self._kv1_engine.read(VaultConstant.TOKENS_SECRETS)
     
+##############################################                          ##################################333
+
     def read_generation_id(self):
         ...
 
 ##############################################                          ##################################333
+
 
     @property
     def JWT_SECRET_KEY(self):

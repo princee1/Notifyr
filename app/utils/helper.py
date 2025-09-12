@@ -501,6 +501,7 @@ def format_url_params(params: dict[str,str])->str:
     param_fragments.append('%s=%s' % (param[0], quote_safe_url(param[1])))
   return '&'.join(param_fragments)
 
+###################################### ** Phone Helper **  ###########################################
 
 
 letter_to_number = {
@@ -538,3 +539,26 @@ def filter_paths(paths):
 
 
         return ['assets/'+ p for p in results ]
+
+###################################### ** Time Helper **  ###########################################
+
+from croniter import croniter
+from datetime import datetime, timedelta
+
+
+def time_until_next_tick(cron_expr: str) -> float:
+    """
+    Calculate how many seconds until the next cron tick
+    from the current time.
+    """
+    base = datetime.now()
+    itr = croniter(cron_expr, base)
+    next_time = itr.get_next(datetime)
+    return (next_time - base).total_seconds()
+
+def cron_interval(cron_expr: str, start_time: float) -> float:
+    base = datetime.fromtimestamp(start_time)
+    itr = croniter(cron_expr, base)
+    t1 = itr.get_next(datetime)
+    t2 = itr.get_next(datetime)
+    return (t2 - t1).total_seconds()

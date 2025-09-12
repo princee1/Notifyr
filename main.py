@@ -5,7 +5,7 @@ from app.utils.prettyprint import PrettyPrinter_
 import shutil
 import sys
 
-from app.utils.validation import host_validator
+from app.utils.validation import host_validator, port_validator
 
 exe_path = shutil.which("uvicorn").replace(".EXE", "")
 
@@ -15,7 +15,7 @@ parser.add_argument('--mode', '-m', choices=[mode.value for mode in RunModeConst
                         default='file', type=str, help='Running Mode')
 
 parser.add_argument("--host", '-H',type=host_validator, default="127.0.0.1", help="Host to bind to")
-parser.add_argument('--port','-p',default=8088,type=int,help='Specify the port, if not it will run using the port set a the env variable')
+parser.add_argument('--port','-p',default=8088,type=port_validator,help='Specify the port, if not it will run using the port set a the env variable')
 parser.add_argument("--log-level", '-l',default="info", choices=["critical", "error", "warning", "info", "debug", "trace"])
 parser.add_argument('--config', '-c', default='./config.app.json',type=str, help='Path to the config file')
 parser.add_argument('--team','-t',type=str,default='solo',choices=['solo','team'],help="Whether there's other instance running too")
