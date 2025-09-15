@@ -63,7 +63,7 @@ create_database_config(){
     username="$POSTGRES_USER" \
     password="$POSTGRES_PASSWORD"
 
-  #vault write -f notifyr-database/rotate-root/postgres
+  vault write -f notifyr-database/rotate-root/postgres
   
   vault write notifyr-database/config/mongodb \
     plugin_name="mongodb-database-plugin" \
@@ -72,7 +72,7 @@ create_database_config(){
     username="$MONGO_INITDB_ROOT_USERNAME" \
     password="$MONGO_INITDB_ROOT_PASSWORD"
 
-  # vault write -f notifyr-database/rotate-root/mongodb
+  vault write -f notifyr-database/rotate-root/mongodb
 
   vault token revoke -self
 

@@ -8,7 +8,7 @@ from app.container import Get
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import BaseService, ServiceStatus
-from app.interface.timers import IntervalInterface
+from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
 from app.services.database_service import MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
@@ -180,16 +180,16 @@ class Application(EventInterface):
         #taskService.start()
 
         vaultService: HCVaultService = Get(HCVaultService) 
-        vaultService.start_interval()
+        vaultService.start()
 
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(10)
 
         tortoiseConnService = Get(TortoiseConnectionService)
-        tortoiseConnService.start_interval()
+        tortoiseConnService.start()
 
         mongooseService = Get(MongooseService)
-        mongooseService.start_interval()
+        mongooseService.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
@@ -197,11 +197,17 @@ class Application(EventInterface):
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
+        vaultService = Get(HCVaultService)
 
-        services: list[IntervalInterface] = [tortoiseConnService,celery_service,mongooseService]
+        taskService:TaskService =  Get(TaskService)
+        
+
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService]
 
         for s in services:
-            s.stop_interval()
+            s.shutdown()
+        
+        celery_service.stop_interval()
 
     @register_hook('startup')
     async def register_tortoise(self):

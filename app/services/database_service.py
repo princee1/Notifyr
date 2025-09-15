@@ -1,20 +1,22 @@
 import functools
 from typing import Any, Callable, Dict, Self, TypedDict
 import aiohttp
+import hvac
 import requests
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.vault_engine import VaultDatabaseCredentials
 from app.definition._error import BaseError
-from app.interface.timers import IntervalInterface
+from app.definition._interface import Interface, IsInterface
+from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultTTLSyncConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import DEFAULT_BUILD_STATE, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceStatus, StateProtocol
+from app.definition._service import DEFAULT_BUILD_STATE, BuildError, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceStatus, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from odmantic.exceptions import BaseEngineException
@@ -41,18 +43,25 @@ class RedisStreamDoesNotExistsError(BaseError):
 class RedisDatabaseDoesNotExistsError(BaseError):
     ...
 
-@AbstractServiceClass
-class DatabaseService(BaseService): 
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
-        super().__init__()
-        self.configService= configService
-        self.fileService = fileService
+
+@IsInterface
+class RotateCredentialsInterface(Interface):
+
+
+    class RetryError(BuildError):
+        ...
+    
+    def __init__(self,vaultService:HCVaultService,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
         self.vaultService = vaultService
         self.creds:VaultDatabaseCredentials = {}
+        self.max_retry = 2
+        self.wait_time = 2
+        self.t=t
+        self.b = b
     
     @staticmethod
-    def random_buffer_interval():
-        return 60*random() + randint(20,40)
+    def random_buffer_interval(ttl):
+        return ttl - (ttl*.08*random() + randint(20,40))
 
     def renew_db_creds(self):
         lease_id = self.creds['lease_id']
@@ -66,7 +75,7 @@ class DatabaseService(BaseService):
     def db_password(self):
         return self.creds.get('data',dict()).get('password',None)
 
-    async def check_vault_status(self):
+    async def _check_vault_status(self):
         temp_service = None 
         async with self.vaultService.statusLock.reader:
             if self.vaultService.service_status == ServiceStatus.AVAILABLE:
@@ -75,7 +84,36 @@ class DatabaseService(BaseService):
                 temp_service = self.vaultService.service_status
         return temp_service
 
+    async def creds_rotation(self):
+        temp_service = await self._check_vault_status()
+        async with self.statusLock.writer:
+            retry =0
+            while retry<self.max_retry:
+                try:
+                    if temp_service == None:
+                        await self._creds_rotator()
+                    else:
+                        self.service_status = temp_service
+                    break
+                except hvac.exceptions.Forbidden:
+                    if self.t == 'constant':
+                        await asyncio.sleep(self.wait_time)
+                    else:
+                        await asyncio.sleep( (retry+1)*self.wait_time +self.b)
+                
+                retry+=1
+                    
 
+    async def _creds_rotator(self):
+        pass
+
+@AbstractServiceClass
+class DatabaseService(BaseService): 
+    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
+        super().__init__()
+        self.configService= configService
+        self.fileService = fileService
+    
 
 @Service
 class RedisService(DatabaseService):
@@ -93,7 +131,7 @@ class RedisService(DatabaseService):
     GROUP = 'NOTIFYR-GROUP'
     
     def __init__(self,configService:ConfigService,reactiveService:ReactiveService):
-        super().__init__(configService,None,None)
+        super().__init__(configService,None)
         self.configService = configService
         self.reactiveService = reactiveService
         self.to_shutdown = False
@@ -422,15 +460,17 @@ class RedisService(DatabaseService):
             await self.db[i].close()
             
 @Service
-class MongooseService(DatabaseService,IntervalInterface): # Chat data
+class MongooseService(DatabaseService,SchedulerInterface,RotateCredentialsInterface): # Chat data
     COLLECTION_REF = Literal['agent','chat','profile']
     DATABASE_NAME=  MongooseDBConstant.DATABASE_NAME
 
 
     #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService):
-        super().__init__(configService,fileService,vaultService)
-        IntervalInterface.__init__(self,False,VaultTTLSyncConstant.MONGODB_AUTH_TTL-self.random_buffer_interval())
+        super().__init__(configService,fileService)
+        SchedulerInterface.__init__(self)
+        RotateCredentialsInterface.__init__(self,vaultService)
+        self.schedule(self.random_buffer_interval(VaultTTLSyncConstant.MONGODB_AUTH_TTL),self.creds_rotation)
 
     async def save(self, model,*args):
         return await self.engine.save(model,*args)
@@ -486,26 +526,23 @@ class MongooseService(DatabaseService,IntervalInterface): # Chat data
         self.motor_db = AsyncIOMotorDatabase(self.client,self.DATABASE_NAME)
         self.engine = AIOEngine(self.client,self.DATABASE_NAME)
 
-    async def callback(self):
-        temp_service = await self.check_vault_status()
-        
-        async with self.statusLock.writer:
-            if temp_service == None:
-                self.db_connection()
-            else:
-                self.service_status = temp_service
+    async def _creds_rotator(self):
+        self.db_connection()
+
 
     @property
     def mongo_uri(self):
         return F'mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017'
 
 @Service
-class TortoiseConnectionService(DatabaseService,IntervalInterface):
+class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
     DATABASE_NAME = 'notifyr'
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
-        super().__init__(configService, None,vaultService)
-        IntervalInterface.__init__(self, False,VaultTTLSyncConstant.POSTGRES_AUTH_TTL-self.random_buffer_interval())
+        super().__init__(configService, None)
+        SchedulerInterface.__init__(self)
+        RotateCredentialsInterface.__init__(self,vaultService)
+        self.schedule(self.random_buffer_interval(VaultTTLSyncConstant.POSTGRES_AUTH_TTL),self.creds_rotation)
 
     def verify_dependency(self):
         
@@ -538,7 +575,7 @@ class TortoiseConnectionService(DatabaseService,IntervalInterface):
     def generate_creds(self):
         self.creds = self.vaultService.generate_postgres_creds()
         print(self.creds)
-    
+        
     @property
     def postgres_uri(self):
         return f"postgres://{self.db_user}:{self.db_password}@{self.configService.POSTGRES_HOST}:5432/{self.DATABASE_NAME}"
@@ -553,22 +590,17 @@ class TortoiseConnectionService(DatabaseService,IntervalInterface):
 
     async def close_connections(self):
         await Tortoise.close_connections()    
-    
-    async def callback(self):
-        temp_service = await self.check_vault_status()
-        
-        async with self.statusLock.writer:
-            if temp_service == None:
-                self.generate_creds()
-                await self.init_connection(True)
-            else:
-                self.service_status = temp_service
+
+    async def _creds_rotator(self):
+        self.generate_creds()
+        await self.init_connection(True)
+
 
 @Service  
 class JSONServerDBService(DatabaseService):
     
     def __init__(self,configService:ConfigService,fileService:FileService,redisService:RedisService):
-        super().__init__(configService, fileService,None)
+        super().__init__(configService, fileService)
         self.json_server_url = configService.SETTING_DB_URL
         self.redisService = redisService
     

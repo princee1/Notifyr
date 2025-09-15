@@ -2,9 +2,10 @@ import datetime
 import time
 from typing import Literal, TypedDict
 import requests
+from app.classes.secrets import SecretsWrapper
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceStatus
-from app.interface.timers import IntervalInterface
+from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.config_service import MODE, ConfigService
 import hvac
 from app.services.file_service import FileService
@@ -41,7 +42,7 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
 
 
 @Service
-class HCVaultService(BaseService,IntervalInterface):
+class HCVaultService(BaseService,SchedulerInterface):
 
     _secret_id_crontab='0 * * * *'
     
@@ -49,8 +50,10 @@ class HCVaultService(BaseService,IntervalInterface):
         super().__init__()
         self.configService = configService
         self.fileService = fileService
-        IntervalInterface.__init__(self,False,VaultTTLSyncConstant.SECRET_ID_TTL)
+        SchedulerInterface.__init__(self)
         self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
+        self.schedule(VaultTTLSyncConstant.SECRET_ID_TTL*.75,self.refresh_token)
+
 
     def verify_dependency(self):
         ...
@@ -67,7 +70,6 @@ class HCVaultService(BaseService,IntervalInterface):
                 self.compute_next_tick_time()
 
             self.vault_approle_login(build_state)
-            print(self.client.lookup_token())
             print(self.client.token)
             self.read_tokens()
 
@@ -97,10 +99,10 @@ class HCVaultService(BaseService,IntervalInterface):
 
         return True
 
-    async def callback(self):
+    async def refresh_token(self):
 
         async with self.statusLock.writer as locK:            
-            creation_state = DEFAULT_BUILD_STATE if  time.time() > self.next_tick() else 0
+            creation_state = DEFAULT_BUILD_STATE if  time.time() > self.next_tick else 0
             self.compute_next_tick_time()
             try:
                 if not self._create_client(creation_state):
@@ -109,13 +111,19 @@ class HCVaultService(BaseService,IntervalInterface):
                     self.service_status = ServiceStatus.AVAILABLE
             except BuildAbortError:
                 self.service_status = ServiceStatus.NOT_AVAILABLE
+            except requests.exceptions.ConnectionError as e:
+                self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
+            except requests.exceptions.Timeout as e:
+                self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
             except Exception as e:
                 print(e,e.__class__) 
                 try:
                     self.renew_auth_token()
                     self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
                 except:
-                    self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
+                    self.service_status = ServiceStatus.NOT_AVAILABLE
+            
+            print(f'{self.name}:',self.service_status)
     
 
     def _read_volume_file(self,filename:str,t:Literal['shared','secrets'],raise_:bool=True):
@@ -193,6 +201,8 @@ class HCVaultService(BaseService,IntervalInterface):
         data = self._kv1_engine.read(VaultConstant.PROFILES_SECRETS,profiles_id)
         for k,v in data.items():
             data[k]= self._transit_engine.decrypt(v,VaultConstant.PROFILES_KEY)
+        
+        data = SecretsWrapper(data)
         return data
 
     def put_profiles(self,profiles_id:str,data:dict):

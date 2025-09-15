@@ -12,8 +12,9 @@ class IntervalError(BaseError):
 
 @IsInterface
 class SchedulerInterface(Interface):
-    def __init__(self):
+    def __init__(self,misfire_grace_time:float|None=None):
         self._scheduler = AsyncIOScheduler()
+        self.misfire_grace_time = misfire_grace_time
         
     def schedule(
         self,
@@ -25,9 +26,9 @@ class SchedulerInterface(Interface):
         """Schedule a task with a delay. Supports async and sync functions."""
         trigger = IntervalTrigger(seconds=delay)
         if asyncio.iscoroutinefunction(action):
-            self._scheduler.add_job(action, trigger, args=args, kwargs=kwargs)
+            self._scheduler.add_job(action, trigger, args=args, kwargs=kwargs,misfire_grace_time=self.misfire_grace_time)
         else:
-            self._scheduler.add_job(self._run_sync, trigger, args=(action, *args), kwargs=kwargs)
+            self._scheduler.add_job(self._run_sync, trigger, args=(action, *args), kwargs=kwargs,misfire_grace_time=self.misfire_grace_time)
 
     def start(self):
         self._scheduler.start()

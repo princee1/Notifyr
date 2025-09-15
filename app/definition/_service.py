@@ -156,7 +156,7 @@ class StateProtocolMalFormattedError(BuildError):
 
 #################################            #####################################
 
-WAIT_TIME = 1
+WAIT_TIME = .1
 
 class BaseService():
     CONTEXT:Literal['sync','async'] = 'sync'

@@ -1,7 +1,7 @@
 import traceback
 from tortoise.models import Model
 from tortoise.transactions import in_transaction
-from app.depends.tools import LockLogicDecorator
+from app.depends.lock import LockLogicDecorator
 from app.models.email_model import EmailTrackingORM
 from app.models.twilio_model import CallTrackingORM, SMSTrackingORM
 from app.utils.constant import StreamConstant
@@ -55,4 +55,4 @@ Tracking_Stream = {
 
 }
 
-Tracking_Stream = LockLogicDecorator(Tracking_Stream)
+LockLogicDecorator(Tracking_Stream)

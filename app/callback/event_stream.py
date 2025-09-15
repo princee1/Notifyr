@@ -4,7 +4,7 @@ import traceback
 from typing import Callable
 from app.container import Get
 from app.definition._service import ServiceStatus
-from app.depends.tools import LockLogicDecorator
+from app.depends.lock import LockLogicDecorator
 from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM, bulk_upsert_email_analytics
 from app.models.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
 from app.models.contacts_model import ContactORM, bulk_upsert_contact_analytics, bulk_upsert_contact_creation_analytics
@@ -639,4 +639,4 @@ Events_Stream = {
     StreamConstant.CONTACT_CREATION_EVENT:Add_Contact_Creation_Event,
 }
 
-Events_Stream = LockLogicDecorator(Events_Stream)
+LockLogicDecorator(Events_Stream)
