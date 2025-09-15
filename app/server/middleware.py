@@ -81,23 +81,8 @@ class SecurityMiddleWare(MiddleWare):
 
     @BypassOn()
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
-        current_time = time.time()
-        timestamp =  self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY]
-
-        diff = timestamp -current_time
-        if diff< 0:
-            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"message": "Unauthorized", "detail": "All Access and Auth token are expired"})
-        try:
-            request_api_key = get_api_key(request)
-            if request_api_key is None:
-                return Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Unauthorized")
-            client_ip = get_client_ip(request)
-            if not self.securityService.verify_server_access(request_api_key, client_ip):
-                return Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Unauthorized")
-            response: Response = await call_next(request)
-            return response
-        except InvalidToken:
-            return Response(status_code=status.HTTP_401_UNAUTHORIZED, content='Unauthorized')
+        return  await call_next(request)
+            
        
 class AnalyticsMiddleware(MiddleWare):
     priority = MiddlewarePriority.ANALYTICS

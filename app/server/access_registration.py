@@ -42,9 +42,7 @@ def register_client_services(set_gen_id:bool):
     
     PrettyPrinter_.show(1, print_stack=False,)
     jwtAuthService.set_generation_id(set_gen_id)
-    if not configService.config_json_app.exists:
-        # TODO not implemented the error
-        return
+    
     # BUG this works only for the first app
     current_ressources = [x.__name__ for x in RESSOURCES.values()]
     client_number = ask_question([NumberInputHandler(

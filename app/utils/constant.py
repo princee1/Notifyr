@@ -1,5 +1,6 @@
 from enum import Enum
 from typing_extensions import Literal
+import random
 ########################  ** Dependencies **   ########################################
 
 
@@ -135,9 +136,7 @@ class VariableConstant:
 
 
 class RunModeConstant(Enum):
-    FILE = "file"
-    CREATE = "create"
-    EDIT = "edit"
+    SERVER = "server"
     REGISTER = "register"
 
 class HTMLTemplateConstant:
@@ -259,6 +258,7 @@ class VaultTTLSyncConstant:
     TRANSIT_ROTATION = SECONDS_IN_AN_HOUR*24
 
     SECRET_ID_TTL= SECONDS_IN_AN_HOUR*2
+    
     VAULT_TOKEN_TTL=60*45
     VAULT_TOKEN_MAX_TTL=60*90
 
@@ -267,5 +267,7 @@ class VaultTTLSyncConstant:
 
     MONGODB_AUTH_TTL=SECONDS_IN_AN_HOUR*2
     MONGODB_MAX_TTL=SECONDS_IN_AN_HOUR*4
+
+    
 
     

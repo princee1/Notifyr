@@ -325,9 +325,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         self.sharing_task: dict[str, TaskManager] = {}
         self.task_lock = RWLock()
         self.route_lock = RWLock()
-        self.server_load: dict[TaskHeaviness, int] = {
-            t: 0 for t in TaskHeaviness._value2member_map_.values()}
-        
+        self.server_load: dict[TaskHeaviness, int] = {t: 0 for t in TaskHeaviness._value2member_map_.values()}
         super().__init__(None)
         BaseService.__init__(self)
         SchedulerInterface.__init__(self)

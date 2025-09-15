@@ -8,10 +8,12 @@ from app.container import Get
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import BaseService, ServiceStatus
+from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
-from app.services.database_service import RedisService, TortoiseConnectionService
+from app.services.database_service import MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
 from app.services.rate_limiter_service import RateLimiterService
+from app.services.secret_service import HCVaultService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
 from app.services.config_service import ConfigService, MODE
@@ -59,12 +61,13 @@ def register_hook(state:Literal['shutdown','startup'],active=True):
 class Application(EventInterface):
 
     # TODO if it important add other on_start_up and on_shutdown hooks
-    def __init__(self,port:int,log_level:str,host:str):
+    def __init__(self,port:int=None,log_level:str=None,host:str=None):
         self.log_level = log_level
+        self.host = host
+        self.port =port
+
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
-        self.port = self.configService.APP_PORT if port <=0 else port
-        self.host = host
         self.rateLimiterService: RateLimiterService = Get(RateLimiterService)
         self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
         self.app.state.limiter = self.rateLimiterService.GlobalLimiter
@@ -154,9 +157,7 @@ class Application(EventInterface):
         
         for middleware in sorted(MIDDLEWARE.values(), key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
-        
-    
-
+            
     @register_hook('startup')
     async def on_startup(self):
 
@@ -171,14 +172,43 @@ class Application(EventInterface):
             await redisService.create_group()
             redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
 
+        FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
+
+    @register_hook('startup',)
+    def start_tickers(self):
         taskService:TaskService =  Get(TaskService)
         #taskService.start()
+
+        vaultService: HCVaultService = Get(HCVaultService) 
+        vaultService.start()
 
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(10)
 
-        FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
+        tortoiseConnService = Get(TortoiseConnectionService)
+        tortoiseConnService.start()
+
+        mongooseService = Get(MongooseService)
+        mongooseService.start()
     
+    @register_hook('shutdown')
+    def stop_tickers(self):
+
+        tortoiseConnService = Get(TortoiseConnectionService)
+        celery_service: CeleryService = Get(CeleryService)
+        mongooseService = Get(MongooseService)
+        vaultService = Get(HCVaultService)
+
+        taskService:TaskService =  Get(TaskService)
+        
+
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService]
+
+        for s in services:
+            s.shutdown()
+        
+        celery_service.stop_interval()
+
     @register_hook('startup')
     async def register_tortoise(self):
 
@@ -205,7 +235,6 @@ class Application(EventInterface):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
         await redisService.close_connections()
-
 
     @property
     def shutdown_hooks(self):

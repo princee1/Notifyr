@@ -277,9 +277,9 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @ServiceStatusLock(SettingService,'reader')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, authPermission=Depends(get_auth_permission)):
-        old_generation_id = self.jwtAuthService.generation_id
+        old_generation_id = None
         self.jwtAuthService.set_generation_id(True)
-        new_generation_id = self.configService.config_json_app[ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY]
+        new_generation_id = None
 
         client = await ClientORM.filter(client_id=authPermission['client_id']).first()
         auth_token, refresh_token = self.issue_auth(client, authPermission)
@@ -294,12 +294,10 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @ServiceStatusLock(SettingService,'reader')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
-    async def un_revoke_all_tokens(self, request: Request, generation: GenerationModel, authPermission=Depends(get_auth_permission)):
-        new_generation_id = generation.generation_id
-        old_generation_id = self.configService.config_json_app[ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY]
-        self.configService.config_json_app[ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY] = new_generation_id
+    async def un_revoke_all_tokens(self, request: Request, authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.set_generation_id(False)
-
+        old_generation_id = None
+        new_generation_id = None
         client = await ClientORM.filter(client_id=authPermission['client_id']).first()
         auth_token, refresh_token = await self.issue_auth(client, authPermission)
 

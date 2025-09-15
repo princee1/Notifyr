@@ -128,6 +128,8 @@ STATUS_TO_ERROR_MAP = {
 class ServiceNotAvailableError(BuildError):
     pass
 
+class MajorSystemFailureError(BufferError):
+    pass
 class ServiceTemporaryNotAvailableError(BuildError):
     pass
 
@@ -154,7 +156,7 @@ class StateProtocolMalFormattedError(BuildError):
 
 #################################            #####################################
 
-WAIT_TIME = 1
+WAIT_TIME = .1
 
 class BaseService():
     CONTEXT:Literal['sync','async'] = 'sync'
@@ -179,6 +181,10 @@ class BaseService():
 
     def check_status(self,func_name):
         match self.service_status :
+
+            case ServiceStatus.MAJOR_SYSTEM_FAILURE:
+                raise MajorSystemFailureError
+
             case ServiceStatus.NOT_AVAILABLE :
                 raise ServiceNotAvailableError
             case ServiceStatus.TEMPORARY_NOT_AVAILABLE:
@@ -232,11 +238,11 @@ class BaseService():
         
 
     @CheckStatusBeforeHand
-    async def async_pingService(self):
+    async def async_pingService(self,**kwargs):
         ...
     
     @CheckStatusBeforeHand
-    def sync_pingService(self):
+    def sync_pingService(self,**kwargs):
         ...
 
 
