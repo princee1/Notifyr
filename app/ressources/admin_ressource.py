@@ -22,7 +22,7 @@ from app.definition._ressource import PingService, ServiceStatusLock, UseGuard, 
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import Role, RoutePermission, AssetsPermission, Scope, TokensModel
 from pydantic import BaseModel,  field_validator
-from app.decorators.handlers import ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
+from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe
 from app.utils.helper import filter_paths, parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
@@ -59,10 +59,11 @@ class AuthPermissionModel(BaseModel):
 class GenerationModel(BaseModel):
     generation_id: str
 
-@PingService([TortoiseConnectionService])
+#@PingService([TortoiseConnectionService])
+@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
-@UseHandler(ServiceAvailabilityHandler,TortoiseHandler)
+@UseHandler(ServiceAvailabilityHandler,TortoiseHandler,AsyncIOHandler)
 @HTTPRessource(CLIENT_PREFIX)
 class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
@@ -216,8 +217,8 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
                 
         return is_revoked
 
-@PingService([TortoiseConnectionService])
-@UseHandler(TortoiseHandler)
+@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseHandler(TortoiseHandler,AsyncIOHandler)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
 @UseHandler(ServiceAvailabilityHandler)
