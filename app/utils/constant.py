@@ -221,10 +221,11 @@ class VaultConstant:
         return f'../../vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','profiles','messages']
+    NotifyrSecretType = Literal['tokens','profiles','messages','generation-id']
     TOKENS_SECRETS = 'tokens'
     PROFILES_SECRETS = 'profiles'
     MESSAGES_SECRETS = 'messages'
+    GENERATION_ID = 'generation-id'
 
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key']
@@ -244,7 +245,9 @@ class VaultConstant:
 
 
     @staticmethod
-    def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType,path:str=''):
+    def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType='',path:str=''):
+        if sub_mount == '':
+            return path+'/'
         return f'{sub_mount}/{path}'
 
     @staticmethod

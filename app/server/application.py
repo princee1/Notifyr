@@ -163,9 +163,6 @@ class Application(EventInterface):
 
         BaseService.CONTEXT = 'async'
 
-        jwtService = Get(JWTAuthService)
-        jwtService.set_generation_id(False)
-
         redisService = Get(RedisService)
         
         if redisService.service_status == ServiceStatus.AVAILABLE:

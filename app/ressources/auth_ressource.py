@@ -135,12 +135,12 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         return AuthPermission(roles=roles,scope=admin.client_scope,allowed_assets=allowed_assets,allowed_routes=allowed_routes) #TODO add more routes
     
     def _decode_and_verify(self, client: ClientORM, x_client_token):
-        authPermission: AuthPermission = self.jwtAutService.decode_token(x_client_token)
+        authPermission: AuthPermission = self.jwtAutService._decode_token(x_client_token)
         
         if authPermission["client_id"] != str(client.client_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
 
-        if authPermission['generation_id'] != self.jwtAutService.generation_id:
+        if authPermission['generation_id'] != self.jwtAutService.GENERATION_ID:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
         
         if authPermission["issued_for"] != client.issued_for:

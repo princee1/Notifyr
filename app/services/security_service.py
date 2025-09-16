@@ -7,7 +7,7 @@ from app.services.setting_service import SettingService
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
-from app.definition._service import AbstractServiceClass, BaseService, Service
+from app.definition._service import AbstractServiceClass, BaseService, Service, ServiceStatus
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 import base64
@@ -16,8 +16,6 @@ import time
 from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
-from app.utils.constant import ConfigAppConstant
-from datetime import datetime, timezone
 import os
 import hmac
 import hashlib
@@ -52,6 +50,9 @@ class EncryptDecryptInterface(Interface):
 
 @Service
 class JWTAuthService(BaseService, EncryptDecryptInterface):
+    GENERATION_ID_LEN = 32
+    gen_id_path='generation-id'
+
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
         self.configService = configService
@@ -59,8 +60,8 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-    def set_generation_id(self, gen=False) -> None:
-        ...
+        self._generation_id =...
+        self._generation_id_meta = ...
 
     def encode_auth_token(self,authz_id,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
         try:
@@ -68,7 +69,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
                 data = {}
             salt = str(self.salt)
             created_time = time.time()
-            permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
+            permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.GENERATION_ID, issued_for=issue_for, created_at=created_time,
                                         expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
                                         salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id,authz_id=authz_id)
             token = self._encode_token(permission)
@@ -81,7 +82,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         try:
             salt = str(self.salt)
             created_time = time.time()
-            permission = RefreshPermission(client_id=client_id, generation_id=self.generation_id, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
+            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
                                            expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id,client_type=client_type.value)
             token = self._encode_token(permission)
             return token
@@ -137,7 +138,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY)
         return token
 
-    def decode_token(self, token: str, secret_key: str = None) -> dict:
+    def _decode_token(self, token: str, secret_key: str = None) -> dict:
         try:
             if secret_key == None:
                 secret_key = self.vaultService.JWT_SECRET_KEY
@@ -174,7 +175,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
     def verify_auth_permission(self, token: str, issued_for: str) -> AuthPermission:
 
-        token = self.decode_token(token)
+        token = self._decode_token(token)
         permission: AuthPermission = AuthPermission(**token)
         try:
             if permission['scope'] == Scope.SoloDolo.value:
@@ -190,7 +191,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             #     raise HTTPException(
             #         status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
 
-            if permission["generation_id"] != self.generation_id:
+            if permission["generation_id"] != self.GENERATION_ID:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
             return permission
@@ -199,7 +200,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
                 status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
 
     def verify_refresh_permission(self,tokens:str):
-        token =self.decode_token(tokens)
+        token =self._decode_token(tokens)
         permission = RefreshPermission(**token)
         self.set_status(permission,'refresh')
 
@@ -211,7 +212,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
     def verify_contact_permission(self, token: str) -> ContactPermission:
 
-        token = self.decode_token(token, 'CONTACT_JWT_SECRET_KEY')
+        token = self._decode_token(token, 'CONTACT_JWT_SECRET_KEY')
         permission: ContactPermission = ContactPermission(**token)
 
         try:
@@ -222,8 +223,33 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
 
+    def read_generation_id(self):
+        data=self.vaultService._kv2_engine.read('',self.gen_id_path)
+        return data.get('GENERATION_ID',None)
+
+    def revoke_all_tokens(self) -> None:
+        new_generation_id = generateId(self.GENERATION_ID_LEN)
+        self.vaultService._kv2_engine.put('',{
+            'GENERATION_ID':new_generation_id,
+        },path=self.gen_id_path)
+
+        self._generation_id = self.read_generation_id()
+        
+    def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool):
+        self.vaultService._kv2_engine.rollback('',self.gen_id_path,version,destroy,delete)
+        self._generation_id = self.read_generation_id()
+
     def build(self,build_state=-1):
-        ...
+        self._generation_id = self.read_generation_id()
+        if self._generation_id == None:
+            self.service_status = ServiceStatus.NOT_AVAILABLE
+            return
+        
+        
+
+    @property
+    def GENERATION_ID(self):
+        return self._generation_id
 
 
 @Service

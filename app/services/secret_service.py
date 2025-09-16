@@ -92,10 +92,10 @@ class HCVaultService(BaseService,SchedulerInterface):
         
         self.token_meta = parse_vault_token_meta(self.client.lookup_token())
         
-        self._kv1_engine = KV1VaultEngine(self.client)
-        self._kv2_engine = KV2VaultEngine(self.client)
-        self._transit_engine = TransitVaultEngine(self.client)
-        self._database_engine = DatabaseVaultEngine(self.client)
+        self._kv1_engine = KV1VaultEngine(self.client, VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT)
+        self._kv2_engine = KV2VaultEngine(self.client,VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT)
+        self._transit_engine = TransitVaultEngine(self.client,VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT)
+        self._database_engine = DatabaseVaultEngine(self.client,VaultConstant.NOTIFYR_DB_MOUNT_POINT)
 
         return True
 
@@ -220,12 +220,6 @@ class HCVaultService(BaseService,SchedulerInterface):
         self.tokens = self._kv1_engine.read(VaultConstant.TOKENS_SECRETS)
     
 ##############################################                          ##################################333
-
-    def read_generation_id(self):
-        ...
-
-##############################################                          ##################################333
-
 
     @property
     def JWT_SECRET_KEY(self):
