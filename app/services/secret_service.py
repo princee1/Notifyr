@@ -5,7 +5,7 @@ import requests
 from app.classes.secrets import SecretsWrapper
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceStatus
-from app.interface.timers import IntervalInterface, SchedulerInterface
+from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.config_service import MODE, ConfigService
 import hvac
 from app.services.file_service import FileService
@@ -52,7 +52,11 @@ class HCVaultService(BaseService,SchedulerInterface):
         self.fileService = fileService
         SchedulerInterface.__init__(self)
         self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
-        self.schedule(VaultTTLSyncConstant.SECRET_ID_TTL*.75,self.refresh_token)
+        delay = IntervalParams(
+            seconds=VaultTTLSyncConstant.SECRET_ID_TTL*.75
+        )
+
+        self.interval_schedule(delay,self.refresh_token)
 
 
     def verify_dependency(self):

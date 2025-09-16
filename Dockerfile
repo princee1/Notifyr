@@ -12,8 +12,6 @@ RUN pip install --no-cache-dir -r requirements_dev.txt
 
 COPY ./assets ./assets/
 
-COPY ./config.app.json .
-
 COPY ./main.py .
 
 COPY ./app/ ./app/
