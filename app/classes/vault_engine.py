@@ -1,7 +1,7 @@
 from app.utils.constant import VaultConstant
 from app.utils.helper import b64_decode, b64_encode
 from hvac import Client
-from typing import TypedDict, Optional, Dict, Any
+from typing import Literal, TypedDict, Optional, Dict, Any
 
 
 class VaultDatabaseCredentialsData(TypedDict):
@@ -47,15 +47,16 @@ RSA_PSS_SALT_LENGTHS = ["auto", "hash"]  # or an integer within allowed range
 
 
 class VaultEngine:
-    def __init__(self,client:Client):
+    def __init__(self,client:Client,mount_point:str):
         self.client = client
+        self.mount_point = mount_point
 
 class KV1VaultEngine(VaultEngine):
     
     def read(self, sub_mount: VaultConstant.NotifyrSecretType, path: str = '', wrap_response: bool = False, wrap_ttl: str = "60s"):
         params = {
             "path": VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
-            "mount_point": VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT,
+            "mount_point": self.mount_point,
         }
         if wrap_response:
             params["wrap_ttl"] = wrap_ttl
@@ -71,7 +72,7 @@ class KV1VaultEngine(VaultEngine):
         params = {
             "path": VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
             "secret": data,
-            "mount_point": VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT,
+            "mount_point": self.mount_point,
         }
         if wrap_response:
             params["wrap_ttl"] = wrap_ttl
@@ -84,35 +85,49 @@ class KV1VaultEngine(VaultEngine):
     def delete(self,sub_mount:VaultConstant.NotifyrSecretType,path:str):
         delete_response = self.client.secrets.kv.v1.delete_secret(
             path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount,path),
-            mount_point=VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT
+            mount_point=self.mount_point
                 )
         print(delete_response)
 
 
 class KV2VaultEngine(VaultEngine):
+
     def read(self, sub_mount: VaultConstant.NotifyrSecretType, path: str = '', version: int = None):
         params = {
             "path": VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
-            "mount_point": VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT,
+            "mount_point": self.mount_point,
         }
         if version is not None:
             params["version"] = version
         
         read_response = self.client.secrets.kv.v2.read_secret_version(**params)
         print("KV2 Read:", read_response)
-        if 'data' in read_response and 'data' in read_response['data']:
-            return read_response['data']['data']
+        if 'data' in read_response:
+            return read_response['data']
         return {}
 
     def put(self, sub_mount: VaultConstant.NotifyrSecretType, data: dict, path: str = ''):
         params = {
             "path": VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
             "secret": data,
-            "mount_point": VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT,
+            "mount_point": self.mount_point,
         }
         write_response = self.client.secrets.kv.v2.create_or_update_secret(**params)
         print("KV2 Write:", write_response)
         return write_response
+
+    def undelete(self, sub_mount: VaultConstant.NotifyrSecretType, path: str, versions: list):
+        if not versions:
+            raise ValueError("You must specify at least one version to undelete.")
+
+        undelete_response = self.client.secrets.kv.v2.undelete_versions(
+            path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
+            versions=versions,
+            mount_point=self.mount_point
+        )
+
+        print("KV2 Undelete:", undelete_response)
+        return undelete_response
 
     def delete(self, sub_mount: VaultConstant.NotifyrSecretType, path: str, versions: list = []):
         if versions:
@@ -120,13 +135,13 @@ class KV2VaultEngine(VaultEngine):
             delete_response = self.client.secrets.kv.v2.delete_versions(
                 path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
                 versions=versions,
-                mount_point=VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT
+                mount_point=self.mount_point
             )
         else:
             # Soft delete latest version
             delete_response = self.client.secrets.kv.v2.delete_latest_version_of_secret(
                 path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
-                mount_point=VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT
+                mount_point=self.mount_point
             )
         print("KV2 Delete:", delete_response)
         return delete_response
@@ -135,17 +150,27 @@ class KV2VaultEngine(VaultEngine):
         destroy_response = self.client.secrets.kv.v2.destroy_secret_versions(
             path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
             versions=versions,
-            mount_point=VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT
+            mount_point=self.mount_point
         )
         print("KV2 Destroy:", destroy_response)
         return destroy_response
 
-    def rollback(self, sub_mount: VaultConstant.NotifyrSecretType, path: str, version: int):
+    def rollback(self, sub_mount: VaultConstant.NotifyrSecretType, path: str, version: int,other_version_to_delete:list[int]=[], destroy=False,delete=False):
         # Rollback by reading the old version and writing it as the latest
         old_data = self.read(sub_mount, path, version=version)
         if not old_data:
-            raise ValueError(f"No data found at version {version} for path {path}")
-        return self.put(sub_mount, old_data, path)
+            if not self.undelete(sub_mount,path, versions=[version]):
+                raise ValueError(f"No data found at version {version} for path {path}")
+            else:
+                old_data = self.read(sub_mount, path, version=version)
+
+        self.put(sub_mount, old_data, path)
+        if destroy and other_version_to_delete:
+            self.destroy(sub_mount,path,other_version_to_delete)
+            return
+        if delete and other_version_to_delete:
+            self.delete(sub_mount,path,other_version_to_delete)
+       
 
 
 class TransitVaultEngine(VaultEngine):
@@ -155,7 +180,7 @@ class TransitVaultEngine(VaultEngine):
         encrypt_response = self.client.secrets.transit.encrypt_data(
             name=key,
             plaintext=encoded_text,
-            mount_point=VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT
+            mount_point=self.mount_point
         )
         print("Encrypted:", encrypt_response)
         return encrypt_response["data"]["ciphertext"]
@@ -164,7 +189,7 @@ class TransitVaultEngine(VaultEngine):
         decrypted_response = self.client.secrets.transit.decrypt_data(
             name=key,
             ciphertext=ciphertext,
-            mount_point=VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT
+            mount_point=self.mount_point
         )
         print("Decrypted:", decrypted_response)
         encoded_response = decrypted_response['data']['plaintext']
@@ -177,7 +202,7 @@ class TransitVaultEngine(VaultEngine):
             name=key,
             input=encoded_input,
             hash_algorithm=algorithm,
-            mount_point=VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT
+            mount_point=self.mount_point
         )
         print("Sign response:", sign_response)
         return sign_response["data"]["signature"]
@@ -190,7 +215,7 @@ class TransitVaultEngine(VaultEngine):
             input=encoded_input,
             signature=signature,
             hash_algorithm=algorithm,
-            mount_point=VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT
+            mount_point=self.mount_point
         )
         print("Verify response:", verify_response)
         return verify_response["data"]["valid"]
@@ -205,7 +230,7 @@ class DatabaseVaultEngine(VaultEngine):
         role+=self._role_prefix
         credentialss = self.client.secrets.database.generate_credentials(
             name=role,
-            mount_point=VaultConstant.NOTIFYR_DB_MOUNT_POINT
+            mount_point=self.mount_point
             )
         return VaultDatabaseCredentials(**credentialss)
     

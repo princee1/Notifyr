@@ -9,7 +9,7 @@ from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.vault_engine import VaultDatabaseCredentials
 from app.definition._error import BaseError
 from app.definition._interface import Interface, IsInterface
-from app.interface.timers import IntervalInterface, SchedulerInterface
+from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultTTLSyncConstant
@@ -470,7 +470,10 @@ class MongooseService(DatabaseService,SchedulerInterface,RotateCredentialsInterf
         super().__init__(configService,fileService)
         SchedulerInterface.__init__(self)
         RotateCredentialsInterface.__init__(self,vaultService)
-        self.schedule(self.random_buffer_interval(VaultTTLSyncConstant.MONGODB_AUTH_TTL),self.creds_rotation)
+        delay = IntervalParams(
+            seconds=self.random_buffer_interval(VaultTTLSyncConstant.MONGODB_AUTH_TTL)
+        )
+        self.interval_schedule(delay,self.creds_rotation)
 
     async def save(self, model,*args):
         return await self.engine.save(model,*args)
@@ -542,7 +545,12 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
         super().__init__(configService, None)
         SchedulerInterface.__init__(self)
         RotateCredentialsInterface.__init__(self,vaultService)
-        self.schedule(self.random_buffer_interval(VaultTTLSyncConstant.POSTGRES_AUTH_TTL),self.creds_rotation)
+
+        delay = IntervalParams(
+            seconds=self.random_buffer_interval(VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
+        )
+
+        self.interval_schedule(delay,self.creds_rotation)
 
     def verify_dependency(self):
         
