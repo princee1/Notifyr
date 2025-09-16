@@ -102,8 +102,8 @@ class KV2VaultEngine(VaultEngine):
         
         read_response = self.client.secrets.kv.v2.read_secret_version(**params)
         print("KV2 Read:", read_response)
-        if 'data' in read_response and 'data' in read_response['data']:
-            return read_response['data']['data']
+        if 'data' in read_response:
+            return read_response['data']
         return {}
 
     def put(self, sub_mount: VaultConstant.NotifyrSecretType, data: dict, path: str = ''):
@@ -155,7 +155,7 @@ class KV2VaultEngine(VaultEngine):
         print("KV2 Destroy:", destroy_response)
         return destroy_response
 
-    def rollback(self, sub_mount: VaultConstant.NotifyrSecretType, path: str, version: int,last_version:True, destroy=False,delete=False):
+    def rollback(self, sub_mount: VaultConstant.NotifyrSecretType, path: str, version: int,other_version_to_delete:list[int]=[], destroy=False,delete=False):
         # Rollback by reading the old version and writing it as the latest
         old_data = self.read(sub_mount, path, version=version)
         if not old_data:
@@ -165,11 +165,11 @@ class KV2VaultEngine(VaultEngine):
                 old_data = self.read(sub_mount, path, version=version)
 
         self.put(sub_mount, old_data, path)
-        if destroy:
-            self.destroy(sub_mount,path,[version])
+        if destroy and other_version_to_delete:
+            self.destroy(sub_mount,path,other_version_to_delete)
             return
-        if delete:
-            self.delete(sub_mount,path,[version])
+        if delete and other_version_to_delete:
+            self.delete(sub_mount,path,other_version_to_delete)
        
 
 

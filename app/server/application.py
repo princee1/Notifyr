@@ -174,7 +174,7 @@ class Application(EventInterface):
     @register_hook('startup',)
     def start_tickers(self):
         taskService:TaskService =  Get(TaskService)
-        #taskService.start()
+        taskService.start()
 
         vaultService: HCVaultService = Get(HCVaultService) 
         vaultService.start()
@@ -199,7 +199,7 @@ class Application(EventInterface):
         taskService:TaskService =  Get(TaskService)
         
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService]
 
         for s in services:
             s.shutdown()

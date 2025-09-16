@@ -1,5 +1,9 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
+from apscheduler.triggers.combining import AndTrigger
 from typing import Callable, Any
 import asyncio
 from app.definition._error import BaseError
@@ -41,6 +45,12 @@ class SchedulerInterface(Interface):
     def shutdown(self):
         """Shut down the scheduler."""
         self._scheduler.shutdown()
+    
+    def pause(self,job_id):
+        self._scheduler.pause_job(job_id)
+    
+    def resume(self,job_id):
+        self._scheduler.resume_job(job_id)
 
 
 @IsInterface

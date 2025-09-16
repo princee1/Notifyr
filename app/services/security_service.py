@@ -7,7 +7,7 @@ from app.services.setting_service import SettingService
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
-from app.definition._service import AbstractServiceClass, BaseService, Service, ServiceStatus
+from app.definition._service import AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 import base64
@@ -60,8 +60,6 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-        self._generation_id =...
-        self._generation_id_meta = ...
 
     def encode_auth_token(self,authz_id,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
         try:
@@ -225,32 +223,36 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
     def read_generation_id(self):
         data=self.vaultService._kv2_engine.read('',self.gen_id_path)
-        return data.get('GENERATION_ID',None)
+        self.generation_id_data = data
 
     def revoke_all_tokens(self) -> None:
         new_generation_id = generateId(self.GENERATION_ID_LEN)
         self.vaultService._kv2_engine.put('',{
             'GENERATION_ID':new_generation_id,
         },path=self.gen_id_path)
-
-        self._generation_id = self.read_generation_id()
+        self.read_generation_id()
         
-    def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool):
-        self.vaultService._kv2_engine.rollback('',self.gen_id_path,version,destroy,delete)
-        self._generation_id = self.read_generation_id()
+    def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool,version_to_delete:list[int]=[]):
+        self.vaultService._kv2_engine.rollback('',self.gen_id_path,version,destroy,delete,version_to_delete)
+        self.read_generation_id()
+
+    def verify_dependency(self):
+        if self.vaultService.service_status not in {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}:
+            raise BuildFailureError
 
     def build(self,build_state=-1):
-        self._generation_id = self.read_generation_id()
-        if self._generation_id == None:
+        self.read_generation_id()
+        if self.GENERATION_ID == None:
             self.service_status = ServiceStatus.NOT_AVAILABLE
-            return
-        
-        
+            return    
 
     @property
-    def GENERATION_ID(self):
-        return self._generation_id
+    def GENERATION_ID(self)->None|str:
+        return self.generation_id_data.get('data',{}).get('GENERATION_ID',None)
 
+    @property
+    def GENERATION_METADATA(self)->dict:
+        return self.generation_id_data.get('metadata',{})
 
 @Service
 class SecurityService(BaseService, EncryptDecryptInterface):
