@@ -1,4 +1,4 @@
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, ServiceStatusLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseServiceLock
 from app.services.database_service import MongooseService, TortoiseConnectionService
 from app.services.secret_service import HCVaultService
 from app.container import Get, InjectInMethod
@@ -41,11 +41,10 @@ class SecretMessageRessource(BaseHTTPRessource):
         self.jwtService = Get(JWTAuthService)
     
 
-    @ServiceStatusLock(HCVaultService,'reader')
+    @UseServiceLock(HCVaultService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],deprecated=True)
     async def print_creds(self,):
-        print(self.tortoiseConnectionService.creds)
-        print(self.mongooseService.creds)
+        ...
 
     
     async def encrypt_message(self):

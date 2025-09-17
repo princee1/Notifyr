@@ -2,7 +2,7 @@ from fastapi import Depends, Query,status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.container import Get, InjectInMethod
-from  app.definition._ressource import BaseHTTPRessource,HTTPRessource, IncludeWebsocket, PingService, ServiceStatusLock, UseHandler, UsePermission, UseRoles
+from  app.definition._ressource import BaseHTTPRessource,HTTPRessource, IncludeWebsocket, PingService, UseServiceLock, UseHandler, UsePermission, UseRoles
 from app.services.setting_service import SettingService
 from app.services.task_service import CeleryService
 from app.services.config_service import ConfigService
@@ -43,7 +43,7 @@ class SupportRessource(BaseHTTPRessource):
         ...
     
     @PingService([JWTAuthService])
-    @ServiceStatusLock(SettingService,lockType='reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @UseHandler(WebSocketHandler)
     @BaseHTTPRessource.Get('/live-chat-permission/{ws_path}',)
     def issue_chat_permission(self, ws_path:str, authPermission=Depends(get_auth_permission)):

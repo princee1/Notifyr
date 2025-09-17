@@ -9,7 +9,7 @@ from app.decorators.guards import ActiveContactGuard, ContactActionCodeGuard, Re
 from app.decorators.handlers import AsyncIOHandler, ContactsHandler, TemplateHandler, TortoiseHandler, handle_http_exception
 from app.depends.funcs_dep import get_contact_permission, Get_Contact, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, ServiceStatusLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ContactORMCache,ContactSummaryORMCache
 from app.models.contacts_model import AppRegisteredContactModel, ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
 from app.services.task_service import TaskService, CeleryService
@@ -33,7 +33,7 @@ CONTACTS_CRUD_PREFIX = 'manage'
 get_contacts = Get_Contact(False,False)
        
 ##############################################                   ##################################################
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @UseRoles([Role.SUBSCRIPTION])
@@ -81,7 +81,7 @@ class ContentSubscriptionRessource(BaseHTTPRessource):
 @UseHandler(TortoiseHandler, ContactsHandler,AsyncIOHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @PingService([ContactsService])
 @HTTPRessource(CONTACTS_SUBSCRIPTION_PREFIX)
 class ContactsSubscriptionRessource(BaseHTTPRessource):
@@ -161,7 +161,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
         return await self.subscriptionService.get_contact_subscription(contact, subs_content)
         
 
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler,ContactsHandler,AsyncIOHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
@@ -223,7 +223,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 
 
 #@UseHandler(handle_http_exception)
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler, ContactsHandler,AsyncIOHandler)
 @PingService([ContactsService])
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
@@ -282,7 +282,7 @@ class ContactsCRUDRessource(BaseHTTPRessource):
         await contact.delete()
         return JSONResponse(content={"detail": "Contact deleted", "contact":content_data}, status_code=status.HTTP_200_OK)
 
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler, ContactsHandler,AsyncIOHandler)
 @UseRoles([Role.CONTACTS])
 @PingService([ContactsService])

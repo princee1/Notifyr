@@ -904,7 +904,7 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
     return decorator
 
 
-def ServiceStatusLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False):
+def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False):
     if lockType not in ['reader', 'writer']:
         raise TypeError
 
@@ -915,7 +915,7 @@ def ServiceStatusLock(*services: Type[S], lockType: Literal['reader', 'writer'] 
         return result
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, ServiceStatusLock, None, services=services,lockType=lockType,infinite_wait=infinite_wait)
+        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait)
         if cls != None:
             return cls
 

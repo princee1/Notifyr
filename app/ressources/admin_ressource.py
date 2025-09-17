@@ -20,7 +20,7 @@ from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
-from app.definition._ressource import PingService, ServiceStatusLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter
+from app.definition._ressource import PingService, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import Role, RoutePermission, AssetsPermission, Scope, TokensModel
 from pydantic import BaseModel,  field_validator
@@ -66,7 +66,7 @@ class UnRevokeGenerationIDModel(BaseModel):
     version_to_delete:list[int] = []
 
 #@PingService([TortoiseConnectionService])
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,TortoiseHandler,AsyncIOHandler)
@@ -86,7 +86,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
         self.key = self.vaultService.CLIENT_PASSWORD_HASH_KEY
 
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/')
     async def create_client(self, client: ClientModel,gid: str = Depends(get_query_params('gid', 'id')), authPermission=Depends(get_auth_permission)):
@@ -223,7 +223,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
                 
         return is_revoked
 
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler,AsyncIOHandler)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
@@ -282,8 +282,8 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @PingService([HCVaultService])
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @ServiceStatusLock(SettingService,'reader')
-    @ServiceStatusLock(JWTAuthService,'writer')
+    @UseServiceLock(SettingService,lockType='reader')
+    @UseServiceLock(JWTAuthService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
         self.jwtAuthService.revoke_all_tokens()
@@ -305,8 +305,8 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     
     @PingService([HCVaultService])
     @UseLimiter(limit_value='1/day')
-    @ServiceStatusLock(SettingService,'reader')
-    @ServiceStatusLock(JWTAuthService,'writer')
+    @UseServiceLock(SettingService,lockType='reader')
+    @UseServiceLock(JWTAuthService,lockType='writer')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
     async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):   
@@ -356,7 +356,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='4/day')
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
     async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client)], authModel: AuthPermissionModel, request: Request, authPermission=Depends(get_auth_permission)):

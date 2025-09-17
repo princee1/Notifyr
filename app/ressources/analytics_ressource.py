@@ -3,11 +3,11 @@ from fastapi import Depends, Request
 from app.classes.auth_permission import Role
 from app.decorators.handlers import AsyncIOHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, ServiceStatusLock, UseHandler, UsePermission, UseRoles,HTTPMethod
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, UseServiceLock, UseHandler, UsePermission, UseRoles,HTTPMethod
 from app.depends.dependencies import get_auth_permission
 from app.services.database_service import TortoiseConnectionService
 
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
 @UseHandler(TortoiseHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission)

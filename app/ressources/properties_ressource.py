@@ -6,7 +6,7 @@ from app.container import Get, InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, ServiceAvailabilityHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import GlobalPointerIteratorPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, ServiceStatusLock, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseServiceLock, UseRoles
 from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_auth_permission
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
@@ -43,7 +43,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         self.configService = configService
 
     @UseLimiter(limit_value='500/minutes')
-    @ServiceStatusLock(AssetService, 'reader')
+    @UseServiceLock(AssetService,lockType= 'reader')
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.PUBLIC])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
@@ -67,7 +67,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         return {"value": val}
 
     @UseLimiter(limit_value='10/hours')
-    @ServiceStatusLock(AssetService, 'writer')
+    @UseServiceLock(AssetService, lockType='writer')
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
@@ -94,7 +94,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         return {"value": val}
 
     @UseLimiter(limit_value='10/hours')
-    @ServiceStatusLock(AssetService, 'writer')
+    @UseServiceLock(AssetService,lockType= 'writer')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
@@ -142,7 +142,7 @@ class SettingsRessource(BaseHTTPRessource):
     #@PingService([SettingService])
     @UseRoles([Role.PUBLIC])
     @UseLimiter(limit_value='1000/minutes')
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET],)
     async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
         return self.settingService.data
@@ -150,7 +150,7 @@ class SettingsRessource(BaseHTTPRessource):
     @PingService([JSONServerDBService])
     @UseRoles([Role.ADMIN])
     @UseLimiter(limit_value='1/minutes')
-    @ServiceStatusLock(SettingService,'writer')
+    @UseServiceLock(SettingService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
     async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission),default = Query(False)):
         if default:

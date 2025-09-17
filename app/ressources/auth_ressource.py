@@ -11,7 +11,7 @@ from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, SecurityCli
 from app.depends.funcs_dep import GetClient, get_client_by_password,verify_admin_signature, verify_admin_token,verify_twilio_token
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, TwilioPermission, UserPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, ServiceStatusLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ChallengeORMCache, ClientORMCache
 from app.errors.security_error import AuthzIdMisMatchError, ClientDoesNotExistError,ClientTokenHeaderNotProvidedError, CouldNotCreateAuthTokenError
 from app.interface.issue_auth import IssueAuthInterface
@@ -31,7 +31,7 @@ REFRESH_AUTH_PREFIX = 'refresh'
 GENERATE_AUTH_PREFIX = 'generate'
 AUTH_PREFIX = 'auth'    
 
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler)   
 @UsePipe(ForceClientPipe)
 @UseHandler(ServiceAvailabilityHandler,SecurityClientHandler,AsyncIOHandler)
@@ -49,7 +49,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePipe(RefreshTokenPipe)
     @UseRoles(roles=[Role.REFRESH])
     @UseHandler(ORMCacheHandler)
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @UsePermission(UserPermission,JWTRefreshTokenPermission)
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard,)
     @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST])
@@ -70,7 +70,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
     @UsePipe(RefreshTokenPipe)
     @UseHandler(ORMCacheHandler)
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @UseRoles(roles=[Role.ADMIN,Role.REFRESH],options=[MustHave(Role.ADMIN)])
     @UsePermission(AdminPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_signature)], )
@@ -88,7 +88,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UsePipe(RefreshTokenPipe)
     @UseHandler(SecurityClientHandler)
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @UseRoles(roles=[Role.ADMIN,Role.REFRESH,Role.TWILIO],options=[MustHaveRoleSuchAs(Role.ADMIN,Role.TWILIO)])
     @UsePermission(TwilioPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_twilio_token)],mount=False )
@@ -106,7 +106,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         else:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED,content='Could not set auth and refresh token')
 
-@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
 @UseHandler(TortoiseHandler,ServiceAvailabilityHandler,AsyncIOHandler)
 @HTTPRessource(GENERATE_AUTH_PREFIX)
@@ -167,7 +167,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
     async def issue_admin_auth(self, request: Request,):
         #TODO Protect requests
@@ -178,7 +178,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/twilio/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)],mount=False)
     async def issue_twilio_auth(self,request:Request):
         
@@ -195,7 +195,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
     @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
-    @ServiceStatusLock(SettingService,'reader')
+    @UseServiceLock(SettingService,lockType='reader')
     @UsePermission(UserPermission(accept_none_auth=True))
     @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST])
     async def self_issue_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None)):
