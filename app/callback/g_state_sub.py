@@ -4,6 +4,7 @@ from typing import Any
 from app.container import Get
 from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, ServiceStatus,StateProtocol, VariableProtocol
 from app.utils.constant import SubConstant
+from app.classes.profiles import ProfileStateProtocol
 
 
 
@@ -66,6 +67,9 @@ async def Set_Service_Variables(message:VariableProtocol):
         return
     except Exception as e:
         traceback.print_exc()
+
+async def ProfilStatus(message:ProfileStateProtocol):
+    ...
 
 G_State_Subs = {
     SubConstant.SERVICE_STATUS:Set_Service_Status,

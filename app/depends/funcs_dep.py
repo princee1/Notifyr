@@ -180,22 +180,6 @@ async def get_subs_content(content_id: str, content_idtype: str = Query('id'), a
             404, {"message": "Subscription Content does not exists with those information"})
 
 
-def cost() -> int:
-    ...
-
-
-def key_contact_id() -> str:
-    ...
-
-
-def key_client_id() -> str:
-    ...
-
-
-def key_group_id() -> str:
-    ...
-
-
 async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
     configService: ConfigService = Get(ConfigService)
 
@@ -320,6 +304,7 @@ async def get_task(request_id: str = Depends(get_request_id), as_async: bool = D
     if offload_task == None:
         raise HTTPException(500, detail='Offload task is not available')
     return taskService._register_tasks(request_id, as_async, runtype, offload_task, ttl, save, return_results,retry,split,algorithm,strategy)
+
 
 async def get_challenge(client:ClientORM):
     return await ChallengeORM.filter(client=client).first()

@@ -309,8 +309,8 @@ class CeleryService(BaseService, IntervalInterface):
             count = celery_app.control.purge()
         return {'message': 'Celery queue purged successfully.', 'count': count}
 
-    def callback(self):
-        asyncio.create_task(self._check_workers_status())
+    async def callback(self):
+        await self._check_workers_status()
 
 @Service
 class TaskService(BackgroundTasks, BaseService, SchedulerInterface):

@@ -256,19 +256,21 @@ class BalancerPermission(Permission):
 
 class ProfilePermission(Permission):
 
-    def __init__(self,service:ProfileInterface):
+    def __init__(self,service:ProfileInterface=None):
         super().__init__()
         self.service = service
     
 
     async def permission(self,authPermission:AuthPermission,profile:str):
 
-        if profile not in self.service.profiles:
-            ...
+        if self.service != None:
+            
+            if profile not in self.service.profiles:
+                ...
+            
+            if not self.service.check_capabilities(profile):
+                ...
         
-        if not self.service.check_capabilities(profile):
-            ...
-
         if authPermission['allowed_profiles'] not in profile:
             ...
 

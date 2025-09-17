@@ -16,7 +16,7 @@ from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, 
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import DEFAULT_BUILD_STATE, BuildError, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceStatus, StateProtocol
+from app.definition._service import DEFAULT_BUILD_STATE, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceStatus, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from odmantic.exceptions import BaseEngineException
@@ -47,9 +47,6 @@ class RedisDatabaseDoesNotExistsError(BaseError):
 @IsInterface
 class RotateCredentialsInterface(Interface):
 
-
-    class RetryError(BuildError):
-        ...
     
     def __init__(self,vaultService:HCVaultService,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
         self.vaultService = vaultService
@@ -531,7 +528,6 @@ class MongooseService(DatabaseService,SchedulerInterface,RotateCredentialsInterf
 
     async def _creds_rotator(self):
         self.db_connection()
-
 
     @property
     def mongo_uri(self):

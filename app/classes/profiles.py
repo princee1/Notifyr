@@ -26,6 +26,8 @@ class ProfilModelConstant:
     SMTP=f'{EMAIL_PROFILE_TYPE}:smtp'
     TWILIO='twilio'
 
+####################################                 #####################################333
+
 class ProfileModelTypeDoesNotExistsError(BaseError):
     
     def __init__(self, e, *args):
@@ -47,9 +49,17 @@ class ProfileNotAllowedToUseError(BaseError):
 class ProfileDoesNotExistsError(BaseError):
     ...
 
+####################################                 #####################################333
 
 class ProfileState(Enum):
     ...
 
 class ProfileStateProtocol(TypedDict):
     ...
+
+####################################                 #####################################333
+
+class Profil:
+
+    def __init__(self):
+        ...

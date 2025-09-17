@@ -84,6 +84,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
         self.linkService= Get(LinkService)
         self.settingService = Get(SettingService)
 
+        self.exclude_meta =('as_contact','index','will_track','sender_type')
+
     
     @UseLimiter(limit_value="10/minutes")
     @UseRoles([Role.PUBLIC])
@@ -100,15 +102,13 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])
-    @PingService([EmailSenderService])
-    @PingService([CeleryService],checker=check_celery_service)
+    @PingService([EmailSenderService,CeleryService],checker=check_celery_service)
     @ServiceStatusLock(AssetService,'reader','')
     @UsePermission(permissions.JWTAssetPermission('html'),permissions.JWTSignatureAssetPermission())
-    @UseHandler(handlers.AsyncIOHandler(),handlers.TemplateHandler(),handlers.ContactsHandler())
+    @UseHandler(handlers.AsyncIOHandler(),handlers.TemplateHandler(),handlers.ContactsHandler(),handlers.ProfileHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
-    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature)
-    @UsePipe(pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
+    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
     async def send_emailTemplate(self, template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
@@ -135,20 +135,18 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 datas = parse_mime_content(data,mail_content.mimeType)
                 mail_content.meta._Message_ID = tracker.make_msgid
 
-            meta = mail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
-            await taskManager.offload_task(len(To),0,index,self.emailService.select().sendTemplateEmail,datas, meta, template.images)
+            meta = mail_content.meta.model_dump(mode='python',exclude=self.exclude_meta)
+            await taskManager.offload_task(len(To),0,index,self.emailService.select('').sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
 
     @UseLimiter(limit_value='10000/minutes')
-    @UseHandler(handlers.ContactsHandler(),handlers.TemplateHandler())
-    @PingService([EmailSenderService])
-    @PingService([CeleryService],checker=check_celery_service)
+    @UseHandler(handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
+    @PingService([EmailSenderService,CeleryService],checker=check_celery_service)
     @UsePermission(permissions.JWTSignatureAssetPermission())
-    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(),force_signature)
-    @UsePipe(pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
-    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
+    @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
+    @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @BaseHTTPRessource.HTTPRoute("/custom/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
     async def send_customEmail(self, scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         signature:Tuple[str,str] = scheduler._signature
@@ -182,8 +180,8 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 contents = _content
                 customEmail_content.meta._Message_ID = tracker.make_msgid
 
-            meta = customEmail_content.meta.model_dump(mode='python',exclude=('as_contact','index','will_track','sender_type'))
-            await taskManager.offload_task(len(To),0,index,self.emailService.select().sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
+            meta = customEmail_content.meta.model_dump(mode='python',exclude=self.exclude_meta)
+            await taskManager.offload_task(len(To),0,index,self.emailService.select('').sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])
