@@ -7,7 +7,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData, MustHave, MustHaveRoleSuchAs, RefreshPermission, Role, TokensModel, parse_authPermission_enum
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.decorators.handlers import ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
+from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.depends.funcs_dep import GetClient, get_client_by_password,verify_admin_signature, verify_admin_token,verify_twilio_token
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, TwilioPermission, UserPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
@@ -31,10 +31,10 @@ REFRESH_AUTH_PREFIX = 'refresh'
 GENERATE_AUTH_PREFIX = 'generate'
 AUTH_PREFIX = 'auth'    
 
-@PingService([TortoiseConnectionService])
+@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
 @UseHandler(TortoiseHandler)   
 @UsePipe(ForceClientPipe)
-@UseHandler(ServiceAvailabilityHandler,SecurityClientHandler)
+@UseHandler(ServiceAvailabilityHandler,SecurityClientHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission(True))
 @HTTPRessource(REFRESH_AUTH_PREFIX)
 class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
@@ -106,9 +106,9 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         else:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED,content='Could not set auth and refresh token')
 
-@PingService([TortoiseConnectionService])
+@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
-@UseHandler(TortoiseHandler,ServiceAvailabilityHandler)
+@UseHandler(TortoiseHandler,ServiceAvailabilityHandler,AsyncIOHandler)
 @HTTPRessource(GENERATE_AUTH_PREFIX)
 class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     admin_roles = [Role.ADMIN,Role.CUSTOM,Role.CONTACTS,Role.SUBSCRIPTION,Role.REFRESH,Role.CLIENT,Role.PUBLIC]
@@ -135,12 +135,12 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         return AuthPermission(roles=roles,scope=admin.client_scope,allowed_assets=allowed_assets,allowed_routes=allowed_routes) #TODO add more routes
     
     def _decode_and_verify(self, client: ClientORM, x_client_token):
-        authPermission: AuthPermission = self.jwtAutService.decode_token(x_client_token)
+        authPermission: AuthPermission = self.jwtAutService._decode_token(x_client_token)
         
         if authPermission["client_id"] != str(client.client_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
 
-        if authPermission['generation_id'] != self.jwtAutService.generation_id:
+        if authPermission['generation_id'] != self.jwtAutService.GENERATION_ID:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
         
         if authPermission["issued_for"] != client.issued_for:

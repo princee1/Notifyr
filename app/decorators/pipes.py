@@ -61,7 +61,7 @@ class AuthPermissionPipe(Pipe):
             tokens = [tokens]
         temp = {}
         for token in tokens:
-            val = self.jwtAuthService.decode_token(token)
+            val = self.jwtAuthService._decode_token(token)
             permission:AuthPermission = AuthPermission(**val)
             temp[permission.issued_for] = permission
 

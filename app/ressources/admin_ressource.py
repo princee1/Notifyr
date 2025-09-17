@@ -4,6 +4,8 @@ from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Query, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
+from app.definition._service import StateProtocol
+from app.depends.class_dep import Broker
 from app.depends.funcs_dep import get_blacklist, get_group, get_client
 from app.depends.orm_cache import WILDCARD, BlacklistORMCache, ChallengeORMCache, ClientORMCache
 from app.interface.issue_auth import IssueAuthInterface
@@ -22,7 +24,7 @@ from app.definition._ressource import PingService, ServiceStatusLock, UseGuard, 
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import Role, RoutePermission, AssetsPermission, Scope, TokensModel
 from pydantic import BaseModel,  field_validator
-from app.decorators.handlers import ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
+from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe
 from app.utils.helper import filter_paths, parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
@@ -56,13 +58,18 @@ class AuthPermissionModel(BaseModel):
         return roles
         return [r.value for r in roles]
 
-class GenerationModel(BaseModel):
-    generation_id: str
 
-@PingService([TortoiseConnectionService])
+class UnRevokeGenerationIDModel(BaseModel):
+    version:int|None = None
+    destroy:bool = False
+    delete:bool = False
+    version_to_delete:list[int] = []
+
+#@PingService([TortoiseConnectionService])
+@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
-@UseHandler(ServiceAvailabilityHandler,TortoiseHandler)
+@UseHandler(ServiceAvailabilityHandler,TortoiseHandler,AsyncIOHandler)
 @HTTPRessource(CLIENT_PREFIX)
 class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
@@ -216,8 +223,8 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
                 
         return is_revoked
 
-@PingService([TortoiseConnectionService])
-@UseHandler(TortoiseHandler)
+@ServiceStatusLock(TortoiseConnectionService,'reader',infinite_wait=True)
+@UseHandler(TortoiseHandler,AsyncIOHandler)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
 @UseHandler(ServiceAvailabilityHandler)
@@ -272,14 +279,21 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully un-blacklisted", "un_blacklist": blacklist})
 
+    @PingService([HCVaultService])
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @ServiceStatusLock(SettingService,'reader')
+    @ServiceStatusLock(JWTAuthService,'writer')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
-    async def revoke_all_tokens(self, request: Request, authPermission=Depends(get_auth_permission)):
-        old_generation_id = None
-        self.jwtAuthService.set_generation_id(True)
-        new_generation_id = None
+    async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
+        self.jwtAuthService.revoke_all_tokens()
+
+        broker.propagate_state(StateProtocol(
+            service=self.jwtAuthService.name,
+            to_build=True,
+            bypass_async_verify=True,
+            force_sync_verify=True
+        ))
 
         client = await ClientORM.filter(client_id=authPermission['client_id']).first()
         auth_token, refresh_token = self.issue_auth(client, authPermission)
@@ -287,25 +301,37 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
                                                                      "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},
-                                                                     "old_generation_id": old_generation_id,
-                                                                     "new_generation_id": new_generation_id})
-
+                                                                     })
+    
+    @PingService([HCVaultService])
     @UseLimiter(limit_value='1/day')
     @ServiceStatusLock(SettingService,'reader')
+    @ServiceStatusLock(JWTAuthService,'writer')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
-    async def un_revoke_all_tokens(self, request: Request, authPermission=Depends(get_auth_permission)):
-        self.jwtAuthService.set_generation_id(False)
-        old_generation_id = None
-        new_generation_id = None
+    async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):   
+        unRevokeModel = unRevokeModel.model_dump()
+        self.jwtAuthService.unrevoke_all_tokens(**unRevokeModel)
+        
+        broker.propagate_state(StateProtocol(
+            service=self.jwtAuthService.name,
+            to_build=True,
+            bypass_async_verify=True,
+            force_sync_verify=True
+        ))
+
         client = await ClientORM.filter(client_id=authPermission['client_id']).first()
         auth_token, refresh_token = await self.issue_auth(client, authPermission)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
-                                                                     "old_generation_id": old_generation_id,
-                                                                     "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},
-                                                                     "new_generation_id": new_generation_id})
+                                                                     "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},})
+
+    @PingService([HCVaultService])
+    @UseLimiter(limit_value='1/day')
+    @BaseHTTPRessource.HTTPRoute('/revoke-version/', methods=[HTTPMethod.GET],deprecated=True,mount=False)
+    def check_version(self,request:Request):
+        return self.jwtAuthService.GENERATION_METADATA
 
     @UseLimiter(limit_value='10/day')
     @UsePipe(ForceClientPipe)

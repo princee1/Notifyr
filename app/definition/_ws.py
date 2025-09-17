@@ -274,7 +274,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         if auth_token == None:
             return False
         try:
-            permission:WSPermission = self.jwtAuthService.decode_token(auth_token,'WS_JWT_SECRET_KEY')
+            permission:WSPermission = self.jwtAuthService._decode_token(auth_token,'WS_JWT_SECRET_KEY')
         except HTTPException as e:
             return False,'Token Invalid'
 

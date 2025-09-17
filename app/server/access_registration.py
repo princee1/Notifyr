@@ -41,7 +41,7 @@ def register_client_services(set_gen_id:bool):
     configService = Get(ConfigService)
     
     PrettyPrinter_.show(1, print_stack=False,)
-    jwtAuthService.set_generation_id(set_gen_id)
+    jwtAuthService.revoke_all_tokens()
     
     # BUG this works only for the first app
     current_ressources = [x.__name__ for x in RESSOURCES.values()]
