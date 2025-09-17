@@ -1,51 +1,69 @@
 
+from typing import Union
 from typing_extensions import Literal
 from app.definition import _service
 from app.services.aws_service import AmazonSESService
 from app.services.config_service import ConfigService
+from app.services.database_service import MongooseService, RedisService
 from app.services.email.email_api_service import EmailAPIService
 from app.services.email.mail_protocol_service import IMAPEmailService, SMTPEmailService
+from app.services.logger_service import LoggerService
+from app.services.secret_service import HCVaultService
 from app.utils.tools import Mock
-from app.interface.email import EmailSendInterface
+from app.interface.email import EmailReadInterface, EmailSendInterface
 
 @_service.Service
 class EmailSenderService(_service.BaseService):
     # BUG cant resolve an abstract class
-    def __init__(self, configService: ConfigService, awsSESService: AmazonSESService, smtpEmailService: SMTPEmailService,emailApiService: EmailAPIService) -> None:
+    def __init__(self, configService: ConfigService,loggerService:LoggerService,vaultService:HCVaultService,redisService:RedisService,mongooseService:MongooseService) -> None:
         super().__init__()
-
         self.configService = configService
-        self.awsSESService = awsSESService
-        self.smtpEmailService = smtpEmailService
-        self.emailApiService = emailApiService
+        self.loggerService = loggerService
+        self.vaultService = vaultService
+        self.redisService = redisService
+        self.mongooseService = mongooseService
+       
+        self.profiles:dict[str,Union[EmailSendInterface,_service.BaseService]] = {
+
+        }
 
     def verify_dependency(self):
         ...
 
-    def select(self,service:Literal['smtp','aws','api']='smtp',sender=None,conn_type:Literal['raw','oauth']=None)->EmailSendInterface:
-        if service == 'smtp':
-            return self.smtpEmailService
-        if 'aws':
-            return self.awsSESService
+    def select(self,profilesId)->EmailSendInterface:
+        p = self.profiles.get(profilesId,None)
+        if p == None:
+            raise # TODO
+        if p.service_status != _service.ServiceStatus.AVAILABLE:
+            raise # TODO
 
-    def build(self,build_state=-1):
+
+    def build(self,build_state=_service.DEFAULT_BUILD_STATE):
         
         ...
 
 @_service.Service
 class EmailReaderService(_service.BaseService):
-    def __init__(self, configService: ConfigService, awsSESService: AmazonSESService, imapEmailService: IMAPEmailService,emailApiService: EmailAPIService) -> None:
+    def __init__(self, configService: ConfigService,vaultService:HCVaultService,mongooseService:MongooseService) -> None:
         super().__init__()
-
-        self.awsSESService = awsSESService
-        self.imapEmailService = imapEmailService
         self.configService = configService
-        self.emailApiService = emailApiService
+        self.mongooseService = mongooseService
+        self.vaultService = vaultService
 
-    
+        self.profiles:dict[str,EmailReadInterface] = {}
+
+
+    def verify_dependency(self):
+        return super().verify_dependency()
+
+    def build(self, build_state = _service.DEFAULT_BUILD_STATE):
+        return super().build(build_state)
+
     def start_jobs(self):
-        self.imapEmailService.start_jobs()
+        for p in self.profiles.values():
+            p.start_jobs()
 
     
     def cancel_jobs(self):
-        self.imapEmailService.cancel_jobs()
+        for p in self.profiles.values():
+            p.cancel_jobs()

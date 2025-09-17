@@ -24,6 +24,7 @@ __DEPENDENCY: list[type] = []
 DEFAULT_BUILD_STATE = -1
 DEFAULT_DESTROY_STATE = -1
 
+#################################            #####################################
 
 class ServiceStatus(Enum):
     AVAILABLE = 1
@@ -47,6 +48,7 @@ class ServiceStatus(Enum):
     """
     The fact that the service does not work will not permit the program to properly run
     """
+#################################            #####################################
 
 
 class Report(TypedDict):
@@ -57,6 +59,7 @@ class Report(TypedDict):
     variables: dict[str,Any] | None= None
 
 PROCESS_SERVICE_REPORT:dict[str, list[Report]] = {}
+#################################            #####################################
 
 
 class StateProtocol(TypedDict):
@@ -83,6 +86,7 @@ class BuildErrorLevel(Enum):
     FAILURE = 3
     WARNING = 2
     SKIP = 1
+#################################            #####################################
 
 
 class BuildError(BaseException):
@@ -403,6 +407,8 @@ def Service(cls: Type[S]) -> Type[S]:
         _CLASS_DEPENDENCY[cls.__name__] = cls
     return cls
 
+def MiniService(cls: Type[S])->Type[S]:
+    return cls
 
 @overload
 def InjectWithCondition(baseClass: type, resolvedClass: type[BaseService]):

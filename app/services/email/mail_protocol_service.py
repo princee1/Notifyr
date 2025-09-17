@@ -37,16 +37,15 @@ from app.utils.validation import email_validator
 from app.utils.constant import StreamConstant
 from email import message_from_bytes
 from app.interface.redis_event import RedisEventInterface
-from app.interface.email import EmailSendInterface
+from app.interface.email import EmailReadInterface, EmailSendInterface
 
 
 
 @_service.AbstractServiceClass
-class BaseEmailService(_service.BaseService, RedisEventInterface,EmailSendInterface):
+class BaseEmailService(_service.BaseService, RedisEventInterface):
 
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         super().__init__()
-        EmailSendInterface.__init__(self)
         self.configService: ConfigService = configService
         self.loggerService: LoggerService = loggerService
         RedisEventInterface.__init__(self, redisService)
@@ -209,8 +208,8 @@ class BaseEmailService(_service.BaseService, RedisEventInterface,EmailSendInterf
         ...
 
 
-@_service.Service
-class SMTPEmailService(BaseEmailService):
+@_service.MiniService
+class SMTPEmailService(BaseEmailService,EmailSendInterface):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         super().__init__(configService, loggerService, redisService)
@@ -371,8 +370,8 @@ J: Type = None
 j: dict = None
 
 
-@_service.Service
-class IMAPEmailService(BaseEmailService):
+@_service.MiniService
+class IMAPEmailService(BaseEmailService,EmailReadInterface):
     service: Self  # Class Singleton
 
     @dataclass

@@ -1,4 +1,4 @@
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, MiniService, Service
 from .config_service import ConfigService
 from .file_service import BaseFileRetrieverService, FileService
 import boto3
@@ -19,7 +19,7 @@ class AmazonSESError(Exception):
 class AmazonSNSError(Exception):
     pass
 
-@Service
+@MiniService
 class AmazonSESService(BaseService):
     def __init__(self, configService: ConfigService) -> None:
         super().__init__()

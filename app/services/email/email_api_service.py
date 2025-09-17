@@ -5,7 +5,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, MiniService, Service
 from app.interface.email import EmailSendInterface,EmailReadInterface
 from app.services.config_service import ConfigService
 
@@ -13,7 +13,7 @@ from app.services.config_service import ConfigService
 class MailAPI():
     ...
 
-
+@MiniService
 class GMailAPI(MailAPI):
     def __init__(self, flowtype: GoogleFlowType, credentials):
         """
@@ -68,11 +68,12 @@ class GMailAPI(MailAPI):
             print(f"An error occurred: {error}")
             return []
 
+@MiniService
 class MicrosoftGraphMailAPI(MailAPI):
     ...
 
 
-@Service
+@MiniService
 class EmailAPIService(BaseService,EmailSendInterface,EmailReadInterface):
     
     def __init__(self,configService:ConfigService):
