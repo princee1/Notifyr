@@ -147,7 +147,7 @@ class SettingsRessource(BaseHTTPRessource):
     async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
         return self.settingService.data
     
-    @PingService([JSONServerDBService])
+    @PingService([JSONServerDBService],infinite_wait=True)
     @UseRoles([Role.ADMIN])
     @UseLimiter(limit_value='1/minutes')
     @UseServiceLock(SettingService,lockType='writer')

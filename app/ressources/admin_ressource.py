@@ -65,7 +65,7 @@ class UnRevokeGenerationIDModel(BaseModel):
     delete:bool = False
     version_to_delete:list[int] = []
 
-#@PingService([TortoiseConnectionService])
+@PingService([TortoiseConnectionService])
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
@@ -283,6 +283,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseServiceLock(SettingService,lockType='reader')
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(JWTAuthService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
@@ -306,6 +307,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @PingService([HCVaultService])
     @UseLimiter(limit_value='1/day')
     @UseServiceLock(SettingService,lockType='reader')
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(JWTAuthService,lockType='writer')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
@@ -327,7 +329,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
                                                                      "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},})
 
-    @PingService([HCVaultService])
+    @UseServiceLock(JWTAuthService,lockType='reader')
     @UseLimiter(limit_value='1/day')
     @BaseHTTPRessource.HTTPRoute('/revoke-version/', methods=[HTTPMethod.GET],deprecated=True,mount=False)
     def check_version(self,request:Request):

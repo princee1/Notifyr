@@ -10,7 +10,7 @@ from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import BaseService, ServiceStatus
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
-from app.services.database_service import MongooseService, RedisService, TortoiseConnectionService
+from app.services.database_service import JSONServerDBService, MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
 from app.services.rate_limiter_service import RateLimiterService
 from app.services.secret_service import HCVaultService
@@ -187,6 +187,9 @@ class Application(EventInterface):
 
         mongooseService = Get(MongooseService)
         mongooseService.start()
+
+        jsonServerService = Get(JSONServerDBService)
+        jsonServerService.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
@@ -197,9 +200,10 @@ class Application(EventInterface):
         vaultService = Get(HCVaultService)
 
         taskService:TaskService =  Get(TaskService)
+        jsonServerService = Get(JSONServerDBService)
         
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,jsonServerService]
 
         for s in services:
             s.shutdown()

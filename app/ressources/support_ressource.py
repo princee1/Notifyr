@@ -42,7 +42,6 @@ class SupportRessource(BaseHTTPRessource):
     def support(self,supportModel:SupportModel, register:bool = Query(False),chat_upgrade:bool = Query(False),authPermission=Depends(get_auth_permission)):
         ...
     
-    @PingService([JWTAuthService])
     @UseServiceLock(SettingService,lockType='reader')
     @UseHandler(WebSocketHandler)
     @BaseHTTPRessource.Get('/live-chat-permission/{ws_path}',)

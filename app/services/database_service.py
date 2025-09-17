@@ -1,4 +1,5 @@
 import functools
+import time
 from typing import Any, Callable, Dict, Self, TypedDict
 import aiohttp
 import hvac
@@ -13,10 +14,11 @@ from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInt
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultTTLSyncConstant
+from app.utils.helper import reverseDict
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import DEFAULT_BUILD_STATE, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceStatus, StateProtocol
+from app.definition._service import DEFAULT_BUILD_STATE, STATUS_TO_ERROR_MAP, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
 from odmantic import AIOEngine
 from odmantic.exceptions import BaseEngineException
@@ -48,13 +50,15 @@ class RedisDatabaseDoesNotExistsError(BaseError):
 class RotateCredentialsInterface(Interface):
 
     
-    def __init__(self,vaultService:HCVaultService,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+    def __init__(self,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
         self.vaultService = vaultService
         self.creds:VaultDatabaseCredentials = {}
-        self.max_retry = 2
-        self.wait_time = 2
+        self.max_retry = max_retry
+        self.wait_time = wait_time
         self.t=t
         self.b = b
+        self.last_rotated = None
+        self.auth_ttl = ...
     
     @staticmethod
     def random_buffer_interval(ttl):
@@ -84,11 +88,13 @@ class RotateCredentialsInterface(Interface):
     async def creds_rotation(self):
         temp_service = await self._check_vault_status()
         async with self.statusLock.writer:
+
             retry =0
             while retry<self.max_retry:
                 try:
                     if temp_service == None:
                         await self._creds_rotator()
+                        self.last_rotated=time.time()
                     else:
                         self.service_status = temp_service
                     break
@@ -103,6 +109,17 @@ class RotateCredentialsInterface(Interface):
 
     async def _creds_rotator(self):
         pass
+
+    def check_auth(self):
+        if not self.is_connected:
+            raise ServiceTemporaryNotAvailableError
+        
+    @property
+    def is_connected(self):
+        if self.last_rotated == None:
+            return True
+        
+        return  time.time() - self.last_rotated < self.auth_ttl
 
 @AbstractServiceClass
 class DatabaseService(BaseService): 
@@ -466,9 +483,9 @@ class MongooseService(DatabaseService,SchedulerInterface,RotateCredentialsInterf
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService):
         super().__init__(configService,fileService)
         SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(self,vaultService)
+        RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
         delay = IntervalParams(
-            seconds=self.random_buffer_interval(VaultTTLSyncConstant.MONGODB_AUTH_TTL)
+            seconds=self.random_buffer_interval(self.auth_ttl)
         )
         self.interval_schedule(delay,self.creds_rotation)
 
@@ -533,6 +550,16 @@ class MongooseService(DatabaseService,SchedulerInterface,RotateCredentialsInterf
     def mongo_uri(self):
         return F'mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017'
 
+
+    async def async_pingService(self,**kwargs):
+        self.check_auth()
+        await super().async_pingService(**kwargs)
+
+    def sync_pingService(self,**kwargs):
+        self.check_auth()
+        
+        super().sync_pingService(**kwargs)
+
 @Service
 class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
     DATABASE_NAME = 'notifyr'
@@ -540,21 +567,18 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
         super().__init__(configService, None)
         SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(self,vaultService)
+        RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
 
         delay = IntervalParams(
-            seconds=self.random_buffer_interval(VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
+            seconds=self.random_buffer_interval(self.auth_ttl)
         )
 
         self.interval_schedule(delay,self.creds_rotation)
 
     def verify_dependency(self):
+        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError('Vault Service Cant issue creds')
         
-        pg_user = self.configService.getenv('POSTGRES_USER')
-        pg_password = self.configService.getenv('POSTGRES_PASSWORD')
-
-        if not pg_user or not pg_password:
-            raise BuildFailureError
 
     def build(self,build_state=-1):
         try:
@@ -598,15 +622,31 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
     async def _creds_rotator(self):
         self.generate_creds()
         await self.init_connection(True)
+    
+    def sync_pingService(self,**kwargs):
+        self.check_auth()
+        super().sync_pingService(**kwargs)
 
+    async def async_pingService(self,**kwargs):
+        self.check_auth()
+        await super().async_pingService(**kwargs)
 
 @Service  
-class JSONServerDBService(DatabaseService):
+class JSONServerDBService(DatabaseService,SchedulerInterface):
+
+    #_error_to_status = reverseDict(STATUS_TO_ERROR_MAP)
     
-    def __init__(self,configService:ConfigService,fileService:FileService,redisService:RedisService):
+    def __init__(self,configService:ConfigService,fileService:FileService,redisService:RedisService,vaultService:HCVaultService):
         super().__init__(configService, fileService)
         self.json_server_url = configService.SETTING_DB_URL
         self.redisService = redisService
+        self.vaultService = vaultService
+        
+        SchedulerInterface.__init__(self,)
+        interval = IntervalParams(
+            hours=6
+        )
+        self.interval_schedule(interval,self.check_health)
     
     def build(self,build_state=-1):
         try:
@@ -625,6 +665,16 @@ class JSONServerDBService(DatabaseService):
         except KeyError as e:
             raise BuildWarningError(e.args)
     
+    async def check_health(self):
+        async with self.statusLock.writer:
+
+            try:
+                self.build()
+            except:
+                if self.service_status == ServiceStatus.AVAILABLE:
+                    self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE      
+                else:
+                    self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE                     
 
     def get_setting(self)->dict:
         try:

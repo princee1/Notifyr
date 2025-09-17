@@ -33,6 +33,8 @@ CONTACTS_CRUD_PREFIX = 'manage'
 get_contacts = Get_Contact(False,False)
        
 ##############################################                   ##################################################
+
+@PingService([TortoiseConnectionService])
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission)
@@ -82,7 +84,7 @@ class ContentSubscriptionRessource(BaseHTTPRessource):
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
-@PingService([ContactsService])
+@PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_SUBSCRIPTION_PREFIX)
 class ContactsSubscriptionRessource(BaseHTTPRessource):
 
@@ -165,7 +167,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
 @UseHandler(TortoiseHandler,ContactsHandler,AsyncIOHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
-@PingService([ContactsService])
+@PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_SECURITY_PREFIX)
 class ContactSecurityRessource(BaseHTTPRessource):
     
@@ -225,7 +227,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 #@UseHandler(handle_http_exception)
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler, ContactsHandler,AsyncIOHandler)
-@PingService([ContactsService])
+@PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
 class ContactsCRUDRessource(BaseHTTPRessource):
     @InjectInMethod
@@ -285,7 +287,7 @@ class ContactsCRUDRessource(BaseHTTPRessource):
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler, ContactsHandler,AsyncIOHandler)
 @UseRoles([Role.CONTACTS])
-@PingService([ContactsService])
+@PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_PREFIX, routers=[ContactsCRUDRessource,ContactSecurityRessource,ContentSubscriptionRessource, ContactsSubscriptionRessource,])
 class ContactsRessource(BaseHTTPRessource):
 

@@ -132,7 +132,7 @@ STATUS_TO_ERROR_MAP = {
 class ServiceNotAvailableError(BuildError):
     pass
 
-class MajorSystemFailureError(BufferError):
+class ServiceMajorSystemFailureError(BufferError):
     pass
 class ServiceTemporaryNotAvailableError(BuildError):
     pass
@@ -187,7 +187,7 @@ class BaseService():
         match self.service_status :
 
             case ServiceStatus.MAJOR_SYSTEM_FAILURE:
-                raise MajorSystemFailureError
+                raise ServiceMajorSystemFailureError
 
             case ServiceStatus.NOT_AVAILABLE :
                 raise ServiceNotAvailableError

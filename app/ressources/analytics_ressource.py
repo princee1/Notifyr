@@ -7,6 +7,7 @@ from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingServ
 from app.depends.dependencies import get_auth_permission
 from app.services.database_service import TortoiseConnectionService
 
+@PingService([TortoiseConnectionService])
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
 @UseHandler(TortoiseHandler,AsyncIOHandler)

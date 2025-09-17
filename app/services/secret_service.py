@@ -4,7 +4,7 @@ from typing import Literal, TypedDict
 import requests
 from app.classes.secrets import SecretsWrapper
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
-from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceStatus
+from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.config_service import MODE, ConfigService
 import hvac
@@ -45,6 +45,7 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
 class HCVaultService(BaseService,SchedulerInterface):
 
     _secret_id_crontab='0 * * * *'
+    _ping_available_state = {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}
     
     def __init__(self,configService:ConfigService,fileService:FileService):
         super().__init__()
@@ -55,12 +56,13 @@ class HCVaultService(BaseService,SchedulerInterface):
         delay = IntervalParams(
             seconds=VaultTTLSyncConstant.SECRET_ID_TTL*.75
         )
-
+        self.last_rotated = None
         self.interval_schedule(delay,self.refresh_token)
 
+    def sync_pingService(self,**kwargs):
 
-    def verify_dependency(self):
-        ...
+        if self.last_rotated != None and  time.time() - self.last_rotated < VaultTTLSyncConstant.VAULT_TOKEN_TTL:
+            raise ServiceTemporaryNotAvailableError
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
         
@@ -113,6 +115,8 @@ class HCVaultService(BaseService,SchedulerInterface):
                     self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
                 else:
                     self.service_status = ServiceStatus.AVAILABLE
+                    self.last_rotated = time.time()
+
             except BuildAbortError:
                 self.service_status = ServiceStatus.NOT_AVAILABLE
             except requests.exceptions.ConnectionError as e:
@@ -123,6 +127,7 @@ class HCVaultService(BaseService,SchedulerInterface):
                 print(e,e.__class__) 
                 try:
                     self.renew_auth_token()
+                    self.last_rotated = time.time()
                     self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
                 except:
                     self.service_status = ServiceStatus.NOT_AVAILABLE
