@@ -32,6 +32,22 @@ class ProfileModelTypeDoesNotExistsError(BaseError):
         super().__init__(*args)
         self.error = e
 
+class ProfileNotAvailableError(BaseError):
+    ...
+
+class ProfileHasNotCapabilitiesError(BaseError):
+    ...
+
+class ProfileTypeNotMatchRequest(BaseError):
+    ...
+
+class ProfileNotAllowedToUseError(BaseError):
+    ...
+
+class ProfileDoesNotExistsError(BaseError):
+    ...
+
+
 class ProfileState(Enum):
     ...
 

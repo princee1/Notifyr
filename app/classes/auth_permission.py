@@ -73,6 +73,7 @@ class AuthPermission(TypedDict):
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str]
+    allowed_profiles:List[str]=[]
     challenge: str
     scope:str
     salt:str

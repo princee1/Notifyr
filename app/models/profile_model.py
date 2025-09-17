@@ -5,7 +5,7 @@ from typing import Optional, Type
 from typing_extensions import Literal
 from odmantic import Model, Field, Reference
 from app.classes.mail_provider import AuthToken, TokenType
-from app.classes.profile import ProfileModelAuthToken, ProfilModelConstant, ProfileState
+from app.classes.profiles import ProfileModelAuthToken, ProfilModelConstant, ProfileState
 from app.definition._error import BaseError
 from app.utils.constant import EmailHostConstant, MongooseDBConstant
 from pydantic import EmailStr, constr, PrivateAttr

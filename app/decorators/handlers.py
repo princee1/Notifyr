@@ -22,7 +22,7 @@ from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDo
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
-from app.classes.profile import ProfileModelTypeDoesNotExistsError
+from app.classes.profiles import ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -566,4 +566,13 @@ class ProfileHandler(Handler):
             raise HTTPException(status_code=422, detail=e.errors())
         
         except ProfileModelTypeDoesNotExistsError as e:
-            raise 
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,)
+    
+        except ProfileNotAvailableError as e:
+            raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE)
+        
+        except ProfileHasNotCapabilitiesError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+
+        except ProfileDoesNotExistsError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
+from app.interface.profile import ProfileInterface
 from app.models.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
@@ -250,4 +251,25 @@ async def same_client_authPermission(authPermission:AuthPermission, client:Clien
 class BalancerPermission(Permission):
     
     def permission(self):
+        return True
+
+
+class ProfilePermission(Permission):
+
+    def __init__(self,service:ProfileInterface):
+        super().__init__()
+        self.service = service
+    
+
+    async def permission(self,authPermission:AuthPermission,profile:str):
+
+        if profile not in self.service.profiles:
+            ...
+        
+        if not self.service.check_capabilities(profile):
+            ...
+
+        if authPermission['allowed_profiles'] not in profile:
+            ...
+
         return True
