@@ -1,4 +1,4 @@
-from app.callback.process import ProcessTerminateProtocol
+from app.classes.process import ProcessTerminateProtocol
 from app.services import ConfigService, LoggerService
 from app.utils.constant import SubConstant
 from app.container import Get   
