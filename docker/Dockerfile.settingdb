@@ -3,7 +3,13 @@ FROM node:18-alpine
 # install json-server
 RUN npm install -g json-server
 
+RUN adduser -S setting
+
+USER setting
+
 WORKDIR /data
+
+COPY ./setting/server.js ./data/
 
 COPY ./settings_db.json /data/db.json
 
