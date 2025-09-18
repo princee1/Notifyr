@@ -1,10 +1,10 @@
 import asyncio
 from enum import Enum
 import functools
-from typing import Any, Literal, overload, Callable, Type, TypeVar, Dict
+from typing import Any, Literal, Self, overload, Callable, Type, TypeVar, Dict
 from app.utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from app.utils.constant import DependencyConstant
-from app.utils.helper import issubclass_of
+from app.utils.helper import generateId, issubclass_of
 import warnings
 import datetime as dt
 from typing import TypedDict
@@ -392,9 +392,21 @@ class BaseService():
 
 class BaseMiniService(BaseService):
     
+    ID_LEN = 20
+
+    def __init__(self, combinedService:Self=None, id=generateId(ID_LEN)):
+        super().__init__()
+
+        self.miniService_id = id
+        self.combinedService = combinedService
+
+
+class BaseMiniServiceManager(BaseService):
     def __init__(self):
         super().__init__()
-        
+        self.MiniServiceStore = Dict[str,BaseMiniService] = {}
+
+    
 
 S = TypeVar('S', bound=BaseService)
 

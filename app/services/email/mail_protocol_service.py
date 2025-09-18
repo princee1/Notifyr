@@ -14,7 +14,6 @@ from typing import Callable, Iterable, Literal, Self, Type, TypedDict
 from bs4 import BeautifulSoup
 
 from app.interface.timers import IntervalInterface
-from app.services.aws_service import AmazonSESService
 from app.services.database_service import MongooseService, RedisService
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
@@ -367,45 +366,9 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
         self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
 
 
-J: Type = None
-j: dict = None
-
 
 @_service.MiniService
 class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
-    service: Self  # Class Singleton
-
-    @dataclass
-    class Jobs:
-        job_name: str
-        func: str
-        args: Iterable
-        kwargs: dict
-        stop: bool = True
-        task: asyncio.Task = None
-        delay: int = field(default_factory=lambda: randint(3600/2, 3600))
-
-        async def __call__(self,):
-            service: IMAPEmailMiniService = IMAPEmailMiniService.service
-            callback = getattr(service, self.func, None)
-            is_async = asyncio.iscoroutinefunction(callback)
-            while self.stop:
-                self.is_running = False
-                await asyncio.sleep(self.delay)
-                self.is_running = True
-
-                if is_async:
-                    print('Ok')
-                    await callback(*self.args, **self.kwargs)
-                else:
-                    print('k')
-
-                    callback(*self.args, **self.kwargs)
-            return
-
-        def cancel_job(self):
-            self.stop = False
-            self.delay = 0
 
     @dataclass
     class IMAPMailboxes:
@@ -455,13 +418,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
         def status(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
             ...
 
-    jobs: dict[str, Jobs] = {}
-
-    global J
-    J = Jobs
-    global j
-    j = jobs
-
     @staticmethod
     def select_inbox(func: Callable):
 
@@ -488,33 +444,9 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
 
         return wrapper if not asyncio.iscoroutinefunction(func) else async_wrapper
 
-    @staticmethod
-    def register_job(job_name: str, delay: tuple[int, int], *args, **kwargs):
-
-        def wrapper(func: Callable):
-            func_name = func.__name__
-            job_name_prime = job_name if job_name else func_name
-            params = {
-                'job_name': job_name_prime,
-                'func': func_name,
-                'args': args,
-                'kwargs': kwargs
-            }
-            if delay == None or not isinstance(delay, tuple):
-                ...
-            else:
-                params['delay'] = randint(*delay)
-
-            jobs_ = J(**params)
-            if job_name_prime in j:
-                ...  # Warning
-            j[job_name_prime] = jobs_
-            return func
-        return wrapper
-
     def __init__(self, configService: ConfigService, loggerService: LoggerService, reactiveService: ReactiveService, redisService: RedisService) -> None:
         super().__init__(configService, loggerService, redisService)
-        IntervalInterface.__init__(self, True, 10)
+        EmailReadInterface.__init__(self,None)
         self.reactiveService = reactiveService
         self.redisService = redisService
 
@@ -522,7 +454,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
         self._current_mailbox: str = None
 
         self._init_config()
-        IMAPEmailMiniService.service = self
         self._capabilities: list = None
 
     def _init_config(self):
@@ -646,15 +577,8 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             return
         return self.delete_email(email_id, connector, hard_delete)
 
-    def start_jobs(self):
-        for jobs in self.jobs.values():
-            asyncio.create_task(jobs())
 
-    def cancel_jobs(self):
-        for jobs in self.jobs.values():
-            jobs.cancel_job()
-
-    # @register_job('Parse DNS Email',(60,180),'INBOX', None)
+    #@EmailReadInterface.register_job('Parse DNS Email',(60,180),'INBOX', None)
     @BaseEmailService.task_lifecycle()
     @select_inbox
     async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
@@ -707,8 +631,8 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             # self.delete_email(ids,connector)
         return None
 
-    # @register_job('Parse Replied Email',(60,180),'INBOX', None,True)
-    # @register_job('Parse Forwarded Email',(60,180),'INBOX', None,False)
+    # @EmailReadInterface.register_job('Parse Replied Email',(60,180),'INBOX', None,True)
+    # @EmailReadInterface.register_job('Parse Forwarded Email',(60,180),'INBOX', None,False)
     @BaseEmailService.task_lifecycle()
     @select_inbox
     async def forwarded_email(self, max_count: int | None, is_re: bool, connector: imap.IMAP4 | imap.IMAP4_SSL):

@@ -1,4 +1,5 @@
-from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseService, MiniService, Service
+from ast import Dict
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, Service
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
@@ -6,7 +7,7 @@ from .database_service import MongooseService, RedisService
 from app.models.profile_model import SMTPProfileModel,IMAPProfileModel,TwilioProfileModel
 
 @Service
-class ProfileManagerService(BaseService):
+class ProfileManagerService(BaseMiniServiceManager):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
         super().__init__()

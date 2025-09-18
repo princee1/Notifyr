@@ -1,7 +1,6 @@
-from abc import ABCMeta, abstractmethod
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
-from app.interface.profile import ProfileInterface
+from app.definition._service import BaseMiniServiceManager
 from app.models.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
@@ -12,7 +11,6 @@ from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
-from app.utils.helper import APIFilterInject
 from app.utils.helper import flatten_dict
 
  
@@ -256,7 +254,7 @@ class BalancerPermission(Permission):
 
 class ProfilePermission(Permission):
 
-    def __init__(self,service:ProfileInterface=None):
+    def __init__(self,service:BaseMiniServiceManager=None):
         super().__init__()
         self.service = service
     
@@ -265,12 +263,9 @@ class ProfilePermission(Permission):
 
         if self.service != None:
             
-            if profile not in self.service.profiles:
+            if profile not in self.service.MiniServiceStore:
                 ...
             
-            if not self.service.check_capabilities(profile):
-                ...
-        
         if authPermission['allowed_profiles'] not in profile:
             ...
 

@@ -1,4 +1,5 @@
-from app.definition._service import BaseService, MiniService, Service
+from app.definition._service import BaseMiniService, BaseService, MiniService, Service
+from app.services.profile_service import ProfileManagerService
 from .config_service import ConfigService
 from .file_service import BaseFileRetrieverService, FileService
 import boto3
@@ -20,7 +21,7 @@ class AmazonSNSError(Exception):
     pass
 
 @MiniService
-class AmazonSESService(BaseService):
+class AmazonSESService(BaseMiniService):
     def __init__(self, configService: ConfigService) -> None:
         super().__init__()
         self.configService = configService

@@ -81,11 +81,11 @@ class SchedulerInterface(Interface):
         trigger = DateTrigger(**date)
         self._schedule(action, args, kwargs, trigger)
 
-    def _schedule(self, action, args, kwargs, trigger):
+    def _schedule(self, action, args, kwargs, trigger,id=None,name=None):
         if asyncio.iscoroutinefunction(action):
-            self._scheduler.add_job(action, trigger, args=args, kwargs=kwargs,misfire_grace_time=self.misfire_grace_time)
+            self._scheduler.add_job(action, trigger, args=args, id = id,kwargs=kwargs,misfire_grace_time=self.misfire_grace_time)
         else:
-            self._scheduler.add_job(self._run_sync, trigger, args=(action, *args), kwargs=kwargs,misfire_grace_time=self.misfire_grace_time)
+            self._scheduler.add_job(self._run_sync, trigger, args=(action, *args),id = id, name=name,kwargs=kwargs,misfire_grace_time=self.misfire_grace_time)
 
     def start(self):
         self._scheduler.start()

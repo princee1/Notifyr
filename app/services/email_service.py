@@ -3,7 +3,6 @@ from typing import Union
 from typing_extensions import Literal
 from app.classes.profiles import ProfileDoesNotExistsError
 from app.definition import _service
-from app.interface.profile import ProfileInterface
 from app.services.aws_service import AmazonSESService
 from app.services.config_service import ConfigService
 from app.services.database_service import MongooseService, RedisService
@@ -17,7 +16,7 @@ from app.utils.tools import Mock
 from app.interface.email import EmailReadInterface, EmailSendInterface
 
 @_service.Service
-class EmailSenderService(_service.BaseService,ProfileInterface):
+class EmailSenderService(_service.BaseMiniServiceManager):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService,loggerService:LoggerService,redisService:RedisService,profileService:ProfileManagerService) -> None:
         super().__init__()
@@ -25,9 +24,6 @@ class EmailSenderService(_service.BaseService,ProfileInterface):
         self.loggerService = loggerService
         self.redisService = redisService
         self.profilesService = profileService
-       
-        self.profiles:dict[str,Union[EmailSendInterface,_service.BaseService]] = {
-        }
 
     def verify_dependency(self):
         ...
@@ -44,15 +40,13 @@ class EmailSenderService(_service.BaseService,ProfileInterface):
         ...
 
 @_service.Service
-class EmailReaderService(_service.BaseService,ProfileInterface):
+class EmailReaderService(_service.BaseMiniServiceManager):
     def __init__(self, configService: ConfigService,reactiveService:ReactiveService,loggerService:LoggerService,profilesService:ProfileManagerService) -> None:
         super().__init__()
         self.configService = configService
         self.reactiveService = reactiveService
         self.loggerService = loggerService
         self.profilesService = profilesService
-
-        self.profiles:dict[str,EmailReadInterface | _service.BaseService] = {}
 
 
     def verify_dependency(self):
@@ -62,10 +56,9 @@ class EmailReaderService(_service.BaseService,ProfileInterface):
         ...
 
     def start_jobs(self):
-        for p in self.profiles.values():
-            p.start_jobs()
+        for p in self.MiniServiceStore.values():
+            p.schedule()
 
-    
     def cancel_jobs(self):
-        for p in self.profiles.values():
-            p.cancel_jobs()
+        for p in self.MiniServiceStore.values():
+            p.shutdown()
