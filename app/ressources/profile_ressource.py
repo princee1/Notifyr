@@ -9,7 +9,7 @@ from app.depends.class_dep import Broker
 from app.depends.dependencies import get_auth_permission
 from app.models.profile_model import ProfilModelValues, ProfileModel
 from app.services.database_service import MongooseService
-from app.services.profile_service import ProfileService
+from app.services.profile_service import ProfileManagerService
 from app.classes.profiles import ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
 
@@ -40,7 +40,7 @@ def generate_profil_model_ressource(model:Type[ProfileModel],path:str)->Type[R]:
     class BaseProfilModelRessource(BaseHTTPRessource):
         
         @InjectInMethod
-        def __init__(self,profileService:ProfileService,):
+        def __init__(self,profileService:ProfileManagerService,):
             super().__init__()
             self.profileService = profileService
 

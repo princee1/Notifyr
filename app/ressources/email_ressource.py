@@ -18,7 +18,7 @@ from app.services.config_service import ConfigService
 from app.services.link_service import LinkService
 from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
-from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, ServiceStatusLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
+from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailReaderService, EmailSenderService
 from fastapi import   HTTPException, Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission
@@ -89,7 +89,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
     @UseLimiter(limit_value="10/minutes")
     @UseRoles([Role.PUBLIC])
-    @ServiceStatusLock(AssetService,'reader','')
+    @UseServiceLock(AssetService,lockType='reader')
     @UsePipe(pipes.TemplateParamsPipe('html','html',True))
     @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler)
     @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
@@ -103,7 +103,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])
     @PingService([EmailSenderService,CeleryService],checker=check_celery_service)
-    @ServiceStatusLock(AssetService,'reader','')
+    @UseServiceLock(AssetService,lockType='reader')
     @UsePermission(permissions.JWTAssetPermission('html'),permissions.JWTSignatureAssetPermission())
     @UseHandler(handlers.AsyncIOHandler(),handlers.TemplateHandler(),handlers.ContactsHandler(),handlers.ProfileHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)

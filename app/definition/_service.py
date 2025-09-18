@@ -390,6 +390,12 @@ class BaseService():
         return self.__class__.__name__
 
 
+class BaseMiniService(BaseService):
+    
+    def __init__(self):
+        super().__init__()
+        
+
 S = TypeVar('S', bound=BaseService)
 
 

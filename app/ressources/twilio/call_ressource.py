@@ -22,7 +22,7 @@ from app.services.database_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService, ReactiveSubject
 from app.services.twilio_service import CallService
-from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, ServiceStatusLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_client,Get_Contact, get_task, get_template, verify_twilio_token, as_async_query, populate_response_with_request_id,wait_timeout_query
@@ -54,7 +54,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @UsePipe(TemplateParamsPipe('phone','xml',True))
     @UseHandler(AsyncIOHandler,TemplateHandler)
-    @ServiceStatusLock(AssetService,'reader','')
+    @UseServiceLock(AssetService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
     def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
         
@@ -66,7 +66,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @PingService([CallService])
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
-    @ServiceStatusLock(AssetService,'reader')
+    @UseServiceLock(AssetService,lockType='reader')
     @UseHandler(AsyncIOHandler,TemplateHandler)
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePipe(to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'), TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','','',False))
@@ -107,7 +107,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @PingService([CallService])
     @UsePipe(CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
-    @ServiceStatusLock(AssetService,'reader')
+    @UseServiceLock(AssetService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/template/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
     async def voice_template(self, template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
         

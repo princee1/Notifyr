@@ -15,8 +15,9 @@ from bs4 import BeautifulSoup
 
 from app.interface.timers import IntervalInterface
 from app.services.aws_service import AmazonSESService
-from app.services.database_service import RedisService
+from app.services.database_service import MongooseService, RedisService
 from app.services.reactive_service import ReactiveService
+from app.services.secret_service import HCVaultService
 from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
@@ -42,7 +43,7 @@ from app.interface.email import EmailReadInterface, EmailSendInterface
 
 
 @_service.AbstractServiceClass
-class BaseEmailService(_service.BaseService, RedisEventInterface):
+class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
 
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         super().__init__()
@@ -144,8 +145,7 @@ class BaseEmailService(_service.BaseService, RedisEventInterface):
             # 'state': self.state,
         }
 
-        self.mailOAuth = MailOAuthFactory(
-            self.emailHost, params, self.configService.OAUTH_METHOD_RETRIEVER, self.configService.OAUTH_JSON_KEY_FILE)
+        self.mailOAuth = MailOAuthFactory(self.emailHost, params, self.configService.OAUTH_METHOD_RETRIEVER, self.configService.OAUTH_JSON_KEY_FILE)
         self.mailOAuth.load_authToken(self.configService.OAUTH_TOKEN_DATA_FILE)
         if self.mailOAuth.exists:
             try:
@@ -209,17 +209,12 @@ class BaseEmailService(_service.BaseService, RedisEventInterface):
 
 
 @_service.MiniService
-class SMTPEmailService(BaseEmailService,EmailSendInterface):
+class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         super().__init__(configService, loggerService, redisService)
         self.type_ = 'SMTP'
-        self.fromEmails: set[str] = set()
-        self.connMethod = self.configService.SMTP_EMAIL_CONN_METHOD.lower()
-        self.tlsConn: bool = SMTPConfig.setConnFlag(self.connMethod)
-        self.hostPort = SMTPConfig.setHostPort(self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
-        self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
-    
+        
     def logout(self, connector: smtp.SMTP):
         try:
             connector.quit()
@@ -245,8 +240,7 @@ class SMTPEmailService(BaseEmailService,EmailSendInterface):
                 auth_status = connector.login(
                     self.configService.SMTP_EMAIL, self.configService.SMTP_PASS)
             else:
-                access_token = self.mailOAuth.encode_token(
-                    self.configService.SMTP_EMAIL)
+                access_token = self.mailOAuth.encode_token(self.configService.SMTP_EMAIL)
                 auth_status = connector.docmd("AUTH XOAUTH2", access_token)
                 auth_status = tuple(auth_status)
                 auth_code, auth_mess = auth_status
@@ -364,6 +358,13 @@ class SMTPEmailService(BaseEmailService,EmailSendInterface):
             raise NotSameDomainEmailError
 
         return (connector.verify(email),)
+    
+    def build(self, build_state=-1):
+        
+        self.connMethod = self.configService.SMTP_EMAIL_CONN_METHOD.lower()
+        self.tlsConn: bool = SMTPConfig.setConnFlag(self.connMethod)
+        self.hostPort = SMTPConfig.setHostPort(self.configService.SMTP_EMAIL_CONN_METHOD) if self.configService.SMTP_EMAIL_PORT == None else self.configService.SMTP_EMAIL_PORT
+        self.emailHost = EmailHostConstant._member_map_[self.configService.SMTP_EMAIL_HOST]
 
 
 J: Type = None
@@ -371,7 +372,7 @@ j: dict = None
 
 
 @_service.MiniService
-class IMAPEmailService(BaseEmailService,EmailReadInterface):
+class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
     service: Self  # Class Singleton
 
     @dataclass
@@ -385,7 +386,7 @@ class IMAPEmailService(BaseEmailService,EmailReadInterface):
         delay: int = field(default_factory=lambda: randint(3600/2, 3600))
 
         async def __call__(self,):
-            service: IMAPEmailService = IMAPEmailService.service
+            service: IMAPEmailMiniService = IMAPEmailMiniService.service
             callback = getattr(service, self.func, None)
             is_async = asyncio.iscoroutinefunction(callback)
             while self.stop:
@@ -517,11 +518,11 @@ class IMAPEmailService(BaseEmailService,EmailReadInterface):
         self.reactiveService = reactiveService
         self.redisService = redisService
 
-        self._mailboxes: dict[str, IMAPEmailService.IMAPMailboxes] = {}
+        self._mailboxes: dict[str, IMAPEmailMiniService.IMAPMailboxes] = {}
         self._current_mailbox: str = None
 
         self._init_config()
-        IMAPEmailService.service = self
+        IMAPEmailMiniService.service = self
         self._capabilities: list = None
 
     def _init_config(self):

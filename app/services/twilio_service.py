@@ -12,8 +12,9 @@ from app.interface.redis_event import RedisEventInterface
 from app.models.otp_model import GatherDtmfOTPModel, GatherOTPBaseModel, GatherSpeechOTPModel, OTPModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.assets_service import AssetService
-from app.services.database_service import RedisService
+from app.services.database_service import MongooseService, RedisService
 from app.services.logger_service import LoggerService
+from app.services.secret_service import HCVaultService
 from app.utils.constant import StreamConstant
 from app.utils.tools import Mock
 from .config_service import CeleryMode, ConfigService
@@ -35,15 +36,16 @@ from twilio.rest.api.v2010.account import AccountInstance
 
 @_service.Service
 class TwilioService(_service.BaseService):
-    def __init__(self, configService: ConfigService,) -> None:
+    def __init__(self, configService: ConfigService,mongooseService:MongooseService,vaultService:HCVaultService) -> None:
         super().__init__()
         self.configService = configService
         self.SERVICE_ID = self.configService.getenv('TWILIO_SERVICE_ID')
 
     def build(self,build_state=-1):
-        self.client = Client(self.configService.TWILIO_ACCOUNT_SID,
-                             self.configService.TWILIO_AUTH_TOKEN)
+        
         try:
+            self.client = Client(self.configService.TWILIO_ACCOUNT_SID,
+                             self.configService.TWILIO_AUTH_TOKEN)
             account = self.client.api.accounts(self.configService.TWILIO_ACCOUNT_SID).fetch()
             if account.status !=  AccountInstance.Status.ACTIVE:
                 raise _service.BuildFailureError

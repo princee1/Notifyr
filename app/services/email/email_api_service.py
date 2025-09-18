@@ -10,11 +10,21 @@ from app.interface.email import EmailSendInterface,EmailReadInterface
 from app.services.config_service import ConfigService
 
 
-class MailAPI():
-    ...
+
+class EmailAPIService(BaseService,EmailSendInterface,EmailReadInterface):
+    
+    def __init__(self,configService:ConfigService):
+        super().__init__()
+        EmailReadInterface.__init__(self)
+        EmailSendInterface.__init__(self)
+        self.configService= configService
+
+    def build(self,build_state=-1):
+        ...
+
 
 @MiniService
-class GMailAPI(MailAPI):
+class GMailAPIMiniService(EmailAPIService):
     def __init__(self, flowtype: GoogleFlowType, credentials):
         """
         Initializes the GMailAPI with a specific Google OAuth2 flow type and credentials.
@@ -69,22 +79,6 @@ class GMailAPI(MailAPI):
             return []
 
 @MiniService
-class MicrosoftGraphMailAPI(MailAPI):
+class MicrosoftGraphMailAPIMiniService(EmailAPIService):
     ...
-
-
-@MiniService
-class EmailAPIService(BaseService,EmailSendInterface,EmailReadInterface):
-    
-    def __init__(self,configService:ConfigService):
-        super().__init__()
-        EmailReadInterface.__init__(self)
-        EmailSendInterface.__init__(self)
-
-
-        self.configService= configService
-
-    def build(self,build_state=-1):
-        ...
-
 
