@@ -8,13 +8,14 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Option
 
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import copy_response, issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services import AssetService, RateLimiterService
 from app.container import Get, Need
-from app.definition._service import S, BaseService
+from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, BaseService
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
@@ -43,9 +44,6 @@ PATH_SEPARATOR = "/"
 
 MIN_TIMEOUT = -1
 
-
-def get_class_name_from_method(func: Callable) -> str:
-    return func.__qualname__.split('.')[0]
 
 
 class MountMetaData(TypedDict):
@@ -95,25 +93,120 @@ EVENTS: dict[str, set[str]] = {}
 """
 This variable contains the functions that will be an events listener
 """
+################################################################                           #########################################################
 
 
-def add_protected_route_metadata(class_name: str, operation_id: str):
-    if class_name in PROTECTED_ROUTES:
-        PROTECTED_ROUTES[class_name].append(operation_id)
-    else:
-        PROTECTED_ROUTES[class_name] = [operation_id]
+class Helper:
 
+    @staticmethod
+    async def return_result(tf:Callable,a,k):
+        result = tf(*a, **k)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
 
-def appends_funcs_callback(func: Callable, wrapper: Callable, priority: DecoratorPriority, touch: float = 0):
-    class_name = get_class_name_from_method(func)
-    if class_name not in DECORATOR_METADATA:
-        DECORATOR_METADATA[class_name] = {}
+    @staticmethod
+    def get_class_name_from_method(func: Callable) -> str:
+        return func.__qualname__.split('.')[0]
 
-    if func.__name__ not in DECORATOR_METADATA[class_name]:
-        DECORATOR_METADATA[class_name][func.__name__] = []
+    @staticmethod
+    def response_decorator(func: Callable):
 
-    DECORATOR_METADATA[class_name][func.__name__].append(
-        (wrapper, priority.value + touch))
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            if asyncio.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+            response: Response = kwargs.get('response', None)
+
+            if isinstance(result, Response):
+                ...
+            elif isinstance(result, (dict, list, set, tuple)):
+                result = JSONResponse(result,)
+
+            elif isinstance(result, (int, str, float, bool)):
+                result = PlainTextResponse(str(result))
+
+            elif result == None:
+                result = JSONResponse({},)
+
+            return copy_response(result, response)
+
+        return wrapper
+
+    @staticmethod
+    def add_protected_route_metadata(class_name: str, operation_id: str):
+        if class_name in PROTECTED_ROUTES:
+            PROTECTED_ROUTES[class_name].append(operation_id)
+        else:
+            PROTECTED_ROUTES[class_name] = [operation_id]
+
+    @staticmethod
+    def appends_funcs_callback(func: Callable, wrapper: Callable, priority: DecoratorPriority, touch: float = 0):
+        class_name = Helper.get_class_name_from_method(func)
+        if class_name not in DECORATOR_METADATA:
+            DECORATOR_METADATA[class_name] = {}
+
+        if func.__name__ not in DECORATOR_METADATA[class_name]:
+            DECORATOR_METADATA[class_name][func.__name__] = []
+
+        DECORATOR_METADATA[class_name][func.__name__].append(
+            (wrapper, priority.value + touch))
+
+    @staticmethod
+    def filter_type_function(functions, flag=True):
+        temp_pipe_func = []
+
+        for p in functions:
+            if type(p) == type:
+                if flag:
+                    p= p()
+                else:
+                    p=p(False)
+            temp_pipe_func.append(p)
+
+        return temp_pipe_func
+
+    @staticmethod
+    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[Exception]):
+        def wrapper(function: Callable):
+
+            @functools.wraps(function)
+            async def callback(*args, **kwargs):  # Function that will be called
+                if empty_decorator:
+                    return await function(*args, **kwargs)
+
+                def proxy(deco, f: Callable):
+                    @functools.wraps(deco)
+                    async def delegator(*a, **k):
+                        if type(deco) == type:
+                            obj: DecoratorObj = deco()
+                            return await obj.do(f, *a, **k)
+                        elif isinstance(deco, deco_type):
+                            return await deco.do(f, *a, **k)
+                        else:
+                            return await deco(f, *a, **k)
+                    return delegator
+
+                deco_prime = function
+                for d in reversed(decorated_function):
+                    deco_prime = proxy(d, deco_prime)
+
+                try:
+                    return await deco_prime(*args, **kwargs)
+                except error_type as e:
+
+                    if default_error == None:
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Could not correctly treat the error')
+
+                    raise HTTPException(**default_error)
+
+            return callback
+        return wrapper
+
+################################################################                           #########################################################
 
 
 class HTTPMethod(Enum):
@@ -183,7 +276,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             if not mount:
                 return func
 
-            class_name = get_class_name_from_method(func)
+            class_name = Helper.get_class_name_from_method(func)
             kwargs = {
                 'path': path,
                 'endpoint': func.__name__,
@@ -231,7 +324,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 raise AttributeError(
                     'Cannot set an http route as an event listener')
             setattr(func, 'event', event)
-            class_name = get_class_name_from_method(func)
+            class_name = Helper.get_class_name_from_method(func)
             if class_name not in EVENTS:
                 EVENTS[class_name] = set([func.__qualname__])
             else:
@@ -396,9 +489,25 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
     def routeExample(self):
         pass
 
+################################################################                           #########################################################
 
 R = TypeVar('R', bound=BaseHTTPRessource)
 
+def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handling_func: Callable | tuple[Callable, ...], **kwargs) -> Type[R] | None:
+
+        if type(cls) == HTTPRessourceMetaClass:
+            for attr in dir(cls):
+                if callable(getattr(cls, attr)) and attr in [end['endpoint'] for end in ROUTES[cls.__name__]]:
+                    handler = getattr(cls, attr)
+                    if handling_func == None:
+                        setattr(cls, attr, decorator(**kwargs)(handler))
+                    else:
+                        setattr(cls, attr, decorator(
+                            *handling_func, **kwargs)(handler))
+            return cls
+        return None
+
+################################################################                           #########################################################
 
 def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Type[W]] = [], add_prefix=True,mount=True):
     def class_decorator(cls: Type[R]) -> Type[R]:
@@ -415,71 +524,7 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
         return cls
     return class_decorator
 
-
-def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handling_func: Callable | tuple[Callable, ...], **kwargs) -> Type[R] | None:
-
-    if type(cls) == HTTPRessourceMetaClass:
-        for attr in dir(cls):
-            if callable(getattr(cls, attr)) and attr in [end['endpoint'] for end in ROUTES[cls.__name__]]:
-                handler = getattr(cls, attr)
-                if handling_func == None:
-                    setattr(cls, attr, decorator(**kwargs)(handler))
-                else:
-                    setattr(cls, attr, decorator(
-                        *handling_func, **kwargs)(handler))
-        return cls
-    return None
-
-def filter_type_function(functions, flag=True):
-    temp_pipe_func = []
-
-    for p in functions:
-        if type(p) == type:
-            if flag:
-                p= p()
-            else:
-                p=p(False)
-        temp_pipe_func.append(p)
-
-    return temp_pipe_func
-
-def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[Exception]):
-    def wrapper(function: Callable):
-
-        @functools.wraps(function)
-        async def callback(*args, **kwargs):  # Function that will be called
-            if empty_decorator:
-                return await function(*args, **kwargs)
-
-            def proxy(deco, f: Callable):
-                @functools.wraps(deco)
-                async def delegator(*a, **k):
-                    if type(deco) == type:
-                        obj: DecoratorObj = deco()
-                        return await obj.do(f, *a, **k)
-                    elif isinstance(deco, deco_type):
-                        return await deco.do(f, *a, **k)
-                    else:
-                        return await deco(f, *a, **k)
-                return delegator
-
-            deco_prime = function
-            for d in reversed(decorated_function):
-                deco_prime = proxy(d, deco_prime)
-
-            try:
-                return await deco_prime(*args, **kwargs)
-            except error_type as e:
-
-                if default_error == None:
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Could not correctly treat the error')
-
-                raise HTTPException(**default_error)
-
-        return callback
-    return wrapper
-
+################################################################                           #########################################################
 
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams = None):
     empty_decorator = len(permission_function) == 0
@@ -487,15 +532,15 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
         warnings.warn(
             "No Permission function or object was provided.", NoFunctionProvidedWarning)
         
-    permission_function = filter_type_function(permission_function)
+    permission_function = Helper.filter_type_function(permission_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UsePermission, permission_function)
         if cls != None:
             return cls
 
-        class_name = get_class_name_from_method(func)
-        add_protected_route_metadata(class_name, func.meta['operation_id'])
+        class_name = Helper.get_class_name_from_method(func)
+        Helper.add_protected_route_metadata(class_name, func.meta['operation_id'])
 
         def wrapper(function: Callable):
 
@@ -543,7 +588,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
                 return await function(*args, **kwargs)
             return callback
-        appends_funcs_callback(func, wrapper, DecoratorPriority.PERMISSION)
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.PERMISSION)
         return func
     return decorator
 
@@ -555,17 +600,17 @@ def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[H
         warnings.warn("No Handler function or object was provided.",
                       NoFunctionProvidedWarning)
         
-    handler_function = filter_type_function(handler_function)
+    handler_function = Helper.filter_type_function(handler_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseHandler, handler_function)
         if cls != None:
             return cls
 
-        wrapper = stack_decorator(
+        wrapper = Helper.stack_decorator(
             handler_function, Handler, empty_decorator, default_error, HandlerDefaultException)
 
-        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER)
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER)
         return func
     return decorator
 
@@ -577,7 +622,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
     if empty_decorator:
         warnings.warn("No Guard function or object was provided.",NoFunctionProvidedWarning)
 
-    guard_function = filter_type_function(guard_function)
+    guard_function = Helper.filter_type_function(guard_function)
 
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
         cls = common_class_decorator(func, UseGuard, guard_function)
@@ -618,7 +663,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
                 return await target_function(*args, **kwargs)
             return callback
 
-        appends_funcs_callback(func, wrapper, DecoratorPriority.GUARD)
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.GUARD)
         return func
     return decorator
 
@@ -631,7 +676,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
         warnings.warn("No Pipe function or object was provided.",
                       NoFunctionProvidedWarning)
     
-    pipe_function = filter_type_function(pipe_function, before)
+    pipe_function = Helper.filter_type_function(pipe_function, before)
     
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -681,10 +726,11 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                     raise HTTPException(**default_error)
             return callback
 
-        appends_funcs_callback(
+        Helper.appends_funcs_callback(
             func, wrapper, DecoratorPriority.PIPE, touch=0 if before else 0.5)
         return func
     return decorator
+
 
 def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams = None):
 
@@ -693,7 +739,7 @@ def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, 
         warnings.warn("No Pipe function or object was provided.",NoFunctionProvidedWarning)
 
 
-    interceptor_function = filter_type_function(interceptor_function)
+    interceptor_function = Helper.filter_type_function(interceptor_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(
@@ -701,10 +747,10 @@ def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, 
         if cls != None:
             return cls
 
-        wrapper = stack_decorator(interceptor_function, Interceptor,
+        wrapper = Helper.stack_decorator(interceptor_function, Interceptor,
                                   empty_decorator, default_error, InterceptorDefaultException)
 
-        appends_funcs_callback(func, wrapper, DecoratorPriority.INTERCEPTOR)
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.INTERCEPTOR)
         return func
     return decorator
 
@@ -735,6 +781,8 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
 
         return func
     return decorator
+
+################################################################                           #########################################################
 
 
 def HTTPStatusCode(code: int | str):
@@ -767,32 +815,7 @@ def HTTPStatusCode(code: int | str):
 
     return decorator
 
-
-def response_decorator(func: Callable):
-
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        if asyncio.iscoroutinefunction(func):
-            result = await func(*args, **kwargs)
-        else:
-            result = func(*args, **kwargs)
-        response: Response = kwargs.get('response', None)
-
-        if isinstance(result, Response):
-            ...
-        elif isinstance(result, (dict, list, set, tuple)):
-            result = JSONResponse(result,)
-
-        elif isinstance(result, (int, str, float, bool)):
-            result = PlainTextResponse(str(result))
-
-        elif result == None:
-            result = JSONResponse({},)
-
-        return copy_response(result, response)
-
-    return wrapper
-
+################################################################                           #########################################################
 
 @functools.wraps(rateLimitService.GlobalLimiter.limit)
 def UseLimiter(**kwargs):  # TODO
@@ -812,7 +835,7 @@ def UseLimiter(**kwargs):  # TODO
             except:
                 ...
 
-        return response_decorator(func)
+        return Helper.response_decorator(func)
 
     return decorator
 
@@ -828,7 +851,7 @@ def UseSharingLimiter(**kwargs):
             meta['limit_obj'] = kwargs
             meta['shared'] = True
 
-        return response_decorator(func)
+        return Helper.response_decorator(func)
     return decorator
 
 
@@ -843,6 +866,7 @@ def ExemptLimiter():
         return func
     return decorator
 
+################################################################                           #########################################################
 
 def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=None):
 
@@ -898,21 +922,15 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
 
 
             return callback
-        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)
         return func
     
     return decorator
-
 
 def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True):
     if lockType not in ['reader', 'writer']:
         raise TypeError
 
-    async def return_result(tf:Callable,a,k):
-        result = tf(*a, **k)
-        if asyncio.iscoroutine(result):
-            return await result
-        return result
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status)
@@ -934,7 +952,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                         async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
                             if check_status:
                                 _service.check_status('')
-                            return await return_result(f,a,k)
+                            return await Helper.return_result(f,a,k)
                     return delegator
                 
                 inner_callback = target_function
@@ -950,14 +968,48 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                 #NOTE: This is the only way to wait on the request, the timeout is for the whole request wrapped in the lock instead of only the verification that we wait
 
             return callback
-        appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
         return func
     return decorator
 
+def UseMiniServiceLock(services:Type[S|BaseMiniServiceManager],lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True):
+    
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status)
+        if cls != None:
+            return cls
+    
+        def wrapper(target_function: Callable):
+
+            @functools.wraps(target_function)
+            async def callback(*args, **kwargs):
+                s:BaseMiniServiceManager = Get(services)
+                profile = kwargs.get('profile',None)
+                if profile == None:
+                    raise ProfileNotSpecifiedError
+                if profile not in s.MiniServiceStore:
+                    raise ProfileTypeNotMatchRequest
+                
+                _service:BaseMiniService = s.MiniServiceStore[profile]
+            
+                async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
+                    if check_status:
+                         _service.check_status('')
+                    return Helper.return_result(target_function,args,kwargs)
+                    
+            return callback
+
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
+        return func
+
+    return decorator
+
+################################################################                           #########################################################
 
 def Exclude():
     ...
 
+################################################################                           #########################################################
 
 def MountDirectory(path: str, app: StaticFiles, name: str):
     def class_decorator(cls: Type[R]) -> Type[R]:
@@ -998,3 +1050,4 @@ def IncludeWebsocket(*websocket: Type[W]):
 
         return cls
     return class_decorator
+################################################################                           #########################################################

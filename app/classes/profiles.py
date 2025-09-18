@@ -49,6 +49,9 @@ class ProfileNotAllowedToUseError(BaseError):
 class ProfileDoesNotExistsError(BaseError):
     ...
 
+class ProfileNotSpecifiedError(BaseError):
+    ...
+
 ####################################                 #####################################333
 
 class ProfileState(Enum):

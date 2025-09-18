@@ -40,12 +40,14 @@ def generate_profil_model_ressource(model:Type[ProfileModel],path:str)->Type[R]:
     class BaseProfilModelRessource(BaseHTTPRessource):
         
         @InjectInMethod
-        def __init__(self,profileService:ProfileManagerService,):
+        def __init__(self,profileManagerService:ProfileManagerService,vaultService:HCVaultService):
             super().__init__()
-            self.profileService = profileService
+            self.profileManagerService = profileManagerService
+            self.vaultService = vaultService
 
         @PingService([HCVaultService])
         @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+        @UseServiceLock(ProfileManagerService,lockType='reader')
         @UsePermission(AdminPermission)
         @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
         async def create_profile(self,profile_type:Model,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -53,19 +55,21 @@ def generate_profil_model_ressource(model:Type[ProfileModel],path:str)->Type[R]:
 
         @PingService([HCVaultService])
         @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-        @UsePermission(AdminPermission)
+        @UseServiceLock(ProfileManagerService,lockType='reader')
+        @UsePermission(AdminPermission,ProfilePermission)
         @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
         async def update_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
             ...
         
+        @UseServiceLock(ProfileManagerService,lockType='reader')
         @PingService([HCVaultService])
         @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-        @UsePermission(AdminPermission)
+        @UsePermission(AdminPermission,ProfilePermission)
         @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
         async def delete_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
             ...
 
-        
+        @UseRoles([Role.PUBLIC])        
         @UsePermission(ProfilePermission)
         @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
         async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -73,14 +77,14 @@ def generate_profil_model_ressource(model:Type[ProfileModel],path:str)->Type[R]:
 
         
         @PingService([HCVaultService])
-        @UsePermission(AdminPermission)
+        @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+        @UseServiceLock(ProfileManagerService,lockType='reader')
+        @UsePermission(AdminPermission,ProfilePermission)
         @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT,HTTPMethod.POST])
         async def set_credentials(self,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
             ...
     
     return BaseProfilModelRessource
-
-
 
 @HTTPRessource(PROFILE_PREFIX,)
 class ProfilRessource(BaseHTTPRessource):

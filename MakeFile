@@ -80,3 +80,5 @@ tunnel_lb:
 docker-worker:
 	docker-compose up -d --no-deps --scale worker=3 worker
 
+docker-prune:
+	docker builder prune -all -f

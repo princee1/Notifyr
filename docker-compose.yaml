@@ -9,6 +9,7 @@ services:
       - "3000:3000"
     volumes:
       - settingdb-data:/data
+      - vault-shared:/vault/shared
 
   redis:
     image: redis:latest #Queue for the taks

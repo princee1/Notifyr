@@ -150,6 +150,16 @@ create_default_token(){
 
   vault kv put notifyr-secrets/tokens $ARGS
 
+  local api_key
+  api_key=$(pwgen -s 100 1)
+
+  vault kv put notifyr-secrets/api-key SETTING_DB_API_KEY="$api_key"
+
+  echo -n "$api_key" > "$VAULT_SHARED_DIR/setting-db-api-key.txt"
+
+  chown root:vaultuser "$VAULT_SHARED_DIR/setting-db-api-key.txt"
+  chmod 664 "$VAULT_SHARED_DIR/setting-db-api-key.txt"
+
   local generation_id
   generation_id=$(pwgen -s 32 1)
 
@@ -159,6 +169,8 @@ create_default_token(){
   generated_at=$(date +%Y-%m-%dT%H:%M:%S)
   
   vault kv metadata put -custom-metadata=generated_at="$generated_at" notifyr-generation/generation-id
+
+
 
   echo "Creating default key"
 }
