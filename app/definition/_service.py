@@ -401,6 +401,24 @@ class BaseMiniService(BaseService):
         self.combinedService = combinedService
 
 
+class MiniServiceStore:
+    
+    def __init__(self):
+        self._store_:Dict[str,BaseMiniService] = {}
+
+    def add(self):
+        ...
+    
+    def get(self,):
+        ...
+    
+    def __getitem__(self,):
+        ...
+    
+    def __hasitem__(self,):
+        ...
+
+
 class BaseMiniServiceManager(BaseService):
     def __init__(self):
         super().__init__()

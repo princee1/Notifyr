@@ -1,16 +1,12 @@
-import datetime
-from enum import Enum
-from ssl import SSLSession
+from datetime import datetime
 from typing import Optional, Type
 from typing_extensions import Literal
 from odmantic import Model, Field, Reference
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.profiles import ProfileModelAuthToken, ProfilModelConstant, ProfileState
-from app.definition._error import BaseError
 from app.utils.constant import EmailHostConstant, MongooseDBConstant
 from pydantic import EmailStr, constr, PrivateAttr
 from typing import ClassVar
-from pydantic import BaseModel
 
 
 ProfileType = Literal['email','twilio']
@@ -26,20 +22,23 @@ class ErrorProfileModel(Model):
     error_name:str
     error_description:str
 
-    class Config:
-        collection = MongooseDBConstant.PROFILE_COLLECTION
+    model_config = {
+        "collection": MongooseDBConstant.PROFILE_COLLECTION
+    }
 
 ######################################################  Profile Model                 ####################################################33
 class ProfileModel(Model):
     profile_type: ProfileType = Field(..., description="The type of profile")
     profile_state: ProfileState
-    secret_key:ClassVar[list[str]] = []
+    _secret_key:ClassVar[list[str]] = []
     created_at: datetime = datetime.utcnow()
     last_modified: datetime = datetime.utcnow()
     version: int = 1
 
-    class Config:
-        collection=MongooseDBConstant.PROFILE_COLLECTION
+    model_config = {
+        "collection": MongooseDBConstant.PROFILE_COLLECTION,
+         "__is_abstract__": True
+    }
 
     def __init_subclass__(cls, **kwargs):
         setattr(cls,'_secret_key',cls.secret_key.copy())
@@ -63,12 +62,13 @@ class EmailProfileModel(ProfileModel):
     profile_type:str = Field('email', const=True)
     email_address: EmailStr = Field(..., description="The email address")
 
-    class Config:
-        collection =MongooseDBConstant.PROFILE_COLLECTION
-        indexes = [
-            # Compound unique index
-            {"key": ("profile_type", "email_address"), "unique": True}
-        ]
+    model_config = {
+
+    "collection": MongooseDBConstant.PROFILE_COLLECTION,
+    "indexes": [
+        {"key": ("profile_type", "email_address"), "unique": True}
+    ]
+    }
 
 
 class ProtocolProfileModel(EmailProfileModel):
@@ -96,7 +96,7 @@ class IMAPProfileModel(ProtocolProfileModel):
     password: str = Field(..., description="The IMAP password")
     imap_server: str = Field(..., description="The IMAP server address")
     imap_port: int = Field(..., description="The IMAP server port")
-    secret_key:ClassVar[list[str]] = ['password']
+    _secret_key:ClassVar[list[str]] = ['password']
 
 class AWSProfileModel(EmailProfileModel):
     profile_type:str = Field(ProfilModelConstant.AWS, const=True)
@@ -104,7 +104,7 @@ class AWSProfileModel(EmailProfileModel):
     s3_bucket_name:str
     aws_access_key_id:str
     aws_secret_access_key:str
-    secret_key:ClassVar[list[str]] = ['aws_access_key_id','aws_secret_access_key']
+    _secret_key:ClassVar[list[str]] = ['aws_access_key_id','aws_secret_access_key']
 
 class GMailAPIProfileModel(APIEmailProfileModel):
     profile_type:str = Field(ProfilModelConstant.GMAIL_API, const=True)
@@ -115,7 +115,7 @@ class OutlookAPIProfileModel(APIEmailProfileModel):
     client_id:str
     client_secret:str
     tenant_id:str
-    secret_key:ClassVar[list[str]] = ['client_secret']
+    _secret_key:ClassVar[list[str]] = ['client_secret']
 
 
 
@@ -143,6 +143,7 @@ class TwilioProfileModel(ProfileModel):
     twilio_chat_number: str = Field(..., description="The Twilio Chat Phone Number")
     twilio_automated_response_number: str = Field(..., description="The Twilio Automated Response Phone Number")
 
+    _secret_key = ["auth_token"]
 
 ProfilModelValues.update({
     ProfilModelConstant.TWILIO: TwilioProfileModel

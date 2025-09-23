@@ -3,9 +3,13 @@ import traceback
 from typing import Any
 from app.container import Get
 from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, ServiceStatus,StateProtocol, VariableProtocol
+from app.interface.timers import SchedulerInterface
 from app.utils.constant import SubConstant
 from app.classes.profiles import ProfileStateProtocol
 
+
+class ServiceStateScheduler(SchedulerInterface):
+    ...
 
 
 async def Set_Service_Status(message:StateProtocol):
@@ -69,6 +73,9 @@ async def Set_Service_Variables(message:VariableProtocol):
         traceback.print_exc()
 
 async def ProfilStatus(message:ProfileStateProtocol):
+    ...
+
+async def Schedule_State_Service():
     ...
 
 G_State_Subs = {

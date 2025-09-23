@@ -3,12 +3,12 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.triggers.combining import AndTrigger
 from typing import Callable, Any, TypedDict
 import asyncio
 from app.definition._error import BaseError
 from app.definition._interface import Interface, IsInterface
-from abc import abstractmethod
 
 
 class IntervalError(BaseError):

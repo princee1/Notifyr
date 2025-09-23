@@ -9,7 +9,7 @@ USER setting
 
 WORKDIR /data
 
-COPY ./setting/server.js ./data/
+COPY ./settingdb/server.js ./data/
 
 COPY ./settings_db.json /data/db.json
 
