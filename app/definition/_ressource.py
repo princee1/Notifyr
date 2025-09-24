@@ -61,6 +61,7 @@ class ClassMetaData(TypedDict):
     mount_ressource:bool
     ressource_id:str
     parent:list[Type]
+    classname:str
 
 
 
@@ -335,7 +336,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         return decorator
 
     def _register_event(self,):
-        class_name = self.__class__.__name__
+        class_name = self.__class__.meta['classname']
         if class_name not in EVENTS:
             return
         self.events = {}
@@ -349,9 +350,9 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         return self.events[event](data)
 
     def _stack_callback(self):
-        if self.__class__.__name__ not in DECORATOR_METADATA:
+        if self.__class__.meta['classname'] not in DECORATOR_METADATA:
             return
-        M = DECORATOR_METADATA[self.__class__.__name__]
+        M = DECORATOR_METADATA[self.__class__.meta['classname']]
         for f in M:
             if hasattr(self, f):
                 stacked_callback = M[f].copy()
@@ -364,7 +365,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 setattr(self, f, c)
 
     def _set_rate_limit(self):
-        for end in ROUTES[self.__class__.__name__]:
+        for end in ROUTES[self.__class__.meta['classname']]:
             func_name = end['endpoint']
             func_attr = getattr(self, func_name)
             meta: FuncMetaData = getattr(func_attr, 'meta')
@@ -404,6 +405,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
 
         self.router = APIRouter(prefix=prefix, on_shutdown=[self.on_shutdown], on_startup=[
                                 self.on_startup], dependencies=dependencies)
+        
         self._stack_callback()
         self._set_rate_limit()
 
@@ -440,10 +442,10 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 ws.on_shutdown()
 
     def _add_routes(self):
-        if self.__class__.__name__ not in ROUTES:
+        if self.__class__.meta['classname'] not in ROUTES:
             return
 
-        routes_metadata = ROUTES[self.__class__.__name__]
+        routes_metadata = ROUTES[self.__class__.meta['classname']]
         for route in routes_metadata:
             kwargs = route.copy()
             operation_id = kwargs['operation_id']
@@ -520,6 +522,8 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
         cls.meta['mount'] = []
         cls.meta['mount_ressource'] = mount
         meta['ressource_id'] = prefix
+
+        meta['classname'] = cls.__name__
 
         return cls
     return class_decorator

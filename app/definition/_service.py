@@ -394,11 +394,19 @@ class BaseMiniService(BaseService):
     
     ID_LEN = 20
 
-    def __init__(self, combinedService:Self=None, id=generateId(ID_LEN)):
+    def __init__(self, depService:Self=None, id=generateId(ID_LEN)):
         super().__init__()
 
         self.miniService_id = id
-        self.combinedService = combinedService
+        self.depService = depService
+    
+    @property
+    def write_lock(self):
+        ...
+    
+    @property
+    def read_lock(self):
+        ...
 
 
 class MiniServiceStore:
@@ -422,9 +430,10 @@ class MiniServiceStore:
 class BaseMiniServiceManager(BaseService):
     def __init__(self):
         super().__init__()
-        self.MiniServiceStore = Dict[str,BaseMiniService] = {}
+        self.MiniServiceStore:Dict[str,BaseMiniService] = {}
 
-    
+    def create_miniService():
+        ...
 
 S = TypeVar('S', bound=BaseService)
 

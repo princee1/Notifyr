@@ -15,7 +15,6 @@ from app.depends.class_dep import Broker, TwilioTracker
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSCustomSchedulerModel, SMSStatusModel, SMSTemplateSchedulerModel
 from app.models.twilio_model import SMSEventORM
-from app.ressources.profile_ressource import ProfileRessource
 from app.services.profile_service import ProfileManagerService
 from app.services.setting_service import SettingService
 from app.services.task_service import TaskManager, TaskService, CeleryService, OffloadTaskService

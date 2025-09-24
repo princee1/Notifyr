@@ -59,9 +59,14 @@ class HCVaultService(BaseService,SchedulerInterface):
         self.last_rotated = None
         self.interval_schedule(delay,self.refresh_token)
 
+
+    @property
+    def is_loggedin(self):
+        return self.last_rotated != None and  time.time() - self.last_rotated < VaultTTLSyncConstant.VAULT_TOKEN_TTL
+
     def sync_pingService(self,**kwargs):
 
-        if self.last_rotated != None and  time.time() - self.last_rotated < VaultTTLSyncConstant.VAULT_TOKEN_TTL:
+        if self.is_loggedin:
             raise ServiceTemporaryNotAvailableError
 
     def build(self, build_state = DEFAULT_BUILD_STATE):

@@ -1,3 +1,4 @@
+from typing import Type
 from app.services.task_service import CeleryService,TaskService,OffloadTaskService
 from app.container import Register
 
@@ -18,7 +19,9 @@ from .link_ressource import LinkRessource
 from .ping_pong_ressource import PingPongRessource
 from .properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
-#from .profile_ressource import ProfileRessource
+from .profile_ressource import ProfilRessource
+
+from app.definition._ressource import BaseHTTPRessource
 #from .push_notification_ressource import PushNotificationRessource
 
-BASE_RESSOURCES = [SupportRessource,EmailTemplateRessource,AdminRessource,RedisResultBackendRessource,ContactsRessource,AuthRessource,TwilioRessource,AppRessource,LinkRessource,PingPongRessource,PropertiesRessource,AnalyticsRessource]
+BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,EmailTemplateRessource,AdminRessource,RedisResultBackendRessource,ContactsRessource,AuthRessource,TwilioRessource,AppRessource,LinkRessource,PingPongRessource,PropertiesRessource,AnalyticsRessource,ProfilRessource]

@@ -4,89 +4,101 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
-from app.definition._ressource import R, BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._service import StateProtocol
 from app.depends.class_dep import Broker
 from app.depends.dependencies import get_auth_permission
 from app.models.profile_model import ProfilModelValues, ProfileModel
 from app.services.database_service import MongooseService
+from app.services.email_service import EmailSenderService
 from app.services.profile_service import ProfileManagerService
 from app.classes.profiles import ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
 
 PROFILE_PREFIX = 'profile'
 
-async def pipe_profil_model(profile_type:str,request:Request):
-    body = await request.json()  # <- untyped dict
-    
-    if profile_type not in ProfilModelValues.keys():
-        raise ProfileModelTypeDoesNotExistsError(profile_type)
-    
-    profile_type:Type[ProfileModel] = ProfilModelValues[profile_type]
-    return profile_type.model_validate(body)
-    
-    
-def generate_profil_model_ressource(model:Type[ProfileModel],path:str)->Type[R]:
 
-    class Model(model):
+
+@PingService([MongooseService])
+@UseServiceLock(MongooseService,lockType='reader')
+@UseRoles([Role.ADMIN])
+@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,ProfileHandler)
+@UseHandler(MotorErrorHandler)
+@UsePermission(JWTRouteHTTPPermission)
+@HTTPRessource('')
+class BaseProfilModelRessource(BaseHTTPRessource):
+    
+    @InjectInMethod
+    def __init__(self,profileManagerService:ProfileManagerService,vaultService:HCVaultService):
+        super().__init__()
+        self.profileManagerService = profileManagerService
+        self.vaultService = vaultService
+
+    @PingService([HCVaultService])
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UsePermission(AdminPermission)
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
+    async def create_profile(self,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+        profileModel = await self.pipe_profil_model(request)
+        print(profileModel)
+        await self.profileManagerService.add_profile(profileModel)
+
+        broker.propagate_state(StateProtocol(ProfileManagerService,to_build=True,to_destroy=True,bypass_async_verify=False))
+        broker.wait(seconds=1.2)
+        broker.propagate_state(StateProtocol(EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
+
+    @PingService([HCVaultService])
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UsePermission(AdminPermission)
+    @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
+    async def delete_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+        ...
+        await self.profileManagerService.get_profile(self.model)
+        await self.profileManagerService.delete_profile()
+
+        broker.propagate_state(StateProtocol(ProfileManagerService,to_build=True,to_destroy=True,bypass_async_verify=False))
+        broker.wait(seconds=1.2)
+        broker.propagate_state(StateProtocol(EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
+
+    
+    @UseRoles([Role.PUBLIC])        
+    @UsePermission(ProfilePermission)
+    @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
+    async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         ...
 
-    @PingService([MongooseService])
-    @UseServiceLock(MongooseService,lockType='reader')
-    @UseRoles([Role.ADMIN])
-    @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,ProfileHandler)
-    @UseHandler(MotorErrorHandler)
-    @UsePermission(JWTRouteHTTPPermission)
-    @HTTPRessource(path)
-    class BaseProfilModelRessource(BaseHTTPRessource):
+    @UsePermission(AdminPermission)
+    @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
+    async def update_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+        ...
+
+    @PingService([HCVaultService])
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UsePermission(AdminPermission)
+    @BaseHTTPRessource.HTTPRoute('/creds/{profile}/',methods=[HTTPMethod.PUT,HTTPMethod.POST])
+    async def set_credentials(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
-        @InjectInMethod
-        def __init__(self,profileManagerService:ProfileManagerService,vaultService:HCVaultService):
-            super().__init__()
-            self.profileManagerService = profileManagerService
-            self.vaultService = vaultService
-
-        @PingService([HCVaultService])
-        @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-        @UseServiceLock(ProfileManagerService,lockType='reader')
-        @UsePermission(AdminPermission)
-        @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-        async def create_profile(self,profileModel:Model,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
-            ...
-
-        @PingService([HCVaultService])
-        @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-        @UseServiceLock(ProfileManagerService,lockType='reader')
-        @UsePermission(AdminPermission,ProfilePermission)
-        @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
-        async def update_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
-            ...
-        
-        @UseServiceLock(ProfileManagerService,lockType='reader')
-        @PingService([HCVaultService])
-        @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-        @UsePermission(AdminPermission,ProfilePermission)
-        @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
-        async def delete_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
-            ...
-
-        @UseRoles([Role.PUBLIC])        
-        @UsePermission(ProfilePermission)
-        @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
-        async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
-            ...
-
-        
-        @PingService([HCVaultService])
-        @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-        @UseServiceLock(ProfileManagerService,lockType='reader')
-        @UsePermission(AdminPermission,ProfilePermission)
-        @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT,HTTPMethod.POST])
-        async def set_credentials(self,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
-            ...
+        await self.profileManagerService.get_profile(self.model,profile)
+        self.vaultService.put_profiles()
     
-    return BaseProfilModelRessource
+    @classmethod
+    async def pipe_profil_model(cls,request:Request):
+        body = await request.json()  # <- untyped dict
+        return cls.model.model_validate(body)
 
-@HTTPRessource(PROFILE_PREFIX,)
+base_meta = BaseProfilModelRessource.meta
+
+def generate_profil_model_ressource(model:Type[ProfileModel],path):
+
+    ModelRessource = type(f"{model.__name__}{BaseProfilModelRessource.__name__}",(BaseProfilModelRessource,),{'model':model})
+    setattr(ModelRessource,'meta',base_meta.copy())
+    meta:ClassMetaData = getattr(ModelRessource,'meta',{})
+    print(getattr(ModelRessource,'model',None))
+    meta['prefix']=path
+    meta['classname'] = BaseProfilModelRessource.__name__
+    return ModelRessource
+
+@HTTPRessource(PROFILE_PREFIX,[generate_profil_model_ressource(model,name) for name,model  in ProfilModelValues.items()])
 class ProfilRessource(BaseHTTPRessource):
     
     @InjectInMethod

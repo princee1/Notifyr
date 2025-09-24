@@ -136,8 +136,7 @@ class Application(EventInterface):
                 if not meta['mount_ressource']:
                     continue
                 
-                self.app.include_router(
-                    res.router, responses=res.default_response)
+                self.app.include_router(res.router, responses=res.default_response)
                 self._mount_directories(ressource_type)
                 self.pretty_printer.success(
                     f"[{now}] Ressource {ressource_type.__name__} added successfully", saveable=True)

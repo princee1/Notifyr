@@ -58,7 +58,7 @@ class RotateCredentialsInterface(Interface):
         self.t=t
         self.b = b
         self.last_rotated = None
-        self.auth_ttl = ...
+        self.auth_ttl = ttl
     
     @staticmethod
     def random_buffer_interval(ttl):

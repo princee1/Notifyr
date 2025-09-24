@@ -377,12 +377,15 @@ class Broker:
                 handler(*args,kwargs) 
 
         self.backgroundTasks.add_task(self.redisService.stream_data,channel,value)
-        
     
     def propagate_state(self,protocol:StateProtocol):
 
+        if isinstance(protocol['service'],type):
+            protocol['service'] = protocol['service'].__name__
+
         if protocol['service'] not in _CLASS_DEPENDENCY.keys():
             raise ServiceDoesNotExistError
+
         try:
             if protocol['status'] is not None:
                 ServiceStatus(protocol['status'])
@@ -390,6 +393,14 @@ class Broker:
             raise StateProtocolMalFormattedError
 
         self.backgroundTasks.add_task(self.redisService.publish_data,SubConstant.SERVICE_STATUS,protocol)
+
+    def update_profile_state(self,protocol):
+        
+        self.backgroundTasks.add_task(self.redisService.stream_data,...)
+
+    def wait(self,seconds:float):
+
+        self.backgroundTasks.add_task(asyncio.sleep,seconds)
         
 
 class KeepAliveQuery:
