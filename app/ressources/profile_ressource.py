@@ -50,7 +50,7 @@ def generate_profil_model_ressource(model:Type[ProfileModel],path:str)->Type[R]:
         @UseServiceLock(ProfileManagerService,lockType='reader')
         @UsePermission(AdminPermission)
         @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-        async def create_profile(self,profile_type:Model,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+        async def create_profile(self,profileModel:Model,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
             ...
 
         @PingService([HCVaultService])

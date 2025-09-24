@@ -4,6 +4,9 @@ from app.utils.constant import RunModeConstant
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 import sys
+import warnings
+
+warnings.filterwarnings("ignore",category=UserWarning,)
 
 from app.utils.validation import host_validator, port_validator
 
@@ -39,15 +42,21 @@ if sys.argv[0] == exe_path:
 else:
     args = parser.parse_args()
     setattr(args,'reload',False)
-
+    setattr(args,'workers',1)
 
 ########################################################################
+
 from app.container import build_container, Get
 build_container()
+
 ########################################################################
 
 from app.server.app_initialization import bootstrap_fastapi_server,initialize_config_service
-initialize_config_service(args)
+from app.services import ConfigService
+configService:ConfigService = initialize_config_service(args)
+
+########################################################################
+
 
 # Main entry point
 
@@ -61,3 +70,4 @@ if __name__ == '__main__':
 else:
     app = bootstrap_fastapi_server().app
 
+########################################################################

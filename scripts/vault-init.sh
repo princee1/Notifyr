@@ -75,9 +75,9 @@ set_approle(){
 
   vault write auth/approle/role/"$NOTIFYR_APP_ROLE" \
     token_policies="app-policy" \
-    token_ttl="45m" \
-    token_max_ttl="90m" \
-    secret_id_ttl="2h" \
+    token_ttl="24h" \
+    token_max_ttl="28h" \
+    secret_id_ttl="72h" \
     secret_id_num_uses=0 \
     enable_local_secret_ids=true
 
@@ -170,8 +170,6 @@ create_default_token(){
   
   vault kv metadata put -custom-metadata=generated_at="$generated_at" notifyr-generation/generation-id
 
-
-
   echo "Creating default key"
 }
 
@@ -179,8 +177,8 @@ setup_database_config(){
   
   vault write notifyr-database/roles/postgres-ntfr-role \
       db_name="postgres" \
-      default_ttl="2h" \
-      max_ttl="4h" \
+      default_ttl="12h" \
+      max_ttl="16h" \
       creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
                           GRANT vault_ntrfyr_app_role TO \"{{name}}\";" \
       rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
@@ -194,8 +192,8 @@ setup_database_config(){
     { "role": "readWrite", "db": "notifyr", "collection":"profile" },
     { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
     { "role": "readWrite", "db": "notifyr", "collection":"chat" }]}' \
-    default_ttl="2h" \
-    max_ttl="4h"
+    default_ttl="12h" \
+    max_ttl="16h"
 
   vault policy write db-config-policy /vault/policies/db-config.hcl
 

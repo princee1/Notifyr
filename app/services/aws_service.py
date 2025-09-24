@@ -7,11 +7,6 @@ from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Dict
 
 
-@Service
-class AmazonS3Service(BaseFileRetrieverService):
-    
-    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__(configService,fileService)
 
 class AmazonSESError(Exception):
     pass
@@ -19,6 +14,13 @@ class AmazonSESError(Exception):
 
 class AmazonSNSError(Exception):
     pass
+
+
+@Service
+class AmazonS3Service(BaseFileRetrieverService):
+    
+    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
+        super().__init__(configService,fileService)
 
 @MiniService
 class AmazonSESService(BaseMiniService):
@@ -82,11 +84,3 @@ class AmazonSNSService(BaseService):
             return response
         except (BotoCoreError, ClientError) as e:
             raise AmazonSNSError(f"Failed to subscribe to SES events: {e}")
-
-@Service
-class AmazonSecretManagerService(BaseService):
-
-    def __init__(self,configService:ConfigService):
-        super().__init__()
-
-        self.configService = configService

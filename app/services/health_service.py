@@ -40,7 +40,7 @@ class HealthService(BaseService):
     
     @property
     def workers_count(self):
-        return 1
+        return self.configService.server_config['workers']
 
     @property
     def weight(self):

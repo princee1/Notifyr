@@ -153,7 +153,7 @@ class ConfigService(_service.BaseService):
 
     def set_config_value(self):
 
-        self.INSTANCE_ID = self.getenv('INSTANCE_ID', '0')
+        self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'))
         self.PROCESS_PID = str(os.getpid())
         self.PARENT_PID = str(os.getppid())
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
@@ -259,13 +259,7 @@ class ConfigService(_service.BaseService):
     def destroy(self,destroy_state=-1):
         return super().destroy()
 
-    @property
-    def is_prod(self):
-        return self.server_config != None
-
     def set_server_config(self, config):
-        if config == None:
-            return 
         self.server_config = ServerConfig(host=config.host, port=config.port,
                                           reload=config.reload, workers=config.workers, log_level=config.log_level,
                                           team=config.team)

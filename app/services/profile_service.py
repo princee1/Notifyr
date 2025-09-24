@@ -4,7 +4,12 @@ from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
 from .database_service import MongooseService, RedisService
-from app.models.profile_model import SMTPProfileModel,IMAPProfileModel,TwilioProfileModel
+from app.models.profile_model import ProfileModel, SMTPProfileModel,IMAPProfileModel,TwilioProfileModel
+
+@MiniService
+class ProfileMiniService(BaseMiniService):
+    ...
+    # TODO each profiles has a services
 
 @Service
 class ProfileManagerService(BaseMiniServiceManager):
@@ -21,9 +26,17 @@ class ProfileManagerService(BaseMiniServiceManager):
         ...
     
 
-
-@MiniService
-class ProfileMiniService(BaseMiniService):
-    ...
-
-    # TODO each profiles has a services
+    async def add_profile(self,profileType:ProfileModel):
+        ...
+    
+    async def delete_profile(self,profileType:ProfileModel):
+        ...
+    
+    async def get_profile(self,profileType:ProfileModel):
+        ...
+    
+    def loadStore(self,):
+        ...
+    
+    def destroyStore(self):
+        ...

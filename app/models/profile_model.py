@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Type
+from typing import Any, Optional, Type
 from typing_extensions import Literal
 from odmantic import Model, Field, Reference
 from app.classes.mail_provider import AuthToken, TokenType
@@ -27,8 +27,8 @@ class ErrorProfileModel(Model):
     }
 
 ######################################################  Profile Model                 ####################################################33
-class ProfileModel(Model):
-    profile_type: ProfileType = Field(..., description="The type of profile")
+class ProfileModel():
+    profile_type: str | Any
     profile_state: ProfileState
     _secret_key:ClassVar[list[str]] = []
     created_at: datetime = datetime.utcnow()
@@ -37,11 +37,11 @@ class ProfileModel(Model):
 
     model_config = {
         "collection": MongooseDBConstant.PROFILE_COLLECTION,
-         "__is_abstract__": True
     }
 
     def __init_subclass__(cls, **kwargs):
-        setattr(cls,'_secret_key',cls.secret_key.copy())
+        setattr(cls,'_secret_key',cls._secret_key.copy())
+        setattr(cls,'profile_type',None)
         super().__init_subclass__(**kwargs)
     
     @property
@@ -59,7 +59,7 @@ class ProfileModel(Model):
 
 
 class EmailProfileModel(ProfileModel):
-    profile_type:str = Field('email', const=True)
+    profile_type: str | Any
     email_address: EmailStr = Field(..., description="The email address")
 
     model_config = {
@@ -82,8 +82,8 @@ class APIEmailProfileModel(EmailProfileModel):
 
 ######################################################                   ####################################################33
 
-class SMTPProfileModel(ProtocolProfileModel):
-    profile_type:str = Field(ProfilModelConstant.SMTP, const=True)
+class SMTPProfileModel(ProtocolProfileModel,Model):
+    profile_type:Literal['email:smtp'] = ProfilModelConstant.SMTP
     from_emails:list[str] = Field([])
     password: Optional[str] = Field(..., description="The SMTP password")
     smtp_server: str = Field(..., description="The SMTP server address")
@@ -91,27 +91,27 @@ class SMTPProfileModel(ProtocolProfileModel):
     oauth_tokens: ProfileModelAuthToken = Field(...,description="The tokens")
     secret_key:ClassVar[list[str]] = ['password']
 
-class IMAPProfileModel(ProtocolProfileModel):
-    profile_type:str = Field(ProfilModelConstant.IMAP, const=True)
+class IMAPProfileModel(ProtocolProfileModel,Model):
+    profile_type:Literal['email:imap'] = ProfilModelConstant.IMAP
     password: str = Field(..., description="The IMAP password")
     imap_server: str = Field(..., description="The IMAP server address")
     imap_port: int = Field(..., description="The IMAP server port")
     _secret_key:ClassVar[list[str]] = ['password']
 
-class AWSProfileModel(EmailProfileModel):
-    profile_type:str = Field(ProfilModelConstant.AWS, const=True)
+class AWSProfileModel(EmailProfileModel,Model):
+    profile_type:Literal['email:aws'] = ProfilModelConstant.AWS
     region_name:str
     s3_bucket_name:str
     aws_access_key_id:str
     aws_secret_access_key:str
     _secret_key:ClassVar[list[str]] = ['aws_access_key_id','aws_secret_access_key']
 
-class GMailAPIProfileModel(APIEmailProfileModel):
-    profile_type:str = Field(ProfilModelConstant.GMAIL_API, const=True)
+class GMailAPIProfileModel(APIEmailProfileModel,Model):
+    profile_type:Literal['email:gmail-api'] = ProfilModelConstant.GMAIL_API
     oauth_tokens: ProfileModelAuthToken = Field(...,description="The tokens")
 
-class OutlookAPIProfileModel(APIEmailProfileModel):
-    profile_type:str = Field(ProfilModelConstant.OUTLOOK_API, const=True)
+class OutlookAPIProfileModel(APIEmailProfileModel,Model):
+    profile_type:Literal['email:outlook-api'] = ProfilModelConstant.OUTLOOK_API
     client_id:str
     client_secret:str
     tenant_id:str
@@ -134,8 +134,8 @@ ProfilModelValues:dict[str,Type[ProfileModel]] = {
 ######################################################                   ####################################################33
     
 
-class TwilioProfileModel(ProfileModel):
-    profile_type:str = Field('twilio', const=True)
+class TwilioProfileModel(ProfileModel,Model):
+    profile_type:Literal['twilio'] = 'twilio'
     account_sid: str = Field(..., description="The Twilio Account SID")
     auth_token: str = Field(..., description="The Twilio Auth Token")
     from_number: str = Field(..., description="The Twilio From Phone Number")   
@@ -143,7 +143,7 @@ class TwilioProfileModel(ProfileModel):
     twilio_chat_number: str = Field(..., description="The Twilio Chat Phone Number")
     twilio_automated_response_number: str = Field(..., description="The Twilio Automated Response Phone Number")
 
-    _secret_key = ["auth_token"]
+    _secret_key:ClassVar[list[str]] = ["auth_token"]
 
 ProfilModelValues.update({
     ProfilModelConstant.TWILIO: TwilioProfileModel
