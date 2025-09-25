@@ -52,6 +52,9 @@ class ProfileDoesNotExistsError(BaseError):
 class ProfileNotSpecifiedError(BaseError):
     ...
 
+class ProfileCreationModelError(BaseError):
+    ...
+
 ####################################                 #####################################333
 
 class ProfileState(Enum):

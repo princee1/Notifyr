@@ -30,10 +30,10 @@ class ErrorProfileModel(Model):
 class ProfileModel():
     profile_type: str | Any
     profile_state: ProfileState
-    _secret_key:ClassVar[list[str]] = []
-    created_at: datetime = datetime.utcnow()
-    last_modified: datetime = datetime.utcnow()
+    created_at: str = datetime.utcnow().isoformat()
+    last_modified: str = datetime.utcnow().isoformat()
     version: int = 1
+    _secret_key:ClassVar[list[str]] = []
 
     model_config = {
         "collection": MongooseDBConstant.PROFILE_COLLECTION,
@@ -60,7 +60,7 @@ class ProfileModel():
 
 class EmailProfileModel(ProfileModel):
     profile_type: str | Any
-    email_address: EmailStr = Field(..., description="The email address")
+    email_address: EmailStr 
 
     model_config = {
 
@@ -72,30 +72,30 @@ class EmailProfileModel(ProfileModel):
 
 
 class ProtocolProfileModel(EmailProfileModel):
-    username: str = Field(..., description="The SMTP username")
-    conn_method: SMTPConnMode = Field(..., description='The SMTP connection method')
+    username: str
+    conn_method: SMTPConnMode
     email_host:EmailHostConstant
 
 
 class APIEmailProfileModel(EmailProfileModel):
-    oauth_tokens: ProfileModelAuthToken = Field(...,description="The tokens")
+    oauth_tokens: ProfileModelAuthToken
 
 ######################################################                   ####################################################33
 
 class SMTPProfileModel(ProtocolProfileModel,Model):
     profile_type:Literal['email:smtp'] = ProfilModelConstant.SMTP
-    from_emails:list[str] = Field([])
-    password: Optional[str] = Field(..., description="The SMTP password")
-    smtp_server: str = Field(..., description="The SMTP server address")
-    smtp_port: int = Field(..., description="The SMTP server port")
-    oauth_tokens: ProfileModelAuthToken = Field(...,description="The tokens")
+    from_emails:list[str]
+    password: Optional[str]
+    smtp_server: str
+    smtp_port: int
+    oauth_tokens: ProfileModelAuthToken
     secret_key:ClassVar[list[str]] = ['password']
 
 class IMAPProfileModel(ProtocolProfileModel,Model):
     profile_type:Literal['email:imap'] = ProfilModelConstant.IMAP
-    password: str = Field(..., description="The IMAP password")
-    imap_server: str = Field(..., description="The IMAP server address")
-    imap_port: int = Field(..., description="The IMAP server port")
+    password: str
+    imap_server: str
+    imap_port: int
     _secret_key:ClassVar[list[str]] = ['password']
 
 class AWSProfileModel(EmailProfileModel,Model):
@@ -108,7 +108,7 @@ class AWSProfileModel(EmailProfileModel,Model):
 
 class GMailAPIProfileModel(APIEmailProfileModel,Model):
     profile_type:Literal['email:gmail-api'] = ProfilModelConstant.GMAIL_API
-    oauth_tokens: ProfileModelAuthToken = Field(...,description="The tokens")
+    oauth_tokens: ProfileModelAuthToken
 
 class OutlookAPIProfileModel(APIEmailProfileModel,Model):
     profile_type:Literal['email:outlook-api'] = ProfilModelConstant.OUTLOOK_API
@@ -136,12 +136,12 @@ ProfilModelValues:dict[str,Type[ProfileModel]] = {
 
 class TwilioProfileModel(ProfileModel,Model):
     profile_type:Literal['twilio'] = 'twilio'
-    account_sid: str = Field(..., description="The Twilio Account SID")
-    auth_token: str = Field(..., description="The Twilio Auth Token")
-    from_number: str = Field(..., description="The Twilio From Phone Number")   
-    twilio_otp_number: str = Field(..., description="The Twilio OTP Phone Number")
-    twilio_chat_number: str = Field(..., description="The Twilio Chat Phone Number")
-    twilio_automated_response_number: str = Field(..., description="The Twilio Automated Response Phone Number")
+    account_sid: str
+    auth_token: str
+    from_number: str
+    twilio_otp_number: str
+    twilio_chat_number: str
+    twilio_automated_response_number: str
 
     _secret_key:ClassVar[list[str]] = ["auth_token"]
 

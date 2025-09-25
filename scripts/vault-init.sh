@@ -76,7 +76,7 @@ set_approle(){
   vault write auth/approle/role/"$NOTIFYR_APP_ROLE" \
     token_policies="app-policy" \
     token_ttl="24h" \
-    token_max_ttl="28h" \
+    token_max_ttl="36h" \
     secret_id_ttl="72h" \
     secret_id_num_uses=0 \
     enable_local_secret_ids=true
@@ -108,7 +108,7 @@ set_rotate_approle() {
 
   vault policy write rotator /vault/policies/rotate-approle.hcl
 
-  TOKEN=$(vault token create -policy=rotator -period=24h -format=json | jq -r .auth.client_token)
+  TOKEN=$(vault token create -policy=rotator -period=48h -format=json | jq -r .auth.client_token)
 
   echo -n "$TOKEN" > "$VAULT_SECRETS_DIR/rotate-token.txt"
 

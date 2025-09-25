@@ -135,7 +135,11 @@ class ServiceNotAvailableError(BuildError):
 class ServiceMajorSystemFailureError(BufferError):
     pass
 class ServiceTemporaryNotAvailableError(BuildError):
-    pass
+    
+    def __init__(self, *args,service=None):
+        super().__init__(*args)
+        self.service = service
+        
 
 class MethodServiceNotAvailableError(BuildError):
     pass

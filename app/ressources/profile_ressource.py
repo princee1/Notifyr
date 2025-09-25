@@ -1,5 +1,5 @@
 from typing import Annotated, Type
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler
@@ -12,7 +12,7 @@ from app.models.profile_model import ProfilModelValues, ProfileModel
 from app.services.database_service import MongooseService
 from app.services.email_service import EmailSenderService
 from app.services.profile_service import ProfileManagerService
-from app.classes.profiles import ProfileModelTypeDoesNotExistsError
+from app.classes.profiles import ProfileCreationModelError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
 
 PROFILE_PREFIX = 'profile'
@@ -83,17 +83,22 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     
     @classmethod
     async def pipe_profil_model(cls,request:Request):
-        body = await request.json()  # <- untyped dict
+        try:
+            body = await request.json()  # <- untyped dict
+        except:
+            raise ProfileCreationModelError
+
+        body['profile_type'] = cls.profile_type    
+
         return cls.model.model_validate(body)
 
 base_meta = BaseProfilModelRessource.meta
 
 def generate_profil_model_ressource(model:Type[ProfileModel],path):
 
-    ModelRessource = type(f"{model.__name__}{BaseProfilModelRessource.__name__}",(BaseProfilModelRessource,),{'model':model})
+    ModelRessource = type(f"{model.__name__}{BaseProfilModelRessource.__name__}",(BaseProfilModelRessource,),{'model':model,'profile_type':path})
     setattr(ModelRessource,'meta',base_meta.copy())
     meta:ClassMetaData = getattr(ModelRessource,'meta',{})
-    print(getattr(ModelRessource,'model',None))
     meta['prefix']=path
     meta['classname'] = BaseProfilModelRessource.__name__
     return ModelRessource

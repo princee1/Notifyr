@@ -44,7 +44,7 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
 @Service
 class HCVaultService(BaseService,SchedulerInterface):
 
-    _secret_id_crontab='0 * * * *'
+    _secret_id_crontab='0 0 * * *'
     _ping_available_state = {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}
     
     def __init__(self,configService:ConfigService,fileService:FileService):
@@ -54,7 +54,7 @@ class HCVaultService(BaseService,SchedulerInterface):
         SchedulerInterface.__init__(self)
         self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
         delay = IntervalParams(
-            seconds=VaultTTLSyncConstant.SECRET_ID_TTL*.75
+            seconds=VaultTTLSyncConstant.SECRET_ID_ROTATION*.75
         )
         self.last_rotated = None
         self.interval_schedule(delay,self.refresh_token)
@@ -62,12 +62,12 @@ class HCVaultService(BaseService,SchedulerInterface):
 
     @property
     def is_loggedin(self):
-        return self.last_rotated != None and  time.time() - self.last_rotated < VaultTTLSyncConstant.VAULT_TOKEN_TTL
+        return self.last_rotated == None or  (time.time() - self.last_rotated) < VaultTTLSyncConstant.VAULT_TOKEN_TTL
 
     def sync_pingService(self,**kwargs):
-
-        if self.is_loggedin:
-            raise ServiceTemporaryNotAvailableError
+        
+        if not self.is_loggedin:
+            raise ServiceTemporaryNotAvailableError(service=self.name)
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
         

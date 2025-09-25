@@ -176,8 +176,8 @@ RUN chmod 755 /usr/local/bin/supercronic
 RUN touch /vault/cron/crontab
 
 RUN cat <<EOF > /vault/cron/crontab
-0 * * * * /usr/local/bin/vault-secret-id-rotator.sh >> /vault/logs/vault-secret-id-rotator.log 2>&1
-0 0 * * * /usr/local/bin/vault-transit-rotator.sh >> /vault/logs/vault-transit-rotator.log 2>&1
+0 0 * * * /usr/local/bin/vault-secret-id-rotator.sh >> /vault/logs/vault-secret-id-rotator.log 2>&1
+0 0 1 */2 * /usr/local/bin/vault-transit-rotator.sh >> /vault/logs/vault-transit-rotator.log 2>&1
 0 0 1 * * /usr/local/bin/vault-db-admin-rotator.sh >> /vault/logs/vault-db-admin-rotator.log 2>&1
 EOF
 

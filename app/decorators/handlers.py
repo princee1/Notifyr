@@ -22,7 +22,7 @@ from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDo
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
-from app.classes.profiles import ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError
+from app.classes.profiles import ProfileCreationModelError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -53,7 +53,10 @@ class ServiceAvailabilityHandler(Handler):
 
         except ServiceTemporaryNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                                detail='Service temporary not available')
+                                detail={
+                                    'service':e.service,
+                                    'message':'Service temporary not available'
+                                })
         
         except ServiceNotImplementedError as e:
             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail='Service not implemented')
@@ -579,3 +582,6 @@ class ProfileHandler(Handler):
     
         except ProfileNotSpecifiedError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    
+        except ProfileCreationModelError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,detail='Profile model body cannot be parsed into JSON')
