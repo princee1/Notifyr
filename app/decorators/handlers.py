@@ -32,7 +32,7 @@ from requests.exceptions import SSLError, Timeout
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-
+from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError
 
 class ServiceAvailabilityHandler(Handler):
 
@@ -415,7 +415,24 @@ class ValueErrorHandler(Handler):
 
 
 class MotorErrorHandler(Handler):
-    ...
+    
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+
+        except DocumentDoesNotExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f'Document with id {e.id} does not exists'
+            )
+            
+        except DocumentExistsUniqueConstraintError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message":f"The document with the values entered {'already exists' if e.exists  else 'does not exists'}"
+                }
+            )
 
 
 class AsyncIOHandler(Handler):

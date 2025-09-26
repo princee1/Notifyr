@@ -2,7 +2,7 @@ import functools
 import time
 from typing import Any, Callable, Dict, Self, Type, TypedDict
 import aiohttp
-from beanie import Document, init_beanie
+from beanie import Document, PydanticObjectId, init_beanie
 import hvac
 import requests
 from typing_extensions import Literal
@@ -33,17 +33,11 @@ from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelection
 from app.utils.constant import SettingDBConstant
 from random import randint,random
 from app.models.profile_model import *
+from app.errors.db_error import *
 
 MS_1000 = 1000
 ENGINE_KEY = 'engine'
 DB_KEY = 'db'
-
-
-class RedisStreamDoesNotExistsError(BaseError):
-    ...
-
-class RedisDatabaseDoesNotExistsError(BaseError):
-    ...
 
 
 @IsInterface
@@ -502,6 +496,12 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     async def save(self,model:Document,*args,**kwargs):
         return await model.insert(*args, **kwargs)
 
+    async def get(self,model:Type[Document],id:str,raise_:bool = True):
+        m = await model.get(PydanticObjectId(id))
+        if m == None:
+            raise DocumentDoesNotExistsError(id)
+        return m
+    
     async def find(self, model: Type[Document], *args, **kwargs):
         return await model.find(*args, **kwargs).to_list()
 
@@ -516,6 +516,20 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
 
     async def count(self, model: Type[Document], *args, **kwargs):
         return await model.find(*args, **kwargs).count()
+    
+    async def exists_unique(self,model:Document,raise_when:bool = None):
+        unique_indexes = getattr(model,'unique_indexes',None)
+        if unique_indexes == None:
+            return False
+        
+        params = {i:getattr(model,i,None)  for i in unique_indexes }
+        is_exist= (await self.find_one(model.__class__,params) != None)
+        if raise_when != None:
+            if (raise_when and is_exist) or (not raise_when and not is_exist):
+                raise DocumentExistsUniqueConstraintError(exists=is_exist,model=model.__class__,params=params)
+        else:
+            return is_exist
+
 
     ##################################################
     # Service lifecycle
