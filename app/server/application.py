@@ -2,7 +2,6 @@
 Contains the FastAPI app
 """
 from dataclasses import dataclass
-
 from fastapi.responses import FileResponse, JSONResponse
 from app.container import Get
 from app.definition._error import ServerFileError
@@ -34,10 +33,21 @@ from fastapi_cache.backends.redis import RedisBackend
 from .app_meta import *
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
+from app.models.profile_model import *
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
 BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
+
+DOCUMENTS = [
+                    ProfileModel,
+                    SMTPProfileModel,
+                    IMAPProfileModel,
+                    AWSProfileModel,
+                    GMailAPIProfileModel,
+                    OutlookAPIProfileModel,
+                    TwilioProfileModel,
+                ]
 
 _shutdown_hooks=[]
 _startup_hooks=[]
@@ -243,9 +253,10 @@ class Application(EventInterface):
         if mongooseService.service_status not in ACCEPTABLE_STATES:
             return 
         
+        mongooseService.register_document(*DOCUMENTS)
         await mongooseService.init_connection()
     
-    @register_hook('startup')
+    @register_hook('shutdown')
     async def close_beanie(self):
         mongooseService: MongooseService = Get(MongooseService)
         if mongooseService.service_status not in ACCEPTABLE_STATES:

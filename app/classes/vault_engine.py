@@ -1,3 +1,4 @@
+from app.definition._error import BaseError
 from app.utils.constant import VaultConstant
 from app.utils.helper import b64_decode, b64_encode
 from hvac import Client
@@ -43,6 +44,10 @@ SIGNING_KEY_TYPES = [
 RSA_SIGNATURE_ALGORITHMS = ["pss", "pkcs1v15"]
 ECDSA_MARSHALING_ALGORITHMS = ["asn1", "jws"]
 RSA_PSS_SALT_LENGTHS = ["auto", "hash"]  # or an integer within allowed range
+
+
+class VaultError(BaseError):
+    ...
 
 
 

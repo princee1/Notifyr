@@ -566,7 +566,7 @@ class ProfileHandler(Handler):
             return await super().handle(function, *args, **kwargs)
         
         except PydanticValidationError as e:
-            raise HTTPException(status_code=422, detail=e.errors())
+            raise HTTPException(status_code=422, detail=e.errors(include_url=False,include_context=False))
         
         except ProfileModelTypeDoesNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,)
@@ -585,3 +585,8 @@ class ProfileHandler(Handler):
     
         except ProfileCreationModelError as e:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,detail='Profile model body cannot be parsed into JSON')
+        
+    
+
+class VaultHandler(Handler):
+    ...

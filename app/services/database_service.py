@@ -495,11 +495,12 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         self.interval_schedule(delay, self.creds_rotation)
 
         self.client: AsyncIOMotorClient | None = None
+        self._documents = []
 
     ##################################################
     # CRUD-like API (Beanie style)
     ##################################################
-    async def save(self, model: Document, *args, **kwargs):
+    async def save(self,model:Document,*args,**kwargs):
         return await model.insert(*args, **kwargs)
 
     async def find(self, model: Type[Document], *args, **kwargs):
@@ -510,6 +511,9 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
 
     async def delete(self, model: Document, *args, **kwargs):
         return await model.delete(*args, **kwargs)
+
+    async def delete_all(self,model:Document,*args,**kwargs):
+        return await model.delete_all(*args,**kwargs)
 
     async def count(self, model: Type[Document], *args, **kwargs):
         return await model.find(*args, **kwargs).count()
@@ -561,30 +565,26 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         except Exception as e:
             ...
 
-    async def init_connection(self):
+    async def init_connection(self,):
         await init_beanie(
                 database=self.motor_db,
-                document_models=[
-                    ProfileModel,
-                    SMTPProfileModel,
-                    IMAPProfileModel,
-                    AWSProfileModel,
-                    GMailAPIProfileModel,
-                    OutlookAPIProfileModel,
-                    TwilioProfileModel,
-                ],
+                document_models=self._documents,
             )
+        
+    def register_document(self,*documents):
+        temp = set()
+        temp.update(self._documents)
+        temp.update(list(documents))
+        self._documents = list(temp)
+
 
     ##################################################
     # Connection string
     ##################################################
     @property
     def mongo_uri(self):
-        return (
-            f"mongodb://{self.db_user}:{self.db_password}"
-            f"@{self.configService.MONGO_HOST}:27017"
-        )
-
+        return f"mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017/{self.DATABASE_NAME}"
+        
     ##################################################
     # Healthcheck
     ##################################################

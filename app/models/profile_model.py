@@ -1,12 +1,13 @@
 from datetime import datetime
-from typing import Any, Optional, Type, Union, ClassVar
+from typing import Any, Optional, Self, Type, Union, ClassVar
 from typing_extensions import Literal
-from pydantic import EmailStr, Field
+from pydantic import EmailStr, Field, field_validator, model_validator
 from beanie import Document
 
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.profiles import ProfileModelAuthToken, ProfilModelConstant, ProfileState
 from app.utils.constant import EmailHostConstant, MongooseDBConstant
+from app.utils.validation import port_validator
 
 
 # Type aliases
@@ -29,12 +30,11 @@ class ErrorProfileModel(Document):
 
 
 ######################################################
-# Base Profile Model (Abstract)
+# Base Profile Model (Root)
 ######################################################
 class ProfileModel(Document):
-    profile_type: str | Any = Field(default=None)
     alias: str
-    description: str
+    description: Optional[str] = Field(default=None,min_length=0,max_length=1000)
     role: list[str] = Field(default_factory=list)
     profile_state: ProfileState = ProfileState.ACTIVE
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
@@ -59,53 +59,82 @@ class ProfileModel(Document):
 
 
 ######################################################
-# Email-related Profiles
+# Email-related Profiles (Abstract)
 ######################################################
+
 class EmailProfileModel(ProfileModel):
     email_address: EmailStr
 
     class Settings:
-        name = MongooseDBConstant.PROFILE_COLLECTION
-        indexes = [
-            {"key": ("profile_type", "email_address"), "unique": True}
-        ]
-
+        abstract = True
 
 class ProtocolProfileModel(EmailProfileModel):
     username: Optional[str] = None
     conn_method: SMTPConnMode
     email_host: EmailHostConstant
+    server: Optional[str] = None
+    port: Optional[int] = None
 
+    @model_validator(mode='after')
+    def host_validation(self)->Self:
+        if self.email_host == EmailHostConstant.CUSTOM:
+            if not self.server:
+                raise ValueError('Server must be defined')
+
+            if self.port == None:
+                raise ValueError('Port must be defined')
+
+            port_validator(self.port)
+
+        return self
+        
+    class Settings:
+        abstract = True
 
 class APIEmailProfileModel(EmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
 
+    class Settings:
+        abstract = True
 
 ######################################################
-# Concrete Implementations
+# Email-related Profiles
 ######################################################
+
 class SMTPProfileModel(ProtocolProfileModel):
-    profile_type: Literal["email:smtp"] = ProfilModelConstant.SMTP
     from_emails: list[str] = Field(default_factory=list)
-    password: Optional[str] = None
-    smtp_server: Optional[str] = None
-    smtp_port: Optional[int] = None
+    password: Optional[str]= None
     oauth_tokens: Optional[ProfileModelAuthToken | Any] = None
 
-    _secret_key: ClassVar[list[str]] = ["password"]
+    _secret_key: ClassVar[list[str]] = ["password","oauth_tokens"]
 
+    @field_validator('password')
+    def password_validation(cls,password:str|None):
+        if password == None:
+            return password
+        if not password:
+            raise ValueError('Password not specified')
+        
+        p_len=len(password)
+        if p_len > 500:
+            raise ValueError('Password is too big')
+    
+        return password
+    
+
+    @model_validator(mode="after")
+    def auth_validation(self)->Self:
+        if (not self.oauth_tokens or self.oauth_tokens == {}) and self.password == None:
+            raise ValueError('No credentials where provided')
+        
+        return self
 
 class IMAPProfileModel(ProtocolProfileModel):
-    profile_type: Literal["email:imap"] = ProfilModelConstant.IMAP
-    password: str
-    imap_server: Optional[str] = None
-    imap_port: Optional[int] = None
+    password: str = Field(min_length=1,max_length=400)
 
     _secret_key: ClassVar[list[str]] = ["password"]
 
-
 class AWSProfileModel(EmailProfileModel):
-    profile_type: Literal["email:aws"] = ProfilModelConstant.AWS
     region_name: str
     s3_bucket_name: str
     aws_access_key_id: str
@@ -113,14 +142,10 @@ class AWSProfileModel(EmailProfileModel):
 
     _secret_key: ClassVar[list[str]] = ["aws_access_key_id", "aws_secret_access_key"]
 
-
 class GMailAPIProfileModel(APIEmailProfileModel):
-    profile_type: Literal["email:gmail-api"] = ProfilModelConstant.GMAIL_API
     oauth_tokens: ProfileModelAuthToken
 
-
 class OutlookAPIProfileModel(APIEmailProfileModel):
-    profile_type: Literal["email:outlook-api"] = ProfilModelConstant.OUTLOOK_API
     client_id: str
     client_secret: str
     tenant_id: str
@@ -132,7 +157,6 @@ class OutlookAPIProfileModel(APIEmailProfileModel):
 # Twilio Profile
 ######################################################
 class TwilioProfileModel(ProfileModel):
-    profile_type: Literal["twilio"] = "twilio"
     account_sid: str
     auth_token: str
     from_number: str

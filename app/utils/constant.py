@@ -87,6 +87,7 @@ class EmailHostConstant(Enum):
     YAHOO = "YAHOO"
     AOL = 'AOL'
     ICLOUD = 'ICLOUD'
+    CUSTOM = 'CUSTOM'
 
 ########################                     ########################################
 

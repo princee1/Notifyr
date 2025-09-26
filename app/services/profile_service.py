@@ -55,10 +55,9 @@ class ProfileService(BaseMiniServiceManager):
             self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
             return False
 
-    async def add_profile(self,model:Type[ProfileModel],profileType:dict):
-        save = await self.mongooseService.save(model,)
-        
-        print(save)
+    async def add_profile(self,profile:ProfileModel):
+        result = await self.mongooseService.save(profile)
+        print(result)
     
     async def delete_profile(self,profileType:ProfileModel):
         ...

@@ -3,7 +3,7 @@ from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AsyncIOHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import StateProtocol
@@ -39,18 +39,19 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseHandler(VaultHandler)
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_profile(self,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request)
-        print(profileModel.model_dump())
-        await self.profileService.add_profile(self.model,profileModel)
+        await self.profileService.add_profile(profileModel)
 
         broker.propagate_state(StateProtocol(ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         broker.wait(seconds=1.2)
         broker.propagate_state(StateProtocol(EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
 
     @PingService([HCVaultService])
+    @UseHandler(VaultHandler)
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
@@ -77,6 +78,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseHandler(VaultHandler)
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.HTTPRoute('/creds/{profile}/',methods=[HTTPMethod.PUT,HTTPMethod.POST])
     async def set_credentials(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):

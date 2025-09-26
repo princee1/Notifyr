@@ -14,9 +14,10 @@ from .transformer import transform
 from langcodes import Language
 
 
-def port_validator(value: str) -> int:
+def port_validator(value: str|int) -> int:
     try:
-        port = int(value)
+        if not isinstance(value,int):
+            port = int(value)
     except ValueError:
         raise argparse.ArgumentTypeError(f"{value} is not an integer")
 
