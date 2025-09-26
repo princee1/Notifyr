@@ -46,6 +46,8 @@ class ProfileModel(Document):
     version: int = 1
 
     _secret_key: ClassVar[list[str]] = []
+    unique_indexes: ClassVar[list[str]] = []
+    
 
     class Settings:
         name = MongooseDBConstant.PROFILE_COLLECTION
@@ -78,6 +80,8 @@ class ProtocolProfileModel(EmailProfileModel):
     email_host: EmailHostConstant
     server: Optional[str] = None
     port: Optional[int] = None
+    unique_indexes: ClassVar[list[str]] = ['email_host','email_address','username']
+
 
     @model_validator(mode='after')
     def host_validation(self)->Self:
@@ -94,23 +98,13 @@ class ProtocolProfileModel(EmailProfileModel):
         
     class Settings:
         abstract = True
-        indexes = [
-            {
-                "fields": [("_class_id", ASCENDING),("email_host", ASCENDING), ("email_address", ASCENDING)],
-                "unique": True
-            }
-        ]
 
 class APIEmailProfileModel(EmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
+    unique_indexes: ClassVar[list[str]] = ['email_address']
 
     class Settings:
         abstract = True
-        indexes= [
-            {
-                "fields":[("_class_id", ASCENDING),("email_addr", ASCENDING),],
-                "unique":True
-            }]
 
 
 ######################################################
@@ -157,13 +151,8 @@ class AWSProfileModel(EmailProfileModel):
     aws_secret_access_key: str
 
     _secret_key: ClassVar[list[str]] = ["aws_secret_access_key"]
+    unique_indexes: ClassVar[list[str]] = ['aws_access_key_id']
 
-    class Setting:
-        indexes= [
-            {
-                "fields":[("aws_access_key_id", ASCENDING),("_class_id", ASCENDING)],
-                "unique":True
-            }]
 
 class GMailAPIProfileModel(APIEmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
@@ -187,15 +176,9 @@ class TwilioProfileModel(ProfileModel):
     twilio_chat_number: str
     twilio_automated_response_number: str
 
-    class Setting:
-        indexes= [
-            {
-                "fields":[("account_sid", ASCENDING),("_class_id", ASCENDING)],
-                "unique":True
-            }]
-
-
     _secret_key: ClassVar[list[str]] = ["auth_token"]
+    unique_indexes: ClassVar[list[str]] = ['account_sid']
+
 
 
 ######################################################

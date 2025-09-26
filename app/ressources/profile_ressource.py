@@ -1,4 +1,5 @@
 from typing import Annotated, Type
+from beanie import Document
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission, Role
@@ -28,14 +29,15 @@ PROFILE_PREFIX = 'profile'
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('')
 class BaseProfilModelRessource(BaseHTTPRessource):
-    model: Type[ProfileModel | BaseModel]
+    model: Type[ProfileModel | Document]
     profileType:str
 
     @InjectInMethod
-    def __init__(self,profileService:ProfileService,vaultService:HCVaultService):
+    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService):
         super().__init__()
         self.profileService = profileService
         self.vaultService = vaultService
+        self.mongooseService = mongooseService
 
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
@@ -45,6 +47,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_profile(self,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request)
+        
+        await self.mongooseService.exists_unique(profileModel,True)
         result = await self.profileService.add_profile(profileModel)
 
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
@@ -60,29 +64,31 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
     async def delete_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
-        await self.profileService.get_profile(self.model,profile_id=profile)
-        result = await self.profileService.delete_profile()
+        
+        profileModel = await self.mongooseService.get(self.model,profile,True)
+        result = await self.profileService.delete_profile(profileModel)
 
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         broker.wait(seconds=1.2)
         broker.propagate_state(StateProtocol(service=EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
 
+        return result
     
     @UseRoles([Role.PUBLIC])        
     @UsePermission(ProfilePermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
     async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
-        
-        await self.profileService.get_profile(self.model)
+        return await self.mongooseService.get(self.model,profile,True)
 
 
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def update_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
+        
+        profileModel = await self.mongooseService.get(self.model,profile,True)
+        
 
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
@@ -91,11 +97,12 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/creds/{profile}/',methods=[HTTPMethod.PUT,HTTPMethod.POST])
     async def set_credentials(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
-        await self.profileService.get_profile(self.model,profile)
+        profileModel = await self.mongooseService.get(self.model,profile,True)
+
         
-    
     @classmethod
     async def pipe_profil_model(cls,request:Request):
+        
         try:
             body = await request.json()  # <- untyped dict
         except:
