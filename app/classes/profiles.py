@@ -58,7 +58,11 @@ class ProfileCreationModelError(BaseError):
 ####################################                 #####################################333
 
 class ProfileState(Enum):
-    ...
+    CREATED = 0 
+    ACTIVE = 1
+    BLOCKED = 2
+    INACTIVE = 3
+    EXPIRED = 4
 
 class ProfileStateProtocol(TypedDict):
     ...

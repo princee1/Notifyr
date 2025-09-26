@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
-from app.definition._service import BaseService, ServiceStatus
+from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
 from app.services.database_service import JSONServerDBService, MongooseService, RedisService, TortoiseConnectionService
@@ -170,6 +170,12 @@ class Application(EventInterface):
 
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
 
+    @register_hook('shutdown',active=True)
+    async def on_shutdown(self):
+        redisService:RedisService = Get(RedisService)
+        redisService.to_shutdown = True
+        await redisService.close_connections()
+
     @register_hook('startup',)
     def start_tickers(self):
         taskService:TaskService =  Get(TaskService)
@@ -213,7 +219,7 @@ class Application(EventInterface):
     async def register_tortoise(self):
 
         tortoiseConnService = Get(TortoiseConnectionService)
-        if tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+        if tortoiseConnService.service_status not in ACCEPTABLE_STATES:
             return
         
         await tortoiseConnService.init_connection()
@@ -221,7 +227,7 @@ class Application(EventInterface):
     @register_hook('shutdown')
     async def close_tortoise(self):
         tortoiseConnService = Get(TortoiseConnectionService)
-        if tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+        if tortoiseConnService.service_status not in ACCEPTABLE_STATES:
             return
 
         await tortoiseConnService.close_connections()
@@ -230,11 +236,23 @@ class Application(EventInterface):
     def print_report_on_startup(self):
         self.pretty_printer.json(PROCESS_SERVICE_REPORT,saveable=False)
 
-    @register_hook('shutdown',active=True)
-    async def on_shutdown(self):
-        redisService:RedisService = Get(RedisService)
-        redisService.to_shutdown = True
-        await redisService.close_connections()
+
+    @register_hook('startup')
+    async def register_beanie(self):
+        mongooseService: MongooseService = Get(MongooseService)
+        if mongooseService.service_status not in ACCEPTABLE_STATES:
+            return 
+        
+        await mongooseService.init_connection()
+    
+    @register_hook('startup')
+    async def close_beanie(self):
+        mongooseService: MongooseService = Get(MongooseService)
+        if mongooseService.service_status not in ACCEPTABLE_STATES:
+            return 
+        
+        mongooseService.close_connection()
+
 
     @property
     def shutdown_hooks(self):

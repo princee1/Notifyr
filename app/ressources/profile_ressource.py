@@ -1,5 +1,6 @@
 from typing import Annotated, Type
 from fastapi import Depends, HTTPException, Request
+from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler
@@ -11,7 +12,7 @@ from app.depends.dependencies import get_auth_permission
 from app.models.profile_model import ProfilModelValues, ProfileModel
 from app.services.database_service import MongooseService
 from app.services.email_service import EmailSenderService
-from app.services.profile_service import ProfileManagerService
+from app.services.profile_service import ProfileService
 from app.classes.profiles import ProfileCreationModelError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
 
@@ -27,11 +28,13 @@ PROFILE_PREFIX = 'profile'
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('')
 class BaseProfilModelRessource(BaseHTTPRessource):
-    
+    model: Type[ProfileModel | BaseModel]
+    profile_type:str
+
     @InjectInMethod
-    def __init__(self,profileManagerService:ProfileManagerService,vaultService:HCVaultService):
+    def __init__(self,profileService:ProfileService,vaultService:HCVaultService):
         super().__init__()
-        self.profileManagerService = profileManagerService
+        self.profileService = profileService
         self.vaultService = vaultService
 
     @PingService([HCVaultService])
@@ -40,10 +43,10 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_profile(self,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request)
-        print(profileModel)
-        await self.profileManagerService.add_profile(profileModel)
+        print(profileModel.model_dump())
+        await self.profileService.add_profile(self.model,profileModel)
 
-        broker.propagate_state(StateProtocol(ProfileManagerService,to_build=True,to_destroy=True,bypass_async_verify=False))
+        broker.propagate_state(StateProtocol(ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         broker.wait(seconds=1.2)
         broker.propagate_state(StateProtocol(EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
 
@@ -53,10 +56,10 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
     async def delete_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         ...
-        await self.profileManagerService.get_profile(self.model)
-        await self.profileManagerService.delete_profile()
+        await self.profileService.get_profile(self.model)
+        await self.profileService.delete_profile()
 
-        broker.propagate_state(StateProtocol(ProfileManagerService,to_build=True,to_destroy=True,bypass_async_verify=False))
+        broker.propagate_state(StateProtocol(ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         broker.wait(seconds=1.2)
         broker.propagate_state(StateProtocol(EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
 
@@ -78,7 +81,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/creds/{profile}/',methods=[HTTPMethod.PUT,HTTPMethod.POST])
     async def set_credentials(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
-        await self.profileManagerService.get_profile(self.model,profile)
+        await self.profileService.get_profile(self.model,profile)
         self.vaultService.put_profiles()
     
     @classmethod
@@ -88,8 +91,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         except:
             raise ProfileCreationModelError
 
-        body['profile_type'] = cls.profile_type    
-
+        body['profile_type'] = cls.profile_type  
         return cls.model.model_validate(body)
 
 base_meta = BaseProfilModelRessource.meta

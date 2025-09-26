@@ -1,7 +1,8 @@
 import functools
 import time
-from typing import Any, Callable, Dict, Self, TypedDict
+from typing import Any, Callable, Dict, Self, Type, TypedDict
 import aiohttp
+from beanie import Document, init_beanie
 import hvac
 import requests
 from typing_extensions import Literal
@@ -20,8 +21,6 @@ from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
 from app.definition._service import DEFAULT_BUILD_STATE, STATUS_TO_ERROR_MAP, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
-from odmantic import AIOEngine
-from odmantic.exceptions import BaseEngineException
 from redis.asyncio import Redis
 from redis import Redis as SyncRedis
 from redis.exceptions import ResponseError
@@ -33,6 +32,7 @@ import psycopg2
 from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
 from app.utils.constant import SettingDBConstant
 from random import randint,random
+from app.models.profile_model import *
 
 MS_1000 = 1000
 ENGINE_KEY = 'engine'
@@ -472,94 +472,132 @@ class RedisService(DatabaseService):
         len_db = len(self.db.keys())//2
         for i in range(len_db):
             await self.db[i].close()
-            
-@Service
-class MongooseService(DatabaseService,SchedulerInterface,RotateCredentialsInterface): # Chat data
-    COLLECTION_REF = Literal['agent','chat','profile']
-    DATABASE_NAME=  MongooseDBConstant.DATABASE_NAME
 
+@Service     
+class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInterface):
+    COLLECTION_REF = Literal["agent", "chat", "profile"]
+    DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
 
-    #NOTE SEE https://motor.readthedocs.io/en/latest/examples/bulk.html
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService):
-        super().__init__(configService,fileService)
+    def __init__(
+        self,
+        configService: ConfigService,
+        fileService: FileService,
+        vaultService: HCVaultService,
+    ):
+        super().__init__(configService, fileService)
         SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
-        delay = IntervalParams(
-            seconds=self.random_buffer_interval(self.auth_ttl)
+        RotateCredentialsInterface.__init__(
+            self, vaultService, VaultTTLSyncConstant.MONGODB_AUTH_TTL
         )
-        self.interval_schedule(delay,self.creds_rotation)
+        delay = IntervalParams( 
+            seconds=self.random_buffer_interval(self.auth_ttl) 
+            )
+        self.interval_schedule(delay, self.creds_rotation)
 
-    async def save(self, model,*args):
-        return await self.engine.save(model,*args)
-    
-    async def find(self,model,*args):
-        return await self.engine.find(model,*args)
+        self.client: AsyncIOMotorClient | None = None
 
-    async def find_one(self,model,*args):
-        return await self.engine.find_one(model,*args)
-    
-    async def delete(self,model,*args):
-        return await self.engine.delete(model,*args)
+    ##################################################
+    # CRUD-like API (Beanie style)
+    ##################################################
+    async def save(self, model: Document, *args, **kwargs):
+        return await model.insert(*args, **kwargs)
 
-    async def count(self,model,*args):
-        return await self.engine.count(model,*args)
-    
+    async def find(self, model: Type[Document], *args, **kwargs):
+        return await model.find(*args, **kwargs).to_list()
+
+    async def find_one(self, model: Type[Document], *args, **kwargs):
+        return await model.find_one(*args, **kwargs)
+
+    async def delete(self, model: Document, *args, **kwargs):
+        return await model.delete(*args, **kwargs)
+
+    async def count(self, model: Type[Document], *args, **kwargs):
+        return await model.find(*args, **kwargs).count()
+
+    ##################################################
+    # Service lifecycle
+    ##################################################
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError('Vault Service Cant issue creds')
-    
-    def build(self,build_state=DEFAULT_BUILD_STATE):
-        try:    
-            self.service_status=ServiceStatus.NOT_AVAILABLE
+            raise BuildFailureError("Vault Service can’t issue creds")
 
+    def build(self, build_state=DEFAULT_BUILD_STATE):
+        try:
+            self.service_status = ServiceStatus.NOT_AVAILABLE
             self.db_connection()
-            
             self.service_status = ServiceStatus.AVAILABLE
+
         except ConnectionFailure as e:
             if build_state == DEFAULT_BUILD_STATE:
                 raise BuildFailureError(f"MongoDB connection error: {e}")
-            
+
         except ConfigurationError as e:
             if build_state == DEFAULT_BUILD_STATE:
                 raise BuildFailureError(f"MongoDB configuration error: {e}")
-
-        except BaseEngineException as e:
-            if build_state == DEFAULT_BUILD_STATE:
-                raise BuildFailureError(f"ODMantic engine error: {e}")
 
         except ServerSelectionTimeoutError as e:
             if build_state == DEFAULT_BUILD_STATE:
                 raise BuildFailureError(f"MongoDB server selection timeout: {e}")
 
-        except Exception as e: # TODO
-            print(e) 
+        except Exception as e:
+            print(e)
             if build_state == DEFAULT_BUILD_STATE:
-                raise BuildFailureError(f"Unexpected error: {e}") 
+                raise BuildFailureError(f"Unexpected error: {e}")
 
     def db_connection(self):
+        # fetch fresh creds from Vault
         self.creds = self.vaultService.generate_mongo_creds()
-        print(self.creds)
         self.client = AsyncIOMotorClient(self.mongo_uri)
-        self.motor_db = AsyncIOMotorDatabase(self.client,self.DATABASE_NAME)
-        self.engine = AIOEngine(self.client,self.DATABASE_NAME)
+        self.motor_db = self.client[self.DATABASE_NAME]
 
     async def _creds_rotator(self):
+        self.close_connection()
         self.db_connection()
+        await self.init_connection()
 
+    def close_connection(self):
+        try:
+            self.client.close()
+        except Exception as e:
+            ...
+
+    async def init_connection(self):
+        await init_beanie(
+                database=self.motor_db,
+                document_models=[
+                    ProfileModel,
+                    SMTPProfileModel,
+                    IMAPProfileModel,
+                    AWSProfileModel,
+                    GMailAPIProfileModel,
+                    OutlookAPIProfileModel,
+                    TwilioProfileModel,
+                ],
+            )
+
+    ##################################################
+    # Connection string
+    ##################################################
     @property
     def mongo_uri(self):
-        return F'mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017'
+        return (
+            f"mongodb://{self.db_user}:{self.db_password}"
+            f"@{self.configService.MONGO_HOST}:27017"
+        )
 
-
-    async def async_pingService(self,**kwargs):
+    ##################################################
+    # Healthcheck
+    ##################################################
+    async def async_pingService(self, **kwargs):
         self.check_auth()
         await super().async_pingService(**kwargs)
 
-    def sync_pingService(self,**kwargs):
+    def sync_pingService(self, **kwargs):
         self.check_auth()
-        
         super().sync_pingService(**kwargs)
 
+    def destroy(self, destroy_state = ...):
+        return super().destroy(destroy_state)
 @Service
 class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
     DATABASE_NAME = 'notifyr'

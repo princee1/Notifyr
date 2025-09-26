@@ -13,7 +13,7 @@ class ProfileMiniService(BaseMiniService):
     # TODO each profiles has a services
 
 @Service
-class ProfileManagerService(BaseMiniServiceManager):
+class ProfileService(BaseMiniServiceManager):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
         super().__init__()
@@ -55,8 +55,10 @@ class ProfileManagerService(BaseMiniServiceManager):
             self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
             return False
 
-    async def add_profile(self,profileType:ProfileModel):
-        ...
+    async def add_profile(self,model:Type[ProfileModel],profileType:dict):
+        save = await self.mongooseService.save(model,)
+        
+        print(save)
     
     async def delete_profile(self,profileType:ProfileModel):
         ...

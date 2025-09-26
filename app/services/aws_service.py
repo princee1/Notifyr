@@ -1,5 +1,5 @@
 from app.definition._service import BaseMiniService, BaseService, MiniService, Service
-from app.services.profile_service import ProfileManagerService
+from app.services.profile_service import ProfileService
 from .config_service import ConfigService
 from .file_service import BaseFileRetrieverService, FileService
 import boto3

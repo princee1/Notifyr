@@ -166,6 +166,8 @@ class StateProtocolMalFormattedError(BuildError):
 
 WAIT_TIME = .1
 
+ACCEPTABLE_STATES = {ServiceStatus.AVAILABLE, ServiceStatus.PARTIALLY_AVAILABLE, ServiceStatus.WORKS_ALMOST_ATT}
+
 class BaseService():
     CONTEXT:Literal['sync','async'] = 'sync'
 
