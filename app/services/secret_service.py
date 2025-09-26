@@ -44,6 +44,7 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
 @Service
 class HCVaultService(BaseService,SchedulerInterface):
 
+    _valid_role= {VaultConstant.MONGO_ROLE,VaultConstant.POSTGRES_ROLE}
     _secret_id_crontab='0 0 * * *'
     _ping_available_state = {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}
     
@@ -103,10 +104,10 @@ class HCVaultService(BaseService,SchedulerInterface):
         
         self.token_meta = parse_vault_token_meta(self.client.lookup_token())
         
-        self._kv1_engine = KV1VaultEngine(self.client, VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT)
-        self._kv2_engine = KV2VaultEngine(self.client,VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT)
-        self._transit_engine = TransitVaultEngine(self.client,VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT)
-        self._database_engine = DatabaseVaultEngine(self.client,VaultConstant.NOTIFYR_DB_MOUNT_POINT)
+        self.secrets_engine = KV1VaultEngine(self.client, VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT)
+        self.generation_engine = KV2VaultEngine(self.client,VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT)
+        self.transit_engine = TransitVaultEngine(self.client,VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT)
+        self.database_engine = DatabaseVaultEngine(self.client,VaultConstant.NOTIFYR_DB_MOUNT_POINT)
 
         return True
 
@@ -139,7 +140,6 @@ class HCVaultService(BaseService,SchedulerInterface):
             
             print(f'{self.name}:',self.service_status)
     
-
     def _read_volume_file(self,filename:str,t:Literal['shared','secrets'],raise_:bool=True):
 
         callback = VaultConstant.VAULT_SHARED_DIR if t == 'shared' else VaultConstant.VAULT_SECRET_DIR
@@ -203,43 +203,13 @@ class HCVaultService(BaseService,SchedulerInterface):
 
 ##############################################                          ##################################333
 
-    def generate_mongo_creds(self):
-        return self._database_engine.generate_credentials(VaultConstant.MONGO_ROLE)
-    
-    def generate_postgres_creds(self):
-        return self._database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE)
-
-##############################################                          ##################################333
-
-    def read_profile(self,profiles_id:str):
-        data = self._kv1_engine.read(VaultConstant.PROFILES_SECRETS,profiles_id)
-        for k,v in data.items():
-            data[k]= self._transit_engine.decrypt(v,VaultConstant.PROFILES_KEY)
-        
-        data = SecretsWrapper(data)
-        return data
-
-    def put_profiles(self,profiles_id:str,data:dict):
-        for k,v in data.items():
-            data[k] = self._transit_engine.encrypt(v,VaultConstant.PROFILES_KEY)
-        data = {
-            profiles_id:data
-        }
-        return self._kv1_engine.put(VaultConstant.PROFILES_SECRETS,profiles_id,data)
-
-    def delete_profiles(self,profiles_id:str):
-        return self._kv1_engine.delete(VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT,profiles_id)
-
     def read_tokens(self):
-        self.tokens = self._kv1_engine.read(VaultConstant.TOKENS_SECRETS)
+        self.tokens = self.secrets_engine.read(VaultConstant.TOKENS_SECRETS)
     
-##############################################                          ##################################333
-
     @property
     def JWT_SECRET_KEY(self):
         return self.tokens.get('JWT_SECRET_KEY',None)
-
-    
+   
     @property
     def JWT_ALGORITHM(self):
         return self._jwt_algorithm

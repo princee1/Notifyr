@@ -14,7 +14,7 @@ from app.definition._interface import Interface, IsInterface
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultTTLSyncConstant
+from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.helper import reverseDict
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
@@ -104,8 +104,7 @@ class RotateCredentialsInterface(Interface):
                     else:
                         await asyncio.sleep( (retry+1)*self.wait_time +self.b)
                 
-                retry+=1
-                    
+                retry+=1                  
 
     async def _creds_rotator(self):
         pass
@@ -550,7 +549,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
 
     def db_connection(self):
         # fetch fresh creds from Vault
-        self.creds = self.vaultService.generate_mongo_creds()
+        self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE)
         self.client = AsyncIOMotorClient(self.mongo_uri)
         self.motor_db = self.client[self.DATABASE_NAME]
 
@@ -639,7 +638,7 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
                 ...
 
     def generate_creds(self):
-        self.creds = self.vaultService.generate_postgres_creds()
+        self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE)
         print(self.creds)
         
     @property

@@ -222,18 +222,18 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
                 status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
 
     def read_generation_id(self):
-        data=self.vaultService._kv2_engine.read('',self.gen_id_path)
+        data=self.vaultService.generation_engine.read('',self.gen_id_path)
         self.generation_id_data = data
 
     def revoke_all_tokens(self) -> None:
         new_generation_id = generateId(self.GENERATION_ID_LEN)
-        self.vaultService._kv2_engine.put('',{
+        self.vaultService.generation_engine.put('',{
             'GENERATION_ID':new_generation_id,
         },path=self.gen_id_path)
         self.read_generation_id()
         
     def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool,version_to_delete:list[int]=[]):
-        self.vaultService._kv2_engine.rollback('',self.gen_id_path,version,destroy,delete,version_to_delete)
+        self.vaultService.generation_engine.rollback('',self.gen_id_path,version,destroy,delete,version_to_delete)
         self.read_generation_id()
 
     def verify_dependency(self):

@@ -58,7 +58,7 @@ class VaultEngine:
 
 class KV1VaultEngine(VaultEngine):
     
-    def read(self, sub_mount: VaultConstant.NotifyrSecretType, path: str = '', wrap_response: bool = False, wrap_ttl: str = "60s"):
+    def read(self, sub_mount: VaultConstant.NotifyrSecretType, path: str = '', wrap_response: bool = False, wrap_ttl: str = "60s",data_only=True,wrap_token_only=True):
         params = {
             "path": VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
             "mount_point": self.mount_point,
@@ -67,13 +67,18 @@ class KV1VaultEngine(VaultEngine):
             params["wrap_ttl"] = wrap_ttl
         read_response = self.client.secrets.kv.v1.read_secret(**params)
         print("KV Read:", read_response)
-        if wrap_response and 'wrap_info' in read_response:
-            return {"wrap_token": read_response['wrap_info']['token']}
-        if 'data' in read_response:
-            return read_response['data']
-        return {}
 
-    def put(self, sub_mount: VaultConstant.NotifyrSecretType, data: dict, path: str = '', wrap_response: bool = False, wrap_ttl: str = "60s"):
+        if wrap_token_only and wrap_response:
+            if wrap_response and 'wrap_info' in read_response:
+                return {"wrap_token": read_response['wrap_info']['token']}
+    
+        elif data_only:
+            if 'data' in read_response:
+                return read_response['data']
+            
+        return read_response
+
+    def put(self, sub_mount: VaultConstant.NotifyrSecretType, data: dict, path: str = '', wrap_response: bool = False, wrap_ttl: str = "60s",wrap_token_only=True):
         params = {
             "path": VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
             "secret": data,
@@ -83,8 +88,11 @@ class KV1VaultEngine(VaultEngine):
             params["wrap_ttl"] = wrap_ttl
         write_response = self.client.secrets.kv.v1.create_or_update_secret(**params)
         print("KV Write:", write_response)
-        if wrap_response and 'wrap_info' in write_response:
-            return {"wrap_token": write_response['wrap_info']['token']}
+
+        if wrap_token_only and wrap_response:
+            if wrap_response and 'wrap_info' in write_response:
+                return {"wrap_token": write_response['wrap_info']['token']}
+        
         return write_response
     
     def delete(self,sub_mount:VaultConstant.NotifyrSecretType,path:str):
@@ -92,8 +100,9 @@ class KV1VaultEngine(VaultEngine):
             path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount,path),
             mount_point=self.mount_point
                 )
-        print(delete_response)
-
+        print('Delete:',delete_response)
+    
+        return delete_response
 
 class KV2VaultEngine(VaultEngine):
 
@@ -176,11 +185,9 @@ class KV2VaultEngine(VaultEngine):
         if delete and other_version_to_delete:
             self.delete(sub_mount,path,other_version_to_delete)
        
-
-
 class TransitVaultEngine(VaultEngine):
     
-    def encrypt(self, plaintext: str, key: VaultConstant.NotifyrTransitKeyType):
+    def encrypt(self, plaintext: str, key: VaultConstant.NotifyrTransitKeyType,ciphertext_only=True):
         encoded_text = b64_encode(plaintext)
         encrypt_response = self.client.secrets.transit.encrypt_data(
             name=key,
@@ -188,19 +195,23 @@ class TransitVaultEngine(VaultEngine):
             mount_point=self.mount_point
         )
         print("Encrypted:", encrypt_response)
-        return encrypt_response["data"]["ciphertext"]
+        if ciphertext_only:
+            return encrypt_response['data']['ciphertext']
+        return encrypt_response
     
-    def decrypt(self, ciphertext: str, key: VaultConstant.NotifyrTransitKeyType):
+    def decrypt(self, ciphertext: str, key: VaultConstant.NotifyrTransitKeyType,plaintext_only):
         decrypted_response = self.client.secrets.transit.decrypt_data(
             name=key,
             ciphertext=ciphertext,
             mount_point=self.mount_point
         )
         print("Decrypted:", decrypted_response)
-        encoded_response = decrypted_response['data']['plaintext']
-        return b64_decode(encoded_response)
+        if plaintext_only:
+            encoded_response = decrypted_response['data']['plaintext']
+            return b64_decode(encoded_response)
+        return decrypted_response
 
-    def sign(self, input_data: str, key: VaultConstant.NotifyrTransitKeyType, algorithm: str = "sha2-256") -> str:
+    def sign(self, input_data: str, key: VaultConstant.NotifyrTransitKeyType, algorithm: str = "sha2-256",signature_only:bool=True) -> str:
         """Signs the given input using Vault transit engine."""
         encoded_input = b64_encode(input_data)
         sign_response = self.client.secrets.transit.sign_data(
@@ -210,9 +221,11 @@ class TransitVaultEngine(VaultEngine):
             mount_point=self.mount_point
         )
         print("Sign response:", sign_response)
-        return sign_response["data"]["signature"]
+        if signature_only:
+            return sign_response["data"]["signature"]
+        return sign_response
 
-    def verify_signature(self, input_data: str, signature: str, key: VaultConstant.NotifyrTransitKeyType, algorithm: str = "sha2-256") -> bool:
+    def verify_signature(self, input_data: str, signature: str, key: VaultConstant.NotifyrTransitKeyType, algorithm: str = "sha2-256",valid_only:bool = True) -> bool:
         """Verifies the given signature against input using Vault transit engine."""
         encoded_input = b64_encode(input_data)
         verify_response = self.client.secrets.transit.verify_signed_data(
@@ -223,9 +236,9 @@ class TransitVaultEngine(VaultEngine):
             mount_point=self.mount_point
         )
         print("Verify response:", verify_response)
-        return verify_response["data"]["valid"]
-
-    
+        if valid_only:
+            return verify_response["data"]["valid"]
+        return verify_response
 
 class DatabaseVaultEngine(VaultEngine):
 
