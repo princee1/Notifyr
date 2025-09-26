@@ -387,7 +387,7 @@ class Broker:
             raise ServiceDoesNotExistError
 
         try:
-            if protocol['status'] is not None:
+            if protocol.get('status',None) is not None:
                 ServiceStatus(protocol['status'])
         except:
             raise StateProtocolMalFormattedError

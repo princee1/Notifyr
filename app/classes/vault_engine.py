@@ -78,21 +78,14 @@ class KV1VaultEngine(VaultEngine):
             
         return read_response
 
-    def put(self, sub_mount: VaultConstant.NotifyrSecretType, data: dict, path: str = '', wrap_response: bool = False, wrap_ttl: str = "60s",wrap_token_only=True):
+    def put(self, sub_mount: VaultConstant.NotifyrSecretType, data: dict, path: str = ''):
         params = {
             "path": VaultConstant.KV_ENGINE_BASE_PATH(sub_mount, path),
             "secret": data,
             "mount_point": self.mount_point,
         }
-        if wrap_response:
-            params["wrap_ttl"] = wrap_ttl
         write_response = self.client.secrets.kv.v1.create_or_update_secret(**params)
-        print("KV Write:", write_response)
-
-        if wrap_token_only and wrap_response:
-            if wrap_response and 'wrap_info' in write_response:
-                return {"wrap_token": write_response['wrap_info']['token']}
-        
+        print('KV Put:',write_response)
         return write_response
     
     def delete(self,sub_mount:VaultConstant.NotifyrSecretType,path:str):

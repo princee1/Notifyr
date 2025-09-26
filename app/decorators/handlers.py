@@ -4,6 +4,7 @@ from typing import Callable
 
 from fastapi.exceptions import ResponseValidationError
 from h11 import LocalProtocolError
+import hvac
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -589,4 +590,9 @@ class ProfileHandler(Handler):
     
 
 class VaultHandler(Handler):
-    ...
+    
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except hvac.exceptions.InvalidRequest as e:
+            raise HTTPException(500,)

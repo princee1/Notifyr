@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, Optional, Self, Type, Union, ClassVar
+from pymongo import ASCENDING
 from typing_extensions import Literal
 from pydantic import EmailStr, Field, field_validator, model_validator
 from beanie import Document
@@ -14,6 +15,9 @@ from app.utils.validation import port_validator
 ProfileType = Literal["email", "twilio"]
 ServiceMode = Literal["smtp", "aws", "api", "imap"]
 SMTPConnMode = Literal["tls", "ssl", "normal"]
+
+PROFILE_TYPE_KEY = 'profileType'
+
 
 
 ######################################################
@@ -57,12 +61,12 @@ class ProfileModel(Document):
     def secrets_keys(cls):
         return getattr(cls, "_secret_key", [])
 
-
 ######################################################
 # Email-related Profiles (Abstract)
 ######################################################
 
 class EmailProfileModel(ProfileModel):
+    profileType:str = 'email'
     email_address: EmailStr
 
     class Settings:
@@ -90,12 +94,24 @@ class ProtocolProfileModel(EmailProfileModel):
         
     class Settings:
         abstract = True
+        indexes = [
+            {
+                "fields": [("_class_id", ASCENDING),("email_host", ASCENDING), ("email_address", ASCENDING)],
+                "unique": True
+            }
+        ]
 
 class APIEmailProfileModel(EmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
 
     class Settings:
         abstract = True
+        indexes= [
+            {
+                "fields":[("_class_id", ASCENDING),("email_addr", ASCENDING),],
+                "unique":True
+            }]
+
 
 ######################################################
 # Email-related Profiles
@@ -140,7 +156,14 @@ class AWSProfileModel(EmailProfileModel):
     aws_access_key_id: str
     aws_secret_access_key: str
 
-    _secret_key: ClassVar[list[str]] = ["aws_access_key_id", "aws_secret_access_key"]
+    _secret_key: ClassVar[list[str]] = ["aws_secret_access_key"]
+
+    class Setting:
+        indexes= [
+            {
+                "fields":[("aws_access_key_id", ASCENDING),("_class_id", ASCENDING)],
+                "unique":True
+            }]
 
 class GMailAPIProfileModel(APIEmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
@@ -149,7 +172,7 @@ class OutlookAPIProfileModel(APIEmailProfileModel):
     client_id: str
     client_secret: str
     tenant_id: str
-
+    
     _secret_key: ClassVar[list[str]] = ["client_secret"]
 
 
@@ -163,6 +186,14 @@ class TwilioProfileModel(ProfileModel):
     twilio_otp_number: str
     twilio_chat_number: str
     twilio_automated_response_number: str
+
+    class Setting:
+        indexes= [
+            {
+                "fields":[("account_sid", ASCENDING),("_class_id", ASCENDING)],
+                "unique":True
+            }]
+
 
     _secret_key: ClassVar[list[str]] = ["auth_token"]
 

@@ -1,5 +1,6 @@
 from typing import Any, Callable, Coroutine, Literal, get_args
 
+from beanie import Document
 from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, TokensModel
@@ -548,3 +549,17 @@ class  GlobalPointerIteratorPipe(Pipe):
             globalIter = PointerIterator(globalIter,self.sep,dict)
 
         return {'globalIter':globalIter}
+
+
+class DocumentFriendlyPipe(Pipe):
+
+    def __init__(self, include=None,exclude=None,exclude_none=False,exclude_defaults=False):
+        super().__init__(False)
+        self.include = include
+        self.exclude = exclude
+        self.exclude_none = exclude_none
+        self.exclude_defaults = exclude_defaults
+
+    def pipe(self,result:Document):
+
+        return result.model_dump(mode='json',)
