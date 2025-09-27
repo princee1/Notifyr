@@ -553,22 +553,25 @@ class  GlobalPointerIteratorPipe(Pipe):
 
 class DocumentFriendlyPipe(Pipe):
 
-    def __init__(self, include=set(),exclude=set(),exclude_none=False,exclude_defaults=False):
+    def __init__(self, include:set=None,exclude:set=None,exclude_none=False,exclude_defaults=False):
         super().__init__(False)
-        self.include = include
-        self.exclude = exclude
+        self.include = set() if include == None else include
+        self.exclude = set() if exclude == None else exclude
         self.exclude_none = exclude_none
         self.exclude_defaults = exclude_defaults
 
     def pipe(self,result:Document):
         result_id = str(result.id)
         
-        result = result.model_dump(
-            mode='json',
-            include=self.include,
-            exclude=self.exclude,
-            exclude_none=self.exclude_none,
-            exclude_defaults=self.exclude_defaults)
-        
+        dump_kwargs = {'mode': 'json'}
+        if self.include:
+            dump_kwargs['include'] = self.include
+        if self.exclude:
+            dump_kwargs['exclude'] = self.exclude
+
+        dump_kwargs['exclude_none'] = self.exclude_none
+        dump_kwargs['exclude_defaults'] = self.exclude_defaults
+
+        result = result.model_dump(**dump_kwargs)
         result['id'] =result_id
         return result

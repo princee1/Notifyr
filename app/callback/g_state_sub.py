@@ -20,13 +20,13 @@ async def Set_Service_Status(message:StateProtocol):
         
         async with service.statusLock.writer:
 
-            if message['status'] is not None:
+            if message.get('status',None) is not None:
                 service.service_status = ServiceStatus(message['status'])
         
-            if message['to_destroy']:
+            if message.get('to_destroy',False):
                 service._destroyer(True,message.get('destroy_state',DEFAULT_DESTROY_STATE))
             
-            if message['to_build']:
+            if message.get('to_build',False):
                 build = True
                 if not message.get('bypass_async_verify',False):
                     build = await service.async_verify_dependency()
@@ -55,12 +55,12 @@ async def Set_Service_Variables(message:VariableProtocol):
         service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
         async with service.statusLock.writer:
 
-            if message['variables'] is not None:
+            if message.get('variables',None) is not None:
                 for key,value in message['variables'].items():
                     if hasattr(service,key):
                         setattr(service,key,value)
                     
-            if message['variables_function'] is not None:
+            if message.get('variables_function',None) is not None:
 
                 variables_function = getattr(service,message['variables_function'],None)
                 if variables_function != None and callable(variables_function):

@@ -2,13 +2,15 @@ from datetime import datetime
 from typing import Any, Optional, Self, Type, Union, ClassVar
 from pymongo import ASCENDING
 from typing_extensions import Literal
-from pydantic import EmailStr, Field, field_validator, model_validator
+from pydantic import EmailStr, Field, field_validator, model_validator, validator
 from beanie import Document
 
 from app.classes.mail_provider import AuthToken, TokenType
+from app.classes.phone import PhoneModel
 from app.classes.profiles import ProfileModelAuthToken, ProfilModelConstant, ProfileState
 from app.utils.constant import EmailHostConstant, MongooseDBConstant
-from app.utils.validation import port_validator
+from app.utils.validation import port_validator, phone_number_validator
+from app.utils.helper import phone_parser
 
 
 # Type aliases
@@ -153,15 +155,15 @@ class AWSProfileModel(EmailProfileModel):
     _secret_key: ClassVar[list[str]] = ["aws_secret_access_key"]
     unique_indexes: ClassVar[list[str]] = ['aws_access_key_id']
 
-
 class GMailAPIProfileModel(APIEmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
+
+    _secret_key: ClassVar[list[str]] = ["oauth_tokens"]
 
 class OutlookAPIProfileModel(APIEmailProfileModel):
     client_id: str
     client_secret: str
-    tenant_id: str
-    
+    tenant_id: str 
     _secret_key: ClassVar[list[str]] = ["client_secret"]
 
 
@@ -171,19 +173,42 @@ class OutlookAPIProfileModel(APIEmailProfileModel):
 class TwilioProfileModel(ProfileModel):
     account_sid: str
     auth_token: str
-    from_number: str
-    twilio_otp_number: str
-    twilio_chat_number: str
-    twilio_automated_response_number: str
+    from_number: PhoneModel | str
+    twilio_otp_number: Optional[PhoneModel | str] = None
+    twilio_chat_number: Optional[PhoneModel | str] = None
+    twilio_automated_response_number: Optional[PhoneModel |str] = None
 
     _secret_key: ClassVar[list[str]] = ["auth_token"]
     unique_indexes: ClassVar[list[str]] = ['account_sid']
 
-
+    @field_validator('from_number')
+    def from_number_validator(cls,from_number:PhoneModel|str)->str:
+        
+        if isinstance(from_number,str):
+            if not phone_number_validator(from_number):
+                raise ValueError('Phone number is not valid')
+            return from_number
+        else:
+            #phone_model = PhoneModel.model_validate(from_number)
+            return from_number.phone_number
+    
+    @field_validator('twilio_otp_number', 'twilio_chat_number', 'twilio_automated_response_number')
+    def twilio_phone_validator(cls,number:PhoneModel|None|str):
+        if number == None:
+            return None
+        if isinstance(number,str):
+            if not phone_number_validator(number):
+                raise ValueError('Phone number is not valid')
+            return number
+        else:    
+            #number = PhoneModel.model_validate(number)
+            return number.phone_number
+        
 
 ######################################################
 # Registry of Profile Implementations
 ######################################################
+
 ProfilModelValues: dict[str, Type[ProfileModel]] = {
     ProfilModelConstant.OUTLOOK_API: OutlookAPIProfileModel,
     ProfilModelConstant.GMAIL_API: GMailAPIProfileModel,

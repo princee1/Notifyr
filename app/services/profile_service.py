@@ -12,8 +12,11 @@ from app.models.profile_model import ProfileModel, SMTPProfileModel,IMAPProfileM
 
 @MiniService
 class ProfileMiniService(BaseMiniService):
-    ...
-    # TODO each profiles has a services
+    
+    def __init__(self,model:ProfileModel,credentials:SecretsWrapper):
+        super().__init__(None, str(model.id))
+        self.model = model
+        self.credentials = credentials
 
 @Service
 class ProfileService(BaseMiniServiceManager):
@@ -57,6 +60,7 @@ class ProfileService(BaseMiniServiceManager):
             self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
             return False
 
+    ########################################################       ################################3
 
     async def add_profile(self,profile:ProfileModel):
         creds = {}
@@ -84,14 +88,18 @@ class ProfileService(BaseMiniServiceManager):
         self._put_encrypted_creds(result_id,creds)
         return result
     
-    async def delete_profile(self,profileModel:ProfileModel):
+    async def delete_profile(self,profileModel:ProfileModel,raise_:bool = False):
         profile_id = str(profileModel.id)
-        await profileModel.delete()
+        result = await profileModel.delete()
         self._delete_encrypted_creds(profile_id)
-
+     
     async def update_profile(self,profileModel:ProfileModel,body:dict):
         ...
 
+    def read_full_profile(self):
+        ...
+  
+    ########################################################       ################################
 
     def _read_encrypted_creds(self,profiles_id:str):
         data = self.vaultService.secrets_engine.read(VaultConstant.PROFILES_SECRETS,profiles_id)
@@ -108,8 +116,9 @@ class ProfileService(BaseMiniServiceManager):
         return self.vaultService.secrets_engine.put(VaultConstant.PROFILES_SECRETS,data,profiles_id)
 
     def _delete_encrypted_creds(self,profiles_id:str):
-        return self.vaultService.secrets_engine.delete(VaultConstant.NOTIFYR_SECRETS_MOUNT_POINT,profiles_id)
-
+        return self.vaultService.secrets_engine.delete(VaultConstant.PROFILES_SECRETS,profiles_id)
+    
+    ########################################################       ################################
 
     def loadStore(self,):
         ...

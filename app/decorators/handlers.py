@@ -613,3 +613,6 @@ class VaultHandler(Handler):
             return await function(*args,**kwargs)
         except hvac.exceptions.InvalidRequest as e:
             raise HTTPException(500,)
+
+        except hvac.exceptions.Forbidden as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)

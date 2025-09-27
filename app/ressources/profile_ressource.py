@@ -1,13 +1,13 @@
 from typing import Annotated, Type
 from beanie import Document
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Response,status
 from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe
-from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import StateProtocol
 from app.depends.class_dep import Broker
 from app.depends.dependencies import get_auth_permission
@@ -44,8 +44,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseHandler(VaultHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_profile(self,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request)
         
         await self.mongooseService.exists_unique(profileModel,True)
@@ -66,13 +67,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     async def delete_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
-        result = await self.profileService.delete_profile(profileModel)
+        await self.profileService.delete_profile(profileModel)
 
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         broker.wait(seconds=1.2)
         broker.propagate_state(StateProtocol(service=EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
 
-        return result
+        return profileModel
     
     @UseRoles([Role.PUBLIC])        
     @UsePermission(ProfilePermission)
@@ -81,21 +82,22 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.mongooseService.get(self.model,profile,True)
 
-
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def update_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
+        self.model.model_construct()
         
 
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseHandler(VaultHandler)
     @UsePermission(AdminPermission)
+    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/creds/{profile}/',methods=[HTTPMethod.PUT,HTTPMethod.POST])
-    async def set_credentials(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def set_credentials(self,profile:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
 

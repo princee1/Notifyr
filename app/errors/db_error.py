@@ -21,3 +21,6 @@ class DocumentDoesNotExistsError(BaseError):
     def __init__(self,id, *args):
         super().__init__(*args)
         self.id = id
+    
+class DocumentAlreadyDeletedError(BaseError):
+    ...

@@ -503,7 +503,6 @@ def format_url_params(params: dict[str,str])->str:
 
 ###################################### ** Phone Helper **  ###########################################
 
-
 letter_to_number = {
     'A': '2', 'B': '2', 'C': '2',
     'D': '3', 'E': '3', 'F': '3',
@@ -516,18 +515,21 @@ letter_to_number = {
 }
 
 
-def phone_parser(phone_number:str):
+def phone_parser(phone_number:str,country_code=None):
     phone_number = phone_number.upper()
     converted_number = ''.join(letter_to_number.get(
         char, char) for char in phone_number)
 
+    plus_exists = converted_number.startswith('+')
     cleaned_number = ''.join(filter(str.isdigit, converted_number))
 
-    if not cleaned_number.startswith('1'):
-        cleaned_number = '1' + cleaned_number # ERROR Assuming US OR CA country code
-
-    formatted_number = f"+{cleaned_number}"
-    return formatted_number
+    if not plus_exists:
+        if country_code == None:
+            raise ValueError('Country cannot be null')
+        cleaned_number = f'+{country_code}{phone_number}'
+    else:
+        cleaned_number = f'+{phone_number}'
+    return cleaned_number
     
 def filter_paths(paths):
         paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur

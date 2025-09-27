@@ -85,16 +85,13 @@ class KV1VaultEngine(VaultEngine):
             "mount_point": self.mount_point,
         }
         write_response = self.client.secrets.kv.v1.create_or_update_secret(**params)
-        print('KV Put:',write_response)
         return write_response
     
     def delete(self,sub_mount:VaultConstant.NotifyrSecretType,path:str):
         delete_response = self.client.secrets.kv.v1.delete_secret(
             path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount,path),
             mount_point=self.mount_point
-                )
-        print('Delete:',delete_response)
-    
+                )    
         return delete_response
 
 class KV2VaultEngine(VaultEngine):
