@@ -1,4 +1,4 @@
 /scripts/*.sh text eol=lf
-/scripts/vault-rotator/*. text eol=lf
+/scripts/vault-rotator/*.sh text eol=lf
 
 
