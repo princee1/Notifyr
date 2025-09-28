@@ -6,10 +6,13 @@ from random import choice, seed
 from string import hexdigits, digits, ascii_letters,punctuation
 import time
 from inspect import currentframe, getargvalues
-from typing import Any, Callable, Literal, Tuple, Type
+from typing import Any, Callable, Literal, Optional, Tuple, Type, get_args, get_origin
 import urllib.parse
+from aiohttp_retry import Union
 from fastapi import Response
 from namespace import Namespace
+from pydantic import BaseModel, ConfigDict, create_model
+from pydantic_core import PydanticUndefined
 from str2bool import str2bool
 import ast
 from enum import Enum
@@ -564,3 +567,42 @@ def cron_interval(cron_expr: str, start_time: float) -> float:
     t1 = itr.get_next(datetime)
     t2 = itr.get_next(datetime)
     return (t2 - t1).total_seconds()
+
+###################################### ** Model Helper **  ###########################################
+def is_optional(annotation) -> bool:
+    """Check if a type annotation already allows None"""
+    if annotation is None:
+        return True
+    origin = get_origin(annotation)
+    if origin is Union:
+        return type(None) in get_args(annotation)
+    return False
+
+def subset_model(
+    base: type[BaseModel],
+    name: str,
+    include: set[str] | None = None,
+    exclude: set[str] | None = None,
+    optional: bool = True,
+    __config__:ConfigDict |None = None
+):
+    fields = {}
+    for field_name, field in base.model_fields.items():
+        if include and field_name not in include:
+            continue
+        if exclude and field_name in exclude:
+            continue
+
+        ann = field.annotation
+        default = field.default if field.default is not None else ...
+
+        if optional:
+            if not is_optional(ann):
+                ann = Optional[ann]  # only wrap if not already Optional
+
+            if default is PydanticUndefined or ...:
+                default = None 
+    
+        fields[field_name] = (ann, default)
+    
+    return create_model(name,__config__=__config__, **fields)

@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import Any, Optional, Self, Type, Union, ClassVar
-from pymongo import ASCENDING
 from typing_extensions import Literal
-from pydantic import EmailStr, Field, field_validator, model_validator, validator
+from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
 from beanie import Document
 
 from app.classes.mail_provider import AuthToken, TokenType
@@ -20,25 +19,12 @@ SMTPConnMode = Literal["tls", "ssl", "normal"]
 
 PROFILE_TYPE_KEY = 'profileType'
 
-
-
-######################################################
-# Error Model
-######################################################
-class ErrorProfileModel(Document):
-    profile_id: str
-    error_code: int
-    error_name: str
-    error_description: str
-
-    class Settings:
-        name = MongooseDBConstant.PROFILE_COLLECTION
-
-
 ######################################################
 # Base Profile Model (Root)
 ######################################################
 class ProfileModel(Document):
+
+    
     alias: str
     description: Optional[str] = Field(default=None,min_length=0,max_length=1000)
     role: list[str] = Field(default_factory=list)
@@ -70,7 +56,6 @@ class ProfileModel(Document):
 ######################################################
 
 class EmailProfileModel(ProfileModel):
-    profileType:str = 'email'
     email_address: EmailStr
 
     class Settings:
@@ -164,7 +149,9 @@ class OutlookAPIProfileModel(APIEmailProfileModel):
     client_id: str
     client_secret: str
     tenant_id: str 
+
     _secret_key: ClassVar[list[str]] = ["client_secret"]
+    unique_indexes:ClassVar[list[str]] = ['client_id','tenant_id','email_address']
 
 
 ######################################################
@@ -217,3 +204,19 @@ ProfilModelValues: dict[str, Type[ProfileModel]] = {
     ProfilModelConstant.SMTP: SMTPProfileModel,
     ProfilModelConstant.TWILIO: TwilioProfileModel,
 }
+
+
+######################################################
+# Error Model
+######################################################
+class ErrorProfileModel(Document):
+    profile_id: Optional[str]
+    error_code: Optional[int]
+    error_name: Optional[str]
+    error_description: Optional[str]
+    error_type:Optional[Literal['warn','critical','message']]
+    ignore:Optional[bool] = False
+
+    class Settings:
+        name = MongooseDBConstant.PROFILE_COLLECTION
+    

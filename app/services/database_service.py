@@ -1,6 +1,6 @@
 import functools
 import time
-from typing import Any, Callable, Dict, Self, Type, TypedDict
+from typing import Any, Callable, Dict, Self, Type, TypeVar, TypedDict
 import aiohttp
 from beanie import Document, PydanticObjectId, init_beanie
 import hvac
@@ -466,6 +466,9 @@ class RedisService(DatabaseService):
         for i in range(len_db):
             await self.db[i].close()
 
+
+D = TypeVar('D',bound=Document)
+
 @Service     
 class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInterface):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
@@ -493,31 +496,31 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     ##################################################
     # CRUD-like API (Beanie style)
     ##################################################
-    async def save(self,model:Document,*args,**kwargs):
+    async def insert(self,model:Document,*args,**kwargs):
         return await model.insert(*args, **kwargs)
 
-    async def get(self,model:Type[Document],id:str,raise_:bool = True):
+    async def get(self,model:Type[D],id:str,raise_:bool = True)->D:
         m = await model.get(PydanticObjectId(id))
         if m == None:
             raise DocumentDoesNotExistsError(id)
         return m
     
-    async def find(self, model: Type[Document], *args, **kwargs):
+    async def find(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).to_list()
 
-    async def find_one(self, model: Type[Document], *args, **kwargs):
+    async def find_one(self, model: Type[D], *args, **kwargs):
         return await model.find_one(*args, **kwargs)
 
-    async def delete(self, model: Document, *args, **kwargs):
+    async def delete(self, model: D, *args, **kwargs):
         return await model.delete(*args, **kwargs)
 
-    async def delete_all(self,model:Document,*args,**kwargs):
+    async def delete_all(self,model:Type[D],*args,**kwargs):
         return await model.delete_all(*args,**kwargs)
 
-    async def count(self, model: Type[Document], *args, **kwargs):
+    async def count(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).count()
     
-    async def exists_unique(self,model:Document,raise_when:bool = None):
+    async def exists_unique(self,model:D,raise_when:bool = None):
         unique_indexes = getattr(model,'unique_indexes',None)
         if unique_indexes == None:
             return False
@@ -610,7 +613,8 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         super().sync_pingService(**kwargs)
 
     def destroy(self, destroy_state = ...):
-        return super().destroy(destroy_state)
+        self.close_connection()
+    
 @Service
 class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
     DATABASE_NAME = 'notifyr'

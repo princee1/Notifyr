@@ -52,8 +52,11 @@ class ProfileDoesNotExistsError(BaseError):
 class ProfileNotSpecifiedError(BaseError):
     ...
 
-class ProfileCreationModelError(BaseError):
-    ...
+class ProfileModelRequestBodyError(BaseError):
+    
+    def __init__(self,*args,message='Profile model body cannot be parsed into JSON'):
+        super().__init__(*args)
+        self.message = message
 
 ####################################                 #####################################333
 
