@@ -23,7 +23,7 @@ from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDo
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
-from app.classes.profiles import ProfileCreationModelError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError
+from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -601,9 +601,10 @@ class ProfileHandler(Handler):
         except ProfileNotSpecifiedError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     
-        except ProfileCreationModelError as e:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,detail='Profile model body cannot be parsed into JSON')
+        except ProfileModelRequestBodyError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,detail=e.message)
         
+
     
 
 class VaultHandler(Handler):
@@ -613,3 +614,6 @@ class VaultHandler(Handler):
             return await function(*args,**kwargs)
         except hvac.exceptions.InvalidRequest as e:
             raise HTTPException(500,)
+
+        except hvac.exceptions.Forbidden as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
