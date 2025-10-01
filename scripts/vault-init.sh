@@ -150,12 +150,17 @@ create_default_token(){
 
   vault kv put notifyr-secrets/tokens $ARGS
 
-  local api_key
-  api_key=$(pwgen -s 100 1)
+  local setting_api_key
+  setting_api_key=$(pwgen -s 100 1)
 
-  vault kv put notifyr-secrets/api-key SETTING_DB_API_KEY="$api_key"
+  local dmz_api_key
+  dmz_api_key=$(pwgen -s 100 1)
 
-  echo -n "$api_key" > "$VAULT_SHARED_DIR/setting-db-api-key.txt"
+  vault kv put notifyr-secrets/api-key/SETTING_DB API_KEY="$setting_api_key"
+
+  vault kv put notifyr-secrets/api-key/DMZ API_KEY="$dmz_api_key"
+
+  echo -n "$setting_api_key" > "$VAULT_SHARED_DIR/setting-db-api-key.txt"
 
   chown root:vaultuser "$VAULT_SHARED_DIR/setting-db-api-key.txt"
   chmod 664 "$VAULT_SHARED_DIR/setting-db-api-key.txt"

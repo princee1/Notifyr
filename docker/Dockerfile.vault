@@ -57,6 +57,11 @@ path "notifyr-secrets/api-key"{
 
 }
 
+path "notifyr-secrets/api-key/*"{
+  capabilities = ["read"]
+
+}
+
 # ---- profiles ----
 
 path "notifyr-secrets/profiles" {

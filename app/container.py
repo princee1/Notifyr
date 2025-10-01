@@ -10,7 +10,7 @@ from app.utils.helper import issubclass_of, SkipCode
 from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
 from ordered_set import OrderedSet
-from app.definition._service import S, LiaisonDependency, LinkParams, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from app.definition._service import PROCESS_SERVICE_REPORT, S, LiaisonDependency, LinkParams, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
@@ -453,6 +453,9 @@ class Container():
             s:BaseService= self.get(d)
             PrettyPrinter_.info(f"=================================== {s.name} ===================================",saveable=False)
             PrettyPrinter_.json(s.used_by_services ,saveable=False)
+
+    def show_report(self):
+       PrettyPrinter_.json(PROCESS_SERVICE_REPORT,saveable=False)
 
     @property
     def dependencies(self) -> list[BaseService]: return [x[DependencyConstant.TYPE_KEY]

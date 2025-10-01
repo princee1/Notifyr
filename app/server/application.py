@@ -3,7 +3,7 @@ Contains the FastAPI app
 """
 from dataclasses import dataclass
 from fastapi.responses import FileResponse, JSONResponse
-from app.container import Get
+from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
@@ -244,8 +244,8 @@ class Application(EventInterface):
 
     @register_hook('startup',active=False)
     def print_report_on_startup(self):
-        self.pretty_printer.json(PROCESS_SERVICE_REPORT,saveable=False)
-
+        CONTAINER.show_report()
+        CONTAINER.show_dep_graph()
 
     @register_hook('startup')
     async def register_beanie(self):
