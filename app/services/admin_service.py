@@ -1,10 +1,14 @@
 from datetime import timedelta
-from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
+from app.definition._service import BaseMiniService, BaseService, BuildFailureError, MiniService, Service, ServiceStatus
 from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,AlreadyBlacklistedClientError
 from app.models.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
 from app.services.database_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 
+
+@MiniService
+class ClientMiniService(BaseMiniService):
+    ...
 
 @Service
 class AdminService(BaseService):
@@ -37,7 +41,6 @@ class AdminService(BaseService):
 
         return False, None
         
-
     async def blacklist(self,client: ClientORM,group:GroupClientORM,time:float):
 
         if client!=None and group == None:
@@ -58,9 +61,6 @@ class AdminService(BaseService):
         await blacklist.save()
         return blacklist
 
-
-    
-
     async def un_blacklist(self,client:ClientORM,group:GroupClientORM):
         if client!=None and group == None:
             is_blacklist,_ = await self.is_blacklisted(client)
@@ -74,7 +74,6 @@ class AdminService(BaseService):
 
         return await BlacklistORM.filter(group=group).delete()
 
-    
     def issue_auth(self,challenge:ChallengeORM,client:ClientORM,authModel):
 
         group_id = None if not client.group_id else str(client.group_id)

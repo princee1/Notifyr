@@ -162,6 +162,9 @@ class ServiceDoesNotExistError(BuildError):
 class StateProtocolMalFormattedError(BuildError):
     ...
 
+class MiniServiceCannotBeIdentifiedError(BuildError):
+    ...
+
 #################################            #####################################
 
 WAIT_TIME = .1
@@ -179,6 +182,7 @@ class BaseService():
         self.service_status: ServiceStatus = None
         self.method_not_available: set[str] = set()
         self.dependant_services:dict[Type[BaseService],BaseService] = {}
+        self.used_by_services:dict[Type[BaseService],BaseService] ={}
         self.statusLock = RWLock()
         self.stateCounter = 0
 
@@ -402,9 +406,13 @@ class BaseMiniService(BaseService):
 
     def __init__(self, depService:Self=None, id=generateId(ID_LEN)):
         super().__init__()
-
-        self.miniService_id = id
         self.depService = depService
+        self.miniService_id = id
+        if id == None:
+            if self.miniService_id!=None:
+                raise MiniServiceCannotBeIdentifiedError
+            self.miniService_id = self.depService.miniService_id
+        
     
     @property
     def write_lock(self):

@@ -76,7 +76,7 @@ class CeleryRessource(BaseHTTPRessource):
         """
         Purge a specific task from the celery queue.
         """
-        return self.celeryService.purge(queue_name=queue, task_id=task_id)
+        return
     
 
 @UseRoles([Role.REDIS_RESULT])

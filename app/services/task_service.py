@@ -5,9 +5,10 @@ import typing
 from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, Compute_cost, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
 from app.classes.celery import CeleryTask, SchedulerModel
 from app.classes.env_selector import EnvSelection, StrategyType, get_selector
-from app.definition._service import BuildFailureError, BaseService, Service, ServiceStatus,BuildWarningError
+from app.definition._service import BaseMiniService, BuildFailureError, BaseService, MiniService, Service, ServiceStatus,BuildWarningError
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.database_service import RedisService
+from app.services.profile_service import ProfileMiniService, ProfileService
 from app.utils.constant import HTTPHeaderConstant, StreamConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import ConfigService
@@ -297,20 +298,52 @@ class CeleryService(BaseService, IntervalInterface):
         await BaseService.async_pingService(self)
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
-    def purge(self,queue_name: str = None,task_id: str = None):
+    async def callback(self):
+        await self._check_workers_status()
+
+    def rate_limit(self):
+        ...
+    
+    def shutdown(self):
+        ...
+    
+    def broadcast(self):
+        ...
+
+    def stats(self):
+        ...
+
+@MiniService
+class ChannelMiniService(BaseMiniService):
+
+    def __init__(self, depService:ProfileMiniService,celeryService:CeleryService):
+        super().__init__(depService)
+        self.celeryService = celeryService
+        self.queue_name= ...
+            
+    def purge(self):
         """
         Purge the Celery queue.
         If queue_name is provided, it will purge that specific queue.
         If not, it will purge all queues.
         """
-        if queue_name:
-            count = celery_app.control.purge(queue=queue_name)
-        else:
-            count = celery_app.control.purge()
+        count = self.celeryService.celery_app.control.purge(queue=self.queue_name)
+        
         return {'message': 'Celery queue purged successfully.', 'count': count}
+    
+    def pause(self):
+        ...
 
-    async def callback(self):
-        await self._check_workers_status()
+    def resume(self):
+        ...
+
+    def delete(self):
+        ...
+    
+    def create(self):
+        ...
+
+    
 
 @Service
 class TaskService(BackgroundTasks, BaseService, SchedulerInterface):

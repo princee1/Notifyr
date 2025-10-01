@@ -1,5 +1,6 @@
 import asyncio
 from threading import Thread
+from aiorwlock import RWLock
 import injector
 from inspect import signature, getmro
 # from dependencies import __DEPENDENCY
@@ -77,12 +78,16 @@ class Container():
     def __init__(self, D: list[type],quiet=False,scopes:list[Any]=None) -> None:  # TODO add the scope option
         self.__app = injector.Injector()
         self.quiet_print = quiet
+
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
+
+        self.container_lock = RWLock()
 
         self.__D: set[str] = self.__load_baseSet(D)
         dep_count = self.__load_dep(D)
         self.__D: OrderedSet[str] = self.__order_dependency(dep_count)
+        self.D:list[Type[S]] = D
 
         PrettyPrinter_.show()
         PrettyPrinter_.message('Building the Container... !')
@@ -232,7 +237,6 @@ class Container():
         set_d = self.__load_baseSet(D)
         self.__D.update(set_d)
 
-
     def __buildContainer(self):
         D = self.__D.copy()
         while D.__len__() != 0:
@@ -358,7 +362,7 @@ class Container():
         except KeyError as e :
             raise NoResolvedDependencyError(e.args)
 
-    def __createDep(self, typ: type, params:dict):
+    def __createDep(self, typ: type, params:dict[str,S]):
         flag = issubclass(typ)
         obj: BaseService = typ(**params)
         
@@ -368,6 +372,7 @@ class Container():
             for s in params.values():
                 c = s.__class__ 
                 dep_services[c]=s
+                s.used_by_services[obj.__class__] = obj
             
             obj.dependant_services= dep_services
             willBuild = self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.FLAG_BUILD_KEY]
@@ -376,6 +381,7 @@ class Container():
         else:
             # WARNING raise we cant verify the data provided
             pass
+
         return obj
 
     def need(self, typ: Type[S]) -> Type[S]:
@@ -392,25 +398,60 @@ class Container():
         return self.get(typ)
 
     def destroyAllDependency(self, scope=None):
-        raise NotImplementedError
-        for dep in __DEPENDENCY:
-            self.destroyDep(dep, scope)
+        for dep in self.D:
+            dep._destroyer()
 
-    def destroyDep(self, typ: type, scope=None):
-        raise NotImplementedError
-        D = self.__app.get(typ, scope)
-        if issubclass(D):  # BUG need to ensure that this a Service type
-            D: BaseService = D  # NOTE access to the intellisense
-            D._destroyer()
+    def destroyDep(self, typ: type, scope=None,all=False,destroy_all:bool=False,rebuild:bool = True):
+        
+        dependency = self.get(typ, scope,all=all)
+        
+        def __destroy(dep:BaseService):
+            if destroy_all:
+                dep._destroyer()
+            if rebuild:
+                dep._builder()
 
-    def reloadDep(self, typ: type, scope=None):  # TODO
-        pass
+            for x in dep.used_by_services.values():
+                __destroy(x)
+        
+        if all: 
+            for d in dependency.values():
+                d._destroyer()
+                for sd in d.used_by_services.values():
+                    __destroy(sd)
+        else:
+            dependency._destroyer()
+            for sd in dependency.used_by_services.values():
+                    __destroy(sd)
+               
+    def reloadDep(self, typ: type, scope=None,all=True,destroy=False):
 
+        s:dict[str,BaseService] |BaseService =self.get(typ,scope,False,all)
+
+        def __reload(service:BaseService):
+            if destroy:
+                service._destroyer(False)
+            service._builder(False)
+            for used_s in service.used_by_services.values():
+                __reload(used_s)
+
+        if all:
+            for all_s in s.values():
+                __reload(all_s)
+        else:
+            __reload(s)
+        
     def register_new_dep(self,typ:type,scope= None):
         self.__add_dep([typ])
         self.__load_dep([typ])
         self.__inject(typ.__name__)
     
+
+    def show_dep_graph(self):
+        for d in self.D:
+            s:BaseService= self.get(d)
+            PrettyPrinter_.json(s.used_by_services ,saveable=False)
+
     @property
     def dependencies(self) -> list[BaseService]: return [x[DependencyConstant.TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]
@@ -430,6 +471,7 @@ class Container():
     @property
     def services_status(self):
         return {s:s.service_status for s in self.dependencies}
+
 
 CONTAINER: Container = None #Container(__DEPENDENCY)
 
