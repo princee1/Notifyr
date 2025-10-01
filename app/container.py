@@ -10,7 +10,7 @@ from app.utils.helper import issubclass_of, SkipCode
 from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
 from ordered_set import OrderedSet
-from app.definition._service import S, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from app.definition._service import S, LiaisonDependency, LinkParams, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
@@ -401,39 +401,41 @@ class Container():
         for dep in self.D:
             dep._destroyer()
 
-    def destroyDep(self, typ: type, scope=None,all=False,destroy_all:bool=False,rebuild:bool = True):
+    def destroyDep(self, typ: type, scope=None,all=False,rebuild:bool = True):
         
         dependency = self.get(typ, scope,all=all)
         
-        def __destroy(dep:BaseService):
-            if destroy_all:
+        def __destroy(dep:BaseService,linkParams:LinkParams={}):
+            if linkParams.get('destroy_follow_dep',True):
                 dep._destroyer()
-            if rebuild:
+            if rebuild and linkParams.get('rebuild',False):
                 dep._builder()
 
+            linkP =  LiaisonDependency[dep.name]
             for x in dep.used_by_services.values():
-                __destroy(x)
+                __destroy(x,linkParams=linkP)
         
         if all: 
             for d in dependency.values():
-                d._destroyer()
-                for sd in d.used_by_services.values():
-                    __destroy(sd)
+                __destroy(d)
         else:
-            dependency._destroyer()
-            for sd in dependency.used_by_services.values():
-                    __destroy(sd)
+            __destroy(d)
                
-    def reloadDep(self, typ: type, scope=None,all=True,destroy=False):
+    def reloadDep(self, typ: type, scope=None,all=True,bypass_destroy=False):
 
         s:dict[str,BaseService] |BaseService =self.get(typ,scope,False,all)
+        
+        def __reload(service:BaseService,link_params:LinkParams={}):
 
-        def __reload(service:BaseService):
-            if destroy:
+            if not bypass_destroy and link_params.get('to_destroy',True):
                 service._destroyer(False)
-            service._builder(False)
+            
+            if link_params.get('to_build',True):
+                service._builder(False,force_sync_verify=True)
+
+            linkP =  LiaisonDependency[service.name]
             for used_s in service.used_by_services.values():
-                __reload(used_s)
+                __reload(used_s,linkP)
 
         if all:
             for all_s in s.values():
@@ -446,10 +448,10 @@ class Container():
         self.__load_dep([typ])
         self.__inject(typ.__name__)
     
-
     def show_dep_graph(self):
         for d in self.D:
             s:BaseService= self.get(d)
+            PrettyPrinter_.info(f"=================================== {s.name} ===================================",saveable=False)
             PrettyPrinter_.json(s.used_by_services ,saveable=False)
 
     @property

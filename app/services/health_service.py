@@ -10,7 +10,7 @@ from app.utils.constant import ConfigAppConstant
 def resolve_notification_service(configService:ConfigService):
     return DiscordService if True else SystemNotificationService
 
-@Service
+@Service()
 class HealthService(BaseService):
     
     def __init__(self,configService:ConfigService,discordService:DiscordService,rateLimiterService:RateLimiterService):

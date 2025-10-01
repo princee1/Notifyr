@@ -20,7 +20,7 @@ MIN_OPT_IN_CODE = 100000000
 MAX_OPT_IN_CODE = 999999999
 
 
-@Service
+@Service()
 class SubscriptionService(BaseService):
 
 
@@ -62,7 +62,7 @@ class SubscriptionService(BaseService):
         return JSONResponse(content={"detail": "Subscription updated", "subscription": subs}, status_code=200)
 
 
-@Service
+@Service()
 class ContactsService(BaseService):
 
     def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService,linkService:LinkService,tortoiseConnService:TortoiseConnectionService):

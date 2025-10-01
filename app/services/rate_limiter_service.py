@@ -7,7 +7,7 @@ from app.services.database_service import RedisService
 from app.utils.fileIO import JSONFile
 
 
-@Service
+@Service()
 class RateLimiterService(BaseService):
     
     def __init__(self,configService:ConfigService,redisService:RedisService):

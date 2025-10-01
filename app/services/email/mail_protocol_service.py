@@ -41,7 +41,7 @@ from app.interface.email import EmailReadInterface, EmailSendInterface
 
 
 
-@_service.AbstractServiceClass
+@_service.AbstractServiceClass()
 class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
 
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
@@ -207,7 +207,7 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
         ...
 
 
-@_service.MiniService
+@_service.MiniService()
 class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
     # BUG cant resolve an abstract class
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
@@ -367,7 +367,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
 
 
 
-@_service.MiniService
+@_service.MiniService()
 class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
 
     @dataclass
@@ -698,5 +698,5 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
     def has_thread_capabilities(self):
         return 'THREAD=REFERENCES' in self._capabilities or 'THREAD=ORDEREDSUBJECT' in self._capabilities
 
-# @_service.ServiceClass
+# @_service.Service()Class
 

@@ -23,7 +23,7 @@ class EmailAPIService(BaseService,EmailSendInterface,EmailReadInterface):
         ...
 
 
-@MiniService
+@MiniService()
 class GMailAPIMiniService(EmailAPIService):
     def __init__(self, flowtype: GoogleFlowType, credentials):
         """
@@ -78,7 +78,7 @@ class GMailAPIMiniService(EmailAPIService):
             print(f"An error occurred: {error}")
             return []
 
-@MiniService
+@MiniService()
 class MicrosoftGraphMailAPIMiniService(EmailAPIService):
     ...
 

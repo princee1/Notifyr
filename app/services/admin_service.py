@@ -6,11 +6,11 @@ from app.services.database_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 
 
-@MiniService
+@MiniService()
 class ClientMiniService(BaseMiniService):
     ...
 
-@Service
+@Service()
 class AdminService(BaseService):
 
     def __init__(self,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService):

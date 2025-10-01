@@ -37,7 +37,7 @@ def ip_lookup_key_builder(
 
 
 
-@Service
+@Service()
 class LinkService(BaseService):
 
     def __init__(self, configService: ConfigService, redisService: RedisService, reactiveService: ReactiveService, securityService: SecurityService,tortoiseConnService:TortoiseConnectionService):

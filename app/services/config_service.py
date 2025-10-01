@@ -56,7 +56,7 @@ class ServerConfig(TypedDict):
 CeleryEnv = Literal['flower', 'worker', 'beat', 'none','purge']
 
 _celery_env_ = CeleryMode.none
-@_service.Service
+@_service.Service()
 class ConfigService(_service.BaseService):
         
     if sys.argv[0] == CELERY_EXE_PATH:

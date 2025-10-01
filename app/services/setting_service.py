@@ -13,7 +13,7 @@ SETTING_SERVICE_ASYNC_BUILD_STATE = 1
 SETTING_SERVICE_DEFAULT_SETTING_BUILD_STATE = 0
 
 
-@Service
+@Service()
 class SettingService(BaseService):
     
     def __init__(self,configService:ConfigService,jsonServerService:JSONServerDBService):

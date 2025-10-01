@@ -16,13 +16,13 @@ class AmazonSNSError(Exception):
     pass
 
 
-@Service
+@Service()
 class AmazonS3Service(BaseFileRetrieverService):
     
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
         super().__init__(configService,fileService)
 
-@MiniService
+@MiniService()
 class AmazonSESService(BaseMiniService):
     def __init__(self, configService: ConfigService) -> None:
         super().__init__()
@@ -59,7 +59,7 @@ class AmazonSESService(BaseMiniService):
         except (BotoCoreError, ClientError) as e:
             raise AmazonSESError(f"Failed to send email: {e}")
 
-@Service
+@Service()
 class AmazonSNSService(BaseService):
     def __init__(self, configService: ConfigService) -> None:
         super().__init__()

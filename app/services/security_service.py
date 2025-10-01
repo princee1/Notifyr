@@ -48,7 +48,7 @@ class EncryptDecryptInterface(Interface):
         return generate_salt()
 
 
-@Service
+@Service()
 class JWTAuthService(BaseService, EncryptDecryptInterface):
     GENERATION_ID_LEN = 32
     gen_id_path='generation-id'
@@ -254,7 +254,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
     def GENERATION_METADATA(self)->dict:
         return self.generation_id_data.get('metadata',{})
 
-@Service
+@Service()
 class SecurityService(BaseService, EncryptDecryptInterface):
 
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:

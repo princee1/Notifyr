@@ -11,7 +11,7 @@ from app.utils.constant import VaultConstant
 from .database_service import MongooseService, RedisService
 from app.models.profile_model import ErrorProfileModel, ProfileModel, SMTPProfileModel,IMAPProfileModel,TwilioProfileModel
 
-@MiniService
+@MiniService()
 class ProfileMiniService(BaseMiniService):
     
     def __init__(self,model:ProfileModel,credentials:SecretsWrapper):
@@ -19,7 +19,7 @@ class ProfileMiniService(BaseMiniService):
         self.model = model
         self.credentials = credentials
 
-@Service
+@Service()
 class ProfileService(BaseMiniServiceManager):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):

@@ -145,7 +145,7 @@ class ThreadedReader(Reader):
 
 
 @_service.PossibleDep([FTPService])
-@_service.Service
+@_service.Service()
 class AssetService(_service.BaseService):
     @inject
     def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService) -> None:

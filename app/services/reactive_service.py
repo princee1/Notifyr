@@ -76,7 +76,7 @@ class ReactiveSubject():
             if lock.locked():
                 lock.release()
 
-@Service
+@Service()
 class ReactiveService(BaseService,SchedulerInterface):
     
     def __init__(self,configService:ConfigService,loggerService:LoggerService):

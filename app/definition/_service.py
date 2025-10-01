@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 from enum import Enum
 import functools
 from typing import Any, Literal, Self, overload, Callable, Type, TypeVar, Dict
@@ -12,11 +13,14 @@ from typing import TypedDict
 from aiorwlock import RWLock
 
 
+LiaisonDependency: Dict[str,dict] = {}
 AbstractDependency: Dict[str, dict] = {}
 AbstractServiceClasses: Dict[str, type] = {}
 BuildOnlyIfDependencies: Dict = {}
 PossibleDependencies: Dict[str, list[type]] = {}
 OptionalDependencies: Dict[str, list[type]] = {}
+ManagerDependency: Dict[str,bool] = {}
+
 _CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []
 
@@ -250,7 +254,6 @@ class BaseService():
         """
         self.method_not_available = set()
         
-
     @CheckStatusBeforeHand
     async def async_pingService(self,**kwargs):
         ...
@@ -258,7 +261,6 @@ class BaseService():
     @CheckStatusBeforeHand
     def sync_pingService(self,**kwargs):
         ...
-
 
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
         # warnings.warn(
@@ -440,7 +442,6 @@ class MiniServiceStore:
     def __hasitem__(self,):
         ...
 
-
 class BaseMiniServiceManager(BaseService):
     def __init__(self):
         super().__init__()
@@ -451,23 +452,67 @@ class BaseMiniServiceManager(BaseService):
 
 S = TypeVar('S', bound=BaseService)
 
+class LinkParams(TypedDict):
+    build_follow_dep:bool
+    to_build:bool
+    to_destroy:bool
+    destroy_follow_dep:bool
+    rebuild:bool
 
-def AbstractServiceClass(cls: S) -> S:
-    if cls in __DEPENDENCY:
-        __DEPENDENCY.remove(cls)
-    AbstractServiceClasses[cls.__name__] = cls
 
-    return cls
+@dataclass
+class LinkDep:
+    service:Type[S]
+
+    build_follow_dep:bool = True
+    to_build:bool = False
+    to_destroy:bool = False
+
+    destroy_follow_dep:bool = True
+    rebuild:bool = False
 
 
-def Service(cls: Type[S]) -> Type[S]:
-    if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
-        __DEPENDENCY.append(cls)
-        _CLASS_DEPENDENCY[cls.__name__] = cls
-    return cls
 
-def MiniService(cls: Type[S])->Type[S]:
-    return cls
+    @property
+    def params(self)->LinkParams:
+        return LinkParams(
+            build_follow_dep=self.build_follow_dep,
+            to_build=self.to_build,
+            to_destroy=self.to_destroy,
+            destroy_follow_dep=self.destroy_follow_dep,
+            rebuild=self.rebuild
+        )
+            
+
+def AbstractServiceClass()->Callable[[Type[S]],Type[S]]:
+    def class_decorator(cls: Type[S])->Type[S]:
+        if cls in __DEPENDENCY:
+            __DEPENDENCY.remove(cls)
+        AbstractServiceClasses[cls.__name__] = cls
+        return cls
+    return class_decorator
+
+def Service(links:list[LinkDep]=[],is_manager = False)->Callable[[Type[S]],Type[S]]:
+
+    def class_decorator(cls: Type[S]) -> Type[S]:
+        if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
+            __DEPENDENCY.append(cls)
+            _CLASS_DEPENDENCY[cls.__name__] = cls
+        liaison = {}
+        LiaisonDependency[cls.__name__] = liaison
+        for l in links:
+            liaison[l.service] = l.params
+        ManagerDependency[cls.__name__] = is_manager
+        return cls
+    
+    return class_decorator
+
+def MiniService()->Callable[[Type[S]],Type[S]]:
+    def class_decorator(cls: Type[S])->Type[S]:
+        return cls
+    return class_decorator
+
+#################################            #####################################
 
 @overload
 def InjectWithCondition(baseClass: type, resolvedClass: type[BaseService]):
@@ -521,14 +566,11 @@ def InjectWithCondition(baseClass: type, resolvedClass: type[BaseService]):
         return cls
     return decorator
 
-
 @overload
 def InjectWithCondition(baseClass: type[BaseService], resolvedClass: Callable[..., type[BaseService]],
                         fallback: list[type[BaseService]]): pass
 
-
 # def InjectWithCondition(baseClass: type, fallback: list[type[Service]]): pass # FIXME: overload function does not work because theres already another with two variable
-
 
 @overload
 def BuildOnlyIf(flag: bool):
@@ -542,7 +584,6 @@ def BuildOnlyIf(flag: bool):
         }
         return cls
     return decorator
-
 
 @overload
 def BuildOnlyIf(func: Callable[..., bool]):
@@ -561,18 +602,15 @@ def BuildOnlyIf(func: Callable[..., bool]):
         return cls
     return decorator
 
-
 def SkipBuild(cls: Type[S]):
     decorator = BuildOnlyIf(cls)
     return decorator(False)
-
 
 def PossibleDep(dependencies: list[type[BaseService]]):
     def decorator(cls: Type[S]) -> Type[S]:
         PossibleDependencies[cls.__name__] = [d.__name__ for d in dependencies]
         return cls
     return decorator
-
 
 def OptionalDep(dependencies: list[type[BaseService]]):
     def decorator(cls: Type[S]) -> Type[S]:

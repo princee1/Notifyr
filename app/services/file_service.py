@@ -5,7 +5,7 @@ from app.utils.fileIO import FDFlag, get_file_info, readFileContent, getFd, JSON
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 
-@Service
+@Service()
 class FileService(BaseService,):
     # TODO add security layer on some file: encription,decryption
     # TODO add file watcher
@@ -48,7 +48,7 @@ class FileService(BaseService,):
     pass
 
 
-@AbstractServiceClass
+@AbstractServiceClass()
 class BaseFileRetrieverService(BaseService,IntervalInterface):
     
     def __init__(self,configService:ConfigService,fileService:FileService):
@@ -56,7 +56,7 @@ class BaseFileRetrieverService(BaseService,IntervalInterface):
         self.configService = configService
         self.fileService = fileService
     
-@Service
+@Service()
 class FTPService(BaseFileRetrieverService):
     def __init__(self, configService: ConfigService, fileService: FileService) -> None:
         super().__init__(configService,fileService)
@@ -78,7 +78,7 @@ class FTPService(BaseFileRetrieverService):
             self.ftpClient.close()
     pass
 
-@Service
+@Service()
 class GitCloneRepoService(BaseFileRetrieverService):
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
         super().__init__(configService,fileService)

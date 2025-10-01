@@ -34,7 +34,7 @@ class EmailService(_service.BaseMiniServiceManager):
         super().__init__()
         self.profilesService = profileService
 
-@_service.Service
+@_service.Service()
 class EmailSenderService(EmailService):
     # BUG cant resolve an abstract class
 
@@ -50,7 +50,7 @@ class EmailSenderService(EmailService):
     def build(self,build_state=_service.DEFAULT_BUILD_STATE):
         ...
 
-@_service.Service
+@_service.Service()
 class EmailReaderService(EmailService):
     def __init__(self, configService: ConfigService,reactiveService:ReactiveService,loggerService:LoggerService,profilesService:ProfileService) -> None:
         super().__init__(profilesService)

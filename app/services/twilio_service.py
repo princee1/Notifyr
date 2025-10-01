@@ -34,7 +34,7 @@ import asyncio
 from aiohttp import BasicAuth
 from twilio.rest.api.v2010.account import AccountInstance
 
-@_service.Service
+@_service.Service()
 class TwilioService(_service.BaseService):
     def __init__(self, configService: ConfigService,mongooseService:MongooseService,vaultService:HCVaultService) -> None:
         super().__init__()
@@ -137,7 +137,7 @@ class TwilioService(_service.BaseService):
             'adds_ons': phone_number_instance.add_ons,
         }
 
-@_service.AbstractServiceClass
+@_service.AbstractServiceClass()
 class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
     def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService) -> None:
         super().__init__()
@@ -224,7 +224,7 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
         ...
 
 
-@_service.Service
+@_service.Service()
 class SMSService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService):
@@ -309,7 +309,7 @@ class SMSService(BaseTwilioCommunication):
         self.messages
 
 
-@_service.Service
+@_service.Service()
 class CallService(BaseTwilioCommunication):
     status_callback_event = ['initiated', 'ringing', 'answered', 'completed','busy','failed','no-answer']
 

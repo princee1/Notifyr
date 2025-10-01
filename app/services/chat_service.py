@@ -2,7 +2,7 @@ from app.definition._service import Service,BaseService
 from .database_service import MongooseService
 
 
-@Service
+@Service()
 class ChatService(BaseService):
     def __init__(self,mongooseService:MongooseService) -> None:
         super().__init__()
@@ -10,7 +10,7 @@ class ChatService(BaseService):
     pass
 
 
-@Service
+@Service()
 class SupportService(BaseService):
     def __init__(self,chatService:ChatService) -> None:
         super().__init__()

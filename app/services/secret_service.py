@@ -41,7 +41,7 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
     }
 
 
-@Service
+@Service()
 class HCVaultService(BaseService,SchedulerInterface):
 
     _valid_role= {VaultConstant.MONGO_ROLE,VaultConstant.POSTGRES_ROLE}

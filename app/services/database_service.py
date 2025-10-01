@@ -114,7 +114,7 @@ class RotateCredentialsInterface(Interface):
         
         return  time.time() - self.last_rotated < self.auth_ttl
 
-@AbstractServiceClass
+@AbstractServiceClass()
 class DatabaseService(BaseService): 
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
         super().__init__()
@@ -122,7 +122,7 @@ class DatabaseService(BaseService):
         self.fileService = fileService
     
 
-@Service
+@Service()
 class RedisService(DatabaseService):
 
     class StreamConfig(TypedDict):
@@ -469,7 +469,7 @@ class RedisService(DatabaseService):
 
 D = TypeVar('D',bound=Document)
 
-@Service     
+@Service()     
 class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInterface):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
     DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
@@ -615,7 +615,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     def destroy(self, destroy_state = ...):
         self.close_connection()
     
-@Service
+@Service()
 class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
     DATABASE_NAME = 'notifyr'
 
@@ -686,7 +686,7 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
         self.check_auth()
         await super().async_pingService(**kwargs)
 
-@Service  
+@Service()  
 class JSONServerDBService(DatabaseService,SchedulerInterface):
 
     #_error_to_status = reverseDict(STATUS_TO_ERROR_MAP)

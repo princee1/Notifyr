@@ -112,7 +112,7 @@ class TaskManager():
     def schedule_ttd(self):
         return self.meta['ttd'] - self.taskConfig[0]['delay']
 
-@Service
+@Service()
 class CeleryService(BaseService, IntervalInterface):
     _celery_app = celery_app
     _task_registry = TASK_REGISTRY
@@ -313,7 +313,7 @@ class CeleryService(BaseService, IntervalInterface):
     def stats(self):
         ...
 
-@MiniService
+@MiniService()
 class ChannelMiniService(BaseMiniService):
 
     def __init__(self, depService:ProfileMiniService,celeryService:CeleryService):
@@ -345,7 +345,7 @@ class ChannelMiniService(BaseMiniService):
 
     
 
-@Service
+@Service()
 class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
     def __init__(self, configService: ConfigService, celeryService:CeleryService, redisService: RedisService):
@@ -577,7 +577,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
     def populate_response_with_request_id(self, request: Request, response: Response):
         response.headers.append(HTTPHeaderConstant.REQUEST_ID, request.state.request_id)
 
-@Service
+@Service()
 class OffloadTaskService(BaseService):
 
     def __init__(self, configService: ConfigService, celeryService: CeleryService, taskService: TaskService):
