@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Optional, Self, Type, Union, ClassVar
+from typing import Any, Optional, Self, Type, TypeVar, Union, ClassVar
 from typing_extensions import Literal
 from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
 from beanie import Document
@@ -205,6 +205,7 @@ ProfilModelValues: dict[str, Type[ProfileModel]] = {
     ProfilModelConstant.TWILIO: TwilioProfileModel,
 }
 
+P = TypeVar('P',bound=ProfileModel)
 
 ######################################################
 # Error Model

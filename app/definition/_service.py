@@ -9,8 +9,8 @@ from app.utils.helper import generateId, issubclass_of
 import warnings
 import datetime as dt
 from typing import TypedDict
-
 from aiorwlock import RWLock
+from app.errors.service_error import *
 
 
 LiaisonDependency: Dict[str,dict] = {}
@@ -52,6 +52,18 @@ class ServiceStatus(Enum):
     """
     The fact that the service does not work will not permit the program to properly run
     """
+
+#################################            #####################################
+
+
+STATUS_TO_ERROR_MAP = {
+    ServiceStatus.NOT_AVAILABLE: BuildFailureError,
+    ServiceStatus.TEMPORARY_NOT_AVAILABLE: BuildWarningError,
+    ServiceStatus.PARTIALLY_AVAILABLE: BuildWarningError,
+    ServiceStatus.WORKS_ALMOST_ATT: BuildSkipError,
+    ServiceStatus.MAJOR_SYSTEM_FAILURE:BuildAbortError
+}
+
 #################################            #####################################
 
 
@@ -82,92 +94,6 @@ class VariableProtocol(TypedDict):
     variables:dict[str,Any] = None
     variables_function:str = None
 
-class BuildReport(TypedDict):
-    ...
-
-class BuildErrorLevel(Enum):
-    ABORT = 4
-    FAILURE = 3
-    WARNING = 2
-    SKIP = 1
-#################################            #####################################
-
-
-class BuildError(BaseException):
-    def __init__(self,*args: object) -> None:
-        super().__init__(*args)
-    pass
-
-
-class BuildFailureError(BuildError):
-    pass
-
-
-class BuildAbortError(BuildError):
-    pass
-
-
-class BuildWarningError(BuildError):
-    pass
-
-
-class BuildSkipError(BuildError):
-    pass
-
-
-class BuildFallbackError(BuildError):
-    pass
-
-
-class BuildNotImplementedError(BuildError):
-    ...
-
-
-STATUS_TO_ERROR_MAP = {
-    ServiceStatus.NOT_AVAILABLE: BuildFailureError,
-    ServiceStatus.TEMPORARY_NOT_AVAILABLE: BuildWarningError,
-    ServiceStatus.PARTIALLY_AVAILABLE: BuildWarningError,
-    ServiceStatus.WORKS_ALMOST_ATT: BuildSkipError,
-    ServiceStatus.MAJOR_SYSTEM_FAILURE:BuildAbortError
-}
-
-#################################            #####################################
-
-class ServiceNotAvailableError(BuildError):
-    pass
-
-class ServiceMajorSystemFailureError(BufferError):
-    pass
-class ServiceTemporaryNotAvailableError(BuildError):
-    
-    def __init__(self, *args,service=None):
-        super().__init__(*args)
-        self.service = service
-        
-
-class MethodServiceNotAvailableError(BuildError):
-    pass
-
-class MethodServiceNotExistsError(BuildError):
-    ...
-
-class MethodServiceNotImplementedError(BuildError):
-    ...
-
-class ServiceNotImplementedError(BuildError):
-    ...
-
-class ServiceChangingStateError(BuildError):
-    ...
-
-class ServiceDoesNotExistError(BuildError):
-    ...
-
-class StateProtocolMalFormattedError(BuildError):
-    ...
-
-class MiniServiceCannotBeIdentifiedError(BuildError):
-    ...
 
 #################################            #####################################
 
@@ -247,6 +173,7 @@ class BaseService():
         Callback to check if the state of the service dependency is suffisant to run
         """
         self.method_not_available = set()
+        return True
 
     def verify_dependency(self):
         """
@@ -406,8 +333,9 @@ class BaseMiniService(BaseService):
     
     ID_LEN = 20
 
-    def __init__(self, depService:Self=None, id=generateId(ID_LEN)):
+    def __init__(self, depService:BaseService=None, id=generateId(ID_LEN)):
         super().__init__()
+        self.used_by_services:list[BaseMiniService] = []
         self.depService = depService
         self.miniService_id = id
         if id == None:
@@ -415,7 +343,9 @@ class BaseMiniService(BaseService):
                 raise MiniServiceCannotBeIdentifiedError
             self.miniService_id = self.depService.miniService_id
         
-    
+    def register(self,miniService:BaseService):
+        self.used_by_services.append(miniService)
+
     @property
     def write_lock(self):
         ...
@@ -428,19 +358,42 @@ class BaseMiniService(BaseService):
 class MiniServiceStore:
     
     def __init__(self):
-        self._store_:Dict[str,BaseMiniService] = {}
+        self._store_: Dict[str, BaseMiniService] = {}
 
-    def add(self):
-        ...
+    def add(self, miniService: BaseMiniService):
+        if miniService.miniService_id in self._store_:
+            raise MiniServiceAlreadyExistsError(f"MiniService with id '{miniService.miniService_id}' already exists.")
+        self._store_[miniService.miniService_id] = miniService
+
+    def get(self, miniService_id: str | Any):
+        if miniService_id not in self._store_:
+            raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
+        return self._store_[miniService_id]
+
+    def exists(self,miniService_id:str|Any):
+        if miniService_id not in self:
+            raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
+        return True
     
-    def get(self,):
-        ...
-    
-    def __getitem__(self,):
-        ...
-    
-    def __hasitem__(self,):
-        ...
+    def __contains__(self, miniService_id: str | Any):
+        return miniService_id in self._store_
+
+    def __delitem__(self, miniService_id: str | Any):
+        if miniService_id not in self._store_:
+            raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
+        del self._store_[miniService_id]
+
+    @property
+    def keys(self):
+        return self._store_.keys()
+
+    @property
+    def values(self):
+        return self._store_.values()
+
+    @property
+    def items(self):
+        return self._store_.items()
 
 class BaseMiniServiceManager(BaseService):
     def __init__(self):
@@ -456,8 +409,11 @@ class LinkParams(TypedDict):
     build_follow_dep:bool
     to_build:bool
     to_destroy:bool
+    to_async_verify:bool
     destroy_follow_dep:bool
     rebuild:bool
+    build_state:int = DEFAULT_BUILD_STATE
+    destroy_state:int = DEFAULT_DESTROY_STATE
 
 
 @dataclass
@@ -467,7 +423,10 @@ class LinkDep:
     build_follow_dep:bool = True
     to_build:bool = False
     to_destroy:bool = False
+    to_async_verify:bool = False
+    build_state:int = DEFAULT_BUILD_STATE
 
+    destroy_state:int = DEFAULT_DESTROY_STATE
     destroy_follow_dep:bool = True
     rebuild:bool = False
 
@@ -479,8 +438,11 @@ class LinkDep:
             build_follow_dep=self.build_follow_dep,
             to_build=self.to_build,
             to_destroy=self.to_destroy,
+            to_async_verify=self.to_async_verify,
             destroy_follow_dep=self.destroy_follow_dep,
-            rebuild=self.rebuild
+            rebuild=self.rebuild,
+            build_state=self.build_state,
+            destroy_state=self.destroy_state
         )
             
 

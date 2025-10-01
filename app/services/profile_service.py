@@ -14,10 +14,10 @@ from app.models.profile_model import ErrorProfileModel, ProfileModel, SMTPProfil
 @MiniService()
 class ProfileMiniService(BaseMiniService):
     
-    def __init__(self,model:ProfileModel,credentials:SecretsWrapper):
-        super().__init__(None, str(model.id))
-        self.model = model
-        self.credentials = credentials
+    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService, model_id:str):
+        super().__init__(None,model_id)
+        self.model = ...
+        self.credentials = ...
 
 @Service()
 class ProfileService(BaseMiniServiceManager):

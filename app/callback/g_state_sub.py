@@ -2,7 +2,7 @@ import asyncio
 import traceback
 from typing import Any
 from app.container import Get
-from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, ServiceStatus,StateProtocol, VariableProtocol
+from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, LinkParams, ServiceStatus,StateProtocol, VariableProtocol, LiaisonDependency
 from app.interface.timers import SchedulerInterface
 from app.utils.constant import SubConstant
 from app.classes.profiles import ProfileStateProtocol
@@ -43,11 +43,47 @@ async def Set_Service_Status(message:StateProtocol):
                         var_ = callback_state_function()
 
                 service.report('variable',var_,)
+        
+        async def recursive(s:BaseService):
+            for d in s.used_by_services.values():
+                linkP =  LiaisonDependency[d.name]
+                linkP:LinkParams = linkP[s.__class__]
+
+                async with d.statusLock.writer:
+                    follow:bool =  linkP.get('build_follow_dep',False)
+                    if not follow:
+                        to_build:bool = linkP.get('to_build',False)
+                        to_destroy:bool = linkP.get('to_destroy',False)
+                        to_async_verify = linkP.get('to_async_verify',False)
+                        build_state = linkP.get('build_state',DEFAULT_BUILD_STATE)
+                        destroy_state=linkP.get('destroy_state',DEFAULT_DESTROY_STATE)
+                    else:
+                        to_destroy =  message.get('to_destroy',False)
+                        to_build = message.get('to_build',False)
+                        to_async_verify = not message.get('bypass_async_verify',False)
+                        build_state = message.get('build_state',DEFAULT_BUILD_STATE)
+                        destroy_state = message.get('destroy_state',DEFAULT_DESTROY_STATE)
+
+                    if to_destroy:
+                        d._destroyer(True,destroy_state=destroy_state)
+                    
+                    if to_build:
+                        build = True
+                        if to_async_verify:
+                            build = await d.async_verify_dependency()
+                        
+                        if build:
+                            d._builder(True,build_state=build_state)              
+
+                await recursive(d)
+        await recursive(service)
 
         print("Ending...")
         return
     except Exception as e:
         traceback.print_exc()
+        print("Ending...")
+
 
 async def Set_Service_Variables(message:VariableProtocol):
     try:

@@ -10,7 +10,7 @@ from app.utils.helper import issubclass_of, SkipCode
 from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
 from ordered_set import OrderedSet
-from app.definition._service import PROCESS_SERVICE_REPORT, S, LiaisonDependency, LinkParams, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, PROCESS_SERVICE_REPORT, S, LiaisonDependency, LinkParams, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
@@ -407,12 +407,13 @@ class Container():
         
         def __destroy(dep:BaseService,linkParams:LinkParams={}):
             if linkParams.get('destroy_follow_dep',True):
-                dep._destroyer()
+                dep._destroyer(destroy_state=linkParams.get('destroy_state',DEFAULT_DESTROY_STATE))
             if rebuild and linkParams.get('rebuild',False):
-                dep._builder()
+                dep._builder(build_state=linkParams.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=True)
 
-            linkP =  LiaisonDependency[dep.name]
             for x in dep.used_by_services.values():
+                linkP =  LiaisonDependency[x.name]
+                linkP = linkP[dep.__class__]
                 __destroy(x,linkParams=linkP)
         
         if all: 
@@ -428,13 +429,14 @@ class Container():
         def __reload(service:BaseService,link_params:LinkParams={}):
 
             if not bypass_destroy and link_params.get('to_destroy',True):
-                service._destroyer(False)
+                service._destroyer(destroy_state=link_params.get('build_state',DEFAULT_DESTROY_STATE))
             
             if link_params.get('to_build',True):
-                service._builder(False,force_sync_verify=True)
+                service._builder(build_state=link_params.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=True)
 
-            linkP =  LiaisonDependency[service.name]
             for used_s in service.used_by_services.values():
+                linkP =  LiaisonDependency[used_s.name]
+                linkP = linkP[service.__class__]
                 __reload(used_s,linkP)
 
         if all:
