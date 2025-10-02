@@ -56,10 +56,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(profileModel,True)
         result = await self.profileService.add_profile(profileModel)
 
-        broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
-        broker.wait(seconds=1.2)
-        broker.propagate_state(StateProtocol(service=EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
-
+        broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,bypass_async_verify=False))
+        
         return result
 
     @PingService([HCVaultService])
@@ -72,10 +70,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
         await self.profileService.delete_profile(profileModel)
-
+        
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
-        broker.wait(seconds=1.2)
-        broker.propagate_state(StateProtocol(service=EmailSenderService,to_build=True,to_destroy=True,bypass_async_verify=False))
 
         return profileModel
     

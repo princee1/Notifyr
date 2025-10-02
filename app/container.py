@@ -404,14 +404,24 @@ class Container():
     def destroyDep(self, typ: type, scope=None,all=False,rebuild:bool = True):
         
         dependency = self.get(typ, scope,all=all)
-        
+        cache = {}
+
         def __destroy(dep:BaseService,linkParams:LinkParams={}):
+            print(dep.name)
+
+            if dep.name in cache:
+                return 
+            
             if linkParams.get('destroy_follow_dep',True):
                 dep._destroyer(destroy_state=linkParams.get('destroy_state',DEFAULT_DESTROY_STATE))
             if rebuild and linkParams.get('rebuild',False):
                 dep._builder(build_state=linkParams.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=True)
 
+            cache[dep.name] = True
+            
             for x in dep.used_by_services.values():
+                if x.name in cache:
+                    continue
                 linkP =  LiaisonDependency[x.name]
                 linkP = linkP[dep.__class__]
                 __destroy(x,linkParams=linkP)
@@ -426,15 +436,25 @@ class Container():
 
         s:dict[str,BaseService] |BaseService =self.get(typ,scope,False,all)
         
+        cache = {}
         def __reload(service:BaseService,link_params:LinkParams={}):
+            print(service.name)
 
-            if not bypass_destroy and link_params.get('to_destroy',True):
+            if service.name in cache:
+                return 
+            
+            if not bypass_destroy and link_params.get('to_destroy',False):
                 service._destroyer(destroy_state=link_params.get('build_state',DEFAULT_DESTROY_STATE))
             
-            if link_params.get('to_build',True):
+            if link_params.get('to_build',False):
                 service._builder(build_state=link_params.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=True)
 
+            cache[service.name] = True
+            
             for used_s in service.used_by_services.values():
+                if used_s.name in cache:
+                    continue
+
                 linkP =  LiaisonDependency[used_s.name]
                 linkP = linkP[service.__class__]
                 __reload(used_s,linkP)

@@ -931,13 +931,16 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
     
     return decorator
 
-def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True):
+def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None):
     if lockType not in ['reader', 'writer']:
         raise TypeError
+    
+    if miniLockType == None:
+        miniLockType = lockType
 
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status)
+        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status,as_manager=as_manager,miniLockType=miniLockType)
         if cls != None:
             return cls
 
@@ -949,13 +952,27 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                 wait_timeout = kwargs.get('wait_timeout',MIN_TIMEOUT)
                 as_async = kwargs.get('as_async',True)
                 
-                def proxy(_service:S,f:Callable):
+                def proxy(_service:BaseService|BaseMiniServiceManager,f:Callable):
                     
                     @functools.wraps(f)
                     async def delegator(*a,**k):
                         async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
                             if check_status:
                                 _service.check_status('')
+
+                            if as_manager:
+                                profile = kwargs.get('profile',None)
+                                if profile == None:
+                                    raise ProfileNotSpecifiedError
+                                if profile not in _service.MiniServiceStore:
+                                    raise ProfileTypeNotMatchRequest
+                                
+                                s:BaseMiniService = _service.MiniServiceStore.get(profile)
+
+                                async with s.statusLock.reader if miniLockType == 'reader' else _service.statusLock.writer:
+                                    if check_status:
+                                        s.check_status('')
+                    
                             return await Helper.return_result(f,a,k)
                     return delegator
                 
@@ -995,11 +1012,14 @@ def UseMiniServiceLock(services:Type[S|BaseMiniServiceManager],lockType: Literal
                     raise ProfileTypeNotMatchRequest
                 
                 _service:BaseMiniService = s.MiniServiceStore[profile]
-            
-                async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
+                async with s.statusLock.reader:
                     if check_status:
-                         _service.check_status('')
-                    return Helper.return_result(target_function,args,kwargs)
+                        s.check_status('')
+
+                    async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
+                        if check_status:
+                            _service.check_status('')
+                        return await Helper.return_result(target_function,args,kwargs)
                     
             return callback
 

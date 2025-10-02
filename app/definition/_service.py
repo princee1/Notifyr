@@ -88,6 +88,10 @@ class StateProtocol(TypedDict):
     destroy_state:int = DEFAULT_DESTROY_STATE
     force_sync_verify:bool = False
     bypass_async_verify:bool = False
+    recursive:bool = True
+
+class MiniStateProtocol(StateProtocol):
+    id:str
 
 class VariableProtocol(TypedDict):
     service:str
@@ -335,16 +339,18 @@ class BaseMiniService(BaseService):
 
     def __init__(self, depService:BaseService=None, id=generateId(ID_LEN)):
         super().__init__()
-        self.used_by_services:list[BaseMiniService] = []
         self.depService = depService
         self.miniService_id = id
         if id == None:
-            if self.miniService_id!=None:
+            if self.miniService_id == None:
                 raise MiniServiceCannotBeIdentifiedError
             self.miniService_id = self.depService.miniService_id
         
-    def register(self,miniService:BaseService):
-        self.used_by_services.append(miniService)
+        self.register()
+        
+    def register(self):
+        if self.depService != None:
+            self.depService.used_by_services[self.__class__] = self
 
     @property
     def write_lock(self):
@@ -363,14 +369,20 @@ class MiniServiceStore:
     def add(self, miniService: BaseMiniService):
         if miniService.miniService_id in self._store_:
             raise MiniServiceAlreadyExistsError(f"MiniService with id '{miniService.miniService_id}' already exists.")
+        if miniService.miniService_id == None:
+            raise MiniServiceCannotBeIdentifiedError
         self._store_[miniService.miniService_id] = miniService
 
     def get(self, miniService_id: str | Any):
+        if miniService_id == None:
+            raise MiniServiceCannotBeIdentifiedError
         if miniService_id not in self._store_:
             raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
         return self._store_[miniService_id]
 
     def exists(self,miniService_id:str|Any):
+        if miniService_id == None:
+            raise MiniServiceCannotBeIdentifiedError
         if miniService_id not in self:
             raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
         return True
@@ -383,22 +395,13 @@ class MiniServiceStore:
             raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
         del self._store_[miniService_id]
 
-    @property
-    def keys(self):
-        return self._store_.keys()
-
-    @property
-    def values(self):
-        return self._store_.values()
-
-    @property
-    def items(self):
-        return self._store_.items()
-
+    def __iter__(self):
+        return iter(self._store_.items())
+   
 class BaseMiniServiceManager(BaseService):
     def __init__(self):
         super().__init__()
-        self.MiniServiceStore:Dict[str,BaseMiniService] = {}
+        self.MiniServiceStore = MiniServiceStore()
 
     def create_miniService():
         ...
@@ -420,7 +423,7 @@ class LinkParams(TypedDict):
 class LinkDep:
     service:Type[S]
 
-    build_follow_dep:bool = True
+    build_follow_dep:bool = False
     to_build:bool = False
     to_destroy:bool = False
     to_async_verify:bool = False

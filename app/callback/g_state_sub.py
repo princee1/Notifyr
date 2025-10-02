@@ -2,21 +2,23 @@ import asyncio
 import traceback
 from typing import Any
 from app.container import Get
-from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, LinkParams, ServiceStatus,StateProtocol, VariableProtocol, LiaisonDependency
+from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseMiniServiceManager, BaseService, LinkParams, MiniStateProtocol, ServiceStatus,StateProtocol, VariableProtocol, LiaisonDependency
 from app.interface.timers import SchedulerInterface
 from app.utils.constant import SubConstant
-from app.classes.profiles import ProfileStateProtocol
 
 
 class ServiceStateScheduler(SchedulerInterface):
     ...
 
+LIFECYCLE_QUIET = False
 
-async def Set_Service_Status(message:StateProtocol):
+
+async def SetServiceStatus(message:StateProtocol,service=None):
     
     try:
         print("Starting..")
-        service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
+        if service == None:
+            service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
         
         async with service.statusLock.writer:
 
@@ -24,7 +26,7 @@ async def Set_Service_Status(message:StateProtocol):
                 service.service_status = ServiceStatus(message['status'])
         
             if message.get('to_destroy',False):
-                service._destroyer(True,message.get('destroy_state',DEFAULT_DESTROY_STATE))
+                service._destroyer(LIFECYCLE_QUIET,message.get('destroy_state',DEFAULT_DESTROY_STATE))
             
             if message.get('to_build',False):
                 build = True
@@ -32,7 +34,7 @@ async def Set_Service_Status(message:StateProtocol):
                     build = await service.async_verify_dependency()
                 
                 if build:
-                    service._builder(True,message.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=message.get('force_sync_verify',False))
+                    service._builder(LIFECYCLE_QUIET,message.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=message.get('force_sync_verify',False))
 
             if 'callback_state_function' in message and message['callback_state_function'] != None:
                 callback_state_function = getattr(service,message['callback_state_function'],None)
@@ -44,8 +46,21 @@ async def Set_Service_Status(message:StateProtocol):
 
                 service.report('variable',var_,)
         
+        cache = {}
+
+        if not message.get('recursive',True):
+            print("Ending...")
+            return 
+
         async def recursive(s:BaseService):
+            if s.name in cache:
+                return
+
             for d in s.used_by_services.values():
+
+                if d.name in cache:
+                    continue
+
                 linkP =  LiaisonDependency[d.name]
                 linkP:LinkParams = linkP[s.__class__]
 
@@ -65,7 +80,7 @@ async def Set_Service_Status(message:StateProtocol):
                         destroy_state = message.get('destroy_state',DEFAULT_DESTROY_STATE)
 
                     if to_destroy:
-                        d._destroyer(True,destroy_state=destroy_state)
+                        d._destroyer(LIFECYCLE_QUIET,destroy_state=destroy_state)
                     
                     if to_build:
                         build = True
@@ -73,9 +88,12 @@ async def Set_Service_Status(message:StateProtocol):
                             build = await d.async_verify_dependency()
                         
                         if build:
-                            d._builder(True,build_state=build_state)              
+                            d._builder(LIFECYCLE_QUIET,build_state=build_state)              
+
+                cache[d.name] = True
 
                 await recursive(d)
+
         await recursive(service)
 
         print("Ending...")
@@ -85,7 +103,7 @@ async def Set_Service_Status(message:StateProtocol):
         print("Ending...")
 
 
-async def Set_Service_Variables(message:VariableProtocol):
+async def SetServiceVariables(message:VariableProtocol):
     try:
         print("Starting..")
         service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
@@ -110,13 +128,26 @@ async def Set_Service_Variables(message:VariableProtocol):
     except Exception as e:
         traceback.print_exc()
 
-async def ProfilStatus(message:ProfileStateProtocol):
-    ...
+
+async def SetMiniProfilStatus(message:MiniStateProtocol):
+    try:
+        service = message.get('service',None)
+        if service == None:
+            return 
+        service:BaseMiniServiceManager = Get(service)
+        if not isinstance(service,BaseMiniServiceManager):
+            return 
+        miniService = service.MiniServiceStore.get(message.get('id',None))
+    except Exception:
+        return 
+    
+    return await SetServiceStatus(message,miniService)
+    
 
 async def Schedule_State_Service():
     ...
 
 G_State_Subs = {
-    SubConstant.SERVICE_STATUS:Set_Service_Status,
-    SubConstant.SERVICE_VARIABLES:Set_Service_Variables,
+    SubConstant.SERVICE_STATUS:SetServiceStatus,
+    SubConstant.SERVICE_VARIABLES:SetServiceVariables,
 }
