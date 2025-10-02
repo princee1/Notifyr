@@ -447,7 +447,14 @@ class LinkDep:
             build_state=self.build_state,
             destroy_state=self.destroy_state
         )
-            
+    
+    @staticmethod
+    def dep_liaison(cls,links):
+            liaison = {}
+            LiaisonDependency[cls.__name__] = liaison
+            for l in links:
+                liaison[l.service] = l.params
+
 
 def AbstractServiceClass()->Callable[[Type[S]],Type[S]]:
     def class_decorator(cls: Type[S])->Type[S]:
@@ -463,17 +470,15 @@ def Service(links:list[LinkDep]=[],is_manager = False)->Callable[[Type[S]],Type[
         if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
             __DEPENDENCY.append(cls)
             _CLASS_DEPENDENCY[cls.__name__] = cls
-        liaison = {}
-        LiaisonDependency[cls.__name__] = liaison
-        for l in links:
-            liaison[l.service] = l.params
+        LinkDep.dep_liaison(cls,links)
         ManagerDependency[cls.__name__] = is_manager
         return cls
     
     return class_decorator
 
-def MiniService()->Callable[[Type[S]],Type[S]]:
+def MiniService(links:list[LinkDep]=[])->Callable[[Type[S]],Type[S]]:
     def class_decorator(cls: Type[S])->Type[S]:
+        LinkDep.dep_liaison(cls,links)
         return cls
     return class_decorator
 

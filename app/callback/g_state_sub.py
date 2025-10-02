@@ -150,4 +150,5 @@ async def Schedule_State_Service():
 G_State_Subs = {
     SubConstant.SERVICE_STATUS:SetServiceStatus,
     SubConstant.SERVICE_VARIABLES:SetServiceVariables,
+    SubConstant.MINI_SERVICE_STATUS:SetMiniProfilStatus,
 }

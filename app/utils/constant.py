@@ -113,6 +113,7 @@ class SubConstant:
     SERVICE_STATUS = 'service-status'
     SERVICE_VARIABLES = 'service-variables'
     PROCESS_TERMINATE = 'process-terminate' 
+    MINI_SERVICE_STATUS = 'mini-service-status'
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'

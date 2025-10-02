@@ -41,8 +41,12 @@ class ProfileHasNotCapabilitiesError(BaseError):
     ...
 
 class ProfileTypeNotMatchRequest(BaseError):
-    ...
+    
+    def __init__(self,profile,motor_fallback, *args):
+        super().__init__(*args)
 
+        self.profile = profile
+        self.motor_fallback=motor_fallback
 class ProfileNotAllowedToUseError(BaseError):
     ...
 

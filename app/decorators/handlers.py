@@ -23,7 +23,7 @@ from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDo
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
-from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError
+from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
@@ -604,7 +604,11 @@ class ProfileHandler(Handler):
         except ProfileModelRequestBodyError as e:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,detail=e.message)
         
-
+        except ProfileTypeNotMatchRequest as e:
+            if e.motor_fallback:
+                raise DocumentDoesNotExistsError(e.profile)
+            
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     
 
 class VaultHandler(Handler):

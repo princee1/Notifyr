@@ -1,6 +1,7 @@
 import functools
 import time
 from typing import Any, Callable, Dict, Self, Type, TypeVar, TypedDict
+from urllib.parse import urlencode
 import aiohttp
 from beanie import Document, PydanticObjectId, init_beanie
 import hvac
@@ -15,12 +16,12 @@ from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInt
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
-from app.utils.helper import reverseDict
+from app.utils.helper import quote_safe_url, reverseDict
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
-from app.definition._service import DEFAULT_BUILD_STATE, STATUS_TO_ERROR_MAP, BuildFailureError, BaseService,AbstractServiceClass,Service,BuildWarningError, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError, StateProtocol
-from motor.motor_asyncio import AsyncIOMotorClient,AsyncIOMotorClientSession,AsyncIOMotorDatabase
+from app.definition._service import DEFAULT_BUILD_STATE, STATUS_TO_ERROR_MAP, BuildFailureError, BaseService,AbstractServiceClass, LinkDep,Service,BuildWarningError, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError, StateProtocol
+from motor.motor_asyncio import AsyncIOMotorClient
 from redis.asyncio import Redis
 from redis import Redis as SyncRedis
 from redis.exceptions import ResponseError
@@ -34,6 +35,7 @@ from app.utils.constant import SettingDBConstant
 from random import randint,random
 from app.models.profile_model import *
 from app.errors.db_error import *
+from pymongo import MongoClient
 
 MS_1000 = 1000
 ENGINE_KEY = 'engine'
@@ -220,6 +222,10 @@ class RedisService(DatabaseService):
             SubConstant.SERVICE_STATUS:self.StreamConfig(
                 sub=True,
                 stream=False
+            ),
+            SubConstant.MINI_SERVICE_STATUS:self.StreamConfig(
+                sub=True,
+                stream=False,
             )
         }
 
@@ -469,7 +475,9 @@ class RedisService(DatabaseService):
 
 D = TypeVar('D',bound=Document)
 
-@Service()     
+@Service(
+    links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
+)     
 class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInterface):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
     DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
@@ -492,6 +500,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
 
         self.client: AsyncIOMotorClient | None = None
         self._documents = []
+        self.mongoConstant = MongooseDBConstant()
 
     ##################################################
     # CRUD-like API (Beanie style)
@@ -533,6 +542,13 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         else:
             return is_exist
 
+    def sync_find_many(self,collection:str,filter={},projection:dict={}):
+        if collection not in self.mongoConstant.available_collection:
+            raise MongoCollectionDoesNotExists(collection)
+        
+        mongo_collection = self.sync_db[collection]
+        return mongo_collection.find(filter,projection)
+
 
     ##################################################
     # Service lifecycle
@@ -567,6 +583,11 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     def db_connection(self):
         # fetch fresh creds from Vault
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE)
+        print(self.creds)
+
+        self.sync_client = MongoClient(self.mongo_uri)
+        self.sync_db = self.sync_client[self.DATABASE_NAME]
+
         self.client = AsyncIOMotorClient(self.mongo_uri)
         self.motor_db = self.client[self.DATABASE_NAME]
 
@@ -578,6 +599,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     def close_connection(self):
         try:
             self.client.close()
+            self.sync_client.close()
         except Exception as e:
             ...
 
@@ -615,7 +637,9 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     def destroy(self, destroy_state = ...):
         self.close_connection()
     
-@Service()
+@Service(
+    links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
+)
 class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
     DATABASE_NAME = 'notifyr'
 

@@ -931,16 +931,15 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
     
     return decorator
 
-def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None):
+def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,**add_kwargs):
     if lockType not in ['reader', 'writer']:
         raise TypeError
     
     if miniLockType == None:
         miniLockType = lockType
 
-
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status,as_manager=as_manager,miniLockType=miniLockType)
+        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status,as_manager=as_manager,miniLockType=miniLockType,**add_kwargs)
         if cls != None:
             return cls
 
@@ -965,7 +964,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                                 if profile == None:
                                     raise ProfileNotSpecifiedError
                                 if profile not in _service.MiniServiceStore:
-                                    raise ProfileTypeNotMatchRequest
+                                    raise ProfileTypeNotMatchRequest(profile,add_kwargs.get('motor_fallback',False))
                                 
                                 s:BaseMiniService = _service.MiniServiceStore.get(profile)
 

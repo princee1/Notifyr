@@ -24,3 +24,6 @@ class DocumentDoesNotExistsError(BaseError):
     
 class DocumentAlreadyDeletedError(BaseError):
     ...
+
+class MongoCollectionDoesNotExists(BaseError):
+    ...
