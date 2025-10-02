@@ -11,7 +11,7 @@ PONG =b'PONG'
 @WebSocketRessource
 class PingPongWebSocket(BaseWebSocketRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,healthService:HealthService,redisService:RedisService,configService:ConfigService):
         super().__init__()
         self.healthService=healthService

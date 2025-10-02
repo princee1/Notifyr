@@ -72,7 +72,7 @@ DEFAULT_RESPONSE = {
 @HTTPRessource(EMAIL_PREFIX)
 class EmailTemplateRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,emailReaderService:EmailReaderService, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,taskService:TaskService):
         super().__init__()
         self.emailService: EmailSenderService = emailSender

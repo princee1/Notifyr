@@ -13,7 +13,7 @@ class TwilioProtocol(BaseProtocol):
 @WebSocketRessource
 class StreamVoiceWebSocket(BaseWebSocketRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,chatService:ChatService,callService:CallService):
         super().__init__()
         self.chatService = chatService

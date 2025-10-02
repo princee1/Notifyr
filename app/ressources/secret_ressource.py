@@ -8,7 +8,7 @@ from app.services.security_service import JWTAuthService
 @HTTPRessource('message')
 class CRUDSecretMessageRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,vaultService:HCVaultService,jwtAuthService:JWTAuthService):
         super().__init__()
         self.vaultService = vaultService
@@ -31,7 +31,7 @@ class CRUDSecretMessageRessource(BaseHTTPRessource):
 @HTTPRessource('vault')
 class SecretMessageRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,tortoiseConnectionService:TortoiseConnectionService):
         super().__init__()
         self.vaultService =vaultService

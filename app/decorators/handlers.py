@@ -437,7 +437,7 @@ class MotorErrorHandler(Handler):
 
 class AsyncIOHandler(Handler):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, loggerService: LoggerService):
         super().__init__()
         self.loggerService = loggerService

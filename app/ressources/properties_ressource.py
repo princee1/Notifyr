@@ -34,7 +34,7 @@ GLOBAL_KEY = 0
 @HTTPRessource(VARIABLES_ROUTE)
 class GlobalAssetVariableRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, configService: ConfigService, assetService: AssetService, awsS3Service: AmazonS3Service, ftpService: FTPService):
         super().__init__(None, None)
         self.assetService = assetService
@@ -89,8 +89,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
             globalIter.del_val(ptr)
             self.assetService.globals.save()
 
-        broker.propagate_state(StateProtocol(
-            service=self.assetService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True))
+        broker.propagate_state(StateProtocol(service=AssetService,to_build=True))
         return {"value": val}
 
     @UseLimiter(limit_value='10/hours')
@@ -122,9 +121,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
                 ptr[k] = v
 
         self.assetService.globals.save()
-        broker.propagate_state(StateProtocol(
-            service=self.assetService.name, status=ServiceStatus.NOT_AVAILABLE.value, to_build=True, to_destroy=True))
-
+        broker.propagate_state(StateProtocol(service=AssetService, to_build=True))
 
 SETTINGS_ROUTE = 'settings'
 
@@ -169,8 +166,7 @@ class SettingsRessource(BaseHTTPRessource):
             raise ValueError('REFRESH_EXPIRATION must be at least two times greater than AUTH_EXPIRATION')
 
         await self.settingService.update_setting(current_data)
-        broker.propagate_state(StateProtocol(
-            service=self.settingService.name, status=None, to_build=True, to_destroy=False, callback_state_function=self.settingService.aio_get_settings.__name__,
+        broker.propagate_state(StateProtocol(service=SettingService, status=None, to_build=True, callback_state_function=self.settingService.aio_get_settings.__name__,
             build_state=SETTING_SERVICE_ASYNC_BUILD_STATE))
         
         return current_data

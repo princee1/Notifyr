@@ -73,7 +73,7 @@ class UnRevokeGenerationIDModel(BaseModel):
 @HTTPRessource(CLIENT_PREFIX)
 class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, configService: ConfigService, securityService: SecurityService, jwtAuthService: JWTAuthService, adminService: AdminService):
         super().__init__()
         self.configService = configService
@@ -231,7 +231,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 @HTTPRessource(ADMIN_PREFIX, routers=[ClientRessource])
 class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService):
         BaseHTTPRessource.__init__(self)
         IssueAuthInterface.__init__(self,Get(AdminService))

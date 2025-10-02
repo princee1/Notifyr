@@ -20,7 +20,7 @@ from app.ressources.twilio.conversation_ressource import ConversationRessource
 @HTTPRessource('twilio',routers=[SMSRessource,CallRessource,ConversationRessource,FaxRessource])
 class TwilioRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,twilioService:TwilioService,callService:CallService) -> None:
         super().__init__()
         self.twilioService = twilioService

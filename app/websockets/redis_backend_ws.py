@@ -7,7 +7,7 @@ from app.services.task_service import CeleryService
 @WebSocketRessource
 class RedisBackendWebSocket(BaseWebSocketRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,celeryService:CeleryService):
         super().__init__()
         self.celery_service:CeleryService = celeryService

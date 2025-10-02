@@ -211,13 +211,19 @@ class Container():
     def __getAbstractResolving(self, typ: type):
         return AbstractDependency[typ.__name__]
 
-    def getSignature(self, t: type | Callable):
+    def getSignature(self, t: type | Callable,accepts_others=False):
         params = signature(t).parameters.values()
         types: list[str] = []
         paramNames: list[str] = []
         for p in params:
             if types.count(p.annotation.__name__) == 1:
                 raise MultipleParameterSameDependencyError
+            
+            if p.annotation.__name__ not in self.DEPENDENCY_MetaData and p.annotation.__name__ != '_empty':
+                if not accepts_others:
+                    raise NoResolvedDependencyError(p.annotation.__name__)
+                else:
+                    continue
 
             types.append(p.annotation.__name__)
             paramNames.append(p.name)
@@ -352,11 +358,18 @@ class Container():
             pass
         return current_type
 
-    def toParams(self, dep, params_names):
+    def toParams(self, dep, params_names,accept_others=False,scope=None):
         try:
             params = {}
             for i,d in enumerate(dep):
-                obj_dep = self.get(self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
+                if d not in self.DEPENDENCY_MetaData:
+                    if not accept_others:
+                        raise KeyError
+                    else:
+                        continue
+                    
+                cls = self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY]
+                obj_dep = self.get(cls,scope=scope)
                 params[params_names[i]] = obj_dep
             return params
         except KeyError as e :
@@ -507,7 +520,7 @@ def build_container(quiet=False,dep=__DEPENDENCY):
     global CONTAINER
     CONTAINER = Container(dep)
 
-def InjectInFunction(func: Callable):
+def InjectInFunction(accept_others=True,scope=None):
     """
     The `InjectInFunction` decorator takes the function and inspect it's signature, if the `CONTAINER` can resolve the 
     dependency it will inject the values otherwise it will throw a `NoResolvedDependencyError`. You can call the function with the position parameter 
@@ -539,17 +552,18 @@ def InjectInFunction(func: Callable):
         <__main__.A object at 0x000001A76EC3FB90>
         ok
     """
-    types, paramNames = CONTAINER.getSignature(func)  # ERROR if theres is other parameter that is not in dependencies
-    paramsToInject = CONTAINER.toParams(types, paramNames)
+    def decorator(func: Callable):
+        types, paramNames = CONTAINER.getSignature(func,accept_others)  # ERROR if theres is other parameter that is not in dependencies
+        paramsToInject = CONTAINER.toParams(types, paramNames,accept_others,scope)
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            paramsToInject.update(kwargs)
+            return func(*args,**paramsToInject)
+        return wrapper
+    return decorator
 
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        paramsToInject.update(kwargs)
-        return func(**paramsToInject)
-    return wrapper
 
-
-def InjectInMethod(func: Callable):
+def InjectInMethod(accept_others=False,scope=None):
     """
     The `InjectInConstructor` decorator takes the __init__ function from a class and inspect it's signature, if the `CONTAINER` can resolve the 
     dependency it will inject the values otherwise it will throw a `NoResolvedDependencyError`. You must call the function with the position parameter 
@@ -594,16 +608,17 @@ def InjectInMethod(func: Callable):
     >>> TypeError: Test.__init__() missing 2 required positional arguments: 'securityService' and 'test'
 
     """
-    types, paramNames = CONTAINER.getSignature(func) # ERROR if the function is not a method and if theres is other parameter that is not in depencies
-    del types[0]
-    del paramNames[0]
-    paramsToInject = CONTAINER.toParams(types, paramNames)
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        paramsToInject.update(kwargs)
-        return func(*args, **paramsToInject)
-    return wrapper
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            types, paramNames = CONTAINER.getSignature(func,accept_others) # ERROR if the function is not a method and if theres is other parameter that is not in depencies
+            del types[0]
+            del paramNames[0]
+            paramsToInject = CONTAINER.toParams(types, paramNames,accept_others,scope)
+            paramsToInject.update(kwargs)
+            return func(*args, **paramsToInject)
+        return wrapper
+    return decorator
 
 def Injectable(scope: Any |None = None ):
     def class_decorator(cls:type) -> type:

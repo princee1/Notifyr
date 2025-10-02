@@ -29,7 +29,7 @@ SUPPORT_PREFIX = 'support'
 @HTTPRessource(prefix=SUPPORT_PREFIX,websockets=[ChatWebSocket])
 class SupportRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,jwtAuthService:JWTAuthService, configService: ConfigService,contactService:ContactsService,celeryService:CeleryService):
         super().__init__()
         self.contactService = contactService

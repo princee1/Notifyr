@@ -39,7 +39,7 @@ SMS_ONGOING_PREFIX = 'ongoing'
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(SMS_ONGOING_PREFIX)
 class OnGoingSMSRessource(BaseHTTPRessource):
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, smsService: SMSService,chatService:ChatService,contactService:ContactsService,configService:ConfigService,offloadService:OffloadTaskService) -> None:
         super().__init__()
         self.smsService: SMSService = smsService
@@ -153,7 +153,7 @@ SMS_INCOMING_PREFIX = "incoming"
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(SMS_INCOMING_PREFIX )
 class IncomingSMSRessource(BaseHTTPRessource):
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,smsService:SMSService,contactsService:ContactsService,chatService:ChatService,redisService:RedisService) -> None:
         self.smsService: SMSService = smsService
         self.contactsService: ContactsService = contactsService

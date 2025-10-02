@@ -228,7 +228,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
     def build_operation_id(path:str,name:str):
         return path.replace(PATH_SEPARATOR, "_")
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,jwtAuthService:JWTAuthService):
         self.connection_manager:dict[str,WSConnectionManager] = {}
         self.protocol:dict[str,Callable]={}

@@ -39,7 +39,7 @@ get_contacts = Get_Contact(False,False)
 @HTTPRessource(CALL_ONGOING_PREFIX)
 class OnGoingCallRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, callService: CallService, chatService: ChatService, contactsService: ContactsService) -> None:
         self.callService = callService
         self.chatService = chatService
@@ -221,7 +221,7 @@ CALL_INCOMING_PREFIX = "incoming"
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CALL_INCOMING_PREFIX)
 class IncomingCallRessources(BaseHTTPRessource):
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, callService: CallService, chatService: ChatService, contactsService: ContactsService, loggerService: LoggerService,reactiveService:ReactiveService) -> None:
         self.callService = callService
         self.chatService = chatService

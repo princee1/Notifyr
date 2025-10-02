@@ -42,7 +42,7 @@ get_contacts = Get_Contact(False,False)
 @HTTPRessource(SUBSCRIPTION_PREFIX)
 class ContentSubscriptionRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,contactsService:ContactsService,subscriptionService:SubscriptionService):
         super().__init__()
         self.contactsService = contactsService
@@ -88,7 +88,7 @@ class ContentSubscriptionRessource(BaseHTTPRessource):
 @HTTPRessource(CONTACTS_SUBSCRIPTION_PREFIX)
 class ContactsSubscriptionRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, contactService: ContactsService, subscriptionService: SubscriptionService):
         super().__init__()
         self.contactService = contactService
@@ -171,7 +171,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
 @HTTPRessource(CONTACTS_SECURITY_PREFIX)
 class ContactSecurityRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,securityService:SecurityService,jwtService:JWTAuthService,contactsService:ContactsService,celeryService:CeleryService ):
         super().__init__()
         self.securityService = securityService
@@ -230,7 +230,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 @PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
 class ContactsCRUDRessource(BaseHTTPRessource):
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: TaskService, emailService: EmailSenderService, smsService: SMSService):
         super().__init__()
         self.contactsService = contactsService

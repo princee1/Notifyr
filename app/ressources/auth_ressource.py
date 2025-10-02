@@ -40,7 +40,7 @@ AUTH_PREFIX = 'auth'
 @HTTPRessource(REFRESH_AUTH_PREFIX)
 class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,adminService:AdminService,twilioService:TwilioService):
         BaseHTTPRessource.__init__(self)
         IssueAuthInterface.__init__(self,adminService)
@@ -116,7 +116,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     admin_roles = [Role.ADMIN,Role.CUSTOM,Role.CONTACTS,Role.SUBSCRIPTION,Role.REFRESH,Role.CLIENT,Role.PUBLIC]
     twilio_roles = admin_roles + [Role.TWILIO]
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,adminService:AdminService,configService:ConfigService,jwtAuthService:JWTAuthService,twilioService:TwilioService):
         BaseHTTPRessource.__init__(self)
         #BaseHTTPRessource.__init__(self,dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])

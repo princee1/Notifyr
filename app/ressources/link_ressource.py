@@ -53,7 +53,7 @@ async def get_link_cache(link_id:str,)->LinkORM:
 @HTTPRessource(LINK_MANAGER_PREFIX)
 class CRUDLinkRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,configService:ConfigService,linkService:LinkService):
         super().__init__()
         self.configService = configService
@@ -159,7 +159,7 @@ LINK_PREFIX='link'
 @HTTPRessource(LINK_PREFIX,routers=[CRUDLinkRessource])
 class LinkRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,configService:ConfigService,redisService:RedisService,linkService:LinkService,contactService:ContactsService):
         super().__init__()
         self.configService = configService

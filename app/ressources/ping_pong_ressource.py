@@ -32,7 +32,7 @@ PING_PONG_PREFIX = 'ping-pong'
 @HTTPRessource(prefix=PING_PONG_PREFIX, websockets=[PingPongWebSocket])
 class PingPongRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService,taskService:TaskService,celeryService:CeleryService):
         super().__init__()
 

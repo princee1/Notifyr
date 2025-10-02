@@ -51,7 +51,7 @@ class RegisterSchedulerPipe(Pipe):
 
 class AuthPermissionPipe(Pipe):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,jwtAuthService:JWTAuthService):
         super().__init__(True)
         self.jwtAuthService = jwtAuthService
@@ -198,7 +198,7 @@ class TwilioPhoneNumberPipe(Pipe):
 
 class AuthClientPipe(Pipe):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,jwtAuthService:JWTAuthService):
         super().__init__(True)
         self.jwtAuthService = jwtAuthService

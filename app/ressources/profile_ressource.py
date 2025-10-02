@@ -9,7 +9,7 @@ from app.decorators.handlers import AsyncIOHandler, MotorErrorHandler, ProfileHa
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe
 from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
-from app.definition._service import StateProtocol
+from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.class_dep import Broker
 from app.depends.dependencies import get_auth_permission
 from app.models.profile_model import ErrorProfileModel, ProfilModelValues, ProfileModel,PROFILE_TYPE_KEY
@@ -26,8 +26,7 @@ PROFILE_PREFIX = 'profile'
 @PingService([MongooseService])
 @UseServiceLock(MongooseService,lockType='reader')
 @UseRoles([Role.ADMIN])
-@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,ProfileHandler)
-@UseHandler(MotorErrorHandler)
+@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MotorErrorHandler,ProfileHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('will be overwritten')
 class BaseProfilModelRessource(BaseHTTPRessource):
@@ -36,7 +35,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     model_creds:Type[ProfileModel | Document]
     profileType:str
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService):
         super().__init__()
         self.profileService = profileService
@@ -63,6 +62,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @PingService([HCVaultService])
     @UseHandler(VaultHandler)
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(ProfileService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
@@ -84,6 +84,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseServiceLock(ProfileService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @HTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def update_profile(self,profile:str,request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -94,10 +95,14 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         modelUpdate = modelUpdate.model_dump()
 
         await self.profileService.update_profile(profileModel,modelUpdate)
+        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile))
+
         return await self.profileService.update_meta_profile(profileModel)
+    
 
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(ProfileService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler)
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
@@ -112,6 +117,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.profileService.update_credentials(profile,modelCreds)
         await self.profileService.update_meta_profile(profileModel)
 
+        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,to_build=True))
         return None
        
     @classmethod
@@ -158,7 +164,7 @@ def generate_profil_model_ressource(model:Type[ProfileModel],path:str):
 @HTTPRessource(PROFILE_PREFIX,[generate_profil_model_ressource(model,name) for name,model  in ProfilModelValues.items()])
 class ProfilRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,mongooseService:MongooseService):
         super().__init__()
         self.mongooseService = mongooseService

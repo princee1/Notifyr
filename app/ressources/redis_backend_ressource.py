@@ -29,7 +29,7 @@ BACKGROUND_PREFIX  = 'background'
 @HTTPRessource(prefix=CELERY_PREFIX)
 class CeleryRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,celeryService:CeleryService,configService:ConfigService,jwtService:JWTAuthService):
         super().__init__(None,None)
         self.celeryService:CeleryService = celeryService
@@ -86,7 +86,7 @@ class CeleryRessource(BaseHTTPRessource):
 @HTTPRessource(prefix=BACKGROUND_PREFIX)
 class BackgroundTaskRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,redisService:RedisService,configService:ConfigService,taskService:TaskService):
         super().__init__()
         self.redisService = redisService
