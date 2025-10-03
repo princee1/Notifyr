@@ -6,7 +6,7 @@ from app.classes.broker import MessageBroker, SubjectType,exception_to_json
 from app.classes.celery import SchedulerModel
 from app.classes.mail_provider import get_email_provider_name
 from app.definition._error import ServerFileError
-from app.definition._service import ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
+from app.definition._service import BaseMiniServiceManager, MiniStateProtocol, ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
 from app.depends.dependencies import get_request_id
 from app.models.call_model import BaseVoiceCallModel
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
@@ -26,7 +26,7 @@ from app.services.reactive_service import ReactiveService, ReactiveType,Disposab
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from time import perf_counter,time
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
-from app.utils.helper import get_value_in_list, uuid_v1_mc,UUID
+from app.utils.helper import get_value_in_list, issubclass_of, uuid_v1_mc,UUID
 from datetime import datetime, timedelta, timezone
 import random
 
@@ -378,13 +378,20 @@ class Broker:
 
         self.backgroundTasks.add_task(self.redisService.stream_data,channel,value)
     
-    def propagate_state(self,protocol:StateProtocol):
+    def propagate_state(self,protocol:StateProtocol|MiniStateProtocol):
 
-        if isinstance(protocol['service'],type):
+        if isinstance(protocol.get('service',None),type):
             protocol['service'] = protocol['service'].__name__
 
         if protocol['service'] not in _CLASS_DEPENDENCY.keys():
             raise ServiceDoesNotExistError
+        
+        if protocol.get('id',None) != None:
+            sub_queue = SubConstant.MINI_SERVICE_STATUS
+            if not issubclass_of(BaseMiniServiceManager,_CLASS_DEPENDENCY[protocol['service']]):
+                raise StateProtocolMalFormattedError('Service is not a MiniServiceManager')
+        else:
+            sub_queue = SubConstant.SERVICE_STATUS
 
         try:
             if protocol.get('status',None) is not None:
@@ -392,7 +399,7 @@ class Broker:
         except:
             raise StateProtocolMalFormattedError
 
-        self.backgroundTasks.add_task(self.redisService.publish_data,SubConstant.SERVICE_STATUS,protocol)
+        self.backgroundTasks.add_task(self.redisService.publish_data,sub_queue,protocol)
 
     def update_profile_state(self,protocol):
         

@@ -445,8 +445,8 @@ class BaseMiniServiceManager(BaseService):
         p = mss.get(kwargs.get('__profile__',None))
         return p.sync_pingService(**kwargs)
     
-    def create_miniService():
-        ...
+    def __getitem__(self,miniServiceId:str):
+        return self.MiniServiceStore.get(miniServiceId)
 
 S = TypeVar('S', bound=BaseService)
 

@@ -37,7 +37,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
             data[k]= self.vaultService.transit_engine.decrypt(v,VaultConstant.PROFILES_KEY)
         self.credentials =  SecretsWrapper(data)
     
-    async def async_build(self):
+    async def async_create_profile(self):
         print('Template Profile Model:', TModel)
         self.model = await self.mongooseService.get(self.model.__class__,self.miniService_id)
         self._read_encrypted_creds()

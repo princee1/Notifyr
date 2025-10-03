@@ -111,10 +111,10 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.ContactsHandler(),handlers.ProfileHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
-    @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService))
+    @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'))
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('html','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('html','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{profile}/{template}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
-    async def send_emailTemplate(self,profile:Annotated[EmailSendInterface,Depends(get_profile)], template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
+    async def send_emailTemplate(self,profile:str,email:Annotated[EmailSendInterface,Depends(get_profile)],template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
         signature:Tuple[str,str]|None = scheduler._signature
         for mail_content in scheduler.content:
@@ -139,7 +139,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 mail_content.meta._Message_ID = tracker.make_msgid
 
             meta = mail_content.meta.model_dump(mode='python',exclude=self.exclude_meta)
-            await taskManager.offload_task(len(To),0,index,profile.sendTemplateEmail,datas, meta, template.images)
+            await taskManager.offload_task(len(To),0,index,email.sendTemplateEmail,datas, meta, template.images)
         return taskManager.results
     
     @UseLimiter(limit_value='10000/minutes')
@@ -147,12 +147,12 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @PingService([CeleryService,ProfileService,EmailSenderService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.JWTSignatureAssetPermission())
-    @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService))
+    @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @BaseHTTPRessource.HTTPRoute("/custom/{profile}/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
-    async def send_customEmail(self,profile:Annotated[EmailSendInterface,Depends(get_profile)], scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+    async def send_customEmail(self,profile:str,email:Annotated[EmailSendInterface,Depends(get_profile)], scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         signature:Tuple[str,str] = scheduler._signature
           
         for customEmail_content in scheduler.content:
@@ -185,7 +185,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
                 customEmail_content.meta._Message_ID = tracker.make_msgid
 
             meta = customEmail_content.meta.model_dump(mode='python',exclude=self.exclude_meta)
-            await taskManager.offload_task(len(To),0,index,profile.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
+            await taskManager.offload_task(len(To),0,index,email.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments)
         return taskManager.results
     
     @UseRoles(options=[MustHave(Role.ADMIN)])

@@ -5,8 +5,9 @@ import typing
 from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, Compute_cost, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
 from app.classes.celery import CeleryTask, SchedulerModel
 from app.classes.env_selector import EnvSelection, StrategyType, get_selector
-from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BuildFailureError, BaseService, LinkDep, MiniService, Service, ServiceStatus,BuildWarningError
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BuildFailureError, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus,BuildWarningError
 from app.interface.timers import IntervalInterface, SchedulerInterface
+from app.models.profile_model import ProfileModel
 from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.utils.constant import HTTPHeaderConstant, StreamConstant
@@ -315,10 +316,13 @@ class CeleryService(BaseService, IntervalInterface):
 @MiniService()
 class ChannelMiniService(BaseMiniService):
 
-    def __init__(self, depService:ProfileMiniService,celeryService:CeleryService):
+    def __init__(self, depService:ProfileMiniService[ProfileModel],celeryService:CeleryService):
+        self.depService = depService
         super().__init__(depService,None)
         self.celeryService = celeryService
-        self.queue_name= ...
+    
+    def build(self, build_state = ...):
+        return super().build(build_state)
         
     def purge(self):
         """
@@ -326,7 +330,7 @@ class ChannelMiniService(BaseMiniService):
         If queue_name is provided, it will purge that specific queue.
         If not, it will purge all queues.
         """
-        count = self.celeryService.celery_app.control.purge(queue=self.queue_name)
+        count = self.celeryService.celery_app.control.purge(queue=self.miniService_id)
         
         return {'message': 'Celery queue purged successfully.', 'count': count}
     
@@ -346,7 +350,7 @@ CHANNEL_BUILD_STATE=0
 @Service(
     links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
 )
-class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
+class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
 
     def __init__(self, configService: ConfigService, celeryService:CeleryService, redisService: RedisService,profileService:ProfileService):
         self.configService = configService
@@ -361,8 +365,10 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         self.route_lock = RWLock()
         self.server_load: dict[TaskHeaviness, int] = {t: 0 for t in TaskHeaviness._value2member_map_.values()}
         super().__init__(None)
-        BaseService.__init__(self)
+        BaseMiniServiceManager.__init__(self)
         SchedulerInterface.__init__(self)
+
+        self.MiniServiceStore = MiniServiceStore[ChannelMiniService]()
 
     def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool,retry:bool,split:bool,algorithm:AlgorithmType,strategy:StrategyType)->TaskManager:
         meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy)
@@ -448,6 +454,14 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
                 self.background_task_count = Gauge('background_task','Active Background Working Task')
             except:
                 raise BuildWarningError
+        
+        for id,p in self.profileService.MiniServiceStore:
+            self.MiniServiceStore.add(
+                ChannelMiniService(
+                    p,
+                    self.celeryService
+                )
+            )
         
     def _compute_ttd(self,):
         return 0
