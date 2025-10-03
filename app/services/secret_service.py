@@ -239,8 +239,8 @@ class HCVaultService(BaseService,SchedulerInterface):
         return self.tokens.get('CLIENT_PASSWORD_HASH_KEY',None)
     
     @property
-    def RSA_PASSWORD(self):
-        return self.tokens.get('RSA_PASSWORD',None)
+    def RSA_SECRET_PASSWORD(self):
+        return self.tokens.get('RSA_SECRET_PASSWORD',None)
 
 
     

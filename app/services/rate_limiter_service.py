@@ -4,16 +4,18 @@ from app.services.config_service import MODE, ConfigService
 from slowapi import Limiter
 from slowapi.util import get_remote_address, get_ipaddr
 from app.services.database_service import RedisService
+from app.services.file_service import FileService
 from app.utils.fileIO import JSONFile
 
 
 @Service()
 class RateLimiterService(BaseService):
     
-    def __init__(self,configService:ConfigService,redisService:RedisService):
+    def __init__(self,configService:ConfigService,redisService:RedisService,fileService:FileService):
         super().__init__()
         self.configService = configService
         self.redisService = redisService
+        self.fileService = fileService
 
         self.RATE_LIMITS_PATH = Path("/run/secrets/rate_limits")
 

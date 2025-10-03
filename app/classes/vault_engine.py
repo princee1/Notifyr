@@ -184,18 +184,16 @@ class TransitVaultEngine(VaultEngine):
             plaintext=encoded_text,
             mount_point=self.mount_point
         )
-        print("Encrypted:", encrypt_response)
         if ciphertext_only:
             return encrypt_response['data']['ciphertext']
         return encrypt_response
     
-    def decrypt(self, ciphertext: str, key: VaultConstant.NotifyrTransitKeyType,plaintext_only):
+    def decrypt(self, ciphertext: str, key: VaultConstant.NotifyrTransitKeyType,plaintext_only=True):
         decrypted_response = self.client.secrets.transit.decrypt_data(
             name=key,
             ciphertext=ciphertext,
             mount_point=self.mount_point
         )
-        print("Decrypted:", decrypted_response)
         if plaintext_only:
             encoded_response = decrypted_response['data']['plaintext']
             return b64_decode(encoded_response)

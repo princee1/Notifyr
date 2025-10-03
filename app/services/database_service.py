@@ -542,14 +542,18 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         else:
             return is_exist
 
-    def sync_find_many(self,collection:str,filter={},projection:dict={}):
+    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={})->list[D]:
+        
+        filter['_class_id'] = {"$regex": f"{model.__name__}$" }
+    
         if collection not in self.mongoConstant.available_collection:
             raise MongoCollectionDoesNotExists(collection)
-        
+
         mongo_collection = self.sync_db[collection]
-        return mongo_collection.find(filter,projection)
+        docs = mongo_collection.find(filter,projection).to_list()
 
-
+        return [model.model_construct(**doc) for doc in docs]
+       
     ##################################################
     # Service lifecycle
     ##################################################
@@ -583,8 +587,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     def db_connection(self):
         # fetch fresh creds from Vault
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE)
-        print(self.creds)
-
+        
         self.sync_client = MongoClient(self.mongo_uri)
         self.sync_db = self.sync_client[self.DATABASE_NAME]
 
@@ -681,7 +684,6 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
 
     def generate_creds(self):
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE)
-        print(self.creds)
         
     @property
     def postgres_uri(self):

@@ -171,6 +171,7 @@ class Application(EventInterface):
     async def on_startup(self):
 
         BaseService.CONTEXT = 'async'
+        BaseService.CONTAINER_LIFECYCLE_SCOPE = False
 
         redisService = Get(RedisService)
         

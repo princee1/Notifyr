@@ -163,6 +163,7 @@ class MongooseDBConstant:
 
         for x in dir(self.__class__):
             if x.endswith('_COLLECTION'):
+                x = getattr(self.__class__,x)
                 self.available_collection.append(x)
             
 ########################                     ########################################

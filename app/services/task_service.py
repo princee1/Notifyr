@@ -5,7 +5,7 @@ import typing
 from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, Compute_cost, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
 from app.classes.celery import CeleryTask, SchedulerModel
 from app.classes.env_selector import EnvSelection, StrategyType, get_selector
-from app.definition._service import BaseMiniService, BuildFailureError, BaseService, MiniService, Service, ServiceStatus,BuildWarningError
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BuildFailureError, BaseService, LinkDep, MiniService, Service, ServiceStatus,BuildWarningError
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
@@ -320,7 +320,7 @@ class ChannelMiniService(BaseMiniService):
         super().__init__(depService)
         self.celeryService = celeryService
         self.queue_name= ...
-            
+        
     def purge(self):
         """
         Purge the Celery queue.
@@ -343,15 +343,17 @@ class ChannelMiniService(BaseMiniService):
     def create(self):
         ...
 
-    
-
-@Service()
+CHANNEL_BUILD_STATE=0
+@Service(
+    links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
+)
 class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
 
-    def __init__(self, configService: ConfigService, celeryService:CeleryService, redisService: RedisService):
+    def __init__(self, configService: ConfigService, celeryService:CeleryService, redisService: RedisService,profileService:ProfileService):
         self.configService = configService
         self.redisService = redisService
         self.celeryService = celeryService
+        self.profileService = profileService
 
         self.running_background_tasks_count = 0
         self.running_route_handler = 0
@@ -438,15 +440,16 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
             'index':index,
                 'message': f"[{name}] - Task added successfully", 'heaviness': str(scheduler.heaviness), 'estimate_tbd': naturaldelta(new_delay),}
 
-    def build(self,build_state=-1):
-        try:
-            self.connection_count = Gauge('http_connections','Active Connection Count')
-            self.request_latency = Histogram("http_request_duration_seconds", "Request duration in seconds")
-            self.connection_total = Counter('total_http_connections','Total Request Received')
-            self.background_task_count = Gauge('background_task','Active Background Working Task')
-        except:
-            raise BuildWarningError
-
+    def build(self,build_state=DEFAULT_BUILD_STATE):
+        if build_state == DEFAULT_BUILD_STATE:
+            try:
+                self.connection_count = Gauge('http_connections','Active Connection Count')
+                self.request_latency = Histogram("http_request_duration_seconds", "Request duration in seconds")
+                self.connection_total = Counter('total_http_connections','Total Request Received')
+                self.background_task_count = Gauge('background_task','Active Background Working Task')
+            except:
+                raise BuildWarningError
+        
     def _compute_ttd(self,):
         return 0
 

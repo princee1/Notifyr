@@ -34,6 +34,7 @@ def generate_salt(length=64):
 class EncryptDecryptInterface(Interface):
 
     def _encode_value(self, value: str, key: bytes | str) -> str:
+        print(key)
         value = base64.b64encode(value.encode()).decode()
         cipher_suite = Fernet(key)
         return cipher_suite.encrypt(value.encode()).decode()

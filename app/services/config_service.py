@@ -265,4 +265,7 @@ class ConfigService(_service.BaseService):
                                           team=config.team)
     @property
     def pool(self):
-        return self.server_config["team"] == 'team'
+        if self.server_config['team'] == 'solo':
+            return self.server_config['workers'] > 1
+        else:
+            return True

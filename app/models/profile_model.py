@@ -15,7 +15,7 @@ from app.utils.helper import phone_parser
 # Type aliases
 ProfileType = Literal["email", "twilio"]
 ServiceMode = Literal["smtp", "aws", "api", "imap"]
-SMTPConnMode = Literal["tls", "ssl", "normal"]
+ProtocolConnMode = Literal["tls", "ssl", "normal"]
 
 PROFILE_TYPE_KEY = 'profileType'
 
@@ -63,7 +63,7 @@ class EmailProfileModel(ProfileModel):
 
 class ProtocolProfileModel(EmailProfileModel):
     username: Optional[str] = None
-    conn_method: SMTPConnMode
+    conn_method: ProtocolConnMode
     email_host: EmailHostConstant
     server: Optional[str] = None
     port: Optional[int] = None
@@ -102,7 +102,7 @@ class SMTPProfileModel(ProtocolProfileModel):
     from_emails: list[str] = Field(default_factory=list)
     password: Optional[str]= None
     oauth_tokens: Optional[ProfileModelAuthToken | Any] = None
-
+    auth_mode:Literal['password','oauth'] = 'password'
     _secret_key: ClassVar[list[str]] = ["password","oauth_tokens"]
 
     @field_validator('password')

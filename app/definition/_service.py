@@ -11,8 +11,9 @@ import datetime as dt
 from typing import TypedDict
 from aiorwlock import RWLock
 from app.errors.service_error import *
+from typing import Generic, TypeVar
 
-
+MiniServiceMeta: list[tuple[Type,Any]] = []
 LiaisonDependency: Dict[str,dict] = {}
 AbstractDependency: Dict[str, dict] = {}
 AbstractServiceClasses: Dict[str, type] = {}
@@ -23,7 +24,11 @@ ManagerDependency: Dict[str,bool] = {}
 
 _CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []
+__MINI_SERVICE_DEPENDENCY =[ ] 
 
+
+DEFAULT_ASYNC_BUILD_STATE = -2
+DEFAULT_ASYNC_DESTROY_STATE = -2
 
 DEFAULT_BUILD_STATE = -1
 DEFAULT_DESTROY_STATE = -1
@@ -107,6 +112,7 @@ ACCEPTABLE_STATES = {ServiceStatus.AVAILABLE, ServiceStatus.PARTIALLY_AVAILABLE,
 
 class BaseService():
     CONTEXT:Literal['sync','async'] = 'sync'
+    CONTAINER_LIFECYCLE_SCOPE:bool = True
 
     def __init__(self) -> None:
         self.build_status: BuildErrorLevel = None
@@ -166,8 +172,8 @@ class BaseService():
             self:BaseService = args[0]
 
             async with self.statusLock.reader as lock:
-
                 self.check_status(func.__name__)
+                
             return await func(*args, **kwargs)
         
         return async_wrapper if asyncio.iscoroutinefunction(func) else  sync_wrapper
@@ -229,6 +235,9 @@ class BaseService():
     
     # TODO Dependency that use service with failed might not properly, need to handle the view
     def _builder(self,quiet:bool=False,build_state:int = -1,force_sync_verify:bool=False):
+        
+        is_mini_service =f'Mini service ID: ({self.miniService_id})- ' if isinstance(self,BaseMiniService) else ''
+        reason = 'Service Built'
         try:
             now = dt.datetime.now()
             
@@ -247,56 +256,65 @@ class BaseService():
                     raise STATUS_TO_ERROR_MAP[self.service_status](f'Service {self.__class__.__name__} has status {self.service_status} after build')
             else:
                 if not quiet:
+                    self.service_status = ServiceStatus.AVAILABLE
                     self.prettyPrinter.success(
-                        f'[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
-            if not quiet:
+                        f'{is_mini_service}[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
+            
+            if self.CONTAINER_LIFECYCLE_SCOPE:
                 self.prettyPrinter.wait(self.pretty_print_wait_time, False)
             
-            reason = 'Service Built'
         except BuildFailureError as e:
-            self.prettyPrinter.error(
-                f'[{now}] Error while building the service: {self.__class__.__name__}. Service using this dependency will not function properly', saveable=True)
+            if not quiet:
+                self.prettyPrinter.error(f'{is_mini_service}[{now}] Error while building the service: {self.__class__.__name__}. Service using this dependency will not function properly', saveable=True)
+
             self.service_status = ServiceStatus.NOT_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
         except BuildAbortError as e:
-            self.prettyPrinter.error(
-                f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
+            if not quiet:
+                self.prettyPrinter.error(
+                    f'{is_mini_service}[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
             print(e)
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
-            exit(-1)
+            if self.CONTAINER_LIFECYCLE_SCOPE:
+                exit(-1)
 
         except BuildWarningError as e:
             # TODO might to change the color because of the error since, it will be for malfunction dependent service
-            self.prettyPrinter.warning(
-                f'[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
+            if not quiet:
+                self.prettyPrinter.warning(
+                    f'{is_mini_service}[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
-            self.prettyPrinter.info(
-                f'[{now}] Slight Problem encountered while building the service: {self.__class__.__name__}', saveable=True)
+            if not quiet:
+                self.prettyPrinter.info(
+                    f'{is_mini_service}[{now}] Slight Problem encountered while building the service: {self.__class__.__name__}', saveable=True)
             self.service_status = ServiceStatus.WORKS_ALMOST_ATT
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
             pass
 
         except BuildNotImplementedError as e:
-            self.prettyPrinter.warning( # TODO change color
-                f'[{now}] Service Not Implemented Yet: {self.__class__.__name__} ', saveable=True)
-            self.prettyPrinter.wait(WAIT_TIME, False)
+            if not quiet:
+                self.prettyPrinter.warning( # TODO change color
+                    f'{is_mini_service}[{now}] Service Not Implemented Yet: {self.__class__.__name__} ', saveable=True)
+                self.prettyPrinter.wait(WAIT_TIME, False)
             self.service_status = ServiceStatus.NOT_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
         except Exception as e:
             print(e)
             print(e.__class__)
-            self.prettyPrinter.error(
-                f'[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
+            if not quiet:
+                self.prettyPrinter.error(
+                    f'{is_mini_service}[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
-            exit(-1)    
+            if self.CONTAINER_LIFECYCLE_SCOPE:
+                exit(-1)    
 
 
         finally:
@@ -333,13 +351,13 @@ class BaseService():
         return self.__class__.__name__
 
 
-class BaseMiniService(BaseService):
-    
+class BaseMiniService(BaseService,):
+    QUIET_MINI_SERVICE = False
     ID_LEN = 20
 
-    def __init__(self, depService:BaseService=None, id=generateId(ID_LEN)):
+    def __init__(self, depService:BaseService, id=generateId(ID_LEN)):
         super().__init__()
-        self.depService = depService
+        self.depService= depService
         self.miniService_id = id
         if id == None:
             if self.miniService_id == None:
@@ -347,6 +365,9 @@ class BaseMiniService(BaseService):
             self.miniService_id = self.depService.miniService_id
         
         self.register()
+
+    def _builder(self, quiet = False, build_state = -1, force_sync_verify = False):
+        return super()._builder(quiet, build_state, force_sync_verify)
         
     def register(self):
         if self.depService != None:
@@ -361,12 +382,16 @@ class BaseMiniService(BaseService):
         ...
 
 
-class MiniServiceStore:
+
+# Define a generic type variable for the model
+TMS = TypeVar("TMS",bound=BaseMiniService)
+
+class MiniServiceStore(Generic[TMS]):
     
     def __init__(self):
-        self._store_: Dict[str, BaseMiniService] = {}
+        self._store_: Dict[str, TMS] = {}
 
-    def add(self, miniService: BaseMiniService):
+    def add(self, miniService: TMS):
         if miniService.miniService_id in self._store_:
             raise MiniServiceAlreadyExistsError(f"MiniService with id '{miniService.miniService_id}' already exists.")
         if miniService.miniService_id == None:
@@ -401,7 +426,11 @@ class MiniServiceStore:
 class BaseMiniServiceManager(BaseService):
     def __init__(self):
         super().__init__()
-        self.MiniServiceStore = MiniServiceStore()
+        self.MiniServiceStore = ...
+
+    def build(self, build_state = DEFAULT_BUILD_STATE):
+        return super().build(build_state)
+    
 
     def create_miniService():
         ...
@@ -449,7 +478,7 @@ class LinkDep:
         )
     
     @staticmethod
-    def dep_liaison(cls,links):
+    def dep_liaison(cls,links:Self):
             liaison = {}
             LiaisonDependency[cls.__name__] = liaison
             for l in links:
@@ -476,9 +505,12 @@ def Service(links:list[LinkDep]=[],is_manager = False)->Callable[[Type[S]],Type[
     
     return class_decorator
 
-def MiniService(links:list[LinkDep]=[])->Callable[[Type[S]],Type[S]]:
+def MiniService(links:list[LinkDep]=[],override_init = False,scope=None )->Callable[[Type[S]],Type[S]]:
     def class_decorator(cls: Type[S])->Type[S]:
         LinkDep.dep_liaison(cls,links)
+        __MINI_SERVICE_DEPENDENCY.append(cls)
+        if override_init:
+            MiniServiceMeta.append((cls,scope))
         return cls
     return class_decorator
 

@@ -10,7 +10,7 @@ from app.utils.helper import issubclass_of, SkipCode
 from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
 from ordered_set import OrderedSet
-from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, PROCESS_SERVICE_REPORT, S, LiaisonDependency, LinkParams, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from app.definition._service import __MINI_SERVICE_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, PROCESS_SERVICE_REPORT, S, LiaisonDependency, LinkParams, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, MiniServiceMeta, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
@@ -75,7 +75,7 @@ def isabstract(cls):
 
 class Container():
 
-    def __init__(self, D: list[type],quiet=False,scopes:list[Any]=None) -> None:  # TODO add the scope option
+    def __init__(self, D: list[type],MD:list[Type],quiet=False,scopes:list[Any]=None) -> None:  # TODO add the scope option
         self.__app = injector.Injector()
         self.quiet_print = quiet
 
@@ -88,11 +88,13 @@ class Container():
         dep_count = self.__load_dep(D)
         self.__D: OrderedSet[str] = self.__order_dependency(dep_count)
         self.D:list[Type[S]] = D
+        self.MD = MD
 
         PrettyPrinter_.show()
         PrettyPrinter_.message('Building the Container... !')
         PrettyPrinter_.space_line()
 
+        #self.__override_mini_service_init()
         self.__buildContainer()
 
     def __bind(self, type_:type, obj:Any, scope=None):
@@ -492,6 +494,13 @@ class Container():
     def show_report(self):
        PrettyPrinter_.json(PROCESS_SERVICE_REPORT,saveable=False)
 
+    def __override_mini_service_init(self):
+        for mini_service,scope in MiniServiceMeta:
+            if mini_service not in self.MD:
+                continue
+            decorator = InjectInMethod(True,scope)
+            mini_service.__init__  = decorator(mini_service.__init__)
+        
     @property
     def dependencies(self) -> list[BaseService]: return [x[DependencyConstant.TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]
@@ -515,10 +524,10 @@ class Container():
 
 CONTAINER: Container = None #Container(__DEPENDENCY)
 
-def build_container(quiet=False,dep=__DEPENDENCY):
+def build_container(quiet=False,dep=__DEPENDENCY,mini_dep=__MINI_SERVICE_DEPENDENCY):
     PrettyPrinter_.quiet=quiet
     global CONTAINER
-    CONTAINER = Container(dep)
+    CONTAINER = Container(dep,mini_dep)
 
 def InjectInFunction(accept_others=True,scope=None):
     """

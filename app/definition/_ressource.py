@@ -872,7 +872,7 @@ def ExemptLimiter():
 
 ################################################################                           #########################################################
 
-def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=None):
+def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=None,is_manager=False):
 
     async def return_result(tf:Callable,a,k):
         result = tf(*a, **k)

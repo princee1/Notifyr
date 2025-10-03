@@ -66,6 +66,7 @@ async def SetServiceStatus(message:StateProtocol,service=None):
 
                 async with d.statusLock.writer:
                     follow:bool =  linkP.get('build_follow_dep',False)
+                    force_sync_verify = False
                     if not follow:
                         to_build:bool = linkP.get('to_build',False)
                         to_destroy:bool = linkP.get('to_destroy',False)
@@ -78,6 +79,7 @@ async def SetServiceStatus(message:StateProtocol,service=None):
                         to_async_verify = not message.get('bypass_async_verify',False)
                         build_state = message.get('build_state',DEFAULT_BUILD_STATE)
                         destroy_state = message.get('destroy_state',DEFAULT_DESTROY_STATE)
+                        force_sync_verify = message.get('force_sync_verify',False)
 
                     if to_destroy:
                         d._destroyer(LIFECYCLE_QUIET,destroy_state=destroy_state)
@@ -88,7 +90,7 @@ async def SetServiceStatus(message:StateProtocol,service=None):
                             build = await d.async_verify_dependency()
                         
                         if build:
-                            d._builder(LIFECYCLE_QUIET,build_state=build_state)              
+                            d._builder(LIFECYCLE_QUIET,build_state=build_state,force_sync_verify=force_sync_verify)              
 
                 cache[d.name] = True
 

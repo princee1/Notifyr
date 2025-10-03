@@ -78,7 +78,12 @@ class EmailConnInterface():
 
     def setConnFlag(mode: str): pass
 
-    def setHostAddr(host: str): pass
+    @classmethod
+    def setHostAddr(cls,host: str) -> str:
+        up_host = host.upper().strip()
+        if up_host in cls._member_names_:
+            return cls._member_map_[up_host].value
+        return host
 
 class SMTPConfig(EmailConnInterface, Enum):
 
@@ -103,11 +108,6 @@ class SMTPConfig(EmailConnInterface, Enum):
 
     def setConnFlag(mode: str): return mode.lower() == "tls"
 
-    def setHostAddr(host: str):
-        host = host.upper().strip()
-        if host in SMTPConfig._member_names_:
-            return SMTPConfig._member_map_[host].value
-        return host
 
 class IMAPConfig (EmailConnInterface, Enum):
     """The IMAPHost class is an enumeration of the IMAP host names for the two email providers that I use
@@ -115,12 +115,6 @@ class IMAPConfig (EmailConnInterface, Enum):
     GMAIL = "imap.gmail.com"
     YAHOO = "imap.mail.yahoo.com"
     OUTLOOK = "outlook.office365.com"  # BUG potentiel : might not work
-
-    def setHostAddr(host: str) -> str | None:
-        host = host.upper().strip()
-        if host in IMAPConfig._member_names_:
-            return IMAPConfig._member_map_[host].value
-        return None
 
     def setConnFlag(mode: str): return mode.lower() == "tls"
 
