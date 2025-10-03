@@ -631,11 +631,10 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     ##################################################
     async def async_pingService(self, **kwargs):
         self.check_auth()
-        await super().async_pingService(**kwargs)
 
     def sync_pingService(self, **kwargs):
-        self.check_auth()
         super().sync_pingService(**kwargs)
+        self.check_auth()
 
     def destroy(self, destroy_state = ...):
         self.close_connection()

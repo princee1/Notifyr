@@ -70,7 +70,6 @@ class ProfileService(BaseMiniServiceManager):
         except MongoCollectionDoesNotExists:
             raise BuildFailureError
 
-    
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:
             ...
@@ -99,6 +98,7 @@ class ProfileService(BaseMiniServiceManager):
             self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
             return False
 
+    
     ########################################################       ################################3
 
     async def add_profile(self,profile:ProfileModel):
@@ -153,7 +153,6 @@ class ProfileService(BaseMiniServiceManager):
         return profile
 
     ########################################################       ################################
-
     async def addError(self,profile_id: str | None,error_code: int | None,error_name: str | None,error_description: str | None,error_type: Literal['warn', 'critical', 'message'] | None):
         error= ErrorProfileModel(
             profile_id=profile_id,

@@ -6,7 +6,6 @@ from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
 from app.definition._utils_decorator import Pipe
-from app.depends.checker import check_celery_service
 from app.depends.class_dep import Broker, EmailTracker
 from app.depends.funcs_dep import get_profile, get_task, get_template
 from app.interface.email import EmailSendInterface
@@ -76,12 +75,14 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @InjectInMethod()
     def __init__(self,emailReaderService:EmailReaderService, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,taskService:TaskService):
         super().__init__()
+
         self.emailService: EmailSenderService = emailSender
         self.configService: ConfigService = configService
         self.securityService: SecurityService = securityService
         self.celeryService:CeleryService = celeryService
         self.taskService: TaskService = taskService
         self.emailReaderService:EmailReaderService = emailReaderService
+
         self.linkService= Get(LinkService)
         self.settingService = Get(SettingService)
 
@@ -103,7 +104,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10000/minutes')
     @UseRoles([Role.MFA_OTP])
-    @PingService([EmailSenderService,CeleryService],checker=check_celery_service)
+    @PingService([CeleryService,ProfileService,EmailSenderService],is_manager=True)
     @UseServiceLock(AssetService,lockType='reader')
     @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.JWTAssetPermission('html'),permissions.JWTSignatureAssetPermission())
@@ -143,7 +144,7 @@ class EmailTemplateRessource(BaseHTTPRessource):
     
     @UseLimiter(limit_value='10000/minutes')
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
-    @PingService([EmailSenderService,CeleryService],checker=check_celery_service)
+    @PingService([CeleryService,ProfileService,EmailSenderService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.JWTSignatureAssetPermission())
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService))

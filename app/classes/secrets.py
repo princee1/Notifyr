@@ -28,9 +28,7 @@ class SecretsWrapper:
             for k,v in plain_data.items():
                 if not isinstance(v,str):
                     continue
-                
                 self.cipher_data[k] = self.encryptor.update(v.encode())
-
 
     @Time
     def _decrypt(self):

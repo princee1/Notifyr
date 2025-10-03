@@ -872,35 +872,26 @@ def ExemptLimiter():
 
 ################################################################                           #########################################################
 
-def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=None,is_manager=False):
+def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,wait_timeout=MIN_TIMEOUT):
 
-    async def return_result(tf:Callable,a,k):
-        result = tf(*a, **k)
-        if asyncio.iscoroutine(result):
-            return await result
-        return result
-
-    async def inner_callback(route_params):
+    async def inner_callback(route_params:dict):
         for s in services:
+            k = {}
+            k['__route_params__'] = route_params
+            k['__profile__'] =route_params.get('profile',None)
+            k['__is_manager__'] = is_manager
+
             if isinstance(s, dict):
-                cls = s['cls']
-                k = s['kwargs']
-                if not isinstance(k,dict):
-                    k = {}
-                k['_route_params'] = route_params
-                cls: S = Get(s)
-                if infinite_wait:
+                k.update(s['kwargs'])
+                s = s['cls']
+
+            cls: BaseService = Get(s)
+            if infinite_wait:
+                async with cls.statusLock.reader:
+                    cls.check_status('')
                     await cls.async_pingService(**k)
-                else:
-                    cls.sync_pingService(**k)
             else:
-                s: BaseService = Get(s)
-                k = {}
-                k['_route_params'] = route_params
-                if infinite_wait:
-                    await s.async_pingService(**k)
-                else:
-                    s.sync_pingService(**k)
+                    cls.sync_pingService(**k)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait)
@@ -911,19 +902,12 @@ def PingService(services: list[S | dict], infinite_wait=False,checker:Callable=N
 
             @functools.wraps(target_function)
             async def callback(*args, **kwargs):
-
-                wait_timeout = MIN_TIMEOUT
-                if checker !=None:
-                    if APIFilterInject(checker)(**kwargs):
-                        return await return_result(target_function,args,kwargs)
-
+                
                 if not infinite_wait and wait_timeout >= 0:
                     asyncio.wait_for(inner_callback(kwargs), wait_timeout)
                 else:
                     await inner_callback(kwargs)
-
-                return await return_result(target_function,args,kwargs)
-
+                return await Helper.return_result(target_function,args,kwargs)
 
             return callback
         Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,PING_SERVICE_TOUCH)

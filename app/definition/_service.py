@@ -191,7 +191,6 @@ class BaseService():
         """
         self.method_not_available = set()
         
-    @CheckStatusBeforeHand
     async def async_pingService(self,**kwargs):
         ...
     
@@ -314,9 +313,7 @@ class BaseService():
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
             if self.CONTAINER_LIFECYCLE_SCOPE:
-                exit(-1)    
-
-
+                exit(-1)
         finally:
             self.report(reason=reason,state_value=build_state)
 
@@ -431,7 +428,23 @@ class BaseMiniServiceManager(BaseService):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         return super().build(build_state)
     
-
+    @BaseMiniService.CheckStatusBeforeHand
+    async def async_pingService(self,**kwargs):
+        if not kwargs.get('__is_manager__',False):
+            return
+        mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
+        p = mss.get(kwargs.get('__profile__',None))
+        return await p.async_pingService(**kwargs)
+    
+    def sync_pingService(self,**kwargs):
+        super().sync_pingService(**kwargs)
+        
+        if not kwargs.get('__is_manager__',False):
+            return
+        mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
+        p = mss.get(kwargs.get('__profile__',None))
+        return p.sync_pingService(**kwargs)
+    
     def create_miniService():
         ...
 

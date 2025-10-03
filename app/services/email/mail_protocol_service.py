@@ -47,7 +47,7 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
 
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService,profileMiniService:ProfileMiniService[ProtocolProfileModel]):
         self.depService = profileMiniService
-        super().__init__(depService=profileMiniService)
+        super().__init__(depService=profileMiniService,id=None)
         self.configService: ConfigService = configService
         self.loggerService: LoggerService = loggerService
         RedisEventInterface.__init__(self, redisService)

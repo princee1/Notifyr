@@ -1,5 +1,6 @@
 from app.definition._service import BaseMiniService, BaseService, MiniService, Service
-from app.services.profile_service import ProfileService
+from app.models.profile_model import AWSProfileModel
+from app.services.profile_service import ProfileMiniService, ProfileService
 from .config_service import ConfigService
 from .file_service import BaseFileRetrieverService, FileService
 import boto3
@@ -24,8 +25,9 @@ class AmazonS3Service(BaseFileRetrieverService):
 
 @MiniService()
 class AmazonSESService(BaseMiniService):
-    def __init__(self, configService: ConfigService) -> None:
-        super().__init__()
+    def __init__(self, configService: ConfigService,profileMiniService:ProfileMiniService[AWSProfileModel]) -> None:
+        self.depService = profileMiniService
+        super().__init__(profileMiniService,None)
         self.configService = configService
     
     def build(self,build_state=-1):

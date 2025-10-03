@@ -10,7 +10,6 @@ from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
-from app.depends.checker import check_celery_service
 from app.depends.class_dep import Broker, TwilioTracker
 from app.models.otp_model import OTPModel
 from app.models.sms_model import OnGoingBaseSMSModel, OnGoingSMSModel, OnGoingTemplateSMSModel, SMSCustomSchedulerModel, SMSStatusModel, SMSTemplateSchedulerModel
@@ -86,7 +85,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseHandler(CeleryTaskHandler,ContactsHandler,ProfileHandler)
     @UsePipe(CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('TWILIO_OTP_NUMBER'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
-    @PingService([SMSService,CeleryService],checker=check_celery_service)
+    @PingService([SMSService,CeleryService])
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True),CeleryTaskGuard(task_names=['task_send_custom_sms']))
     @UseServiceLock(ProfileService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/custom/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
@@ -115,7 +114,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePermission(JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True),CeleryTaskGuard(['task_send_template_sms']))
-    @PingService([SMSService,CeleryService],checker=check_celery_service)
+    @PingService([SMSService,CeleryService])
     @UseServiceLock(AssetService,ProfileService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/template/{template}',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
     async def sms_template(self,template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):

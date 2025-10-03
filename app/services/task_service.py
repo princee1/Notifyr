@@ -295,7 +295,6 @@ class CeleryService(BaseService, IntervalInterface):
         if count:
             # TODO check in which interval the ratio is in
             ...
-        await BaseService.async_pingService(self)
         return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
 
     async def callback(self):
@@ -317,7 +316,7 @@ class CeleryService(BaseService, IntervalInterface):
 class ChannelMiniService(BaseMiniService):
 
     def __init__(self, depService:ProfileMiniService,celeryService:CeleryService):
-        super().__init__(depService)
+        super().__init__(depService,None)
         self.celeryService = celeryService
         self.queue_name= ...
         
@@ -571,8 +570,7 @@ class TaskService(BackgroundTasks, BaseService, SchedulerInterface):
         self.check_system_ram()
         if count:
             ...
-
-        return await BaseService.async_pingService(self)
+        
 
     def check_system_ram():
         ...

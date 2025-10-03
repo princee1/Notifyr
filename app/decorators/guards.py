@@ -22,16 +22,16 @@ from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request,status
 
 class CeleryTaskGuard(Guard):
-    def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
+    def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
         super().__init__()
         self.task_names = [task_name(t) for t in  task_names]
-        self.task_types = task_types
+        self.task_types = [t.value for t in task_types]
     
     def guard(self,scheduler:SchedulerModel):        
         if self.task_names and scheduler.task_name not in self.task_names:
             return False,f'The task: [{scheduler.task_name}] is  not permitted for this route'
         
-        if self.task_types != None and scheduler.task_name not in self.task_types:
+        if self.task_types and scheduler.task_type not in self.task_types:
             return False,f'The task_type: [{scheduler.task_type}] is not permitted for this route'
         
         return True,''
