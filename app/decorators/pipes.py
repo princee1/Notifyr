@@ -1,4 +1,4 @@
-from typing import Any, Callable, Coroutine, Literal, get_args
+from typing import Any, Callable, Coroutine, Literal, Type, get_args
 
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
@@ -9,6 +9,7 @@ from app.classes.celery import AlgorithmType, SchedulerModel,CelerySchedulerOpti
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
+from app.definition._service import BaseMiniServiceManager
 from app.depends.class_dep import KeepAliveQuery
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.models.call_model import CallCustomSchedulerModel
@@ -575,3 +576,16 @@ class DocumentFriendlyPipe(Pipe):
         result = result.model_dump(**dump_kwargs)
         result['id'] =result_id
         return result
+
+    
+
+class MiniServiceInjectorPipe(Pipe):
+    def __init__(self,cls:Type[BaseMiniServiceManager]):
+        if  not isinstance(cls,BaseMiniServiceManager):
+            raise TypeError('Must be a Mini Service Manager')
+
+        self.service:BaseMiniServiceManager = Get(cls)  
+
+    def pipe(self,profile:str):
+        return self.service.MiniServiceStore.get(profile)
+

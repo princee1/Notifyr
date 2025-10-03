@@ -16,6 +16,7 @@ from app.definition._service import MethodServiceNotExistsError, MethodServiceNo
 from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
+from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDoesNotExistsError,MiniServiceCannotBeIdentifiedError
 
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
@@ -621,3 +622,25 @@ class VaultHandler(Handler):
 
         except hvac.exceptions.Forbidden as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+
+class MiniServiceHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except MiniServiceAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="MiniService already exists"
+            )
+        except MiniServiceDoesNotExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="MiniService does not exist"
+            )
+        except MiniServiceCannotBeIdentifiedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+               detail="MiniService cannot be identified"
+            )

@@ -312,3 +312,7 @@ async def get_challenge(client:ClientORM):
 
 def get_template(template:str):
     return template
+
+def get_profile(profile:str):
+    return profile
+
