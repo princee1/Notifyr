@@ -26,7 +26,7 @@ from app.definition._utils_decorator import Pipe
 from app.services.task_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioService
 from app.utils.constant import SpecialKeyAttributesConstant
-from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response
+from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
@@ -581,7 +581,7 @@ class DocumentFriendlyPipe(Pipe):
 
 class MiniServiceInjectorPipe(Pipe):
     def __init__(self,cls:Type[BaseMiniServiceManager]):
-        if  not isinstance(cls,BaseMiniServiceManager):
+        if not issubclass_of(BaseMiniServiceManager,cls):
             raise TypeError('Must be a Mini Service Manager')
 
         self.service:BaseMiniServiceManager = Get(cls)  
