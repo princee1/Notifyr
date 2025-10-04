@@ -1,5 +1,5 @@
 from typing import Any, List, Self
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from app.utils.validation import language_code_validator,url_validator
 from string import digits
 from app.utils.helper import letter_to_number
@@ -54,7 +54,7 @@ class SpeechConfig(GatherConfig):
 
 class OTPModel(BaseModel):
     to:str
-    from_:str=None
+    from_:str=PrivateAttr(None)
     content:Any
     # otp:str
     # brand:str = None

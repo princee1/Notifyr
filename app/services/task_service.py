@@ -446,6 +446,18 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
                 'message': f"[{name}] - Task added successfully", 'heaviness': str(scheduler.heaviness), 'estimate_tbd': naturaldelta(new_delay),}
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
+        
+        state_counter = self.StatusCounter(len(self.profileService.MiniServiceStore))
+        for id,p in self.profileService.MiniServiceStore:
+
+            miniService = ChannelMiniService(p,self.celeryService)
+            miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
+
+            state_counter.count(state_counter)
+            self.MiniServiceStore.add(miniService)
+        
+        BaseMiniServiceManager.build(self,state_counter)
+
         if build_state == DEFAULT_BUILD_STATE:
             try:
                 self.connection_count = Gauge('http_connections','Active Connection Count')
@@ -454,14 +466,6 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
                 self.background_task_count = Gauge('background_task','Active Background Working Task')
             except:
                 raise BuildWarningError
-        
-        for id,p in self.profileService.MiniServiceStore:
-            self.MiniServiceStore.add(
-                ChannelMiniService(
-                    p,
-                    self.celeryService
-                )
-            )
         
     def _compute_ttd(self,):
         return 0

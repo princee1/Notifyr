@@ -58,7 +58,7 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
         self.connMethod = ...
         self.last_connectionTime: float = ...
         self.emailHost: EmailHostConstant = ...
-        self.email_address:str = ...
+       
         self.log_level:int = None
 
         self.auth_method:Literal['password','oauth'] = ...
@@ -137,7 +137,6 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
 
         self.connMethod = self.depService.model.conn_method.lower()
         self.tlsConn: bool = config.setConnFlag(self.connMethod)
-        self.email_address = self.depService.model.email_address
         self.emailHost = self.depService.model.email_host
 
         if self.emailHost == EmailHostConstant.CUSTOM:
@@ -209,7 +208,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
     # BUG cant resolve an abstract class
     def __init__(self,profileMiniService:ProfileMiniService[SMTPProfileModel], configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         super().__init__(configService, loggerService, redisService,profileMiniService)
-        EmailSendInterface.__init__(self)
+        EmailSendInterface.__init__(self,self.depService.model.email_address)
         self.type_ = 'SMTP'
         self.depService = profileMiniService
         self.log_level = self.SMTP_LOG_LEVEL
@@ -298,14 +297,14 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
 
     @Mock()
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
-    def sendTemplateEmail(self, data, meta, images,contact_id=None, connector: smtp.SMTP = None):
+    def sendTemplateEmail(self, data, meta, images,contact_id=None,profile:str=None, connector: smtp.SMTP = None,):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(data, meta, images)
         return self._send_message(email, contact_ids=contact_id, connector=connector)
 
     @Mock()
     @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
-    def sendCustomEmail(self, content, meta, images, attachment,contact_id=None, connector: smtp.SMTP = None):
+    def sendCustomEmail(self, content, meta, images, attachment,contact_id=None,profile:str=None, connector: smtp.SMTP = None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
         return self._send_message(email, contact_ids=contact_id, connector=connector)
@@ -477,7 +476,7 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
     def __init__(self,profileMiniService:ProfileMiniService[IMAPProfileModel], configService: ConfigService, loggerService: LoggerService, reactiveService: ReactiveService, redisService: RedisService) -> None:
         self.depService = profileMiniService
         super().__init__(configService, loggerService, redisService,profileMiniService)
-        EmailReadInterface.__init__(self,None)
+        EmailReadInterface.__init__(self,self.depService.model.email_address,None)
         self.reactiveService = reactiveService
         self.redisService = redisService
         self.type_ = 'IMAP'
@@ -530,7 +529,7 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             else:
                 self.service_status = _service.ServiceStatus.NOT_AVAILABLE
                 return False
-                access_token = self.mailOAuth.encode_token(self.configService.IMAP_EMAIL)
+                access_token = self.mailOAuth.encode_token(self.email_address)
                 auth_code, auth_message = connector.authenticate('AUTH XOAUTH2', access_token)
                 if auth_code != 'OK':
                     raise imap.IMAP4.error(

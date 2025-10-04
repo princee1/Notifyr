@@ -4,11 +4,12 @@ from typing_extensions import Literal
 from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
 from beanie import Document
 
+from app.classes.condition import MongoCondition
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.phone import PhoneModel
 from app.classes.profiles import ProfileModelAuthToken, ProfilModelConstant, ProfileState
 from app.utils.constant import EmailHostConstant, MongooseDBConstant
-from app.utils.validation import port_validator, phone_number_validator
+from app.utils.validation import email_validator, port_validator, phone_number_validator,url_validator
 from app.utils.helper import phone_parser
 
 
@@ -35,6 +36,7 @@ class ProfileModel(Document):
 
     _secret_key: ClassVar[list[str]] = []
     unique_indexes: ClassVar[list[str]] = []
+    condition:ClassVar[tuple[MongoCondition,bool]] = None,False
     
 
     class Settings:
@@ -102,6 +104,8 @@ class SMTPProfileModel(ProtocolProfileModel):
     from_emails: list[str] = Field(default_factory=list)
     password: Optional[str]= None
     oauth_tokens: Optional[ProfileModelAuthToken | Any] = None
+    disposition_notification_to: Optional[str] = None
+    return_receipt_to: Optional[str] = None
     auth_mode:Literal['password','oauth'] = 'password'
     _secret_key: ClassVar[list[str]] = ["password","oauth_tokens"]
 
@@ -125,6 +129,14 @@ class SMTPProfileModel(ProtocolProfileModel):
             raise ValueError('No credentials where provided')
         
         return self
+
+    @field_validator('disposition_notification_to','return_receipt_to')
+    def email_rd_validation(cls,email):
+        if email == None:
+            return cls.email_address
+        if not email_validator(email):
+            raise ValueError('Email format not valid')
+        return email
 
 class IMAPProfileModel(ProtocolProfileModel):
     password: str = Field(min_length=1,max_length=400)
@@ -161,12 +173,26 @@ class TwilioProfileModel(ProfileModel):
     account_sid: str
     auth_token: str
     from_number: PhoneModel | str
+    twilio_url : str
     twilio_otp_number: Optional[PhoneModel | str] = None
     twilio_chat_number: Optional[PhoneModel | str] = None
     twilio_automated_response_number: Optional[PhoneModel |str] = None
+    main:bool = False
 
     _secret_key: ClassVar[list[str]] = ["auth_token"]
     unique_indexes: ClassVar[list[str]] = ['account_sid']
+    condition:ClassVar[tuple[MongoCondition,bool]] = (MongoCondition(
+        rule={"$ge":1},
+        filter={"main":True},
+        method='simple-number-validation',
+    ),True)
+
+    @field_validator('twilio_url')
+    def twilio_url_validator(cls,twilio_url)->str:
+        if not url_validator(twilio_url):
+            raise ValueError('Url is not valid')
+        
+        return twilio_url
 
     @field_validator('from_number')
     def from_number_validator(cls,from_number:PhoneModel|str)->str:

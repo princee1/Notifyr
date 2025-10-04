@@ -1,10 +1,10 @@
-from typing import List, Self
-from pydantic import BaseModel, field_validator, model_validator
+from typing import List, Literal, Self
+from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from app.classes.celery import SubContentBaseModel, SchedulerModel
 from app.utils.validation import url_validator
 
 class OnGoingBaseSMSModel(SubContentBaseModel):
-    from_:str = None
+    from_:str=PrivateAttr(None)
     to:str | list[str]
 
     @model_validator(mode="after")

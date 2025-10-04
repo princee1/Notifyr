@@ -71,6 +71,7 @@ keep_connection:Callable[[Request],bool]=get_query_params('keep_connection','fal
 
 track:Callable[[Request],bool] = get_query_params('track','false',True,raise_except=True)
 
+profile_query:Callable[[Request],str] = get_query_params('profile','main',raise_except=True)
 # ----------------------------------------------                                    ---------------------------------- #
 
 verify_url:Callable[[Request],bool] = get_query_params('verify_strategy',None,False,raise_except=True,checker=lambda v: v in ['domain','well-known'])

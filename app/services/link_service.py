@@ -49,8 +49,7 @@ class LinkService(BaseService):
         self.redisService = redisService
         self.securityService = securityService
 
-        self.BASE_URL: Callable[[str], str] = lambda v: self.configService.getenv(
-            'PROD_URL', "")+v
+        self.BASE_URL: Callable[[str], str] = lambda v: self.configService.getenv('PROD_URL', "")+v
         self.IPINFO_API_KEY = self.configService['IPINFO_API_KEY']
 
     def build(self,build_state=-1):

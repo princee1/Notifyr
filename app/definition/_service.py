@@ -194,7 +194,6 @@ class BaseService():
     async def async_pingService(self,**kwargs):
         ...
     
-    @CheckStatusBeforeHand
     def sync_pingService(self,**kwargs):
         ...
 
@@ -284,7 +283,7 @@ class BaseService():
             if not quiet:
                 self.prettyPrinter.warning(
                     f'{is_mini_service}[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
-            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE if self.service_status == None else self.service_status
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
@@ -352,7 +351,7 @@ class BaseMiniService(BaseService,):
     QUIET_MINI_SERVICE = False
     ID_LEN = 20
 
-    def __init__(self, depService:BaseService, id=generateId(ID_LEN)):
+    def __init__(self, depService:Self, id=generateId(ID_LEN)):
         super().__init__()
         self.depService= depService
         self.miniService_id = id
@@ -419,22 +418,52 @@ class MiniServiceStore(Generic[TMS]):
 
     def __iter__(self):
         return iter(self._store_.items())
+
+    def __len__(self):
+        return len(self._store_)    
+
    
 class BaseMiniServiceManager(BaseService):
+
+    class StatusCounter:
+
+        def __init__(self,total_service):
+            self.total_service = total_service
+            self.acceptable_service = 0
+            self.available_service = 0
+        
+        def count(self,miniService:BaseMiniService):
+            if miniService.service_status in ACCEPTABLE_STATES:
+                self.acceptable_service+=1
+            if miniService.service_status == ServiceStatus.AVAILABLE:
+                self.available_service += 1
+
     def __init__(self):
         super().__init__()
         self.MiniServiceStore = ...
 
-    def build(self, build_state = DEFAULT_BUILD_STATE):
-        return super().build(build_state)
+    def build(self,counter:StatusCounter, build_state = DEFAULT_BUILD_STATE):
+        if counter.total_service <1:
+            raise BuildFailureError
+        
+        if counter.available_service == counter.total_service:
+            return
+        
+        if counter.acceptable_service < 1:
+            self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
+        
+        if counter.acceptable_service < counter.total_service:
+            raise BuildWarningError
+        
+        if counter.acceptable_service == counter.total_service:
+            raise BuildSkipError
     
-    @BaseMiniService.CheckStatusBeforeHand
     async def async_pingService(self,**kwargs):
         if not kwargs.get('__is_manager__',False):
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
         p = mss.get(kwargs.get('__profile__',None))
-        return await p.async_pingService(**kwargs)
+        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(**kwargs)
     
     def sync_pingService(self,**kwargs):
         super().sync_pingService(**kwargs)
@@ -443,7 +472,7 @@ class BaseMiniServiceManager(BaseService):
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
         p = mss.get(kwargs.get('__profile__',None))
-        return p.sync_pingService(**kwargs)
+        return BaseService.CheckStatusBeforeHand(p.sync_pingService)(**kwargs)
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)

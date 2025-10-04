@@ -4,6 +4,7 @@ from beanie import Document
 from fastapi import Depends, HTTPException, Request, Response,status
 from pydantic import BaseModel, ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
+from app.classes.condition import simple_number_validation
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
@@ -17,7 +18,7 @@ from app.models.profile_model import ErrorProfileModel, ProfilModelValues, Profi
 from app.services.database_service import MongooseService
 from app.services.email_service import EmailSenderService
 from app.services.profile_service import ProfileMiniService, ProfileService
-from app.classes.profiles import ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
+from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
 from app.services.task_service import CeleryService, ChannelMiniService, TaskService
 from app.utils.helper import subset_model
@@ -59,8 +60,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         profileModel = await self.pipe_profil_model(request,'model')
         
         await self.mongooseService.exists_unique(profileModel,True)
-        result = await self.profileService.add_profile(profileModel)
+        await self.create_profile_model_condition(profileModel)
 
+        result = await self.profileService.add_profile(profileModel)
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,bypass_async_verify=False))
 
         profileMiniService = ProfileMiniService(None,None,None,result)
@@ -128,6 +130,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         modelCreds = await self.pipe_profil_model(request,'model_creds')
 
         modelCreds = modelCreds.model_dump()
+        await self.create_profile_model_condition(modelCreds)
 
         await self.profileService.update_credentials(profile,modelCreds)
         await self.profileService.update_meta_profile(profileModel)
@@ -150,6 +153,51 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             raise ProfileModelRequestBodyError(message = 'Profil Model cannot be empty')
 
         return model.model_validate(body)
+
+    async def create_profile_model_condition(self,profileModel:ProfileModel | dict):
+        
+        def validate_filter(m,p_dump):
+            try:
+                for k,v in m['filter']:
+                    if v == p_dump[k]:
+                        continue
+                    else:
+                        return False
+            except KeyError:
+                return False
+            return True
+
+        mc,force= self.model.condition
+        if mc == None:
+            return
+        
+        if isinstance(profileModel,ProfileModel):
+            profile_dump = profileModel.model_dump('json')    
+        else:
+            profile_dump = profileModel
+
+        if not validate_filter(mc,profile_dump):
+            return
+
+        count = await self.mongooseService.count(self.model,mc['filter'])
+        if mc['method'] != 'simple-number-validation':
+            raise ProfileModelConditionWrongMethodError
+
+        if simple_number_validation(count,mc['rule']):
+            raise ProfileModelAddConditionError()
+        
+        if not force:
+            return
+
+        for k,v in mc['filter']:
+            if not isinstance(v,(str,int,float,bool)):
+                continue
+
+            if isinstance(profileModel,ProfileModel):
+                setattr(profileModel,k,v)
+            else:
+                profile_dump[k] = v
+            
 
 base_meta = BaseProfilModelRessource.meta
 base_attr = {'id','revision_id','created_at','last_modified','version'}
