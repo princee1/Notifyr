@@ -1,5 +1,5 @@
 from app.definition._service import BaseMiniService, BaseService, LinkDep, MiniService, Service
-from app.interface.email import EmailReadInterface, EmailSendInterface
+from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface
 from app.models.profile_model import AWSProfileModel
 from app.services.profile_service import ProfileMiniService, ProfileService
 from .config_service import ConfigService
@@ -29,13 +29,13 @@ class AmazonS3Service(BaseFileRetrieverService):
     links=[LinkDep(ProfileMiniService,build_follow_dep=True)]
 
 )
-class AmazonSESService(BaseMiniService,EmailSendInterface,EmailReadInterface):
+class AmazonSESService(BaseMiniService,EmailSendInterface,EmailInterface,EmailReadInterface):
     def __init__(self, configService: ConfigService,profileMiniService:ProfileMiniService[AWSProfileModel]) -> None:
         self.depService = profileMiniService
         super().__init__(profileMiniService,None)
         EmailSendInterface.__init__(self,None)
         EmailReadInterface.__init__(self,None)
-        self.email_address = self.depService.model.email_address
+        EmailInterface.__init__(self,self.depService.model.email_address)
         self.configService = configService
     
     def build(self,build_state=-1):

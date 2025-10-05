@@ -887,9 +887,9 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
 
             cls: BaseService = Get(s)
             if infinite_wait:
-                await BaseService.CheckStatusBeforeHand(cls.async_pingService)(**k)
+                await BaseService.CheckStatusBeforeHand(cls.async_pingService)(cls,**k)
             else:
-                BaseService.CheckStatusBeforeHand(cls.sync_pingService)(**k)
+                BaseService.CheckStatusBeforeHand(cls.sync_pingService)(cls,**k)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait)

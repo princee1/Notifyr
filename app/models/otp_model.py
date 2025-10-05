@@ -54,7 +54,7 @@ class SpeechConfig(GatherConfig):
 
 class OTPModel(BaseModel):
     to:str
-    from_:str=PrivateAttr(None)
+    _from:str=PrivateAttr(None)
     content:Any
     # otp:str
     # brand:str = None

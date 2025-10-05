@@ -4,7 +4,7 @@ from app.classes.celery import SubContentBaseModel, SchedulerModel
 from app.utils.validation import url_validator
 
 class OnGoingBaseSMSModel(SubContentBaseModel):
-    from_:str=PrivateAttr(None)
+    _from:str=PrivateAttr(None)
     to:str | list[str]
 
     @model_validator(mode="after")

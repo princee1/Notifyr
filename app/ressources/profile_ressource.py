@@ -4,7 +4,7 @@ from beanie import Document
 from fastapi import Depends, HTTPException, Request, Response,status
 from pydantic import BaseModel, ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
-from app.classes.condition import simple_number_validation
+from app.classes.condition import MongoCondition, simple_number_validation
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
@@ -27,7 +27,7 @@ PROFILE_PREFIX = 'profile'
 
 
 @PingService([MongooseService])
-@UseServiceLock(MongooseService,lockType='reader')
+@UseServiceLock(MongooseService,lockType='reader',check_status=False)
 @UseRoles([Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MotorErrorHandler,ProfileHandler)
 @UsePermission(JWTRouteHTTPPermission)
@@ -156,9 +156,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     async def create_profile_model_condition(self,profileModel:ProfileModel | dict):
         
-        def validate_filter(m,p_dump):
+        def validate_filter(m:MongoCondition,p_dump):
             try:
-                for k,v in m['filter']:
+                for k,v in m['filter'].items():
                     if v == p_dump[k]:
                         continue
                     else:
@@ -172,7 +172,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             return
         
         if isinstance(profileModel,ProfileModel):
-            profile_dump = profileModel.model_dump('json')    
+            profile_dump = profileModel.model_dump(mode='json')    
         else:
             profile_dump = profileModel
 

@@ -321,7 +321,7 @@ class SMSService(BaseTwilioCommunication):
         twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
         func = twilioProfile.client.messages.create_async if as_async else twilioProfile.client.messages.create
         status_callback = twilioProfile.logs_url + self.status_callback_type
-        return func(send_as_mms=True, provide_feedback=True, to=otpModel.to, status_callback=status_callback, from_=otpModel.from_, body=body)
+        return func(send_as_mms=True, provide_feedback=True, to=otpModel.to, status_callback=status_callback, from_=otpModel._from, body=body)
 
     def build(self,build_state=-1):
         ...

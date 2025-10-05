@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from enum import Enum
 import functools
+import traceback
 from typing import Any, Literal, Self, overload, Callable, Type, TypeVar, Dict
 from app.utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from app.utils.constant import DependencyConstant
@@ -134,6 +135,7 @@ class BaseService():
     
 
     def check_status(self,func_name):
+        print(self,self.service_status) 
         match self.service_status :
 
             case ServiceStatus.MAJOR_SYSTEM_FAILURE:
@@ -156,9 +158,7 @@ class BaseService():
     def CheckStatusBeforeHand(func:Callable):
         
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            
-            self:BaseService = args[0]
+        def sync_wrapper(self:Self,*args, **kwargs):
 
             if self.is_reader_locked:
                 raise ServiceChangingStateError
@@ -167,7 +167,7 @@ class BaseService():
             return func(*args, **kwargs)
         
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
+        async def async_wrapper(self:Self,*args, **kwargs):
             
             self:BaseService = args[0]
 
@@ -311,6 +311,7 @@ class BaseService():
                     f'{is_mini_service}[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
+            traceback.print_exc()
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 exit(-1)
         finally:
@@ -353,12 +354,14 @@ class BaseMiniService(BaseService,):
 
     def __init__(self, depService:Self, id=generateId(ID_LEN)):
         super().__init__()
-        self.depService= depService
-        self.miniService_id = id
+        self.depService = depService
+        
         if id == None:
-            if self.miniService_id == None:
+            if self.depService.miniService_id == None:
                 raise MiniServiceCannotBeIdentifiedError
             self.miniService_id = self.depService.miniService_id
+        else:
+            self.miniService_id = id
         
         self.register()
 
@@ -463,7 +466,7 @@ class BaseMiniServiceManager(BaseService):
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
         p = mss.get(kwargs.get('__profile__',None))
-        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(**kwargs)
+        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(p,**kwargs)
     
     def sync_pingService(self,**kwargs):
         super().sync_pingService(**kwargs)
@@ -472,7 +475,7 @@ class BaseMiniServiceManager(BaseService):
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
         p = mss.get(kwargs.get('__profile__',None))
-        return BaseService.CheckStatusBeforeHand(p.sync_pingService)(**kwargs)
+        return BaseService.CheckStatusBeforeHand(p.sync_pingService)(p,**kwargs)
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)

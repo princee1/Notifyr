@@ -4,6 +4,7 @@ from typing import Any, Dict, Literal
 from app.classes.rsa import RSA
 from app.definition._interface import Interface, IsInterface
 from app.services.setting_service import SettingService
+from app.utils.tools import Time
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
@@ -39,6 +40,7 @@ class EncryptDecryptInterface(Interface):
         cipher_suite = Fernet(key)
         return cipher_suite.encrypt(value.encode()).decode()
 
+    @Time
     def _decode_value(self, value: str, key: bytes | str) -> str:
         cipher_suite = Fernet(key)
         value = cipher_suite.decrypt(value.encode())

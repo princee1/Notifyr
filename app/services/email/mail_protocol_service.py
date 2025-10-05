@@ -39,7 +39,7 @@ from app.utils.validation import email_validator
 from app.utils.constant import StreamConstant
 from email import message_from_bytes
 from app.interface.redis_event import RedisEventInterface
-from app.interface.email import EmailReadInterface, EmailSendInterface
+from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface
 
 
 
@@ -202,15 +202,16 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
     override_init=True,
     links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True)]
 )
-class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
+class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
 
     SMTP_LOG_LEVEL = 0
     # BUG cant resolve an abstract class
     def __init__(self,profileMiniService:ProfileMiniService[SMTPProfileModel], configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
-        super().__init__(configService, loggerService, redisService,profileMiniService)
-        EmailSendInterface.__init__(self,self.depService.model.email_address)
-        self.type_ = 'SMTP'
         self.depService = profileMiniService
+        BaseEmailService.__init__(self,configService, loggerService, redisService,profileMiniService)
+        EmailSendInterface.__init__(self)
+        EmailInterface.__init__(self,self.depService.model.email_address)
+        self.type_ = 'SMTP'
         self.log_level = self.SMTP_LOG_LEVEL
         
     def logout(self, connector: smtp.SMTP):
@@ -261,7 +262,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
                 connector.ehlo()
                 connector.starttls(context=context)
                 connector.ehlo()
-
+            
             if self.auth_method == 'password':
                 auth_status = connector.login(self.email_address, self.depService.credentials.plain['password'])
             else:

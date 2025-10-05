@@ -167,9 +167,9 @@ class RelayPipe(Pipe):
 
 class TwilioPhoneNumberPipe(Pipe):
 
-    PhonNumberChoice = Literal['default','otp','chat','auto-mess']
+    PhoneNumberChoice = Literal['default','otp','chat','auto-mess']
 
-    def __init__(self, phone_number_name:PhonNumberChoice ='default',fallback=False):
+    def __init__(self, phone_number_name:PhoneNumberChoice ='default',fallback=False):
         super().__init__(True)
         self.twilioService:TwilioService = Get(TwilioService)
         self.configService = Get(ConfigService) 
@@ -183,14 +183,14 @@ class TwilioPhoneNumberPipe(Pipe):
 
         if scheduler!= None:
             for content in scheduler.content:
-                content.from_ = self.setFrom_()
+                content._from = self.setFrom_(twilio)
                 if not content.sender_type == 'raw':
                     content.to = [self.twilioService.parse_to_phone_format(to) for to in content.to]
             return {'scheduler':scheduler}
 
         if otpModel != None:
             otpModel.to = self.twilioService.parse_to_phone_format(otpModel.to)
-            otpModel.from_ = self.setFrom_()
+            otpModel._from = self.setFrom_(twilio)
             return {'otpModel':otpModel}
         
         return {}
@@ -221,12 +221,6 @@ class TwilioPhoneNumberPipe(Pipe):
         
         return pn
             
-                
-
-
-        
-        
-
 
 class AuthClientPipe(Pipe):
 

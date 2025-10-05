@@ -33,7 +33,7 @@ class EmailService(_service.BaseMiniServiceManager):
         return 
     
     def build(self,build_state=_service.DEFAULT_BUILD_STATE):
-        
+        #TODO filter the by type of the model
         state_counter = self.StatusCounter(len(self.profilesService.MiniServiceStore))
 
         for i,p in self.profilesService.MiniServiceStore:

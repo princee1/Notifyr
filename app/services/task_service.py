@@ -6,6 +6,7 @@ from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CeleryScheduler
 from app.classes.celery import CeleryTask, SchedulerModel
 from app.classes.env_selector import EnvSelection, StrategyType, get_selector
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BuildFailureError, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus,BuildWarningError
+from app.errors.service_error import BuildError, BuildSkipError
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.models.profile_model import ProfileModel
 from app.services.database_service import RedisService
@@ -269,7 +270,7 @@ class CeleryService(BaseService, IntervalInterface):
             response = celery_app.control.ping(timeout=self.set_next_timeout)
             available_workers_count = len(response)
             if available_workers_count == 0:
-                self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
+                self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
                 async with self.task_lock.writer:
                     self.available_workers_count = 0
 
@@ -288,15 +289,8 @@ class CeleryService(BaseService, IntervalInterface):
         async with self.task_lock.reader:
             return self.available_workers_count
 
-    async def async_pingService(self, ratio: float = None, count: int = None):
-        response_count = await self.get_available_workers_count
-        if ratio:
-            # TODO check in which interval the ratio is in
-            ...
-        if count:
-            # TODO check in which interval the ratio is in
-            ...
-        return response_count, response_count/self.configService.CELERY_WORKERS_COUNT
+    async def async_pingService(self, **kwargs):
+        ...
 
     async def callback(self):
         await self._check_workers_status()
@@ -446,17 +440,6 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
                 'message': f"[{name}] - Task added successfully", 'heaviness': str(scheduler.heaviness), 'estimate_tbd': naturaldelta(new_delay),}
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
-        
-        state_counter = self.StatusCounter(len(self.profileService.MiniServiceStore))
-        for id,p in self.profileService.MiniServiceStore:
-
-            miniService = ChannelMiniService(p,self.celeryService)
-            miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
-
-            state_counter.count(state_counter)
-            self.MiniServiceStore.add(miniService)
-        
-        BaseMiniServiceManager.build(self,state_counter)
 
         if build_state == DEFAULT_BUILD_STATE:
             try:
@@ -466,6 +449,22 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
                 self.background_task_count = Gauge('background_task','Active Background Working Task')
             except:
                 raise BuildWarningError
+        
+        self.state_counter = self.StatusCounter(len(self.profileService.MiniServiceStore))
+
+        for id,p in self.profileService.MiniServiceStore:
+
+            miniService = ChannelMiniService(p,self.celeryService)
+            miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
+
+            self.state_counter.count(miniService)
+            self.MiniServiceStore.add(miniService)
+               
+        try:
+            BaseMiniServiceManager.build(self,self.state_counter)
+        except BuildError:
+            raise BuildSkipError
+            
         
     def _compute_ttd(self,):
         return 0

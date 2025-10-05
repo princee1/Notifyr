@@ -3,14 +3,12 @@ from typing import Any, Callable, Iterable
 from app.definition._interface import Interface, IsInterface
 from app.interface.timers import CronParams, DateParams, IntervalParams, SchedulerInterface
 
+class EmailInterface(Interface):
+    def __init__(self,email_address):
+        super().__init__()
+        self.email_address = email_address
 
-
-
-@IsInterface
 class EmailSendInterface(Interface):
-
-    def __init__(self, email_address:str):
-        self.email_address= email_address
 
     def sendTemplateEmail(self, data, meta, images,contact_id=None,email_profile:str=None):
         ...
@@ -23,8 +21,6 @@ class EmailSendInterface(Interface):
 
     def verify_same_domain_email(self, email: str):
        ...
-
-
 
 @dataclass
 class Jobs:
@@ -64,8 +60,7 @@ class EmailReadInterface(SchedulerInterface):
         return wrapper
     
     def __init__(self,email_address:str, misfire_grace_time = None):
-        super().__init__(misfire_grace_time)
-        self.email_address = email_address
+        SchedulerInterface.__init__(self,misfire_grace_time)
         self._schedule_jobs()
     
     def _schedule_jobs(self,id=None):
