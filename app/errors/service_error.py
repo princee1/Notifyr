@@ -89,3 +89,6 @@ class MiniServiceDoesNotExistsError(BuildError):
 
 class MiniServiceCannotBeIdentifiedError(BuildError):
     ...
+
+class MiniServiceStrictValueNotValidError(BuildError):
+    ...

@@ -12,6 +12,7 @@ from app.container import Get, InjectInMethod
 from app.definition._service import BaseMiniServiceManager
 from app.depends.class_dep import KeepAliveQuery
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
+from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status, SubscriptionORM
 from app.models.email_model import BaseEmailSchedulerModel
@@ -24,7 +25,7 @@ from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.task_service import CeleryService, TaskManager, task_name
-from app.services.twilio_service import TwilioService
+from app.services.twilio_service import TwilioAccountMiniService, TwilioService
 from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of
 from app.utils.validation import email_validator, phone_number_validator
@@ -166,36 +167,60 @@ class RelayPipe(Pipe):
 
 class TwilioPhoneNumberPipe(Pipe):
 
-    def __init__(self, phone_number_name:str):
+    PhoneNumberChoice = Literal['default','otp','chat','auto-mess']
+
+    def __init__(self, phone_number_name:PhoneNumberChoice ='default',fallback=False):
         super().__init__(True)
         self.twilioService:TwilioService = Get(TwilioService)
-        self.configService = Get(ConfigService)
-
-        self.phone_number = self.configService[phone_number_name]
+        self.configService = Get(ConfigService) 
+        if phone_number_name not in get_args(self.PhoneNumberChoice):
+            raise ValueError('Phone Number name not valid')
+        
+        self.fallback= fallback
+        self.phone_number_name = phone_number_name
     
-    def pipe(self,scheduler:SMSCustomSchedulerModel | CallCustomSchedulerModel =None,otpModel:OTPModel=None):
+    def pipe(self,twilio:TwilioAccountMiniService,scheduler:SMSCustomSchedulerModel | CallCustomSchedulerModel =None,otpModel:OTPModel=None,):
 
         if scheduler!= None:
             for content in scheduler.content:
-                content.from_ = self.setFrom_(content.from_)
+                content._from = self.setFrom_(twilio)
                 if not content.sender_type == 'raw':
                     content.to = [self.twilioService.parse_to_phone_format(to) for to in content.to]
             return {'scheduler':scheduler}
 
         if otpModel != None:
             otpModel.to = self.twilioService.parse_to_phone_format(otpModel.to)
-            otpModel.from_ = self.setFrom_(otpModel.from_)
+            otpModel._from = self.setFrom_(twilio)
             return {'otpModel':otpModel}
         
         return {}
 
-    def setFrom_(self,from_):
-        if from_ == None:
-            return  self.phone_number
-        return self.twilioService.parse_to_phone_format(from_)
-        
-        
+    def setFrom_(self,twilio:TwilioAccountMiniService):
+        pn=None
+        match self.phone_number_name:
+            case 'default':
+                return twilio.depService.model.from_number  
+            
+            case 'otp':
+                pn= twilio.depService.model.twilio_otp_number
+            
+            case 'chat':
+                pn= twilio.depService.model.twilio_chat_number
+            
+            case 'auto-mess':
+                pn= twilio.depService.model.twilio_automated_response_number
 
+            case _:
+                ...
+
+        if pn == None:
+            if self.fallback:
+                return twilio.depService.model.from_number
+
+            raise ServiceNotAvailableError(f'The {twilio.miniService_id} profile does not have {self.phone_number_name} set')
+        
+        return pn
+            
 
 class AuthClientPipe(Pipe):
 
@@ -580,14 +605,23 @@ class DocumentFriendlyPipe(Pipe):
     
 
 class MiniServiceInjectorPipe(Pipe):
-    def __init__(self,cls:Type[BaseMiniServiceManager],key:str='profile'):
+    def __init__(self,cls:Type[BaseMiniServiceManager],key:str='profile',strict_value:str=None):
+        super().__init__(True)
         if not issubclass_of(BaseMiniServiceManager,cls):
             raise TypeError('Must be a Mini Service Manager')
 
         self.service:BaseMiniServiceManager = Get(cls)  
         self.key = key
+        self.strict_value =strict_value
 
     def pipe(self,profile:str):
+        if self.strict_value != None and profile==  self.strict_value:
+            miniService = getattr(self.service,self.strict_value)
+            if miniService == None:
+                raise MiniServiceStrictValueNotValidError
+            return {
+                self.key:miniService
+            }
 
         return {
             self.key: self.service.MiniServiceStore.get(profile)

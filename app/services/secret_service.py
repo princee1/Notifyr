@@ -2,7 +2,7 @@ import datetime
 import time
 from typing import Literal, TypedDict
 import requests
-from app.classes.secrets import SecretsWrapper
+from app.classes.secrets import ChaCha20SecretsWrapper
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface

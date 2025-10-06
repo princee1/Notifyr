@@ -2,7 +2,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 from app.classes.auth_permission import Role
 from app.container import InjectInMethod
-from app.decorators.handlers import ServiceAvailabilityHandler, TwilioHandler
+from app.decorators.handlers import MiniServiceHandler, ServiceAvailabilityHandler, TwilioHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import parse_phone_number
 from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
@@ -16,7 +16,7 @@ from app.ressources.twilio.conversation_ressource import ConversationRessource
 
 
 @UsePermission(JWTRouteHTTPPermission)
-@UseHandler(ServiceAvailabilityHandler,TwilioHandler)
+@UseHandler(ServiceAvailabilityHandler,TwilioHandler,MiniServiceHandler)
 @HTTPRessource('twilio',routers=[SMSRessource,CallRessource,ConversationRessource,FaxRessource])
 class TwilioRessource(BaseHTTPRessource):
 
@@ -31,7 +31,7 @@ class TwilioRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/balance/',methods=[HTTPMethod.GET])
     def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
-        return self.callService.fetch_balance()
+        ...
     
     @PingService([TwilioService])
     @UsePipe(parse_phone_number)

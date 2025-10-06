@@ -15,6 +15,12 @@ from app.interface.email import EmailReadInterface, EmailSendInterface
 
 class EmailService(_service.BaseMiniServiceManager):
 
+    ACCEPTABLE_MODEL:set = ...
+
+    def __init_subclass__(cls):
+        setattr(cls,'ACCEPTABLE_MODEL',set())
+        return super().__init_subclass__()
+
     def verify_dependency(self):
         if self.profilesService.service_status not in _service.ACCEPTABLE_STATES:
             raise _service.BuildFailureError
@@ -33,13 +39,23 @@ class EmailService(_service.BaseMiniServiceManager):
         return 
     
     def build(self,build_state=_service.DEFAULT_BUILD_STATE):
+        #TODO filter the by type of the model   
+
+        count = self.profilesService.MiniServiceStore.filter_count(lambda p: p.model.__class__ in self.ACCEPTABLE_MODEL )
+        state_counter = self.StatusCounter(count)
+
         for i,p in self.profilesService.MiniServiceStore:
-            model = type(p.model)
+            model = p.model.__class__
             miniService = self._create_mini_service(model,p)
             if miniService == None:
                 continue
+
             miniService._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
+            state_counter.count(miniService)
             self.MiniServiceStore.add(miniService)
+
+        super().build(state_counter)
+
 
 @_service.Service(
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
@@ -47,6 +63,8 @@ class EmailService(_service.BaseMiniServiceManager):
 class EmailSenderService(EmailService):
 
     # BUG cant resolve an abstract class
+
+    service_model = {SMTPProfileModel}
 
     def __init__(self, configService: ConfigService,loggerService:LoggerService,redisService:RedisService,profileService:ProfileService) -> None:
         super().__init__(profileService)
@@ -62,14 +80,14 @@ class EmailSenderService(EmailService):
         else:
             return None
 
-    def select(self,profilesId:str)->EmailSendInterface:
-       ...
 
 
 @_service.Service(
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
 class EmailReaderService(EmailService):
+
+    service_model = {IMAPProfileModel}
 
     def __init__(self, configService: ConfigService,reactiveService:ReactiveService,loggerService:LoggerService,profilesService:ProfileService,redisService:RedisService) -> None:
         super().__init__(profilesService)

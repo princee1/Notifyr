@@ -61,7 +61,16 @@ class ProfileModelRequestBodyError(BaseError):
     def __init__(self,*args,message='Profile model body cannot be parsed into JSON'):
         super().__init__(*args)
         self.message = message
+    
+class ProfileModelAddConditionError(BaseError):
+    ...
 
+class ProfileModelConditionWrongMethodError(BaseError):
+    ...
+
+
+class ProfileModelConditionFilterDoesNotExistOnModelError(BaseError):
+    ...
 ####################################                 #####################################333
 
 class ProfileState(Enum):

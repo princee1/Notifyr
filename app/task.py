@@ -99,40 +99,47 @@ def SharedTask(heaviness: TaskHeaviness, **kwargs):
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_mail(self:Task,data, meta, images,contact_id=None):
+def task_send_template_mail(self:Task,*args,**kwargs):
+    emailService: EmailSenderService = Get(EmailSenderService),
+    email_profile = kwargs.get('email_profile',None)
+    emailMiniService=emailService.MiniServiceStore.get(email_profile)
+    return emailMiniService.sendTemplateEmail(*args,**kwargs)
+
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_custom_mail(self:Task,*args,**kwargs):
     emailService: EmailSenderService = Get(EmailSenderService)
-    return emailService.select().sendTemplateEmail(data, meta, images,contact_id)
+    email_profile = kwargs.get('email_profile',None)
+    emailMiniService=emailService.MiniServiceStore.get(email_profile)
+    return emailMiniService.sendCustomEmail(*args,**kwargs)
 
-
-@RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_mail(self:Task,content, meta, images, attachment,contact_id=None):
-    emailService: EmailSenderService = Get(EmailSenderService)
-    return emailService.select().sendCustomEmail(content, meta, images, attachment,contact_id)
+#============================================================================================================#
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_sms(self:Task,messages):
+def task_send_custom_sms(self:Task,*args,**kwargs):
     smsService:SMSService = Get(SMSService)
-    return smsService.send_custom_sms(messages)
+    return smsService.send_custom_sms(*args,**kwargs)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_sms(self:Task,messages):
+def task_send_template_sms(self:Task,*args,**kwargs):
     smsService:SMSService = Get(SMSService)
-    return smsService.send_template_sms(messages)
+    return smsService.send_template_sms(*args,**kwargs)
+
+#============================================================================================================#
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_voice_call(self:Task,result,content):
+def task_send_template_voice_call(self:Task,*args,**kwargs):
     callService:CallService = Get(CallService)
-    return callService.send_template_voice_call(result,content)
+    return callService.send_template_voice_call(*args,**kwargs)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_twiml_voice_call(self:Task,url,details):
+def task_send_twiml_voice_call(self:Task,*args,**kwargs):
     callService:CallService = Get(CallService)
-    return callService.send_twiml_voice_call(url,details)
-    
+    return callService.send_twiml_voice_call(*args,**kwargs)
     
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_voice_call(self:Task,body,details):
+def task_send_custom_voice_call(self:Task, *args,**kwargs):
     callService:CallService = Get(CallService)
-    return callService.send_custom_voice_call(body,details)
+    return callService.send_custom_voice_call(*args,**kwargs)
 
 ##############################################           ##################################################

@@ -9,11 +9,14 @@ import requests
 from app.classes.template import SMSTemplate
 from app.definition import _service
 from app.interface.redis_event import RedisEventInterface
+from app.interface.twilio import TwilioInterface
 from app.models.otp_model import GatherDtmfOTPModel, GatherOTPBaseModel, GatherSpeechOTPModel, OTPModel
+from app.models.profile_model import TwilioProfileModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.assets_service import AssetService
 from app.services.database_service import MongooseService, RedisService
 from app.services.logger_service import LoggerService
+from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import StreamConstant
 from app.utils.tools import Mock
@@ -34,24 +37,45 @@ import asyncio
 from aiohttp import BasicAuth
 from twilio.rest.api.v2010.account import AccountInstance
 
-@_service.Service()
-class TwilioService(_service.BaseService):
-    def __init__(self, configService: ConfigService,mongooseService:MongooseService,vaultService:HCVaultService) -> None:
-        super().__init__()
+@_service.MiniService(
+    links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True)]
+)
+class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
+    def __init__(self, configService: ConfigService,profileMiniService:ProfileMiniService[TwilioProfileModel]) -> None:
+        self.depService = profileMiniService
+        super().__init__(profileMiniService,None)
         self.configService = configService
-        self.SERVICE_ID = self.configService.getenv('TWILIO_SERVICE_ID')
+
+        self.twilio_url:str  = ...
+
+    @property
+    def logs_url(self):
+        return self.twilio_url + "/status/logs"
+        
+    @property
+    def partial_results_url(self):
+        return self.twilio_url + "/status/partial-results"
+
+    def gather_url(self):
+        return self.twilio_url + '/gather'
+
 
     def build(self,build_state=-1):
-        
+
+        self.account_sid = self.depService.model.account_sid
+        self.auth_token = self.depService.credentials.plain['auth_token']
         try:
-            self.client = Client(self.configService.TWILIO_ACCOUNT_SID,
-                             self.configService.TWILIO_AUTH_TOKEN)
-            account = self.client.api.accounts(self.configService.TWILIO_ACCOUNT_SID).fetch()
+            
+            self.client = Client(self.account_sid,self.auth_token)
+            account = self.client.api.accounts(self.account_sid).fetch()
             if account.status !=  AccountInstance.Status.ACTIVE:
                 raise _service.BuildFailureError
             
             if float(account.balance.fetch().balance)<0:
                 _service.BuildSkipError
+        
+            mode = self.configService['TWILIO_MODE']
+            self.twilio_url = self.depService.model.twilio_url if mode == "prod" else self.configService.TWILIO_TEST_URL
                 
         except TwilioRestException as e:
                 raise _service.BuildFailureError(e.details)
@@ -60,19 +84,9 @@ class TwilioService(_service.BaseService):
         except Exception as e:
             raise _service.BuildFailureError(e.args)
 
-    
     def verify_dependency(self):
-        if not self.configService.TWILIO_ACCOUNT_SID or not self.configService.TWILIO_AUTH_TOKEN:
-            raise _service.BuildFailureError
-            
-    def parse_to_phone_format(self, phone_number: str) -> str:
-        formatted_number = phone_parser(phone_number)
-
-        if not phone_number_validator(formatted_number):
-            raise TwilioPhoneNumberParseError(formatted_number)
-
-        return formatted_number
-
+        ...
+    
     async def verify_twilio_token(self, request: Request):
         twilio_signature = request.headers.get("X-Twilio-Signature", None)
 
@@ -85,7 +99,7 @@ class TwilioService(_service.BaseService):
         form_data = await request.form()
         params = {key: form_data[key] for key in form_data}
 
-        validator = RequestValidator(self.configService.TWILIO_AUTH_TOKEN)
+        validator = RequestValidator(self.auth_token)
         if not validator.validate(full_url, params, twilio_signature):
             raise HTTPException(
                 status_code=403, detail="Invalid Twilio Signature")
@@ -101,29 +115,12 @@ class TwilioService(_service.BaseService):
         phone_number, query = self._parse_phone_and_query(phone_number, carrier, caller_name)    
         query = ','.join(query)
 
-        account_sid = self.configService.TWILIO_ACCOUNT_SID
-        auth_token = self.configService.TWILIO_AUTH_TOKEN
-        basic_auth = BasicAuth(account_sid, auth_token)
+        basic_auth = BasicAuth(self.account_sid, self.auth_token)
         async with aiohttp.ClientSession(auth=basic_auth) as session:
             async with session.get(f'https://lookups.twilio.com/v1/PhoneNumbers/{phone_number}?Type={query}') as response:
                 body = await response.json()
                 status_code = response.status
                 return status_code,body
-
-    def _parse_phone_and_query(self, phone_number, carrier, caller_name):
-        phone_number = self.parse_to_phone_format(phone_number)
-
-        query = []
-        if carrier:
-            query.append('carrier')
-
-        if caller_name:
-            query.append('caller_name')
-
-        # if adds_ons:
-        #     query.append('add_ons')
-
-        return phone_number,query
 
     def phone_lookup(self, phone_number: str, carrier=True, caller_name=False) -> tuple[int, dict]:
         phone_number, query = self._parse_phone_and_query(phone_number, carrier, caller_name)
@@ -137,6 +134,90 @@ class TwilioService(_service.BaseService):
             'adds_ons': phone_number_instance.add_ons,
         }
 
+    def fetch_balance(self):
+        balance = self.client.balance.fetch()
+        return {
+            'balance': balance.balance,
+            'currency': balance.currency,
+            'solution': balance._solution,
+            'version':balance._version
+        }
+
+
+@_service.Service(
+    links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
+)
+class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
+    
+    def __init__(self, configService: ConfigService,mongooseService:MongooseService,vaultService:HCVaultService,profileService:ProfileService) -> None:
+        super().__init__()
+        self.configService = configService
+        self.mongooseService = mongooseService
+        self.vaultService = vaultService
+        self.profileService = profileService
+
+        self.MiniServiceStore = _service.MiniServiceStore[TwilioAccountMiniService]()
+        self.main:TwilioAccountMiniService = None
+    
+    async def async_pingService(self,**kwargs):
+        if self.main == None:
+            raise _service.ServiceNotAvailableError
+        
+        return super().async_pingService(**kwargs)
+    
+    def sync_pingService(self,**kwargs):
+        if self.main == None:
+            raise _service.ServiceNotAvailableError
+            
+        super().sync_pingService(**kwargs)
+
+    def verify_dependency(self):
+        ...
+
+    def build(self, build_state=...):
+        main_set = False
+        first_available = None
+
+        count = self.profileService.MiniServiceStore.filter_count(lambda p: p.model.__class__ == TwilioProfileModel)
+        state_counter = self.StatusCounter(count)
+
+        twilio_account_count = 0
+
+        for id, p in self.profileService.MiniServiceStore:
+            if p.model.__class__ == TwilioProfileModel:
+                twilio_account_count+=1
+                tams = TwilioAccountMiniService(self.configService, p)
+                tams._builder(_service.BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
+
+                if tams.service_status in _service.ACCEPTABLE_STATES and first_available is None:
+                    first_available = tams
+
+                if tams.depService.model.main and tams.service_status in _service.ACCEPTABLE_STATES:
+                    self.main = tams
+                    main_set = True
+                
+                state_counter.count(tams)
+
+                self.MiniServiceStore.add(tams)
+
+        # If main is not set or not available, fallback to first available
+        if not main_set or (self.main and self.main.service_status not in _service.ACCEPTABLE_STATES):
+            self.main = first_available
+        
+        if self.main == None:
+            raise _service.BuildFailureError
+    
+        super().build(state_counter)
+
+    async def verify_twilio_token(self, request):
+        return await self.main.verify_twilio_token(request)
+    
+    def phone_lookup(self, phone_number, carrier=True, caller_name=False):
+       return self.main.phone_lookup(phone_number,carrier,caller_name)
+    
+    async def async_phone_lookup(self, phone_number, carrier=True, caller_name=False):
+        return await self.main.async_phone_lookup(phone_number,carrier,caller_name)
+
 @_service.AbstractServiceClass()
 class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
     def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService) -> None:
@@ -144,22 +225,15 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
         self.configService = configService
         self.twilioService = twilioService
         RedisEventInterface.__init__(self,redisService)
+        self.status_callback_type:str = ...
         
-        mode = self.configService['TWILIO_MODE']
-        self.twilio_url = self.configService.TWILIO_PROD_URL if mode == "prod" else self.configService.TWILIO_TEST_URL
-        
-        self.logs_url = self.twilio_url + "/status/logs"
-        self.partial_results_url = self.twilio_url + "/status/partial-results"
-
     def verify_dependency(self):
-        if self.twilioService.service_status == _service.ServiceStatus.NOT_AVAILABLE:
+        if self.twilioService.service_status not in _service.ACCEPTABLE_STATES:
             raise _service.BuildFailureError
 
-        if self.redisService.service_status == _service.ServiceStatus.NOT_AVAILABLE:
-            raise _service.BuildWarningError
-
-    def set_url(self,subject_id=None,twilio_tracking=None):
-        url = self.status_callback
+        
+    def set_url(self,status_callback,subject_id=None,twilio_tracking=None):
+        url = status_callback + self.status_callback_type
         if subject_id!=None:
             url +=f'&subject_id={subject_id}'
         
@@ -223,14 +297,12 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
     def response_extractor(self, res) -> dict:
         ...
 
-
 @_service.Service()
 class SMSService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService):
         super().__init__(configService, twilioService,redisService)
-        self.status_callback = self.logs_url + '?type=sms'
-
+        self.status_callback_type = '?type=sms'
     def response_extractor(self, message: MessageInstance) -> dict:
         return {
             'date_created': str(message.date_created),
@@ -244,21 +316,23 @@ class SMSService(BaseTwilioCommunication):
         }
 
     @BaseTwilioCommunication.parse_to_json()
-    async def send_otp(self, otpModel: OTPModel, body: str, as_async: bool = False):
+    async def send_otp(self, otpModel: OTPModel, body: str, as_async: bool = False,twilioProfile:str=None):
         as_async = False
-        func = self.messages.create_async if as_async else self.messages.create
-        return func(send_as_mms=True, provide_feedback=True, to=otpModel.to, status_callback=self.status_callback, from_=otpModel.from_, body=body)
+        twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
+        func = twilioProfile.client.messages.create_async if as_async else twilioProfile.client.messages.create
+        status_callback = twilioProfile.logs_url + self.status_callback_type
+        return func(send_as_mms=True, provide_feedback=True, to=otpModel.to, status_callback=status_callback, from_=otpModel._from, body=body)
 
     def build(self,build_state=-1):
-        self.messages = self.twilioService.client.messages
+        ...
 
-    def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = []) -> MessageInstance:
-        
+    def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None) -> MessageInstance:
+        twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
         results = []
         events= []
         for i,to in enumerate(messageData['to']):
 
-            url = self.set_url(subject_id, get_value_in_list(twilio_tracking,i))
+            url = self.set_url(twilioProfile.logs_url,subject_id, get_value_in_list(twilio_tracking,i))
             now = datetime.now(timezone.utc).isoformat()
 
             data = messageData.copy()
@@ -266,7 +340,7 @@ class SMSService(BaseTwilioCommunication):
 
             try:
                 #if self.configService.celery_env == CeleryMode.worker:
-                result = self.messages.create(provide_feedback=True, send_as_mms=True, status_callback=url, **data)
+                result = twilioProfile.client.messages.create(provide_feedback=True, send_as_mms=True, status_callback=url, **data)
                 # else:
                 #     result = self.messages.create_async(provide_feedback=True, send_as_mms=True, status_callback=url, **messageData)
                 #     result = await result
@@ -298,16 +372,16 @@ class SMSService(BaseTwilioCommunication):
             return (results,(StreamConstant.TWILIO_EVENT_STREAM_SMS,events),{})
         
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = []):
-        return self._send_sms(messageData, subject_id, twilio_tracking)
+    def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None):
+        return self._send_sms(messageData, subject_id, twilio_tracking,twilioProfile)
 
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    async def send_template_sms(self, message: dict, subject_id=None, twilio_tracking:list[str] = []):
-        return self._send_sms(message, subject_id, twilio_tracking)
+    async def send_template_sms(self, message: dict, subject_id=None, twilio_tracking:list[str] = [],twilioProfile:str=None):
+        return self._send_sms(message, subject_id, twilio_tracking,twilioProfile)
 
-    def get_message(self, to: str):
-        self.messages
-
+    def get_message(self, to: str,twilioProfile:str):
+        twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
+        
 
 @_service.Service()
 class CallService(BaseTwilioCommunication):
@@ -315,23 +389,6 @@ class CallService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService):
         super().__init__(configService, twilioService,redisService)
-        self.status_callback = self.logs_url + '?type=call'
-        self.gather_url = self.twilio_url + '/gather'
-
-    def build(self,build_state=-1):
-        self.call = self.twilioService.client
-
-    def fetch_balance(self):
-        balance = self.call.balance.fetch()
-        return {
-            'balance': balance.balance,
-            'currency': balance.currency,
-            'solution': balance._solution,
-        }
-
-    @property
-    def calls(self):
-        return self.call.calls
 
     def response_extractor(self, result: CallInstance):
         return {
@@ -351,44 +408,45 @@ class CallService(BaseTwilioCommunication):
         }
 
     @BaseTwilioCommunication.parse_to_json('async')
-    def send_otp_voice_call(self, body: str, otp: OTPModel):
+    def send_otp_voice_call(self, body: str, otp: OTPModel,twilio_profile:str):
         call = {}
         call.update(otp.model_dump(exclude=('content')))
         call['twiml'] = body
-        return self._create_call(call)
+        return self._create_call(call,twilioProfile=twilio_profile)
 
     @BaseTwilioCommunication.parse_to_json(('async',*RedisEventInterface.redis_event_callback))
-    def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,subject_id=None,twilio_tracking:list[str]=None):
+    def send_custom_voice_call(self, body: str, voice: str, lang: str, loop: int, call: dict,subject_id=None,twilio_tracking:list[str]=None,twilio_profile:str=None):
         voiceResponse = VoiceResponse()
         voiceResponse.say(body, voice, loop, lang)
         call['twiml'] = voiceResponse
-        return self._create_call(call,subject_id,twilio_tracking)
+        return self._create_call(call,subject_id,twilio_tracking,twilio_profile)
 
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:list[str]=None):
+    def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:list[str]=None,twilio_profile:str=None):
         call_details['url'] = url
-        return self._create_call(call_details,subject_id,twilio_tracking)
+        return self._create_call(call_details,subject_id,twilio_tracking,twilio_profile)
 
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:list[str]=None):
+    def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:list[str]=None,twilio_profile:str=None):
         call_details['twiml'] = result
-        return self._create_call(call_details,subject_id,twilio_tracking)
+        return self._create_call(call_details,subject_id,twilio_tracking,twilio_profile)
 
-    def _create_call(self, details: dict,subject_id:str=None,twilio_tracking:list[str]=[]):
+    def _create_call(self, details: dict,subject_id:str=None,twilio_tracking:list[str]=[],twilioProfile:str=None):
    
-        
+        twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
+
         events= []
         results = []
 
         for i,to in enumerate(details['to']):
             now = datetime.now(timezone.utc).isoformat()
-            url = self.set_url(subject_id,get_value_in_list(twilio_tracking,i))
+            url = self.set_url(twilioProfile.logs_url,subject_id,get_value_in_list(twilio_tracking,i))
 
             try:
                 data = details.copy()
                 data['to'] = to
                 result = None
-                result = self.calls.create(**data, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
+                result = twilioProfile.client.calls.create(**data, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
 
                 # if self.configService.celery_env == CeleryMode.worker:
                 #     result = self.calls.create(**details, method='GET', status_callback_method='POST', status_callback=url, status_callback_event=CallService.status_callback_event)
@@ -422,12 +480,13 @@ class CallService(BaseTwilioCommunication):
     def update_voice_call(self):
         ...
 
-    def gather_dtmf(self, otpModel: GatherDtmfOTPModel,subject_id:str,request_id:str):
+    def gather_dtmf(self, otpModel: GatherDtmfOTPModel,subject_id:str,request_id:str,twilioProfile:TwilioAccountMiniService):
+        
         otp = otpModel.otp
         service = otpModel.service if otpModel.service else '-1'
         config = otpModel.content.model_dump(exclude={'instruction'})
         response = VoiceResponse()
-        action_url = self.gather_url+f'/dtmf'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}&maxDigits={otpModel.content.numDigits}'
+        action_url = twilioProfile.gather_url+f'/dtmf'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}&maxDigits={otpModel.content.numDigits}'
         gather = Gather(action=action_url, method='GET',input='dtmf',**config)
 
         self._add_instruction_when_gather(otpModel, service, response, gather,'dtmf')
@@ -463,29 +522,26 @@ class CallService(BaseTwilioCommunication):
             
         response.append(say)
     
-    def gather_speech(self,otpModel:GatherSpeechOTPModel,subject_id:str,request_id:str):
+    def gather_speech(self,otpModel:GatherSpeechOTPModel,subject_id:str,request_id:str,twilioProfile:TwilioAccountMiniService):
         otp = otpModel.otp
         service = otpModel.service if otpModel.service else '-1'
         config = otpModel.content.model_dump(exclude={'instruction'})
-        config['partialResultCallback'] = self.partial_results_url
+        config['partialResultCallback'] = twilioProfile.partial_results_url
         config['partialResultCallbackMethod'] = 'POST'
 
         response = VoiceResponse()
 
-        action_url = self.gather_url+'/speech'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}'
+        action_url = twilioProfile.gather_url+'/speech'+f'?otp={otp}&return_url=-1&subject_id={subject_id}&hangup=true&request_id={request_id}'
         gather = Gather(action=action_url, method='GET',input='speech',**config)
 
         self._add_instruction_when_gather(otpModel, service, response, gather)
         return response
 
 
-
-
 class FaxService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService):
         super().__init__(configService, twilioService)
-
 
 class ConversationService(BaseTwilioCommunication):
     def __init__(self, configService: ConfigService, twilioService: TwilioService):
