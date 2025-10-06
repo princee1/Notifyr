@@ -143,6 +143,7 @@ class BaseService():
 
             case ServiceStatus.NOT_AVAILABLE :
                 raise ServiceNotAvailableError
+            
             case ServiceStatus.TEMPORARY_NOT_AVAILABLE:
                 raise ServiceTemporaryNotAvailableError
             case _:
@@ -425,6 +426,12 @@ class MiniServiceStore(Generic[TMS]):
     def __len__(self):
         return len(self._store_)    
 
+    def filter_count(self,lamda:Callable[[TMS],bool]):
+        count=0
+        for _,v in self:
+            if lamda(v):
+                count+=1
+        return count
    
 class BaseMiniServiceManager(BaseService):
 

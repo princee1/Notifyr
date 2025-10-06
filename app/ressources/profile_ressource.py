@@ -49,7 +49,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
-    @PingService([HCVaultService,CeleryService])
+    @PingService([HCVaultService,TaskService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseHandler(VaultHandler,MiniServiceHandler)
     @UsePermission(AdminPermission)
@@ -189,11 +189,12 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         if not force:
             return
 
-        for k,v in mc['filter']:
-            if not isinstance(v,(str,int,float,bool)):
+        for k,v in mc['filter'].items():
+            if not isinstance(v,(str,int,float,bool,list,dict)):
                 continue
 
             if isinstance(profileModel,ProfileModel):
+                print(k,v)
                 setattr(profileModel,k,v)
             else:
                 profile_dump[k] = v

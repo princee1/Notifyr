@@ -15,6 +15,12 @@ from app.interface.email import EmailReadInterface, EmailSendInterface
 
 class EmailService(_service.BaseMiniServiceManager):
 
+    ACCEPTABLE_MODEL:set = ...
+
+    def __init_subclass__(cls):
+        setattr(cls,'ACCEPTABLE_MODEL',set())
+        return super().__init_subclass__()
+
     def verify_dependency(self):
         if self.profilesService.service_status not in _service.ACCEPTABLE_STATES:
             raise _service.BuildFailureError
@@ -33,8 +39,10 @@ class EmailService(_service.BaseMiniServiceManager):
         return 
     
     def build(self,build_state=_service.DEFAULT_BUILD_STATE):
-        #TODO filter the by type of the model
-        state_counter = self.StatusCounter(len(self.profilesService.MiniServiceStore))
+        #TODO filter the by type of the model   
+
+        count = self.profilesService.MiniServiceStore.filter_count(lambda p: p.model.__class__ in self.ACCEPTABLE_MODEL )
+        state_counter = self.StatusCounter(count)
 
         for i,p in self.profilesService.MiniServiceStore:
             model = p.model.__class__
@@ -56,6 +64,8 @@ class EmailSenderService(EmailService):
 
     # BUG cant resolve an abstract class
 
+    service_model = {SMTPProfileModel}
+
     def __init__(self, configService: ConfigService,loggerService:LoggerService,redisService:RedisService,profileService:ProfileService) -> None:
         super().__init__(profileService)
         self.configService = configService
@@ -76,6 +86,8 @@ class EmailSenderService(EmailService):
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
 class EmailReaderService(EmailService):
+
+    service_model = {IMAPProfileModel}
 
     def __init__(self, configService: ConfigService,reactiveService:ReactiveService,loggerService:LoggerService,profilesService:ProfileService,redisService:RedisService) -> None:
         super().__init__(profilesService)

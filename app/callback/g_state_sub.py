@@ -7,6 +7,52 @@ from app.interface.timers import SchedulerInterface
 from app.utils.constant import SubConstant
 
 
+
+async def recursive(s:BaseService,message:StateProtocol,cache={}):
+    if s.name in cache:
+        return
+
+    for d in s.used_by_services.values():
+
+        if d.name in cache:
+            continue
+
+        linkP =  LiaisonDependency[d.name]
+        linkP:LinkParams = linkP[s.__class__]
+
+        async with d.statusLock.writer:
+            follow:bool =  linkP.get('build_follow_dep',False)
+            force_sync_verify = False
+            if not follow:
+                to_build:bool = linkP.get('to_build',False)
+                to_destroy:bool = linkP.get('to_destroy',False)
+                to_async_verify = linkP.get('to_async_verify',False)
+                build_state = linkP.get('build_state',DEFAULT_BUILD_STATE)
+                destroy_state=linkP.get('destroy_state',DEFAULT_DESTROY_STATE)
+            else:
+                to_destroy =  message.get('to_destroy',False)
+                to_build = message.get('to_build',False)
+                to_async_verify = not message.get('bypass_async_verify',False)
+                build_state = message.get('build_state',DEFAULT_BUILD_STATE)
+                destroy_state = message.get('destroy_state',DEFAULT_DESTROY_STATE)
+                force_sync_verify = message.get('force_sync_verify',False)
+
+            if to_destroy:
+                d._destroyer(LIFECYCLE_QUIET,destroy_state=destroy_state)
+            
+            if to_build:
+                build = True
+                if to_async_verify:
+                    build = await d.async_verify_dependency()
+                
+                if build:
+                    d._builder(LIFECYCLE_QUIET,build_state=build_state,force_sync_verify=force_sync_verify)              
+
+        cache[d.name] = True
+
+        await recursive(d,message,cache)
+
+
 class ServiceStateScheduler(SchedulerInterface):
     ...
 
@@ -35,7 +81,7 @@ async def SetServiceStatus(message:StateProtocol,service=None):
                 
                 if build:
                     service._builder(LIFECYCLE_QUIET,message.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=message.get('force_sync_verify',False))
-
+                    
             if 'callback_state_function' in message and message['callback_state_function'] != None:
                 callback_state_function = getattr(service,message['callback_state_function'],None)
                 if callback_state_function != None and callable(callback_state_function):
@@ -46,57 +92,11 @@ async def SetServiceStatus(message:StateProtocol,service=None):
 
                 service.report('variable',var_,)
         
-        cache = {}
-
         if not message.get('recursive',True):
             print("Ending...")
             return 
 
-        async def recursive(s:BaseService):
-            if s.name in cache:
-                return
-
-            for d in s.used_by_services.values():
-
-                if d.name in cache:
-                    continue
-
-                linkP =  LiaisonDependency[d.name]
-                linkP:LinkParams = linkP[s.__class__]
-
-                async with d.statusLock.writer:
-                    follow:bool =  linkP.get('build_follow_dep',False)
-                    force_sync_verify = False
-                    if not follow:
-                        to_build:bool = linkP.get('to_build',False)
-                        to_destroy:bool = linkP.get('to_destroy',False)
-                        to_async_verify = linkP.get('to_async_verify',False)
-                        build_state = linkP.get('build_state',DEFAULT_BUILD_STATE)
-                        destroy_state=linkP.get('destroy_state',DEFAULT_DESTROY_STATE)
-                    else:
-                        to_destroy =  message.get('to_destroy',False)
-                        to_build = message.get('to_build',False)
-                        to_async_verify = not message.get('bypass_async_verify',False)
-                        build_state = message.get('build_state',DEFAULT_BUILD_STATE)
-                        destroy_state = message.get('destroy_state',DEFAULT_DESTROY_STATE)
-                        force_sync_verify = message.get('force_sync_verify',False)
-
-                    if to_destroy:
-                        d._destroyer(LIFECYCLE_QUIET,destroy_state=destroy_state)
-                    
-                    if to_build:
-                        build = True
-                        if to_async_verify:
-                            build = await d.async_verify_dependency()
-                        
-                        if build:
-                            d._builder(LIFECYCLE_QUIET,build_state=build_state,force_sync_verify=force_sync_verify)              
-
-                cache[d.name] = True
-
-                await recursive(d)
-
-        await recursive(service)
+        await recursive(service,message)
 
         print("Ending...")
         return

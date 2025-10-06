@@ -177,10 +177,11 @@ class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
     def build(self, build_state=...):
         main_set = False
         first_available = None
-        state_counter = self.StatusCounter(len(self.profileService.MiniServiceStore))
+
+        count = self.profileService.MiniServiceStore.filter_count(lambda p: p.model.__class__ == TwilioProfileModel)
+        state_counter = self.StatusCounter(count)
 
         twilio_account_count = 0
-        valid_account_count = 0
 
         for id, p in self.profileService.MiniServiceStore:
             if p.model.__class__ == TwilioProfileModel:
@@ -190,7 +191,6 @@ class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
 
                 if tams.service_status in _service.ACCEPTABLE_STATES and first_available is None:
                     first_available = tams
-                    valid_account_count = 0
 
                 if tams.depService.model.main and tams.service_status in _service.ACCEPTABLE_STATES:
                     self.main = tams

@@ -606,12 +606,13 @@ class DocumentFriendlyPipe(Pipe):
 
 class MiniServiceInjectorPipe(Pipe):
     def __init__(self,cls:Type[BaseMiniServiceManager],key:str='profile',strict_value:str=None):
+        super().__init__(True)
         if not issubclass_of(BaseMiniServiceManager,cls):
             raise TypeError('Must be a Mini Service Manager')
 
         self.service:BaseMiniServiceManager = Get(cls)  
         self.key = key
-        self.strict_value =None
+        self.strict_value =strict_value
 
     def pipe(self,profile:str):
         if self.strict_value != None and profile==  self.strict_value:

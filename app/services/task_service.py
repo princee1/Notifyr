@@ -461,6 +461,8 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
             self.MiniServiceStore.add(miniService)
                
         try:
+            self._builded = True
+            self._destroyed = False
             BaseMiniServiceManager.build(self,self.state_counter)
         except BuildError:
             raise BuildSkipError

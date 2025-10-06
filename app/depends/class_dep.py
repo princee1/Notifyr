@@ -401,11 +401,7 @@ class Broker:
             raise StateProtocolMalFormattedError
 
         self.backgroundTasks.add_task(self.redisService.publish_data,sub_queue,protocol)
-
-    def update_profile_state(self,protocol):
-        
-        self.backgroundTasks.add_task(self.redisService.stream_data,...)
-
+    
     def wait(self,seconds:float):
 
         self.backgroundTasks.add_task(asyncio.sleep,seconds)
