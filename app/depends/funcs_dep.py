@@ -7,13 +7,15 @@ from app.container import Get, GetAttr
 from app.definition._error import ServerFileError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
-from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyORM
+from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyMappingORM, PolicyORM
 from app.services.admin_service import AdminService
 from app.services.task_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
 from tortoise.exceptions import OperationalError
+
+from app.utils.helper import filter_paths
 from .variables import *
 
 
@@ -313,8 +315,10 @@ async def get_challenge(client:ClientORM):
 def get_template(template:str):
     return template
 
+
 def get_profile(profile:str):
     return profile
+
 
 def GetPolicy(skipPermission:bool):
 
@@ -338,3 +342,44 @@ def GetPolicy(skipPermission:bool):
             )
     
     return get_policy
+
+
+async def get_combined_policies(client:ClientORM):
+    
+    client_id = str(client.client_id)
+    group_id = None if client.group == None else str(client.group.group_id)
+    policies:list[PolicyORM] = [pm.policy for pm in  await PolicyMappingORM.filter(client_id=client_id,group_id=group_id)]
+    
+    roles= set()
+    allowed_assets = set()
+    allowed_profiles = set()
+    allowed_routes = {}
+    
+    for p in policies:
+        roles.update(p.roles)
+        allowed_assets.union(p.allowed_assets)
+        allowed_profiles.union(p.allowed_profiles)
+
+        for k,r in p.allowed_routes.items():
+            
+            if k not in allowed_routes:
+                allowed_routes[k] = r
+            else:
+                if r['scope'] == 'all':
+                    if allowed_routes['scope'] !='all':
+                        allowed_routes['scope'] = 'all'
+                        allowed_routes['custom_routes'] = []
+                else:
+                    if allowed_routes['scope'] == 'custom':
+                        allowed_routes['custom_routes'] = list[set(allowed_routes['custom_routes']).union(r['scope'])]
+    
+    allowed_assets = filter_paths(list(allowed_assets))
+    allowed_profiles = list(allowed_profiles)
+    allowed_profiles = list(allowed_profiles)
+
+    return AuthPermission(
+        roles=roles,
+        allowed_routes=allowed_routes,
+        allowed_profiles=allowed_profiles,
+        allowed_assets=allowed_assets
+    )

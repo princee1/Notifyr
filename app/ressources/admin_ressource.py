@@ -7,7 +7,7 @@ from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.definition._service import StateProtocol
 from app.depends.class_dep import Broker
 from app.depends.funcs_dep import GetPolicy, get_blacklist, get_group, get_client
-from app.depends.orm_cache import WILDCARD, BlacklistORMCache, ChallengeORMCache, ClientORMCache, PolicyORMCache
+from app.depends.orm_cache import WILDCARD, AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache, PolicyORMCache
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
@@ -22,7 +22,7 @@ from app.depends.dependencies import get_auth_permission, get_query_params, get_
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
-from app.classes.auth_permission import PolicyModel, PolicyUpdateMode, Role, RoutePermission, AssetsPermission, Scope, TokensModel, UpdatePolicyModel
+from app.classes.auth_permission import PolicyModel, PolicyUpdateMode, Role, Scope, TokensModel, UpdatePolicyModel
 from pydantic import BaseModel,  field_validator
 from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, PydanticHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe, ObjectRelationalFriendlyPipe
@@ -33,6 +33,7 @@ from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotR
 from datetime import datetime, timedelta
 from tortoise.transactions import in_transaction
 from app.depends.variables import policy_update_mode_query
+from tortoise.expressions import Q
 
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
@@ -77,6 +78,7 @@ class PolicyRessource(BaseHTTPRessource):
         async with in_transaction():
             await policy.delete()
             await PolicyORMCache.Invalid(str(policy.policy_id))
+            await AuthPermissionCache.InvalidAll()
         
         return policy
 
@@ -95,7 +97,8 @@ class PolicyRessource(BaseHTTPRessource):
 
         await PolicyORMCache.Invalid(policy_id)
         await PolicyORMCache.Store(policy_id,policy)
- 
+        await AuthPermissionCache.InvalidAll()
+
         return policy
     
     @UsePipe(ObjectRelationalFriendlyPipe)
@@ -161,6 +164,8 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         else:
             group = None
         async with in_transaction():
+            group_id = None if group == None else str(group.group_id)
+
             client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
             await PolicyMappingORM.bulk_create([PolicyMappingORM(policy_id=policy_id,client=client,group=None) for policy_id in client.policy_ids])
             challenge = await ChallengeORM.create(client=client)
@@ -169,8 +174,9 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.settingService.REFRESH_EXPIRATION)
             await challenge.save()
 
-            await ClientORMCache.Store([client.group.group_id,client.client_id],client,)
+            await ClientORMCache.Store([group_id,client.client_id],client,)
             await ChallengeORMCache.Store(client.client_id,challenge,ttl_auth_challenge)
+            await AuthPermissionCache.Store([group_id,client.client_id],None,client=client)
 
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json})
     
@@ -178,7 +184,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePipe(ForceClientPipe)
     @UseHandler(ValueErrorHandler,ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
-    async def update_client(self, updateClient:UpdateClientModel ,client: Annotated[ClientORM, Depends(get_client)],gid: str = Depends(get_query_params('gid', 'id')),rmgrp: str = Depends(get_query_params('rmgrp', False)),authPermission=Depends(get_auth_permission) ):
+    async def update_client(self, updateClient:UpdateClientModel ,client: Annotated[ClientORM, Depends(get_client)],gid: str = Depends(get_query_params('gid', 'id')),rmgrp: str = Depends(get_query_params('rmgrp', False)),mode:PolicyUpdateMode =Depends(policy_update_mode_query),authPermission=Depends(get_auth_permission) ):
         
         if not isinstance(rmgrp,bool):
             rmgrp_ = parseToBool(rmgrp)
@@ -186,14 +192,19 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f'Could not parse {rmgrp} as a bool')
         async with in_transaction():
             is_revoked = await self._update_client(updateClient, client, gid, authPermission,rmgrp_)
+            await self._update_policy(updateClient.policy_ids,mode,client)
             if is_revoked:
                 # ERROR Do i need the revoke the possibility to login again?
                 await self._revoke_client(client)
             else:
                 await client.save()
-        
-            await ClientORMCache.Invalid([client.group.group_id,client.client_id])
-            await ClientORMCache.Store([client.group.group_id,client.client_id],client)
+            group_id = None if client.group == None else str(client.group.group_id)
+            
+            await ClientORMCache.Invalid([group_id,client.client_id])
+            await ClientORMCache.Store([group_id,client.client_id],client)
+
+            await AuthPermissionCache.Invalid([group_id,client.client_id])
+            await AuthPermissionCache.Store([group_id,client.client_id],None,client=client)
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully updated", "client": client.to_json})
 
@@ -204,7 +215,12 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     async def delete_client(self, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         async with in_transaction():
             await client.delete()
-            await ClientORMCache.Invalid([client.group.group_id,client.client_id])
+
+            group_id = None if client.group==None else str(client.group.group_id)
+
+            await ClientORMCache.Invalid([group_id,client.client_id])
+            await AuthPermissionCache.Invalid([group_id,client.client_id])
+
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully deleted", "client": client.to_json})
 
     @UseRoles(roles=[Role.CONTACTS])
@@ -233,9 +249,13 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.Delete('/group/')
     async def delete_group(self, group: Annotated[GroupClientORM, Depends(get_group)], authPermission=Depends(get_auth_permission)):
-        await group.delete()
-        await BlacklistORMCache.InvalidAll([group.group_id,WILDCARD])
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Group successfully deleted", "group": group.to_json})
+        async with in_transaction():
+
+            await group.delete()
+            await BlacklistORMCache.InvalidAll([group.group_id,WILDCARD])
+            await AuthPermissionCache.InvalidAll([group.group_id,WILDCARD])
+            
+            return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Group successfully deleted", "group": group.to_json})
 
     @UseRoles(roles=[Role.CONTACTS])
     @BaseHTTPRessource.Get('/group/all/',deprecated=True,mount=False)
@@ -287,6 +307,32 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
                     raise ValueError(f"Invalid IPv4 subnet: {client.issued_for}")
                 
         return is_revoked
+
+    async def _update_policy(self, policy_ids: list[str], mode: PolicyUpdateMode, client: ClientORM = None, group: GroupClientORM = None):
+        # Get all current policy mappings for this client/group
+        current_policies = PolicyMappingORM.filter(client=client, group=group)
+        
+        match mode:
+            case 'delete':
+                await current_policies.filter(Q(policy_id__in=policy_ids)).delete()
+
+            case 'merge':
+                # Add new policy_ids that are not already mapped
+                current_policies = await current_policies
+                current_policy_ids = {pm.policy_id for pm in current_policies}
+                new_policy_ids = set(policy_ids) - current_policy_ids
+                await PolicyMappingORM.bulk_create([
+                    PolicyMappingORM(policy_id=pid, client=client, group=group)
+                    for pid in new_policy_ids
+                ])
+
+            case 'set':
+                # Remove all current mappings, then set only the provided policy_ids
+                await current_policies.delete()
+                await PolicyMappingORM.bulk_create([
+                    PolicyMappingORM(policy_id=pid, client=client, group=group)
+                    for pid in policy_ids
+                ])
 
 @PingService([TortoiseConnectionService])
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)

@@ -96,4 +96,4 @@ force_update_query: Callable[[Request],bool]=get_query_params('force',False,True
 
 # ----------------------------------------------                                    ---------------------------------- #
 
-policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','set',False,raise_except=True,checker=lambda v: v in get_args(PolicyUpdateMode))
+policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','merge',False,raise_except=True,checker=lambda v: v in get_args(PolicyUpdateMode))

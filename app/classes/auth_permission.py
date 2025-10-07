@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Callable, List, Literal,Dict,NotRequired, Optional
-from pydantic import BaseModel, field_validator
+from typing import Callable, List, Literal,Dict,NotRequired, Optional, Self
+from pydantic import BaseModel, field_validator, model_validator
 from typing_extensions import TypedDict
 from enum import Enum
 from time import time
@@ -35,7 +35,8 @@ class Role(Enum):
 class Scope(Enum):
     SoloDolo = 'SoloDolo'
     Organization = 'Organization'
-    #Domain = 'Domain'
+    Domain = 'Domain'
+    Free=cn'Free'
 
 
 class ClientType(Enum):
@@ -96,12 +97,25 @@ class RefreshPermission(TypedDict): # NOTE if someone from an organization chang
     client_type:ClientTypeLiteral = 'User'
 
 
+class RoutePermissionModel(BaseModel):
+    scope:PermissionScope
+    custom_routes:Optional[List[str]] = []
+
+    @model_validator(mode='after')
+    def check_model(self)->Self:
+        if self.scope == 'all':
+            self.custom_routes = []
+        else:
+            if not self.custom_routes:
+                raise ValueError('Custom Routes must have at least one routes')
+        return self
+
 
 class PolicyModel(BaseModel):
     allowed_profiles:List[str]=[]
-    allowed_routes: dict[str, RoutePermission] = {}
-    allowed_assets: list[str] =[]
-    roles: Optional[list[Role]] = [Role.PUBLIC]
+    allowed_routes: Dict[str, RoutePermissionModel] = {}
+    allowed_assets: List[str] =[]
+    roles: Optional[List[Role]] = [Role.PUBLIC]
 
     @field_validator('allowed_assets')
     def filter_assets_paths(cls,allowed_assets):

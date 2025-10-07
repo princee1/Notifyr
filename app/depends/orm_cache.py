@@ -2,7 +2,10 @@ import functools
 from random import randint
 import time
 from uuid import UUID
-from app.depends.funcs_dep import GetClient, GetLink, GetPolicy, get_challenge,Get_Contact
+
+from aiohttp_retry import List
+from app.classes.auth_permission import AuthPermission
+from app.depends.funcs_dep import GetClient, GetLink, GetPolicy, get_challenge,Get_Contact, get_combined_policies
 from app.models.contacts_model import ContactORM, ContactSummary, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.services.admin_service import AdminService
@@ -313,4 +316,5 @@ LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link'
 ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact',use_to_json=True)
 ContactSummaryORMCache = generate_cache_type(ContactSummary,contactService.read_contact,prefix='orm-contact-summary',use_to_json=False)
 PolicyORMCache = generate_cache_type(PolicyORM,GetPolicy(True),prefix='orm-policy',)
+AuthPermissionCache = generate_cache_type(AuthPermission,get_combined_policies,prefix=['auth-group','client'],use_to_json=False)
 #ContentSubORMCache = generate_cache_type(ContentSubscriptionORM,)

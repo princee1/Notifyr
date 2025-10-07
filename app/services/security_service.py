@@ -12,7 +12,7 @@ from app.definition._service import AbstractServiceClass, BaseService, BuildFail
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 import base64
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 import time
 from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
@@ -63,11 +63,8 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-
-    def encode_auth_token(self,authz_id, client_id:str,data: Dict[str, RoutePermission], challenge: str, group_id: str | None) -> str:
+    def encode_auth_token(self,authz_id, client_id:str, challenge: str, group_id: str | None) -> str:
         try:
-            if data == None:
-                data = {}
             salt = str(self.salt)
             created_time = time.time()
             permission = AuthPermission(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5,
@@ -174,18 +171,20 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
 
+    def verify_client_origin(self,permission:AuthPermission,issued_for,origin=None):
+        if permission['scope'] == Scope.SoloDolo.value:
+                if issued_for != permission["issued_for"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+        else:
+            # TODO verify subnet
+            ...
+
     def verify_auth_permission(self, token: str, issued_for: str) -> AuthPermission:
 
         token = self._decode_token(token)
         permission: AuthPermission = AuthPermission(**token)
         try:
-            if permission['scope'] == Scope.SoloDolo.value:
-                if issued_for != permission["issued_for"]:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
-            else:
-                # TODO verify subnet
-                ...
 
             self.set_status(permission,'auth')
             # if permission['status'] == 'expired': # NOTE might accept expired

@@ -18,7 +18,7 @@ CREATE DOMAIN Role AS VARCHAR(30) CHECK (
 )
 
 CREATE DOMAIN Scope AS VARCHAR(25) CHECK (
-    VALUE IN ('SoloDolo', 'Organization')
+    VALUE IN ('SoloDolo', 'Organization','Domain','Free')
 );
 
 CREATE DOMAIN ClientType AS VARCHAR(25) CHECK (
