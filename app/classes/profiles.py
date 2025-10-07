@@ -83,6 +83,9 @@ class ProfileState(Enum):
 class ProfileStateProtocol(TypedDict):
     ...
 
+class ProfileErrorProtocol(TypedDict):
+    ...
+    
 ####################################                 #####################################333
 
 class Profil:
