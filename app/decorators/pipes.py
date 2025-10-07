@@ -602,7 +602,15 @@ class DocumentFriendlyPipe(Pipe):
         result['id'] =result_id
         return result
 
+class ObjectRelationalFriendlyPipe(Pipe):
+
+    def __init__(self,):
+        super().__init__(False)
     
+    def pipe(self,result):
+        if hasattr(result,'to_json'):
+            return result.to_json
+        return None
 
 class MiniServiceInjectorPipe(Pipe):
     def __init__(self,cls:Type[BaseMiniServiceManager],key:str='profile',strict_value:str=None):

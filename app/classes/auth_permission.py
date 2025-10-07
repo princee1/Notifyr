@@ -1,17 +1,21 @@
 from dataclasses import dataclass
-from typing import Callable, List, Literal,Dict,NotRequired
-from pydantic import BaseModel
+from typing import Callable, List, Literal,Dict,NotRequired, Optional
+from pydantic import BaseModel, field_validator
 from typing_extensions import TypedDict
 from enum import Enum
 from time import time
 
 from app.definition._error import BaseError
+from app.utils.helper import filter_paths, subset_model
 
 PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
 PermissionStatus= Literal['active','inactive','expired']
 ClientTypeLiteral = Literal['User','Admin']
+
+PolicyUpdateMode = Literal['set','merge','delete']
+
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
@@ -65,7 +69,6 @@ class AuthPermission(TypedDict):
     hostname:str
     client_id: str
     client_type:ClientTypeLiteral = 'User'
-    #application_id: str = None # TODO
     roles:list[str|Role]
     issued_for: str # Subnets
     group_id:str | None = None
@@ -92,6 +95,26 @@ class RefreshPermission(TypedDict): # NOTE if someone from an organization chang
     status:PermissionStatus= 'active'
     client_type:ClientTypeLiteral = 'User'
 
+
+
+class PolicyModel(BaseModel):
+    allowed_profiles:List[str]=[]
+    allowed_routes: dict[str, RoutePermission] = {}
+    allowed_assets: list[str] =[]
+    roles: Optional[list[Role]] = [Role.PUBLIC]
+
+    @field_validator('allowed_assets')
+    def filter_assets_paths(cls,allowed_assets):
+        return filter_paths(allowed_assets)
+    
+    @field_validator('roles')
+    def checks_roles(cls, roles: list[Role]):
+        if Role.PUBLIC not in roles:
+            roles.append(Role.PUBLIC)
+        return roles
+        return [r.value for r in roles]
+
+UpdatePolicyModel = subset_model(PolicyModel,f'Update{PolicyModel.__name__}',optional=False)
 
 def parse_authPermission_enum(authPermission):
         authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]

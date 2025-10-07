@@ -18,21 +18,15 @@ class IssueAuthInterface(Interface):
     def __init__(self,adminService:AdminService):
         self.adminService:AdminService =adminService
     
-    def _transform_to_auth_model(self, permission: AuthPermission):
-        permission['roles']=[r.value for r in permission['roles']]
-        return IssueAuthInterface.AuthModel(permission['scope'],permission['roles'],permission['allowed_routes'],permission['allowed_assets'])
-
-    async def issue_auth(self, client, authPermission,update_authz=False):
+    async def issue_auth(self, client,update_authz=False):
         challenge = await ChallengeORM.filter(client=client).first()
         if update_authz:
             await self.change_authz_id(challenge)
 
-        auth_model = self._transform_to_auth_model(authPermission)
-
-        auth_token, refresh_token = self.adminService.issue_auth(challenge, client, auth_model)
+        auth_token, refresh_token = self.adminService.issue_auth(challenge, client)
         return auth_token, refresh_token
 
-    async def change_authz_id(self, challenge):
+    async def change_authz_id(self, challenge:ChallengeORM):
         challenge.last_autz_id = uuid.uuid4()
         await challenge.save()
 

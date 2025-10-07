@@ -3,6 +3,7 @@ from typing import Callable,get_args
 
 from aiohttp_retry import Any
 from fastapi import Query, Request, Response
+from app.classes.auth_permission import PolicyUpdateMode
 from app.classes.celery import AlgorithmType, CeleryTask
 from app.classes.env_selector import StrategyType
 from app.container import GetAttr, GetDependsFunc
@@ -94,3 +95,5 @@ global_var_key:tuple[Callable[[Request],str],Callable[[Request],str]] = get_quer
 force_update_query: Callable[[Request],bool]=get_query_params('force',False,True,raise_except=True)
 
 # ----------------------------------------------                                    ---------------------------------- #
+
+policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','set',False,raise_except=True,checker=lambda v: v in get_args(PolicyUpdateMode))

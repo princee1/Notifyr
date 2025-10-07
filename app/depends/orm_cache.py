@@ -2,7 +2,7 @@ import functools
 from random import randint
 import time
 from uuid import UUID
-from app.depends.funcs_dep import GetClient, GetLink, get_challenge,Get_Contact
+from app.depends.funcs_dep import GetClient, GetLink, GetPolicy, get_challenge,Get_Contact
 from app.models.contacts_model import ContactORM, ContactSummary, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.services.admin_service import AdminService
@@ -12,7 +12,7 @@ from app.services.config_service import ConfigService
 from app.container import Get
 from app.utils.helper import KeyBuilder
 from app.utils.tools import Time
-from app.models.security_model import ClientORM,ChallengeORM
+from app.models.security_model import ClientORM,ChallengeORM, PolicyORM
 import typing
 from typing import Any, Callable, Type,TypeVar, TypedDict
 from tortoise.models import Model,ModelMeta
@@ -312,4 +312,5 @@ ChallengeORMCache = generate_cache_type(ChallengeORM,get_challenge,prefix='orm-c
 LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link')
 ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact',use_to_json=True)
 ContactSummaryORMCache = generate_cache_type(ContactSummary,contactService.read_contact,prefix='orm-contact-summary',use_to_json=False)
+PolicyORMCache = generate_cache_type(PolicyORM,GetPolicy(True),prefix='orm-policy',)
 #ContentSubORMCache = generate_cache_type(ContentSubscriptionORM,)

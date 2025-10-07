@@ -58,7 +58,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         refreshPermission:RefreshPermission = tokens
         async with in_transaction():    
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
             client.authenticated = True # NOTE just to make sure
             await client.save()
 
@@ -80,7 +80,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 
             refreshPermission:RefreshPermission = tokens
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
 
         await ClientORMCache.Invalid(client.client_id)
         
@@ -94,10 +94,11 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePermission(TwilioPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_twilio_token)],mount=False )
     async def refresh_twilio_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
+        return
         async with in_transaction():    
             refreshPermission:RefreshPermission = tokens
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
 
         status_code = await self.twilioService.update_env_variable(auth_token, refresh_token)
 
@@ -132,9 +133,6 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             raise ClientDoesNotExistError()
                 
         return client
-
-    def _create_superuser_auth_permission(self,admin:ClientORM,roles,allowed_assets=[],allowed_routes={})->AuthPermission:
-        return AuthPermission(roles=roles,scope=admin.client_scope,allowed_assets=allowed_assets,allowed_routes=allowed_routes) #TODO add more routes
     
     def _decode_and_verify(self, client: ClientORM, x_client_token):
         authPermission: AuthPermission = self.jwtAutService._decode_token(x_client_token)
@@ -157,8 +155,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         async with in_transaction():
             client = await self._get_client_by_type(client_type)
             await raw_revoke_challenges(client)
-            authPermission = self._create_superuser_auth_permission(client,roles)
-            auth_token, refresh_token = await self.issue_auth(client,authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
         
         if auth_token == None:
             raise CouldNotCreateAuthTokenError
@@ -184,7 +181,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/twilio/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)],mount=False)
     async def issue_twilio_auth(self,request:Request):
         
-        auth_token, refresh_token = await self._create_superuser_auth(ClientType.Twilio,self.twilio_roles)
+        auth_token, refresh_token = await self._create_superuser_auth(ClientType.Twilio)
         status_code = await self.twilioService.update_env_variable(auth_token,refresh_token)
 
         if status_code == status.HTTP_200_OK:
@@ -213,7 +210,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
                 raise AuthzIdMisMatchError
             
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
             
             await client.save()
 

@@ -36,6 +36,8 @@ class ClientORM(models.Model):
     authenticated = fields.BooleanField(default=False)
     password = fields.TextField()
     password_salt = fields.TextField()
+    max_connection = fields.IntField(default=1)
+    current_connection_count = fields.IntField(default=0)
     can_login = fields.BooleanField(default=False)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     issued_for = fields.CharField(max_length=50, null=False, unique=True)
@@ -54,6 +56,8 @@ class ClientORM(models.Model):
             "client_name": self.client_name,
             "client_scope": self.client_scope.value,
             "authenticated": self.authenticated,
+            "max_connection":self.max_connection,
+            "current_connection_count":self.current_connection_count,
             "client_type": self.client_type.value,
             "issued_for": self.issued_for,
             "group_id": str(self.group_id) if self.group else None,
@@ -96,8 +100,63 @@ class BlacklistORM(models.Model):
             "expired_at": self.expired_at.isoformat() if self.expired_at else None
         }
 
+class PolicyORM(models.Model):
+    policy_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    allowed_profiles = fields.JSONField(default=list)  # TEXT[] as list
+    allowed_routes = fields.JSONField(default=dict)    # JSONB as dict
+    allowed_assets = fields.JSONField(default=list)    # TEXT[] as list
+    roles = fields.JSONField(default=lambda: ["PUBLIC"])  # role[] as list
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        schema = SCHEMA
+        table = "policy"
+    
+    @property
+    def to_json(self,):
+        return {
+            'policy_id':str(self.policy_id),
+            'allowed_profiles':self.allowed_profiles,
+            'allowed_routes':self.allowed_routes,
+            'allowed_assets':self.allowed_assets,
+            'roles':self.roles,
+            'created_at':self.created_at.isoformat(),
+            'updated_at':self.updated_at.isoformat()
+
+        }
+
+class PolicyMappingORM(models.Model):
+    mapping_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
+    policy = fields.ForeignKeyField("models.PolicyORM", related_name="mappings", on_delete=fields.CASCADE)
+    client = fields.ForeignKeyField("models.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    group = fields.ForeignKeyField("models.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+
+    class Meta:
+        schema = SCHEMA
+        table = "policymapping"
+        unique_together = [
+            ("policy", "client"),
+            ("policy", "group"),
+        ]
+        
+    @property
+    def to_json(self):
+        return {
+            'mapping_id':str(self.mapping_id),
+            'policy_id':str(self.policy_id),
+            'client_id':str(self.client_id) if self.client else None,
+            'group_id':str(self.group_id) if self.group else None,
+        }
+
+client_password_validator = PasswordValidator(12,60,)
+
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login"))
+
+
 class GroupModel(BaseModel):
     group_name: str
+    policy_ids: list[str] = []
 
     @field_validator('group_name')
     def parse_name(cls,group_name:str):
@@ -105,16 +164,12 @@ class GroupModel(BaseModel):
         return group_name
         group_name=group_name.lower()
         return group_name.capitalize()
-    
-
-client_password_validator = PasswordValidator(12,60,)
-
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login"))
 
 class ClientModel(ClientModelBase):
     
     client_scope:Scope
     group_id:str | None = None
+    policy_ids:list[str] =[]
 
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:

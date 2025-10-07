@@ -376,7 +376,7 @@ class SMSService(BaseTwilioCommunication):
         return self._send_sms(messageData, subject_id, twilio_tracking,twilioProfile)
 
     @BaseTwilioCommunication.parse_to_json('async',*RedisEventInterface.redis_event_callback)
-    async def send_template_sms(self, message: dict, subject_id=None, twilio_tracking:list[str] = [],twilioProfile:str=None):
+    def send_template_sms(self, message: dict, subject_id=None, twilio_tracking:list[str] = [],twilioProfile:str=None):
         return self._send_sms(message, subject_id, twilio_tracking,twilioProfile)
 
     def get_message(self, to: str,twilioProfile:str):

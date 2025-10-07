@@ -7,7 +7,7 @@ from app.container import Get, GetAttr
 from app.definition._error import ServerFileError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
-from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM
+from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyORM
 from app.services.admin_service import AdminService
 from app.services.task_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
@@ -316,3 +316,25 @@ def get_template(template:str):
 def get_profile(profile:str):
     return profile
 
+def GetPolicy(skipPermission:bool):
+
+    async def get_policy(policy:str,authPermission:AuthPermission=Depends(wrapper_auth_permission)):
+        
+        if skipPermission:
+            if authPermission['client_id'] != 'Admin':
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,)
+        try:
+            p = await PolicyORM.filter(policy_id=policy).first()
+            if p == None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f'Policy does not exists'
+                )
+            return p
+        except OperationalError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e.args[0])
+            )
+    
+    return get_policy

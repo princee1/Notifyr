@@ -611,7 +611,14 @@ class ProfileHandler(Handler):
             
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     
+class PydanticHandler(Handler):
 
+    def handle(self, function, *args, **kwargs):
+        try:
+            return super().handle(function, *args, **kwargs)
+        except PydanticValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors(include_url=False,include_context=False))
+        
 class VaultHandler(Handler):
     
     async def handle(self, function, *args, **kwargs):

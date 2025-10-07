@@ -6,7 +6,7 @@ from random import choice, seed
 from string import hexdigits, digits, ascii_letters,punctuation
 import time
 from inspect import currentframe, getargvalues
-from typing import Any, Callable, Literal, Optional, Tuple, Type, get_args, get_origin
+from typing import Any, Callable, Literal, Optional, Tuple, Type, TypeVar, get_args, get_origin
 import urllib.parse
 from aiohttp_retry import Union
 from fastapi import Response
@@ -578,14 +578,16 @@ def is_optional(annotation) -> bool:
         return type(None) in get_args(annotation)
     return False
 
+M= TypeVar('M',bound=BaseModel)
+
 def subset_model(
-    base: type[BaseModel],
+    base: Type[M],
     name: str,
     include: set[str] | None = None,
     exclude: set[str] | None = None,
     optional: bool = True,
     __config__:ConfigDict |None = None
-):
+)->Type[M]:
     fields = {}
     for field_name, field in base.model_fields.items():
         if include and field_name not in include:

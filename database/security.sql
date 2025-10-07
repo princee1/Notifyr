@@ -12,10 +12,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE DOMAIN Role AS VARCHAR(30) CHECK (
+    VALUE IN ('PUBLIC','ADMIN','RELAY','CUSTOM','MFA_OTP','CHAT','REDIS-RESULT','REFRESH','CONTACTS','TWILIO','SUBSCRIPTION','CLIENT','LINK'
+)
+)
+
 CREATE DOMAIN Scope AS VARCHAR(25) CHECK (
     VALUE IN ('SoloDolo', 'Organization')
 );
-
 
 CREATE DOMAIN ClientType AS VARCHAR(25) CHECK (
     VALUE IN ('User','Admin','Twilio')
@@ -38,6 +42,8 @@ CREATE TABLE IF NOT EXISTS Client (
     password TEXT DEFAULT NULL,
     password_salt TEXT DEFAULT NULL,
     can_login BOOLEAN DEFAULT NULL,
+    max_connection INT DEFAULT 1,
+    current_connection_count DEFAULT 0,
     issued_for VARCHAR(50) UNIQUE,
     authenticated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -55,7 +61,7 @@ CREATE TABLE IF NOT EXISTS Challenge (
     challenge_refresh VARCHAR(256) UNIQUE DEFAULT secure_random_string(256),
     created_at_refresh TIMESTAMPTZ DEFAULT NOW(),
     expired_at_refresh TIMESTAMPTZ ,
-    last_authz_id UUID DEFAULT uuid_generate_v4 (),
+    last_authz_id UUID DEFAULT uuid_generate_v4(),
     PRIMARY KEY (client_id),
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -66,10 +72,62 @@ CREATE TABLE IF NOT EXISTS Blacklist (
     group_id UUID UNIQUE DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     expired_at TiMESTAMPTZ,
+    CONSTRAINT client_xor_group CHECK (
+        (client_id IS NOT NULL AND group_id IS NULL) OR
+        (client_id IS NULL AND group_id IS NOT NULL)
+    ),
     PRIMARY KEY (blacklist_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
+    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE,
 );
+
+-- Unique for policy_id + client_id where client_id is not null
+CREATE UNIQUE INDEX IF NOT EXISTS unique_policy_client
+ON Blacklist(policy_id, client_id)
+WHERE client_id IS NOT NULL;
+
+-- Unique for policy_id + group_id where group_id is not null
+CREATE UNIQUE INDEX IF NOT EXISTS unique_policy_group
+ON Blacklist(policy_id, group_id)
+WHERE group_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS Policy (
+    policy_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc(),
+    allowed_profiles TEXT[] DEFAULT '{}',
+    allowed_routes JSONB DEFAULT '{}'::jsonb,
+    allowed_assets TEXT[] DEFAULT '{}',
+    roles role[] DEFAULT ARRAY['PUBLIC']::Role[],
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS PolicyMapping(
+    mapping_id UUID DEFAULT uuid_generate_v1mc(),
+    policy_id UUID,
+    client_id UUID DEFAULT NULL,
+    group_id UUID DEFAULT NULL,
+    PRIMARY KEY (mapping_id),
+    CONSTRAINT client_xor_group CHECK (
+        (client_id IS NOT NULL AND group_id IS NULL) OR
+        (client_id IS NULL AND group_id IS NOT NULL)
+    ),
+    FOREIGN KEY (policy_id) REFERENCES Policy (policy_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE,
+);
+
+-- Unique for policy_id + client_id where client_id is not null
+CREATE UNIQUE INDEX IF NOT EXISTS unique_policy_client
+ON PolicyMapping(policy_id, client_id)
+WHERE client_id IS NOT NULL;
+
+-- Unique for policy_id + group_id where group_id is not null
+CREATE UNIQUE INDEX IF NOT EXISTS unique_policy_group
+ON PolicyMapping(policy_id, group_id)
+WHERE group_id IS NOT NULL;
+
+#------------------------------------             -------------------------------------------#
+#------------------------------------             -------------------------------------------#
 
 CREATE OR REPLACE FUNCTION set_auth_challenge() RETURNS VOID AS $$
 BEGIN
@@ -99,7 +157,6 @@ BEGIN
         expired_at_refresh <= NOW();
 END; $$ LANGUAGE plpgsql;
 
-
 CREATE OR REPLACE FUNCTION raw_revoke_challenges(cid UUID) RETURNS VOID as $$
 BEGIN
     SET search_path = security;
@@ -118,7 +175,6 @@ BEGIN
 
 END; $$ LANGUAGE plpgsql;
 
-
 CREATE OR REPLACE FUNCTION raw_revoke_auth_token(cid UUID) RETURNS VOID as $$
 BEGIN
     SET search_path = security;
@@ -133,14 +189,16 @@ BEGIN
 
 END; $$ LANGUAGE plpgsql;
 
-
-
 CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
 BEGIN
     SET search_path = security;
     PERFORM set_auth_challenge();
     PERFORM set_refresh_challenge();
 END; $$ LANGUAGE plpgsql;
+
+#------------------------------------             -------------------------------------------#
+#------------------------------------             -------------------------------------------#
+
 
 SELECT cron.schedule (
     'update_challenge_every_5_minutes', '*/5 * * * *', 'SELECT security.update_challenge();'
@@ -157,6 +215,10 @@ END; $$ LANGUAGE plpgsql;
 SELECT cron.schedule (
     'delete_blacklist_every_5_minutes', '*/5 * * * *', 'SELECT security.delete_blacklist();'
 );
+
+#------------------------------------             -------------------------------------------#
+
+#------------------------------------             -------------------------------------------#
 
 CREATE OR REPLACE FUNCTION compute_limit_group() RETURNS TRIGGER AS $compute_limit_group$
 DECLARE
@@ -217,7 +279,6 @@ CREATE TRIGGER limit_client
     ON Client
     FOR EACH ROW
     EXECUTE FUNCTION compute_limit_client();
-
 
 CREATE OR REPLACE FUNCTION guard_admin_creation() RETURNS TRIGGER AS $guard_admin_creation$
 BEGIN

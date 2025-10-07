@@ -64,27 +64,27 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.vaultService = vaultService
 
 
-    def encode_auth_token(self,authz_id,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
+    def encode_auth_token(self,authz_id, client_id:str,data: Dict[str, RoutePermission], challenge: str, group_id: str | None) -> str:
         try:
             if data == None:
                 data = {}
             salt = str(self.salt)
             created_time = time.time()
-            permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.GENERATION_ID, issued_for=issue_for, created_at=created_time,
-                                        expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
-                                        salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id,authz_id=authz_id)
+            permission = AuthPermission(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5,
+                                        salt=salt, group_id=group_id, challenge=challenge,client_id=client_id,
+                                        authz_id=authz_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def encode_refresh_token(self,client_id:str, issued_for: str, challenge: str, group_id:str,client_type:ClientType):
+    def encode_refresh_token(self,client_id:str,challenge: str, group_id:str):
         try:
             salt = str(self.salt)
             created_time = time.time()
-            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
-                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id,client_type=client_type.value)
+            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt, challenge=challenge,
+                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
