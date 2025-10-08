@@ -15,7 +15,7 @@ $$ LANGUAGE plpgsql;
 CREATE DOMAIN Role AS VARCHAR(30) CHECK (
     VALUE IN ('PUBLIC','ADMIN','RELAY','CUSTOM','MFA_OTP','CHAT','REDIS-RESULT','REFRESH','CONTACTS','TWILIO','SUBSCRIPTION','CLIENT','LINK'
 )
-)
+);
 
 CREATE DOMAIN Scope AS VARCHAR(25) CHECK (
     VALUE IN ('SoloDolo', 'Organization','Domain','Free')
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS Client (
     password_salt TEXT DEFAULT NULL,
     can_login BOOLEAN DEFAULT NULL,
     max_connection INT DEFAULT 1,
-    current_connection_count DEFAULT 0,
+    current_connection_count INT DEFAULT 0,
     issued_for VARCHAR(50) UNIQUE,
     authenticated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -78,18 +78,8 @@ CREATE TABLE IF NOT EXISTS Blacklist (
     ),
     PRIMARY KEY (blacklist_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
-
--- Unique for policy_id + client_id where client_id is not null
-CREATE UNIQUE INDEX IF NOT EXISTS unique_policy_client
-ON Blacklist(policy_id, client_id)
-WHERE client_id IS NOT NULL;
-
--- Unique for policy_id + group_id where group_id is not null
-CREATE UNIQUE INDEX IF NOT EXISTS unique_policy_group
-ON Blacklist(policy_id, group_id)
-WHERE group_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS Policy (
     policy_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc(),
@@ -113,7 +103,7 @@ CREATE TABLE IF NOT EXISTS PolicyMapping(
     ),
     FOREIGN KEY (policy_id) REFERENCES Policy (policy_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- Unique for policy_id + client_id where client_id is not null
@@ -126,8 +116,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS unique_policy_group
 ON PolicyMapping(policy_id, group_id)
 WHERE group_id IS NOT NULL;
 
-#------------------------------------             -------------------------------------------#
-#------------------------------------             -------------------------------------------#
+-- ------------------------------------             -------------------------------------------#
+-- ------------------------------------             -------------------------------------------#
 
 CREATE OR REPLACE FUNCTION set_auth_challenge() RETURNS VOID AS $$
 BEGIN
@@ -196,8 +186,8 @@ BEGIN
     PERFORM set_refresh_challenge();
 END; $$ LANGUAGE plpgsql;
 
-#------------------------------------             -------------------------------------------#
-#------------------------------------             -------------------------------------------#
+-- ------------------------------------             -------------------------------------------#
+-- ------------------------------------             -------------------------------------------#
 
 
 SELECT cron.schedule (
@@ -216,9 +206,9 @@ SELECT cron.schedule (
     'delete_blacklist_every_5_minutes', '*/5 * * * *', 'SELECT security.delete_blacklist();'
 );
 
-#------------------------------------             -------------------------------------------#
+-- ------------------------------------             -------------------------------------------#
 
-#------------------------------------             -------------------------------------------#
+-- ------------------------------------             -------------------------------------------#
 
 CREATE OR REPLACE FUNCTION compute_limit_group() RETURNS TRIGGER AS $compute_limit_group$
 DECLARE

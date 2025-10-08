@@ -36,7 +36,7 @@ class Scope(Enum):
     SoloDolo = 'SoloDolo'
     Organization = 'Organization'
     Domain = 'Domain'
-    Free=cn'Free'
+    Free='Free'
 
 
 class ClientType(Enum):

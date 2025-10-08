@@ -172,14 +172,23 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
 
     def verify_client_origin(self,permission:AuthPermission,issued_for,origin=None):
-        if permission['scope'] == Scope.SoloDolo.value:
+        match permission['scope']:
+            case Scope.SoloDolo:
                 if issued_for != permission["issued_for"]:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
-        else:
-            # TODO verify subnet
-            ...
-
+            case Scope.Organization:
+                # TODO verify subnet
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            case Scope.Domain:
+                if origin == None:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Origin header missing")
+            
+            case Scope.Free:
+                ...
+                
     def verify_auth_permission(self, token: str, issued_for: str) -> AuthPermission:
 
         token = self._decode_token(token)
@@ -206,7 +215,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
         if permission['status'] == 'expired':
             raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
+                    status_code=status.HTTP_401_UNAUTHORIZED,  detail="Token expired")
         
         return permission
 

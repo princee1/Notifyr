@@ -32,6 +32,9 @@ class JWTRouteHTTPPermission(Permission):
         
         if authPermission['status'] == 'expired' and not self.accept_expired:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
+        
+        if authPermission['client_type'] == ClientType.Admin:
+            return True
 
         operation_id = func_meta["operation_id"]
         roles= func_meta['roles']
@@ -79,6 +82,9 @@ class JWTAssetPermission(Permission):
         self.model_keys_size = len(self.model_keys) == 0
 
     def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
+        if authPermission['client_type'] == ClientType.Admin:
+            return True
+
         assetPermission = authPermission['allowed_assets']
         template_type = self.template_type if template_type == None else template_type
         permission = tuple(assetPermission)
