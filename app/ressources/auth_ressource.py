@@ -41,10 +41,11 @@ AUTH_PREFIX = 'auth'
 class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     
     @InjectInMethod()
-    def __init__(self,adminService:AdminService,twilioService:TwilioService):
+    def __init__(self,adminService:AdminService,twilioService:TwilioService,jwtService:JWTAuthService):
         BaseHTTPRessource.__init__(self)
         IssueAuthInterface.__init__(self,adminService)
         self.twilioService = twilioService
+        self.jwtService = jwtService
 
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
     @UsePipe(RefreshTokenPipe)
@@ -63,7 +64,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             await client.save()
 
         await ChallengeORMCache.Invalid(client.client_id)
-        await ClientORMCache.Invalid(client.client_id)
+        #await ClientORMCache.Invalid(client.client_id)
         
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token}, "message": "Tokens successfully refreshed"})
 
@@ -77,13 +78,14 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_signature)], )
     async def refresh_admin_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
         async with in_transaction():    
-
             refreshPermission:RefreshPermission = tokens
             await raw_revoke_auth_token(client)
             auth_token, refresh_token = await self.issue_auth(client)
 
-        await ClientORMCache.Invalid(client.client_id)
+        #await ClientORMCache.Invalid(client.client_id)
+        await ChallengeORMCache.Invalid(client.client_id)
         
+
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token,}, "message": "Tokens successfully refreshed"})
     
 

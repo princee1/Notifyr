@@ -17,7 +17,7 @@ from app.utils.helper import KeyBuilder
 from app.utils.tools import Time
 from app.models.security_model import ClientORM,ChallengeORM, PolicyORM
 import typing
-from typing import Any, Callable, Type,TypeVar, TypedDict
+from typing import Any, Callable, Generic, Type,TypeVar, TypedDict
 from tortoise.models import Model,ModelMeta
 from app.utils.helper import isprimitive_type
 from app.utils.transformer import parse_time
@@ -28,7 +28,7 @@ REDIS_CACHE_KEY = 3
 
 WILDCARD='*'
 
-T = TypeVar('T',bool,str,int,Model)
+T = TypeVar('T',bool,str,int,Model,dict,TypedDict,AuthPermission) # type: ignore
 
 redisService:RedisService = Get(RedisService)
 configService:ConfigService = Get(ConfigService)
@@ -36,10 +36,10 @@ adminService:AdminService = Get(AdminService)
 contactService:ContactsService = Get(ContactsService)
 
 
-class CacheInterface:
+class CacheInterface(Generic[T]):
 
     @staticmethod
-    async def Get(key:str|list[str])->Type[T]|None:
+    async def Get(key:str|list[str])->T|None:
         """
         Retrieves an object from the Redis cache.
         Args:
@@ -132,7 +132,7 @@ class CacheInterface:
     def When(cond:Any)->bool:
         ...
 
-def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,prefix:str|list[str]='orm-cache',sep:str|list[str]='/',expiry:int|str|Callable[[T],int|float] = 0,nx:bool=False, when:Callable[[Any],bool]|None=None,use_to_json:bool=True,max_size_memory_cache=1000)->Type[CacheInterface]:
+def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,prefix:str|list[str]='orm-cache',sep:str|list[str]='/',expiry:int|str|Callable[[T],int|float] = 0,nx:bool=False, when:Callable[[Any],bool]|None=None,use_to_json:bool=True,max_size_memory_cache=1000)->Type[CacheInterface[T]]:
     """
         Generates a cache interface class for managing cached objects with a consistent key-building mechanism.
             type_ (Type[T]): The type of the object to be cached. If it is a model, it should support initialization with keyword arguments.
@@ -232,7 +232,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
         
         @kb
         @staticmethod
-        async def Get(key:str|list[str])->Type[T]|None:
+        async def Get(key:str|list[str])->T|None:
             
             obj = await redisService.retrieve(REDIS_CACHE_KEY,key)   
             if obj == None:
@@ -256,17 +256,18 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
                 p=prefix
                 is_s_p = True
             else:
-                if mask == None:
-                    raise ValueError('Value cant be none')
-                
                 is_s_p = False
+
+                if mask == None:
+                    mask = [WILDCARD] * len(prefix)
+                
                 p=key_builder(mask)
 
             return await redisService.delete_all(REDIS_CACHE_KEY,p,is_s_p)
 
         @Time
         @staticmethod
-        async def Cache(key,*args,expiry:int|None|Callable[[Any],int]=expiry,when_cond:Any=None,**kwargs):
+        async def Cache(key,*args,expiry:int|None|Callable[[Any],int]=expiry,when_cond:Any=None,**kwargs)->T:
             
             if not ORMCache.When(when_cond):
                 return await DB_Get(*args,**kwargs)

@@ -18,7 +18,7 @@ class EmailService(_service.BaseMiniServiceManager):
     ACCEPTABLE_MODEL:set = ...
 
     def __init_subclass__(cls):
-        setattr(cls,'ACCEPTABLE_MODEL',set())
+        setattr(cls,'ACCEPTABLE_MODEL',cls.ACCEPTABLE_MODEL)
         return super().__init_subclass__()
 
     def verify_dependency(self):
@@ -64,7 +64,7 @@ class EmailSenderService(EmailService):
 
     # BUG cant resolve an abstract class
 
-    service_model = {SMTPProfileModel}
+    ACCEPTABLE_MODEL = {SMTPProfileModel}
 
     def __init__(self, configService: ConfigService,loggerService:LoggerService,redisService:RedisService,profileService:ProfileService) -> None:
         super().__init__(profileService)
@@ -87,7 +87,7 @@ class EmailSenderService(EmailService):
 )
 class EmailReaderService(EmailService):
 
-    service_model = {IMAPProfileModel}
+    ACCEPTABLE_MODEL = {IMAPProfileModel}
 
     def __init__(self, configService: ConfigService,reactiveService:ReactiveService,loggerService:LoggerService,profilesService:ProfileService,redisService:RedisService) -> None:
         super().__init__(profilesService)

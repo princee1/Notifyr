@@ -534,7 +534,7 @@ def phone_parser(phone_number:str,country_code=None):
         cleaned_number = f'+{phone_number}'
     return cleaned_number
     
-def filter_paths(paths):
+def filter_paths(paths,append_asset=True):
         paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
         results = []
 
@@ -542,8 +542,9 @@ def filter_paths(paths):
             if not any(path.startswith(d + "\\") for d in results):
                 results.append(path)
 
-
-        return ['assets/'+ p for p in results ]
+        if append_asset:
+            return ['assets/'+ p for p in results ]
+        return results
 
 ###################################### ** Time Helper **  ###########################################
 

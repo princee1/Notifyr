@@ -31,6 +31,7 @@ class Role(Enum):
     SUBSCRIPTION = 'SUBSCRIPTION'
     CLIENT = "CLIENT"
     LINK = "LINK"
+    PROFILE ="PROFILE"
 
 class Scope(Enum):
     SoloDolo = 'SoloDolo'
@@ -125,10 +126,9 @@ class PolicyModel(BaseModel):
     def checks_roles(cls, roles: list[Role]):
         if Role.PUBLIC not in roles:
             roles.append(Role.PUBLIC)
-        return roles
+        roles = list(set(roles))
+        #return roles
         return [r.value for r in roles]
-
-UpdatePolicyModel = subset_model(PolicyModel,f'Update{PolicyModel.__name__}',optional=False)
 
 def parse_authPermission_enum(authPermission):
         authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]

@@ -161,10 +161,7 @@ class Helper:
 
         for p in functions:
             if type(p) == type:
-                if flag:
-                    p= p()
-                else:
-                    p=p(False)
+                p=p()
             temp_pipe_func.append(p)
 
         return temp_pipe_func

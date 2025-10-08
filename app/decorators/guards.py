@@ -1,5 +1,5 @@
 from typing import Any, List
-from app.classes.auth_permission import AuthPermission, RefreshPermission
+from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPermission
 from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
@@ -10,6 +10,7 @@ from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.assets_service import AssetService
+from app.services.profile_service import ProfileService
 from app.services.task_service import TaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
@@ -266,3 +267,16 @@ class TrackGuard(Guard):
         if scheduler.task_type not in self.allowed:
             return False,'Cannot track task that are not ran once'
         return True,''
+
+class PolicyGuard(Guard):
+    
+    def guard(self,policyModel:PolicyModel):
+        profileService:ProfileService = Get(ProfileService)
+        profiles_set=set(policyModel.allowed_profiles).difference(profileService.MiniServiceStore.ids)
+        if len(profiles_set) >= 1:
+            return False,f'Those profiles does not exists at the moment: {profiles_set}'
+    
+        return True,''
+
+
+        

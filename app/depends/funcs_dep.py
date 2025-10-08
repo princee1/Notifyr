@@ -2,7 +2,7 @@ import functools
 from typing import Annotated, Any, Callable, Literal, TypedDict
 from fastapi import Depends, HTTPException, Header, Query, Response, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ContactPermission, Role
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role
 from app.container import Get, GetAttr
 from app.definition._error import ServerFileError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
@@ -323,9 +323,10 @@ def get_profile(profile:str):
 def GetPolicy(skipPermission:bool):
 
     async def get_policy(policy:str,authPermission:AuthPermission=Depends(wrapper_auth_permission)):
-        
-        if skipPermission:
-            if authPermission['client_id'] != 'Admin':
+
+        if not skipPermission:
+            print('Auth Permission',authPermission)
+            if authPermission['client_type'] != ClientType.Admin:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,)
         try:
             p = await PolicyORM.filter(policy_id=policy).first()
@@ -349,16 +350,17 @@ async def get_combined_policies(client:ClientORM):
     client_id = str(client.client_id)
     group_id = None if client.group == None else str(client.group.group_id)
     policies:list[PolicyORM] = [pm.policy for pm in  await PolicyMappingORM.filter(client_id=client_id,group_id=group_id)]
-    
+
     roles= set()
     allowed_assets = set()
     allowed_profiles = set()
     allowed_routes = {}
     
     for p in policies:
+        p = await p
         roles.update(p.roles)
-        allowed_assets.union(p.allowed_assets)
-        allowed_profiles.union(p.allowed_profiles)
+        allowed_assets.update(p.allowed_assets)
+        allowed_profiles.update(p.allowed_profiles)
 
         for k,r in p.allowed_routes.items():
             
@@ -373,9 +375,11 @@ async def get_combined_policies(client:ClientORM):
                     if allowed_routes['scope'] == 'custom':
                         allowed_routes['custom_routes'] = list[set(allowed_routes['custom_routes']).union(r['scope'])]
     
-    allowed_assets = filter_paths(list(allowed_assets))
+    print(allowed_assets)
+
+    allowed_assets = filter_paths(list(allowed_assets),False)
     allowed_profiles = list(allowed_profiles)
-    allowed_profiles = list(allowed_profiles)
+    roles = list(roles)
 
     return AuthPermission(
         roles=roles,

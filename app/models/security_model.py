@@ -5,7 +5,7 @@ from pydantic import BaseModel, field_validator, model_validator
 from app.classes.auth_permission import ClientType, Scope
 from app.utils.helper import uuid_v1_mc
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
-
+from tortoise.contrib.postgres.fields import ArrayField
 
 SCHEMA = 'security'
 
@@ -102,10 +102,10 @@ class BlacklistORM(models.Model):
 
 class PolicyORM(models.Model):
     policy_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    allowed_profiles = fields.JSONField(default=list)  # TEXT[] as list
+    allowed_profiles = ArrayField('TEXT',default=list)  # TEXT[] as list
     allowed_routes = fields.JSONField(default=dict)    # JSONB as dict
-    allowed_assets = fields.JSONField(default=list)    # TEXT[] as list
-    roles = fields.JSONField(default=lambda: ["PUBLIC"])  # role[] as list
+    allowed_assets = ArrayField('TEXT',default=list)   # TEXT[] as list
+    roles = ArrayField('Role',default=lambda: ["PUBLIC"])  # role[] as list
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 

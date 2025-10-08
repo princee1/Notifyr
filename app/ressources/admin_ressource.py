@@ -3,7 +3,7 @@ from random import randint
 from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Query, Request, HTTPException, Response, status
 from fastapi.responses import JSONResponse
-from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
+from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard, PolicyGuard
 from app.definition._service import StateProtocol
 from app.depends.class_dep import Broker
 from app.depends.funcs_dep import GetPolicy, get_blacklist, get_group, get_client
@@ -12,6 +12,7 @@ from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.database_service import TortoiseConnectionService
+from app.services.profile_service import ProfileService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
 from app.services.task_service import CeleryService
@@ -22,7 +23,7 @@ from app.depends.dependencies import get_auth_permission, get_query_params, get_
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
-from app.classes.auth_permission import PolicyModel, PolicyUpdateMode, Role, Scope, TokensModel, UpdatePolicyModel
+from app.classes.auth_permission import PolicyModel, PolicyUpdateMode, Role, Scope
 from pydantic import BaseModel,  field_validator
 from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, PydanticHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe, ObjectRelationalFriendlyPipe
@@ -52,7 +53,7 @@ get_policy = GetPolicy(False)
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
 @UseRoles(roles=[Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler,TortoiseHandler,AsyncIOHandler)
-@HTTPRessource('policy',)
+@HTTPRessource('policy')
 class PolicyRessource(BaseHTTPRessource):
 
     @InjectInMethod()
@@ -60,19 +61,23 @@ class PolicyRessource(BaseHTTPRessource):
         super().__init__()
         self.adminService = adminService
 
-    @UsePipe(ObjectRelationalFriendlyPipe)
+    @PingService([ProfileService])
+    @UseServiceLock(ProfileService,lockType='reader',check_status=False)
+    @UsePipe(ObjectRelationalFriendlyPipe,before=False)
+    @UseGuard(PolicyGuard)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_policy(self,request:Request,response:Response, policy:PolicyModel, authPermission=Depends(get_auth_permission)):
-        policy_model = policy.model_dump(mode='python')
-        policy_orm =  await PolicyORM.create(**policy_model)
+    async def create_policy(self,request:Request,response:Response, policyModel:PolicyModel, authPermission=Depends(get_auth_permission)):
+        policy_model = policyModel.model_dump(mode='python')
 
-        policy_id = str(policy_orm.policy_id)
+        async with in_transaction():
+            policy_orm =  await PolicyORM.create(**policy_model)
+            policy_id = str(policy_orm.policy_id)
 
-        await PolicyORMCache.Store(policy_id,policy_orm)
-        return policy_orm
+            await PolicyORMCache.Store(policy_id,policy_orm)
+            return policy_orm
     
-    @UsePipe(ObjectRelationalFriendlyPipe)
+    @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{policy}/',methods=[HTTPMethod.DELETE])
     async def delete_policy(self,request:Request,policy:Annotated[PolicyORM,Depends(get_policy)],authPermission=Depends(get_auth_permission)):
         async with in_transaction():
@@ -82,26 +87,25 @@ class PolicyRessource(BaseHTTPRessource):
         
         return policy
 
+    @PingService([ProfileService])
+    @UseServiceLock(ProfileService,lockType='reader',check_status=False)
     @UseHandler(PydanticHandler)
-    @UsePipe(ObjectRelationalFriendlyPipe)
+    @UseGuard(PolicyGuard)
+    @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{policy}/',methods=[HTTPMethod.PUT])
-    async def update_policy(self,request:Request,policy:Annotated[PolicyORM,Depends(get_policy)],mode:PolicyUpdateMode =Depends(policy_update_mode_query), authPermission=Depends(get_auth_permission)):
+    async def update_policy(self,request:Request,policyModel:PolicyModel,policy:Annotated[PolicyORM,Depends(get_policy)],mode:PolicyUpdateMode =Depends(policy_update_mode_query), authPermission=Depends(get_auth_permission)):
         
-        body = await request.json()
-        updatePolicyModel = UpdatePolicyModel.model_validate(body)
-     
-        self._update_policy_model(updatePolicyModel,mode,policy)
-        await policy.save()
-
-        policy_id = str(policy.policy_id)
-
-        await PolicyORMCache.Invalid(policy_id)
-        await PolicyORMCache.Store(policy_id,policy)
-        await AuthPermissionCache.InvalidAll()
+        async with in_transaction():
+            self._update_policy_model(policyModel,mode,policy)
+            await policy.save()
+            policy_id = str(policy.policy_id)
+            await PolicyORMCache.Invalid(policy_id)
+            await PolicyORMCache.Store(policy_id,policy)
+            await AuthPermissionCache.InvalidAll()
 
         return policy
     
-    @UsePipe(ObjectRelationalFriendlyPipe)
+    @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{policy}/',methods=[HTTPMethod.GET])
     async def read_policy(self,request:Request,policy:Annotated[PolicyORM,Depends(get_policy)],authPermission=Depends(get_auth_permission)):
         return policy
@@ -112,19 +116,19 @@ class PolicyRessource(BaseHTTPRessource):
             case 'merge':    
                 policy.allowed_assets = list(set(model.allowed_assets + policy.allowed_assets))
                 policy.allowed_profiles = list(set(model.allowed_profiles +policy.allowed_profiles))
-                policy.roles = list(set([r.value for r in model.roles] + policy.roles))
+                policy.roles = list(set(model.roles + policy.roles))
                 policy.allowed_routes = {**policy.allowed_routes,**model.allowed_routes}
             
             case 'set':
                 policy.allowed_assets = model.allowed_assets
                 policy.allowed_profiles = model.allowed_profiles
-                policy.roles = [r.value for r in model.roles]
+                policy.roles = model.roles
                 policy.allowed_routes = model.allowed_routes
             
             case 'delete':
                 policy.allowed_assets = list(set(policy.allowed_assets) - set(model.allowed_assets))
                 policy.allowed_profiles = list(set(policy.allowed_profiles) - set(model.allowed_profiles))
-                policy.roles = list(set(policy.roles) - set([r.value for r in model.roles]))
+                policy.roles = list(set(policy.roles) - set(model.roles))
                 policy.allowed_routes = {k: v for k, v in policy.allowed_routes.items() if k not in model.allowed_routes}
 
         
@@ -155,6 +159,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     async def create_client(self, client: ClientModel,gid: str = Depends(get_query_params('gid', 'id')), authPermission=Depends(get_auth_permission)):
         name = client.client_name
         scope = client.client_scope
+        policy_ids = client.policy_ids
         password,salt = self.securityService.store_password(client.password,self.key)
         salt = str(salt)
         
@@ -167,7 +172,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             group_id = None if group == None else str(group.group_id)
 
             client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
-            await PolicyMappingORM.bulk_create([PolicyMappingORM(policy_id=policy_id,client=client,group=None) for policy_id in client.policy_ids])
+            await PolicyMappingORM.bulk_create([PolicyMappingORM(policy_id=policy_id,client=client,group=None) for policy_id in policy_ids])
             challenge = await ChallengeORM.create(client=client)
             ttl_auth_challenge = timedelta(seconds=self.settingService.AUTH_EXPIRATION)
             challenge.expired_at_auth = challenge.created_at_auth + ttl_auth_challenge
@@ -176,9 +181,11 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
             await ClientORMCache.Store([group_id,client.client_id],client,)
             await ChallengeORMCache.Store(client.client_id,challenge,ttl_auth_challenge)
-            await AuthPermissionCache.Store([group_id,client.client_id],None,client=client)
 
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json})
+            policy = await AuthPermissionCache.Cache([group_id,client.client_id],client=client)
+
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json,
+                                                                          "Policy":policy})
     
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
@@ -204,9 +211,10 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             await ClientORMCache.Store([group_id,client.client_id],client)
 
             await AuthPermissionCache.Invalid([group_id,client.client_id])
-            await AuthPermissionCache.Store([group_id,client.client_id],None,client=client)
+            policy = await AuthPermissionCache.Cache([group_id,client.client_id],client=client)
 
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully updated", "client": client.to_json})
+
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully updated", "client": client.to_json,'Policy':policy})
 
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
@@ -236,11 +244,11 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/group/')
-    async def create_group(self, group: GroupModel, authPermission=Depends(get_auth_permission)):
+    async def create_group(self, groupModel: GroupModel, authPermission=Depends(get_auth_permission)):
         
         async with in_transaction():    
-            group:GroupClientORM = await GroupClientORM.create(group_name=group.group_name)
-            await PolicyMappingORM.bulk_create([PolicyMappingORM(policy_id=policy_id,client=None,group=group) for policy_id in group.policy_ids])
+            group:GroupClientORM = await GroupClientORM.create(group_name=groupModel.group_name)
+            await PolicyMappingORM.bulk_create([PolicyMappingORM(policy_id=policy_id,client=None,group=group) for policy_id in groupModel.policy_ids])
 
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Group successfully created", "group": group.to_json})
 

@@ -185,17 +185,11 @@ class JWTRefreshTokenPermission(Permission):
         if client_id != authPermission['client_id']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
 
-        if permission['client_type'] != authPermission['client_type']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client type mismatch")
-
         if permission['generation_id'] != authPermission['generation_id']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
 
         if permission['group_id'] != authPermission['group_id']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
-
-        if permission['issued_for'] != authPermission['issued_for']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
 
         challenge = await ChallengeORM.filter(client=client_id).first()
         if challenge.challenge_refresh != permission['challenge']:
@@ -260,19 +254,12 @@ class BalancerPermission(Permission):
 
 class ProfilePermission(Permission):
 
-    def __init__(self,service:BaseMiniServiceManager=None):
-        super().__init__()
-        self.service = service
-    
-
     async def permission(self,authPermission:AuthPermission,profile:str):
 
-        if self.service != None:
-            
-            if profile not in self.service.MiniServiceStore:
-                ...
-            
-        if authPermission['allowed_profiles'] not in profile:
-            ...
-
+        if profile not in authPermission['allowed_profiles']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Profile Is not allowed to be used'
+            )
+        
         return True
