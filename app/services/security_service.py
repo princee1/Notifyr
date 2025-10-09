@@ -12,7 +12,7 @@ from app.definition._service import AbstractServiceClass, BaseService, BuildFail
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 import base64
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 import time
 from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
@@ -63,28 +63,25 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-
-    def encode_auth_token(self,authz_id,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
+    def encode_auth_token(self,authz_id, client_id:str, challenge: str, group_id: str | None) -> str:
         try:
-            if data == None:
-                data = {}
             salt = str(self.salt)
             created_time = time.time()
-            permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.GENERATION_ID, issued_for=issue_for, created_at=created_time,
-                                        expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
-                                        salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id,authz_id=authz_id)
+            permission = AuthPermission(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5,
+                                        salt=salt, group_id=group_id, challenge=challenge,client_id=client_id,
+                                        authz_id=authz_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def encode_refresh_token(self,client_id:str, issued_for: str, challenge: str, group_id:str,client_type:ClientType):
+    def encode_refresh_token(self,client_id:str,challenge: str, group_id:str):
         try:
             salt = str(self.salt)
             created_time = time.time()
-            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
-                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id,client_type=client_type.value)
+            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt, challenge=challenge,
+                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
@@ -174,18 +171,29 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
 
+    def verify_client_origin(self,permission:AuthPermission,issued_for,origin=None):
+        match permission['scope']:
+            case Scope.SoloDolo:
+                if issued_for != permission["issued_for"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            case Scope.Organization:
+                # TODO verify subnet
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            case Scope.Domain:
+                if origin == None:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Origin header missing")
+            
+            case Scope.Free:
+                ...
+                
     def verify_auth_permission(self, token: str, issued_for: str) -> AuthPermission:
 
         token = self._decode_token(token)
         permission: AuthPermission = AuthPermission(**token)
         try:
-            if permission['scope'] == Scope.SoloDolo.value:
-                if issued_for != permission["issued_for"]:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
-            else:
-                # TODO verify subnet
-                ...
 
             self.set_status(permission,'auth')
             # if permission['status'] == 'expired': # NOTE might accept expired
@@ -207,7 +215,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
         if permission['status'] == 'expired':
             raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
+                    status_code=status.HTTP_401_UNAUTHORIZED,  detail="Token expired")
         
         return permission
 

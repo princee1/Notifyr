@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.classes.condition import MongoCondition, simple_number_validation
 from app.container import InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
 from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
@@ -51,7 +51,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @PingService([HCVaultService,TaskService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-    @UseHandler(VaultHandler,MiniServiceHandler)
+    @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
@@ -97,6 +97,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return await self.mongooseService.get(self.model,profile,True)
 
     @PingService([CeleryService])
+    @UseHandler(PydanticHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
@@ -119,7 +120,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
-    @UseHandler(VaultHandler)
+    @UseHandler(VaultHandler,PydanticHandler)
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'))
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)

@@ -2,7 +2,7 @@ import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientType, Role, Scope, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
-from app.depends.orm_cache import BlacklistORMCache, ChallengeORMCache, ClientORMCache
+from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
 from app.services.task_service import TaskService
@@ -98,6 +98,16 @@ class JWTAuthMiddleware(MiddleWare):
         self.configService: ConfigService = Get(ConfigService)
         self.adminService: AdminService = Get(AdminService)
 
+
+    def _copy_client_into_auth(self,client:ClientORM,permission:AuthPermission):
+        permission['client_type'] = client.client_type
+        permission['scope'] = client.client_scope
+        permission['issued_for'] = client.issued_for
+        permission['auth_type'] = client.auth_type
+        permission['client_username'] = client.client_username
+
+        
+
     @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
@@ -107,6 +117,8 @@ class JWTAuthMiddleware(MiddleWare):
         try:  
             token = get_bearer_token_from_request(request)
             client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
+            origin = ...
+
             authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
           
             client_id = authPermission['client_id']
@@ -114,23 +126,31 @@ class JWTAuthMiddleware(MiddleWare):
 
             client:ClientORM = await ClientORMCache.Cache([group_id,client_id],client_id=client_id,cid="id",authPermission=authPermission)
 
+            self._copy_client_into_auth(client,authPermission)
+            self.jwtService.verify_client_origin(authPermission,client_ip,origin)
+
             #TODO check group id
             if not client.authenticated:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client is not authenticated")
 
             if client.client_type != ClientType.Admin: 
-                is_blacklisted:bool = await BlacklistORMCache.Cache([group_id,client_id],client)
 
-                if is_blacklisted :
-                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
+                if await BlacklistORMCache.Cache([group_id,client_id],client):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
 
             request.state.client = client
+
+            policies = await AuthPermissionCache.Cache([group_id,client_id],client)
+            authPermission= AuthPermission(**{**authPermission,**policies})
+
             parse_authPermission_enum(authPermission)
             request.state.authPermission = authPermission
+
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
         return await call_next(request)
+    
 
     
 class BackgroundTaskMiddleware(MiddleWare):
@@ -190,6 +210,6 @@ class ChallengeMatchMiddleware(MiddleWare):
         db_challenge:ChallengeORM = await ChallengeORMCache.Cache(client.client_id,client) 
 
         if challenge != db_challenge.challenge_auth:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Challenge does not match") 
         
         return await call_next(request)
