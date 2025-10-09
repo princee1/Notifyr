@@ -101,8 +101,10 @@ class JWTAuthMiddleware(MiddleWare):
 
     def _copy_client_into_auth(self,client:ClientORM,permission:AuthPermission):
         permission['client_type'] = client.client_type
-        #permission['hostname'] = client.client_name
         permission['scope'] = client.client_scope
+        permission['issued_for'] = client.issued_for
+        permission['auth_type'] = client.auth_type
+        permission['client_username'] = client.client_username
 
         
 

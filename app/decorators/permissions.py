@@ -10,7 +10,7 @@ from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
+from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
 from app.utils.helper import flatten_dict
 
  
@@ -27,11 +27,13 @@ class JWTRouteHTTPPermission(Permission):
         if authPermission == None:
             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Auth Permission not implemented")
         
-        if authPermission['status'] == 'inactive' and not self.accept_inactive:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
-        
-        if authPermission['status'] == 'expired' and not self.accept_expired:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
+        if authPermission['auth_type'] == AuthType.ACCESS_TOKEN:
+
+            if authPermission['status'] == 'inactive' and not self.accept_inactive:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
+            
+            if authPermission['status'] == 'expired' and not self.accept_expired:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
         
         if authPermission['client_type'] == ClientType.Admin:
             return True

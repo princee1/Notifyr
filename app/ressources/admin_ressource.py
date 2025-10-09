@@ -23,7 +23,7 @@ from app.depends.dependencies import get_auth_permission, get_query_params, get_
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
-from app.classes.auth_permission import PolicyModel, PolicyUpdateMode, Role, Scope
+from app.classes.auth_permission import AuthType, PolicyModel, PolicyUpdateMode, Role, Scope
 from pydantic import BaseModel,  field_validator
 from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, PydanticHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe, ObjectRelationalFriendlyPipe
@@ -157,21 +157,28 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/')
     async def create_client(self, client: ClientModel,gid: str = Depends(get_query_params('gid', 'id')), authPermission=Depends(get_auth_permission)):
-        name = client.client_name
-        scope = client.client_scope
-        policy_ids = client.policy_ids
-        password,salt = self.securityService.store_password(client.password,self.key)
-        salt = str(salt)
         
+        policy_ids = client.policy_ids
+        password, salt = self.securityService.store_password(client.password, self.key)
+        client_data = {
+            "client_name": client.client_name,"client_scope": client.client_scope,"group": None,"password": password,"password_salt": str(salt),"can_login": False,
+            "client_description": client.client_description,
+            "auth_type": client.auth_type,
+        }
+        if client.client_scope in [Scope.SoloDolo, Scope.Organization]:
+            client_data['issued_for'] = client.issued_for
+
         group_id = client.group_id
         if group_id != None :
             group = await get_group(group_id=group_id,gid=gid,authPermission=authPermission)
         else:
             group = None
+
         async with in_transaction():
             group_id = None if group == None else str(group.group_id)
+            client_data['group'] = group
 
-            client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
+            client:ClientORM = await ClientORM.create(**client_data)
             await PolicyMappingORM.bulk_create([PolicyMappingORM(policy_id=policy_id,client=client,group=None) for policy_id in policy_ids])
             challenge, ttl_auth_challenge = await self.create_challenge(client)
 
@@ -183,14 +190,19 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json,
                                                                           "Policy":policy})
 
-    async def create_challenge(self, client):
-        
-        challenge = await ChallengeORM.create(client=client)
-        ttl_auth_challenge = timedelta(seconds=self.settingService.AUTH_EXPIRATION)
-        challenge.expired_at_auth = challenge.created_at_auth + ttl_auth_challenge
-        challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.settingService.REFRESH_EXPIRATION)
-        await challenge.save()
-        return challenge,ttl_auth_challenge
+    async def create_challenge(self, client: ClientORM):
+        challenge = ChallengeORM(client=client)
+        if client.auth_type == AuthType.API_TOKEN:
+            challenge.expired_at_auth = None
+            challenge.expired_at_refresh = None
+            await challenge.save()
+            return challenge, 0
+        else:
+            ttl_auth_challenge = timedelta(seconds=self.settingService.AUTH_EXPIRATION * 4)
+            challenge.expired_at_auth = challenge.created_at_auth + ttl_auth_challenge
+            challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.settingService.REFRESH_EXPIRATION * 4)
+            await challenge.save()
+        return challenge, ttl_auth_challenge
     
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
@@ -299,6 +311,9 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             client.password = password
             client.password_salt= salt
             is_revoked = True
+        
+        if updateClient.client_description != None:
+            client.client_description = updateClient.client_description
 
         if updateClient.client_name:
             client.client_name = updateClient.client_name
@@ -315,7 +330,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             if client.client_scope == Scope.SoloDolo:
                 if not ipv4_validator(client.issued_for):
                     raise ValueError(f"Invalid IPv4 address: {client.issued_for}")
-            else:
+            elif client.client_scope == Scope.Organization:
                 if not ipv4_subnet_validator(client.issued_for):
                     raise ValueError(f"Invalid IPv4 subnet: {client.issued_for}")
                 

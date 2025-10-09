@@ -460,8 +460,10 @@ def isprimitive_type(obj:Any):
 
 ################################   ** Generate Helper **      #################################
 
-def generateId(len):
+def generateId(len, add_punctuation=False):
     seed(time.time())
+    if add_punctuation:
+        return "".join(choice(alphanumeric + punctuation) for _ in range(len))
     return "".join(choice(alphanumeric) for _ in range(len))
 
 

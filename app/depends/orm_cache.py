@@ -1,3 +1,4 @@
+from datetime import timedelta
 import functools
 from random import randint
 import time
@@ -173,6 +174,8 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
                 _expiry = parse_time(_expiry)
             except:
                 _expiry=0
+        elif isinstance(_expiry,timedelta):
+            return _expiry.total_seconds()
         else:
             _expiry = 0
         return _expiry

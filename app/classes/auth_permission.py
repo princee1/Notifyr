@@ -46,6 +46,11 @@ class ClientType(Enum):
     Twilio = 'Twilio'
 
 
+class AuthType(Enum):
+    ACCESS_TOKEN = 'ACCESS_TOKEN'
+    API_TOKEN = 'API_TOKEN'
+
+
 class FuncMetaData(TypedDict):
     operation_id:str
     roles:set[Role]
@@ -68,12 +73,13 @@ class AssetsPermission(TypedDict):
         
 class AuthPermission(TypedDict):
     generation_id: str
-    hostname:str
+    client_username: str
     client_id: str
     client_type:ClientTypeLiteral = 'User'
     roles:list[str|Role]
     issued_for: str # Subnets
     group_id:str | None = None
+    auth_type:AuthType
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
@@ -132,7 +138,6 @@ class PolicyModel(BaseModel):
 
 def parse_authPermission_enum(authPermission):
         authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
-        authPermission['scope'] = Scope._member_map_[authPermission['scope']]
         
 
 class ContactPermission(TypedDict):

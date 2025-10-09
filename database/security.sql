@@ -17,6 +17,10 @@ CREATE DOMAIN Role AS VARCHAR(30) CHECK (
 )
 );
 
+CREATE DOMAIN AuthType AS VARCHAR(30) CHECK(
+    VALUE IN ('ACCESS_TOKEN','API_TOKEN')
+);
+
 CREATE DOMAIN Scope AS VARCHAR(25) CHECK (
     VALUE IN ('SoloDolo', 'Organization','Domain','Free')
 );
@@ -36,16 +40,19 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 CREATE TABLE IF NOT EXISTS Client (
     client_id UUID DEFAULT uuid_generate_v1mc (),
     client_name VARCHAR(50) UNIQUE,
+    client_description TEXT DEFAULT NULL,
+    client_username VARCHAR(30) UNIQUE DEFAULT 'notifyr-user-' || secure_random_string(12),
     client_scope Scope DEFAULT 'SoloDolo',
     group_id UUID DEFAULT NULL,
     client_type ClientType DEFAULT 'User',
     password TEXT DEFAULT NULL,
     password_salt TEXT DEFAULT NULL,
-    can_login BOOLEAN DEFAULT NULL,
+    can_login BOOLEAN DEFAULT FALSE,
     max_connection INT DEFAULT 1,
     current_connection_count INT DEFAULT 0,
-    issued_for VARCHAR(50) UNIQUE,
+    issued_for VARCHAR(50) UNIQUE DEFAULT secure_random_string(20),
     authenticated BOOLEAN DEFAULT FALSE,
+    auth_type AuthType DEFAULT 'ACCESS_TOKEN',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (client_id),
@@ -124,13 +131,14 @@ BEGIN
     SET search_path = security;
 
     UPDATE 
-        Challenge
+        Challenge c
     SET 
         challenge_auth = secure_random_string(64),
         created_at_auth = NOW(),
         expired_at_auth = NOW() + (expired_at_auth - created_at_auth)
     WHERE 
-        expired_at_auth <= NOW();
+        expired_at_auth IS NOT NULL AND expired_at_auth <= NOW();
+
 END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION set_refresh_challenge() RETURNS VOID AS $$
@@ -140,11 +148,11 @@ BEGIN
         Challenge c
     SET 
         challenge_refresh = secure_random_string(128),
-        -- authenticated = FALSE, TODO should i disconnect the client or nah?
         created_at_refresh = NOW(),
         expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh)
     WHERE 
-        expired_at_refresh <= NOW();
+        expired_at_refresh IS NOT NULL AND expired_at_refresh <= NOW();
+    
 END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION raw_revoke_challenges(cid UUID) RETURNS VOID as $$
@@ -154,14 +162,20 @@ BEGIN
         Challenge c
     SET 
         challenge_auth = secure_random_string(64),
-        expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
         created_at_auth = NOW(),
         challenge_refresh = secure_random_string(128),
-        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh),
         created_at_refresh = NOW()
     
     WHERE
         c.client_id = cid;
+
+    UPDATE 
+        Challenge c
+    SET 
+        expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
+        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh),
+    WHERE
+        c.client_id = cid AND c.expired_at_auth IS NOT NULL AND c.expired_at_refresh IS NOT NULL;
 
 END; $$ LANGUAGE plpgsql;
 
@@ -172,10 +186,16 @@ BEGIN
         Challenge c
     SET 
         challenge_auth = secure_random_string(64),
-        expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
         created_at_auth = NOW()
     WHERE
         c.client_id = cid;
+    
+    UPDATE 
+        Challenge c
+    SET 
+        expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
+    WHERE
+        c.client_id = cid AND c.expired_at_auth IS NOT NULL;
 
 END; $$ LANGUAGE plpgsql;
 
@@ -270,6 +290,11 @@ CREATE TRIGGER limit_client
     FOR EACH ROW
     EXECUTE FUNCTION compute_limit_client();
 
+-- ------------------------------------             -------------------------------------------#
+
+-- ------------------------------------             -------------------------------------------#
+
+
 CREATE OR REPLACE FUNCTION guard_admin_creation() RETURNS TRIGGER AS $guard_admin_creation$
 BEGIN
     SET search_path = security;
@@ -306,3 +331,40 @@ CREATE TRIGGER guard_admin_deletion
     ON Client
     FOR EACH ROW
     EXECUTE FUNCTION guard_admin_deletion();
+
+-- ------------------------------------             -------------------------------------------#
+
+-- ------------------------------------             -------------------------------------------#
+
+
+CREATE OR REPLACE FUNCTION guard_challenge_expiry() RETURNS TRIGGER AS $guard_challenge_expiry$
+DECLARE
+    client_auth_type AuthType;
+BEGIN
+    SET search_path = security;
+    SELECT auth_type INTO client_auth_type FROM Client WHERE client_id = NEW.client_id;
+
+    IF client_auth_type = 'ACCESS_TOKEN' THEN
+        IF NEW.expired_at_auth IS NOT NULL AND NEW.expired_at_auth <= NOW() THEN
+            RAISE EXCEPTION 'expired_at_auth cannot be in the past for ACCESS_TOKEN clients';
+            RETURN NULL;
+        END IF;
+        IF NEW.expired_at_refresh IS NOT NULL AND NEW.expired_at_refresh <= NOW() THEN
+            RAISE EXCEPTION 'expired_at_refresh cannot be in the past for ACCESS_TOKEN clients';
+            RETURN NULL;
+        END IF;
+    ELSIF client_auth_type = 'API_TOKEN' THEN
+        IF NEW.expired_at_auth IS NOT NULL OR NEW.expired_at_refresh IS NOT NULL THEN
+            RAISE EXCEPTION 'expired_at_auth and expired_at_refresh must be NULL for API_TOKEN clients';
+            RETURN NULL;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$guard_challenge_expiry$ LANGUAGE plpgsql;
+
+CREATE TRIGGER guard_challenge_expiry
+    BEFORE INSERT OR UPDATE
+    ON Challenge
+    FOR EACH ROW
+    EXECUTE FUNCTION guard_challenge_expiry();

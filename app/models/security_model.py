@@ -1,9 +1,10 @@
 from typing import Self
+from pyparsing import Optional
 from tortoise import Tortoise, fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, field_validator, model_validator
-from app.classes.auth_permission import ClientType, Scope
-from app.utils.helper import uuid_v1_mc
+from app.classes.auth_permission import AuthType, ClientType, Scope
+from app.utils.helper import generateId, uuid_v1_mc
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
 from tortoise.contrib.postgres.fields import ArrayField
 
@@ -31,7 +32,9 @@ class GroupClientORM(models.Model):
 
 class ClientORM(models.Model):
     client_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    client_name = fields.CharField(max_length=200, unique=True, null=True)
+    client_name = fields.CharField(max_length=50, unique=True, null=True)
+    client_username = fields.CharField(max_length=30, unique=True, null=False)
+    client_description = fields.TextField()
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
     authenticated = fields.BooleanField(default=False)
     password = fields.TextField()
@@ -40,6 +43,7 @@ class ClientORM(models.Model):
     current_connection_count = fields.IntField(default=0)
     can_login = fields.BooleanField(default=False)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
+    auth_type = fields.CharEnumField(enum_type=AuthType, default=AuthType.ACCESS_TOKEN, max_length=30)
     issued_for = fields.CharField(max_length=50, null=False, unique=True)
     group = fields.ForeignKeyField("models.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
@@ -54,6 +58,9 @@ class ClientORM(models.Model):
         return {
             "client_id": str(self.client_id),
             "client_name": self.client_name,
+            "client_username": self.client_username,
+            "client_description": self.client_description,
+            "auth_type": self.auth_type.value,
             "client_scope": self.client_scope.value,
             "authenticated": self.authenticated,
             "max_connection":self.max_connection,
@@ -151,7 +158,7 @@ class PolicyMappingORM(models.Model):
 
 client_password_validator = PasswordValidator(12,60,)
 
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login"))
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login","current_connection_count","client_username",))
 
 
 class GroupModel(BaseModel):
@@ -170,6 +177,8 @@ class ClientModel(ClientModelBase):
     client_scope:Scope
     group_id:str | None = None
     policy_ids:list[str] =[]
+    client_description:str = ''
+    auth_type:AuthType = AuthType.ACCESS_TOKEN
 
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:
@@ -177,31 +186,73 @@ class ClientModel(ClientModelBase):
             if not ipv4_subnet_validator(self.issued_for):
                 raise ValueError('Invalid ipv4 subnet')
             return self
-        if not ipv4_validator(self.issued_for):
-            raise ValueError('Invalid ipv4 address')
+        elif self.client_scope == Scope.SoloDolo:
+            if not ipv4_validator(self.issued_for):
+                raise ValueError('Invalid ipv4 address')
         return self
 
     @field_validator('password')
     def check_password(cls,password:str):
         return client_password_validator(password)
+    
+    @field_validator('max_connection')
+    def validate_max_connection(self,max_connection:int)->int:
+        if max_connection <1:
+            raise ValueError('max_connection must be greater than 0')
+        if max_connection >5:
+            raise ValueError('max_connection must be less than or equal to 5')
+        return max_connection
+
+    @field_validator('client_type')
+    def validate_client_type(self,clientType:AuthType):
+        if clientType == ClientType.Admin:
+            raise ValueError('Cannot create an Admin client')
+        return clientType
+    
+    @field_validator('client_description')
+    def validate_description(self,description:str)->str:
+        if len(description)>500:
+            raise ValueError('Description must be less than 500 characters')
+        return description.strip()
+
 
 class UpdateClientModel(ClientModel):
     client_scope:Scope|None = None
     password:str|None = None
     client_name:str | None = None
     issued_for:str | None = None
+    client_description :str | None = None
+
+    #### Fields that wont be updated ######
+    auth_type:Optional[AuthType] = None
+    max_connection:Optional[int] = None
+
 
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:
         if self.client_scope != None and self.issued_for!=None:
-            return super().validate_ip_issuance
+            return super().validate_ip_issuance()
+        if self.client_scope in [Scope.Domain,Scope.Free] and self.issued_for != None:
+            self.issued_for = generateId(20,True)
+        
         return self
     
+    @model_validator(mode="after")
+    def force_non_update(self):
+        self.auth_type = None
+        self.max_connection = None
+
     @field_validator('password')
     def check_password(cls, password):
         if password!=None:
             return super().check_password(password)
         return password
+
+    @field_validator('client_description')
+    def validate_description(self,description:str|None)->str|None:
+        if description!=None:
+            return super().validate_description(description)
+        return description
     
     # @model_validator(mode="after")
     # def final_validate(self) -> Self:
