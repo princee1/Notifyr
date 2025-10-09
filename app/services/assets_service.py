@@ -145,11 +145,15 @@ class ThreadedReader(Reader):
 
 
 @_service.PossibleDep([FTPService])
-@_service.Service()
+@_service.Service(
+    links=[_service.LinkDep(AmazonS3Service,to_destroy=True, to_build=True)]
+)
 class AssetService(_service.BaseService):
-    @inject
+    
+
     def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService) -> None:
         super().__init__()
+
         self.fileService = fileService
         self.fileService:FileService = fileService
         self.securityService = securityService
@@ -165,8 +169,7 @@ class AssetService(_service.BaseService):
             self.globals = JSONFile(ASSETS_GLOBALS_VARIABLES,{})
         
         MLTemplate._globals.update(flatten_dict(self.globals.data))
-
-        
+     
     def build(self,build_state=-1):
         
         self._read_globals()
@@ -226,7 +229,6 @@ class AssetService(_service.BaseService):
         html.add_signature()
         html.set_content()
         
-
     def exportRouteName(self,attributeName:RouteAssetType)-> list[str] | None:
         """
         html: HTML Template Key
@@ -275,10 +277,6 @@ class AssetService(_service.BaseService):
     
     def destroy(self,destroy_state=-1):
         pass
-
-    def encryptPdf(self, name):
-        KEY=""
-        self.pdf[name].encrypt(KEY)
 
     def check_asset(self,asset, allowed_assets:list[str]=None):
         if asset == None:

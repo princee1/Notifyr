@@ -1,6 +1,8 @@
-from app.definition._service import BaseMiniService, BaseService, MiniService, Service
+from app.definition._service import BaseMiniService, BaseService, LinkDep, MiniService, Service
+from app.interface.timers import SchedulerInterface
 from app.models.profile_model import AWSProfileModel
 from app.services.profile_service import ProfileMiniService, ProfileService
+from app.services.secret_service import HCVaultService
 from .config_service import ConfigService
 from .file_service import BaseFileRetrieverService, FileService
 import boto3
@@ -17,13 +19,20 @@ class AmazonSNSError(Exception):
     pass
 
 
-@Service()
-class AmazonS3Service(BaseFileRetrieverService):
-    
-    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__(configService,fileService)
+@Service(
 
-@MiniService()
+)
+class AmazonS3Service(BaseFileRetrieverService,SchedulerInterface):
+    
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
+        super().__init__(configService,fileService)
+        self.vaultService = vaultService
+    
+
+
+@MiniService(
+    links=[LinkDep(ProfileMiniService,to_destroy=True, to_build=True)]
+)
 class AmazonSESService(BaseMiniService):
     def __init__(self, configService: ConfigService,profileMiniService:ProfileMiniService[AWSProfileModel]) -> None:
         self.depService = profileMiniService
