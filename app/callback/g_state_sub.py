@@ -8,7 +8,10 @@ from app.utils.constant import SubConstant
 
 
 
-async def recursive(s:BaseService,message:StateProtocol,cache={}):
+async def recursive(s:BaseService,message:StateProtocol,cache=None):
+    if cache == None:
+        cache = {}
+
     if s.name in cache:
         return
 
@@ -16,8 +19,12 @@ async def recursive(s:BaseService,message:StateProtocol,cache={}):
 
         if d.name in cache:
             continue
-
+        
         linkP =  LiaisonDependency[d.name]
+        
+        if s.__class__ not in linkP:
+            continue
+
         linkP:LinkParams = linkP[s.__class__]
 
         async with d.statusLock.writer:
@@ -48,9 +55,9 @@ async def recursive(s:BaseService,message:StateProtocol,cache={}):
                 if build:
                     d._builder(LIFECYCLE_QUIET,build_state=build_state,force_sync_verify=force_sync_verify)              
 
-        cache[d.name] = True
-
         await recursive(d,message,cache)
+
+        cache[d.name] = True
 
 
 class ServiceStateScheduler(SchedulerInterface):

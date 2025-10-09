@@ -302,7 +302,7 @@ class RedisService(DatabaseService):
         else:
             async def handler_wrapper(message):
                 try:
-                    print(message)
+                    
                     if 'data' not in message: 
                         return
                     data= json.loads(message["data"])

@@ -344,9 +344,6 @@ class SMSService(BaseTwilioCommunication):
         status_callback = twilioProfile.logs_url + self.status_callback_type
         return func(send_as_mms=True, provide_feedback=True, to=otpModel.to, status_callback=status_callback, from_=otpModel._from, body=body)
 
-    def build(self,build_state=-1):
-        ...
-
     def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None) -> MessageInstance:
         twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
         results = []
