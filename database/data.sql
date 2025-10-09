@@ -46,13 +46,18 @@ INSERT INTO
     security.Client (
         client_name,
         client_type,
-        issued_for,
-        authenticated
+        client_description,
+        client_scope,
+        authenticated,
+        can_login
+
     )
 VALUES (
         'Notifyr ADMIN',
         'Admin',
-        '127.0.0.1',
+        'Admin client for Notifyr application',
+        'Free',
+        True,
         True
     );
 

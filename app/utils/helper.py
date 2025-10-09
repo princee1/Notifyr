@@ -6,7 +6,7 @@ from random import choice, seed
 from string import hexdigits, digits, ascii_letters,punctuation
 import time
 from inspect import currentframe, getargvalues
-from typing import Any, Callable, Literal, Optional, Tuple, Type, get_args, get_origin
+from typing import Any, Callable, Literal, Optional, Tuple, Type, TypeVar, get_args, get_origin
 import urllib.parse
 from aiohttp_retry import Union
 from fastapi import Response
@@ -460,8 +460,10 @@ def isprimitive_type(obj:Any):
 
 ################################   ** Generate Helper **      #################################
 
-def generateId(len):
+def generateId(len, add_punctuation=False):
     seed(time.time())
+    if add_punctuation:
+        return "".join(choice(alphanumeric + punctuation) for _ in range(len))
     return "".join(choice(alphanumeric) for _ in range(len))
 
 
@@ -534,7 +536,7 @@ def phone_parser(phone_number:str,country_code=None):
         cleaned_number = f'+{phone_number}'
     return cleaned_number
     
-def filter_paths(paths):
+def filter_paths(paths,append_asset=True):
         paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
         results = []
 
@@ -542,8 +544,9 @@ def filter_paths(paths):
             if not any(path.startswith(d + "\\") for d in results):
                 results.append(path)
 
-
-        return ['assets/'+ p for p in results ]
+        if append_asset:
+            return ['assets/'+ p for p in results ]
+        return results
 
 ###################################### ** Time Helper **  ###########################################
 
@@ -578,14 +581,16 @@ def is_optional(annotation) -> bool:
         return type(None) in get_args(annotation)
     return False
 
+M= TypeVar('M',bound=BaseModel)
+
 def subset_model(
-    base: type[BaseModel],
+    base: Type[M],
     name: str,
     include: set[str] | None = None,
     exclude: set[str] | None = None,
     optional: bool = True,
     __config__:ConfigDict |None = None
-):
+)->Type[M]:
     fields = {}
     for field_name, field in base.model_fields.items():
         if include and field_name not in include:

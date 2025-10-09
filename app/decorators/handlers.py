@@ -5,6 +5,7 @@ from typing import Callable
 from fastapi.exceptions import ResponseValidationError
 from h11 import LocalProtocolError
 import hvac
+import requests
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -611,7 +612,14 @@ class ProfileHandler(Handler):
             
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     
+class PydanticHandler(Handler):
 
+    def handle(self, function, *args, **kwargs):
+        try:
+            return super().handle(function, *args, **kwargs)
+        except PydanticValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors(include_url=False,include_context=False))
+        
 class VaultHandler(Handler):
     
     async def handle(self, function, *args, **kwargs):
@@ -622,6 +630,12 @@ class VaultHandler(Handler):
 
         except hvac.exceptions.Forbidden as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+        except hvac.exceptions.Unauthorized as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+        except requests.exceptions.ReadTimeout:
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,detail="Vault server did not respond in time")
 
 
 class MiniServiceHandler(Handler):

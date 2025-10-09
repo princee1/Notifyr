@@ -170,8 +170,6 @@ class BaseService():
         @functools.wraps(func)
         async def async_wrapper(self:Self,*args, **kwargs):
             
-            self:BaseService = args[0]
-
             async with self.statusLock.reader as lock:
                 self.check_status(func.__name__)
                 
@@ -415,6 +413,10 @@ class MiniServiceStore(Generic[TMS]):
             raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
         return True
     
+    @property
+    def ids(self):
+        return self._store_.keys()
+
     def __contains__(self, miniService_id: str | Any):
         return miniService_id in self._store_
 

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from app.definition._service import BaseMiniService, BaseService, BuildFailureError, MiniService, Service, ServiceStatus
+from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, MiniService, Service, ServiceStatus
 from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,AlreadyBlacklistedClientError
 from app.models.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
 from app.services.database_service import TortoiseConnectionService
@@ -11,7 +11,7 @@ class ClientMiniService(BaseMiniService):
     ...
 
 @Service()
-class AdminService(BaseService):
+class AdminService(BaseMiniServiceManager):
 
     def __init__(self,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService):
         super().__init__()
@@ -74,16 +74,15 @@ class AdminService(BaseService):
 
         return await BlacklistORM.filter(group=group).delete()
 
-    def issue_auth(self,challenge:ChallengeORM,client:ClientORM,authModel):
+    def issue_auth(self,challenge:ChallengeORM,client:ClientORM):
 
         group_id = None if not client.group_id else str(client.group_id)
-        refresh_token = self.jwtAuthService.encode_refresh_token(client_id=str(client.client_id),challenge=challenge.challenge_refresh, issued_for=client.issued_for, group_id=group_id,client_type=client.client_type)
+        refresh_token = self.jwtAuthService.encode_refresh_token(client_id=str(client.client_id),challenge=challenge.challenge_refresh, group_id=group_id)
 
         if refresh_token == None:
             raise CouldNotCreateRefreshTokenError()
 
-        auth_token = self.jwtAuthService.encode_auth_token(str(challenge.last_authz_id),client.client_type,str(client.client_id),authModel.scope.value,
-            authModel.allowed_routes, challenge.challenge_auth, authModel.roles, group_id,  client.issued_for, client.client_name, authModel.allowed_assets)
+        auth_token = self.jwtAuthService.encode_auth_token(str(challenge.last_authz_id),str(client.client_id),challenge.challenge_auth, group_id)
 
         if auth_token == None:
             raise CouldNotCreateAuthTokenError()
