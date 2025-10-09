@@ -165,7 +165,6 @@ BEGIN
         created_at_auth = NOW(),
         challenge_refresh = secure_random_string(128),
         created_at_refresh = NOW()
-    
     WHERE
         c.client_id = cid;
 
@@ -173,7 +172,7 @@ BEGIN
         Challenge c
     SET 
         expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
-        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh),
+        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh)
     WHERE
         c.client_id = cid AND c.expired_at_auth IS NOT NULL AND c.expired_at_refresh IS NOT NULL;
 
@@ -193,7 +192,7 @@ BEGIN
     UPDATE 
         Challenge c
     SET 
-        expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
+        expired_at_auth = NOW() + (expired_at_auth - created_at_auth)
     WHERE
         c.client_id = cid AND c.expired_at_auth IS NOT NULL;
 
