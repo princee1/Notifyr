@@ -7,7 +7,7 @@ from app.services.database_service import RedisService
 class RedisEventInterface(Interface):
     
     def __init__(self,redisService:RedisService):
-        super().__init__()
+        Interface.__init__(self)
         self.redisService = redisService
 
     async def async_stream_event(self,event_name:str,event:list[dict]|dict):

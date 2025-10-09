@@ -3,12 +3,17 @@ from typing import Any, Callable, Iterable
 from app.definition._interface import Interface, IsInterface
 from app.interface.timers import CronParams, DateParams, IntervalParams, SchedulerInterface
 
-@IsInterface
+class EmailInterface(Interface):
+    def __init__(self,email_address):
+        super().__init__()
+        self.email_address = email_address
+
 class EmailSendInterface(Interface):
-    def sendTemplateEmail(self, data, meta, images,contact_id=None):
+
+    def sendTemplateEmail(self, data, meta, images,contact_id=None,email_profile:str=None):
         ...
 
-    def sendCustomEmail(self, content, meta, images, attachment,contact_id=None):
+    def sendCustomEmail(self, content, meta, images, attachment,contact_id=None,email_profile:str=None):
         ...
 
     def reply_to_an_email(self, content, meta, images, attachment, reply_to, references, contact_ids:list[str]=None):
@@ -17,8 +22,6 @@ class EmailSendInterface(Interface):
     def verify_same_domain_email(self, email: str):
        ...
 
-
-
 @dataclass
 class Jobs:
     job_name:str
@@ -26,8 +29,11 @@ class Jobs:
     args: Iterable
     kwargs: dict
     trigger:Any
+
 @IsInterface
 class EmailReadInterface(SchedulerInterface):
+
+    JOBS_META ={}
 
     @classmethod
     def register_job(cls,job_name: str, trigger, args:tuple, kwargs:dict):
@@ -53,8 +59,8 @@ class EmailReadInterface(SchedulerInterface):
             return func
         return wrapper
     
-    def __init__(self, misfire_grace_time = None):
-        super().__init__(misfire_grace_time)
+    def __init__(self,email_address:str, misfire_grace_time = None):
+        SchedulerInterface.__init__(self,misfire_grace_time)
         self._schedule_jobs()
     
     def _schedule_jobs(self,id=None):

@@ -178,28 +178,6 @@ class ConfigService(_service.BaseService):
         self.OAUTH_CLIENT_SECRET = self.getenv('OAUTH_CLIENT_SECRET')
         self.OAUTH_OUTLOOK_TENANT_ID = self.getenv('OAUTH_TENANT_ID')
         
-        self.SEND_MAIL_METHOD = self.getenv("SEND_MAIL_METHOD", 'SMTP')
-        self.SMTP_EMAIL_HOST = self.getenv("SMTP_EMAIL_HOST").upper()
-        self.SMTP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("SMTP_EMAIL_PORT"))
-        self.SMTP_EMAIL = self.getenv("SMTP_EMAIL")
-        self.SMTP_ADDR_SERVER = self.getenv('SMTP_ADDR_SERVER')
-        self.SMTP_PASS = self.getenv("SMTP_EMAIL_PASS")
-        self.SMTP_EMAIL_CONN_METHOD = self.getenv("SMTP_EMAIL_CONN_METHOD",'tls')
-        self.SMTP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(self.getenv("SMTP_EMAIL_LOG_LEVEL"), 0)
-
-        self.READ_MAIL_METHOD = self.getenv("READ_MAIL_METHOD", 'IMAP')
-        self.IMAP_EMAIL_HOST = self.getenv("IMAP_EMAIL_HOST", self.SMTP_EMAIL_HOST).upper()
-        self.IMAP_EMAIL_PORT = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_PORT"))
-        self.IMAP_EMAIL = self.getenv("IMAP_EMAIL", self.SMTP_EMAIL)
-        self.IMAP_ADDR_SERVER = self.getenv('IMAP_ADDR_SERVER')
-        self.IMAP_PASS = self.getenv("IMAP_EMAIL_PASS", self.SMTP_PASS)
-        self.IMAP_EMAIL_CONN_METHOD = self.getenv("IMAP_EMAIL_CONN_METHOD", self.SMTP_EMAIL_CONN_METHOD)
-        self.IMAP_EMAIL_LOG_LEVEL = ConfigService.parseToInt(self.getenv("IMAP_EMAIL_LOG_LEVEL"), self.SMTP_EMAIL_LOG_LEVEL)
-
-        self.TWILIO_ACCOUNT_SID = self.getenv("TWILIO_ACCOUNT_SID")
-        self.TWILIO_AUTH_TOKEN = self.getenv("TWILIO_AUTH_TOKEN")
-        self.TWILIO_NUMBER = self.getenv("TWILIO_NUMBER")
-        self.TWILIO_PROD_URL = self.getenv("TWILIO_PROD_URL", None)
         self.TWILIO_TEST_URL = self.getenv("TWILIO_TEST_URL", None)
 
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")

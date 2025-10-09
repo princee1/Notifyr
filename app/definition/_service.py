@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from enum import Enum
 import functools
+import traceback
 from typing import Any, Literal, Self, overload, Callable, Type, TypeVar, Dict
 from app.utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from app.utils.constant import DependencyConstant
@@ -134,6 +135,7 @@ class BaseService():
     
 
     def check_status(self,func_name):
+        print(self,self.service_status) 
         match self.service_status :
 
             case ServiceStatus.MAJOR_SYSTEM_FAILURE:
@@ -141,6 +143,7 @@ class BaseService():
 
             case ServiceStatus.NOT_AVAILABLE :
                 raise ServiceNotAvailableError
+            
             case ServiceStatus.TEMPORARY_NOT_AVAILABLE:
                 raise ServiceTemporaryNotAvailableError
             case _:
@@ -156,9 +159,7 @@ class BaseService():
     def CheckStatusBeforeHand(func:Callable):
         
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            
-            self:BaseService = args[0]
+        def sync_wrapper(self:Self,*args, **kwargs):
 
             if self.is_reader_locked:
                 raise ServiceChangingStateError
@@ -167,10 +168,8 @@ class BaseService():
             return func(*args, **kwargs)
         
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
+        async def async_wrapper(self:Self,*args, **kwargs):
             
-            self:BaseService = args[0]
-
             async with self.statusLock.reader as lock:
                 self.check_status(func.__name__)
                 
@@ -194,7 +193,6 @@ class BaseService():
     async def async_pingService(self,**kwargs):
         ...
     
-    @CheckStatusBeforeHand
     def sync_pingService(self,**kwargs):
         ...
 
@@ -284,7 +282,7 @@ class BaseService():
             if not quiet:
                 self.prettyPrinter.warning(
                     f'{is_mini_service}[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
-            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE if self.service_status == None else self.service_status
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
@@ -312,6 +310,7 @@ class BaseService():
                     f'{is_mini_service}[{now}] Error while building the service: {self.__class__.__name__}. Aborting the process', saveable=True)
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
+            traceback.print_exc()
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 exit(-1)
         finally:
@@ -352,14 +351,16 @@ class BaseMiniService(BaseService,):
     QUIET_MINI_SERVICE = False
     ID_LEN = 20
 
-    def __init__(self, depService:BaseService, id=generateId(ID_LEN)):
+    def __init__(self, depService:Self, id=generateId(ID_LEN)):
         super().__init__()
-        self.depService= depService
-        self.miniService_id = id
+        self.depService = depService
+        
         if id == None:
-            if self.miniService_id == None:
+            if self.depService.miniService_id == None:
                 raise MiniServiceCannotBeIdentifiedError
             self.miniService_id = self.depService.miniService_id
+        else:
+            self.miniService_id = id
         
         self.register()
 
@@ -409,6 +410,10 @@ class MiniServiceStore(Generic[TMS]):
             raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
         return True
     
+    @property
+    def ids(self):
+        return self._store_.keys()
+
     def __contains__(self, miniService_id: str | Any):
         return miniService_id in self._store_
 
@@ -419,22 +424,58 @@ class MiniServiceStore(Generic[TMS]):
 
     def __iter__(self):
         return iter(self._store_.items())
+
+    def __len__(self):
+        return len(self._store_)    
+
+    def filter_count(self,lamda:Callable[[TMS],bool]):
+        count=0
+        for _,v in self:
+            if lamda(v):
+                count+=1
+        return count
    
 class BaseMiniServiceManager(BaseService):
+
+    class StatusCounter:
+
+        def __init__(self,total_service):
+            self.total_service = total_service
+            self.acceptable_service = 0
+            self.available_service = 0
+        
+        def count(self,miniService:BaseMiniService):
+            if miniService.service_status in ACCEPTABLE_STATES:
+                self.acceptable_service+=1
+            if miniService.service_status == ServiceStatus.AVAILABLE:
+                self.available_service += 1
+
     def __init__(self):
         super().__init__()
         self.MiniServiceStore = ...
 
-    def build(self, build_state = DEFAULT_BUILD_STATE):
-        return super().build(build_state)
+    def build(self,counter:StatusCounter, build_state = DEFAULT_BUILD_STATE):
+        if counter.total_service <1:
+            raise BuildFailureError
+        
+        if counter.available_service == counter.total_service:
+            return
+        
+        if counter.acceptable_service < 1:
+            self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
+        
+        if counter.acceptable_service < counter.total_service:
+            raise BuildWarningError
+        
+        if counter.acceptable_service == counter.total_service:
+            raise BuildSkipError
     
-    @BaseMiniService.CheckStatusBeforeHand
     async def async_pingService(self,**kwargs):
         if not kwargs.get('__is_manager__',False):
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
         p = mss.get(kwargs.get('__profile__',None))
-        return await p.async_pingService(**kwargs)
+        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(p,**kwargs)
     
     def sync_pingService(self,**kwargs):
         super().sync_pingService(**kwargs)
@@ -443,7 +484,7 @@ class BaseMiniServiceManager(BaseService):
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
         p = mss.get(kwargs.get('__profile__',None))
-        return p.sync_pingService(**kwargs)
+        return BaseService.CheckStatusBeforeHand(p.sync_pingService)(p,**kwargs)
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)

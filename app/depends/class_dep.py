@@ -8,6 +8,7 @@ from app.classes.mail_provider import get_email_provider_name
 from app.definition._error import ServerFileError
 from app.definition._service import BaseMiniServiceManager, MiniStateProtocol, ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
 from app.depends.dependencies import get_request_id
+from app.interface.email import EmailInterface, EmailSendInterface
 from app.models.call_model import BaseVoiceCallModel
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
 from app.models.link_model import LinkORM
@@ -58,7 +59,7 @@ class EmailTracker(TrackerInterface):
         
         return True
 
-    def pipe_email_data(self,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
+    def pipe_email_data(self,email:EmailInterface,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
         
         spam_confidence,spam_label = spam        
         emailMetaData=content.meta
@@ -88,8 +89,8 @@ class EmailTracker(TrackerInterface):
                 recipient = to
                 subject = emailMetaData.Subject
 
-                emailMetaData._Disposition_Notification_To = self.configService.SMTP_EMAIL
-                emailMetaData._Return_Receipt_To = self.configService.SMTP_EMAIL
+                emailMetaData._Disposition_Notification_To = email.email_address
+                emailMetaData._Return_Receipt_To = email.email_address
                 
                 contact_id = get_value_in_list(contact_ids,i)
 
@@ -202,7 +203,7 @@ class TwilioTracker(TrackerInterface):
                     'call_id': twilio_id,
                     'contact_id': contact_id,
                     'recipient': to,
-                    'sender': content.from_,
+                    'sender': content._from,
                     'date_sent': now.isoformat(),
                     'last_update': now.isoformat(),
                     'expired_tracking_date': expired_tracking_date,
@@ -400,11 +401,7 @@ class Broker:
             raise StateProtocolMalFormattedError
 
         self.backgroundTasks.add_task(self.redisService.publish_data,sub_queue,protocol)
-
-    def update_profile_state(self,protocol):
-        
-        self.backgroundTasks.add_task(self.redisService.stream_data,...)
-
+    
     def wait(self,seconds:float):
 
         self.backgroundTasks.add_task(asyncio.sleep,seconds)

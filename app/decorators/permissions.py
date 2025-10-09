@@ -10,7 +10,7 @@ from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
+from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
 from app.utils.helper import flatten_dict
 
  
@@ -27,11 +27,16 @@ class JWTRouteHTTPPermission(Permission):
         if authPermission == None:
             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Auth Permission not implemented")
         
-        if authPermission['status'] == 'inactive' and not self.accept_inactive:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
+        if authPermission['auth_type'] == AuthType.ACCESS_TOKEN:
+
+            if authPermission['status'] == 'inactive' and not self.accept_inactive:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
+            
+            if authPermission['status'] == 'expired' and not self.accept_expired:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
         
-        if authPermission['status'] == 'expired' and not self.accept_expired:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
+        if authPermission['client_type'] == ClientType.Admin:
+            return True
 
         operation_id = func_meta["operation_id"]
         roles= func_meta['roles']
@@ -79,6 +84,9 @@ class JWTAssetPermission(Permission):
         self.model_keys_size = len(self.model_keys) == 0
 
     def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
+        if authPermission['client_type'] == ClientType.Admin:
+            return True
+
         assetPermission = authPermission['allowed_assets']
         template_type = self.template_type if template_type == None else template_type
         permission = tuple(assetPermission)
@@ -179,17 +187,11 @@ class JWTRefreshTokenPermission(Permission):
         if client_id != authPermission['client_id']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
 
-        if permission['client_type'] != authPermission['client_type']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client type mismatch")
-
         if permission['generation_id'] != authPermission['generation_id']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
 
         if permission['group_id'] != authPermission['group_id']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
-
-        if permission['issued_for'] != authPermission['issued_for']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
 
         challenge = await ChallengeORM.filter(client=client_id).first()
         if challenge.challenge_refresh != permission['challenge']:
@@ -254,19 +256,12 @@ class BalancerPermission(Permission):
 
 class ProfilePermission(Permission):
 
-    def __init__(self,service:BaseMiniServiceManager=None):
-        super().__init__()
-        self.service = service
-    
-
     async def permission(self,authPermission:AuthPermission,profile:str):
 
-        if self.service != None:
-            
-            if profile not in self.service.MiniServiceStore:
-                ...
-            
-        if authPermission['allowed_profiles'] not in profile:
-            ...
-
+        if profile not in authPermission['allowed_profiles']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Profile Is not allowed to be used'
+            )
+        
         return True

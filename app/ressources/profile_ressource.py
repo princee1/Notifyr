@@ -4,8 +4,9 @@ from beanie import Document
 from fastapi import Depends, HTTPException, Request, Response,status
 from pydantic import BaseModel, ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
+from app.classes.condition import MongoCondition, simple_number_validation
 from app.container import InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, ServiceAvailabilityHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
 from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
@@ -17,7 +18,7 @@ from app.models.profile_model import ErrorProfileModel, ProfilModelValues, Profi
 from app.services.database_service import MongooseService
 from app.services.email_service import EmailSenderService
 from app.services.profile_service import ProfileMiniService, ProfileService
-from app.classes.profiles import ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
+from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
 from app.services.task_service import CeleryService, ChannelMiniService, TaskService
 from app.utils.helper import subset_model
@@ -26,7 +27,7 @@ PROFILE_PREFIX = 'profile'
 
 
 @PingService([MongooseService])
-@UseServiceLock(MongooseService,lockType='reader')
+@UseServiceLock(MongooseService,lockType='reader',check_status=False)
 @UseRoles([Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MotorErrorHandler,ProfileHandler)
 @UsePermission(JWTRouteHTTPPermission)
@@ -48,9 +49,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
-    @PingService([HCVaultService,CeleryService])
+    @PingService([HCVaultService,TaskService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-    @UseHandler(VaultHandler,MiniServiceHandler)
+    @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
@@ -59,8 +60,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         profileModel = await self.pipe_profil_model(request,'model')
         
         await self.mongooseService.exists_unique(profileModel,True)
-        result = await self.profileService.add_profile(profileModel)
+        await self.create_profile_model_condition(profileModel)
 
+        result = await self.profileService.add_profile(profileModel)
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,bypass_async_verify=False))
 
         profileMiniService = ProfileMiniService(None,None,None,result)
@@ -95,6 +97,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return await self.mongooseService.get(self.model,profile,True)
 
     @PingService([CeleryService])
+    @UseHandler(PydanticHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
@@ -117,7 +120,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
-    @UseHandler(VaultHandler)
+    @UseHandler(VaultHandler,PydanticHandler)
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'))
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
@@ -128,6 +131,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         modelCreds = await self.pipe_profil_model(request,'model_creds')
 
         modelCreds = modelCreds.model_dump()
+        await self.create_profile_model_condition(modelCreds)
 
         await self.profileService.update_credentials(profile,modelCreds)
         await self.profileService.update_meta_profile(profileModel)
@@ -150,6 +154,52 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             raise ProfileModelRequestBodyError(message = 'Profil Model cannot be empty')
 
         return model.model_validate(body)
+
+    async def create_profile_model_condition(self,profileModel:ProfileModel | dict):
+        
+        def validate_filter(m:MongoCondition,p_dump):
+            try:
+                for k,v in m['filter'].items():
+                    if v == p_dump[k]:
+                        continue
+                    else:
+                        return False
+            except KeyError:
+                return False
+            return True
+
+        mc,force= self.model.condition
+        if mc == None:
+            return
+        
+        if isinstance(profileModel,ProfileModel):
+            profile_dump = profileModel.model_dump(mode='json')    
+        else:
+            profile_dump = profileModel
+
+        if not validate_filter(mc,profile_dump):
+            return
+
+        count = await self.mongooseService.count(self.model,mc['filter'])
+        if mc['method'] != 'simple-number-validation':
+            raise ProfileModelConditionWrongMethodError
+
+        if simple_number_validation(count,mc['rule']):
+            raise ProfileModelAddConditionError()
+        
+        if not force:
+            return
+
+        for k,v in mc['filter'].items():
+            if not isinstance(v,(str,int,float,bool,list,dict)):
+                continue
+
+            if isinstance(profileModel,ProfileModel):
+                print(k,v)
+                setattr(profileModel,k,v)
+            else:
+                profile_dump[k] = v
+            
 
 base_meta = BaseProfilModelRessource.meta
 base_attr = {'id','revision_id','created_at','last_modified','version'}

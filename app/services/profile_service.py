@@ -1,7 +1,7 @@
 from datetime import datetime
 from random import randint
 from typing import Literal, Type
-from app.classes.secrets import SecretsWrapper
+from app.classes.secrets import ChaCha20Poly1305SecretsWrapper, ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.db_error import MongoCollectionDoesNotExists
 from app.errors.service_error import BuildFailureError
@@ -35,7 +35,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         data = self.vaultService.secrets_engine.read(VaultConstant.PROFILES_SECRETS,self.miniService_id)
         for k,v in data.items():
             data[k]= self.vaultService.transit_engine.decrypt(v,VaultConstant.PROFILES_KEY)
-        self.credentials =  SecretsWrapper(data)
+        self.credentials =  ChaCha20Poly1305SecretsWrapper(data)
     
     async def async_create_profile(self):
         print('Template Profile Model:', TModel)

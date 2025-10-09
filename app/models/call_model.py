@@ -1,11 +1,11 @@
 from typing import Self
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from app.classes.celery import SubContentBaseModel, SchedulerModel
 from app.utils.validation import url_validator,language_code_validator
 
 class BaseVoiceCallModel(SubContentBaseModel):
     to:str |list[str]
-    from_:str =None
+    _from:str =PrivateAttr(None)
     timeout:int
     record:bool = True
     time_limit:int = 60
