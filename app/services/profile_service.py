@@ -30,7 +30,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
     
     def build(self, build_state = ...):
         self._read_encrypted_creds()
-                
+        
     def _read_encrypted_creds(self):
         data = self.vaultService.secrets_engine.read(VaultConstant.PROFILES_SECRETS,self.miniService_id)
         for k,v in data.items():
@@ -58,6 +58,8 @@ class ProfileService(BaseMiniServiceManager):
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
+            self.MiniServiceStore.clear()
+            
             for v in ProfilModelValues.values():
                 for m in self.mongooseService.sync_find(MongooseDBConstant.PROFILE_COLLECTION,v):
                     p = ProfileMiniService[v](
@@ -67,8 +69,12 @@ class ProfileService(BaseMiniServiceManager):
                         model=m)
                     p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                     self.MiniServiceStore.add(p)
-        except MongoCollectionDoesNotExists:
+        except MongoCollectionDoesNotExists as e:
+            print(e)
             raise BuildFailureError
+
+        except Exception as e:
+            print(e)
 
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:

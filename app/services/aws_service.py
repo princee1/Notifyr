@@ -26,7 +26,7 @@ class AmazonS3Service(BaseFileRetrieverService):
 
 @MiniService(
     override_init=True,
-    links=[LinkDep(ProfileMiniService,build_follow_dep=True)]
+    links=[LinkDep(ProfileMiniService,to_build=True,to_destroy=True)]
 
 )
 class AmazonSESService(BaseMiniService,EmailSendInterface,EmailInterface,EmailReadInterface):

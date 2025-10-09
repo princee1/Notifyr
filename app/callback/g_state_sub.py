@@ -60,7 +60,6 @@ LIFECYCLE_QUIET = False
 
 
 async def SetServiceStatus(message:StateProtocol,service=None):
-    
     try:
         print("Starting..")
         if service == None:
@@ -81,8 +80,10 @@ async def SetServiceStatus(message:StateProtocol,service=None):
                 
                 if build:
                     service._builder(LIFECYCLE_QUIET,message.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=message.get('force_sync_verify',False))
+                else:
+                    ...
                     
-            if 'callback_state_function' in message and message['callback_state_function'] != None:
+            if message.get('callback_state_function',None) != None:
                 callback_state_function = getattr(service,message['callback_state_function'],None)
                 if callback_state_function != None and callable(callback_state_function):
                     if asyncio.iscoroutinefunction(callback_state_function):

@@ -451,7 +451,8 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
                 raise BuildWarningError
         
         self.state_counter = self.StatusCounter(len(self.profileService.MiniServiceStore))
-
+        self.MiniServiceStore.clear()
+        
         for id,p in self.profileService.MiniServiceStore:
 
             miniService = ChannelMiniService(p,self.celeryService)

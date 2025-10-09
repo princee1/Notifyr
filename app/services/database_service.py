@@ -269,7 +269,7 @@ class RedisService(DatabaseService):
     async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker|Any|None]):
         pubsub = self.redis_events.pubsub()
 
-        if channels != SubConstant.SERVICE_STATUS:
+        if channels not in SubConstant._SUB_CALLBACK:
             def handler_wrapper(message):
                 if message is None:
                     print('No message')
@@ -301,12 +301,18 @@ class RedisService(DatabaseService):
                         ...
         else:
             async def handler_wrapper(message):
-                if 'data' not in message: 
-                    return
-                data= json.loads(message["data"])
-                if asyncio.iscoroutinefunction(handler):
-                    return await handler(data)
-                return handler(data)
+                try:
+                    print(message)
+                    if 'data' not in message: 
+                        return
+                    data= json.loads(message["data"])
+                    if asyncio.iscoroutinefunction(handler):
+                        return await handler(data)
+                    return handler(data)
+                except Exception as e:
+                    print(e)
+                    print(e.__class__)
+                    
 
         await pubsub.subscribe(**{channels:handler_wrapper}) # TODO Maybe add the function as await
 

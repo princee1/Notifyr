@@ -49,8 +49,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
-    @PingService([HCVaultService,TaskService])
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @PingService([HCVaultService,TaskService,CeleryService])
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseHandler(VaultHandler,MiniServiceHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
@@ -63,7 +63,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.create_profile_model_condition(profileModel)
 
         result = await self.profileService.add_profile(profileModel)
-        broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,bypass_async_verify=False))
+        broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
 
         profileMiniService = ProfileMiniService(None,None,None,result)
         channelService = ChannelMiniService(profileMiniService,self.celeryService)
@@ -71,9 +71,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         return result
 
-    @PingService([HCVaultService,CeleryService])
+    @PingService([HCVaultService,CeleryService,TaskService])
     @UseHandler(VaultHandler,MiniServiceHandler)
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UsePermission(AdminPermission)
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
@@ -96,7 +96,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.mongooseService.get(self.model,profile,True)
 
-    @PingService([CeleryService])
+    @PingService([CeleryService,TaskService])
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
@@ -116,7 +116,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return await self.profileService.update_meta_profile(profileModel)
     
 
-    @PingService([HCVaultService])
+    @PingService([HCVaultService,TaskService,CeleryService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler)

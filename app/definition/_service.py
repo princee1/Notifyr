@@ -391,6 +391,9 @@ class MiniServiceStore(Generic[TMS]):
     def __init__(self):
         self._store_: Dict[str, TMS] = {}
 
+    def clear(self):
+        self._store_.clear()
+
     def add(self, miniService: TMS):
         if miniService.miniService_id in self._store_:
             raise MiniServiceAlreadyExistsError(f"MiniService with id '{miniService.miniService_id}' already exists.")

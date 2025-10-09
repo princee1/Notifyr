@@ -210,7 +210,7 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
 
 @_service.MiniService(
     override_init=True,
-    links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True)]
+    links=[_service.LinkDep(ProfileMiniService,to_build=True,to_destroy=True)]
 )
 class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
 
@@ -410,7 +410,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
 
 @_service.MiniService(
     override_init=True,
-    links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True)]
+    links=[_service.LinkDep(ProfileMiniService,to_build=True,to_destroy=True)]
     )
 class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
 
@@ -472,7 +472,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             if self._mailboxes[inbox].no_select:
                 raise imap.IMAP4.error(f'This inbox cannot be selected')
 
-            self._current_mailbox = inbox
             connector: imap.IMAP4 | imap.IMAP4_SSL = kwargs['connector']
             connector.select(inbox)
 
@@ -497,8 +496,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
         self.type_ = 'IMAP'
 
         self._mailboxes: dict[str, IMAPEmailMiniService.IMAPMailboxes] = {}
-        self._current_mailbox: str = None
-
         self._capabilities: list = None
         self.auth_method = 'password'
 
