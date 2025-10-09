@@ -6,6 +6,7 @@ import functools
 from typing import Annotated, Callable, Coroutine, Literal
 from fastapi import HTTPException, Header, Request
 import requests
+from app.classes.profiles import ProfileModelException
 from app.classes.template import SMSTemplate
 from app.definition import _service
 from app.interface.redis_event import RedisEventInterface
@@ -249,37 +250,47 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs) -> dict:
                 self: BaseTwilioCommunication = args[0]
-                if asyncio.iscoroutinefunction(func):
-                    message:CallInstance| MessageInstance | Coroutine = await func(*args, **kwargs)
-                else:
-                    message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
-                if message== None:
-                    return None
-                
-                if callable(async_callback):
-                    await async_callback(self,*result[1],**result[2])
-                    result = result[0]
-                else:
-                    if isinstance(result,tuple):
+                try:
+                    if asyncio.iscoroutinefunction(func):
+                        message:CallInstance| MessageInstance | Coroutine = await func(*args, **kwargs)
+                    else:
+                        message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
+                    if message== None:
+                        return None
+                    
+                    if callable(async_callback):
+                        await async_callback(self,*result[1],**result[2])
                         result = result[0]
+                    else:
+                        if isinstance(result,tuple):
+                            result = result[0]
 
-                return self.response_extractor(message)
+                    return self.response_extractor(message)
+                except ProfileModelException as e:
+                    await async_callback(self,e.topic,e.error)
+                    return e.error
+
+
 
             @functools.wraps(func)
             def sync_wrapper(*args,**kwargs):
                 self: BaseTwilioCommunication = args[0]
-
-                message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
-                if message== None:
-                    return None
-                
-                if callable(sync_callback):
-                    sync_callback(self,*result[1],**result[2])
-                    result = result[0]
-                else:
-                    if isinstance(result,tuple):
+                try:
+                    message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
+                    if message== None:
+                        return None
+                    
+                    if callable(sync_callback):
+                        sync_callback(self,*result[1],**result[2])
                         result = result[0]
-                return self.response_extractor(message)
+                    else:
+                        if isinstance(result,tuple):
+                            result = result[0]
+                    return self.response_extractor(message)
+                except ProfileModelException as e:
+                    sync_callback(self,e.topic,e.error)
+                    return e.error
+
 
             if ConfigService._celery_env == CeleryMode.worker:
                 return sync_wrapper

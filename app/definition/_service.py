@@ -41,19 +41,19 @@ class ServiceStatus(Enum):
     """
     The service is fully operational and available for use.
     """
-    NOT_AVAILABLE = 2
-    """
-    The service is not available and cannot be used."""
-    TEMPORARY_NOT_AVAILABLE=3
-    """
-    The service is temporarily not available, possibly due to maintenance or transient issues."""
-    PARTIALLY_AVAILABLE = 4
+    PARTIALLY_AVAILABLE = 2
     """
     The service is operational but may have some limitations or issues that affect its performance or reliability."""
-    WORKS_ALMOST_ATT = 5
+    WORKS_ALMOST_ATT = 3
     """
     The service is operational but may have some features or functionalities that are not fully working as expected, potentially leading to minor issues or inconveniences for users.
     """
+    TEMPORARY_NOT_AVAILABLE=4
+    """
+    The service is temporarily not available, possibly due to maintenance or transient issues."""
+    NOT_AVAILABLE = 5
+    """
+    The service is not available and cannot be used."""
     MAJOR_SYSTEM_FAILURE=6
     """
     The fact that the service does not work will not permit the program to properly run

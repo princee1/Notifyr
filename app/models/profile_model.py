@@ -238,10 +238,13 @@ P = TypeVar('P',bound=ProfileModel)
 ######################################################
 class ErrorProfileModel(Document):
     profile_id: Optional[str]
+
     error_code: Optional[int]
     error_name: Optional[str]
     error_description: Optional[str]
-    error_type:Optional[Literal['warn','critical','message']]
+    error_level:Optional[Literal['warn','critical','message']]
+    error_type:Optional[Literal['connect','authenticate','permission','rate_limit','general']]
+
     ignore:Optional[bool] = False
 
     class Settings:

@@ -226,7 +226,9 @@ class RedisService(DatabaseService):
             SubConstant.MINI_SERVICE_STATUS:self.StreamConfig(
                 sub=True,
                 stream=False,
-            )
+            ),
+            # StreamConstant.PROFILE_ERROR_STREAM:self.StreamConfig(
+            # )
         }
 
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
