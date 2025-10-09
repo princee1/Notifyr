@@ -173,11 +173,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
             client:ClientORM = await ClientORM.create(client_name=name, client_scope=scope, group=group,issued_for=client.issued_for,password=password,password_salt=salt,can_login=False)
             await PolicyMappingORM.bulk_create([PolicyMappingORM(policy_id=policy_id,client=client,group=None) for policy_id in policy_ids])
-            challenge = await ChallengeORM.create(client=client)
-            ttl_auth_challenge = timedelta(seconds=self.settingService.AUTH_EXPIRATION)
-            challenge.expired_at_auth = challenge.created_at_auth + ttl_auth_challenge
-            challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.settingService.REFRESH_EXPIRATION)
-            await challenge.save()
+            challenge, ttl_auth_challenge = await self.create_challenge(client)
 
             await ClientORMCache.Store([group_id,client.client_id],client,)
             await ChallengeORMCache.Store(client.client_id,challenge,ttl_auth_challenge)
@@ -186,6 +182,15 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json,
                                                                           "Policy":policy})
+
+    async def create_challenge(self, client):
+        
+        challenge = await ChallengeORM.create(client=client)
+        ttl_auth_challenge = timedelta(seconds=self.settingService.AUTH_EXPIRATION)
+        challenge.expired_at_auth = challenge.created_at_auth + ttl_auth_challenge
+        challenge.expired_at_refresh = challenge.created_at_refresh + timedelta(seconds=self.settingService.REFRESH_EXPIRATION)
+        await challenge.save()
+        return challenge,ttl_auth_challenge
     
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
