@@ -66,6 +66,25 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifyr
+    
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      # MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+    volumes:
+      - ./assets/:/data
+    command: server /data --console-address ":9001"
 
   vault:
     build:
@@ -274,10 +293,17 @@ volumes:
   neo4j_conf:
   redis-data:
     driver: local
+  
+  minio_data:
 
 secrets:
   approle_role_id:
     file: ./bootstrap/role_id.txt # created after first container init
+
+  minio_root_user:
+    file: ./secrets/minio_root_user.txt
+  minio_root_password:
+    file: ./secrets/minio_root_password.txt
 
 networks:
   notifyr-net:
