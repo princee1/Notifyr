@@ -152,12 +152,10 @@ class ThreadedReader(Reader):
 class AssetService(_service.BaseService):
     
 
-    def __init__(self, fileService: FileService, securityService: SecurityService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService) -> None:
+    def __init__(self, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService) -> None:
         super().__init__()
 
-        self.fileService = fileService
         self.fileService:FileService = fileService
-        self.securityService = securityService
         self.configService = configService
         self.amazonS3Service = amazonS3Service
         self.settingService = settingService
