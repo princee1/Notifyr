@@ -58,12 +58,13 @@ def extension(extension: Extension): return f".{extension.value}"
 
 
 class Reader():
-    fileService: FileService
+    
 
-    def __init__(self, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+    def __init__(self,fileService: FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         self.asset = asset
         self.values: Dict[str, Asset] = {}
         self.func = additionalCode
+        self.fileService = fileService
 
     def safeReader(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
         try:
@@ -127,8 +128,8 @@ class Reader():
 
 
 class ThreadedReader(Reader):
-    def __init__(self, asset: Asset = Asset, additionalCode: Callable[..., Any] = None) -> None:
-        super().__init__(asset, additionalCode)
+    def __init__(self,fileService: FileService, asset: Asset = Asset, additionalCode: Callable[..., Any] = None) -> None:
+        super().__init__(fileService,asset, additionalCode)
         self.thread: Thread
 
     def read(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
@@ -184,22 +185,16 @@ class AssetService(_service.BaseService):
         self.sms: dict[str, SMSTemplate] = {}
         self.phone: dict[str, PhoneTemplate] = {}
 
-        Reader.fileService = self.fileService
         if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
             return 
         
-        self.images = Reader()(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
-        self.css = Reader()(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
+        self.images = Reader(self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
+        self.css = Reader(self.fileService)(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
 
-        htmlReader = Reader(HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.HTML.value)
-        pdfReader = Reader(PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)
-        smsReader = Reader(SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
-        phoneReader = Reader(PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
-
-        self.html = htmlReader
-        self.pdf = pdfReader
-        self.sms = smsReader
-        self.phone = phoneReader
+        self.html = Reader(self.fileService,HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.HTML.value)
+        self.pdf = Reader(self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)
+        self.sms = Reader(self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
+        self.phone = Reader(self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
 
         self.service_status = _service.ServiceStatus.AVAILABLE
         

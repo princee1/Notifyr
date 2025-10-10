@@ -3,7 +3,7 @@ from .assets_service import AssetService
 from .config_service import ConfigService
 from .database_service import TortoiseConnectionService,RedisService,MongooseService
 from .email_service import EmailReaderService,EmailSenderService
-from .file_service import FileService,BaseFileRetrieverService
+from .file_service import FileService,BaseFileRetrieverService,FTPService,GitCloneRepoService
 from .logger_service import LoggerService
 from .notification_service import *
 from .security_service import JWTAuthService,SecurityService

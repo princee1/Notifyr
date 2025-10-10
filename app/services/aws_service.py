@@ -28,6 +28,8 @@ class AmazonS3Service(BaseFileRetrieverService,SchedulerInterface):
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
         super().__init__(configService,fileService)
         self.vaultService = vaultService
+        
+        self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
     
 
 
