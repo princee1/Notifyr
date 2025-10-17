@@ -667,7 +667,6 @@ def Need(typ: Type[S]|str) -> Type[S]:
     """
     return CONTAINER.need(typ)
 
-
 def Bind(type_:type, obj:Any, scope=None):
     return CONTAINER.bind(type_,obj,scope)
 

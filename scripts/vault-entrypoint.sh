@@ -7,6 +7,8 @@ VAULT_SHARED_DIR=/vault/shared
 
 PG_HOST=${POSTGRES_HOST:-postgres}
 M_HOST=${MONGO_HOST:-mongodb}
+MIO_HOST=${MINIO_HOST:-minio}
+C_TYPE=${CRED_TYPE:-MINIO}
 
 wait_for_server() {
   # Wait for listener
@@ -47,7 +49,6 @@ unseal_vault(){
 
 create_database_config(){
 
-
   ONE_SHOT_DB_TOKEN=$(cat "$VAULT_SECRETS_DIR/one_shot_db_token.txt")
 
   export VAULT_ADDR="http://127.0.0.1:8200"
@@ -74,6 +75,48 @@ create_database_config(){
 
   vault write -f notifyr-database/rotate-root/mongodb
 
+  local MINIO_VAULT_PASSWORD=$(cat /minio/secrets/config.json | jq -r .credential.secretKey)
+  local MINIO_VAULT_USER=$(cat /minio/secrets/config.json | jq  -r .credential.accessKey)
+  local MINIO_WEBHOOK_TOKEN=$( cat /minio/secrets/config.json | jq -r '.eventAuthToken')
+
+  vault kv put notifyr-secrets/api-key/S3-WEBHOOK API_KEY="$MINIO_WEBHOOK_TOKEN"
+
+  echo  "building minio cred type: $C_TYPE"
+
+  if [ "$C_TYPE" == "AWS" ]; then
+    vault write notifyr-minio-s3/config/root \
+      access_key="$MINIO_VAULT_USER" \
+      secret_key="$MINIO_VAULT_PASSWORD" \
+      endpoint="http://$MIO_HOST:9000" \
+      iam_endpoint="http://$MIO_HOST:9000" \
+      sts_endpoint="http://$MIO_HOST:9000" \
+      region=us-east-1 \
+      sts_region="us-east-1"
+
+    vault write notifyr-minio-s3/roles/template-role \
+      credential_type=iam_user \
+      policy_arns="template-access" \
+      ttl=15m \
+      max_ttl=1h\
+
+    vault write notifyr-minio-s3/config/lease \
+      lease=15m \
+      lease_max=1h
+  else
+    vault write notifyr-minio-s3/config \
+      endpoint="$MIO_HOST:9000" \
+      accessKeyId="$MINIO_VAULT_USER" \
+      secretAccessKey="$MINIO_VAULT_PASSWORD" \
+      sts_region="us-east-1" \
+      ssl=false
+
+    vault write notifyr-minio-s3/roles/minio-ntfr-role \
+        policy="template-access" \
+        user_name_prefix="vault-temp-user-" \
+        default_ttl=15m \
+        max_ttl=1h
+  fi
+  
   vault token revoke -self
 
   export VAULT_ADDR="http://0.0.0.0:8200"

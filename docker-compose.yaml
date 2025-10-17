@@ -9,7 +9,7 @@ services:
       - "3000:3000"
     volumes:
       - settingdb-data:/data
-      - vault-shared:/vault/shared
+      - vault-api-key:/vault/api-key
 
   redis:
     image: redis:latest #Queue for the taks
@@ -71,25 +71,24 @@ services:
     image: minio/minio:latest
     container_name: minio
     restart: always
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.minio
     ports:
       - "9000:9000"
       - "9001:9001"
-    secrets:
-      - minio_root_user
-      - minio_root_password
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      # MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
-      # MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
     volumes:
-      - ./assets/:/data
-    command: server /data --console-address ":9001"
-
+      - minio-data:/data
+      - minio-secret:/minio/secrets
+    environment:
+      - MINIO_STS_ENABLE="yes"
+    
   vault:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.vault
+      args:
+        - CRED_TYPE=${CRED_TYPE} #MINIO (minio plugin)  || AWS (aws plugin)
     container_name: vault
     labels:
       - com.docker.compose.service=vault
@@ -104,6 +103,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MINIO_HOST: ${MINIO_HOST}
       POSTGRES_HOST: ${POSTGRES_HOST}
       MONGO_HOST: ${MONGO_HOST}
     volumes:
@@ -111,6 +111,9 @@ services:
       - vault-shared:/vault/shared
       - vault-secrets:/vault/secrets
       - vault-audit:/vault/logs
+      - vault-api-key:/vault/api-key
+      - minio-secret:/minio/secrets:ro
+
     depends_on:
       - mongodb
     #restart: always
@@ -276,6 +279,7 @@ volumes:
   vault-shared: {} # holds secret_id
   vault-secrets: {} # holds root_token/unseal_key (optional, only for admin access)
   vault-audit: {}
+  vault-api-key: {}
 
   mongo-data:
     driver: local
@@ -294,7 +298,8 @@ volumes:
   redis-data:
     driver: local
   
-  minio_data:
+  minio-data: {}
+  minio-secret: {}
 
 secrets:
   approle_role_id:

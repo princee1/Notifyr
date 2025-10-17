@@ -14,7 +14,10 @@ class AssetWebhookRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='1/day')
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.HEAD])
     def head(self,request:Request,):
-        return 
+        return
+
+    
+
 
 @UseRoles([Role.ASSETS])
 @UsePermission(JWTRouteHTTPPermission)
@@ -28,11 +31,23 @@ class AssetRessource(BaseHTTPRessource):
     def generate_upload_url(self,request:Request,):
         ...
     
+    
+    def upload_stream(self):
+        ...
+    
+    def download_stream(self):
+        ...
+
+
     @UseRoles(options=[MustHave(Role.ADMIN)])
     @PingService([AmazonS3Service])
     @UseServiceLock(AmazonS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE])
     def delete_asset(self,):
+        ...
+    
+
+    def read_asset(self):
         ...
     
 
