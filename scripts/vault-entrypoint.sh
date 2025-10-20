@@ -47,6 +47,56 @@ unseal_vault(){
   fi
 }
 
+
+create_aws_engine(){
+  vault write notifyr-minio-s3/config/root \
+      access_key="$MINIO_VAULT_USER" \
+      secret_key="$MINIO_VAULT_PASSWORD" \
+      endpoint="http://$MIO_HOST:9000" \
+      iam_endpoint="http://$MIO_HOST:9000" \
+      sts_endpoint="http://$MIO_HOST:9000" \
+      region=us-east-1 \
+      sts_region="us-east-1"
+
+    vault write notifyr-minio-s3/roles/template-role \
+      credential_type=iam_user \
+      policy_arns="template-access" \
+      ttl=15m \
+      max_ttl=1h\
+
+    vault write notifyr-minio-s3/config/lease \
+      lease=15m \
+      lease_max=1h
+
+}
+
+
+create_minio_plugin_engin(){
+
+  vault write notifyr-minio-s3/config/root \
+      endpoint="$MIO_HOST:9000" \
+      accessKeyId="$MINIO_VAULT_USER" \
+      secretAccessKey="$MINIO_VAULT_PASSWORD" \
+      sts_region="us-east-1" \
+      ssl=false
+
+  vault write notifyr-minio-s3/roles/static-minio-ntfr-role \
+      policy_name=template-access \
+      user_name_prefix="vault-static-temp-" \
+      credential_type=static \
+      default_ttl=15m \
+      max_ttl=1h
+
+  vault write notifyr-minio-s3/roles/sts-minio-ntfr-role \
+      policy_name=template-access \
+      credential_type=sts \
+      default_ttl=15m \
+      max_ttl=1h \
+      max_sts_ttl=2h
+
+}
+
+
 create_database_config(){
 
   ONE_SHOT_DB_TOKEN=$(cat "$VAULT_SECRETS_DIR/one_shot_db_token.txt")
@@ -84,37 +134,9 @@ create_database_config(){
   echo  "building minio cred type: $C_TYPE"
 
   if [ "$C_TYPE" == "AWS" ]; then
-    vault write notifyr-minio-s3/config/root \
-      access_key="$MINIO_VAULT_USER" \
-      secret_key="$MINIO_VAULT_PASSWORD" \
-      endpoint="http://$MIO_HOST:9000" \
-      iam_endpoint="http://$MIO_HOST:9000" \
-      sts_endpoint="http://$MIO_HOST:9000" \
-      region=us-east-1 \
-      sts_region="us-east-1"
-
-    vault write notifyr-minio-s3/roles/template-role \
-      credential_type=iam_user \
-      policy_arns="template-access" \
-      ttl=15m \
-      max_ttl=1h\
-
-    vault write notifyr-minio-s3/config/lease \
-      lease=15m \
-      lease_max=1h
+    create_aws_engine
   else
-    vault write notifyr-minio-s3/config \
-      endpoint="$MIO_HOST:9000" \
-      accessKeyId="$MINIO_VAULT_USER" \
-      secretAccessKey="$MINIO_VAULT_PASSWORD" \
-      sts_region="us-east-1" \
-      ssl=false
-
-    vault write notifyr-minio-s3/roles/minio-ntfr-role \
-        policy="template-access" \
-        user_name_prefix="vault-temp-user-" \
-        default_ttl=15m \
-        max_ttl=1h
+    create_minio_plugin_engin
   fi
   
   vault token revoke -self

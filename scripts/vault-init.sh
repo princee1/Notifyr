@@ -223,7 +223,7 @@ setup_database_config(){
 
   DB_TOKEN=$(vault token create \
     -orphan \
-    -use-limit=10 \
+    -use-limit=15 \
     -ttl=2h \
     -renewable=false \
     -policy=db-config-policy \

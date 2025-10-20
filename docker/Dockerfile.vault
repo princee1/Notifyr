@@ -1,30 +1,25 @@
-# ---- Stage 1: Build the MinIO Vault plugin ----
 FROM golang:latest AS builder
 
 RUN apt-get update && apt-get install -y git make && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-# ARG COMMIT_SHA=75862a1065ff489a4601791ad22062e22ee7a1d1
+ARG COMMIT_SHA=75862a1065ff489a4601791ad22062e22ee7a1d1
 
-RUN git clone https://github.com/ram-parameswaran/vault-plugin-secrets-minio.git
+# RUN git clone https://github.com/ram-parameswaran/vault-plugin-secrets-minio.git
 
+RUN git clone https://github.com/jayxiong1/vault-plugin-secrets-minio.git
 
 WORKDIR /build/vault-plugin-secrets-minio/
 
 RUN make deps
 
-#RUN make
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/vault-plugin-secrets-minio
-
-
-# RUN ls -l -R
 
 FROM hashicorp/vault:latest
 
 # Use root for setup
 USER root
-
 
 ARG CRED_TYPE="MINIO"
 
@@ -68,18 +63,15 @@ RUN mkdir -p /vault/policies
 
 RUN cat <<EOF > /vault/policies/app-policy.hcl
 
-# ---- Notifyr ENGINE ----
+# ---- SECRETS ENGINE ----
 
 path "notifyr-secrets/" {
   capabilities = ["list"]
 }
 
-# ---- tokens ----
 path "notifyr-secrets/tokens" {
   capabilities = ["read","list"]
 }
-
-# ---- api key ----
 
 path "notifyr-secrets/api-key"{
   capabilities = ["read","list"]
@@ -91,8 +83,6 @@ path "notifyr-secrets/api-key/*"{
 
 }
 
-# ---- profiles ----
-
 path "notifyr-secrets/profiles" {
   capabilities =["read","list"]
 }
@@ -101,18 +91,15 @@ path "notifyr-secrets/profiles/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
-# ---- messages ----
-
 path "notifyr-secrets/messages" {
   capabilities = ["read","list"]
 }
-
 
 path "notifyr-secrets/messages/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
-# ---- Generation ID ---- 
+# ---- GENERATION ID ENGINE ---- 
 
 path "notifyr-generation/data/generation-id" {
   capabilities = ["create", "update", "read", "delete"]
@@ -122,7 +109,7 @@ path "notifyr-generation/metadata/generation-id" {
   capabilities = ["read", "list", "delete"]
 }
 
-# ---- Transit ENGINE ----
+# ---- TRANSIT ENGINE ----
 
 path "transit/" {
   capabilities = ["list"]
@@ -136,22 +123,19 @@ path "notifyr-transit/decrypt/*" {
   capabilities = ["update"]
 }
 
-# Sign data
 path "notifyr-transit/sign/*" {
   capabilities = ["update"]
 }
 
-# Verify signature
 path "notifyr-transit/verify/*" {
   capabilities = ["update"]
 }
 
-# Optional: to read key info (like key config or key versions)
 path "notifyr-transit/keys/*" {
   capabilities = ["read"]
 }
 
-# ---- Database ENGINE ----
+# ---- DATABASE ENGINE ----
 
 path "notifyr-database/creds/*" {
   capabilities = ["read"]
@@ -211,10 +195,8 @@ RUN adduser -D -u 1500 -g vaultuser vaultuser \
     && chmod 755 /vault/secrets /vault/shared
 
 # Install supercronic
-ENV SUPERCRONIC_VERSION=0.2.31
-ADD https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_VERSION}/supercronic-linux-amd64 /usr/local/bin/supercronic
+ADD https://github.com/aptible/supercronic/releases/download/v0.2.31/supercronic-linux-amd64 /usr/local/bin/supercronic
 RUN chmod 755 /usr/local/bin/supercronic
-
 
 RUN touch /vault/cron/crontab
 

@@ -81,7 +81,7 @@ services:
       - minio-data:/data
       - minio-secret:/minio/secrets
     environment:
-      - MINIO_STS_ENABLE="yes"
+      - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
     
   vault:
     build:
