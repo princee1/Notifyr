@@ -8,7 +8,7 @@ Register(OffloadTaskService)
 
 
 from .support_ressource import SupportRessource
-from .email_ressource import EmailTemplateRessource
+from .email_ressource import EmailRessource
 from .admin_ressource import AdminRessource
 from .redis_backend_ressource import RedisResultBackendRessource
 from .contacts_ressources import ContactsRessource
@@ -24,4 +24,4 @@ from .profile_ressource import ProfilRessource
 from app.definition._ressource import BaseHTTPRessource
 #from .push_notification_ressource import PushNotificationRessource
 
-BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,EmailTemplateRessource,AdminRessource,RedisResultBackendRessource,ContactsRessource,AuthRessource,TwilioRessource,AppRessource,LinkRessource,PingPongRessource,PropertiesRessource,AnalyticsRessource,ProfilRessource]
+BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,EmailRessource,AdminRessource,RedisResultBackendRessource,ContactsRessource,AuthRessource,TwilioRessource,AppRessource,LinkRessource,PingPongRessource,PropertiesRessource,AnalyticsRessource,ProfilRessource]

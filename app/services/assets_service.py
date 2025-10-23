@@ -1,5 +1,4 @@
 from fastapi import HTTPException,status
-
 from app.definition._error import BaseError
 from app.services.aws_service import AmazonS3Service
 from app.services.setting_service import SettingService
@@ -10,11 +9,10 @@ from app.classes.template import Asset, HTMLTemplate, MLTemplate, PDFTemplate, S
 from .security_service import SecurityService
 from .file_service import FileService, FTPService
 from app.definition import _service
-from injector import inject
 from enum import Enum
 import os
 from threading import Thread
-from typing import Any, Callable, Literal, Dict
+from typing import Any, Callable, Literal, Dict, get_args
 from app.utils.helper import flatten_dict, issubclass_of
 
 ROOT_PATH = "assets/"
@@ -50,7 +48,7 @@ class AssetType(Enum):
     PDF = "pdf"
     SMS = "sms"
     PHONE = "phone"
-    HTML = Extension.HTML.value
+    EMAIL = "html"
     
 RouteAssetType = Literal['html', 'sms', 'phone']
 
@@ -187,9 +185,9 @@ class AssetService(_service.BaseService):
             return 
         
         self.images = Reader(self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
-        self.css = Reader(self.fileService)(Extension.CSS, FDFlag.READ, AssetType.HTML.value)
+        self.css = Reader(self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value)
 
-        self.html = Reader(self.fileService,HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.HTML.value)
+        self.html = Reader(self.fileService,HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value)
         self.pdf = Reader(self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)
         self.sms = Reader(self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
         self.phone = Reader(self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
@@ -229,7 +227,7 @@ class AssetService(_service.BaseService):
         phone: Phone Template Key
         """
         try:
-            if attributeName != "html" and  attributeName !="sms" and attributeName != "phone":
+            if attributeName not in get_args(RouteAssetType):
                 raise AttributeError
             temp:dict[str,Asset] = getattr(self,attributeName)
             if type(temp) is not dict:
@@ -275,7 +273,7 @@ class AssetService(_service.BaseService):
         if asset == None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Asset not specified')
 
-        if allowed_assets == None and asset != "html" and  asset !="sms" and asset != "phone":
+        if allowed_assets == None and asset not in get_args(RouteAssetType):
             raise AssetNotFoundError(asset)
         
         return asset in allowed_assets

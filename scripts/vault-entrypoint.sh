@@ -58,9 +58,9 @@ create_aws_engine(){
       region=us-east-1 \
       sts_region="us-east-1"
 
-    vault write notifyr-minio-s3/roles/template-role \
+    vault write notifyr-minio-s3/roles/assets-role \
       credential_type=iam_user \
-      policy_arns="template-access" \
+      policy_arns="assets-access" \
       ttl=15m \
       max_ttl=1h\
 
@@ -81,14 +81,14 @@ create_minio_plugin_engin(){
       ssl=false
 
   vault write notifyr-minio-s3/roles/static-minio-ntfr-role \
-      policy_name=template-access \
-      user_name_prefix="vault-static-temp-" \
+      policy_name=assets-access \
+      user_name_prefix="vault-static-temp" \
       credential_type=static \
       default_ttl=12h \
       max_ttl=16h
 
   vault write notifyr-minio-s3/roles/sts-minio-ntfr-role \
-      policy_name=template-access \
+      policy_name=assets-access \
       credential_type=sts \
       default_ttl=12h \
       max_ttl=16h \

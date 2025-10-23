@@ -71,7 +71,7 @@ DEFAULT_RESPONSE = {
 @UsePermission(permissions.JWTRouteHTTPPermission)
 @PingService([EmailSenderService])
 @HTTPRessource(EMAIL_PREFIX)
-class EmailTemplateRessource(BaseHTTPRessource):
+class EmailRessource(BaseHTTPRessource):
 
     @InjectInMethod()
     def __init__(self,emailReaderService:EmailReaderService, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,taskService:TaskService):
@@ -95,9 +95,9 @@ class EmailTemplateRessource(BaseHTTPRessource):
     @UseServiceLock(AssetService,lockType='reader')
     @UsePipe(pipes.TemplateParamsPipe('html','html',True))
     @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler)
-    @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
-    def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
-
+    @BaseHTTPRessource.HTTPRoute('/template/{template:template}',methods=[HTTPMethod.OPTIONS])
+    def get_template_schema(self,request:Request,response:Response,template:str,authPermission=Depends(get_auth_permission),wait_timeout: int | float = Depends(wait_timeout_query)):
+        print(template)
         schemas = self.assetService.get_schema('html')
         if template in schemas:
             return schemas[template]

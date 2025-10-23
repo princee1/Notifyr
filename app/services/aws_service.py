@@ -106,10 +106,10 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
         )
         self.client.remove_object(MinioConstant.TEMPLATE_BUCKET, source_object_name, version_id=version_id)
         return self.get_object(dest_object_name)
-    
-    def upload_object(self,object_name: str,data, content_type: str = 'application/octet-stream'):
+
+    def upload_object(self,object_name: str,data, content_type: str = 'application/octet-stream',metadata: Dict = None):
         result = self.client.put_object(
-            MinioConstant.TEMPLATE_BUCKET,object_name,data,len(data),content_type=content_type
+            MinioConstant.TEMPLATE_BUCKET,object_name,data,len(data),content_type=content_type,metadata=metadata
         )
         return self.get_object(object_name)
     

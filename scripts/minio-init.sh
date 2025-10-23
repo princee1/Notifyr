@@ -20,10 +20,10 @@ mc alias set myminio http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSW
 mc mb myminio/static
 mc version enable myminio/static
 
-mc mb myminio/template
-mc version enable myminio/template
+mc mb myminio/assets
+mc version enable myminio/assets
 
-mc cp --recursive /app/assets/ myminio/template/
+mc cp --recursive /app/assets/ myminio/assets/
 
 VAULT_SECRET_ACCESS_KEY="vaultuser-$(pwgen -s 10 1)"
 VAULT_SECRET_KEY=$(pwgen -s 30 1)
@@ -38,7 +38,16 @@ cat > /minio/secrets/config.json <<EOF
     "accessKey": "$VAULT_SECRET_ACCESS_KEY",
     "secretKey": "$VAULT_SECRET_KEY"
   },
-  "eventAuthToken":"$S3_WEBHOOK_TOKEN"
+  "notify_redis": {
+    "2": {
+      "enable": "on",
+      "address": "redis:6379",
+      "key": "minio-events",
+      "queue_limit": 1000,
+      "user": "",
+      "password": ""
+    }
+  }
 }
 EOF
 
@@ -46,17 +55,7 @@ mc admin user add myminio "$VAULT_SECRET_ACCESS_KEY" "$VAULT_SECRET_KEY"
 
 mc admin policy attach myminio consoleAdmin --user "$VAULT_SECRET_ACCESS_KEY"
 
-mc admin policy create myminio template-access /app/policy/template-access.json
-
-# test mode
-# mc admin config set myminio notify_webhook:notifyr \
-#     endpoint="http://0.0.0.0:8088/assets/webhook/" \
-#     authorization_token="$MINIO_WEBHOOK_TOKEN"
-
-# mc event add myminio/template arn:minio:sqs::notifyr:webhook \
-#     --event put,delete \
-#     --suffix "" \
-#     --prefix ""
+mc admin policy create myminio assets-access /app/policy/assets-access.json
 
 mc alias remove myminio
 
