@@ -3,7 +3,7 @@ import time
 from typing import Literal, TypedDict
 import requests
 from app.classes.secrets import ChaCha20SecretsWrapper
-from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
+from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, MinioS3VaultEngine, TransitVaultEngine
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.config_service import MODE, ConfigService
@@ -108,6 +108,7 @@ class HCVaultService(BaseService,SchedulerInterface):
         self.generation_engine = KV2VaultEngine(self.client,VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT)
         self.transit_engine = TransitVaultEngine(self.client,VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT)
         self.database_engine = DatabaseVaultEngine(self.client,VaultConstant.NOTIFYR_DB_MOUNT_POINT)
+        self.minio_engine = MinioS3VaultEngine(self.client,VaultConstant.NOTIFYR_MINIO_MOUNT_POINT)
 
         return True
 
@@ -182,6 +183,8 @@ class HCVaultService(BaseService,SchedulerInterface):
             raise BuildAbortError(f"Forbidden: {e}")
         except hvac.exceptions.Unauthorized as e:
             raise BuildAbortError(f"Unauthorized: {e}")
+        except hvac.exceptions.VaultDown:
+            raise BuildAbortError('Vault Is Sealed')
         except requests.exceptions.ConnectionError as e:
             raise BuildAbortError(f"Vault server not reachable: {e}")
         except requests.exceptions.Timeout as e:

@@ -9,6 +9,8 @@ amqp==5.3.1
 annotated-types==0.7.0
 anyio==4.8.0
 APScheduler==3.11.0
+argon2-cffi==25.1.0
+argon2-cffi-bindings==25.1.0
 asgiref==3.8.1
 asyncpg==0.30.0
 atlastk==0.13.3
@@ -90,6 +92,7 @@ marisa-trie==1.2.1
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
 mdurl==0.1.2
+minio==7.2.18
 modcall==0.1.0
 motor==3.7.0
 msal==1.31.1
@@ -116,6 +119,7 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.1
 pybind11==2.13.6
 pycparser==2.22
+pycryptodome==3.23.0
 pydantic==2.10.6
 pydantic_core==2.27.2
 pyfiglet==0.7

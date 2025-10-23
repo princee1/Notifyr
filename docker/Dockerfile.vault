@@ -145,6 +145,16 @@ path "notifyr-database/roles" {
   capabilities = ["list"]
 }
 
+# ---- MINIO ENGINE ----
+
+path "notifyr-minio-s3/creds/*"{
+  capabilities = ["read"]
+}
+
+path "notifyr-minio-s3/sts/*"{
+  capabilities=["update","read"]
+}
+
 EOF
 
 RUN cat <<EOF > /vault/policies/rotate-approle.hcl

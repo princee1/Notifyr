@@ -84,15 +84,15 @@ create_minio_plugin_engin(){
       policy_name=template-access \
       user_name_prefix="vault-static-temp-" \
       credential_type=static \
-      default_ttl=15m \
-      max_ttl=1h
+      default_ttl=12h \
+      max_ttl=16h
 
   vault write notifyr-minio-s3/roles/sts-minio-ntfr-role \
       policy_name=template-access \
       credential_type=sts \
-      default_ttl=15m \
-      max_ttl=1h \
-      max_sts_ttl=2h
+      default_ttl=12h \
+      max_ttl=16h \
+      max_sts_ttl=12h
 
 }
 

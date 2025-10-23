@@ -55,7 +55,11 @@ class RotateCredentialsInterface(Interface):
         self.b = b
         self.last_rotated = None
         self.auth_ttl = ttl
-    
+
+    def verify_dependency(self):
+        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError("Vault Service can’t issue creds")
+        
     @staticmethod
     def random_buffer_interval(ttl):
         return ttl - (ttl*.08*random() + randint(20,40))
@@ -557,9 +561,6 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     ##################################################
     # Service lifecycle
     ##################################################
-    def verify_dependency(self):
-        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError("Vault Service can’t issue creds")
 
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
@@ -655,11 +656,6 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
         )
 
         self.interval_schedule(delay,self.creds_rotation)
-
-    def verify_dependency(self):
-        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError('Vault Service Cant issue creds')
-        
 
     def build(self,build_state=-1):
         try:

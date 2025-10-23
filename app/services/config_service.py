@@ -184,6 +184,15 @@ class ConfigService(_service.BaseService):
         self.API_KEY = self.getenv("API_KEY")
         
 
+        # OBJECT STORAGE CONFIG #
+        self.MINIO_ENDPOINT= self.getenv('MINIO_ENDPOINT','127.0.0.1:9000' if self.MODE == MODE.DEV_MODE else 'minio:9000')
+
+        self.MINIO_REGION = self.getenv("MINIO_REGION",None)
+        
+        self.MINIO_CRED_TYPE = self.getenv('CRED_TYPE','static')
+
+        self.MINIO_SSL = ConfigService.parseToBool(self.getenv('MINIO_SSL'), False)
+
         # HASHI CORP VAULT CONFIG #
 
         self.VAULT_ADDR = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
@@ -209,9 +218,8 @@ class ConfigService(_service.BaseService):
 
         # CELERY CONFIG #
 
-        self.CELERY_MESSAGE_BROKER_URL = self.REDIS_URL + self.getenv("CELERY_MESSAGE_BROKER_URL", '/0')
-        self.CELERY_BACKEND_URL = self.REDIS_URL + self.getenv("CELERY_BACKEND_URL", '/0')
-        self.REDBEAT_REDIS_URL = self.REDIS_URL + self.getenv("REDBEAT_REDIS_URL", self.CELERY_MESSAGE_BROKER_URL)
+        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL",self.REDIS_URL +  '/0')
+        self.CELERY_BACKEND_URL =  self.getenv("CELERY_BACKEND_URL", self.REDIS_URL +'/0')
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT", 1)        

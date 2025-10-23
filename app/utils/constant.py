@@ -214,6 +214,7 @@ class VaultConstant:
     SECRET_ID_FILE= 'secret-id.txt' 
     ROLE_ID_FILE = 'role_id.txt' # in the secrets shared by the vault
     SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
+    
 
     
     @staticmethod
@@ -241,11 +242,14 @@ class VaultConstant:
     MONGO_ROLE='mongo'
     POSTGRES_ROLE='postgres'
 
+    NotifyrMinioRole = Literal['static-minio','sts-minio']
+
 
     NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
     NOTIFYR_TRANSIT_MOUNT_POINT = 'notifyr-transit'
     NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
     NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
+    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio-s3'
 
 
     @staticmethod
@@ -275,6 +279,13 @@ class VaultTTLSyncConstant:
     MONGODB_AUTH_TTL=SECONDS_IN_AN_HOUR*12
     MONGODB_MAX_TTL=SECONDS_IN_AN_HOUR*16
 
-    
+    MINIO_TTL=SECONDS_IN_AN_HOUR*12
+    MINIO_MAX_TTL= SECONDS_IN_AN_HOUR *16
 
     
+
+
+class MinioConstant:
+    STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
+    TEMPLATE_BUCKET = 'template'
+    STATIC_TEMPLATE = 'static'
