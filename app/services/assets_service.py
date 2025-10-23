@@ -14,14 +14,7 @@ import os
 from threading import Thread
 from typing import Any, Callable, Literal, Dict, get_args
 from app.utils.helper import flatten_dict, issubclass_of
-
-ROOT_PATH = "assets/"
-DIRECTORY_SEPARATOR = '\\'
-REQUEST_DIRECTORY_SEPARATOR = ':'
-ASSETS_GLOBALS_VARIABLES =f"{ROOT_PATH}globals.json"
-
-
-def path(x): return ROOT_PATH+x
+from app.utils.globals import DIRECTORY_SEPARATOR
 
 class AssetNotFoundError(BaseError):
     ...
@@ -48,9 +41,9 @@ class AssetType(Enum):
     PDF = "pdf"
     SMS = "sms"
     PHONE = "phone"
-    EMAIL = "html"
+    EMAIL = "email"
     
-RouteAssetType = Literal['html', 'sms', 'phone']
+RouteAssetType = Literal['email', 'sms', 'phone']
 
 def extension(extension: Extension): return f".{extension.value}"
 
@@ -58,11 +51,12 @@ def extension(extension: Extension): return f".{extension.value}"
 class Reader():
     
 
-    def __init__(self,fileService: FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+    def __init__(self,configService:ConfigService, fileService: FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         self.asset = asset
         self.values: Dict[str, Asset] = {}
         self.func = additionalCode
         self.fileService = fileService
+        self.configService = configService
 
     def safeReader(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
         try:
@@ -89,12 +83,11 @@ class Reader():
         to be used when reading the files. In this case, the default encoding is set to "utf-8"
         """
         extension_ = extension(ext)
-        root = path(rootParam) if type(rootParam) is str  else path(ext.value)
+        root = self.path(rootParam) if type(rootParam) is str  else self.path(ext.value)
         setTempFile: set[str] = set()
         for file in self.fileService.listFileExtensions(extension_, root, recursive=True):
             relpath = root + os.path.sep+file
-            filename, content, dir = self.fileService.readFileDetail(
-                relpath, flag, encoding)
+            filename, content, dir = self.fileService.readFileDetail(relpath, flag, encoding)
             keyName = filename if not setTempFile else file
             setTempFile.add(keyName)
             try:
@@ -109,7 +102,7 @@ class Reader():
                 if self.func != None:
                     self.func(self.values[relpath])
 
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
+    def __call__(self, *args: Any, **kwds: Any) -> dict[str, Asset]:
         """
         :param ext:
         :type ext: Extension
@@ -123,6 +116,9 @@ class Reader():
         """
         self.safeReader(*args)
         return self.values
+    
+    def path(self,val):
+        return f"{self.configService.ASSET_DIR}{val}"
 
 
 class ThreadedReader(Reader):
@@ -138,7 +134,7 @@ class ThreadedReader(Reader):
         self.safeReader(*args)
         return self
 
-    def join(self):
+    def join(self) -> dict[str, Asset]:
         self.thread.join()
         return self.values
 
@@ -158,12 +154,14 @@ class AssetService(_service.BaseService):
         self.amazonS3Service = amazonS3Service
         self.settingService = settingService
 
+        self.ASSETS_GLOBALS_VARIABLES =f"{self.configService.ASSET_DIR}globals.json"
+
     def _read_globals(self):
 
         try:
-            self.globals =  JSONFile(ASSETS_GLOBALS_VARIABLES)
+            self.globals =  JSONFile(self.ASSETS_GLOBALS_VARIABLES)
         except:
-            self.globals = JSONFile(ASSETS_GLOBALS_VARIABLES,{})
+            self.globals = JSONFile(self.ASSETS_GLOBALS_VARIABLES,{})
         
         MLTemplate._globals.update(flatten_dict(self.globals.data))
      
@@ -173,40 +171,44 @@ class AssetService(_service.BaseService):
 
         Template.LANG = self.settingService.ASSET_LANG
 
-        self.images: dict[str, Asset] = {}
-        self.css: dict[str, Asset] = {}
-
-        self.html: dict[str, HTMLTemplate] = {}
-        self.pdf: dict[str, PDFTemplate] = {}
-        self.sms: dict[str, SMSTemplate] = {}
-        self.phone: dict[str, PhoneTemplate] = {}
-
         if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
             return 
         
-        self.images = Reader(self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)
-        self.css = Reader(self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value)
+        self.images = self.sanitize_paths(Reader(self.configService,self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value))
+        self.css = self.sanitize_paths(Reader(self.configService,self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value))
 
-        self.html = Reader(self.fileService,HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value)
-        self.pdf = Reader(self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)
-        self.sms = Reader(self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)
-        self.phone = Reader(self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)
+        self.email = self.sanitize_paths(Reader(self.configService,self.fileService,HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value))
+        self.pdf = self.sanitize_paths(Reader(self.configService,self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value))
+        self.sms = self.sanitize_paths(Reader(self.configService,self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value))
+        self.phone = self.sanitize_paths(Reader(self.configService,self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value))
 
         self.service_status = _service.ServiceStatus.AVAILABLE
-        
+    
+    def normalize_path(self,path:str,action:Literal['add','remove']='add')-> str:
+        if action == 'add':
+            return f"{self.configService.ASSET_DIR}{path}"
+        elif action == 'remove':
+            return path.removeprefix(self.configService.ASSET_DIR)
+        return path
+
+    def sanitize_paths(self,assets:dict[str,Asset]):
+        temp: dict[str,Asset]={}
+        for key, asset in assets.items():
+            key = self.normalize_path(key,'remove')
+            temp[key]=asset
+        return temp
+
     def loadHTMLData(self, html: HTMLTemplate):
         cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
         css_content=""
         for cssPath in cssInPath:
-            cssPath = self.asset_rel_path(cssPath,Extension.HTML.value)
-            cssPath = cssPath.replace(Extension.CSS.value+"\\",'')
-            cssPath = cssPath.replace(Extension.HTML.value+"\\"+Extension.HTML.value+"\\",Extension.HTML.value+"\\")
+            if not cssPath.startswith(AssetType.EMAIL.value+DIRECTORY_SEPARATOR):
+                cssPath = f"{AssetType.EMAIL.value}{DIRECTORY_SEPARATOR}{cssPath}"
             try:
                 css_content += self.css[cssPath].content
-                
             except KeyError as e:
-                print('error')
-                pass
+                print(cssPath,'error')
+                continue
         html.loadCSS(css_content)
         imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG.value)
         for imagesPath in imagesInPath:
@@ -240,9 +242,9 @@ class AssetService(_service.BaseService):
         except AttributeError as e:
             pass
 
-    def asset_rel_path(self,path,asset_type):
-        return f"{self.configService.ASSET_DIR}{asset_type}\\{path}"
-        
+    def asset_rel_path(self,path,asset_type:AssetType):
+        return f"{asset_type}{DIRECTORY_SEPARATOR}{path}"
+
     def verify_asset_permission(self,content:dict,model_keys:list[str],assetPermission,options:list[Callable[[Any],bool]]):
         
         permission = tuple(assetPermission)

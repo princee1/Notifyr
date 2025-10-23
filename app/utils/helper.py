@@ -22,6 +22,8 @@ from uuid import UUID,uuid1
 import hashlib
 import socket
 
+from app.utils.globals import DIRECTORY_SEPARATOR
+
 alphanumeric = digits + ascii_letters
 
 
@@ -535,17 +537,14 @@ def phone_parser(phone_number:str,country_code=None):
     else:
         cleaned_number = f'+{phone_number}'
     return cleaned_number
-    
-def filter_paths(paths,append_asset=True):
-        paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
+
+def filter_paths(paths: list[str]) -> list[str]:
+        paths = sorted(paths, key=lambda x: x.count(DIRECTORY_SEPARATOR))  # Trier par profondeur
         results = []
 
         for path in paths:
-            if not any(path.startswith(d + "\\") for d in results):
+            if not any(path.startswith(d + DIRECTORY_SEPARATOR) for d in results):
                 results.append(path)
-
-        if append_asset:
-            return ['assets/'+ p for p in results ]
         return results
 
 ###################################### ** Time Helper **  ###########################################

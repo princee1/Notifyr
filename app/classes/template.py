@@ -85,9 +85,6 @@ class Asset():
         self.content = content
         self.dirName = dirName
         self.name = self.filename.split(".")[0]
-        # BUG need to replace the path separator
-        self.name.replace("\\", ROUTE_SEP)
-        self.name.replace("/", ROUTE_SEP)
         self.ignore=False
 
 

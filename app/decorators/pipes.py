@@ -19,7 +19,7 @@ from app.models.email_model import BaseEmailSchedulerModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
-from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
+from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
@@ -33,7 +33,7 @@ from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
 
 async def to_otp_path(template:str):
-    template = "otp\\"+template
+    template = "otp" + DIRECTORY_SEPARATOR + template
     return {'template':template}
 
 
@@ -86,7 +86,7 @@ class TemplateParamsPipe(Pipe):
             
             template+="."+self.extension
             asset_routes = self.assetService.exportRouteName(self.template_type)
-            template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
+            
             template = self.assetService.asset_rel_path(template,self.template_type)
 
             if template not in asset_routes:
@@ -96,7 +96,7 @@ class TemplateParamsPipe(Pipe):
         
 class TemplateSignatureQueryPipe(TemplateParamsPipe):
     def __init__(self):
-        super().__init__('html', 'html', False)
+        super().__init__('email', 'html', False)
 
     async def pipe(self,scheduler: BaseEmailSchedulerModel):
         if scheduler.signature == None:
@@ -105,17 +105,6 @@ class TemplateSignatureQueryPipe(TemplateParamsPipe):
         scheduler.signature.template = val['template']
         return {}
         
-
-class TemplateQueryPipe(TemplateParamsPipe):
-    def __init__(self,*allowed_assets:RouteAssetType):
-        super().__init__(None)
-        self.allowed_assets = list(allowed_assets)
-
-    def pipe(self, asset:str,template:str):
-        self.assetService.check_asset(asset,self.allowed_assets)
-        self.template_type = asset #BUG 
-        return super().pipe(template)
-
 class CeleryTaskPipe(Pipe):
     
     def __init__(self):
@@ -160,11 +149,10 @@ class RelayPipe(Pipe):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Relay not allowed')
         
         if relay=='email' and self.parse_email:
-            relay = 'html'
+            ...
 
         return {'relay':relay}
     
-
 class TwilioPhoneNumberPipe(Pipe):
 
     PhoneNumberChoice = Literal['default','otp','chat','auto-mess']
@@ -221,7 +209,6 @@ class TwilioPhoneNumberPipe(Pipe):
         
         return pn
             
-
 class AuthClientPipe(Pipe):
 
     @InjectInMethod()
@@ -232,7 +219,6 @@ class AuthClientPipe(Pipe):
     def pipe(self,client:str,scope:str):
         return {'client':client,'scope':scope}
     
-
 class ForceClientPipe(Pipe):
 
     def __init__(self):
@@ -283,7 +269,6 @@ class ContactStatusPipe(Pipe):
         next_status:Status = Status._member_map_[next_status]
         return {'next_status':next_status}
     
-
 class OffloadedTaskResponsePipe(Pipe):
 
     def __init__(self, copy_res=False):
@@ -328,7 +313,6 @@ class OffloadedTaskResponsePipe(Pipe):
         else:
             response.status_code = 200
 
-
 class KeepAliveResponsePipe(Pipe):
     def __init__(self):
         super().__init__(False)
@@ -338,7 +322,6 @@ class KeepAliveResponsePipe(Pipe):
         # TODO add headers and status code
         return result
     
-
 class TwilioResponseStatusPipe(Pipe):
     def __init__(self,before=False,status_code=status.HTTP_204_NO_CONTENT):
         super().__init__(before)
@@ -475,7 +458,6 @@ class ContactToInfoPipe(Pipe,PointerIterator):
         
         return {'scheduler':scheduler}
 
-
 class InjectTemplateInterface:
 
 
@@ -561,9 +543,6 @@ class ContentIndexPipe(Pipe,PointerIterator):
         
         return {'scheduler':scheduler}
 
-
-
-
 class  GlobalPointerIteratorPipe(Pipe):
 
     def __init__(self,separator:str):
@@ -575,7 +554,6 @@ class  GlobalPointerIteratorPipe(Pipe):
             globalIter = PointerIterator(globalIter,self.sep,dict)
 
         return {'globalIter':globalIter}
-
 
 class DocumentFriendlyPipe(Pipe):
 

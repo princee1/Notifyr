@@ -377,7 +377,7 @@ async def get_combined_policies(client:ClientORM):
     
     print(allowed_assets)
 
-    allowed_assets = filter_paths(list(allowed_assets),False)
+    allowed_assets = filter_paths(list(allowed_assets))
     allowed_profiles = list(allowed_profiles)
     roles = list(roles)
 

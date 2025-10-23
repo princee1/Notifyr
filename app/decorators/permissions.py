@@ -1,11 +1,9 @@
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
-from app.definition._service import BaseMiniServiceManager
 from app.models.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
-from app.services.admin_service import AdminService
-from app.services.assets_service import DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR, AssetService, RouteAssetType
+from app.services.assets_service import AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
@@ -92,10 +90,9 @@ class JWTAssetPermission(Permission):
         permission = tuple(assetPermission)
         
         if template:
-            t = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
-            t = self.assetService.asset_rel_path(t,template_type)
+            t = self.assetService.asset_rel_path(template,template_type)
             if not t.startswith(permission):
-                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{t}] not allowed' })
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{t}] not allowed' })
         
         if scheduler == None:
             return True
@@ -117,7 +114,7 @@ class JWTAssetPermission(Permission):
 class JWTSignatureAssetPermission(JWTAssetPermission):
 
     def __init__(self):
-        super().__init__('html')
+        super().__init__('email')
     
     def permission(self, authPermission:AuthPermission, scheduler:BaseEmailSchedulerModel):
         if  scheduler.signature == None:

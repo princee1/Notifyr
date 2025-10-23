@@ -56,7 +56,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(TemplateParamsPipe('phone','xml',True))
     @UseHandler(AsyncIOHandler,TemplateHandler)
     @UseServiceLock(AssetService,lockType='reader')
-    @BaseHTTPRessource.HTTPRoute('/template/',methods=[HTTPMethod.OPTIONS])
+    @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS])
     def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
         
         schemas = self.assetService.get_schema('phone')
@@ -72,7 +72,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseHandler(AsyncIOHandler,TemplateHandler)
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('otp',True), TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','','',False))
-    @BaseHTTPRessource.Post('/otp/{template}',dependencies=[Depends(populate_response_with_request_id)])
+    @BaseHTTPRessource.Post('/otp/{template:path}',dependencies=[Depends(populate_response_with_request_id)])
     async def voice_relay_otp(self,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], template: Annotated[PhoneTemplate,Depends(get_template)], otpModel: OTPModel, request: Request,taskManager: Annotated[TaskManager, Depends(get_task)],profile:str=Depends(profile_query), wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
         
         _, body = template.build(otpModel.content, ...,True)
@@ -113,7 +113,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('default'))
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard)
-    @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
+    @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template:path}/', methods=[HTTPMethod.POST], dependencies=[Depends(populate_response_with_request_id)])
     async def voice_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)], template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel, request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(get_task)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
         
         for content in scheduler.content:

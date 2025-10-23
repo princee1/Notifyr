@@ -277,6 +277,3 @@ class PolicyGuard(Guard):
             return False,f'Those profiles does not exists at the moment: {profiles_set}'
     
         return True,''
-
-
-        
