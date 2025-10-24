@@ -191,10 +191,13 @@ class HCVaultService(BaseService,SchedulerInterface):
             raise BuildAbortError("Vault request timed out: {e}")
   
     def _dev_token_login(self):
+        dev_root_token = self.configService.getenv('VAULT_DEV_ROOT_TOKEN_ID',None)
+        if not dev_root_token:
+            raise BuildAbortError('No dev root token provided')
         try:
-            ...
-        except:
-            ...
+            self.client = hvac.Client(self.configService.VAULT_ADDR,token=dev_root_token)
+        except Exception as e:
+            raise BuildAbortError(f"Failed to create Vault client: {e}")
 
     def renew_auth_token(self):
         return self.client.auth.token.renew_self()

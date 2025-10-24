@@ -13,6 +13,7 @@ from typing import Callable, Iterable, Literal, Self, Type, TypedDict
 
 from bs4 import BeautifulSoup
 
+from app.classes.profiles import ProfileState
 from app.interface.timers import IntervalInterface
 from app.models.profile_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
 from app.services.database_service import MongooseService, RedisService
@@ -194,9 +195,14 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
     def verify_connection(self,connector = None):
         ...
 
+    def verify_dependency(self):
+        if self.depService.model.profile_state != ProfileState.ACTIVE:
+            raise _service.BuildFailureError(f'Profile is not active {self.depService.model.profile_state.name} ')
+
     async def async_verify_dependency(self):
-        self.verify_dependency()
-        return True
+        async with self.depService.statusLock.reader:
+            self.verify_dependency()
+            return True
 
 @_service.MiniService(
     override_init=True,

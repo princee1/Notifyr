@@ -6,6 +6,7 @@ import psutil
 
 from app.services.rate_limiter_service import RateLimiterService
 from app.utils.constant import ConfigAppConstant
+from app.utils.globals import PARENT_PID, PROCESS_PID
 
 def resolve_notification_service(configService:ConfigService):
     return DiscordService if True else SystemNotificationService
@@ -50,7 +51,8 @@ class HealthService(BaseService):
     def notifyr_app_info(self)->dict:
         return {
             'InstanceId':self.configService.INSTANCE_ID,
-            'ParentPid':self.configService.PARENT_PID,
+            'ParentPid':PARENT_PID,
+            'Pid':PROCESS_PID,
             'Spec':{
                 'CpuCount':self.cpu_count,
                 'Ram':self.ram_size_gb,

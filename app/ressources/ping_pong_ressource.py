@@ -10,6 +10,7 @@ from app.services.task_service import CeleryService, TaskService
 from app.services.config_service import ConfigService
 from app.services.health_service import HealthService
 from app.services.security_service import JWTAuthService, SecurityService
+from app.utils.globals import PARENT_PID, PROCESS_PID
 from app.websockets.ping_pong_ws import PingPongWebSocket
 from app.definition._service import PROCESS_SERVICE_REPORT
 
@@ -69,8 +70,8 @@ class PingPongRessource(BaseHTTPRessource):
     def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission)):
         return {
             'instance_id':self.configService.INSTANCE_ID,
-            'parent_pid':self.configService.PARENT_PID,
-            'process_pid':self.configService.PROCESS_PID,
+            'parent_pid':PARENT_PID,
+            'process_pid':PROCESS_PID,
             'report':PROCESS_SERVICE_REPORT
         }
 

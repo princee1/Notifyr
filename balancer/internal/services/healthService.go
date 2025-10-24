@@ -37,6 +37,7 @@ type AppSpec struct {
 type NotifyrApp struct {
 	InstanceId   string
 	Parent_pid   string
+	Pid          string
 	Capabilities []string
 	Spec         AppSpec
 }

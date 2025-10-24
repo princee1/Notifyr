@@ -21,7 +21,7 @@ class SettingService(BaseService):
         self.configService = configService
         self.jsonServerService = jsonServerService
 
-        self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','no'))
+        self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','no'),False)
     
     async def async_verify_dependency(self):
         await super().async_verify_dependency()

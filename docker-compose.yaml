@@ -83,6 +83,9 @@ services:
     environment:
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
     
+    depends_on:
+      - redis
+    
   vault:
     build:
       context: .
@@ -103,7 +106,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      MINIO_HOST: ${MINIO_HOST}
+      AWS_VAULT_USER: set_user_in_container_start
+      AWS_VAULT_PASSWORD: set_password_in_container_start
+      S3_HOST: ${S3_HOST}
       POSTGRES_HOST: ${POSTGRES_HOST}
       MONGO_HOST: ${MONGO_HOST}
     volumes:

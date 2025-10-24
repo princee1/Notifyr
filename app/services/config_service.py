@@ -140,7 +140,6 @@ class ConfigService(_service.BaseService):
             return path.removeprefix(self.ASSETS_DIR)
         return path
 
-
     def build(self,build_state=-1):
         self.set_config_value()
         self.verify()
@@ -168,24 +167,33 @@ class ConfigService(_service.BaseService):
 
     def set_config_value(self):
 
-        self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'))
-        self.PROCESS_PID = str(os.getpid())
-        self.PARENT_PID = str(os.getppid())
+        # MODE CONFIG #
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
+        self.PROD_URL = self.getenv('PROD_URL',None)
+        self.DEV_URL = self.getenv('DEV_URL','http://localhost:8088')
 
-        self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
+        # CONTAINER CONFIG #
+        self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'))
         
+        # NAMING CONFIG #
+        self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
+        self.USERNAME = self.getenv('USERNAME','notifyr')
+
+        # DIRECTORY CONFIG #
         self.BASE_DIR = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
-        
-        self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), True)
 
+        # SECURITY CONFIG #
+        self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
+        self.ADMIN_KEY = self.getenv("ADMIN_KEY")
+        self.API_KEY = self.getenv("API_KEY")
+        
+        # SERVER CONFIG #
         self.HTTP_MODE = self.getenv("HTTP_MODE",'HTTP')
         self.HTTPS_CERTIFICATE = self.getenv("HTTPS_CERTIFICATE", 'cert.pem')
         self.HTTPS_KEY = self.getenv("HTTPS_KEY", 'key.pem')
 
-        self.NGROK_DOMAIN = self.getenv("NGROK_DOMAIN", None)
-
+        # EMAIL OAUTH CONFIG #
         self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
         self.OAUTH_JSON_KEY_FILE = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
         self.OAUTH_TOKEN_DATA_FILE = self.getenv('OAUTH_DATA_FILE', 'mail_provider.tokens.json')
@@ -193,28 +201,23 @@ class ConfigService(_service.BaseService):
         self.OAUTH_CLIENT_SECRET = self.getenv('OAUTH_CLIENT_SECRET')
         self.OAUTH_OUTLOOK_TENANT_ID = self.getenv('OAUTH_TENANT_ID')
         
-        self.TWILIO_TEST_URL = self.getenv("TWILIO_TEST_URL", None)
-
-        self.ADMIN_KEY = self.getenv("ADMIN_KEY")
-        self.API_KEY = self.getenv("API_KEY")
-        
         # ASSETS CONFIG #
-        self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local'))
+        self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local' if self.MODE == MODE.DEV_MODE else 's3').lower())
         
         # S3 STORAGE CONFIG #
-        self.S3_CRED_TYPE = self.getenv('CRED_TYPE','MINIO')
+        self.S3_CRED_TYPE:Literal['MINIO','AWS'] = self.getenv('S3_CRED_TYPE','MINIO').upper()
 
-        self.S3_ENDPOINT= self.getenv('S3_ENDPOINT','127.0.0.1:9000' if self.MODE == MODE.DEV_MODE else 'minio:9000')
+        self.S3_ENDPOINT:str= self.getenv('S3_ENDPOINT','127.0.0.1:9000' if self.MODE == MODE.DEV_MODE else 'minio:9000')
 
-        self.S3_REGION = self.getenv("S3_REGION",None)
+        self.S3_REGION:str = self.getenv("S3_REGION",None)
 
-        self.S3_TO_DISK = ConfigService.parseToBool(self.getenv('S3_TO_DISK'), False)
+        self.S3_TO_DISK:bool = ConfigService.parseToBool(self.getenv('S3_TO_DISK'), False)
 
         # MINIO CONFIG #
 
-        self.MINIO_STS_ENABLE = ConfigService.parseToBool(self.getenv('MINIO_STS_ENABLE'), False)   
-        
-        self.MINIO_SSL = ConfigService.parseToBool(self.getenv('MINIO_SSL'), False)
+        self.MINIO_STS_ENABLE:bool = ConfigService.parseToBool(self.getenv('MINIO_STS_ENABLE'), False)
+
+        self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL'), False)
 
         # HASHI CORP VAULT CONFIG #
 

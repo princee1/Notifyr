@@ -16,6 +16,7 @@ from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
 from app.depends.dependencies import get_api_key, get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
 from cryptography.fernet import InvalidToken
 from app.depends.variables import SECURITY_FLAG
+from app.utils.globals import PARENT_PID, PROCESS_PID
 from app.utils.helper import generateId
 from app.depends.funcs_dep import GetClient
 from starlette.background import BackgroundTask
@@ -30,8 +31,8 @@ class MetaDataMiddleWare(MiddleWare):
         self.configService:ConfigService = Get(ConfigService)
 
         self.instance_id = str(self.configService.INSTANCE_ID)
-        self.process_pid = self.configService.PROCESS_PID
-        self.parent_pid = self.configService.PARENT_PID
+        self.process_pid = PROCESS_PID
+        self.parent_pid = PARENT_PID
 
 
     @ExcludeOn(['/docs/*','/openapi.json'])
