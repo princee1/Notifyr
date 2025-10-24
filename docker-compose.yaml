@@ -91,7 +91,7 @@ services:
       context: .
       dockerfile: ./docker/Dockerfile.vault
       args:
-        - CRED_TYPE=${CRED_TYPE} #MINIO (minio plugin)  || AWS (aws plugin)
+        - S3_CRED_TYPE=${S3_CRED_TYPE} #MINIO (minio plugin)  || AWS (aws engine)
     container_name: vault
     labels:
       - com.docker.compose.service=vault

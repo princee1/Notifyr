@@ -241,12 +241,12 @@ class DatabaseVaultEngine(VaultEngine):
 class MinioS3VaultEngine(VaultEngine):
 
 
-    def generate_sts_credentials(self,role_name='static-minio'):
+    def generate_static_credentials(self,role_name='static-minio'):
         role_name += ROLE_PREFIX
         
         return self.client.adapter.get(f"/v1/{self.mount_point}/creds/{role_name}")
     
-    def generate_static_credentials(self,role_name:str='sts-minio',ttl_seconds=3600):
+    def generate_sts_credentials(self,role_name:str='sts-minio',ttl_seconds=3600):
         role_name += ROLE_PREFIX
         ttl = {"ttl": f"{ttl_seconds}s"} if ttl_seconds and ttl_seconds >=120 else {}
 

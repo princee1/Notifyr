@@ -79,9 +79,9 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
 
     def generate_minio_creds(self):
         if not self.configService.MINIO_STS_ENABLE:
-            creds = self.vaultService.minio_engine.generate_static_credentials(ttl_seconds=VaultTTLSyncConstant.MINIO_TTL)
+            creds = self.vaultService.minio_engine.generate_static_credentials()
         else:
-            creds = self.vaultService.minio_engine.generate_sts_credentials()
+            creds = self.vaultService.minio_engine.generate_sts_credentials(ttl_seconds=VaultTTLSyncConstant.MINIO_TTL)
 
         self.creds = VaultDatabaseCredentials(request_id=creds['request_id'], lease_id=creds["lease_id"], lease_duration=creds["lease_duration"],
             renewable=creds["renewable"], wrap_info=creds.get("wrap_info", None), data=VaultDatabaseCredentialsData(

@@ -3,6 +3,7 @@ from typing import Any, TypedDict
 from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
+from app.errors.service_error import BuildAbortError, BuildWarningError
 from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
@@ -103,7 +104,7 @@ class ConfigService(_service.BaseService):
         return bool(default)
     
     @staticmethod # TODO need to add the build error level
-    def parseToInt(value: str, default: int | None = None, positive=True):
+    def parseToInt(value: str, default: int | None = None, positive=True)->int:
         """
         The function `parseToInt` attempts to convert a string to an integer and returns the integer
         value or a default value if conversion fails.
@@ -170,37 +171,37 @@ class ConfigService(_service.BaseService):
         # MODE CONFIG #
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
         self.PROD_URL = self.getenv('PROD_URL',None)
-        self.DEV_URL = self.getenv('DEV_URL','http://localhost:8088')
+        self.DEV_URL:str = self.getenv('DEV_URL','http://localhost:8088')
 
         # CONTAINER CONFIG #
-        self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'))
+        self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'),0)
         
         # NAMING CONFIG #
-        self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
-        self.USERNAME = self.getenv('USERNAME','notifyr')
+        self.HOSTNAME:str = self.getenv('HOSTNAME',socket.getfqdn())
+        self.USERNAME:str = self.getenv('USERNAME','notifyr')
 
         # DIRECTORY CONFIG #
-        self.BASE_DIR = self.getenv("BASE_DIR", './')
-        self.ASSETS_DIR = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
+        self.BASE_DIR:str = self.getenv("BASE_DIR", './')
+        self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
 
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
-        self.ADMIN_KEY = self.getenv("ADMIN_KEY")
-        self.API_KEY = self.getenv("API_KEY")
+        self.ADMIN_KEY:str = self.getenv("ADMIN_KEY")
+        self.API_KEY:str = self.getenv("API_KEY")
         
         # SERVER CONFIG #
-        self.HTTP_MODE = self.getenv("HTTP_MODE",'HTTP')
-        self.HTTPS_CERTIFICATE = self.getenv("HTTPS_CERTIFICATE", 'cert.pem')
-        self.HTTPS_KEY = self.getenv("HTTPS_KEY", 'key.pem')
+        self.HTTP_MODE:Literal['HTTP','HTTPS'] = self.getenv("HTTP_MODE",'HTTP')
+        self.HTTPS_CERTIFICATE:str = self.getenv("HTTPS_CERTIFICATE", 'cert.pem')
+        self.HTTPS_KEY:str = self.getenv("HTTPS_KEY", 'key.pem')
 
         # EMAIL OAUTH CONFIG #
-        self.OAUTH_METHOD_RETRIEVER = self.getenv('OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
-        self.OAUTH_JSON_KEY_FILE = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
-        self.OAUTH_TOKEN_DATA_FILE = self.getenv('OAUTH_DATA_FILE', 'mail_provider.tokens.json')
-        self.OAUTH_CLIENT_ID = self.getenv('OAUTH_CLIENT_ID')
-        self.OAUTH_CLIENT_SECRET = self.getenv('OAUTH_CLIENT_SECRET')
-        self.OAUTH_OUTLOOK_TENANT_ID = self.getenv('OAUTH_TENANT_ID')
-        
+        self.OAUTH_METHOD_RETRIEVER:str = self.getenv('OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
+        self.OAUTH_JSON_KEY_FILE:str = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
+        self.OAUTH_TOKEN_DATA_FILE:str = self.getenv('OAUTH_DATA_FILE', 'mail_provider.tokens.json')
+        self.OAUTH_CLIENT_ID:str = self.getenv('OAUTH_CLIENT_ID')
+        self.OAUTH_CLIENT_SECRET:str = self.getenv('OAUTH_CLIENT_SECRET')
+        self.OAUTH_OUTLOOK_TENANT_ID:str = self.getenv('OAUTH_TENANT_ID')
+
         # ASSETS CONFIG #
         self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local' if self.MODE == MODE.DEV_MODE else 's3').lower())
         
@@ -211,36 +212,36 @@ class ConfigService(_service.BaseService):
 
         self.S3_REGION:str = self.getenv("S3_REGION",None)
 
-        self.S3_TO_DISK:bool = ConfigService.parseToBool(self.getenv('S3_TO_DISK'), False)
+        self.S3_TO_DISK:bool = ConfigService.parseToBool(self.getenv('S3_TO_DISK','false'), False)
 
         # MINIO CONFIG #
 
-        self.MINIO_STS_ENABLE:bool = ConfigService.parseToBool(self.getenv('MINIO_STS_ENABLE'), False)
+        self.MINIO_STS_ENABLE:bool = ConfigService.parseToBool(self.getenv('MINIO_STS_ENABLE','false'), False)
 
-        self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL'), False)
+        self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
         # HASHI CORP VAULT CONFIG #
 
-        self.VAULT_ADDR = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
+        self.VAULT_ADDR:str = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
 
         # MONGODB CONFIG #
 
-        self.MONGO_HOST = self.getenv('MONGO_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'mongodb')
+        self.MONGO_HOST:str = self.getenv('MONGO_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'mongodb')
 
         # SETTING DB CONFIG #
-        self.SETTING_DB_URL = self.getenv("SETTING_DB_URL","http://localhost:3000" if self.MODE == MODE.DEV_MODE else "http://settingdb:3000")
+        self.SETTING_DB_URL:str = self.getenv("SETTING_DB_URL","http://localhost:3000" if self.MODE == MODE.DEV_MODE else "http://settingdb:3000")
 
         # REDIS CONFIG #
 
-        self.REDIS_URL = self.getenv("REDIS_URL","redis://localhost" if self.MODE == MODE.DEV_MODE else "redis://redis")
+        self.REDIS_URL:str = self.getenv("REDIS_URL","redis://localhost" if self.MODE == MODE.DEV_MODE else "redis://redis")
 
         # SLOW API CONFIG #
 
-        self.SLOW_API_REDIS_URL = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL", '/1')
+        self.SLOW_API_REDIS_URL:str = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL", '/1')
 
         # POSTGRES DB CONFIG #
 
-        self.POSTGRES_HOST = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
+        self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
         # CELERY CONFIG #
 
@@ -248,13 +249,17 @@ class ConfigService(_service.BaseService):
         self.CELERY_BACKEND_URL =  self.getenv("CELERY_BACKEND_URL", self.REDIS_URL +'/0')
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
-        self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT", 1)        
+        self.CELERY_WORKERS_COUNT = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_COUNT","1"), 1)
 
     def verify(self):
-
-            # self.API_EXPIRATION = self.AUTH_EXPIRATION
-            # raise _service.BuildWarningError("API_EXPIRATION cannot be less than AUTH_EXPIRATION")
-            ...
+        if self.S3_CRED_TYPE not in ['MINIO','AWS']:
+            raise BuildAbortError(f"S3_CRED_TYPE {self.S3_CRED_TYPE} is not valid please use MINIO or AWS")
+        
+        if self.HTTP_MODE not in ['HTTP','HTTPS']:
+            raise BuildAbortError(f"HTTP_MODE {self.HTTP_MODE} is not valid please use HTTP or HTTPS")
+        
+        if not self.SECURITY_FLAG:
+            raise BuildWarningError(f"SECURITY_FLAG {self.SECURITY_FLAG} is set to False, this is not recommended for production environments")
 
     def __getitem__(self, key):
         try:

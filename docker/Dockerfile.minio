@@ -37,8 +37,8 @@ RUN cat <<EOF > ./policy/assets-access.json
         "s3:ListBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::template",
-        "arn:aws:s3:::template/*"
+        "arn:aws:s3:::assets",
+        "arn:aws:s3:::assets/*"
       ]
     }
   ]

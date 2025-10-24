@@ -8,7 +8,7 @@ VAULT_SHARED_API_DIR=/vault/api-key
 
 NOTIFYR_APP_ROLE="notifyr-app-role"
 
-CRED_TYPE=$1
+S3_CRED_TYPE=$1
 
 export VAULT_ADDR="http://127.0.0.1:8200"
 
@@ -60,7 +60,7 @@ setup_engine(){
   vault secrets enable -path=notifyr-transit -seal-wrap transit 
   vault secrets enable -path=notifyr-database -seal-wrap database
 
-  if [ "$CRED_TYPE" = "AWS" ]; then  
+  if [ "$S3_CRED_TYPE" = "AWS" ]; then  
     vault secrets enable -path=notifyr-minio-s3 -seal-wrap aws
   else
     local CHECKSUM=$( sha256sum /etc/vault/plugins/vault-plugin-secrets-minio 2>/dev/null | cut -d " " -f 1 )

@@ -21,9 +21,9 @@ FROM hashicorp/vault:latest
 # Use root for setup
 USER root
 
-ARG CRED_TYPE="MINIO"
+ARG S3_CRED_TYPE="MINIO"
 
-ENV CRED_TYPE=${CRED_TYPE}
+ENV S3_CRED_TYPE=${S3_CRED_TYPE}
 
 # Install dependencies
 RUN apk add --no-cache bash curl jq tini ca-certificates pwgen

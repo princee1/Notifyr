@@ -8,7 +8,7 @@ VAULT_SHARED_DIR=/vault/shared
 PG_HOST=${POSTGRES_HOST:-postgres}
 M_HOST=${MONGO_HOST:-mongodb}
 STHREE_HOST=${S3_HOST:-minio}
-C_TYPE=${CRED_TYPE:-MINIO}
+C_TYPE=${S3_CRED_TYPE:-MINIO}
 
 wait_for_server() {
   # Wait for listener
