@@ -6,6 +6,7 @@ from enum import Enum
 from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
+from app.utils.globals import DIRECTORY_SEPARATOR
 from app.utils.helper import parseToBool
 import shutil
 import sys
@@ -36,6 +37,14 @@ class MODE(Enum):
                 return "127.0.0.1"
             case _:
                 return "127.0.0.1"
+
+
+class AssetMode(Enum):
+    s3 = 's3'
+    github = 'github'
+    local = 'local'
+    ftp = 'ftp'
+
 
 class CeleryMode(Enum):
     flower = 'flower'
@@ -92,9 +101,8 @@ class ConfigService(_service.BaseService):
         except TypeError:
             ...
         return bool(default)
-
-    @staticmethod
-    # TODO need to add the build error level
+    
+    @staticmethod # TODO need to add the build error level
     def parseToInt(value: str, default: int | None = None, positive=True):
         """
         The function `parseToInt` attempts to convert a string to an integer and returns the integer
@@ -125,6 +133,14 @@ class ConfigService(_service.BaseService):
             pass
         return default
 
+    def normalize_assets_path(self,path:str,action:Literal['add','remove']='add')-> str:
+        if action == 'add':
+            return f"{self.ASSETS_DIR}{path}"
+        elif action == 'remove':
+            return path.removeprefix(self.ASSETS_DIR)
+        return path
+
+
     def build(self,build_state=-1):
         self.set_config_value()
         self.verify()
@@ -137,7 +153,6 @@ class ConfigService(_service.BaseService):
         if isinstance(val, str) and not val == "":
             return val
         return default
-    
 
     def get_value_from_mode(self,dev_value,prod_value,test_value=None,):
         match self.MODE:
@@ -161,7 +176,7 @@ class ConfigService(_service.BaseService):
         self.HOSTNAME = self.getenv('HOSTNAME',socket.getfqdn())
         
         self.BASE_DIR = self.getenv("BASE_DIR", './')
-        self.ASSET_DIR = self.getenv("ASSETS_DIR", 'assets/')
+        self.ASSETS_DIR = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
         
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), True)
 
@@ -183,14 +198,22 @@ class ConfigService(_service.BaseService):
         self.ADMIN_KEY = self.getenv("ADMIN_KEY")
         self.API_KEY = self.getenv("API_KEY")
         
-
-        # OBJECT STORAGE CONFIG #
-        self.MINIO_ENDPOINT= self.getenv('MINIO_ENDPOINT','127.0.0.1:9000' if self.MODE == MODE.DEV_MODE else 'minio:9000')
-
-        self.MINIO_REGION = self.getenv("MINIO_REGION",None)
+        # ASSETS CONFIG #
+        self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local'))
         
-        self.MINIO_CRED_TYPE = self.getenv('CRED_TYPE','static')
+        # S3 STORAGE CONFIG #
+        self.S3_CRED_TYPE = self.getenv('CRED_TYPE','MINIO')
 
+        self.S3_ENDPOINT= self.getenv('S3_ENDPOINT','127.0.0.1:9000' if self.MODE == MODE.DEV_MODE else 'minio:9000')
+
+        self.S3_REGION = self.getenv("S3_REGION",None)
+
+        self.S3_TO_DISK = ConfigService.parseToBool(self.getenv('S3_TO_DISK'), False)
+
+        # MINIO CONFIG #
+
+        self.MINIO_STS_ENABLE = ConfigService.parseToBool(self.getenv('MINIO_STS_ENABLE'), False)   
+        
         self.MINIO_SSL = ConfigService.parseToBool(self.getenv('MINIO_SSL'), False)
 
         # HASHI CORP VAULT CONFIG #
@@ -224,7 +247,6 @@ class ConfigService(_service.BaseService):
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_WORKERS_COUNT = self.getenv("CELERY_WORKERS_COUNT", 1)        
 
-
     def verify(self):
 
             # self.API_EXPIRATION = self.AUTH_EXPIRATION
@@ -249,6 +271,7 @@ class ConfigService(_service.BaseService):
         self.server_config = ServerConfig(host=config.host, port=config.port,
                                           reload=config.reload, workers=config.workers, log_level=config.log_level,
                                           team=config.team)
+    
     @property
     def pool(self):
         if self.server_config['team'] == 'solo':

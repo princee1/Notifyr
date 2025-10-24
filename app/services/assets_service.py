@@ -1,9 +1,10 @@
+import json
 from fastapi import HTTPException,status
 from app.definition._error import BaseError
 from app.services.aws_service import AmazonS3Service
 from app.services.setting_service import SettingService
 from app.utils.prettyprint import printJSON
-from .config_service import CeleryMode, ConfigService
+from .config_service import AssetMode, CeleryMode, ConfigService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .security_service import SecurityService
@@ -47,17 +48,33 @@ RouteAssetType = Literal['email', 'sms', 'phone']
 
 def extension(extension: Extension): return f".{extension.value}"
 
-
-class Reader():
-    
-
-    def __init__(self,configService:ConfigService, fileService: FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+class Reader:
+    def __init__(self, configService: ConfigService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         self.asset = asset
-        self.values: Dict[str, Asset] = {}
-        self.func = additionalCode
-        self.fileService = fileService
         self.configService = configService
+        self.func = additionalCode
+        self.values: Dict[str, Asset] = {}
 
+    
+    def __call__(self, *args: Any, **kwds: Any) -> dict[str, Asset]:
+        """
+        :param ext:
+        :type ext: Extension
+
+        :param flag:
+        :type flag: FDFlag
+
+        :param rootFlag: 
+
+        :param encoding:
+        """
+        self.safeReader(*args)
+        return self.values
+    
+    def path(self,val):
+        return f"{self.configService.ASSETS_DIR}{val}"
+
+    
     def safeReader(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
         try:
             self.read(ext, flag, rootFlag, encoding)
@@ -67,7 +84,7 @@ class Reader():
             pass
         except AttributeError as e:
             pass
-
+    
     def read(self, ext: Extension, flag: FDFlag, rootParam: str = None, encoding="utf-8"):
         """
         This function reads files with a specific extension, processes them, and stores the content in a
@@ -82,6 +99,17 @@ class Reader():
         :param encoding: The `encoding` parameter in the `read` method specifies the character encoding
         to be used when reading the files. In this case, the default encoding is set to "utf-8"
         """
+
+class DiskReader(Reader):
+
+    def __init__(self,configService:ConfigService, fileService: FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+        super().__init__(configService, asset, additionalCode)
+        self.asset = asset
+        self.func = additionalCode
+        self.fileService = fileService
+        self.configService = configService
+
+    def read(self, ext: Extension, flag: FDFlag, rootParam: str = None, encoding="utf-8"):
         extension_ = extension(ext)
         root = self.path(rootParam) if type(rootParam) is str  else self.path(ext.value)
         setTempFile: set[str] = set()
@@ -102,26 +130,7 @@ class Reader():
                 if self.func != None:
                     self.func(self.values[relpath])
 
-    def __call__(self, *args: Any, **kwds: Any) -> dict[str, Asset]:
-        """
-        :param ext:
-        :type ext: Extension
-
-        :param flag:
-        :type flag: FDFlag
-
-        :param rootFlag: 
-
-        :param encoding:
-        """
-        self.safeReader(*args)
-        return self.values
-    
-    def path(self,val):
-        return f"{self.configService.ASSET_DIR}{val}"
-
-
-class ThreadedReader(Reader):
+class ThreadedReader(DiskReader):
     def __init__(self,fileService: FileService, asset: Asset = Asset, additionalCode: Callable[..., Any] = None) -> None:
         super().__init__(fileService,asset, additionalCode)
         self.thread: Thread
@@ -139,6 +148,18 @@ class ThreadedReader(Reader):
         return self.values
 
 
+class ObjectReader(Reader):
+    def __init__(self, configService: ConfigService, fileService: FileService, awsService: AmazonS3Service, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+        super().__init__(configService, asset, additionalCode)
+        self.asset = asset
+        self.func = additionalCode
+        self.fileService = fileService
+        self.configService = configService
+        self.awsService = awsService
+    
+    def read(self, ext: Extension, flag: FDFlag, rootParam: str = None, encoding="utf-8"):
+        ...
+
 @_service.PossibleDep([FTPService])
 @_service.Service(
     links=[_service.LinkDep(AmazonS3Service,to_destroy=True, to_build=True)]
@@ -154,9 +175,9 @@ class AssetService(_service.BaseService):
         self.amazonS3Service = amazonS3Service
         self.settingService = settingService
 
-        self.ASSETS_GLOBALS_VARIABLES =f"{self.configService.ASSET_DIR}globals.json"
+        self.ASSETS_GLOBALS_VARIABLES =f"{self.configService.ASSETS_DIR}globals.json"
 
-    def _read_globals(self):
+    def _read_globals_disk(self):
 
         try:
             self.globals =  JSONFile(self.ASSETS_GLOBALS_VARIABLES)
@@ -164,37 +185,54 @@ class AssetService(_service.BaseService):
             self.globals = JSONFile(self.ASSETS_GLOBALS_VARIABLES,{})
         
         MLTemplate._globals.update(flatten_dict(self.globals.data))
+    
+    def _read_globals_s3(self):
+        data = self.amazonS3Service.read_object('globals.json')
+        data = json.loads(data.read())
+        self.globals = JSONFile(self.ASSETS_GLOBALS_VARIABLES, data)
+
+        MLTemplate._globals.update(flatten_dict(self.globals.data))
      
     def build(self,build_state=-1):
-        
-        self._read_globals()
-
         Template.LANG = self.settingService.ASSET_LANG
+
+        if self.configService.ASSET_MODE == AssetMode.s3 and not self.configService.S3_TO_DISK:
+            self.read_asset_from_s3()
+        else:
+            self.read_asset_from_disk()
+
+        self.service_status = _service.ServiceStatus.AVAILABLE
+
+    def verify_dependency(self):
+        if self.configService.ASSET_MODE == AssetMode.s3:
+            if not self.amazonS3Service.service_status == _service.ServiceStatus.AVAILABLE:
+                raise _service.BuildFailureError('Amazon S3 Service not available')
+
+    def read_asset_from_s3(self):
+        self._read_globals_s3()
+
+        
+
+
+    def read_asset_from_disk(self):
+        self._read_globals_disk()
 
         if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
             return 
         
-        self.images = self.sanitize_paths(Reader(self.configService,self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value))
-        self.css = self.sanitize_paths(Reader(self.configService,self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value))
+        self.images = self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value))
+        self.css = self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value))
 
-        self.email = self.sanitize_paths(Reader(self.configService,self.fileService,HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value))
-        self.pdf = self.sanitize_paths(Reader(self.configService,self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value))
-        self.sms = self.sanitize_paths(Reader(self.configService,self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value))
-        self.phone = self.sanitize_paths(Reader(self.configService,self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value))
-
-        self.service_status = _service.ServiceStatus.AVAILABLE
+        self.email = self.sanitize_paths(DiskReader(self.configService,self.fileService,HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value))
+        self.pdf = self.sanitize_paths(DiskReader(self.configService,self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value))
+        self.sms = self.sanitize_paths(DiskReader(self.configService,self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value))
+        self.phone = self.sanitize_paths(DiskReader(self.configService,self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value))
     
-    def normalize_path(self,path:str,action:Literal['add','remove']='add')-> str:
-        if action == 'add':
-            return f"{self.configService.ASSET_DIR}{path}"
-        elif action == 'remove':
-            return path.removeprefix(self.configService.ASSET_DIR)
-        return path
 
     def sanitize_paths(self,assets:dict[str,Asset]):
         temp: dict[str,Asset]={}
         for key, asset in assets.items():
-            key = self.normalize_path(key,'remove')
+            key = self.configService.normalize_assets_path(key,'remove')
             temp[key]=asset
         return temp
 
@@ -242,8 +280,11 @@ class AssetService(_service.BaseService):
         except AttributeError as e:
             pass
 
-    def asset_rel_path(self,path,asset_type:AssetType):
+    def asset_rel_path(self,path,asset_type:AssetType=None):
+        if asset_type is None:
+            return path
         return f"{asset_type}{DIRECTORY_SEPARATOR}{path}"
+
 
     def verify_asset_permission(self,content:dict,model_keys:list[str],assetPermission,options:list[Callable[[Any],bool]]):
         
@@ -287,3 +328,8 @@ class AssetService(_service.BaseService):
             raise AssetTypeNotFoundError
         return {key:value.schema for key,value in schemas.items() }
             
+    def save_globals(self):
+        if self.configService.ASSET_MODE == AssetMode.s3:
+            self.amazonS3Service.upload_object('globals.json',)
+        else:
+            self.globals.save()

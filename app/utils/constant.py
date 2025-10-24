@@ -287,5 +287,5 @@ class VaultTTLSyncConstant:
 
 class MinioConstant:
     STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
-    TEMPLATE_BUCKET = 'template'
+    ASSETS_BUCKET = 'assets'
     STATIC_TEMPLATE = 'static'

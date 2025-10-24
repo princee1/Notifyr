@@ -1,6 +1,6 @@
 from app.interface.timers import IntervalInterface
-from .config_service import ConfigService
-from app.definition._service import BaseService,Service,AbstractServiceClass
+from .config_service import AssetMode, ConfigService
+from app.definition._service import GUNICORN_BUILD_STATE, BaseService,Service,AbstractServiceClass
 from app.utils.fileIO import FDFlag, get_file_info, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
@@ -20,6 +20,9 @@ class FileService(BaseService,):
         dirName = getFileDir(path)
 
         return filename,content,dirName
+
+    def build(self,build_state=-1):
+        ...
 
     def get_file_info(self,path):
         return get_file_info(path)
@@ -63,6 +66,13 @@ class FTPService(BaseFileRetrieverService):
         self.ftpClient: FTP
         pass
 
+    def build(self, build_state = ...):
+        if build_state != GUNICORN_BUILD_STATE:
+            return
+        
+        if self.configService.ASSET_MODE != AssetMode.ftp:
+            return
+        
     def authenticate(self):
         try:
             self.ftpClient = FTP()
@@ -83,6 +93,14 @@ class GitCloneRepoService(BaseFileRetrieverService):
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
         super().__init__(configService,fileService)
     
+    def build(self, build_state = ...):
+        if build_state != GUNICORN_BUILD_STATE:
+            return
+        
+        if self.configService.ASSET_MODE != AssetMode.github:
+            return
+        
+
     def destroy(self,destroy_state=-1):
         return super().destroy()
     pass

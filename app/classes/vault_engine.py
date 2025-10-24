@@ -255,3 +255,7 @@ class MinioS3VaultEngine(VaultEngine):
         
    
     
+class AwsEngine(VaultEngine):
+    """ AWS Vault Engine for generating dynamic AWS credentials.
+    """
+

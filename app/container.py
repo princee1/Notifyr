@@ -112,7 +112,7 @@ class Container():
             raise ValueError
         self.__bind(type_, to=obj, scope=scope)
         
-    def get(self, typ: Type[S] |str, scope=None, all=False) -> dict[type, Type[S]] | Type[S]:
+    def get(self, typ: Type[S] |str, scope=None, all=False) -> dict[Type[S], S] | S:
         typ = self._str_to_service(typ)
 
         if not all and isabstract(typ.__name__):
@@ -402,7 +402,7 @@ class Container():
 
         return obj
 
-    def need(self, typ: Type[S]) -> Type[S]:
+    def need(self, typ: Type[S]) -> S:
         typ = self._str_to_service(typ)
 
         if not self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY]:
@@ -636,7 +636,7 @@ def Injectable(scope: Any |None = None ):
         return cls
     return class_decorator
 
-def Get(typ: Type[S]|str, scope=None, all=False) -> dict[str, Type[S]] | Type[S]:
+def Get(typ: Type[S]|str, scope=None, all=False) -> dict[Type[S], S] | S:
     """
     The `Get` function retrieves a service from a container based on the specified type, scope, and
     whether to retrieve all instances if it`s an AbstractService  [or in a multibind context].
@@ -656,11 +656,11 @@ def Get(typ: Type[S]|str, scope=None, all=False) -> dict[str, Type[S]] | Type[S]
     """
     return CONTAINER.get(typ, scope=scope, all=all)
 
-def Register(typ:Type[S],scope=None)->Type[S]:
+def Register(typ:Type[S],scope=None)->S:
     CONTAINER.register_new_dep(typ,scope)
     return Get(typ,scope)
 
-def Need(typ: Type[S]|str) -> Type[S]:
+def Need(typ: Type[S]|str) -> S:
     """
     The function `Need` takes a type parameter `Service` and returns the result of calling the `need`
     method on the `CONTAINER` object with the specified type.
@@ -670,7 +670,7 @@ def Need(typ: Type[S]|str) -> Type[S]:
 def Bind(type_:type, obj:Any, scope=None):
     return CONTAINER.bind(type_,obj,scope)
 
-def GetDepends(typ:type[S])->Type[S] | dict[str,Type[S]]:
+def GetDepends(typ:type[S])->Type[S] | dict[str,S]:
     def depends():
         return Get(typ)
     return depends

@@ -24,7 +24,7 @@ RUN touch ./policy/template-access.json ./policy/vault-admin.json
 RUN mkdir /minio /minio/secrets
 
 # Template bucket access policy (S3 permissions)
-RUN cat <<EOF > ./policy/template-access.json
+RUN cat <<EOF > ./policy/assets-access.json
 {
   "Version": "2012-10-17",
   "Statement": [

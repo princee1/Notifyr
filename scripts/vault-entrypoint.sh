@@ -7,7 +7,7 @@ VAULT_SHARED_DIR=/vault/shared
 
 PG_HOST=${POSTGRES_HOST:-postgres}
 M_HOST=${MONGO_HOST:-mongodb}
-MIO_HOST=${MINIO_HOST:-minio}
+STHREE_HOST=${S3_HOST:-minio}
 C_TYPE=${CRED_TYPE:-MINIO}
 
 wait_for_server() {
@@ -49,12 +49,15 @@ unseal_vault(){
 
 
 create_aws_engine(){
+  local S3_VAULT_USER=${AWS_VAULT_USER:-"notifyr-s3-user"}
+  local S3_VAULT_PASSWORD=${AWS_VAULT_PASSWORD:-"notifyr-s3-password"}
+
   vault write notifyr-minio-s3/config/root \
-      access_key="$MINIO_VAULT_USER" \
-      secret_key="$MINIO_VAULT_PASSWORD" \
-      endpoint="http://$MIO_HOST:9000" \
-      iam_endpoint="http://$MIO_HOST:9000" \
-      sts_endpoint="http://$MIO_HOST:9000" \
+      access_key="$S3_VAULT_USER" \
+      secret_key="$S3_VAULT_PASSWORD" \
+      endpoint="https://$STHREE_HOST" \
+      iam_endpoint="https://$STHREE_HOST" \
+      sts_endpoint="https://$STHREE_HOST" \
       region=us-east-1 \
       sts_region="us-east-1"
 
@@ -73,8 +76,11 @@ create_aws_engine(){
 
 create_minio_plugin_engin(){
 
+  local MINIO_VAULT_PASSWORD=$(cat /minio/secrets/config.json | jq -r .credential.secretKey)
+  local MINIO_VAULT_USER=$(cat /minio/secrets/config.json | jq  -r .credential.accessKey)
+
   vault write notifyr-minio-s3/config/root \
-      endpoint="$MIO_HOST:9000" \
+      endpoint="$STHREE_HOST:9000" \
       accessKeyId="$MINIO_VAULT_USER" \
       secretAccessKey="$MINIO_VAULT_PASSWORD" \
       sts_region="us-east-1" \
@@ -124,14 +130,6 @@ create_database_config(){
     password="$MONGO_INITDB_ROOT_PASSWORD"
 
   vault write -f notifyr-database/rotate-root/mongodb
-
-  local MINIO_VAULT_PASSWORD=$(cat /minio/secrets/config.json | jq -r .credential.secretKey)
-  local MINIO_VAULT_USER=$(cat /minio/secrets/config.json | jq  -r .credential.accessKey)
-  local MINIO_WEBHOOK_TOKEN=$( cat /minio/secrets/config.json | jq -r '.eventAuthToken')
-
-  vault kv put notifyr-secrets/api-key/S3-WEBHOOK API_KEY="$MINIO_WEBHOOK_TOKEN"
-
-  echo  "building minio cred type: $C_TYPE"
 
   if [ "$C_TYPE" == "AWS" ]; then
     create_aws_engine

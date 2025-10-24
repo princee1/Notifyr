@@ -34,6 +34,10 @@ DEFAULT_ASYNC_DESTROY_STATE = -2
 DEFAULT_BUILD_STATE = -1
 DEFAULT_DESTROY_STATE = -1
 
+
+GUNICORN_BUILD_STATE =  -3
+GUNICORN_DESTROY_STATE = -3
+
 #################################            #####################################
 
 class ServiceStatus(Enum):

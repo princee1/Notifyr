@@ -4,14 +4,14 @@ from minio.deleteobjects import DeleteObject
 from minio.commonconfig import CopySource
 from app.classes.vault_engine import VaultDatabaseCredentials, VaultDatabaseCredentialsData
 from app.definition._error import BaseError
-from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseService, LinkDep, MiniService, Service
+from app.definition._service import DEFAULT_BUILD_STATE, GUNICORN_BUILD_STATE, BaseMiniService, BaseService, LinkDep, MiniService, Service
 from app.interface.timers import SchedulerInterface
 from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface
 from app.models.profile_model import AWSProfileModel
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MinioConstant, VaultConstant, VaultTTLSyncConstant
-from .config_service import ConfigService
+from .config_service import AssetMode, ConfigService
 from .file_service import BaseFileRetrieverService, FileService
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -33,6 +33,9 @@ class AmazonSNSError(Exception):
     pass
 
 
+MINIO_OBJECT_BUILD_STATE = 1001
+MINIO_OBJECT_DESTROY_STATE = 1001
+
 @Service(
 
 )
@@ -45,12 +48,37 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         self.client_init()
+
+        if build_state != GUNICORN_BUILD_STATE and build_state != MINIO_OBJECT_BUILD_STATE:
+            return
+
+        if self.configService.ASSET_MODE != AssetMode.s3 or not self.configService.S3_TO_DISK:
+            return
+
+        self.download_into_disk()
         
     def _creds_rotator(self):
         self.client_init()        
 
     def client_init(self,):
-        if self.configService.MINIO_CRED_TYPE == 'static':
+        if self.configService.S3_CRED_TYPE == 'MINIO':
+            self.generate_minio_creds()
+        else:
+            self.generate_aws_creds()
+
+        self.client = Minio(
+            endpoint=self.configService.S3_ENDPOINT,
+            access_key=self.db_user,
+            secret_key=self.db_password,
+            secure=self.configService.MINIO_SSL,
+            region=self.configService.S3_REGION
+        )
+
+    def generate_aws_creds(self):
+        ...  # Implementation for generating AWS credentials
+
+    def generate_minio_creds(self):
+        if not self.configService.MINIO_STS_ENABLE:
             creds = self.vaultService.minio_engine.generate_static_credentials(ttl_seconds=VaultTTLSyncConstant.MINIO_TTL)
         else:
             creds = self.vaultService.minio_engine.generate_sts_credentials()
@@ -63,62 +91,54 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             auth=creds.get('auth', None), warnings=creds.get('warnings', None)
         )
 
-        self.client = Minio(
-            endpoint=self.configService.MINIO_ENDPOINT,
-            access_key=self.db_user,
-            secret_key=self.db_password,
-            secure=self.configService.MINIO_SSL,
-            region=self.configService.MINIO_REGION
-        )
-
     def delete_object(self,object_name: str,version_id: str = None):
-        _object = self.get_object(object_name,version_id)
-        self.client.remove_object(MinioConstant.TEMPLATE_BUCKET, object_name, version_id=version_id)
+        _object = self.read_object(object_name,version_id)
+        self.client.remove_object(MinioConstant.ASSETS_BUCKET, object_name, version_id=version_id)
         return _object
 
     def delete_prefix(self, prefix: str,recursive: bool = True):
-        objects = self.client.list_objects(MinioConstant.TEMPLATE_BUCKET, prefix=prefix, recursive=recursive)
+        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
         if objects:
-            self.client.remove_objects(MinioConstant.TEMPLATE_BUCKET, [DeleteObject(obj.object_name) for obj in objects])
-        error = self.client.remove_objects(MinioConstant.TEMPLATE_BUCKET, [DeleteObject(obj.object_name) for obj in objects])
+            self.client.remove_objects(MinioConstant.ASSETS_BUCKET, [DeleteObject(obj.object_name) for obj in objects])
+        error = self.client.remove_objects(MinioConstant.ASSETS_BUCKET, [DeleteObject(obj.object_name) for obj in objects])
         if error:
             print(error)
         # Alternatively, if you want to delete all objects under the prefix without using remove_objects
         # for obj in objects:
         #     self.client.remove_object(MinioConstant.TEMPLATE_BUCKET, obj.object_name)
 
-    def get_object(self,object_name: str,version_id: str = None):
-        _object = self.client.get_object(MinioConstant.TEMPLATE_BUCKET, object_name, version_id=version_id)  
+    def read_object(self,object_name: str,version_id: str = None):
+        _object = self.client.get_object(MinioConstant.ASSETS_BUCKET, object_name, version_id=version_id)  
         if _object.status != 200:
-            raise ObjectNotFoundError(f'Object {object_name} not found in bucket {MinioConstant.TEMPLATE_BUCKET}')
+            raise ObjectNotFoundError(f'Object {object_name} not found in bucket {MinioConstant.ASSETS_BUCKET}')
         return _object
     
     def list_objects(self,prefix: str='',recursive: bool = True):
-        objects = self.client.list_objects(MinioConstant.TEMPLATE_BUCKET, prefix=prefix, recursive=recursive)
+        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
         return objects
 
     def move_object(self,source_object_name: str,dest_object_name: str,version_id: str = None):
-        self.get_object(source_object_name,version_id)
+        self.read_object(source_object_name,version_id)
         self.client.copy_object(
-            MinioConstant.TEMPLATE_BUCKET,
+            MinioConstant.ASSETS_BUCKET,
             dest_object_name,
-            source=CopySource(bucket=MinioConstant.TEMPLATE_BUCKET, object=source_object_name, version_id=version_id)
+            source=CopySource(bucket=MinioConstant.ASSETS_BUCKET, object=source_object_name, version_id=version_id)
         )
-        self.client.remove_object(MinioConstant.TEMPLATE_BUCKET, source_object_name, version_id=version_id)
-        return self.get_object(dest_object_name)
+        self.client.remove_object(MinioConstant.ASSETS_BUCKET, source_object_name, version_id=version_id)
+        return self.read_object(dest_object_name)
 
     def upload_object(self,object_name: str,data, content_type: str = 'application/octet-stream',metadata: Dict = None):
         result = self.client.put_object(
-            MinioConstant.TEMPLATE_BUCKET,object_name,data,len(data),content_type=content_type,metadata=metadata
+            MinioConstant.ASSETS_BUCKET,object_name,data,len(data),content_type=content_type,metadata=metadata
         )
-        return self.get_object(object_name)
+        return self.read_object(object_name)
     
     def download_object(self,object_name: str,version_id: str = None):
-        _object = self.get_object(object_name,version_id)
+        _object = self.read_object(object_name,version_id)
         return _object.read()
 
     def download_prefix(self,prefix: str,recursive: bool = True):
-        objects = self.client.list_objects(MinioConstant.TEMPLATE_BUCKET, prefix=prefix, recursive=recursive)
+        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
         downloaded_objects = {}
         for obj in objects:
             downloaded_objects[obj.object_name] = self.download_object(obj.object_name)
@@ -126,16 +146,29 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
     
     def generate_presigned_url(self,object_name: str,expiry: int = 3600,method: str = 'GET',version_id: str = None):
         url = self.client.presigned_get_object(
-            MinioConstant.TEMPLATE_BUCKET,
+            MinioConstant.ASSETS_BUCKET,
             object_name,
             version_id=version_id,
             expires=timedelta(seconds=expiry)
         ) if method == 'GET' else self.client.presigned_put_object(
-            MinioConstant.TEMPLATE_BUCKET,
+            MinioConstant.ASSETS_BUCKET,
             object_name,
             expires=timedelta(seconds=expiry)
         )
         return url
+
+    def download_into_disk(self):
+        # Optimize to only download new or updated objects
+        objects = self.list_objects()
+        for obj in objects:
+            disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add')
+            self.client.fget_object(
+                MinioConstant.ASSETS_BUCKET,
+                obj.object_name,
+                disk_rel_path
+            )
+    
+
 @MiniService(
     links=[LinkDep(ProfileMiniService,to_destroy=True, to_build=True)]
 )

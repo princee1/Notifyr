@@ -15,7 +15,7 @@ from app.services.assets_service import AssetService
 from app.depends.class_dep import Broker
 from app.services.aws_service import AmazonS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
-from app.services.config_service import ConfigService
+from app.services.config_service import AssetMode, ConfigService
 from app.services.database_service import JSONServerDBService
 from app.services.file_service import FTPService
 from app.services.setting_service import SETTING_SERVICE_ASYNC_BUILD_STATE, DEFAULT_SETTING, SettingService
@@ -28,6 +28,9 @@ PARAMS_KEY_SEPARATOR = "@"
 GLOBAL_KEY_RAISE = 1
 GLOBAL_KEY = 0
 
+configService = Get(ConfigService)
+
+to_mount_modify_obj =  configService.ASSET_MODE == AssetMode.s3 or configService.ASSET_MODE == AssetMode.local and not configService.server_config['team'] == 'solo'
 
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler, AsyncIOHandler, GlobalVarHandler)
@@ -71,7 +74,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
-    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE],)
+    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE],mount=to_mount_modify_obj)
     async def delete_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY_RAISE]), authPermission=Depends(get_auth_permission)):
         if globalIter == None:
             ...
@@ -87,9 +90,8 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
                     PARAMS_KEY_SEPARATOR, globalIter.var)
 
             globalIter.del_val(ptr)
-            self.assetService.globals.save()
-
-        broker.propagate_state(StateProtocol(service=AssetService,to_build=True))
+            self.assetService.save_globals()
+        self.propagate_asset_state(broker)
         return {"value": val}
 
     @UseLimiter(limit_value='10/hours')
@@ -97,7 +99,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
-    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
+    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],mount=to_mount_modify_obj)
     async def upsert_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], globalModel: GlobalVarModel, wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), force: bool = Depends(force_update_query), authPermission=Depends(get_auth_permission)):
 
         if globalIter == None:
@@ -120,8 +122,14 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
                     continue
                 ptr[k] = v
 
-        self.assetService.globals.save()
-        broker.propagate_state(StateProtocol(service=AssetService, to_build=True))
+        self.assetService.save_globals()
+        self.propagate_asset_state(broker)
+
+    def propagate_asset_state(self, broker: Broker):
+        if self.configService.ASSET_MODE == AssetMode.local:
+            broker.propagate_state(StateProtocol(service=AssetService, to_build=True))
+        else:
+            broker.propagate_state(StateProtocol(service=AmazonS3Service, to_build=True))
 
 SETTINGS_ROUTE = 'settings'
 

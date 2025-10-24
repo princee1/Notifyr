@@ -183,8 +183,7 @@ class Application(EventInterface):
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
 
         assetService:AssetService = Get(AssetService)
-        print(assetService.html)
-
+        
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)

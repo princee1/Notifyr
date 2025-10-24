@@ -4,7 +4,7 @@ from typing import Literal, TypedDict
 import requests
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, MinioS3VaultEngine, TransitVaultEngine
-from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
+from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, GUNICORN_BUILD_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.config_service import MODE, ConfigService
 import hvac
@@ -91,9 +91,9 @@ class HCVaultService(BaseService,SchedulerInterface):
             
     def _create_client(self,build_state:int):
         self.client = hvac.Client(self.configService.VAULT_ADDR)
-        _raise = build_state==DEFAULT_BUILD_STATE
+        _raise = build_state==DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE
 
-        if build_state == DEFAULT_BUILD_STATE:
+        if build_state == DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE:
             self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets',_raise)
             self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',_raise)
 
