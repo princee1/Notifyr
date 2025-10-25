@@ -2,9 +2,11 @@ from datetime import timedelta
 from minio import Minio
 from minio.deleteobjects import DeleteObject
 from minio.commonconfig import CopySource
+from minio.error import S3Error,ServerError, InvalidResponseError, MinioAdminException
 from app.classes.vault_engine import VaultDatabaseCredentials, VaultDatabaseCredentialsData
 from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, GUNICORN_BUILD_STATE, BaseMiniService, BaseService, LinkDep, MiniService, Service
+from app.errors.service_error import BuildFailureError
 from app.interface.timers import SchedulerInterface
 from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface
 from app.models.profile_model import AWSProfileModel
@@ -17,7 +19,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Dict
 from app.services.database_service import RotateCredentialsInterface
-
+from fnmatch import fnmatch
 
 class AmazonS3ServiceError(BaseError):
     pass
@@ -47,15 +49,25 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
         self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
-        self.client_init()
+        try:
+            self.client_init()
 
-        if build_state != GUNICORN_BUILD_STATE and build_state != MINIO_OBJECT_BUILD_STATE:
-            return
+            if build_state != GUNICORN_BUILD_STATE and build_state != MINIO_OBJECT_BUILD_STATE:
+                return
 
-        if self.configService.ASSET_MODE != AssetMode.s3 or not self.configService.S3_TO_DISK:
-            return
+            if self.configService.ASSET_MODE != AssetMode.s3 or not self.configService.S3_TO_DISK:
+                return
 
-        self.download_into_disk()
+            self.download_into_disk()
+        except ServerError as e:
+            raise BuildFailureError(f'Failed to build AmazonS3Service due to server error: {str(e)}') from e
+        except InvalidResponseError as e:
+            raise BuildFailureError(f'Failed to build AmazonS3Service due to invalid response: {str(e)}') from e
+        except S3Error as e:
+            raise BuildFailureError(f'Failed to build AmazonS3Service: {str(e)}') from e
+        except MinioAdminException as e:
+            raise BuildFailureError(f'Failed to build AmazonS3Service due to Minio Admin error: {str(e)}') from e
+        
         
     def _creds_rotator(self):
         self.client_init()        
@@ -73,7 +85,7 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             secure=self.configService.MINIO_SSL,
             region=self.configService.S3_REGION
         )
-
+        
     def generate_aws_creds(self):
         ...  # Implementation for generating AWS credentials
 
@@ -113,8 +125,10 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             raise ObjectNotFoundError(f'Object {object_name} not found in bucket {MinioConstant.ASSETS_BUCKET}')
         return _object
     
-    def list_objects(self,prefix: str='',recursive: bool = True):
+    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None):
         objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
+        if match:
+            objects = [o for o in objects if fnmatch(o.object_name,match)]
         return objects
 
     def move_object(self,source_object_name: str,dest_object_name: str,version_id: str = None):
