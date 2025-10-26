@@ -1,9 +1,16 @@
+from fnmatch import fnmatch
+from pathlib import PurePath
+import traceback
+from typing import Any
 from app.interface.timers import IntervalInterface
+from app.utils.globals import DIRECTORY_SEPARATOR
 from .config_service import AssetMode, ConfigService
 from app.definition._service import GUNICORN_BUILD_STATE, BaseService,Service,AbstractServiceClass
-from app.utils.fileIO import FDFlag, get_file_info, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
+from app.utils.fileIO import FDFlag, get_file_info, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
+from app.utils.helper import PointerIterator
+
 
 @Service()
 class FileService(BaseService,):
@@ -17,7 +24,7 @@ class FileService(BaseService,):
 
         filename  = getFilenameOnly(path)
         content = readFileContent(path, flag, enc)
-        dirName = getFileDir(path)
+        dirName = getFileOSDir(path)
 
         return filename,content,dirName
 
@@ -45,10 +52,50 @@ class FileService(BaseService,):
     def addWatcher(self,path,):
         pass
 
-    def build(self,build_state=-1):
-        ...
+    def getFileDir(self,path:str,os:bool=True,sep=DIRECTORY_SEPARATOR):
+        if os:
+            return getFileOSDir(path)
+
+        return path.rsplit(sep, 1)[0] if "/" in path else ""
+
+    def simple_file_matching(self,path:str,root:str,ext:str):
+        if root== None and ext==None:
+            raise ValueError
         
-    pass
+        if root != None and ext == None:
+            return  path.startswith(ext)
+
+        if root == None and ext!= None:
+            return path.endswith(ext)
+        
+        return path.startswith(root) and path.endswith(ext)
+
+    def file_pattern_matching(self,path,pattern:str):
+        return PurePath(path).match(pattern)
+
+    def relative_file_matching(self,path_list:list[str], path:str,ext:str,sep=DIRECTORY_SEPARATOR,pointer:PointerIterator=None):
+        cursor=""
+        files = []
+        try:
+            set_paths = set(path_list)
+        except TypeError as e :
+            if pointer != None:
+                set_paths = set([pointer.ptr(x).get_val() for x in path_list ])
+            else:
+                raise e
+            
+        for p in path.split(sep):
+            cursor+=f"{p}{sep}"
+            
+            for f in set_paths:
+                if self.file_pattern_matching(f,f"{cursor}*{ext}"):
+                    files.append(f)
+                
+            set_paths.difference_update(files)
+
+        return files
+
+
 
 
 @AbstractServiceClass()

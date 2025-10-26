@@ -10,7 +10,7 @@ COPY ./requirements_dev.txt .
 
 RUN pip install --no-cache-dir -r requirements_dev.txt
 
-COPY ./assets ./assets/
+COPY ./gunicorn_main.py .
 
 COPY ./main.py .
 

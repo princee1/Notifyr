@@ -181,6 +181,43 @@ def get_value_in_list(data,index):
 
 
 class PointerIterator:
+
+    class Pointer:
+        def __init__(self,ptr:object |dict,data_key:str,type_:type[object | dict]):
+            self.ptr = ptr
+            self.data_key = data_key
+            self._type = type_
+
+        def get_val(self):
+            if self._type == object:
+                return getattr(self.ptr,self.data_key,None)
+            if isinstance(self.ptr,dict):
+                if self.data_key not in self.ptr:
+                    return False,None
+                return True,self.ptr[self.data_key]
+            return None
+    
+        def set_val(self,new_val):
+            if self._type == object:
+                setattr(self.ptr,self.data_key,new_val)
+            else:
+                if isinstance(self.ptr,dict):
+                    self.ptr[self.data_key] = new_val
+
+        def del_val(self):
+            exists = self.get_val()
+            if self._type == object:
+                if exists == None:
+                    return None
+                delattr(self.ptr,self.data_key)
+                return exists
+            else:
+                exists,val= exists
+                if not exists:
+                    return None
+                self.ptr.pop(self.data_key,None)   
+                return val  
+
     def __init__(self,var:str,split:str='.',_type:Type[object|dict]=object):
         self._type=_type
         self.var = var
@@ -200,41 +237,14 @@ class PointerIterator:
                 if not isinstance(next_ptr,dict):
                     break
             ptr = next_ptr
-        return ptr
+        
+        return self.Pointer(ptr,self.data_key,self._type)
     
     @property
     def data_key(self):
         return self.ptr_iterator[-1]
     
-    def get_val(self,ptr):
-        if self._type == object:
-            return getattr(ptr,self.data_key,None)
-        if isinstance(ptr,dict):
-            if self.data_key not in ptr:
-                return False,None
-            return True,ptr[self.data_key]
-        return None
-    
-    def set_val(self,ptr,new_val):
-        if self._type == object:
-            setattr(ptr,self.data_key,new_val)
-        else:
-            if isinstance(ptr,dict):
-                ptr[self.data_key] = new_val
-
-    def del_val(self,ptr:dict|object):
-        exists = self.get_val(ptr)
-        if self._type == object:
-            if exists == None:
-                return None
-            delattr(ptr,self.data_key)
-            return exists
-        else:
-            exists,val= exists
-            if not exists:
-                return None
-            ptr.pop(self.data_key,None)   
-            return val     
+       
 
 ################################   ** Parsing Helper **      #################################
 

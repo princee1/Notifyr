@@ -30,10 +30,8 @@ def getFd(path: str, flag: FDFlag, enc: str = "utf-8"):
     except:
         return None
 
-
 def exist(path):
     return getFd(path, FDFlag.READ) != None
-
 
 def readFileContent(path: str, flag: FDFlag, enc: str = "utf-8"):
     try:
@@ -45,7 +43,6 @@ def readFileContent(path: str, flag: FDFlag, enc: str = "utf-8"):
         return file_content
     except:
         return None
-
 
 def writeContent(path: str, content, flag: FDFlag, enc: str = "utf-8"):
     try:
@@ -60,7 +57,6 @@ def writeContent(path: str, content, flag: FDFlag, enc: str = "utf-8"):
         print(e)
         pass
 
-
 def listFilesExtension(extension: str, root=None, recursive: bool = False,exclude_extension:list[str]=None):
     if root != None and not os.path.isdir(f"{os.path.curdir}/{root}"):
         raise OSError
@@ -70,7 +66,6 @@ def listFilesExtension(extension: str, root=None, recursive: bool = False,exclud
     if exclude_extension!= None:
         return  [file for file in result if not file.endswith(tuple(exclude_extension))]
     return result
-
 
 def listFilesExtensionCertainPath(path: str, extension: str):
     if not os.path.isdir(path):
@@ -91,12 +86,10 @@ def listFilesExtensionCertainPath(path: str, extension: str):
 
     return results
 
-
-def getFileDir(path: str):
+def getFileOSDir(path: str):
     if not os.path.isfile(path):
         raise OSError
     return os.path.dirname(path)
-
 
 def getFilenameOnly(path: str):
     return os.path.split(path)[1]
@@ -134,14 +127,18 @@ class File:
     @property
     def exists(self):
         return exist(self.file)
+
+    def export(self)->bytes:
+        ...
     
 
 
 class JSONFile(File):
 
-    def __init__(self, jsonFilename, from_data=None):
+    def __init__(self, jsonFilename, from_data=None,os_link=True):
+        self.os_link = os_link
         super().__init__(jsonFilename, from_data)
-
+        
     def load(self, from_data=None):
         super().load(from_data)
         if not self.exists and from_data is None:
@@ -150,7 +147,7 @@ class JSONFile(File):
         if from_data != None:
             self.data = from_data
             self.loaded = True
-            self.save()
+            self.save(FDFlag.CREATE)
             return 
 
         fd = getFd(self.file, FDFlag.READ)
@@ -167,10 +164,12 @@ class JSONFile(File):
         
         return
 
-    def save(self):
+    def save(self,flag=FDFlag.WRITE):
+        if not self.os_link:
+            return
         if not self.loaded:
             return
-        fd = getFd(self.file, FDFlag.WRITE)
+        fd = getFd(self.file, flag)
         json.dump(self.data, fd)
 
     def clear(self):
@@ -183,6 +182,8 @@ class JSONFile(File):
     def __setitem__(self,key,value):
         self.data[key] = value
 
+    def export(self,encoding='utf-8'):
+        return json.dumps(self.data).encode()
 
 class ConfigFile(File):
     """

@@ -125,10 +125,10 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             raise ObjectNotFoundError(f'Object {object_name} not found in bucket {MinioConstant.ASSETS_BUCKET}')
         return _object
     
-    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None):
+    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None,match_flag=True):
         objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
         if match:
-            objects = [o for o in objects if fnmatch(o.object_name,match)]
+            objects = [o for o in objects if (match_flag and fnmatch(o.object_name,match))]
         return objects
 
     def move_object(self,source_object_name: str,dest_object_name: str,version_id: str = None):

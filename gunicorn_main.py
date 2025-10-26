@@ -103,9 +103,11 @@ def worker_abort(worker):
     worker.log.info("Worker received SIGABRT signal.")
 
 def on_starting(server):
+    print(type(server))
     server.log.info("Starting master process...")
 
 def pre_fork(server, worker):
+    print(type(worker))
     server.log.info(f"About to fork worker {worker.pid}")
 
 def post_fork(server, worker):

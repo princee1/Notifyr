@@ -1,4 +1,6 @@
 import json
+import traceback
+from minio.datatypes import Object
 from fastapi import HTTPException,status
 from app.definition._error import BaseError
 from app.services.aws_service import AmazonS3Service
@@ -14,7 +16,7 @@ from enum import Enum
 import os
 from threading import Thread
 from typing import Any, Callable, Literal, Dict, get_args
-from app.utils.helper import flatten_dict, issubclass_of
+from app.utils.helper import PointerIterator, flatten_dict, issubclass_of
 from app.utils.globals import DIRECTORY_SEPARATOR
 
 class AssetNotFoundError(BaseError):
@@ -48,6 +50,11 @@ RouteAssetType = Literal['email', 'sms', 'phone']
 
 def extension(extension: Extension): return f".{extension.value}"
 
+#############################################                ##################################################
+#                                               READER                                                        #  
+#############################################                ##################################################
+
+
 class Reader:
     def __init__(self, configService: ConfigService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         self.asset = asset
@@ -56,7 +63,7 @@ class Reader:
         self.values: Dict[str, Asset] = {}
 
     
-    def __call__(self, *args: Any, **kwds: Any) -> dict[str, Asset]:
+    def __call__(self, ext: Extension, flag: FDFlag, rootParam: str = None, encoding="utf-8") -> dict[str, Asset]:
         """
         :param ext:
         :type ext: Extension
@@ -68,8 +75,21 @@ class Reader:
 
         :param encoding:
         """
-        self.safeReader(*args)
+        self.safeReader(ext,flag,rootParam,encoding)
         return self.values
+    
+    def create_assets(self, relpath, content, dir, keyName):
+        try:
+            self.values[relpath] = self.asset(keyName, content, dir)
+        except SkipTemplateCreationError as e:
+            print(e.args[0])
+                #printJSON(e.args[1])
+        except Exception as e :
+            print(e.__class__,e)
+
+        if issubclass_of(Template, self.asset):
+            if self.func != None:
+                self.func(self.values[relpath])
     
     def path(self,val):
         return f"{self.configService.ASSETS_DIR}{val}"
@@ -118,17 +138,7 @@ class DiskReader(Reader):
             filename, content, dir = self.fileService.readFileDetail(relpath, flag, encoding)
             keyName = filename if not setTempFile else file
             setTempFile.add(keyName)
-            try:
-                self.values[relpath] = self.asset(keyName, content, dir)
-            except SkipTemplateCreationError as e:
-                print(e.args[0])
-                #printJSON(e.args[1])
-            except Exception as e :
-                print(e.__class__,e)
-
-            if issubclass_of(Template, self.asset):
-                if self.func != None:
-                    self.func(self.values[relpath])
+            self.create_assets(relpath, content, dir, keyName)
 
 class ThreadedReader(DiskReader):
     def __init__(self,fileService: FileService, asset: Asset = Asset, additionalCode: Callable[..., Any] = None) -> None:
@@ -147,25 +157,40 @@ class ThreadedReader(DiskReader):
         self.thread.join()
         return self.values
 
+class S3ObjectReader(Reader):   
 
-class ObjectReader(Reader):
-    def __init__(self, configService: ConfigService, fileService: FileService, awsService: AmazonS3Service, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+    def __init__(self, configService: ConfigService, awsService: AmazonS3Service,objects:list[Object],fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         super().__init__(configService, asset, additionalCode)
         self.asset = asset
         self.func = additionalCode
-        self.fileService = fileService
         self.configService = configService
         self.awsService = awsService
+        self.fileService = fileService
+        self.objects:list[Object] =objects
     
     def read(self, ext: Extension, flag: FDFlag, rootParam: str = None, encoding="utf-8"):
-        ...
+        ext= f".{ext.value}"
+        # objects = self.awsService.list_objects(rootParam,True,match=ext)
+        for obj in self.objects:
+            if self.fileService.simple_file_matching(obj.object_name,rootParam,ext):
+                    obj_content = self.awsService.read_object(object_name=obj.object_name)
+                    obj_content = obj_content.read()
+                    if flag != FDFlag.READ_BYTES:
+                        obj_content = obj_content.decode(encoding)
+                    obj_dir = self.fileService.getFileDir(obj.object_name,False,'/')
+                    self.create_assets(obj.object_name,obj_content,obj_dir,self.configService.normalize_assets_path(obj.object_name,'add'))
+    
 
-@_service.PossibleDep([FTPService])
+#############################################                ##################################################
+#                                              ASSET SERVICE                                                  #
+#############################################                ##################################################
+
 @_service.Service(
     links=[_service.LinkDep(AmazonS3Service,to_destroy=True, to_build=True)]
 )
 class AssetService(_service.BaseService):
     
+    non_obj_template = {'globals.json','README.MD'}
 
     def __init__(self, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService) -> None:
         super().__init__()
@@ -176,6 +201,7 @@ class AssetService(_service.BaseService):
         self.settingService = settingService
 
         self.ASSETS_GLOBALS_VARIABLES =f"{self.configService.ASSETS_DIR}globals.json"
+        self.objects = []
 
     def _read_globals_disk(self):
 
@@ -189,7 +215,7 @@ class AssetService(_service.BaseService):
     def _read_globals_s3(self):
         data = self.amazonS3Service.read_object('globals.json')
         data = json.loads(data.read())
-        self.globals = JSONFile(self.ASSETS_GLOBALS_VARIABLES, data)
+        self.globals = JSONFile(self.ASSETS_GLOBALS_VARIABLES, data,False)
 
         MLTemplate._globals.update(flatten_dict(self.globals.data))
      
@@ -209,10 +235,22 @@ class AssetService(_service.BaseService):
                 raise _service.BuildFailureError('Amazon S3 Service not available')
 
     def read_asset_from_s3(self):
+        self.objects = [ obj for obj in self.amazonS3Service.list_objects(recursive=True) if obj.object_name not in self.non_obj_template ]
         self._read_globals_s3()
 
-        
+        self.images = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService)(
+            Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value)
+        self.css = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService)(
+            Extension.CSS,...,AssetType.EMAIL.value)
 
+        self.email = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
+            Extension.HTML,...,AssetType.EMAIL.value)
+        self.pdf = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,PDFTemplate)(
+            Extension.PDF,FDFlag.READ_BYTES,AssetType.PDF.value)
+        self.sms = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,SMSTemplate)(
+            Extension.XML,...,AssetType.SMS.value)
+        self.phone = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,PhoneTemplate)(
+            Extension.XML,...,AssetType.PHONE.value)
 
     def read_asset_from_disk(self):
         self._read_globals_disk()
@@ -223,12 +261,11 @@ class AssetService(_service.BaseService):
         self.images = self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value))
         self.css = self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value))
 
-        self.email = self.sanitize_paths(DiskReader(self.configService,self.fileService,HTMLTemplate, self.loadHTMLData)(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value))
+        self.email = self.sanitize_paths(DiskReader(self.configService,self.fileService,HTMLTemplate, self.loadHTMLData('disk'))(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value))
         self.pdf = self.sanitize_paths(DiskReader(self.configService,self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value))
         self.sms = self.sanitize_paths(DiskReader(self.configService,self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value))
         self.phone = self.sanitize_paths(DiskReader(self.configService,self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value))
     
-
     def sanitize_paths(self,assets:dict[str,Asset]):
         temp: dict[str,Asset]={}
         for key, asset in assets.items():
@@ -236,30 +273,46 @@ class AssetService(_service.BaseService):
             temp[key]=asset
         return temp
 
-    def loadHTMLData(self, html: HTMLTemplate):
-        cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
-        css_content=""
-        for cssPath in cssInPath:
-            if not cssPath.startswith(AssetType.EMAIL.value+DIRECTORY_SEPARATOR):
-                cssPath = f"{AssetType.EMAIL.value}{DIRECTORY_SEPARATOR}{cssPath}"
-            try:
-                css_content += self.css[cssPath].content
-            except KeyError as e:
-                print(cssPath,'error')
-                continue
-        html.loadCSS(css_content)
-        imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG.value)
-        for imagesPath in imagesInPath:
-            try:
-                imageContent = self.images[imagesPath].content
-                html.loadImage(imagesPath,imageContent)
-            except KeyError as e:
-                pass
-       
-        html.add_tracking_pixel()
-        html.add_signature()
-        html.set_content()
+    def loadHTMLData(self,iterator:Literal['disk','s3']):
+
+        def callback(html: HTMLTemplate):
+            if iterator == 'disk':  
+                cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
+            else:
+                cssInPath = self.fileService.relative_file_matching(self.objects,html.dirName,Extension.CSS.value,sep='/',pointer=PointerIterator('object_name'))
+            
+            css_content=""
+
+            for cssPath in cssInPath:
+                if not cssPath.startswith(AssetType.EMAIL.value+DIRECTORY_SEPARATOR):
+                    cssPath = f"{AssetType.EMAIL.value}{DIRECTORY_SEPARATOR}{cssPath}"
+                try:
+                    css_content += self.css[cssPath].content
+                except KeyError as e:
+                    print(cssPath,'error')
+                    continue
+            
+            html.loadCSS(css_content)
+
+            if iterator == 'disk':
+                imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG.value)
+            else:
+                imagesInPath = self.fileService.relative_file_matching(self.objects,html.dirName,Extension.JPEG.value,sep='/',pointer=PointerIterator('object_name'))
+                
+            for imagesPath in imagesInPath:
+                try:
+                    imageContent = self.images[imagesPath].content
+                    html.loadImage(imagesPath,imageContent)
+                    continue
+                except KeyError as e:
+                    pass
         
+            html.add_tracking_pixel()
+            html.add_signature()
+            html.set_content()
+        
+        return callback
+    
     def exportRouteName(self,attributeName:RouteAssetType)-> list[str] | None:
         """
         html: HTML Template Key
@@ -284,7 +337,6 @@ class AssetService(_service.BaseService):
         if asset_type is None:
             return path
         return f"{asset_type}{DIRECTORY_SEPARATOR}{path}"
-
 
     def verify_asset_permission(self,content:dict,model_keys:list[str],assetPermission,options:list[Callable[[Any],bool]]):
         
@@ -330,6 +382,7 @@ class AssetService(_service.BaseService):
             
     def save_globals(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
-            self.amazonS3Service.upload_object('globals.json',)
+            data = self.globals.export()
+            self.amazonS3Service.upload_object('globals.json',data)
         else:
             self.globals.save()
