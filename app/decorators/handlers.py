@@ -5,6 +5,7 @@ from typing import Callable
 from fastapi.exceptions import ResponseValidationError
 from h11 import LocalProtocolError
 import hvac
+from minio import S3Error, ServerError
 import requests
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
@@ -657,4 +658,28 @@ class MiniServiceHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                detail="MiniService cannot be identified"
+            )
+
+class S3Handler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except S3Error as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    'message':'S3 Service error occurred',
+                    'error_code':e.code,
+                    'error_message':e.message,
+                    'request_id':e.request_id,
+                    'resource':e.resource,
+                    'object_name':e.object_name
+                }
+            )
+    
+        except ServerError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Failed to build S3 Service due to server error: {str(e)}'
             )

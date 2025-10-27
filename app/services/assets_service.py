@@ -2,13 +2,14 @@ import json
 import traceback
 from minio.datatypes import Object
 from fastapi import HTTPException,status
+from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
 from app.services.aws_service import AmazonS3Service
 from app.services.setting_service import SettingService
 from app.utils.prettyprint import printJSON
 from .config_service import AssetMode, CeleryMode, ConfigService
 from app.utils.fileIO import FDFlag, JSONFile
-from app.classes.template import Asset, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
+from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .security_service import SecurityService
 from .file_service import FileService, FTPService
 from app.definition import _service
@@ -24,20 +25,6 @@ class AssetNotFoundError(BaseError):
 
 class AssetTypeNotFoundError(BaseError):
     ...
-
-class Extension(Enum):
-    """
-    The class `Extension` defines an enumeration of file extensions.
-    """
-
-    HTML = "html"
-    CSS = "css"
-    SCSS = "scss"
-    JPEG = "jpg"
-    PDF = "pdf"
-    TXT = "txt"
-    XML= "xml"
-
 
 class AssetType(Enum):
     IMAGES = "images"
@@ -177,7 +164,7 @@ class S3ObjectReader(Reader):
                     obj_content = obj_content.read()
                     if flag != FDFlag.READ_BYTES:
                         obj_content = obj_content.decode(encoding)
-                    obj_dir = self.fileService.getFileDir(obj.object_name,False,'/')
+                    obj_dir = self.fileService.get_file_dir(obj.object_name,'pure')
                     self.create_assets(obj.object_name,obj_content,obj_dir,self.configService.normalize_assets_path(obj.object_name,'add'))
     
 
@@ -338,40 +325,52 @@ class AssetService(_service.BaseService):
             return path
         return f"{asset_type}{DIRECTORY_SEPARATOR}{path}"
 
-    def verify_asset_permission(self,content:dict,model_keys:list[str],assetPermission,options:list[Callable[[Any],bool]]):
-        
-        permission = tuple(assetPermission)
+    def verify_content_asset_permission(self,content:dict,model_keys:list[str],authPermission:AuthPermission,options:list[Callable[[str,str],bool]]):
+                
         for keys in model_keys:
             s_content=content[keys]
             if type(s_content) == list:
                 for c in s_content:
                     if type(c) == str:
-                        if not c.startswith(permission):
-                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{c}] not allowed' })
+                        self._raw_verify_asset_permission(c,authPermission['allowed_assets'],options)
                     
             elif type(s_content)==str:
-                if not c.startswith(permission):
-                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{s_content}] not allowed' })      
+                self._raw_verify_asset_permission(s_content,authPermission['allowed_assets'],options)           
             else:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={'message':'Entity not properly accessed'})
-            
-            for option in options:
-                if not option(assetPermission):
-                    return False
-
+        
         return True
     
+    def verify_asset_permission(self,template:str,authPermission:AuthPermission,template_type:str,options:list[Callable[[str,list[str]],str|None]],):
+        
+        if template_type:
+            template = self.asset_rel_path(template,template_type)
+        
+        self._raw_verify_asset_permission(template,authPermission['allowed_assets'],template,options)
+
+        for option in options:
+            if not option(template,authPermission):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
+
+    def _raw_verify_asset_permission(self,authPermission:AuthPermission,template:str,options:list[Callable[[list[str],str],str|None]]):
+        
+        assetsPermission:AssetsPermission = authPermission['allowed_assets']
+        allowed_files = assetsPermission['files']
+        allowed_dirs = tuple(assetsPermission['dirs'])
+        
+        if template.startswith(allowed_dirs):
+            return
+        
+        if template not in allowed_files:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
+        
+        for option in options:
+            mess =  option(assetsPermission,template)
+            if mess == None:
+                continue
+        
     def destroy(self,destroy_state=-1):
         pass
-
-    def check_asset(self,asset, allowed_assets:list[str]=None):
-        if asset == None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Asset not specified')
-
-        if allowed_assets == None and asset not in get_args(RouteAssetType):
-            raise AssetNotFoundError(asset)
-        
-        return asset in allowed_assets
     
     def get_schema(self,asset:RouteAssetType):
         try:

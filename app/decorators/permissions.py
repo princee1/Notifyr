@@ -8,7 +8,7 @@ from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
+from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
 from app.utils.helper import flatten_dict
 
  
@@ -71,7 +71,7 @@ class JWTRouteHTTPPermission(Permission):
 
 class JWTAssetPermission(Permission):
 
-    def __init__(self,template_type:RouteAssetType,model_keys:list[str]=[],options=[]):
+    def __init__(self,template_type:RouteAssetType,extension:str=None,model_keys:list[str]=[],options=[],accept_none_template:bool=False):
         #TODO Look for the scheduler object and the template
         super().__init__()
         self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
@@ -79,33 +79,33 @@ class JWTAssetPermission(Permission):
         self.model_keys=model_keys
         self.template_type = template_type
         self.options = options
-        self.model_keys_size = len(self.model_keys) == 0
+        self.extension = extension
+        self.accept_none= accept_none_template
 
     def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
         if authPermission['client_type'] == ClientType.Admin:
             return True
+        
+        if self.accept_none and template == '':
+            return True
 
-        assetPermission = authPermission['allowed_assets']
+        if self.extension:
+            template +=f".{self.extension}"
+        
+        filter_asset_permission(authPermission)
+
         template_type = self.template_type if template_type == None else template_type
-        permission = tuple(assetPermission)
-        
-        if template:
-            t = self.assetService.asset_rel_path(template,template_type)
-            if not t.startswith(permission):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{t}] not allowed' })
-        
+        self.assetService.verify_asset_permission(template,authPermission,template_type,self.options)
+
         if scheduler == None:
             return True
 
         if len(self.model_keys) == 0:
             return True
         
-        if not self.model_keys_size:
-            return True
-
         for content in scheduler.model_dump(include={'content'}):
             content = flatten_dict(content)
-            if not self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options):
+            if not self.assetService.verify_content_asset_permission(content,self.model_keys,authPermission,self.options):
                 return False
                                 
         return True
@@ -123,21 +123,6 @@ class JWTSignatureAssetPermission(JWTAssetPermission):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Signature template not provided")
         
         return super().permission(authPermission, scheduler.signature, None, None)
-
-class JWTQueryAssetPermission(JWTAssetPermission):
-     
-    def __init__(self,allowed_assets:RouteAssetType, model_keys = [], options=[]):
-        """
-        Use kwargs the model_keys and options parameter
-        """
-        super().__init__(None, model_keys, options)
-        self.allowed_assets = allowed_assets
-        self.template_type=...
-        
-    def permission(self,template:str, scheduler:SchedulerModel, asset:str,authPermission:AuthPermission):
-        self.assetService.check_asset(asset,self.allowed_assets)
-        return super().permission(template,scheduler,authPermission,asset)
-    
 
 class JWTContactPermission(Permission):
 

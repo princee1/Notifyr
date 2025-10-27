@@ -57,7 +57,7 @@ class AssetGuard(Guard):
             return True,_
         content = scheduler.model_dump(include={'content'})
         content = flatten_dict(content)
-        flag = self.assetService.verify_asset_permission(content,self.content_keys,self.allowed_path,self.options)
+        flag = self.assetService.verify_content_asset_permission(content,self.content_keys,self.allowed_path,self.options)
         if not flag:
             return False, 'message'
         return True,''

@@ -394,7 +394,7 @@ class ContactToInfoPipe(Pipe,PointerIterator):
                     filtered_content.append(content)
                 continue
             
-            val = self.get_val(ptr)
+            val = ptr.get_val()
             index = getattr(ptr,'index')  
             
             if getattr(ptr, 'sender_type', 'raw') == 'subs':
@@ -499,8 +499,8 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterfa
                     if ptr == None:
                         ...
 
-                    val = self.get_val(ptr)
-                    index = self.index_ptr.get_val(idx_ptr)
+                    val = ptr.get_val()
+                    index = idx_ptr.get_val()
                     if val == None:
                         ...
                     
@@ -537,9 +537,9 @@ class ContentIndexPipe(Pipe,PointerIterator):
 
         for i,content in enumerate(scheduler.content):
             ptr = self.ptr(content)
-            index = self.get_val(ptr)
+            index = ptr.get_val()
             val =  index if index != None else i
-            self.set_val(ptr,val)
+            ptr.set_val(val)
         
         return {'scheduler':scheduler}
 
@@ -613,3 +613,20 @@ class MiniServiceInjectorPipe(Pipe):
             self.key: self.service.MiniServiceStore.get(profile)
             }
 
+class FilterAllowedSchemaPipe(Pipe):
+
+    @InjectInMethod()
+    def __init__(self,assetService:AssetService):
+        super().__init__(False)
+        self.assetService = assetService
+    
+    def pipe(self,result:dict[str,dict],authPermission:AuthPermission):
+        temp_res = {}
+        for path,schema in result.items():
+            try:
+                self.assetService._raw_verify_asset_permission(authPermission,path)
+                temp_res[path]=schema
+            except:
+                continue
+        
+        return temp_res

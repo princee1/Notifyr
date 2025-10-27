@@ -62,7 +62,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
             raise GlobalKeyDoesNotExistsError(
                 PARAMS_KEY_SEPARATOR, globalIter.var)
 
-        flag, val = globalIter.get_val(ptr)
+        flag, val = ptr.get_val()
         if not flag:
             raise GlobalKeyDoesNotExistsError(
                 PARAMS_KEY_SEPARATOR, globalIter.var)
@@ -84,12 +84,12 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
                 raise GlobalKeyDoesNotExistsError(
                     PARAMS_KEY_SEPARATOR, globalIter.var)
 
-            flag, val = globalIter.get_val(ptr)
+            flag, val = ptr.get_val()
             if not flag:
                 raise GlobalKeyDoesNotExistsError(
                     PARAMS_KEY_SEPARATOR, globalIter.var)
 
-            globalIter.del_val(ptr)
+            ptr.del_val()
             self.assetService.save_globals()
         self.propagate_asset_state(broker)
         return {"value": val}

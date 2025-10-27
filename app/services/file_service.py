@@ -1,16 +1,16 @@
 from fnmatch import fnmatch
 from pathlib import PurePath
 import traceback
-from typing import Any
+from typing import Any, Literal
+from app.definition._error import BaseError
 from app.interface.timers import IntervalInterface
 from app.utils.globals import DIRECTORY_SEPARATOR
 from .config_service import AssetMode, ConfigService
 from app.definition._service import GUNICORN_BUILD_STATE, BaseService,Service,AbstractServiceClass
-from app.utils.fileIO import FDFlag, get_file_info, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
+from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 from app.utils.helper import PointerIterator
-
 
 @Service()
 class FileService(BaseService,):
@@ -52,11 +52,19 @@ class FileService(BaseService,):
     def addWatcher(self,path,):
         pass
 
-    def getFileDir(self,path:str,os:bool=True,sep=DIRECTORY_SEPARATOR):
-        if os:
-            return getFileOSDir(path)
+    def is_file(self,path:str,allowed_multiples_suffixes=False):
+        return is_file(path,allowed_multiples_suffixes)
 
-        return path.rsplit(sep, 1)[0] if "/" in path else ""
+    def get_file_dir(self,path:str,method:Literal['os','pure','custom']='os',sep=DIRECTORY_SEPARATOR):
+        match method:
+            case 'os':
+                return getFileOSDir(path)
+            case 'custom':
+                return path.rsplit(sep, 1)[0] if "/" in path else ""
+            case 'pure':
+                return str(PurePath(path).parent)
+            case _:
+                raise ValueError(method)
 
     def simple_file_matching(self,path:str,root:str,ext:str):
         if root== None and ext==None:

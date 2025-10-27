@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import datetime
 from enum import Enum
 import os
+from pathlib import PurePath
 import sys
 import json
 import pickle
@@ -57,7 +58,7 @@ def writeContent(path: str, content, flag: FDFlag, enc: str = "utf-8"):
         print(e)
         pass
 
-def listFilesExtension(extension: str, root=None, recursive: bool = False,exclude_extension:list[str]=None):
+def listFilesExtension(extension: str, root=None, recursive: bool = False,exclude_extension:list[str]=None,):
     if root != None and not os.path.isdir(f"{os.path.curdir}/{root}"):
         raise OSError
 
@@ -99,6 +100,30 @@ def get_file_info(path):
     size = stat.st_size  # Size in bytes
     last_modified = datetime.datetime.fromtimestamp(stat.st_mtime)  # Last modification time as datetime
     return size, last_modified
+
+class MultipleExtensionError(ValueError):
+    ...
+
+class ExtensionNotAllowed(ValueError):
+    ...
+
+def is_file(path:str,allowed_multiples_suffixes=False,allowed_extension:set|list = None):
+        suffixes =PurePath(path).suffixes
+        suf_len = len(suffixes)
+        if suf_len == 0:
+            return False
+        if suf_len == 1:
+            if allowed_extension and suffixes[0] not in allowed_extension:
+                raise ExtensionNotAllowed(f'Extension not allowed only those {allowed_extension} are allowed')
+            return True
+        
+        if not allowed_multiples_suffixes:
+            raise MultipleExtensionError(f'Path {path} as multiple extension: {suffixes}')
+        
+        if allowed_extension and len(set(suffixes).difference(allowed_extension)) >= 1:
+            raise ExtensionNotAllowed(f'Extension not allowed only those {allowed_extension} are allowed')
+
+        return True
 
 
 

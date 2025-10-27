@@ -92,6 +92,8 @@ class EmailRessource(BaseHTTPRessource):
     
     @UseLimiter(limit_value="10/minutes")
     @UseRoles([Role.PUBLIC])
+    @UsePermission(permissions.JWTAssetPermission('email','html',accept_none_template=True))
+    @UsePipe(pipes.FilterAllowedSchemaPipe,before=False)
     @UseServiceLock(AssetService,lockType='reader')
     @UsePipe(pipes.TemplateParamsPipe('email','html',True))
     @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler)
