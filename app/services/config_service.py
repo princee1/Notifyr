@@ -286,3 +286,8 @@ class ConfigService(_service.BaseService):
             return self.server_config['workers'] > 1
         else:
             return True
+
+
+@_service.Service()
+class ProcessWorkerService(_service.BaseService):
+    ...

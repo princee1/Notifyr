@@ -38,27 +38,18 @@ class AmazonSNSError(Exception):
 MINIO_OBJECT_BUILD_STATE = 1001
 MINIO_OBJECT_DESTROY_STATE = 1001
 
-@Service(
-
-)
+@Service()
 class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
     
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
         super().__init__(configService,fileService)
         RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.MINIO_TTL)
         self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
+        self.download_cache = {}
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
             self.client_init()
-
-            if build_state != GUNICORN_BUILD_STATE and build_state != MINIO_OBJECT_BUILD_STATE:
-                return
-
-            if self.configService.ASSET_MODE != AssetMode.s3 or not self.configService.S3_TO_DISK:
-                return
-
-            self.download_into_disk()
         except ServerError as e:
             raise BuildFailureError(f'Failed to build AmazonS3Service due to server error: {str(e)}') from e
         except InvalidResponseError as e:
@@ -157,7 +148,15 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
         for obj in objects:
             downloaded_objects[obj.object_name] = self.download_object(obj.object_name)
         return downloaded_objects
-    
+
+    def write_into_disk(self,object_name:str,disk_rel_path:str):
+        return self.client.fget_object(
+                MinioConstant.ASSETS_BUCKET,
+                object_name,
+                disk_rel_path
+            )
+        
+
     def generate_presigned_url(self,object_name: str,expiry: int = 3600,method: str = 'GET',version_id: str = None):
         url = self.client.presigned_get_object(
             MinioConstant.ASSETS_BUCKET,
@@ -169,20 +168,8 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             object_name,
             expires=timedelta(seconds=expiry)
         )
-        return url
-
-    def download_into_disk(self):
-        # Optimize to only download new or updated objects
-        objects = self.list_objects()
-        for obj in objects:
-            disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add')
-            self.client.fget_object(
-                MinioConstant.ASSETS_BUCKET,
-                obj.object_name,
-                disk_rel_path
-            )
+        return url   
     
-
 @MiniService(
     links=[LinkDep(ProfileMiniService,to_destroy=True, to_build=True)]
 )

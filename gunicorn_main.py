@@ -1,8 +1,8 @@
 from app.container import build_container, Get
 from app.definition._service import GUNICORN_BUILD_STATE, GUNICORN_DESTROY_STATE
-from app.services import ConfigService, FileService, FTPService, GitCloneRepoService,AmazonS3Service,HCVaultService
+from app.services import ConfigService, FileService, FTPService, GitCloneRepoService,AmazonS3Service,HCVaultService, AssetService
 
-build_container(dep=[ConfigService,FileService,FTPService,GitCloneRepoService,AmazonS3Service,HCVaultService],
+build_container(dep=[ConfigService,FileService,FTPService,GitCloneRepoService,AmazonS3Service,HCVaultService,AssetService],
                 quiet=False,build_state=GUNICORN_BUILD_STATE,destroy_state=GUNICORN_DESTROY_STATE)
 
 

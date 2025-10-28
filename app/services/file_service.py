@@ -106,6 +106,8 @@ class FileService(BaseService,):
     def get_extension(self,path:str)->str:
         return PurePath(path).suffix
 
+    def soft_is_file(self,path:str):
+        return self.get_extension(path) == ''
 
 @AbstractServiceClass()
 class BaseFileRetrieverService(BaseService,IntervalInterface):

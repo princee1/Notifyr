@@ -167,7 +167,7 @@ class Helper:
         return temp_pipe_func
 
     @staticmethod
-    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[Exception]):
+    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[DecoratorException]):
         def wrapper(function: Callable):
 
             @functools.wraps(function)
@@ -194,6 +194,8 @@ class Helper:
                 try:
                     return await deco_prime(*args, **kwargs)
                 except error_type as e:
+
+                    e.raise_http_exception()
 
                     if default_error == None:
                         raise HTTPException(
@@ -576,7 +578,9 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                             raise HTTPException(
                                 status_code=status.HTTP_403_FORBIDDEN)
 
-                    except PermissionDefaultException:
+                    except PermissionDefaultException as e:
+                        e.raise_http_exception()
+
                         if default_error == None:
                             raise HTTPException(
                                 status_code=status.HTTP_501_NOT_IMPLEMENTED)
@@ -651,6 +655,8 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
                                 status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
 
                 except GuardDefaultException as e:
+                    e.raise_http_exception()
+
                     if default_error == None:
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED, detail='Request Validation Aborted')
@@ -715,7 +721,8 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
 
                         return result
 
-                except PipeDefaultException:
+                except PipeDefaultException as e:
+                    e.raise_http_exception() 
                     if default_error == None:
                         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
                     

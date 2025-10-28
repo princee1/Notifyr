@@ -108,6 +108,7 @@ class StreamConstant:
     CONTACT_CREATION_EVENT= 'contact-creation-event'
     CELERY_RETRY_MECHANISM='retry-mechanism'
     PROFILE_ERROR_STREAM='profile-error-stream'
+    S3_EVENT_STREAM='s3-event-stream'
 
 
 class SubConstant:

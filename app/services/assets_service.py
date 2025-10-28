@@ -5,6 +5,7 @@ from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
 from app.services.aws_service import AmazonS3Service
+import app.services.aws_service as aws_service
 from app.services.setting_service import SettingService
 from app.utils.prettyprint import printJSON
 from .config_service import AssetMode, CeleryMode, ConfigService
@@ -17,8 +18,10 @@ from enum import Enum
 import os
 from threading import Thread
 from typing import Any, Callable, Literal, Dict, get_args
-from app.utils.helper import PointerIterator, flatten_dict, issubclass_of
+from app.utils.helper import IntegrityCache, PointerIterator, flatten_dict, issubclass_of
 from app.utils.globals import DIRECTORY_SEPARATOR
+from app.services import ProcessWorkerService
+
 
 class AssetNotFoundError(BaseError):
     ...
@@ -67,11 +70,13 @@ def extension(extension: Extension): return f".{extension.value}"
 
 
 class Reader:
-    def __init__(self, configService: ConfigService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+    def __init__(self, configService: ConfigService,fileService:FileService,asset_cache:IntegrityCache, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         self.asset = asset
         self.configService = configService
         self.func = additionalCode
+        self.fileService = fileService
         self.values: Dict[str, Asset] = {}
+        self.asset_cache = asset_cache
 
     
     def __call__(self, ext: Extension, flag: FDFlag, rootParam: str = None, encoding="utf-8") -> dict[str, Asset]:
@@ -133,8 +138,8 @@ class Reader:
 
 class DiskReader(Reader):
 
-    def __init__(self,configService:ConfigService, fileService: FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
-        super().__init__(configService, asset, additionalCode)
+    def __init__(self,configService:ConfigService, fileService: FileService,asset_cache:IntegrityCache, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+        super().__init__(configService,fileService,asset_cache, asset, additionalCode)
         self.asset = asset
         self.func = additionalCode
         self.fileService = fileService
@@ -146,14 +151,19 @@ class DiskReader(Reader):
         setTempFile: set[str] = set()
         for file in self.fileService.listFileExtensions(extension_, root, recursive=True):
             relpath = root + os.path.sep+file
+
+            info = str(self.fileService.get_file_info(relpath))
+            if self.asset_cache.cache(relpath,info):
+                continue
+
             filename, content, dir = self.fileService.readFileDetail(relpath, flag, encoding)
             keyName = filename if not setTempFile else file
             setTempFile.add(keyName)
             self.create_assets(relpath, content, dir, keyName)
 
 class ThreadedReader(DiskReader):
-    def __init__(self,fileService: FileService, asset: Asset = Asset, additionalCode: Callable[..., Any] = None) -> None:
-        super().__init__(fileService,asset, additionalCode)
+    def __init__(self,configService:ConfigService, fileService: FileService,asset_cache:IntegrityCache, asset: Asset = Asset, additionalCode: Callable[..., Any] = None) -> None:
+        super().__init__(configService,fileService,asset_cache,asset, additionalCode)
         self.thread: Thread
 
     def read(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
@@ -170,8 +180,8 @@ class ThreadedReader(DiskReader):
 
 class S3ObjectReader(Reader):   
 
-    def __init__(self, configService: ConfigService, awsService: AmazonS3Service,objects:list[Object],fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
-        super().__init__(configService, asset, additionalCode)
+    def __init__(self, configService: ConfigService, awsService: AmazonS3Service,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+        super().__init__(configService,fileService,asset_cache, asset, additionalCode)
         self.asset = asset
         self.func = additionalCode
         self.configService = configService
@@ -183,6 +193,10 @@ class S3ObjectReader(Reader):
         ext= f".{ext.value}"
         # objects = self.awsService.list_objects(rootParam,True,match=ext)
         for obj in self.objects:
+            if not self.fileService.soft_is_file(obj.object_name):
+                continue
+            if self.asset_cache.cache(obj.object_name,obj.etag):
+                continue
             if self.fileService.simple_file_matching(obj.object_name,rootParam,ext):
                     obj_content = self.awsService.read_object(object_name=obj.object_name)
                     obj_content = obj_content.read()
@@ -203,16 +217,27 @@ class AssetService(_service.BaseService):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService) -> None:
+    def __init__(self, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:ProcessWorkerService) -> None:
         super().__init__()
 
         self.fileService:FileService = fileService
         self.configService = configService
+        self.processWorkerPeer = processWorkerPeer
         self.amazonS3Service = amazonS3Service
         self.settingService = settingService
 
         self.ASSETS_GLOBALS_VARIABLES =f"{self.configService.ASSETS_DIR}globals.json"
-        self.objects = []
+        self.objects:list[Object] = []
+        self.buckets_size = 0
+        self.download_cache = IntegrityCache('value')
+        self.asset_cache = IntegrityCache('value')
+
+        self.images:dict[str,Asset] = {}
+        self.css:dict[str,Asset] = {}
+        self.email:dict[str,Asset] = {}
+        self.pdf:dict[str,Asset] = {}
+        self.phone:dict[str,Asset] = {}
+        self.sms:dict[str,Asset] = {}
 
     def _read_globals_disk(self):
 
@@ -230,53 +255,69 @@ class AssetService(_service.BaseService):
 
         MLTemplate._globals.update(flatten_dict(self.globals.data))
      
-    def build(self,build_state=-1):
-        Template.LANG = self.settingService.ASSET_LANG
+    def build(self,build_state=_service.DEFAULT_BUILD_STATE):
+        self.read_bucket_metadata()
 
-        if self.configService.ASSET_MODE == AssetMode.s3 and not self.configService.S3_TO_DISK:
-            self.read_asset_from_s3()
-        else:
-            self.read_asset_from_disk()
-
-        self.service_status = _service.ServiceStatus.AVAILABLE
+        match build_state:
+            case _service.GUNICORN_BUILD_STATE:
+                if self.configService.ASSET_MODE == AssetMode.s3 and self.configService.S3_TO_DISK:
+                    self.download_into_disk()
+            
+            case _service.DEFAULT_BUILD_STATE:
+                Template.LANG = self.settingService.ASSET_LANG
+                if self.configService.ASSET_MODE == AssetMode.s3 and not self.configService.S3_TO_DISK:
+                    self.read_asset_from_s3()
+                else:
+                    self.read_asset_from_disk()
+                self.service_status = _service.ServiceStatus.AVAILABLE
+            
+            case aws_service.MINIO_OBJECT_BUILD_STATE:
+                self.download_into_disk()
 
     def verify_dependency(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
             if not self.amazonS3Service.service_status == _service.ServiceStatus.AVAILABLE:
                 raise _service.BuildFailureError('Amazon S3 Service not available')
 
-    def read_asset_from_s3(self):
-        self.objects = [ obj for obj in self.amazonS3Service.list_objects(recursive=True) if obj.object_name not in self.non_obj_template ]
-        self.buckets_size = sum([obj.size for obj in self.objects])
-        self._read_globals_s3()
+    def read_asset_from_s3(self):       
 
-        self.images = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService)(
-            Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value)
-        self.css = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService)(
-            Extension.CSS,...,AssetType.EMAIL.value)
+        self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService)(
+            Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value))
+        self.css.update(S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService)(
+            Extension.CSS,...,AssetType.EMAIL.value))
 
-        self.email = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
-            Extension.HTML,...,AssetType.EMAIL.value)
-        self.pdf = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,PDFTemplate)(
-            Extension.PDF,FDFlag.READ_BYTES,AssetType.PDF.value)
-        self.sms = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,SMSTemplate)(
-            Extension.XML,...,AssetType.SMS.value)
-        self.phone = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,PhoneTemplate)(
-            Extension.XML,...,AssetType.PHONE.value)
+        self.email.update(S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
+            Extension.HTML,...,AssetType.EMAIL.value))
+        self.pdf.update(S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,PDFTemplate)(
+            Extension.PDF,FDFlag.READ_BYTES,AssetType.PDF.value))
+        self.sms.update(S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,SMSTemplate)(
+            Extension.XML,...,AssetType.SMS.value))
+        self.phone.update(S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService,PhoneTemplate)(
+            Extension.XML,...,AssetType.PHONE.value))
 
+    def read_bucket_metadata(self):
+        self.buckets_size = 0
+        for obj in self.amazonS3Service.list_objects(recursive=True):
+            if obj.size:
+                self.buckets_size += obj.size
+            if obj.object_name not in self.non_obj_template:
+                self.objects.append(obj)
+        
+        print(self.buckets_size)
+  
     def read_asset_from_disk(self):
         self._read_globals_disk()
 
         if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
             return 
         
-        self.images = self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value))
-        self.css = self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value))
+        self.images.update(self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)))
+        self.css.update(self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value)))
 
-        self.email = self.sanitize_paths(DiskReader(self.configService,self.fileService,HTMLTemplate, self.loadHTMLData('disk'))(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value))
-        self.pdf = self.sanitize_paths(DiskReader(self.configService,self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value))
-        self.sms = self.sanitize_paths(DiskReader(self.configService,self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value))
-        self.phone = self.sanitize_paths(DiskReader(self.configService,self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value))
+        self.email.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,HTMLTemplate, self.loadHTMLData('disk'))(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value)))
+        self.pdf.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)))
+        self.sms.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)))
+        self.phone.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)))
     
     def sanitize_paths(self,assets:dict[str,Asset]):
         temp: dict[str,Asset]={}
@@ -410,3 +451,18 @@ class AssetService(_service.BaseService):
             self.amazonS3Service.upload_object('globals.json',data)
         else:
             self.globals.save()
+    
+    def download_into_disk(self):
+        # Optimize to only download new or updated objects
+       
+        for obj in self.objects:
+
+            if not self.fileService.soft_is_file(obj.object_name):
+                continue
+
+            if self.download_cache.cache(obj.object_name,obj.etag):
+                continue
+
+            disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add')
+            self.amazonS3Service.write_into_disk(obj.object_name,disk_rel_path)
+            

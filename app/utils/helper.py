@@ -551,7 +551,8 @@ def phone_parser(phone_number:str,country_code=None):
 def filter_paths(paths: list[str]) -> list[str]:
         paths = sorted(paths, key=lambda x: x.count(DIRECTORY_SEPARATOR))  # Trier par profondeur
         results = []
-
+        if DIRECTORY_SEPARATOR in paths:
+            return [DIRECTORY_SEPARATOR]
         for path in paths:
             if not any(path.startswith(d + DIRECTORY_SEPARATOR) for d in results):
                 results.append(path)
@@ -620,3 +621,42 @@ def subset_model(
         fields[field_name] = (ann, default)
     
     return create_model(name,__config__=__config__, **fields)
+
+################################   ** Cache Helper **      #################################
+
+
+class IntegrityCache:
+    """
+    The `IntegrityCache` class implements a caching mechanism with support for two modes:
+    'presence-only' which only checks if the value is inside of the cache and 'value' checks the presence and the value.
+    """
+
+    def __init__(self,mode:Literal['presence-only','value']):
+        self._cache = {}
+        self.mode = mode
+    
+    def cache(self,key,value=None)->bool:
+        """
+        Return if it is a cache hit. If the mode is `value` then it performs also the value validation
+        """
+        if self.mode == 'presence-only':
+            value = None
+
+        if key not in self._cache:
+            self._cache[key]=value
+            return False
+        
+        if self.mode == "presence-only":
+            return True
+        
+        if self._cache[key] == value:
+            return True
+
+        self._cache[key] = value
+        return False
+
+    def clear(self):
+        self._cache = {}
+    
+    def invalid(self,key:str,default:Any=None):
+        return self._cache.pop(key,default)

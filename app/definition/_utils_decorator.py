@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Callable
 
-from fastapi import Response
+from fastapi import HTTPException, Response
 from app.utils.helper import APIFilterInject,AsyncAPIFilterInject
 from asgiref.sync import sync_to_async
 from enum import Enum
@@ -14,8 +14,23 @@ class DecoratorPriority(Enum):
     GUARD = 4
     INTERCEPTOR = 5
 
+class DecoratorException(Exception):
 
-class NextHandlerException(Exception):
+    def __init__(self,status_code=None,details:Any=None,headers:dict[str,str]=None, *args):
+        super().__init__(*args)
+        self.status_code = status_code
+        self.details = details
+        self.headers=headers
+
+    def raise_http_exception(self):
+        if self.status_code == None:
+            return
+        
+        raise HTTPException(self.status_code,self.details,self.headers)
+        
+
+
+class NextHandlerException(DecoratorException):
     ...
 
 
@@ -45,7 +60,7 @@ class Guard(DecoratorObj):
         ...
 
 
-class GuardDefaultException(Exception):
+class GuardDefaultException(DecoratorException):
     ...
 
 class Handler(DecoratorObj):
@@ -59,7 +74,7 @@ class Handler(DecoratorObj):
     async def handle(self, function: Callable, *args, **kwargs):
         return await function(*args,**kwargs)
 
-class HandlerDefaultException(Exception):
+class HandlerDefaultException(DecoratorException):
     ...
 
 
@@ -72,7 +87,7 @@ class Pipe(DecoratorObj):
         ...
 
 
-class PipeDefaultException(Exception):
+class PipeDefaultException(DecoratorException):
     ...
 
 
@@ -85,7 +100,7 @@ class Permission(DecoratorObj):
         ...
 
 
-class PermissionDefaultException(Exception):
+class PermissionDefaultException(DecoratorException):
     ...
 
 class Interceptor(DecoratorObj):
@@ -115,5 +130,5 @@ class Interceptor(DecoratorObj):
     async def do(self,function:Callable, *args, **kwargs):
         return await self.intercept(function,*args,**kwargs)
 
-class InterceptorDefaultException(Exception):
+class InterceptorDefaultException(DecoratorException):
     ...

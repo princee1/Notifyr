@@ -1,16 +1,18 @@
 from typing import Callable
 from aiohttp_retry import List
-from fastapi import BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile,status
+from fastapi import BackgroundTasks, Depends, File, HTTPException, Query, Request, Response, UploadFile,status
 from app.classes.auth_permission import AuthPermission, MustHave, MustHaveRoleSuchAs, Role
 from app.classes.template import Extension
-from app.container import InjectInMethod
+from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard
 from app.decorators.handlers import S3Handler, ServiceAvailabilityHandler
 from app.decorators.permissions import AdminPermission, JWTAssetPermission, JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UseRoles, UseServiceLock
+from app.definition._utils_decorator import Guard
 from app.depends.dependencies import get_auth_permission
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError, AssetTypeNotFoundError
 from app.services import AmazonS3Service
+from app.services.config_service import ConfigService
 from app.services.file_service import FileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import SECONDS_IN_AN_HOUR as HOUR
@@ -54,6 +56,18 @@ async def upload_handler(function: Callable, *args, **kwargs):
             detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
         )
 
+
+class UploadGuard(Guard):
+
+    def __init__(self,max_file:int,max_file_size=int):
+        super().__init__()        
+        self.max_file = max_file
+        self.max_file_size = max_file_size
+        self.configService = Get(ConfigService)
+        self.assetService = Get(AssetService)
+    
+
+
 @UseRoles([Role.ASSETS])
 @UseHandler(ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
@@ -88,15 +102,17 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseHandler(upload_handler)
     @PingService([AmazonS3Service])
     @UseGuard(GlobalsTemplateGuard)
+    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST])
-    async def upload_stream(self,request:Request,backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...), authPermission:AuthPermission=Depends(get_auth_permission),force:bool= Depends(force_update_query)):
+    async def upload_stream(self,request:Request,response:Response,backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...), authPermission:AuthPermission=Depends(get_auth_permission),force:bool= Depends(force_update_query)):
         
         errors = {}
         upload_files:list[UploadFile]= []
 
         for file in files:
             filename = file.filename
+            ext = self.fileService.get_extension(ext)
             try:
                 self.fileService.is_file(filename,allowed_extensions=self.allowed_extension)
             except (MultipleExtensionError,ExtensionNotAllowedError) as e:
@@ -104,8 +120,7 @@ class S3ObjectRessource(BaseHTTPRessource):
                     errors[filename]= {'name':e.__class__.__name__,'description':e.mess}
                     continue
                 else: raise e
-            ext = self.fileService.get_extension(ext)
-
+            
             if ext == Extension.XML.value and not filename.startswith(AssetConfusionError.asset_confusion):
                 if force:
                     errors[filename]={'name':AssetConfusionError.__name__,'description':"filename must start with either phone or sms"} 
