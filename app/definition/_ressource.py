@@ -356,6 +356,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 c = getattr(self, f)
                 if not asyncio.iscoroutinefunction(c):
                     setattr(self, f, sync_to_async(c))
+                    c= getattr(self,f)
                 for sc in sorted(stacked_callback, key=lambda x: x[1], reverse=True):
                     sc_ = sc[0]
                     c = sc_(c)
@@ -829,8 +830,11 @@ def UseLimiter(**kwargs):  # TODO
                 RequestLimit += limit_value
             except:
                 ...
-
-        return Helper.response_decorator(func)
+        def wrapper(target_function):
+            return Helper.response_decorator(target_function)
+        
+        Helper.appends_funcs_callback(func,wrapper,DecoratorPriority.LIMITER)
+        return func
 
     return decorator
 

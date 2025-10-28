@@ -7,6 +7,7 @@ from asgiref.sync import sync_to_async
 from enum import Enum
 
 class DecoratorPriority(Enum):
+    LIMITER = 0
     PERMISSION = 1
     HANDLER = 2
     PIPE = 3

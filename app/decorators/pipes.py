@@ -51,25 +51,6 @@ class RegisterSchedulerPipe(Pipe):
             taskManager.meta['algorithm'] = self.algorithm
         return {}
 
-class AuthPermissionPipe(Pipe):
-
-    @InjectInMethod()
-    def __init__(self,jwtAuthService:JWTAuthService):
-        super().__init__(True)
-        self.jwtAuthService = jwtAuthService
-
-    def pipe(self,tokens:TokensModel):
-        tokens = tokens.model_dump(include={'tokens'})
-        if isinstance(tokens,str):
-            tokens = [tokens]
-        temp = {}
-        for token in tokens:
-            val = self.jwtAuthService._decode_token(token)
-            permission:AuthPermission = AuthPermission(**val)
-            temp[permission.issued_for] = permission
-
-        return {'tokens':temp}
-
 class TemplateParamsPipe(Pipe):
     
     def __init__(self,template_type:RouteAssetType,extension:str=None,accept_none=False):
@@ -278,10 +259,8 @@ class OffloadedTaskResponsePipe(Pipe):
     def pipe(self, result: Any | Response, response: Response = None, scheduler: SchedulerModel = None, otpModel: OTPModel = None, taskManager: TaskManager = None, as_async: bool = None):
         as_async = self._determine_async(taskManager, as_async)
         result = self._process_result(result, taskManager)
-        response = self._prepare_response(result, response)
-        
         self._set_status_code(response, scheduler, otpModel, as_async)
-        return response
+        return result
 
     def _determine_async(self, taskManager: TaskManager, as_async: bool) -> bool:
         if taskManager is None and as_async is None:
@@ -292,20 +271,9 @@ class OffloadedTaskResponsePipe(Pipe):
 
     def _process_result(self, result: Any|Response, taskManager: TaskManager) -> Any | Response:
         
-        if (result == None or result.body == b'{}' or result.body == b'') and taskManager is not None:
+        if result == None  and taskManager is not None:
             return taskManager.results
         return result
-
-    def _prepare_response(self, result: Any | Response, response: Response) -> Response:
-        if not isinstance(result, Response):
-            result = JSONResponse(content=result)
-            if self.copy_res:
-                response = copy_response(result, response)
-            else:
-                response = result
-        else:
-            response = result
-        return response
 
     def _set_status_code(self, response: Response, scheduler: SchedulerModel, otpModel: OTPModel, as_async: bool):
         if (scheduler and scheduler.task_type != TaskType.NOW.value) or (otpModel and as_async) or as_async:
@@ -612,6 +580,8 @@ class FilterAllowedSchemaPipe(Pipe):
         self.assetService = assetService
     
     def pipe(self,result:dict[str,dict],authPermission:AuthPermission):
+        if authPermission == None:
+            return result
         temp_res = {}
         for path,schema in result.items():
             try:
