@@ -312,15 +312,6 @@ class OffloadedTaskResponsePipe(Pipe):
             response.status_code = 201
         else:
             response.status_code = 200
-
-class KeepAliveResponsePipe(Pipe):
-    def __init__(self):
-        super().__init__(False)
-    
-    def pipe(self, result:Any|Response,keepAliveConn:KeepAliveQuery):
-        keepAliveConn.dispose()
-        # TODO add headers and status code
-        return result
     
 class TwilioResponseStatusPipe(Pipe):
     def __init__(self,before=False,status_code=status.HTTP_204_NO_CONTENT):

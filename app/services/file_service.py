@@ -52,8 +52,8 @@ class FileService(BaseService,):
     def addWatcher(self,path,):
         pass
 
-    def is_file(self,path:str,allowed_multiples_suffixes=False):
-        return is_file(path,allowed_multiples_suffixes)
+    def is_file(self,path:str,allowed_multiples_suffixes=False,allowed_extensions:set|list=None):
+        return is_file(path,allowed_multiples_suffixes,allowed_extensions)
 
     def get_file_dir(self,path:str,method:Literal['os','pure','custom']='os',sep=DIRECTORY_SEPARATOR):
         match method:
@@ -66,7 +66,7 @@ class FileService(BaseService,):
             case _:
                 raise ValueError(method)
 
-    def simple_file_matching(self,path:str,root:str,ext:str):
+    def simple_file_matching(self,path:str,root:str|tuple[str,...]=None,ext:str|tuple[str,...]=None):
         if root== None and ext==None:
             raise ValueError
         
@@ -103,7 +103,8 @@ class FileService(BaseService,):
 
         return files
 
-
+    def get_extension(self,path:str)->str:
+        return PurePath(path).suffix
 
 
 @AbstractServiceClass()

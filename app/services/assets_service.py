@@ -26,6 +26,10 @@ class AssetNotFoundError(BaseError):
 class AssetTypeNotFoundError(BaseError):
     ...
 
+class AssetTypeNotAllowedError(BaseError):
+    ...
+
+
 class AssetType(Enum):
     IMAGES = "images"
     PDF = "pdf"
@@ -34,6 +38,26 @@ class AssetType(Enum):
     EMAIL = "email"
     
 RouteAssetType = Literal['email', 'sms', 'phone']
+
+
+class AssetConfusionError(BaseError):
+    asset_confusion = (AssetType.PHONE.value,AssetType.SMS.value)
+
+    def __init__(self,filename,*args):
+        super().__init__(*args)
+        self.filename = filename
+
+        
+
+EXTENSION_TO_ASSET_TYPE:dict[str,AssetType|str] = {
+    Extension.JPEG.value: AssetType.IMAGES.value,
+    Extension.PDF.value: AssetType.PDF.value,
+    Extension.SCSS.value: AssetType.EMAIL.value,
+    Extension.CSS.value: AssetType.EMAIL.value,
+    Extension.HTML.value: AssetType.EMAIL.value,
+    Extension.XML.value: [AssetType.PHONE.value, AssetType.SMS.value]
+}
+
 
 def extension(extension: Extension): return f".{extension.value}"
 
@@ -223,6 +247,7 @@ class AssetService(_service.BaseService):
 
     def read_asset_from_s3(self):
         self.objects = [ obj for obj in self.amazonS3Service.list_objects(recursive=True) if obj.object_name not in self.non_obj_template ]
+        self.buckets_size = sum([obj.size for obj in self.objects])
         self._read_globals_s3()
 
         self.images = S3ObjectReader(self.configService,self.amazonS3Service,self.objects,self.fileService)(

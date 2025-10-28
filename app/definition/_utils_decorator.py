@@ -93,23 +93,22 @@ class Interceptor(DecoratorObj):
         super().__init__(self.intercept, True)
 
 
-    def _intercept_before(self):
+    def _before(self):
         ...
     
-    def _intercept_after(self,result:Response|Any):
+    def _after(self,result:Response|Any):
         ...
     
     async def intercept(self,function:Callable,*args,**kwargs):
-        if asyncio.iscoroutinefunction(self._intercept_before):
-            await  AsyncAPIFilterInject(self._intercept_before)(*args,**kwargs)
-        else:
-            APIFilterInject(self._intercept_before)(*args,**kwargs)
-
+        r = APIFilterInject(self._before)(*args,**kwargs)
+        if asyncio.iscoroutinefunction(self._before):
+            await r
+            
         result = await function(*args,**kwargs)
-        if asyncio.iscoroutinefunction(self._intercept_after):
-            await self._intercept_after(result)
-        else:
-            self._intercept_after(result)
+        r= APIFilterInject(self._after)(result,**kwargs)
+        if asyncio.iscoroutinefunction(self._after):
+            await  r
+
         return result
     
     async def do(self,function:Callable, *args, **kwargs):

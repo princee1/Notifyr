@@ -150,12 +150,12 @@ def parse_authPermission_enum(authPermission):
         
 def filter_asset_permission(authPermission:AuthPermission):
     files = set()
-    dirs = []
+    dirs = set()
     for p in authPermission['allowed_assets']:
         if is_file(p):
             files.add(p)
         else:
-            dirs.append(p)
+            dirs.add(p)
     
     authPermission['allowed_assets'] = AssetsPermission(files=files,dirs=dirs)
 

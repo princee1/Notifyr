@@ -71,7 +71,7 @@ class JWTRouteHTTPPermission(Permission):
 
 class JWTAssetPermission(Permission):
 
-    def __init__(self,template_type:RouteAssetType,extension:str=None,model_keys:list[str]=[],options=[],accept_none_template:bool=False):
+    def __init__(self,template_type:RouteAssetType=None,extension:str=None,model_keys:list[str]=[],options=[],accept_none_template:bool=False):
         #TODO Look for the scheduler object and the template
         super().__init__()
         self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
@@ -88,11 +88,14 @@ class JWTAssetPermission(Permission):
         
         if self.accept_none and template == '':
             return True
-
+        
         if self.extension:
             template +=f".{self.extension}"
         
         filter_asset_permission(authPermission)
+
+        if '/' in authPermission['allowed_assets']['dirs']:
+            return True
 
         template_type = self.template_type if template_type == None else template_type
         self.assetService.verify_asset_permission(template,authPermission,template_type,self.options)

@@ -83,7 +83,7 @@ services:
     container_name: vault
     labels:
       - com.docker.compose.service=vault
-    image: hashicorp/vault:1.16
+    image: hashicorp/vault:latest
     cap_add: ["IPC_LOCK"]
     ports:
       - "8200:8200"
