@@ -60,6 +60,8 @@ setup_engine(){
   vault secrets enable -path=notifyr-transit -seal-wrap transit 
   vault secrets enable -path=notifyr-database -seal-wrap database
 
+  vault secrets enable -path=notifyr-config kv
+
   if [ "$S3_CRED_TYPE" = "AWS" ]; then  
     vault secrets enable -path=notifyr-minio-s3 -seal-wrap aws
   else
@@ -79,8 +81,7 @@ setup_engine(){
   vault write -f notifyr-transit/keys/profiles-key
   vault write -f notifyr-transit/keys/messages-key
   vault write -f notifyr-transit/keys/chat-key
-  vault write -f notifyr-transit/keys/minio-rest-key
-  vault write -f notifyr-transit/keys/minio-transport-key
+  vault write -f notifyr-transit/keys/s3-rest-key
 
 }
 

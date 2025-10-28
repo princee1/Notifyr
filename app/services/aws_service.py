@@ -168,7 +168,17 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             object_name,
             expires=timedelta(seconds=expiry)
         )
-        return url   
+        return url  
+
+    @property
+    def external(self,):
+        if self.configService.S3_ENDPOINT == 'minio:9000':
+            return False
+        addr = self.configService.S3_ENDPOINT.split(':')[0]
+        if addr =='localhost':
+            return False
+        return not addr.startswith('127.0.0')
+        
     
 @MiniService(
     links=[LinkDep(ProfileMiniService,to_destroy=True, to_build=True)]

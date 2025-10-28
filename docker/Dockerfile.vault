@@ -175,6 +175,10 @@ path "notifyr-database/rotate-root/*" {
   capabilities=["update"]
 }
 
+path "notifyr-config/*"{
+  capabilities=["update","read","create","list","delete"]
+}
+
 EOF
 
 RUN cat <<EOF > /vault/policies/db-config.hcl 

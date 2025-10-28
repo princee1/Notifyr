@@ -234,10 +234,11 @@ class VaultConstant:
     GENERATION_ID = 'generation-id'
 
 
-    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key']
+    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
     SECRETS_MESSAGE_KEY = 'messages-key'
     PROFILES_KEY = 'profiles-key'
     CHAT_KEY='chat-key'
+    S3_REST_KEY='s3-rest-key'
 
     NotifyrDynamicSecretsRole= Literal['postgres','mongo']
     MONGO_ROLE='mongo'
@@ -290,3 +291,4 @@ class MinioConstant:
     STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
     ASSETS_BUCKET = 'assets'
     STATIC_TEMPLATE = 'static'
+    ENCRYPTED_KEY = 'encrypted'

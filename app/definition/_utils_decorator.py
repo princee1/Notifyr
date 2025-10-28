@@ -56,7 +56,7 @@ class Guard(DecoratorObj):
     def __init__(self):
         super().__init__(self.guard, True)
 
-    def guard(self) -> tuple[tuple, dict]:
+    def guard(self) -> tuple[bool, str]:
         ...
 
 

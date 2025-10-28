@@ -60,6 +60,9 @@ services:
     container_name: minio
     restart: always
     build:
+      args:
+        - S3_STORAGE_LIMIT=${S3_STORAGE_LIMIT}
+        - S3_MODE=dev
       context: .
       dockerfile: docker/Dockerfile.minio
     ports:
