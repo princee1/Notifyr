@@ -72,10 +72,10 @@ class ProfileService(BaseMiniServiceManager):
 
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:
-            ...
+            raise BuildFailureError
         
         if self.mongooseService.service_status not in HCVaultService._ping_available_state:
-            ...
+            raise BuildFailureError
     
     async def async_verify_dependency(self):
         try:

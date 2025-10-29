@@ -632,14 +632,17 @@ class ValidFreeInputTemplatePipe(Pipe):
     
 class ObjectS3OperationResponsePipe(Pipe):
     class ResponseModel(BaseModel):
-        meta:Optional[dict] = None
+        meta:Optional[dict|list[dict]] = None
         errors:Optional[List[dict]] =[]
         result: Optional[dict] = None
         content: Optional[str] = ""
     
+    def __init__(self,):
+        super().__init__(False)
 
     def pipe(self,result:dict):
-        meta:Object|None = result.get('meta',None) 
+        meta:Object|list[Object]|None = result.get('meta',None) 
+        more_meta= type(meta) == list
         write_result:ObjectWriteResult = result.get('result',None)
 
         errors = [{
@@ -656,10 +659,20 @@ class ObjectS3OperationResponsePipe(Pipe):
                 "location":write_result.location,
                 "http_headers": write_result.http_headers} if  write_result != None else None
 
-        meta:dict = asdict(meta) if meta != None else None
+        
         if meta!=None:
-            meta['last_modified'] = meta['last_modified'].isoformat()
-            meta.pop('storage_class',None), meta.pop('owner_id',None), meta.pop('owner_name',None), meta.pop('is_dir',None)
+            if not more_meta:   
+                meta=[meta]
+
+            def parse_meta(m):
+                m:dict = asdict(m)
+                m['last_modified'] = m['last_modified'].isoformat()
+                m.pop('storage_class',None), m.pop('owner_id',None), m.pop('owner_name',None), m.pop('is_dir',None)
+                return m
+            meta = [parse_meta(m) for m in meta]
+
+            if not more_meta:
+                meta=meta[0]
             
         return {
             'meta':meta,

@@ -1,8 +1,8 @@
-from app.services.database_service import MS_1000
 from app.utils.constant import StreamConstant, SubConstant
 import asyncio
 from typing import Dict, TypedDict
 
+MS_1000 = 1000
 class CallbacksConfig(TypedDict):
     sub:bool
     count:int|None = None

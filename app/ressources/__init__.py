@@ -1,5 +1,5 @@
 from typing import Type
-from app.services.config_service import ConfigService
+from app.services.config_service import AssetMode, ConfigService
 from app.services.task_service import CeleryService,TaskService,OffloadTaskService
 from app.container import Register, Get
 
@@ -24,8 +24,8 @@ from .properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
 from .profile_ressource import ProfilRessource
 from .objetc_s3_ressource import S3ObjectRessource
-from .test_ressource import TestRessource
 from app.definition._ressource import BaseHTTPRessource
+
 #from .push_notification_ressource import PushNotificationRessource
 
 BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
@@ -43,4 +43,5 @@ BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
                                                  ProfilRessource,
                                                  #PushNotificationRessource,
 ]
-# BASE_RESSOURCES = [TestRessource]
+if configService.ASSET_MODE == AssetMode.s3:
+    BASE_RESSOURCES.append(S3ObjectRessource)

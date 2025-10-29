@@ -62,8 +62,6 @@ class FileService(BaseService,):
     
         return PurePath(path).name
 
-
-
     def get_file_dir(self,path:str,method:Literal['os','pure','custom']='os',sep=DIRECTORY_SEPARATOR):
         match method:
             case 'os':

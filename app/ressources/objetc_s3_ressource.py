@@ -5,7 +5,7 @@ from aiohttp_retry import List
 from fastapi import BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile,status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from app.classes.auth_permission import AuthPermission,Role
+from app.classes.auth_permission import AuthPermission,Role, filter_asset_permission
 from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard
@@ -56,11 +56,17 @@ class S3ObjectRessource(BaseHTTPRessource):
         self.hcVaultService: HCVaultService = hcVaultService
         self.fileService = fileService
 
-    async def upload(self, files:list[UploadFile],encrypt:bool=False):
+    async def upload(self, files:list[UploadFile | dict],encrypt:bool=False):
         
         for file in files:
-            file_bytes = await file.read()
-            ext = self.fileService.get_extension(file.filename)
+            if type(file) == UploadFile:
+                file_bytes = await file.read()
+                filename = file.filename
+            else:
+                file_bytes = file['content']
+                filename = file['filename']
+
+            ext = self.fileService.get_extension(filename)
             if ext == Extension.HTML.value:
                 ...
                 #file_bytes = self.fileService.html_minify(file_bytes)
@@ -72,7 +78,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
                 metadata = {MinioConstant.ENCRYPTED_KEY:True}
             
-            await self.amazonS3Service.upload_object(file.filename,file_bytes,metadata=metadata)
+            await self.amazonS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
     @UsePermission(AdminPermission)
     @PingService([HCVaultService])
@@ -128,9 +134,9 @@ class S3ObjectRessource(BaseHTTPRessource):
 
     @UsePermission(JWTAssetPermission(accept_none_template=True))
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler)
-    @PingService([AmazonS3Service])
+    @PingService([AmazonS3Service,HCVaultService])
     @UsePipe(ValidFreeInputTemplatePipe)
-    @UseServiceLock(AmazonS3Service,AssetService,lockType='reader',check_status=False)
+    @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/download/{template:path}',methods=[HTTPMethod.GET],mount=False)
     async def download_stream(self,request:Request,template:str,objectSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission)): # type: ignore
 
@@ -201,26 +207,45 @@ class S3ObjectRessource(BaseHTTPRessource):
             'meta':meta
         }
 
+
+    @PingService([AmazonS3Service])
+    @UseRoles(roles=[Role.PUBLIC])
+    @UsePipe(ObjectS3OperationResponsePipe,before=False)
+    @UseServiceLock(AmazonS3Service,AssetService,lockType='reader',check_status=False)
+    @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET],response_model=ObjectS3OperationResponsePipe.ResponseModel)
+    def list_objects_stat(self,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+        objects = self.assetService.objects.copy()
+        if authPermission != None:
+            filter_asset_permission(authPermission)
+            objects = [o for o in objects 
+                    if self.assetService._raw_verify_asset_permission(authPermission,o.object_name,_raise=False)
+                    ]
+        return {
+            'meta':objects
+        }
+
                 
     @PingService([AmazonS3Service,HCVaultService])
     @UsePermission(AdminPermission)
     @UseHandler(S3Handler,VaultHandler,TemplateHandler)
     @UseGuard(GlobalsTemplateGuard)
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html'},{'email','phone','sms'}))
+    @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}))
     @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectS3OperationResponsePipe.ResponseModel)
-    def modify_object(self,template:str,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],content: str = Body(..., media_type="text/plain"),authPermission:AuthPermission=Depends(get_auth_permission)):
+    def modify_object(self,template:str,backgroundTask:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],content: str = Body(..., media_type="text/plain"),authPermission:AuthPermission=Depends(get_auth_permission)):
         meta= self.amazonS3Service.stat_objet(template,objectsSearch.version_id,True)
+        encrypted = meta.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if meta.metadata else False
         assetType = template.split('/')[0]
+        extension = self.fileService.get_extension(template)
         match assetType:
-            case 'email': HTMLTemplate('',content,'')
+            case 'email': HTMLTemplate('',content,'') if extension == Extension.HTML.value else ...
             case 'phone': PhoneTemplate('',content,'')
             case 'sms': SMSTemplate('',content,'')
 
+        backgroundTask.add_task(self.upload,[{'content':content.encode(),'filename':template}],False)
         return {
             'meta':meta,
-            'result':self.amazonS3Service.upload_object(template,content.encode())
         }
         
     

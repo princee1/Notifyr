@@ -10,7 +10,7 @@ from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant
 from app.utils.prettyprint import printJSON
-from .config_service import AssetMode, CeleryMode, ConfigService
+from .config_service import AssetMode, CeleryMode, ConfigService, ProcessWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .security_service import SecurityService
@@ -22,7 +22,6 @@ from threading import Thread
 from typing import Any, Callable, Literal, Dict, get_args
 from app.utils.helper import IntegrityCache, PointerIterator, flatten_dict, issubclass_of
 from app.utils.globals import ASSET_SEPARATOR, DIRECTORY_SEPARATOR
-from app.services import ProcessWorkerService
 
 
 class AssetNotFoundError(BaseError):
@@ -195,9 +194,8 @@ class S3ObjectReader(Reader):
         ext= f".{ext.value}"
         # objects = self.awsService.list_objects(rootParam,True,match=ext)
         for obj in self.objects:
-            encrypted=False
-            if obj.metadata:
-                encrypted = obj.metadata.get(MinioConstant.ENCRYPTED_KEY,False)
+            
+            encrypted = obj.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if obj.metadata else False
             
             if not self.fileService.soft_is_file(obj.object_name):
                 continue
@@ -294,18 +292,18 @@ class AssetService(_service.BaseService):
 
     def read_asset_from_s3(self):       
 
-        self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.fileService)(
+        self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value))
-        self.css.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.fileService)(
+        self.css.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.CSS,...,AssetType.EMAIL.value))
 
-        self.email.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
+        self.email.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
             Extension.HTML,...,AssetType.EMAIL.value))
-        self.pdf.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.fileService,PDFTemplate)(
+        self.pdf.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PDFTemplate)(
             Extension.PDF,FDFlag.READ_BYTES,AssetType.PDF.value))
-        self.sms.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.fileService,SMSTemplate)(
+        self.sms.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,SMSTemplate)(
             Extension.XML,...,AssetType.SMS.value))
-        self.phone.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.fileService,PhoneTemplate)(
+        self.phone.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PhoneTemplate)(
             Extension.XML,...,AssetType.PHONE.value))
 
     def read_bucket_metadata(self):
@@ -324,13 +322,13 @@ class AssetService(_service.BaseService):
         if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
             return 
         
-        self.images.update(self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)))
-        self.css.update(self.sanitize_paths(DiskReader(self.configService,self.fileService)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value)))
+        self.images.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,self.asset_cache)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)))
+        self.css.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,self.asset_cache)(Extension.CSS, FDFlag.READ, AssetType.EMAIL.value)))
 
-        self.email.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,HTMLTemplate, self.loadHTMLData('disk'))(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value)))
-        self.pdf.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)))
-        self.sms.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)))
-        self.phone.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)))
+        self.email.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,self.asset_cache,HTMLTemplate, self.loadHTMLData('disk'))(Extension.HTML, FDFlag.READ, AssetType.EMAIL.value)))
+        self.pdf.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,self.asset_cache,PDFTemplate)(Extension.PDF, FDFlag.READ_BYTES, AssetType.PDF.value)))
+        self.sms.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,self.asset_cache,SMSTemplate)(Extension.XML, FDFlag.READ, AssetType.SMS.value)))
+        self.phone.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,self.asset_cache,PhoneTemplate)(Extension.XML, FDFlag.READ, AssetType.PHONE.value)))
     
     def sanitize_paths(self,assets:dict[str,Asset]):
         temp: dict[str,Asset]={}
@@ -432,23 +430,32 @@ class AssetService(_service.BaseService):
             if not option(template,authPermission):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
 
-    def _raw_verify_asset_permission(self,authPermission:AuthPermission,template:str,options:list[Callable[[list[str],str],str|None]]):
+    def _raw_verify_asset_permission(self,authPermission:AuthPermission,template:str,options:list[Callable[[list[str],str],str|None]],_raise=True):
         
         assetsPermission:AssetsPermission = authPermission['allowed_assets']
         allowed_files = assetsPermission['files']
         allowed_dirs = tuple(assetsPermission['dirs'])
         
         if template.startswith(allowed_dirs):
-            return
+            return  True
         
         if template not in allowed_files:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
+            if _raise:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed' })
+            return False
         
         for option in options:
             mess =  option(assetsPermission,template)
             if mess == None:
                 continue
+            else:
+                if _raise:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{template}] not allowed','description':mess })
+                else:
+                    return False
         
+        return True
+                    
     def get_assets_dict_by_path(self,path:str):
         
         if path.startswith(AssetType.EMAIL.value):
