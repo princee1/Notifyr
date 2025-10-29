@@ -86,18 +86,19 @@ class JWTAssetPermission(Permission):
         if authPermission['client_type'] == ClientType.Admin:
             return True
         
-        if self.accept_none and template == '':
-            return True
-        
+        filter_asset_permission(authPermission)
+        template_type = self.template_type if template_type == None else template_type
+
+        if template == '':
+            if self.accept_none:
+                if template_type==None:
+                    return '/' in authPermission['allowed_assets']['dirs']
+            else:
+                return False
+       
         if self.extension:
             template +=f".{self.extension}"
         
-        filter_asset_permission(authPermission)
-
-        if '/' in authPermission['allowed_assets']['dirs']:
-            return True
-
-        template_type = self.template_type if template_type == None else template_type
         self.assetService.verify_asset_permission(template,authPermission,template_type,self.options)
 
         if scheduler == None:

@@ -1,6 +1,8 @@
 from datetime import timedelta
 from minio import Minio
-from minio.deleteobjects import DeleteObject
+from minio.helpers import ObjectWriteResult
+from minio.datatypes import Object
+from minio.deleteobjects import DeleteObject,DeleteError
 from minio.commonconfig import CopySource
 from minio.error import S3Error,ServerError, InvalidResponseError, MinioAdminException
 from app.classes.vault_engine import VaultDatabaseCredentials, VaultDatabaseCredentialsData
@@ -95,17 +97,20 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
         )
 
     def delete_object(self,object_name: str,version_id: str = None):
-        _object = self.read_object(object_name,version_id)
+        _object = self.stat_objet(object_name,version_id)
         self.client.remove_object(MinioConstant.ASSETS_BUCKET, object_name, version_id=version_id)
         return _object
 
-    def delete_prefix(self, prefix: str,recursive: bool = True):
-        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
-        if objects:
-            self.client.remove_objects(MinioConstant.ASSETS_BUCKET, [DeleteObject(obj.object_name) for obj in objects])
-        error = self.client.remove_objects(MinioConstant.ASSETS_BUCKET, [DeleteObject(obj.object_name) for obj in objects])
-        if error:
-            print(error)
+    def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None):
+        objects = self.list_objects(prefix=prefix, recursive=recursive,match=match)
+        if not objects:
+            raise ObjectNotFoundError 
+        
+        errors = self.client.remove_objects(MinioConstant.ASSETS_BUCKET, [DeleteObject(obj.object_name) for obj in objects])
+        return {
+            'meta':objects,
+            'errors':errors
+        }
         # Alternatively, if you want to delete all objects under the prefix without using remove_objects
         # for obj in objects:
         #     self.client.remove_object(MinioConstant.TEMPLATE_BUCKET, obj.object_name)
@@ -116,37 +121,53 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             raise ObjectNotFoundError(f'Object {object_name} not found in bucket {MinioConstant.ASSETS_BUCKET}')
         return _object
     
-    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None,match_flag=True):
+    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None):
         objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
         if match:
-            objects = [o for o in objects if (match_flag and fnmatch(o.object_name,match))]
+            objects = [o for o in objects if ((match and self.fileService.file_matching(o.object_name,match)) and not o.is_dir)]
         return objects
 
-    def move_object(self,source_object_name: str,dest_object_name: str,version_id: str = None):
-        self.read_object(source_object_name,version_id)
-        self.client.copy_object(
+    def copy_object(self,source_object_name: str,dest_object_name: str,version_id: str = None,move=False):
+        self.read_object(source_object_name,version_id).close()
+        result = self.client.copy_object(
             MinioConstant.ASSETS_BUCKET,
             dest_object_name,
             source=CopySource(bucket=MinioConstant.ASSETS_BUCKET, object=source_object_name, version_id=version_id)
         )
-        self.client.remove_object(MinioConstant.ASSETS_BUCKET, source_object_name, version_id=version_id)
-        return self.read_object(dest_object_name)
+        
+        if move:
+            self.client.remove_object(MinioConstant.ASSETS_BUCKET, source_object_name, version_id=version_id)
+        meta = self.stat_objet(dest_object_name,check_existence=True)
+        return {
+            'result':result,
+            'meta':meta
+        }
 
     def upload_object(self,object_name: str,data, content_type: str = 'application/octet-stream',metadata: Dict = None):
-        result = self.client.put_object(
+        return self.client.put_object(
             MinioConstant.ASSETS_BUCKET,object_name,data,len(data),content_type=content_type,metadata=metadata
         )
-        return self.read_object(object_name)
     
-    def download_object(self,object_name: str,version_id: str = None):
-        _object = self.read_object(object_name,version_id)
-        return _object.read()
-
-    def download_prefix(self,prefix: str,recursive: bool = True):
-        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
+    def stat_objet(self,object_name,version_id,check_existence:bool=True)->Object:
+        if check_existence:
+            self.read_object(object_name,version_id).close()
+        return self.client.stat_object(
+            MinioConstant.ASSETS_BUCKET,object_name,version_id=version_id
+        )        
+    
+    def download_objects(self,prefix: str,recursive: bool = True,match:str=None,objects:list[Object]=None):
+        if objects == None:
+            objects = self.list_objects(prefix=prefix, recursive=recursive,match=match)
         downloaded_objects = {}
+        if not objects:
+            raise ObjectNotFoundError
+            
         for obj in objects:
-            downloaded_objects[obj.object_name] = self.download_object(obj.object_name)
+            content =  self.read_object(obj.object_name).read()
+            if obj.metadata and obj.metadata.get(MinioConstant.ENCRYPTED_KEY,False):
+                content = self.vaultService.transit_engine.decrypt(content.decode(),'s3-rest-key',).encode()
+            
+            downloaded_objects[obj.bucket_name] = content
         return downloaded_objects
 
     def write_into_disk(self,object_name:str,disk_rel_path:str):

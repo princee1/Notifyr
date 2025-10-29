@@ -548,13 +548,13 @@ def phone_parser(phone_number:str,country_code=None):
         cleaned_number = f'+{phone_number}'
     return cleaned_number
 
-def filter_paths(paths: list[str]) -> list[str]:
-        paths = sorted(paths, key=lambda x: x.count(DIRECTORY_SEPARATOR))  # Trier par profondeur
+def filter_paths(paths: list[str],sep=DIRECTORY_SEPARATOR) -> list[str]:
+        paths = sorted(paths, key=lambda x: x.count(sep))  # Trier par profondeur
         results = []
-        if DIRECTORY_SEPARATOR in paths:
-            return [DIRECTORY_SEPARATOR]
+        if sep in paths:
+            return [sep]
         for path in paths:
-            if not any(path.startswith(d + DIRECTORY_SEPARATOR) for d in results):
+            if not any(path.startswith(d + sep) for d in results):
                 results.append(path)
         return results
 

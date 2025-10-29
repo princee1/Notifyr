@@ -21,7 +21,7 @@ import os
 from threading import Thread
 from typing import Any, Callable, Literal, Dict, get_args
 from app.utils.helper import IntegrityCache, PointerIterator, flatten_dict, issubclass_of
-from app.utils.globals import DIRECTORY_SEPARATOR
+from app.utils.globals import ASSET_SEPARATOR, DIRECTORY_SEPARATOR
 from app.services import ProcessWorkerService
 
 
@@ -33,7 +33,6 @@ class AssetTypeNotFoundError(BaseError):
 
 class AssetTypeNotAllowedError(BaseError):
     ...
-
 
 class AssetType(Enum):
     IMAGES = "images"
@@ -206,17 +205,17 @@ class S3ObjectReader(Reader):
                 continue
 
             if self.fileService.simple_file_matching(obj.object_name,rootParam,ext):
-                    obj_content = self.awsService.read_object(object_name=obj.object_name)
-                    obj_content = obj_content.read()
-                    if encrypted:
-                        obj_content = self.vaultService.transit_engine.decrypt(obj_content.decode(),'s3-rest-key')
-                        if flag == FDFlag.READ_BYTES:
-                            obj_content = obj_content.encode()
-                    
-                    if flag != FDFlag.READ_BYTES:
-                        obj_content = obj_content.decode(encoding)
-                    obj_dir = self.fileService.get_file_dir(obj.object_name,'pure')
-                    self.create_assets(obj.object_name,obj_content,obj_dir,self.configService.normalize_assets_path(obj.object_name,'add'))
+                obj_content = self.awsService.read_object(object_name=obj.object_name)
+                obj_content = obj_content.read()
+                if encrypted:
+                    obj_content = self.vaultService.transit_engine.decrypt(obj_content.decode(),'s3-rest-key')
+                    if flag == FDFlag.READ_BYTES:
+                        obj_content = obj_content.encode()
+                
+                if flag != FDFlag.READ_BYTES:
+                    obj_content = obj_content.decode(encoding)
+                obj_dir = self.fileService.get_file_dir(obj.object_name,'pure')
+                self.create_assets(obj.object_name,obj_content,obj_dir,self.configService.normalize_assets_path(obj.object_name,'add'))
     
 
 #############################################                ##################################################
@@ -337,6 +336,7 @@ class AssetService(_service.BaseService):
         temp: dict[str,Asset]={}
         for key, asset in assets.items():
             key = self.configService.normalize_assets_path(key,'remove')
+            key = key.replace(DIRECTORY_SEPARATOR,ASSET_SEPARATOR)
             temp[key]=asset
         return temp
 
@@ -346,13 +346,13 @@ class AssetService(_service.BaseService):
             if iterator == 'disk':  
                 cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
             else:
-                cssInPath = self.fileService.root_to_path_matching(self.objects,html.dirName,Extension.CSS.value,sep='/',pointer=PointerIterator('object_name'))
+                cssInPath = self.fileService.root_to_path_matching(self.objects,html.dirName,Extension.CSS.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
             
             css_content=""
 
             for cssPath in cssInPath:
-                if not cssPath.startswith(AssetType.EMAIL.value+DIRECTORY_SEPARATOR):
-                    cssPath = f"{AssetType.EMAIL.value}{DIRECTORY_SEPARATOR}{cssPath}"
+                if not cssPath.startswith(AssetType.EMAIL.value+ASSET_SEPARATOR):
+                    cssPath = f"{AssetType.EMAIL.value}{ASSET_SEPARATOR}{cssPath}"
                 try:
                     css_content += self.css[cssPath].content
                 except KeyError as e:
@@ -364,7 +364,7 @@ class AssetService(_service.BaseService):
             if iterator == 'disk':
                 imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG.value)
             else:
-                imagesInPath = self.fileService.root_to_path_matching(self.objects,html.dirName,Extension.JPEG.value,sep='/',pointer=PointerIterator('object_name'))
+                imagesInPath = self.fileService.root_to_path_matching(self.objects,html.dirName,Extension.JPEG.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
                 
             for imagesPath in imagesInPath:
                 try:
@@ -403,7 +403,7 @@ class AssetService(_service.BaseService):
     def asset_rel_path(self,path,asset_type:AssetType=None):
         if asset_type is None:
             return path
-        return f"{asset_type}{DIRECTORY_SEPARATOR}{path}"
+        return f"{asset_type}/{path}"
 
     def verify_content_asset_permission(self,content:dict,model_keys:list[str],authPermission:AuthPermission,options:list[Callable[[str,str],bool]]):
                 
@@ -421,7 +421,7 @@ class AssetService(_service.BaseService):
         
         return True
     
-    def verify_asset_permission(self,template:str,authPermission:AuthPermission,template_type:str,options:list[Callable[[str,list[str]],str|None]],):
+    def verify_asset_permission(self,template:str,authPermission:AuthPermission,template_type:str|None,options:list[Callable[[str,list[str]],str|None]],):
         
         if template_type:
             template = self.asset_rel_path(template,template_type)
@@ -449,6 +449,21 @@ class AssetService(_service.BaseService):
             if mess == None:
                 continue
         
+    def get_assets_dict_by_path(self,path:str):
+        
+        if path.startswith(AssetType.EMAIL.value):
+            return self.email
+        if path.startswith(AssetType.IMAGES.value):
+            return self.images
+        if path.startswith(AssetType.PDF.value):
+            return self.pdf
+        if path.startswith(AssetType.PHONE.value):
+            return self.phone
+        if path.startswith(AssetType.SMS.value):
+            return self.sms
+
+        raise AssetNotFoundError
+
     def destroy(self,destroy_state=-1):
         pass
     

@@ -135,7 +135,7 @@ class PolicyModel(BaseModel):
     def filter_assets_paths(cls,allowed_assets):
         for asset in allowed_assets:
             is_file(asset,allowed_extension=EXTENSION)
-        return filter_paths(allowed_assets)
+        return filter_paths(allowed_assets,'/')
     
     @field_validator('roles')
     def checks_roles(cls, roles: list[Role]):

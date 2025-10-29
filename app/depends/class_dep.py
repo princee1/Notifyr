@@ -569,3 +569,13 @@ class CampaignQuery:
         self.utm_term = self.request.query_params.get("utm_term", None)
         self.utm_content = self.request.query_params.get("utm_content", None)
 
+
+
+class ObjectsSearch:
+
+    def __init__(self,recursive:bool=Query(True),match:str=Query(None),version_id:str=Query(None),assets:bool=Query(False)):
+        self.recursive = recursive
+        self.match = match
+        self.version_id = version_id
+        self.assets = assets
+        self.is_file:bool = None

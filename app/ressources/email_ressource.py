@@ -50,7 +50,7 @@ class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterfac
     
 async def to_signature_path(scheduler:BaseEmailSchedulerModel):    
     if scheduler.signature != None:
-        scheduler.signature.template = "signature" + DIRECTORY_SEPARATOR + scheduler.signature.template
+        scheduler.signature.template = "email/signature/" + scheduler.signature.template
     return {}
 
 async def force_signature(scheduler:BaseEmailSchedulerModel):

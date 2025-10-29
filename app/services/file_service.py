@@ -11,6 +11,7 @@ from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent, ge
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 from app.utils.helper import PointerIterator
+import htmlmin
 
 @Service()
 class FileService(BaseService,):
@@ -54,6 +55,14 @@ class FileService(BaseService,):
 
     def is_file(self,path:str,allowed_multiples_suffixes=False,allowed_extensions:set|list=None):
         return is_file(path,allowed_multiples_suffixes,allowed_extensions)
+    
+    def soft_get_filename(self,path:str):
+        if not self.soft_is_file(path):
+            raise ValueError('Can only check if it is a file')
+    
+        return PurePath(path).name
+
+
 
     def get_file_dir(self,path:str,method:Literal['os','pure','custom']='os',sep=DIRECTORY_SEPARATOR):
         match method:
@@ -78,10 +87,10 @@ class FileService(BaseService,):
         
         return path.startswith(root) and path.endswith(ext)
 
-    def file_pattern_matching(self,path,pattern:str):
+    def file_matching(self,path,pattern:str):
         return PurePath(path).match(pattern)
 
-    def relative_file_matching(self,path_list:list[str], path:str,ext:str,sep=DIRECTORY_SEPARATOR,pointer:PointerIterator=None):
+    def root_to_path_matching(self,path_list:list[str], path:str,ext:str,sep=DIRECTORY_SEPARATOR,pointer:PointerIterator=None):
         cursor=""
         files = []
         try:
@@ -96,7 +105,7 @@ class FileService(BaseService,):
             cursor+=f"{p}{sep}"
             
             for f in set_paths:
-                if self.file_pattern_matching(f,f"{cursor}*{ext}"):
+                if self.file_matching(f,f"{cursor}*{ext}"):
                     files.append(f)
                 
             set_paths.difference_update(files)
@@ -108,6 +117,14 @@ class FileService(BaseService,):
 
     def soft_is_file(self,path:str):
         return self.get_extension(path) == ''
+
+    def html_minify(self,input:bytes|str):
+        input_type = type(input)
+        if input_type == bytes:
+            input = input.decode()
+        
+        return htmlmin.minify(input,False,True,True,).encode()
+        
 
 @AbstractServiceClass()
 class BaseFileRetrieverService(BaseService,IntervalInterface):

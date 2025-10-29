@@ -1,16 +1,19 @@
-from typing import Any, Callable, Coroutine, Literal, Type, get_args
+from dataclasses import asdict
+from typing import Any, Callable, Coroutine, Literal, Optional, Type, get_args
 
+from aiohttp_retry import List
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import AlgorithmType, SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.email import EmailInvalidFormatError
-from app.classes.template import HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
+from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.definition._service import BaseMiniServiceManager
-from app.depends.class_dep import KeepAliveQuery
+from app.depends.class_dep import KeepAliveQuery, ObjectsSearch
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
 from app.models.call_model import CallCustomSchedulerModel
@@ -19,9 +22,10 @@ from app.models.email_model import BaseEmailSchedulerModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
-from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR
+from app.services.assets_service import AssetService, AssetType, AssetTypeNotAllowedError, RouteAssetType, DIRECTORY_SEPARATOR
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
+from app.services.file_service import FileService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.task_service import CeleryService, TaskManager, task_name
@@ -31,9 +35,10 @@ from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, co
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
+from app.services.aws_service import Object,DeleteError,ObjectWriteResult
 
 async def to_otp_path(template:str):
-    template = "otp" + DIRECTORY_SEPARATOR + template
+    template = "otp/" + template
     return {'template':template}
 
 
@@ -53,7 +58,7 @@ class RegisterSchedulerPipe(Pipe):
 
 class TemplateParamsPipe(Pipe):
     
-    def __init__(self,template_type:RouteAssetType,extension:str=None,accept_none=False):
+    def __init__(self,template_type:RouteAssetType=None,extension:str=None,accept_none=False):
         super().__init__(True)
         self.assetService= Get(AssetService)
         self.configService = Get(ConfigService)
@@ -65,11 +70,16 @@ class TemplateParamsPipe(Pipe):
             if template == '' and self.accept_none:
                 return {'template':template}
             
-            template+="."+self.extension
-            asset_routes = self.assetService.exportRouteName(self.template_type)
+            if self.extension:
+                template+="."+self.extension
             
-            template = self.assetService.asset_rel_path(template,self.template_type)
-
+            if self.template_type:
+                asset_routes = self.assetService.exportRouteName(self.template_type)
+                template = self.assetService.asset_rel_path(template,self.template_type)
+            else: 
+                
+                asset_routes = self.assetService.get_assets_dict_by_path(template)
+                        
             if template not in asset_routes:
                 raise TemplateNotFoundError(template)
 
@@ -591,3 +601,69 @@ class FilterAllowedSchemaPipe(Pipe):
                 continue
         
         return temp_res
+
+class ValidFreeInputTemplatePipe(Pipe):
+
+    allowed_assets = tuple(AssetType._value2member_map_.keys())
+    allowed_extension = set(Extension._value2member_map_.keys())
+
+    def __init__(self, accept_empty=True,accept_dir=True,allowed_extension=None,allowed_assets=None):
+        super().__init__(True)
+        self.fileService = Get(FileService)
+        self.accept_empty=accept_empty
+        self.accept_dir = accept_dir
+        self._allowed_extension = self.allowed_extension if allowed_extension == None else allowed_extension
+        self._allowed_assets = self.allowed_assets if allowed_assets == None else allowed_assets
+
+        
+
+    def pipe (self,template:str,objectSearch:ObjectsSearch):
+        if template != '':
+            if not template.startswith(self._allowed_assets):
+                raise AssetTypeNotAllowedError
+            if not self.fileService.is_file(template,False,self._allowed_extension) and not self.accept_dir:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Directory Not allowed')            
+        else:
+            if not self.accept_empty:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Object name cannot be empty')
+        
+        objectSearch.is_file = self.fileService.soft_is_file(template)
+        return {}
+    
+class ObjectS3OperationResponsePipe(Pipe):
+    class ResponseModel(BaseModel):
+        meta:Optional[dict] = None
+        errors:Optional[List[dict]] =[]
+        result: Optional[dict] = None
+        content: Optional[str] = ""
+    
+
+    def pipe(self,result:dict):
+        meta:Object|None = result.get('meta',None) 
+        write_result:ObjectWriteResult = result.get('result',None)
+
+        errors = [{
+                "object_name": getattr(e, "object_name", None),
+                "version_id": getattr(e, "version_id", None),
+                "code": getattr(e, "code", None),
+                "message": getattr(e, "message", None)} for e in result.get('errors',[]) ]
+        
+        write_result = {"bucket_name": write_result.bucket_name,
+                "object_name": write_result.object_name,
+                "version_id": write_result.version_id,
+                "etag": write_result.etag,
+                "last_modified":write_result.last_modified.isoformat(),
+                "location":write_result.location,
+                "http_headers": write_result.http_headers} if  write_result != None else None
+
+        meta:dict = asdict(meta) if meta != None else None
+        if meta!=None:
+            meta['last_modified'] = meta['last_modified'].isoformat()
+            meta.pop('storage_class',None), meta.pop('owner_id',None), meta.pop('owner_name',None), meta.pop('is_dir',None)
+            
+        return {
+            'meta':meta,
+            'errors':errors,
+            'result':write_result,
+            'content': result.get('content',"")
+        }
