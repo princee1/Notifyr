@@ -1,0 +1,80 @@
+FROM debian:stable-slim AS pwgen-builder
+
+RUN apt-get update && apt-get install -y pwgen && rm -rf /var/lib/apt/lists/*
+
+FROM minio/minio:latest
+
+ARG APP_HOST=app
+
+WORKDIR /app
+
+# Copy pwgen for generating secrets
+COPY --from=pwgen-builder /usr/bin/pwgen /usr/bin/pwgen
+
+# Copy assets
+COPY ./assets/ ./assets/
+
+# Create policy folder
+RUN mkdir ./policy/
+
+# Create empty policy files
+RUN touch ./policy/template-access.json ./policy/vault-admin.json
+
+# Directory for secrets
+RUN mkdir /minio /minio/secrets
+
+# Template bucket access policy (S3 permissions)
+RUN cat <<EOF > ./policy/assets-access.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:HeadBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::assets",
+        "arn:aws:s3:::assets/*"
+      ]
+    }
+  ]
+}
+EOF
+
+# Vault admin policy (user + policy management)
+RUN cat <<EOF > ./policy/vault-admin.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "admin:user:svcacct",
+        "admin:user:list",
+        "admin:policy:list"
+      ],
+      "Resource": ["*"]
+    }
+  ]
+}
+EOF
+
+# Copy init script
+COPY --chmod=700 ./scripts/minio-init.sh .
+COPY --chmod=700 ./scripts/minio-entrypoint.sh .
+
+# Run init script
+RUN ./minio-init.sh ${APP_HOST}
+
+# Make secrets readable
+RUN chmod 664 /minio/secrets/*
+
+# Default user
+# USER minio
+ENTRYPOINT ["./minio-entrypoint.sh"]

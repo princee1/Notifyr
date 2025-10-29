@@ -8,6 +8,7 @@ import hvac
 import requests
 from typing_extensions import Literal
 from random import random,randint
+from app.classes.callbacks import CALLBACKS_CONFIG
 from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.vault_engine import VaultDatabaseCredentials
 from app.definition._error import BaseError
@@ -55,7 +56,11 @@ class RotateCredentialsInterface(Interface):
         self.b = b
         self.last_rotated = None
         self.auth_ttl = ttl
-    
+
+    def verify_dependency(self):
+        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError("Vault Service can’t issue creds")
+        
     @staticmethod
     def random_buffer_interval(ttl):
         return ttl - (ttl*.08*random() + randint(20,40))
@@ -127,16 +132,6 @@ class DatabaseService(BaseService):
 @Service()
 class RedisService(DatabaseService):
 
-    class StreamConfig(TypedDict):
-        sub:bool
-        count:int|None = None
-        block:int|None=None
-        wait:int|None=None
-        stream:bool
-        channel_tasks:asyncio.Task | None = None
-        stream_tasks: asyncio.Task | None = None
-
-
     GROUP = 'NOTIFYR-GROUP'
     
     def __init__(self,configService:ConfigService,reactiveService:ReactiveService):
@@ -144,91 +139,7 @@ class RedisService(DatabaseService):
         self.configService = configService
         self.reactiveService = reactiveService
         self.to_shutdown = False
-        
-        self.streams:Dict[StreamConstant.StreamLiteral,RedisService.StreamConfig] = {
-            StreamConstant.LINKS_EVENT_STREAM:self.StreamConfig(**{
-                'sub':True,
-                'count':MS_1000*4,
-                'block':MS_1000*5,
-                'stream':True
-            }),
-            StreamConstant.EMAIL_EVENT_STREAM:self.StreamConfig(**{
-                'sub':True,
-                'count':MS_1000,
-                'block':MS_1000*15,
-                'wait':70,
-                'stream':True
-            }),
-            StreamConstant.TWILIO_REACTIVE:self.StreamConfig(**{
-                'sub':True,
-                'stream':False}),
-            
-            StreamConstant.EMAIL_TRACKING:self.StreamConfig(**{
-                'sub':False,
-                'stream':True,
-                'block':MS_1000*2,
-                'wait':5,
-            }),
-
-            StreamConstant.TWILIO_TRACKING_CALL:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait=5,
-                block=MS_1000*5
-            ),
-            StreamConstant.TWILIO_TRACKING_SMS:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait=5,
-                block=MS_1000*5
-            ),
-            StreamConstant.TWILIO_EVENT_STREAM_CALL:self.StreamConfig(
-                sub=True,
-                stream=True,
-                wait=45,
-                block=MS_1000*15,
-                count=MS_1000*5,
-
-            ),
-            StreamConstant.TWILIO_EVENT_STREAM_SMS:self.StreamConfig(
-                sub=True,
-                stream=True,
-                wait=45,
-                block=MS_1000*15,
-                count=500,
-            ),
-            StreamConstant.CONTACT_CREATION_EVENT:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait = 60*60*6,
-                block=MS_1000*10,
-                count=1000
-            ),
-            StreamConstant.CONTACT_SUBS_EVENT:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait = 60*60*4,
-                block=MS_1000*20,
-                count=10000
-            ),
-            StreamConstant.CELERY_RETRY_MECHANISM:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait=10,
-                block=10,
-                count=1000,
-            ),
-
-            SubConstant.SERVICE_STATUS:self.StreamConfig(
-                sub=True,
-                stream=False
-            ),
-            SubConstant.MINI_SERVICE_STATUS:self.StreamConfig(
-                sub=True,
-                stream=False,
-            )
-        }
-
+        self.callbacks = CALLBACKS_CONFIG.copy()
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
 
 
@@ -245,7 +156,7 @@ class RedisService(DatabaseService):
 
     @dynamic_context
     def stream_data(self,stream:str,data:dict):
-        if stream not in self.streams.keys():
+        if stream not in self.callbacks.keys():
             raise RedisStreamDoesNotExistsError(stream)
         
         if not isinstance(data,dict):
@@ -258,7 +169,7 @@ class RedisService(DatabaseService):
 
     @dynamic_context
     def publish_data(self,channel:str,data:Any):
-        if channel not in self.streams.keys():
+        if channel not in self.callbacks.keys():
             return
         #if data:   
         data = json.dumps(data)
@@ -316,7 +227,7 @@ class RedisService(DatabaseService):
 
     async def create_group(self):
 
-        for stream in self.streams.keys():
+        for stream in self.callbacks.keys():
             try:
                 await self.redis_events.xgroup_create(stream, RedisService.GROUP, id='0-0', mkstream=True)
             except ResponseError as e:
@@ -326,7 +237,7 @@ class RedisService(DatabaseService):
                     ...
 
     def register_consumer(self,callbacks_sub:dict[str,Callable]={},callbacks_stream:dict[str,Callable]={}):
-        for stream_name,config in self.streams.items():
+        for stream_name,config in self.callbacks.items():
             is_stream = config['stream']
             is_sub = config['sub']
             if is_stream:
@@ -462,7 +373,7 @@ class RedisService(DatabaseService):
         return response
         
     async def close_connections(self,):
-        for config in self.streams.values():
+        for config in self.callbacks.values():
             if 'channel_tasks' in config and  config['channel_tasks']:
                 config['channel_tasks'].cancel()
             if 'stream_tasks' in config and config['stream_tasks']:
@@ -557,9 +468,6 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     ##################################################
     # Service lifecycle
     ##################################################
-    def verify_dependency(self):
-        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError("Vault Service can’t issue creds")
 
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
@@ -655,11 +563,6 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
         )
 
         self.interval_schedule(delay,self.creds_rotation)
-
-    def verify_dependency(self):
-        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError('Vault Service Cant issue creds')
-        
 
     def build(self,build_state=-1):
         try:

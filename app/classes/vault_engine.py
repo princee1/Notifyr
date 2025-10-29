@@ -14,7 +14,6 @@ class VaultDatabaseCredentials(TypedDict, total=False):
     lease_id: str
     lease_duration: int
     renewable: bool
-    lease_id: str
     data: VaultDatabaseCredentialsData
     wrap_info: Optional[Dict[str, Any]]
     warnings: Optional[list[str]]
@@ -45,6 +44,7 @@ RSA_SIGNATURE_ALGORITHMS = ["pss", "pkcs1v15"]
 ECDSA_MARSHALING_ALGORITHMS = ["asn1", "jws"]
 RSA_PSS_SALT_LENGTHS = ["auto", "hash"]  # or an integer within allowed range
 
+ROLE_PREFIX= '-ntfr-role'
 
 class VaultError(BaseError):
     ...
@@ -230,13 +230,32 @@ class TransitVaultEngine(VaultEngine):
 
 class DatabaseVaultEngine(VaultEngine):
 
-    _role_prefix= '-ntfr-role'
-
     def generate_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole)->VaultDatabaseCredentials:
-        role+=self._role_prefix
-        credentialss = self.client.secrets.database.generate_credentials(
+        role+=ROLE_PREFIX
+        credentials = self.client.secrets.database.generate_credentials(
             name=role,
             mount_point=self.mount_point
             )
-        return VaultDatabaseCredentials(**credentialss)
+        return VaultDatabaseCredentials(**credentials)
     
+class MinioS3VaultEngine(VaultEngine):
+
+
+    def generate_static_credentials(self,role_name='static-minio'):
+        role_name += ROLE_PREFIX
+        
+        return self.client.adapter.get(f"/v1/{self.mount_point}/creds/{role_name}")
+    
+    def generate_sts_credentials(self,role_name:str='sts-minio',ttl_seconds=3600):
+        role_name += ROLE_PREFIX
+        ttl = {"ttl": f"{ttl_seconds}s"} if ttl_seconds and ttl_seconds >=120 else {}
+
+        return self.client.adapter.post(f"/v1/{self.mount_point}/sts/{role_name}", json=ttl )
+
+        
+   
+    
+class AwsEngine(VaultEngine):
+    """ AWS Vault Engine for generating dynamic AWS credentials.
+    """
+

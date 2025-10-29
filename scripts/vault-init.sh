@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -e
 
-
 VAULT_CONFIG=/vault/config/vault.hcl
 VAULT_SECRETS_DIR=/vault/secrets
 VAULT_SHARED_DIR=/vault/shared
+VAULT_SHARED_API_DIR=/vault/api-key
 
 NOTIFYR_APP_ROLE="notifyr-app-role"
+
+S3_CRED_TYPE=$1
 
 export VAULT_ADDR="http://127.0.0.1:8200"
 
@@ -30,8 +32,6 @@ unseal_vault(){
     UNSEAL_KEY=$(cat "$VAULT_SECRETS_DIR/unseal_key.b64")
     vault operator unseal "$UNSEAL_KEY"
   fi
-
-  export VAULT_CONTAINER_READY = "true"
 }
 
 init_vault(){
@@ -57,12 +57,31 @@ init_vault(){
 setup_engine(){
   vault secrets enable -path=notifyr-generation -seal-wrap -version=2 kv
   vault secrets enable -path=notifyr-secrets -seal-wrap -version=1 kv
-  vault secrets enable -path=notifyr-transit transit 
-  vault secrets enable -path=notifyr-database database
+  vault secrets enable -path=notifyr-transit -seal-wrap transit 
+  vault secrets enable -path=notifyr-database -seal-wrap database
+
+  vault secrets enable -path=notifyr-config kv
+
+  if [ "$S3_CRED_TYPE" = "AWS" ]; then  
+    vault secrets enable -path=notifyr-minio-s3 -seal-wrap aws
+  else
+    local CHECKSUM=$( sha256sum /etc/vault/plugins/vault-plugin-secrets-minio 2>/dev/null | cut -d " " -f 1 )
+    
+    [[ -n "$CHECKSUM" ]] || die "Could not calculate plugin sha256 sum"
+
+    vault plugin register -sha256="$CHECKSUM" -command="vault-plugin-secrets-minio" secret vault-plugin-secrets-minio
+
+    vault secrets enable \
+      -path=notifyr-minio-s3 \
+      -plugin-name=vault-plugin-secrets-minio \
+      -description="Instance of the Minio plugin" \
+      plugin
+  fi
 
   vault write -f notifyr-transit/keys/profiles-key
   vault write -f notifyr-transit/keys/messages-key
   vault write -f notifyr-transit/keys/chat-key
+  vault write -f notifyr-transit/keys/s3-rest-key
 
 }
 
@@ -150,28 +169,28 @@ create_default_token(){
 
   vault kv put notifyr-secrets/tokens $ARGS
 
-  local setting_api_key
-  setting_api_key=$(pwgen -s 100 1)
+  local setting_api_key="settingdb:$(pwgen -s 100 1)"
 
-  local dmz_api_key
-  dmz_api_key=$(pwgen -s 100 1)
+  local dmz_api_key="dmz:$(pwgen -s 100 1)"
 
   vault kv put notifyr-secrets/api-key/SETTING_DB API_KEY="$setting_api_key"
 
   vault kv put notifyr-secrets/api-key/DMZ API_KEY="$dmz_api_key"
+  
+  echo -n "$setting_api_key" > "$VAULT_SHARED_API_DIR/setting-db-api-key.txt"
 
-  echo -n "$setting_api_key" > "$VAULT_SHARED_DIR/setting-db-api-key.txt"
+  echo -n "$dmz_api_key" > "$VAULT_SHARED_API_DIR/dmz-api-key.txt"
 
-  chown root:vaultuser "$VAULT_SHARED_DIR/setting-db-api-key.txt"
-  chmod 664 "$VAULT_SHARED_DIR/setting-db-api-key.txt"
+  # echo -n "$s3_webhook_key" > "$VAULT_SHARED_API_DIR/s3-webhook-key.txt"
 
-  local generation_id
-  generation_id=$(pwgen -s 32 1)
+  chown root:vaultuser $VAULT_SHARED_API_DIR/*.txt
+  chmod 664 $VAULT_SHARED_API_DIR/*.txt
+
+  local generation_id=$(pwgen -s 32 1)
 
   vault kv put notifyr-generation/generation-id GENERATION_ID="$generation_id"
 
-  local generated_at
-  generated_at=$(date +%Y-%m-%dT%H:%M:%S)
+  local generated_at=$(date +%Y-%m-%dT%H:%M:%S)
   
   vault kv metadata put -custom-metadata=generated_at="$generated_at" notifyr-generation/generation-id
 
@@ -204,14 +223,13 @@ setup_database_config(){
 
   DB_TOKEN=$(vault token create \
     -orphan \
-    -use-limit=7 \
+    -use-limit=15 \
     -ttl=2h \
     -renewable=false \
     -policy=db-config-policy \
     -format=json | jq -r '.auth.client_token')
 
-  local db_token_file
-  db_token_file="one_shot_db_token"
+  local db_token_file="one_shot_db_token"
 
   echo -n "$DB_TOKEN" > "$VAULT_SECRETS_DIR/$db_token_file.txt"
 

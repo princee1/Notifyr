@@ -19,11 +19,11 @@ class ProfileModelAuthToken(BaseModel):
     secret_key:ClassVar[list[str]]= ['access_token','refresh_token']
 
 class ProfilModelConstant:
-    OUTLOOK_API=f'{EMAIL_PROFILE_TYPE}:outlook-api'
-    GMAIL_API=f'{EMAIL_PROFILE_TYPE}:gmail-api'
-    AWS=f'{EMAIL_PROFILE_TYPE}:aws'
-    IMAP=f'{EMAIL_PROFILE_TYPE}:imap'
-    SMTP=f'{EMAIL_PROFILE_TYPE}:smtp'
+    OUTLOOK_API=f'{EMAIL_PROFILE_TYPE}/outlook-api'
+    GMAIL_API=f'{EMAIL_PROFILE_TYPE}/gmail-api'
+    AWS=f'{EMAIL_PROFILE_TYPE}/aws'
+    IMAP=f'{EMAIL_PROFILE_TYPE}/imap'
+    SMTP=f'{EMAIL_PROFILE_TYPE}/smtp'
     TWILIO='twilio'
 
 ####################################                 #####################################333

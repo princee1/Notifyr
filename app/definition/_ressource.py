@@ -167,7 +167,7 @@ class Helper:
         return temp_pipe_func
 
     @staticmethod
-    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[Exception]):
+    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[DecoratorException]):
         def wrapper(function: Callable):
 
             @functools.wraps(function)
@@ -194,6 +194,8 @@ class Helper:
                 try:
                     return await deco_prime(*args, **kwargs)
                 except error_type as e:
+
+                    e.raise_http_exception()
 
                     if default_error == None:
                         raise HTTPException(
@@ -356,6 +358,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 c = getattr(self, f)
                 if not asyncio.iscoroutinefunction(c):
                     setattr(self, f, sync_to_async(c))
+                    c= getattr(self,f)
                 for sc in sorted(stacked_callback, key=lambda x: x[1], reverse=True):
                     sc_ = sc[0]
                     c = sc_(c)
@@ -414,12 +417,6 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
 
         self.default_response: Dict[int | str,
                                     Dict[str, Any]] | None = router_default_response
-
-    def get(self, dep: Type[S]|str, scope=None, all=False) -> S:
-        return Get(dep, scope, all)
-
-    def need(self, dep: Type[S]|str) -> S:
-        return Need(dep)
 
     def on_startup(self):
         """
@@ -581,7 +578,9 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                             raise HTTPException(
                                 status_code=status.HTTP_403_FORBIDDEN)
 
-                    except PermissionDefaultException:
+                    except PermissionDefaultException as e:
+                        e.raise_http_exception()
+
                         if default_error == None:
                             raise HTTPException(
                                 status_code=status.HTTP_501_NOT_IMPLEMENTED)
@@ -656,6 +655,8 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
                                 status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
 
                 except GuardDefaultException as e:
+                    e.raise_http_exception()
+
                     if default_error == None:
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED, detail='Request Validation Aborted')
@@ -720,7 +721,8 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
 
                         return result
 
-                except PipeDefaultException:
+                except PipeDefaultException as e:
+                    e.raise_http_exception() 
                     if default_error == None:
                         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
                     
@@ -835,8 +837,11 @@ def UseLimiter(**kwargs):  # TODO
                 RequestLimit += limit_value
             except:
                 ...
-
-        return Helper.response_decorator(func)
+        def wrapper(target_function):
+            return Helper.response_decorator(target_function)
+        
+        Helper.appends_funcs_callback(func,wrapper,DecoratorPriority.LIMITER)
+        return func
 
     return decorator
 

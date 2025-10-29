@@ -47,7 +47,17 @@ VALIDATION_CSS_SELECTOR = "head > validation"
 VALIDATION_REGISTRY_SELECTOR = "validation-registry"
 def BODY_SELECTOR(select): return f"body {select}"
 # ============================================================================================================
-
+class Extension(Enum):
+    """
+    The class `Extension` defines an enumeration of file extensions.
+    """
+    HTML = "html"
+    CSS = "css"
+    SCSS = "scss"
+    JPEG = "jpg"
+    PDF = "pdf"
+    TXT = "txt"
+    XML= "xml"
 
 class TemplateAssetError(BaseError):
     ...
@@ -85,9 +95,6 @@ class Asset():
         self.content = content
         self.dirName = dirName
         self.name = self.filename.split(".")[0]
-        # BUG need to replace the path separator
-        self.name.replace("\\", ROUTE_SEP)
-        self.name.replace("/", ROUTE_SEP)
         self.ignore=False
 
 

@@ -1,20 +1,36 @@
 import asyncio
 from typing import Any, Callable
 
-from fastapi import Response
+from fastapi import HTTPException, Response
 from app.utils.helper import APIFilterInject,AsyncAPIFilterInject
 from asgiref.sync import sync_to_async
 from enum import Enum
 
 class DecoratorPriority(Enum):
+    LIMITER = 0
     PERMISSION = 1
     HANDLER = 2
     PIPE = 3
     GUARD = 4
     INTERCEPTOR = 5
 
+class DecoratorException(Exception):
 
-class NextHandlerException(Exception):
+    def __init__(self,status_code=None,details:Any=None,headers:dict[str,str]=None, *args):
+        super().__init__(*args)
+        self.status_code = status_code
+        self.details = details
+        self.headers=headers
+
+    def raise_http_exception(self):
+        if self.status_code == None:
+            return
+        
+        raise HTTPException(self.status_code,self.details,self.headers)
+        
+
+
+class NextHandlerException(DecoratorException):
     ...
 
 
@@ -40,11 +56,11 @@ class Guard(DecoratorObj):
     def __init__(self):
         super().__init__(self.guard, True)
 
-    def guard(self) -> tuple[tuple, dict]:
+    def guard(self) -> tuple[bool, str]:
         ...
 
 
-class GuardDefaultException(Exception):
+class GuardDefaultException(DecoratorException):
     ...
 
 class Handler(DecoratorObj):
@@ -58,7 +74,7 @@ class Handler(DecoratorObj):
     async def handle(self, function: Callable, *args, **kwargs):
         return await function(*args,**kwargs)
 
-class HandlerDefaultException(Exception):
+class HandlerDefaultException(DecoratorException):
     ...
 
 
@@ -71,7 +87,7 @@ class Pipe(DecoratorObj):
         ...
 
 
-class PipeDefaultException(Exception):
+class PipeDefaultException(DecoratorException):
     ...
 
 
@@ -84,7 +100,7 @@ class Permission(DecoratorObj):
         ...
 
 
-class PermissionDefaultException(Exception):
+class PermissionDefaultException(DecoratorException):
     ...
 
 class Interceptor(DecoratorObj):
@@ -93,27 +109,26 @@ class Interceptor(DecoratorObj):
         super().__init__(self.intercept, True)
 
 
-    def _intercept_before(self):
+    def _before(self):
         ...
     
-    def _intercept_after(self,result:Response|Any):
+    def _after(self,result:Response|Any):
         ...
     
     async def intercept(self,function:Callable,*args,**kwargs):
-        if asyncio.iscoroutinefunction(self._intercept_before):
-            await  AsyncAPIFilterInject(self._intercept_before)(*args,**kwargs)
-        else:
-            APIFilterInject(self._intercept_before)(*args,**kwargs)
-
+        r = APIFilterInject(self._before)(*args,**kwargs)
+        if asyncio.iscoroutinefunction(self._before):
+            await r
+            
         result = await function(*args,**kwargs)
-        if asyncio.iscoroutinefunction(self._intercept_after):
-            await self._intercept_after(result)
-        else:
-            self._intercept_after(result)
+        r= APIFilterInject(self._after)(result,**kwargs)
+        if asyncio.iscoroutinefunction(self._after):
+            await  r
+
         return result
     
     async def do(self,function:Callable, *args, **kwargs):
         return await self.intercept(function,*args,**kwargs)
 
-class InterceptorDefaultException(Exception):
+class InterceptorDefaultException(DecoratorException):
     ...

@@ -1,16 +1,19 @@
-from typing import Any, Callable, Coroutine, Literal, Type, get_args
+from dataclasses import asdict
+from typing import Any, Callable, Coroutine, Literal, Optional, Type, get_args
 
+from aiohttp_retry import List
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import AlgorithmType, SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
 from app.classes.email import EmailInvalidFormatError
-from app.classes.template import HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
+from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.definition._service import BaseMiniServiceManager
-from app.depends.class_dep import KeepAliveQuery
+from app.depends.class_dep import KeepAliveQuery, ObjectsSearch
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
 from app.models.call_model import CallCustomSchedulerModel
@@ -19,9 +22,10 @@ from app.models.email_model import BaseEmailSchedulerModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
-from app.services.assets_service import AssetService, RouteAssetType, DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR
+from app.services.assets_service import AssetService, AssetType, AssetTypeNotAllowedError, RouteAssetType, DIRECTORY_SEPARATOR
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
+from app.services.file_service import FileService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.task_service import CeleryService, TaskManager, task_name
@@ -31,9 +35,10 @@ from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, co
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
+from app.services.aws_service import Object,DeleteError,ObjectWriteResult
 
 async def to_otp_path(template:str):
-    template = "otp\\"+template
+    template = "otp/" + template
     return {'template':template}
 
 
@@ -51,28 +56,9 @@ class RegisterSchedulerPipe(Pipe):
             taskManager.meta['algorithm'] = self.algorithm
         return {}
 
-class AuthPermissionPipe(Pipe):
-
-    @InjectInMethod()
-    def __init__(self,jwtAuthService:JWTAuthService):
-        super().__init__(True)
-        self.jwtAuthService = jwtAuthService
-
-    def pipe(self,tokens:TokensModel):
-        tokens = tokens.model_dump(include={'tokens'})
-        if isinstance(tokens,str):
-            tokens = [tokens]
-        temp = {}
-        for token in tokens:
-            val = self.jwtAuthService._decode_token(token)
-            permission:AuthPermission = AuthPermission(**val)
-            temp[permission.issued_for] = permission
-
-        return {'tokens':temp}
-
 class TemplateParamsPipe(Pipe):
     
-    def __init__(self,template_type:RouteAssetType,extension:str=None,accept_none=False):
+    def __init__(self,template_type:RouteAssetType=None,extension:str=None,accept_none=False):
         super().__init__(True)
         self.assetService= Get(AssetService)
         self.configService = Get(ConfigService)
@@ -84,11 +70,16 @@ class TemplateParamsPipe(Pipe):
             if template == '' and self.accept_none:
                 return {'template':template}
             
-            template+="."+self.extension
-            asset_routes = self.assetService.exportRouteName(self.template_type)
-            template = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
-            template = self.assetService.asset_rel_path(template,self.template_type)
-
+            if self.extension:
+                template+="."+self.extension
+            
+            if self.template_type:
+                asset_routes = self.assetService.exportRouteName(self.template_type)
+                template = self.assetService.asset_rel_path(template,self.template_type)
+            else: 
+                
+                asset_routes = self.assetService.get_assets_dict_by_path(template)
+                        
             if template not in asset_routes:
                 raise TemplateNotFoundError(template)
 
@@ -96,7 +87,7 @@ class TemplateParamsPipe(Pipe):
         
 class TemplateSignatureQueryPipe(TemplateParamsPipe):
     def __init__(self):
-        super().__init__('html', 'html', False)
+        super().__init__('email', 'html', False)
 
     async def pipe(self,scheduler: BaseEmailSchedulerModel):
         if scheduler.signature == None:
@@ -105,17 +96,6 @@ class TemplateSignatureQueryPipe(TemplateParamsPipe):
         scheduler.signature.template = val['template']
         return {}
         
-
-class TemplateQueryPipe(TemplateParamsPipe):
-    def __init__(self,*allowed_assets:RouteAssetType):
-        super().__init__(None)
-        self.allowed_assets = list(allowed_assets)
-
-    def pipe(self, asset:str,template:str):
-        self.assetService.check_asset(asset,self.allowed_assets)
-        self.template_type = asset #BUG 
-        return super().pipe(template)
-
 class CeleryTaskPipe(Pipe):
     
     def __init__(self):
@@ -160,11 +140,10 @@ class RelayPipe(Pipe):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Relay not allowed')
         
         if relay=='email' and self.parse_email:
-            relay = 'html'
+            ...
 
         return {'relay':relay}
     
-
 class TwilioPhoneNumberPipe(Pipe):
 
     PhoneNumberChoice = Literal['default','otp','chat','auto-mess']
@@ -221,7 +200,6 @@ class TwilioPhoneNumberPipe(Pipe):
         
         return pn
             
-
 class AuthClientPipe(Pipe):
 
     @InjectInMethod()
@@ -232,7 +210,6 @@ class AuthClientPipe(Pipe):
     def pipe(self,client:str,scope:str):
         return {'client':client,'scope':scope}
     
-
 class ForceClientPipe(Pipe):
 
     def __init__(self):
@@ -283,7 +260,6 @@ class ContactStatusPipe(Pipe):
         next_status:Status = Status._member_map_[next_status]
         return {'next_status':next_status}
     
-
 class OffloadedTaskResponsePipe(Pipe):
 
     def __init__(self, copy_res=False):
@@ -293,10 +269,8 @@ class OffloadedTaskResponsePipe(Pipe):
     def pipe(self, result: Any | Response, response: Response = None, scheduler: SchedulerModel = None, otpModel: OTPModel = None, taskManager: TaskManager = None, as_async: bool = None):
         as_async = self._determine_async(taskManager, as_async)
         result = self._process_result(result, taskManager)
-        response = self._prepare_response(result, response)
-        
         self._set_status_code(response, scheduler, otpModel, as_async)
-        return response
+        return result
 
     def _determine_async(self, taskManager: TaskManager, as_async: bool) -> bool:
         if taskManager is None and as_async is None:
@@ -307,38 +281,16 @@ class OffloadedTaskResponsePipe(Pipe):
 
     def _process_result(self, result: Any|Response, taskManager: TaskManager) -> Any | Response:
         
-        if (result == None or result.body == b'{}' or result.body == b'') and taskManager is not None:
+        if result == None  and taskManager is not None:
             return taskManager.results
         return result
-
-    def _prepare_response(self, result: Any | Response, response: Response) -> Response:
-        if not isinstance(result, Response):
-            result = JSONResponse(content=result)
-            if self.copy_res:
-                response = copy_response(result, response)
-            else:
-                response = result
-        else:
-            response = result
-        return response
 
     def _set_status_code(self, response: Response, scheduler: SchedulerModel, otpModel: OTPModel, as_async: bool):
         if (scheduler and scheduler.task_type != TaskType.NOW.value) or (otpModel and as_async) or as_async:
             response.status_code = 201
         else:
             response.status_code = 200
-
-
-class KeepAliveResponsePipe(Pipe):
-    def __init__(self):
-        super().__init__(False)
     
-    def pipe(self, result:Any|Response,keepAliveConn:KeepAliveQuery):
-        keepAliveConn.dispose()
-        # TODO add headers and status code
-        return result
-    
-
 class TwilioResponseStatusPipe(Pipe):
     def __init__(self,before=False,status_code=status.HTTP_204_NO_CONTENT):
         super().__init__(before)
@@ -411,7 +363,7 @@ class ContactToInfoPipe(Pipe,PointerIterator):
                     filtered_content.append(content)
                 continue
             
-            val = self.get_val(ptr)
+            val = ptr.get_val()
             index = getattr(ptr,'index')  
             
             if getattr(ptr, 'sender_type', 'raw') == 'subs':
@@ -475,7 +427,6 @@ class ContactToInfoPipe(Pipe,PointerIterator):
         
         return {'scheduler':scheduler}
 
-
 class InjectTemplateInterface:
 
 
@@ -517,8 +468,8 @@ class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterfa
                     if ptr == None:
                         ...
 
-                    val = self.get_val(ptr)
-                    index = self.index_ptr.get_val(idx_ptr)
+                    val = ptr.get_val()
+                    index = idx_ptr.get_val()
                     if val == None:
                         ...
                     
@@ -555,14 +506,11 @@ class ContentIndexPipe(Pipe,PointerIterator):
 
         for i,content in enumerate(scheduler.content):
             ptr = self.ptr(content)
-            index = self.get_val(ptr)
+            index = ptr.get_val()
             val =  index if index != None else i
-            self.set_val(ptr,val)
+            ptr.set_val(val)
         
         return {'scheduler':scheduler}
-
-
-
 
 class  GlobalPointerIteratorPipe(Pipe):
 
@@ -575,7 +523,6 @@ class  GlobalPointerIteratorPipe(Pipe):
             globalIter = PointerIterator(globalIter,self.sep,dict)
 
         return {'globalIter':globalIter}
-
 
 class DocumentFriendlyPipe(Pipe):
 
@@ -635,3 +582,101 @@ class MiniServiceInjectorPipe(Pipe):
             self.key: self.service.MiniServiceStore.get(profile)
             }
 
+class FilterAllowedSchemaPipe(Pipe):
+
+    @InjectInMethod()
+    def __init__(self,assetService:AssetService):
+        super().__init__(False)
+        self.assetService = assetService
+    
+    def pipe(self,result:dict[str,dict],authPermission:AuthPermission):
+        if authPermission == None:
+            return result
+        temp_res = {}
+        for path,schema in result.items():
+            try:
+                self.assetService._raw_verify_asset_permission(authPermission,path)
+                temp_res[path]=schema
+            except:
+                continue
+        
+        return temp_res
+
+class ValidFreeInputTemplatePipe(Pipe):
+
+    allowed_assets = tuple(AssetType._value2member_map_.keys())
+    allowed_extension = set(Extension._value2member_map_.keys())
+
+    def __init__(self, accept_empty=True,accept_dir=True,allowed_extension=None,allowed_assets=None):
+        super().__init__(True)
+        self.fileService = Get(FileService)
+        self.accept_empty=accept_empty
+        self.accept_dir = accept_dir
+        self._allowed_extension = self.allowed_extension if allowed_extension == None else allowed_extension
+        self._allowed_assets = self.allowed_assets if allowed_assets == None else allowed_assets
+
+        
+
+    def pipe (self,template:str,objectSearch:ObjectsSearch):
+        if template != '':
+            if not template.startswith(self._allowed_assets):
+                raise AssetTypeNotAllowedError
+            if not self.fileService.is_file(template,False,self._allowed_extension) and not self.accept_dir:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Directory Not allowed')            
+        else:
+            if not self.accept_empty:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Object name cannot be empty')
+        
+        objectSearch.is_file = self.fileService.soft_is_file(template)
+        return {}
+    
+class ObjectS3OperationResponsePipe(Pipe):
+    class ResponseModel(BaseModel):
+        meta:Optional[dict|list[dict]] = None
+        errors:Optional[List[dict]] =[]
+        result: Optional[dict] = None
+        content: Optional[str] = ""
+    
+    def __init__(self,):
+        super().__init__(False)
+
+    def pipe(self,result:dict):
+        meta:Object|list[Object]|None = result.get('meta',None) 
+        more_meta= type(meta) == list
+        write_result:ObjectWriteResult = result.get('result',None)
+
+        errors = [{
+                "object_name": getattr(e, "object_name", None),
+                "version_id": getattr(e, "version_id", None),
+                "code": getattr(e, "code", None),
+                "message": getattr(e, "message", None)} for e in result.get('errors',[]) ]
+        
+        write_result = {"bucket_name": write_result.bucket_name,
+                "object_name": write_result.object_name,
+                "version_id": write_result.version_id,
+                "etag": write_result.etag,
+                "last_modified":write_result.last_modified.isoformat(),
+                "location":write_result.location,
+                "http_headers": write_result.http_headers} if  write_result != None else None
+
+        
+        if meta!=None:
+            if not more_meta:   
+                meta=[meta]
+
+            def parse_meta(m):
+                m:dict = asdict(m)
+                m['last_modified'] = m['last_modified'].isoformat()
+                m.pop('storage_class',None), m.pop('owner_id',None), m.pop('owner_name',None), m.pop('is_dir',None)
+                return m
+            meta = [parse_meta(m) for m in meta]
+
+            if not more_meta:
+                meta=meta[0]
+            
+        return {
+            'meta':meta,
+            'errors':errors,
+            'result':write_result,
+            'content': result.get('content',"")
+        }

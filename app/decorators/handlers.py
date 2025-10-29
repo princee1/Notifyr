@@ -5,11 +5,12 @@ from typing import Callable
 from fastapi.exceptions import ResponseValidationError
 from h11 import LocalProtocolError
 import hvac
+from minio import S3Error, ServerError
 import requests
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
-from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
+from app.classes.template import SchemaValidationError, SkipTemplateCreationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
 from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
@@ -26,7 +27,7 @@ from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
-from app.services.assets_service import AssetNotFoundError
+from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
@@ -35,6 +36,7 @@ from requests.exceptions import SSLError, Timeout
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError
+from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 
 class ServiceAvailabilityHandler(Handler):
 
@@ -131,6 +133,8 @@ class TemplateHandler(Handler):
                 'error': error,
                 'message': 'Validation Error'
             })
+        except SkipTemplateCreationError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,detail='Couldnt create a template')
 
 
 class WebSocketHandler(Handler):
@@ -657,4 +661,63 @@ class MiniServiceHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                detail="MiniService cannot be identified"
+            )
+
+class S3Handler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except S3Error as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    'message':'S3 Service error occurred',
+                    'error_code':e.code,
+                    'error_message':e.message,
+                    'request_id':e.request_id,
+                    'resource':e.resource,
+                    'object_name':e.object_name
+                }
+            )
+    
+        except ServerError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Failed to build S3 Service due to server error: {str(e)}'
+            )
+
+class FileNamingHandler(Handler):
+
+    async def handle(function: Callable, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except AssetTypeNotAllowedError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Asset type not allowed for upload."
+            )
+
+        except AssetTypeNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Asset type not found."
+            )
+
+        except MultipleExtensionError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Multiple file extensions detected; only one is allowed."
+            )
+
+        except ExtensionNotAllowedError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The file extension is not allowed for this asset type."
+            )
+        except AssetConfusionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
             )

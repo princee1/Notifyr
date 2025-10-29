@@ -6,6 +6,7 @@ import functools
 from typing import Annotated, Callable, Coroutine, Literal
 from fastapi import HTTPException, Header, Request
 import requests
+from app.classes.profiles import ProfileState
 from app.classes.template import SMSTemplate
 from app.definition import _service
 from app.interface.redis_event import RedisEventInterface
@@ -38,14 +39,15 @@ from aiohttp import BasicAuth
 from twilio.rest.api.v2010.account import AccountInstance
 
 @_service.MiniService(
-    links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True)]
+    links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True,to_async_verify=True)]
 )
 class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
     def __init__(self, configService: ConfigService,profileMiniService:ProfileMiniService[TwilioProfileModel]) -> None:
         self.depService = profileMiniService
         super().__init__(profileMiniService,None)
         self.configService = configService
-
+        self.mode:str = ...
+        self.testUrl:str = ...
         self.twilio_url:str  = ...
 
     @property
@@ -74,8 +76,9 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
             if float(account.balance.fetch().balance)<0:
                 _service.BuildSkipError
         
-            mode = self.configService['TWILIO_MODE']
-            self.twilio_url = self.depService.model.twilio_url if mode == "prod" else self.configService.TWILIO_TEST_URL
+            self.mode = self.configService['TWILIO_MODE']
+            self.testUrl = self.configService['TWILIO_TEST_URL']
+            self.twilio_url = self.depService.model.twilio_url if self.mode == "prod" else self.testUrl
                 
         except TwilioRestException as e:
                 raise _service.BuildFailureError(e.details)
@@ -85,8 +88,19 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
             raise _service.BuildFailureError(e.args)
 
     def verify_dependency(self):
-        ...
-    
+        mode = self.configService.getenv('TWILIO_MODE','prod')
+        if mode != 'prod':
+            if self.configService.getenv('TWILIO_TEST_URL',None) == None:
+                raise _service.BuildFailureError('TWILIO_TEST_URL must be set in non-prod mode')
+            
+        if self.depService.model.profile_state != ProfileState.ACTIVE:
+            raise _service.BuildFailureError(f'Profile is not active {self.depService.model.profile_state.name} ')
+
+    async def async_verify_dependency(self):
+        async with self.depService.statusLock.reader:
+            self.verify_dependency()
+            return True
+
     async def verify_twilio_token(self, request: Request):
         twilio_signature = request.headers.get("X-Twilio-Signature", None)
 

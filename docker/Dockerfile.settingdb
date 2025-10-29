@@ -3,13 +3,15 @@ FROM node:18-alpine
 # install json-server
 RUN npm install -g json-server
 
+# RUN npm install yargs
+
 RUN adduser -S setting
 
 USER setting
 
 WORKDIR /data
 
-COPY ./settingdb/server.js ./data/
+COPY ./settingdb/server.js ./
 
 COPY ./settings_db.json /data/db.json
 

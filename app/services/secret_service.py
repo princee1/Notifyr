@@ -3,8 +3,8 @@ import time
 from typing import Literal, TypedDict
 import requests
 from app.classes.secrets import ChaCha20SecretsWrapper
-from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, TransitVaultEngine
-from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
+from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, MinioS3VaultEngine, TransitVaultEngine
+from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, GUNICORN_BUILD_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.config_service import MODE, ConfigService
 import hvac
@@ -91,9 +91,9 @@ class HCVaultService(BaseService,SchedulerInterface):
             
     def _create_client(self,build_state:int):
         self.client = hvac.Client(self.configService.VAULT_ADDR)
-        _raise = build_state==DEFAULT_BUILD_STATE
+        _raise = build_state==DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE
 
-        if build_state == DEFAULT_BUILD_STATE:
+        if build_state == DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE:
             self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets',_raise)
             self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',_raise)
 
@@ -108,6 +108,7 @@ class HCVaultService(BaseService,SchedulerInterface):
         self.generation_engine = KV2VaultEngine(self.client,VaultConstant.NOTIFYR_GENERATION_MOUNT_POINT)
         self.transit_engine = TransitVaultEngine(self.client,VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT)
         self.database_engine = DatabaseVaultEngine(self.client,VaultConstant.NOTIFYR_DB_MOUNT_POINT)
+        self.minio_engine = MinioS3VaultEngine(self.client,VaultConstant.NOTIFYR_MINIO_MOUNT_POINT)
 
         return True
 
@@ -182,16 +183,21 @@ class HCVaultService(BaseService,SchedulerInterface):
             raise BuildAbortError(f"Forbidden: {e}")
         except hvac.exceptions.Unauthorized as e:
             raise BuildAbortError(f"Unauthorized: {e}")
+        except hvac.exceptions.VaultDown:
+            raise BuildAbortError('Vault Is Sealed')
         except requests.exceptions.ConnectionError as e:
             raise BuildAbortError(f"Vault server not reachable: {e}")
         except requests.exceptions.Timeout as e:
             raise BuildAbortError("Vault request timed out: {e}")
   
     def _dev_token_login(self):
+        dev_root_token = self.configService.getenv('VAULT_DEV_ROOT_TOKEN_ID',None)
+        if not dev_root_token:
+            raise BuildAbortError('No dev root token provided')
         try:
-            ...
-        except:
-            ...
+            self.client = hvac.Client(self.configService.VAULT_ADDR,token=dev_root_token)
+        except Exception as e:
+            raise BuildAbortError(f"Failed to create Vault client: {e}")
 
     def renew_auth_token(self):
         return self.client.auth.token.renew_self()

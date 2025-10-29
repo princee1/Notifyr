@@ -130,13 +130,17 @@ class SMTPProfileModel(ProtocolProfileModel):
         
         return self
 
-    @field_validator('disposition_notification_to','return_receipt_to')
-    def email_rd_validation(cls,email):
-        if email == None:
-            return cls.email_address
-        if not email_validator(email):
-            raise ValueError('Email format not valid')
-        return email
+    @model_validator(mode='after')
+    def email_rd_validation(self,):
+        def parse_email(email):
+            if email == None:
+                return self.email_address
+            if not email_validator(email):
+                raise ValueError('Email format not valid')
+            return email
+        
+        self.disposition_notification_to = parse_email(self.disposition_notification_to)
+        self.return_receipt_to = parse_email(self.return_receipt_to)
 
 class IMAPProfileModel(ProtocolProfileModel):
     password: str = Field(min_length=1,max_length=400)
