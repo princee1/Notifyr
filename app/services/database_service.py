@@ -385,15 +385,6 @@ class RedisService(DatabaseService):
         for i in range(len_db):
             await self.db[i].close()
 
-
-class MemCachedTypeValueError(BaseError):
-    ...
-
-class MemCacheNoValidKeysDefinedError(BaseError):
-    ...
-
-class MemCachedCacheMissError(BaseError):
-    ...
 @Service()
 class MemCachedService(DatabaseService,SchedulerInterface):
     

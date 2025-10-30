@@ -108,7 +108,7 @@ class StreamConstant:
     CONTACT_CREATION_EVENT= 'contact-creation-event'
     CELERY_RETRY_MECHANISM='retry-mechanism'
     PROFILE_ERROR_STREAM='profile-error-stream'
-    S3_EVENT_STREAM='s3-event-stream'
+    S3_EVENT_STREAM='s3_object_events'
 
 
 class SubConstant:
@@ -292,3 +292,4 @@ class MinioConstant:
     ASSETS_BUCKET = 'assets'
     STATIC_TEMPLATE = 'static'
     ENCRYPTED_KEY = 'encrypted'
+    MINIO_EVENT='minio_events'

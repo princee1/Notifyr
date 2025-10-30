@@ -33,10 +33,9 @@ from twilio.base.exceptions import TwilioRestException
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
 from requests.exceptions import SSLError, Timeout
 
-from app.services.database_service import MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError
+from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError

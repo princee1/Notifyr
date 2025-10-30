@@ -233,7 +233,7 @@ class ConfigService(_service.BaseService):
 
         # REDIS CONFIG #
 
-        self.REDIS_URL:str = self.getenv("REDIS_URL","redis://localhost" if self.MODE == MODE.DEV_MODE else "redis://redis")
+        self.REDIS_URL:str = "redis://"+self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")
 
         # REDIS CONFIG #
         self.MEMCACHED_URL:str = self.getenv("MEMCHACHED_URL","localhost" if self.MODE == MODE.DEV_MODE else "memcached")

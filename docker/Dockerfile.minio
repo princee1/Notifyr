@@ -1,15 +1,21 @@
-FROM debian:stable-slim AS pwgen-builder
+FROM debian:stable-slim AS builder
 
-RUN apt-get update && apt-get install -y pwgen && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y pwgen curl && rm -rf /var/lib/apt/lists/*
+
+RUN curl -L -o /usr/bin/jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 \
+    && chmod +x /usr/bin/jq
 
 FROM minio/minio:latest
 
-ARG APP_HOST=app
+ARG ASSETS_STORAGE_LIMIT=500MB
+ARG STATIC_STORAGE_LIMIT=500MB
+ARG S3_MODE=dev
 
 WORKDIR /app
 
 # Copy pwgen for generating secrets
-COPY --from=pwgen-builder /usr/bin/pwgen /usr/bin/pwgen
+COPY --from=builder /usr/bin/pwgen /usr/bin/pwgen
+COPY --from=builder /usr/bin/jq /usr/bin/jq
 
 # Copy assets
 COPY ./assets/ ./assets/
@@ -23,7 +29,7 @@ RUN touch ./policy/template-access.json ./policy/vault-admin.json
 # Directory for secrets
 RUN mkdir /minio /minio/secrets
 
-# Template bucket access policy (S3 permissions)
+
 RUN cat <<EOF > ./policy/assets-access.json
 {
   "Version": "2012-10-17",
@@ -47,7 +53,6 @@ RUN cat <<EOF > ./policy/assets-access.json
 }
 EOF
 
-# Vault admin policy (user + policy management)
 RUN cat <<EOF > ./policy/vault-admin.json
 {
   "Version": "2012-10-17",
@@ -55,9 +60,14 @@ RUN cat <<EOF > ./policy/vault-admin.json
     {
       "Effect": "Allow",
       "Action": [
+        "s3:PutBucketNotification",
+        "s3:GetBucketNotification",
         "admin:user:svcacct",
         "admin:user:list",
-        "admin:policy:list"
+        "admin:policy:list",
+        "admin:SetConfig",
+        "admin:GetConfig",
+        "admin:ServerUpdate"
       ],
       "Resource": ["*"]
     }
@@ -65,12 +75,10 @@ RUN cat <<EOF > ./policy/vault-admin.json
 }
 EOF
 
-# Copy init script
 COPY --chmod=700 ./scripts/minio-init.sh .
-COPY --chmod=700 ./scripts/minio-entrypoint.sh .
+RUN ./minio-init.sh ${ASSETS_STORAGE_LIMIT} ${STATIC_STORAGE_LIMIT} ${S3_MODE}
 
-# Run init script
-RUN ./minio-init.sh ${APP_HOST}
+COPY --chmod=700 ./scripts/minio-entrypoint.sh .
 
 # Make secrets readable
 RUN chmod 664 /minio/secrets/*

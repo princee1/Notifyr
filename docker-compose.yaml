@@ -66,10 +66,11 @@ services:
   minio:
     image: minio/minio:latest
     container_name: minio
-    restart: always
+    restart: unless-stopped
     build:
       args:
-        - S3_STORAGE_LIMIT=${S3_STORAGE_LIMIT}
+        - ASSETS_STORAGE_LIMIT=${ASSETS_STORAGE_LIMIT:-500MB}
+        - STATIC_STORAGE_LIMIT=${STATIC_STORAGE_LIMIT:-500MB}
         - S3_MODE=dev
       context: .
       dockerfile: docker/Dockerfile.minio
@@ -81,6 +82,7 @@ services:
       - minio-secret:/minio/secrets
     environment:
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
+      - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
     
     depends_on:
       - redis
