@@ -1,0 +1,7 @@
+FROM redis:latest
+
+RUN cat <<EOF /usr/local/etc/redis/redis.acl.template >
+user default off
+user __REDIS_USER__ on >__REDIS_PASSWORD__ ~* +@all
+EOF
+
