@@ -16,11 +16,12 @@ class DecoratorPriority(Enum):
 
 class DecoratorException(Exception):
 
-    def __init__(self,status_code=None,details:Any=None,headers:dict[str,str]=None, *args):
+    def __init__(self,status_code=None,details:Any=None,headers:dict[str,str]=None,response:Response=None, *args):
         super().__init__(*args)
         self.status_code = status_code
         self.details = details
         self.headers=headers
+        self.response = response
 
     def raise_http_exception(self):
         if self.status_code == None:
@@ -109,20 +110,20 @@ class Interceptor(DecoratorObj):
         super().__init__(self.intercept, True)
 
 
-    def _before(self):
+    def intercept_before(self):
         ...
     
-    def _after(self,result:Response|Any):
+    def intercept_after(self,result:Response|Any):
         ...
     
     async def intercept(self,function:Callable,*args,**kwargs):
-        r = APIFilterInject(self._before)(*args,**kwargs)
-        if asyncio.iscoroutinefunction(self._before):
+        r = APIFilterInject(self.intercept_before)(*args,**kwargs)
+        if asyncio.iscoroutinefunction(self.intercept_before):
             await r
             
         result = await function(*args,**kwargs)
-        r= APIFilterInject(self._after)(result,**kwargs)
-        if asyncio.iscoroutinefunction(self._after):
+        r= APIFilterInject(self.intercept_after)(result,**kwargs)
+        if asyncio.iscoroutinefunction(self.intercept_after):
             await  r
 
         return result

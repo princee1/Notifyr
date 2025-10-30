@@ -33,10 +33,14 @@ from twilio.base.exceptions import TwilioRestException
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
 from requests.exceptions import SSLError, Timeout
 
+from app.services.database_service import MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
+from aiomcache.exceptions import ClientException, ValidationException 
+from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
+
 
 class ServiceAvailabilityHandler(Handler):
 
@@ -721,3 +725,31 @@ class FileNamingHandler(Handler):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
             )
+
+class MemCachedHandler(Handler):
+
+    async def handle(function:Callable,*args,**kwargs):
+
+        try:
+            return await function(*args,**kwargs)
+        
+        except MemCachedTypeValueError as e:
+            ...
+        
+        except MemCacheNoValidKeysDefinedError as e:
+            ...
+        
+        except MemcacheClientError as e:
+            ...
+        
+        except MemcacheServerError as e:
+            ...
+        
+        except MemcacheUnexpectedCloseError as e:
+            ...
+        
+        except ValidationException as e:
+            ...
+        
+        except ClientException as e:
+            ...

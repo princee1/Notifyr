@@ -127,7 +127,7 @@ class LinkService(BaseService):
             **ip_data
         }
 
-    @Cache('redis')(SECONDS_IN_AN_HOUR*2,coder=MyJSONCoder,key_builder=ip_lookup_key_builder, namespace="")
+    @Cache('fastapi-default-cache')(SECONDS_IN_AN_HOUR*2,coder=MyJSONCoder,key_builder=ip_lookup_key_builder, namespace="")
     async def ip_lookup(self, ip_address):
         headers = {
             "Accept": "application/json",

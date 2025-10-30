@@ -195,6 +195,9 @@ class Helper:
                     return await deco_prime(*args, **kwargs)
                 except error_type as e:
 
+                    if e.response != None and isinstance(e.response,Response):
+                        return e.response                    
+
                     e.raise_http_exception()
 
                     if default_error == None:
@@ -579,6 +582,9 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                                 status_code=status.HTTP_403_FORBIDDEN)
 
                     except PermissionDefaultException as e:
+                        if e.response != None and isinstance(e.response,Response):
+                            return e.response
+                        
                         e.raise_http_exception()
 
                         if default_error == None:
@@ -655,6 +661,9 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
                                 status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
 
                 except GuardDefaultException as e:
+                    if e.response != None and isinstance(e.response,Response):
+                        return e.response
+                    
                     e.raise_http_exception()
 
                     if default_error == None:
@@ -722,6 +731,9 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                         return result
 
                 except PipeDefaultException as e:
+                    if e.response != None and isinstance(e.response,Response):
+                        return e.response
+                    
                     e.raise_http_exception() 
                     if default_error == None:
                         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -10,7 +10,7 @@ from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatu
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
 from app.services.assets_service import AssetService
-from app.services.database_service import JSONServerDBService, MongooseService, RedisService, TortoiseConnectionService
+from app.services.database_service import JSONServerDBService, MemCachedService, MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
 from app.services.rate_limiter_service import RateLimiterService
 from app.services.secret_service import HCVaultService
@@ -31,6 +31,9 @@ from tortoise.contrib.fastapi import register_tortoise
 import traceback
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.backends.memcached import MemcachedBackend
+
 from .app_meta import *
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
@@ -175,12 +178,15 @@ class Application(EventInterface):
         BaseService.CONTAINER_LIFECYCLE_SCOPE = False
 
         redisService = Get(RedisService)
+        memcachedService = Get(MemCachedService)
         
         if redisService.service_status == ServiceStatus.AVAILABLE:
             await redisService.create_group()
             redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
 
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
+        # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
+        # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
 
         assetService:AssetService = Get(AssetService)
         
