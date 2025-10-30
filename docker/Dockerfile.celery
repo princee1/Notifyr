@@ -14,7 +14,7 @@ COPY ./app ./app/
 
 COPY ./requirements_dev.txt .
 
-COPY ./Makefile.prod ./Makefile
+COPY ./prod.Makefile ./Makefile
 
 COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
 
