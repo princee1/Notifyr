@@ -20,7 +20,7 @@ from .file_service import BaseFileRetrieverService, FileService
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Dict
-from app.services.database_service import RotateCredentialsInterface
+from app.services.database_service import TempCredentialsDatabaseService
 from fnmatch import fnmatch
 
 class AmazonS3ServiceError(BaseError):
@@ -41,11 +41,10 @@ MINIO_OBJECT_BUILD_STATE = 1001
 MINIO_OBJECT_DESTROY_STATE = 1001
 
 @Service()
-class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
+class AmazonS3Service(TempCredentialsDatabaseService,BaseFileRetrieverService):
     
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
-        super().__init__(configService,fileService)
-        RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.MINIO_TTL)
+        super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.MINIO_TTL)
         self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
         self.download_cache = {}
     

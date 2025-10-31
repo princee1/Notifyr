@@ -16,7 +16,7 @@ from app.definition._interface import Interface, IsInterface
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import MongooseDBConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.helper import quote_safe_url, reverseDict
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
@@ -45,11 +45,19 @@ ENGINE_KEY = 'engine'
 DB_KEY = 'db'
 
 
-@IsInterface
-class RotateCredentialsInterface(Interface):
+@AbstractServiceClass()
+class DatabaseService(BaseService): 
+    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
+        super().__init__()
+        self.configService= configService
+        self.fileService = fileService
 
-    
-    def __init__(self,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+@AbstractServiceClass()
+class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
+
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+        super().__init__(configService,fileService)
+        SchedulerInterface.__init__(self,)
         self.vaultService = vaultService
         self.creds:VaultDatabaseCredentials = {}
         self.max_retry = max_retry
@@ -59,9 +67,23 @@ class RotateCredentialsInterface(Interface):
         self.last_rotated = None
         self.auth_ttl = ttl
 
+        delay = IntervalParams( 
+            seconds=self.random_buffer_interval(self.auth_ttl) 
+            )
+        self.interval_schedule(delay, self.creds_rotation)
+
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError("Vault Service can’t issue creds")
+
+    async def async_pingService(self, **kwargs):
+        self.check_auth()
+        super().async_pingService(**kwargs)
+
+    def sync_pingService(self, **kwargs):
+        self.check_auth()
+        super().sync_pingService(**kwargs)
+        
         
     @staticmethod
     def random_buffer_interval(ttl):
@@ -121,15 +143,9 @@ class RotateCredentialsInterface(Interface):
         if self.last_rotated == None:
             return True
         
-        return  time.time() - self.last_rotated < self.auth_ttl
+        return  time.time() - self.last_rotated < self.auth_ttl    
 
-@AbstractServiceClass()
-class DatabaseService(BaseService): 
-    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__()
-        self.configService= configService
-        self.fileService = fileService
-    
+
 
 @Service()
 class RedisService(DatabaseService):
@@ -294,20 +310,20 @@ class RedisService(DatabaseService):
     def build(self,build_state=-1):
         host = self.configService.REDIS_URL
         host = host.replace('redis://','')
-        self.redis_celery = Redis(host=host,db=0)
-        self.redis_limiter = Redis(host=host,db=1)
-        self.redis_cache = Redis(host=host,db=3,decode_responses=True)
+        self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB)
+        self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB)
+        self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True)
 
         if self.configService.celery_env == CeleryMode.none:
-            self.redis_events=Redis(host=host,db=2,decode_responses=True)
+            self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
         else :
-            self.redis_events = SyncRedis(host=host,db=2,decode_responses=True)
+            self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
 
         self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
-            0:self.redis_celery,
-            1:self.redis_limiter,
-            2:self.redis_events,
-            3:self.redis_cache,
+            RedisConstant.CELERY_DB:self.redis_celery,
+            RedisConstant.LIMITER_DB:self.redis_limiter,
+            RedisConstant.EVENT_DB:self.redis_events,
+            RedisConstant.CACHE_DB:self.redis_cache,
             'celery':self.redis_celery,
             'limiter':self.redis_limiter,
             'events': self.redis_events,
@@ -469,7 +485,7 @@ D = TypeVar('D',bound=Document)
 @Service(
     links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
 )     
-class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInterface):
+class MongooseService(TempCredentialsDatabaseService):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
     DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
 
@@ -479,15 +495,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         fileService: FileService,
         vaultService: HCVaultService,
     ):
-        super().__init__(configService, fileService)
-        SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(
-            self, vaultService, VaultTTLSyncConstant.MONGODB_AUTH_TTL
-        )
-        delay = IntervalParams( 
-            seconds=self.random_buffer_interval(self.auth_ttl) 
-            )
-        self.interval_schedule(delay, self.creds_rotation)
+        super().__init__(configService, fileService,vaultService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
 
         self.client: AsyncIOMotorClient | None = None
         self._documents = []
@@ -617,32 +625,18 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     ##################################################
     # Healthcheck
     ##################################################
-    async def async_pingService(self, **kwargs):
-        self.check_auth()
-
-    def sync_pingService(self, **kwargs):
-        super().sync_pingService(**kwargs)
-        self.check_auth()
-
+    
     def destroy(self, destroy_state = ...):
         self.close_connection()
     
 @Service(
     links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
 )
-class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
+class TortoiseConnectionService(TempCredentialsDatabaseService):
     DATABASE_NAME = 'notifyr'
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
-        super().__init__(configService, None)
-        SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
-
-        delay = IntervalParams(
-            seconds=self.random_buffer_interval(self.auth_ttl)
-        )
-
-        self.interval_schedule(delay,self.creds_rotation)
+        super().__init__(configService, None,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
 
     def build(self,build_state=-1):
         try:
@@ -686,13 +680,6 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
         self.generate_creds()
         await self.init_connection(True)
     
-    def sync_pingService(self,**kwargs):
-        self.check_auth()
-        super().sync_pingService(**kwargs)
-
-    async def async_pingService(self,**kwargs):
-        self.check_auth()
-        await super().async_pingService(**kwargs)
 
 @Service()  
 class JSONServerDBService(DatabaseService,SchedulerInterface):
