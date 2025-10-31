@@ -40,11 +40,12 @@ class AmazonSNSError(Exception):
 MINIO_OBJECT_BUILD_STATE = 1001
 MINIO_OBJECT_DESTROY_STATE = 1001
 
-@Service()
-class AmazonS3Service(TempCredentialsDatabaseService,BaseFileRetrieverService):
+@Service(abstract_service_register=[BaseFileRetrieverService])
+class AmazonS3Service(TempCredentialsDatabaseService):
     
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
-        super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.MINIO_TTL)
+        TempCredentialsDatabaseService.__init__(self,configService,fileService,vaultService,VaultTTLSyncConstant.MINIO_TTL)
+        
         self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
         self.download_cache = {}
     

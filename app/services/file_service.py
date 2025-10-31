@@ -127,8 +127,9 @@ class FileService(BaseService,):
 @AbstractServiceClass()
 class BaseFileRetrieverService(BaseService,IntervalInterface):
     
-    def __init__(self,configService:ConfigService,fileService:FileService):
-        super().__init__()
+    def __init__(self,configService:ConfigService,fileService:FileService,start_now:bool=False,interval:float=None):
+        BaseService.__init__(self)
+        IntervalInterface.__init__(self,start_now,interval)
         self.configService = configService
         self.fileService = fileService
     

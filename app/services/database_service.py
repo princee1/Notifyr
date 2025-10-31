@@ -48,7 +48,7 @@ DB_KEY = 'db'
 @AbstractServiceClass()
 class DatabaseService(BaseService): 
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__()
+        BaseService.__init__(self)
         self.configService= configService
         self.fileService = fileService
 
@@ -56,7 +56,7 @@ class DatabaseService(BaseService):
 class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
 
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
-        super().__init__(configService,fileService)
+        DatabaseService.__init__(self,configService,fileService)
         SchedulerInterface.__init__(self,)
         self.vaultService = vaultService
         self.creds:VaultDatabaseCredentials = {}

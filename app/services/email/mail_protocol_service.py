@@ -404,7 +404,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
     override_init=True,
     links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True)]
     )
-class IMAPEmailMiniService(BaseEmailService,EmailReadInterface,EmailInterface):
+class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
 
     @dataclass
     class IMAPMailboxes:
