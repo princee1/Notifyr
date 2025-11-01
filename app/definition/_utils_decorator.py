@@ -106,8 +106,10 @@ class PermissionDefaultException(DecoratorException):
 
 class Interceptor(DecoratorObj):
 
-    def __init__(self,):
+    def __init__(self,filter_before_params:bool= True,filter_after_params:bool=True):
         super().__init__(self.intercept, True)
+        self.filter_before_params = filter_before_params
+        self.filter_after_params = filter_after_params
 
 
     def intercept_before(self):
@@ -117,12 +119,18 @@ class Interceptor(DecoratorObj):
         ...
     
     async def intercept(self,function:Callable,*args,**kwargs):
-        r = APIFilterInject(self.intercept_before)(*args,**kwargs)
+
+        if self.filter_before_params:r = APIFilterInject(self.intercept_before)(*args,**kwargs) 
+        else:r=self.intercept_before(*args,**kwargs)
+
         if asyncio.iscoroutinefunction(self.intercept_before):
             await r
             
         result = await function(*args,**kwargs)
-        r= APIFilterInject(self.intercept_after)(result,**kwargs)
+
+        if self.filter_after_params: r = APIFilterInject(self.intercept_after)(result,*args,**kwargs) 
+        else: self.intercept_after(*args,**kwargs)
+
         if asyncio.iscoroutinefunction(self.intercept_after):
             await  r
 

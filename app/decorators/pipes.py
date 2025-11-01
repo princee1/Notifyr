@@ -58,14 +58,17 @@ class RegisterSchedulerPipe(Pipe):
 
 class TemplateParamsPipe(Pipe):
     
-    def __init__(self,template_type:RouteAssetType=None,extension:str=None,accept_none=False):
+    asset_routes_key='asset_routes'
+
+    def __init__(self,template_type:RouteAssetType=None,extension:str=None,accept_none=False,inject_asset_routes=False):
         super().__init__(True)
         self.assetService= Get(AssetService)
         self.configService = Get(ConfigService)
         self.template_type = template_type
         self.extension = extension
         self.accept_none = accept_none
-    
+        self.inject_asset_routes = inject_asset_routes
+
     async def pipe(self,template:str):
             if template == '' and self.accept_none:
                 return {'template':template}
@@ -77,12 +80,14 @@ class TemplateParamsPipe(Pipe):
                 asset_routes = self.assetService.exportRouteName(self.template_type)
                 template = self.assetService.asset_rel_path(template,self.template_type)
             else: 
-                
                 asset_routes = self.assetService.get_assets_dict_by_path(template)
                         
             if template not in asset_routes:
                 raise TemplateNotFoundError(template)
 
+            if self.inject_asset_routes:
+                return asset_routes
+            
             return {'template':template}
         
 class TemplateSignatureQueryPipe(TemplateParamsPipe):
@@ -615,33 +620,34 @@ class ValidFreeInputTemplatePipe(Pipe):
         self._allowed_extension = self.allowed_extension if allowed_extension == None else allowed_extension
         self._allowed_assets = self.allowed_assets if allowed_assets == None else allowed_assets
 
-        
 
-    def pipe (self,template:str,objectSearch:ObjectsSearch):
-        if template != '':
+    def pipe (self,template:str,objectsSearch:ObjectsSearch):
+        if template != '': # if the template input is not empty
             if not template.startswith(self._allowed_assets):
                 raise AssetTypeNotAllowedError
             if not self.fileService.is_file(template,False,self._allowed_extension) and not self.accept_dir:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Directory Not allowed')            
-        else:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Directory Not allowed')
+            
+            objectsSearch.is_file = self.fileService.soft_is_file(template)
+            if not objectsSearch.is_file and objectsSearch.version_id:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,'There is no version on prefix')
+
+        else: # the template is empty
             if not self.accept_empty:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST,'Object name cannot be empty')
-        
-        objectSearch.is_file = self.fileService.soft_is_file(template)
+            objectsSearch.is_file = False
+       
         return {}
     
 class ObjectS3OperationResponsePipe(Pipe):
     class ResponseModel(BaseModel):
-        meta:Optional[dict|list[dict]] = None
-        errors:Optional[List[dict]] =[]
-        result: Optional[dict] = None
-        content: Optional[str] = ""
+        ...
     
     def __init__(self,):
         super().__init__(False)
 
     def pipe(self,result:dict):
-        meta:Object|list[Object]|None = result.get('meta',None) 
+        meta:Object|list[Object]|None = result.get('meta',[]) 
         more_meta= type(meta) == list
         write_result:ObjectWriteResult = result.get('result',None)
 
@@ -657,10 +663,10 @@ class ObjectS3OperationResponsePipe(Pipe):
                 "etag": write_result.etag,
                 "last_modified":write_result.last_modified.isoformat(),
                 "location":write_result.location,
-                "http_headers": write_result.http_headers} if  write_result != None else None
+                "http_headers": write_result.http_headers} if  write_result != None else {}
 
         
-        if meta!=None:
+        if meta:
             if not more_meta:   
                 meta=[meta]
 
@@ -674,9 +680,12 @@ class ObjectS3OperationResponsePipe(Pipe):
             if not more_meta:
                 meta=meta[0]
             
-        return {
+        
+        x= {
             'meta':meta,
             'errors':errors,
             'result':write_result,
             'content': result.get('content',"")
         }
+        print(x)
+        return x

@@ -182,11 +182,7 @@ class S3ObjectReader(Reader):
 
     def __init__(self, configService: ConfigService, awsService: AmazonS3Service,vaultService:HCVaultService,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         super().__init__(configService,fileService,asset_cache, asset, additionalCode)
-        self.asset = asset
-        self.func = additionalCode
-        self.configService = configService
         self.awsService = awsService
-        self.fileService = fileService
         self.vaultService = vaultService
         self.objects:list[Object] =objects
     
@@ -194,15 +190,16 @@ class S3ObjectReader(Reader):
         ext= f".{ext.value}"
         # objects = self.awsService.list_objects(rootParam,True,match=ext)
         for obj in self.objects:
-            
-            encrypted = obj.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if obj.metadata else False
+            if not (not obj.is_delete_marker and obj.is_latest=='true'):
+                continue
             
             if not self.fileService.soft_is_file(obj.object_name):
                 continue
-            if self.asset_cache.cache(obj.object_name,obj.etag):
-                continue
 
-            if self.fileService.simple_file_matching(obj.object_name,rootParam,ext):
+            encrypted = obj.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if obj.metadata else False
+
+            if self.fileService.simple_file_matching(obj.object_name,rootParam,ext) and not self.asset_cache.cache(obj.object_name,obj.etag):
+
                 obj_content = self.awsService.read_object(object_name=obj.object_name)
                 obj_content = obj_content.read()
                 if encrypted:
@@ -290,7 +287,7 @@ class AssetService(_service.BaseService):
             if not self.amazonS3Service.service_status == _service.ServiceStatus.AVAILABLE:
                 raise _service.BuildFailureError('Amazon S3 Service not available')
 
-    def read_asset_from_s3(self):       
+    def read_asset_from_s3(self):
 
         self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value))
@@ -314,7 +311,6 @@ class AssetService(_service.BaseService):
             if obj.object_name not in self.non_obj_template:
                 self.objects.append(obj)
         
-        print(self.buckets_size)
   
     def read_asset_from_disk(self):
         self._read_globals_disk()
@@ -339,12 +335,13 @@ class AssetService(_service.BaseService):
         return temp
 
     def loadHTMLData(self,iterator:Literal['disk','s3']):
+        non_marker_obj = [obj for obj in self.objects if not obj.is_delete_marker]
 
         def callback(html: HTMLTemplate):
             if iterator == 'disk':  
                 cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
             else:
-                cssInPath = self.fileService.root_to_path_matching(self.objects,html.dirName,Extension.CSS.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
+                cssInPath = self.fileService.root_to_path_matching(non_marker_obj,html.dirName,Extension.CSS.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
             
             css_content=""
 
@@ -362,7 +359,7 @@ class AssetService(_service.BaseService):
             if iterator == 'disk':
                 imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG.value)
             else:
-                imagesInPath = self.fileService.root_to_path_matching(self.objects,html.dirName,Extension.JPEG.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
+                imagesInPath = self.fileService.root_to_path_matching(non_marker_obj,html.dirName,Extension.JPEG.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
                 
             for imagesPath in imagesInPath:
                 try:

@@ -711,6 +711,9 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                             else:
                                 result = await APIFilterInject(pipe)(*args, **kwargs_prime)
 
+                            if result == None:
+                                continue
+
                             if not isinstance(result, dict):
                                 raise PipeDefaultException
 
@@ -728,6 +731,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                             else:
                                 result = await APIFilterInject(pipe)(result, **kwargs)
 
+                        print(result)
                         return result
 
                 except PipeDefaultException as e:

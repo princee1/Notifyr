@@ -14,6 +14,7 @@ from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
 from app.services.config_service import ConfigService
 from app.container import Get
+from app.utils.constant import RedisConstant
 from app.utils.helper import KeyBuilder
 from app.utils.tools import Time
 from app.models.security_model import ClientORM,ChallengeORM, PolicyORM
@@ -25,7 +26,7 @@ from app.utils.transformer import parse_time
 import asyncio
 from cachetools import LRUCache
 
-REDIS_CACHE_KEY = 3
+REDIS_CACHE_KEY = RedisConstant.CACHE_DB
 
 WILDCARD='*'
 

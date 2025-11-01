@@ -293,3 +293,11 @@ class MinioConstant:
     STATIC_TEMPLATE = 'static'
     ENCRYPTED_KEY = 'encrypted'
     MINIO_EVENT='minio_events'
+
+
+class RedisConstant:
+
+    EVENT_DB=0
+    CELERY_DB=2
+    LIMITER_DB=1
+    CACHE_DB=3

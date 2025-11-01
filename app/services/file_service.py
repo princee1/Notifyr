@@ -86,6 +86,8 @@ class FileService(BaseService,):
         return path.startswith(root) and path.endswith(ext)
 
     def file_matching(self,path,pattern:str):
+        if not pattern:
+            return True
         return PurePath(path).match(pattern)
 
     def root_to_path_matching(self,path_list:list[str], path:str,ext:str,sep=DIRECTORY_SEPARATOR,pointer:PointerIterator=None):
@@ -114,7 +116,7 @@ class FileService(BaseService,):
         return PurePath(path).suffix
 
     def soft_is_file(self,path:str):
-        return self.get_extension(path) == ''
+        return self.get_extension(path) != ''
 
     def html_minify(self,input:bytes|str):
         input_type = type(input)

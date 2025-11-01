@@ -9,6 +9,7 @@ from inspect import currentframe, getargvalues
 from typing import Any, Callable, Literal, Optional, Tuple, Type, TypeVar, get_args, get_origin
 import urllib.parse
 from aiohttp_retry import Union
+from cachetools import Cache
 from fastapi import Response
 from namespace import Namespace
 from pydantic import BaseModel, ConfigDict, create_model
@@ -628,13 +629,17 @@ def subset_model(
 class IntegrityCache:
     """
     The `IntegrityCache` class implements a caching mechanism with support for two modes:
-    'presence-only' which only checks if the value is inside of the cache and 'value' checks the presence and the value.
+    'presence-only' which only checks if the value is inside of the cache and 'value' checks the presence and the integrity of the value.
     """
 
-    def __init__(self,mode:Literal['presence-only','value']):
-        self._cache = {}
+    def __init__(self,mode:Literal['presence-only','value'],_cache:Callable[[],dict|Cache]=lambda:dict()):
+        self._cache_init = _cache
         self.mode = mode
-    
+        self.init()
+
+    def init(self):
+        self._cache = self._cache_init()
+        
     def cache(self,key,value=None)->bool:
         """
         Return if it is a cache hit. If the mode is `value` then it performs also the value validation
@@ -656,7 +661,7 @@ class IntegrityCache:
         return False
 
     def clear(self):
-        self._cache = {}
+        self.init()
     
     def invalid(self,key:str,default:Any=None):
         return self._cache.pop(key,default)

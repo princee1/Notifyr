@@ -101,8 +101,8 @@ class AmazonS3Service(TempCredentialsDatabaseService):
         self.client.remove_object(MinioConstant.ASSETS_BUCKET, object_name, version_id=version_id)
         return _object
 
-    def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None):
-        objects = self.list_objects(prefix=prefix, recursive=recursive,match=match)
+    def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None,delete_version=False):
+        objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=delete_version,include_delete_marker=False)
         if not objects:
             raise ObjectNotFoundError 
         
@@ -121,11 +121,10 @@ class AmazonS3Service(TempCredentialsDatabaseService):
             raise ObjectNotFoundError(f'Object {object_name} not found in bucket {MinioConstant.ASSETS_BUCKET}')
         return _object
     
-    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None):
-        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
-        if match:
-            objects = [o for o in objects if ((match and self.fileService.file_matching(o.object_name,match)) and not o.is_dir)]
-        return objects
+    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None,include_version=True,include_delete_marker=True):
+        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive,include_version=include_version)
+        return [o for o in objects if (self.fileService.file_matching(o.object_name,match) and not o.is_dir and (include_delete_marker or not o.is_delete_marker))]
+        
 
     def copy_object(self,source_object_name: str,dest_object_name: str,version_id: str = None,move=False):
         self.read_object(source_object_name,version_id).close()
@@ -143,7 +142,7 @@ class AmazonS3Service(TempCredentialsDatabaseService):
             'meta':meta
         }
 
-    def upload_object(self,object_name: str,data, content_type: str = 'application/octet-stream',metadata: Dict = None):
+    def upload_object(self,object_name: str,data:bytes, content_type: str = 'application/octet-stream',metadata: Dict = None):
         return self.client.put_object(
             MinioConstant.ASSETS_BUCKET,object_name,data,len(data),content_type=content_type,metadata=metadata
         )
@@ -157,7 +156,7 @@ class AmazonS3Service(TempCredentialsDatabaseService):
     
     def download_objects(self,prefix: str,recursive: bool = True,match:str=None,objects:list[Object]=None):
         if objects == None:
-            objects = self.list_objects(prefix=prefix, recursive=recursive,match=match)
+            objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=False,include_delete_marker=False)
         downloaded_objects = {}
         if not objects:
             raise ObjectNotFoundError

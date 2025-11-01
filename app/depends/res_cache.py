@@ -31,13 +31,16 @@ def generate_cache_type(_type:Type[C],prefix:str,sep="/",key_builder:Callable[..
         default_expiry = 0
 
     json_type = {dict,Dict,TypedDict,BaseModel}
-    def key_builder(func:Callable):
+    def key_builder_decorator(func:Callable):
         @wraps(func)
-        async def wrapper(key:str,*args,**kwargs):
+        async def wrapper(*args,**kwargs):
             if key_builder:
                 # k= kwargs.copy()
                 # k['key'] = key
                 key = APIFilterInject(key_builder)(**kwargs)
+            else:
+                key = args[0]
+            
             if not isinstance(key,str):
                 raise MemCacheNoValidKeysDefinedError
 
@@ -50,7 +53,7 @@ def generate_cache_type(_type:Type[C],prefix:str,sep="/",key_builder:Callable[..
     class ResCache(ResponseCacheInterface):
         
         @staticmethod
-        @key_builder
+        @key_builder_decorator
         async def Get(key:str)->C|None:
             result:Any |None = await memcachedService.get(key,None,_raise_miss)
             if result == None:
@@ -65,14 +68,14 @@ def generate_cache_type(_type:Type[C],prefix:str,sep="/",key_builder:Callable[..
                 
 
         @staticmethod
-        @key_builder
+        @key_builder_decorator
         async def Set(key:str,value:C):
             if type(_type) ==_model_construction.ModelMetaclass:
                 value = value.model_dump('json')        
             return await memcachedService.set(key,value,multi)
 
         @staticmethod
-        @key_builder
+        @key_builder_decorator
         async def Delete(key:str):
             return await memcachedService.delete(key)
     

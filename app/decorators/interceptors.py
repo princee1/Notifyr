@@ -22,26 +22,28 @@ class KeepAliveResponseInterceptor(Interceptor):
 class ResponseCacheInterceptor(Interceptor):
 
     def __init__(self,mode:Literal['invalid-only','cache'],cacheType:Type[ResponseCacheInterface],hit_status_code=status.HTTP_200_OK):
-        super().__init__()
+        super().__init__(False,False)
         self.mode = mode
         self.cacheType = cacheType
         self.memCachedService = Get(MemCachedService)
         self.hit_status_code = hit_status_code
 
-    async def intercept_before(self,request:Request,response:Response,template:str=None,):
+    async def intercept_before(self,*args,**kwargs):
         if self.mode == 'cache':
 
-            result = await self.cacheType.Get(template,request=request)
+            result = await self.cacheType.Get(**kwargs)
             if result == None:
                 return
+            response:Response = kwargs.get('response')
             response.status_code = self.hit_status_code
             raise InterceptorDefaultException(response=copy_response(JSONResponse(result),response))
 
-    async def intercept_after(self, result:Any,request:Request,response:Response,backgroundTasks:BackgroundTasks,template:str=None,):
-        
+    async def intercept_after(self, result:Any,*args,**kwargs):
+        backgroundTasks:BackgroundTasks = kwargs.get('backgroundTasks')
+
         if self.mode == 'cache':
-            backgroundTasks.add_task(self.cacheType.Set,template,result,request=request)
+            backgroundTasks.add_task(self.cacheType.Set,result,**kwargs)
         else:
-            backgroundTasks.add_task(self.cacheType.Delete,template,request=request)
+            backgroundTasks.add_task(self.cacheType.Delete,**kwargs)
         
         
