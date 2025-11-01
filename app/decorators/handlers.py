@@ -1,5 +1,6 @@
 from asyncio import CancelledError
 import asyncio
+import traceback
 from typing import Callable
 
 from fastapi.exceptions import ResponseValidationError
@@ -125,7 +126,10 @@ class TemplateHandler(Handler):
                 'message': 'Failed to create template',
                 'error': e.args[0]
             })
+
         except ValueError as e:
+            print(e)
+            traceback.print_exc()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
                 'message':'Could not be able to properly display the value'
             })
@@ -668,7 +672,7 @@ class MiniServiceHandler(Handler):
 
 class S3Handler(Handler):
 
-    async def handle(self, function, *args, **kwargs):
+    async def handle(self, function:Callable, *args, **kwargs):
         try:
             return await function(*args,**kwargs)
         except S3Error as e:
@@ -692,7 +696,7 @@ class S3Handler(Handler):
 
 class FileNamingHandler(Handler):
 
-    async def handle(function: Callable, *args, **kwargs):
+    async def handle(self,function: Callable, *args, **kwargs):
         try:
             return await function(*args, **kwargs)
 
@@ -714,10 +718,11 @@ class FileNamingHandler(Handler):
                 detail="Multiple file extensions detected; only one is allowed."
             )
 
-        except ExtensionNotAllowedError:
+        except ExtensionNotAllowedError as e :
+            print(e.args)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="The file extension is not allowed for this asset type."
+                detail="The file extension is not allowed for this asset type." if not e.args else e.args[0]
             )
         except AssetConfusionError as e:
             raise HTTPException(
@@ -727,7 +732,7 @@ class FileNamingHandler(Handler):
 
 class MemCachedHandler(Handler):
 
-    async def handle(function:Callable,*args,**kwargs):
+    async def handle(self,function:Callable,*args,**kwargs):
 
         try:
             return await function(*args,**kwargs)

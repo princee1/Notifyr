@@ -6,6 +6,7 @@ from beanie import Document
 from fastapi import HTTPException, Request, Response,status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from urllib3 import HTTPHeaderDict
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import AlgorithmType, SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
@@ -610,7 +611,7 @@ class FilterAllowedSchemaPipe(Pipe):
 class ValidFreeInputTemplatePipe(Pipe):
 
     allowed_assets = tuple(AssetType._value2member_map_.keys())
-    allowed_extension = set(Extension._value2member_map_.keys())
+    allowed_extension = set(['.'+k for k in  Extension._value2member_map_.keys()])
 
     def __init__(self, accept_empty=True,accept_dir=True,allowed_extension=None,allowed_assets=None):
         super().__init__(True)
@@ -641,7 +642,10 @@ class ValidFreeInputTemplatePipe(Pipe):
     
 class ObjectS3OperationResponsePipe(Pipe):
     class ResponseModel(BaseModel):
-        ...
+        meta: Optional[list|dict] = []
+        errors: Optional[list]=[]
+        result: Optional[dict] ={}
+        content: Optional[str] = ""
     
     def __init__(self,):
         super().__init__(False)
@@ -673,6 +677,8 @@ class ObjectS3OperationResponsePipe(Pipe):
             def parse_meta(m):
                 m:dict = asdict(m)
                 m['last_modified'] = m['last_modified'].isoformat()
+                if 'metadata' in m:
+                    m['metadata'] = dict(m['metadata'])
                 m.pop('storage_class',None), m.pop('owner_id',None), m.pop('owner_name',None), m.pop('is_dir',None)
                 return m
             meta = [parse_meta(m) for m in meta]
@@ -680,12 +686,9 @@ class ObjectS3OperationResponsePipe(Pipe):
             if not more_meta:
                 meta=meta[0]
             
-        
-        x= {
+        return {
             'meta':meta,
             'errors':errors,
             'result':write_result,
             'content': result.get('content',"")
         }
-        print(x)
-        return x

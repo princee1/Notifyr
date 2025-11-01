@@ -203,7 +203,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
     @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
     @UsePipe(ValidFreeInputTemplatePipe(False,False))
-    @BaseHTTPRessource.HTTPRoute('/{template:path}',methods=[HTTPMethod.GET],response_model=ObjectS3OperationResponsePipe.ResponseModel)
+    @BaseHTTPRessource.HTTPRoute('/single/{template:path}',methods=[HTTPMethod.GET],response_model=ObjectS3OperationResponsePipe.ResponseModel)
     async def read_object(self,template:str,request:Request,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission)):
         ext = self.fileService.get_extension(template)
 
@@ -212,23 +212,19 @@ class S3ObjectRessource(BaseHTTPRessource):
             template:HTMLTemplate = asset_routes[template]
             content = template.content
         else:
-            objects = self.amazonS3Service.read_object(template,objectsSearch.version_id)
+            objects = self.amazonS3Service.read_object(template,objectsSearch.version_id) 
             content = objects.read().decode()
             objects.close()
 
-        meta= self.amazonS3Service.stat_objet(template,objectsSearch.version_id,False)
         content = b64_encode(content)
-        return {
-            'content':content,
-            'meta':meta
-        }
+        return {'content':content}
 
 
     @PingService([AmazonS3Service])
     @UseRoles(roles=[Role.PUBLIC])
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseServiceLock(AmazonS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.HEAD])
+    @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
     def list_objects_stat(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         objects = self.assetService.objects.copy()
         if authPermission != None:
