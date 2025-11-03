@@ -13,7 +13,7 @@ from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import copy_response, issubclass_of
 from app.utils.constant import SpecialKeyParameterConstant
-from app.services import AssetService, RateLimiterService
+from app.services import AssetService, CostService
 from app.container import Get, Need
 from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, BaseService
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -32,7 +32,7 @@ from app.depends.variables import SECURITY_FLAG
 
 
 configService: ConfigService = Get(ConfigService)
-rateLimitService:RateLimiterService = Get(RateLimiterService)
+rateLimitService:CostService = Get(CostService)
 
 RequestLimit = 0
 

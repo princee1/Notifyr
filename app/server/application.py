@@ -13,7 +13,7 @@ from app.services.assets_service import AssetService
 from app.services.aws_service import AmazonS3Service
 from app.services.database_service import JSONServerDBService, MemCachedService, MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
-from app.services.rate_limiter_service import RateLimiterService
+from app.services.cost_service import CostService
 from app.services.secret_service import HCVaultService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
@@ -83,7 +83,7 @@ class Application(EventInterface):
 
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
-        self.rateLimiterService: RateLimiterService = Get(RateLimiterService)
+        self.rateLimiterService: CostService = Get(CostService)
         self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
         self.app.state.limiter = self.rateLimiterService.GlobalLimiter
 

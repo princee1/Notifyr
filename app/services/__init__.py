@@ -17,6 +17,6 @@ from .link_service import LinkService
 from .model_service import LLMModelService
 from .aws_service import AmazonS3Service,AmazonSESService,AmazonSNSService
 from .health_service import HealthService
-from .rate_limiter_service import RateLimiterService
+from .cost_service import CostService
 from .setting_service import SettingService,DEFAULT_SETTING
 from .secret_service import HCVaultService

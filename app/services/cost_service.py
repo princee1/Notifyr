@@ -9,7 +9,7 @@ from app.utils.fileIO import JSONFile
 
 
 @Service()
-class RateLimiterService(BaseService):
+class CostService(BaseService):
     
     def __init__(self,configService:ConfigService,redisService:RedisService,fileService:FileService):
         super().__init__()
@@ -39,7 +39,6 @@ class RateLimiterService(BaseService):
                 self.rate_limits={"default":True}
                 self.rate_limits= JSONFile(path).data
                 self.service_status = ServiceStatus.AVAILABLE
-                print(self.rate_limits)
             except:
                 raise BuildWarningError(f'Could not mount the rate limiting so limit will revert too default settings')
         else:
