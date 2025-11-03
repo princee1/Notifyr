@@ -292,7 +292,7 @@ class MinioConstant:
     ASSETS_BUCKET = 'assets'
     STATIC_TEMPLATE = 'static'
     ENCRYPTED_KEY = 'encrypted'
-    MINIO_EVENT='minio_events'
+    MINIO_EVENT='s3_object_events'
 
 
 class RedisConstant:

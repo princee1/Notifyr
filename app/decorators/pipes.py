@@ -32,7 +32,7 @@ from app.definition._utils_decorator import Pipe
 from app.services.task_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioAccountMiniService, TwilioService
 from app.utils.constant import SpecialKeyAttributesConstant
-from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of
+from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of, parseToBool
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
@@ -641,12 +641,7 @@ class ValidFreeInputTemplatePipe(Pipe):
         return {}
     
 class ObjectS3OperationResponsePipe(Pipe):
-    class ResponseModel(BaseModel):
-        meta: Optional[list|dict] = []
-        errors: Optional[list]=[]
-        result: Optional[dict] ={}
-        content: Optional[str] = ""
-    
+        
     def __init__(self,):
         super().__init__(False)
 
@@ -676,6 +671,7 @@ class ObjectS3OperationResponsePipe(Pipe):
 
             def parse_meta(m):
                 m:dict = asdict(m)
+                m['is_latest'] = parseToBool(m['is_latest'])
                 m['last_modified'] = m['last_modified'].isoformat()
                 if 'metadata' in m:
                     m['metadata'] = dict(m['metadata'])

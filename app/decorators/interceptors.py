@@ -7,7 +7,7 @@ from app.definition._utils_decorator import Interceptor, InterceptorDefaultExcep
 from app.depends.class_dep import KeepAliveQuery
 from app.depends.res_cache import ResponseCacheInterface
 from app.services.database_service import MemCachedService
-from app.utils.helper import copy_response
+from app.utils.helper import SkipCode, copy_response
 
 
 class KeepAliveResponseInterceptor(Interceptor):
@@ -21,22 +21,29 @@ class KeepAliveResponseInterceptor(Interceptor):
 
 class ResponseCacheInterceptor(Interceptor):
 
-    def __init__(self,mode:Literal['invalid-only','cache'],cacheType:Type[ResponseCacheInterface],hit_status_code=status.HTTP_200_OK):
+    def __init__(self,mode:Literal['invalid-only','cache'],cacheType:Type[ResponseCacheInterface],hit_status_code=status.HTTP_200_OK,raise_default_exception=True):
         super().__init__(False,False)
         self.mode = mode
         self.cacheType = cacheType
         self.memCachedService = Get(MemCachedService)
         self.hit_status_code = hit_status_code
+        self.raise_default_exception = raise_default_exception
 
     async def intercept_before(self,*args,**kwargs):
-        if self.mode == 'cache':
+        if self.mode != 'cache':
+            return
+        
+        result = await self.cacheType.Get(**kwargs)
+        if result == None:
+            return
+        
+        response:Response = kwargs.get('response')
+        response.status_code = self.hit_status_code
 
-            result = await self.cacheType.Get(**kwargs)
-            if result == None:
-                return
-            response:Response = kwargs.get('response')
-            response.status_code = self.hit_status_code
-            raise InterceptorDefaultException(response=copy_response(JSONResponse(result),response))
+        if not self.raise_default_exception:
+            raise SkipCode(result)
+        
+        raise InterceptorDefaultException(response=copy_response(JSONResponse(result),response))
 
     async def intercept_after(self, result:Any,*args,**kwargs):
         backgroundTasks:BackgroundTasks = kwargs.get('backgroundTasks')

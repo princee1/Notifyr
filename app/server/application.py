@@ -10,6 +10,7 @@ from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatu
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
 from app.services.assets_service import AssetService
+from app.services.aws_service import AmazonS3Service
 from app.services.database_service import JSONServerDBService, MemCachedService, MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
 from app.services.rate_limiter_service import RateLimiterService
@@ -213,6 +214,9 @@ class Application(EventInterface):
         mongooseService = Get(MongooseService)
         mongooseService.start()
 
+        amazons3Service = Get(AmazonS3Service)
+        amazons3Service.start()
+
         jsonServerService = Get(JSONServerDBService)
         jsonServerService.start()
     
@@ -222,13 +226,14 @@ class Application(EventInterface):
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
+        amazons3Service = Get(AmazonS3Service)
         vaultService = Get(HCVaultService)
 
         taskService:TaskService =  Get(TaskService)
         jsonServerService = Get(JSONServerDBService)
         
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,jsonServerService]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,jsonServerService,amazons3Service]
 
         for s in services:
             s.shutdown()

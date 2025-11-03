@@ -1,14 +1,17 @@
 import json
+from random import randint
 import traceback
 from minio.datatypes import Object
 from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
+from app.interface.timers import IntervalParams, SchedulerInterface
 from app.services.aws_service import AmazonS3Service
 import app.services.aws_service as aws_service
+from app.services.database_service import RedisService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
-from app.utils.constant import MinioConstant
+from app.utils.constant import MinioConstant, RedisConstant
 from app.utils.prettyprint import printJSON
 from .config_service import AssetMode, CeleryMode, ConfigService, ProcessWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
@@ -220,12 +223,13 @@ class S3ObjectReader(Reader):
 @_service.Service(
     links=[_service.LinkDep(AmazonS3Service,to_destroy=True, to_build=True)]
 )
-class AssetService(_service.BaseService):
+class AssetService(_service.BaseService,SchedulerInterface):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:HCVaultService, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:ProcessWorkerService) -> None:
+    def __init__(self,hcVaultService:HCVaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:ProcessWorkerService) -> None:
         super().__init__()
+        SchedulerInterface.__init__(self,)
 
         self.fileService:FileService = fileService
         self.configService = configService
@@ -233,6 +237,7 @@ class AssetService(_service.BaseService):
         self.amazonS3Service = amazonS3Service
         self.settingService = settingService
         self.hcVaultService = hcVaultService
+        self.redisService = redisService
 
         self.ASSETS_GLOBALS_VARIABLES =f"{self.configService.ASSETS_DIR}globals.json"
         self.objects:list[Object] = []
@@ -246,6 +251,13 @@ class AssetService(_service.BaseService):
         self.pdf:dict[str,Asset] = {}
         self.phone:dict[str,Asset] = {}
         self.sms:dict[str,Asset] = {}
+
+        self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events)
+
+    async def clear_object_events(self,):
+        objects_events = await self.redisService.hash_iter(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,iter=False)
+        print(objects_events)
+        await self.redisService.hash_del(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,*objects_events.keys())
 
     def _read_globals_disk(self):
 
@@ -311,7 +323,6 @@ class AssetService(_service.BaseService):
             if obj.object_name not in self.non_obj_template:
                 self.objects.append(obj)
         
-  
     def read_asset_from_disk(self):
         self._read_globals_disk()
 

@@ -101,8 +101,9 @@ class AmazonS3Service(TempCredentialsDatabaseService):
         self.client.remove_object(MinioConstant.ASSETS_BUCKET, object_name, version_id=version_id)
         return _object
 
-    def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None,delete_version=False):
-        objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=delete_version,include_delete_marker=False)
+    def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None,delete_version=False,objects=None):
+        if not objects:
+            objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=delete_version,include_delete_marker=False)
         if not objects:
             raise ObjectNotFoundError 
         

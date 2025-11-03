@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, Callable
 
 from fastapi import HTTPException, Response
-from app.utils.helper import APIFilterInject,AsyncAPIFilterInject
+from app.utils.helper import APIFilterInject,AsyncAPIFilterInject, SkipCode
 from asgiref.sync import sync_to_async
 from enum import Enum
 
@@ -119,20 +119,20 @@ class Interceptor(DecoratorObj):
         ...
     
     async def intercept(self,function:Callable,*args,**kwargs):
+        try:
+            if self.filter_before_params:r = APIFilterInject(self.intercept_before)(*args,**kwargs) 
+            else:r=self.intercept_before(*args,**kwargs)
 
-        if self.filter_before_params:r = APIFilterInject(self.intercept_before)(*args,**kwargs) 
-        else:r=self.intercept_before(*args,**kwargs)
-
-        if asyncio.iscoroutinefunction(self.intercept_before):
-            await r
-            
+            if asyncio.iscoroutine(r): await r
+        except SkipCode as e:
+            return e.args[0]
+                    
         result = await function(*args,**kwargs)
 
         if self.filter_after_params: r = APIFilterInject(self.intercept_after)(result,*args,**kwargs) 
-        else: self.intercept_after(*args,**kwargs)
+        else: r=self.intercept_after(result,*args,**kwargs)
 
-        if asyncio.iscoroutinefunction(self.intercept_after):
-            await  r
+        if asyncio.iscoroutine(r): await  r
 
         return result
     

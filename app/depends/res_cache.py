@@ -2,6 +2,7 @@ from functools import wraps
 from typing import Dict, Generic, Type, TypeVar, TypedDict
 from aiohttp_retry import Any, Callable
 from pydantic import BaseModel
+from app.classes.minio import ObjectS3ResponseModel, key_setter
 from app.container import Get
 from app.services.database_service import MemCachedService,MemCacheNoValidKeysDefinedError
 from pydantic.main import _model_construction
@@ -57,6 +58,7 @@ def generate_cache_type(_type:Type[C],prefix:str,sep="/",key_builder:Callable[..
         async def Get(key:str)->C|None:
             result:Any |None = await memcachedService.get(key,None,_raise_miss)
             if result == None:
+                print('CACHE MISS -','Key:',key)
                 return None
             
             if _type in json_type: 
@@ -64,15 +66,16 @@ def generate_cache_type(_type:Type[C],prefix:str,sep="/",key_builder:Callable[..
                     result = _type.model_construct(**result)
                 else:
                     result = _type(**result)
+            print('CACHE HIT -','Key:',key)
             return result
                 
 
         @staticmethod
         @key_builder_decorator
-        async def Set(key:str,value:C):
-            if type(_type) ==_model_construction.ModelMetaclass:
+        async def Set(key:str,value:C,expiry=default_expiry):
+            if type(_type) ==_model_construction.ModelMetaclass and isinstance(value,BaseModel):
                 value = value.model_dump('json')        
-            return await memcachedService.set(key,value,multi)
+            return await memcachedService.set(key,value,expiry,multi)
 
         @staticmethod
         @key_builder_decorator
@@ -80,3 +83,6 @@ def generate_cache_type(_type:Type[C],prefix:str,sep="/",key_builder:Callable[..
             return await memcachedService.delete(key)
     
     return ResCache
+
+
+MinioResponseCache=generate_cache_type(ObjectS3ResponseModel,'object',key_builder=key_setter)

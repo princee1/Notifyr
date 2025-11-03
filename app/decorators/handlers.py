@@ -672,12 +672,17 @@ class MiniServiceHandler(Handler):
 
 class S3Handler(Handler):
 
+    error_codes_to_http_codes= {
+        'NoSuchKey':status.HTTP_404_NOT_FOUND
+    }
+
     async def handle(self, function:Callable, *args, **kwargs):
         try:
             return await function(*args,**kwargs)
         except S3Error as e:
+
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=self.error_codes_to_http_codes.get(e.code,status.HTTP_500_INTERNAL_SERVER_ERROR),
                 detail={
                     'message':'S3 Service error occurred',
                     'error_code':e.code,

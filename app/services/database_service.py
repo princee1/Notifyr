@@ -83,8 +83,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
     def sync_pingService(self, **kwargs):
         self.check_auth()
         super().sync_pingService(**kwargs)
-        
-        
+             
     @staticmethod
     def random_buffer_interval(ttl):
         return ttl - (ttl*.08*random() + randint(20,40))
@@ -401,6 +400,19 @@ class RedisService(DatabaseService):
         for i in range(len_db):
             await self.db[i].close()
 
+
+    @check_db
+    async def hash_iter(self,database:int|str,hash_name:str,iter=False,match:str=None,count=None,redis:Redis=None):
+        if iter:
+            return await redis.hscan_iter(hash_name,match,count)
+        else:
+            return await redis.hgetall(hash_name)
+    
+    @check_db
+    async def hash_del(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
+        return await redis.hdel(*keys)
+
+    
 @Service()
 class MemCachedService(DatabaseService,SchedulerInterface):
     
@@ -445,7 +457,7 @@ class MemCachedService(DatabaseService,SchedulerInterface):
                 raise MemCachedCacheMissError
             else: return default
     
-        return json.loads(result) if result!=None and _return_bytes else result
+        return json.loads(result) if result!=None and not _return_bytes else result
    
     async def delete(self,*key:str):
         if len(key) < 1:
@@ -458,7 +470,7 @@ class MemCachedService(DatabaseService,SchedulerInterface):
         return self.sync_client.delete_many(list(key))
     
     @KeyEncoder
-    async def set(self,key:str,value:Any|bytes,expire:int=0,multi=False):
+    async def set(self,key:str,value:Any|bytes,expire:int=0,multi=False):     
         if not multi:
             if type(value) != bytes:
                 value = json.dumps(value).encode()
