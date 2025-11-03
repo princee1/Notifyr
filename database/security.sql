@@ -345,11 +345,15 @@ BEGIN
     SELECT auth_type INTO client_auth_type FROM Client WHERE client_id = NEW.client_id;
 
     IF client_auth_type = 'ACCESS_TOKEN' THEN
-        IF NEW.expired_at_auth IS NOT NULL AND NEW.expired_at_auth <= NOW() THEN
+        IF NEW.expired_at_auth IS NULL OR NEW.expired_at_refresh IS NULL THEN
+            RAISE EXCEPTION 'expired_at_auth/refresh cannot be null';
+            RETURN NULL;
+
+        IF NEW.expired_at_auth <= NOW() THEN
             RAISE EXCEPTION 'expired_at_auth cannot be in the past for ACCESS_TOKEN clients';
             RETURN NULL;
         END IF;
-        IF NEW.expired_at_refresh IS NOT NULL AND NEW.expired_at_refresh <= NOW() THEN
+        IF NEW.expired_at_refresh <= NOW() THEN
             RAISE EXCEPTION 'expired_at_refresh cannot be in the past for ACCESS_TOKEN clients';
             RETURN NULL;
         END IF;
