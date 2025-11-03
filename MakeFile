@@ -33,12 +33,6 @@ clean:
 	find . -name "__pycache__" -type d -exec rm -rf {} +
 	find . -name "*.pyc" -type f -delete
 
-###############################     HTTPS               #######################################
-
-https_pem:
-	openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
-
-
 ###############################      RUNNING THE CODE IN DEV MODE                     #######################################
 
 run_dev:
@@ -46,7 +40,6 @@ run_dev:
 
 run_prod:
 	uvicorn main:app --workers 4 --port 8088
-
 
 ###############################      CELERY                     #######################################
 
@@ -68,7 +61,6 @@ purge:
 
 ###############################     NGROK                      #######################################
 
-
 tunnel:
 	ngrok http --url ${ngrok_url} 8088
 
@@ -82,3 +74,6 @@ docker-worker:
 
 docker-prune:
 	docker builder prune --all -f
+
+docker-vault-sidecar:
+	docker-compose run --rm sidecar && docker rmi notifyr:vault-sidecar
