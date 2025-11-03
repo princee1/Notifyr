@@ -529,7 +529,9 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
 
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams = None,mount=True):
     if not mount:
-        return
+        def decorator(func:Callable):
+            return func
+        return decorator
 
     empty_decorator = len(permission_function) == 0
     if empty_decorator:
@@ -605,7 +607,9 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[Handler] | Handler, default_error: HTTPExceptionParams = None,mount=True):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
     if not mount:
-        return
+        def decorator(func:Callable):
+            return func
+        return decorator
     
     empty_decorator = len(handler_function) == 0
     if empty_decorator:
@@ -631,7 +635,9 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
     # INFO guards only purpose is to validate the request
     # NOTE:  be mindful of the order
     if not mount:
-        return
+        def decorator(func:Callable):
+            return func
+        return decorator
 
     empty_decorator = len(guard_function) == 0
     if empty_decorator:
@@ -693,7 +699,10 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
     be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
     """
     if not mount:
-        return
+        def decorator(func:Callable):
+            return func
+        return decorator
+    
     empty_decorator = len(pipe_function) == 0
     if empty_decorator:
         warnings.warn("No Pipe function or object was provided.",
@@ -765,7 +774,9 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
 def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams = None,mount=True):
 
     if not mount:
-        return
+        def decorator(func:Callable):
+            return func
+        return decorator
     
     empty_decorator = len(interceptor_function) == 0
     if empty_decorator:
