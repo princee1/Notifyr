@@ -17,7 +17,7 @@ class CostService(BaseService):
         self.redisService = redisService
         self.fileService = fileService
 
-        self.RATE_LIMITS_PATH = Path("/run/secrets/rate_limits")
+        self.RATE_LIMITS_PATH = Path("/run/secrets/costs")
 
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:

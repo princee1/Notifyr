@@ -133,7 +133,7 @@ services:
     ports:
       - 8088:8088
     volumes:
-      - ./rate_limits.json:/run/secrets/rate_limits:ro
+      - ./costs.json:/run/secrets/costs:ro
       - vault-shared:/vault/shared:ro
       - vault-secrets:/vault/secrets:ro
     build:
