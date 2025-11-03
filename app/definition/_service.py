@@ -551,7 +551,7 @@ def AbstractServiceClass()->Callable[[Type[S]],Type[S]]:
         return cls
     return class_decorator
 
-def Service(links:list[LinkDep]=[],is_manager = False)->Callable[[Type[S]],Type[S]]:
+def Service(links:list[LinkDep]=[],is_manager = False,abstract_service_register:list[Type[BaseService]]=[])->Callable[[Type[S]],Type[S]]:
 
     def class_decorator(cls: Type[S]) -> Type[S]:
         if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:

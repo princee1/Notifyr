@@ -6,16 +6,20 @@ from fastapi import BackgroundTasks, Body, Depends, File, HTTPException, Query, 
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission,Role, filter_asset_permission
+from app.classes.minio import ObjectS3ResponseModel
 from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard
 from app.decorators.handlers import FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, VaultHandler
+from app.decorators.interceptors import ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._service import StateProtocol
 from app.definition._utils_decorator import Guard
-from app.depends.class_dep import ObjectsSearch
+from app.depends.class_dep import Broker, ObjectsSearch
 from app.depends.dependencies import get_auth_permission
+from app.depends.res_cache import MinioResponseCache
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError
 from app.services import AmazonS3Service
 from app.services.config_service import ConfigService
@@ -29,24 +33,34 @@ from app.utils.helper import b64_encode
 # limit the size with a guard
 # limit the minio size also 
 
-class UploadGuard(Guard):
-
-    def __init__(self,max_file:int,max_file_size=int):
-        super().__init__()        
-        self.max_file = max_file
-        self.max_file_size = max_file_size
-        self.configService = Get(ConfigService)
-        self.assetService = Get(AssetService)
-    
-async def is_minio_external_guard():
-    s3Service = Get(AmazonS3Service)
-    return s3Service.external, '' if s3Service.external else 'Cannot generate presigned url for a non external s3 endpoint'
-
 @UseRoles([Role.ASSETS])
 @UseHandler(ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('objects')
 class S3ObjectRessource(BaseHTTPRessource):
+    
+    class UploadGuard(Guard):
+
+        def __init__(self,max_file:int,max_file_size=int):
+            super().__init__()        
+            self.max_file = max_file
+            self.max_file_size = max_file_size
+            self.configService = Get(ConfigService)
+            self.assetService = Get(AssetService)
+    
+    @staticmethod
+    def pipe_restore(restore:bool,template:str,objectsSearch:ObjectsSearch):
+        if restore:
+            if objectsSearch.version_id == None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Version id is needed to restore from a previous version')
+            
+            return {'destination_template':template,'move':False}
+        return {}
+
+    @staticmethod
+    async def is_minio_external_guard():
+        s3Service = Get(AmazonS3Service)
+        return s3Service.external, '' if s3Service.external else 'Cannot generate presigned url for a non external s3 endpoint'
 
     @InjectInMethod()
     def __init__(self, assetService: AssetService, amazonS3Service: AmazonS3Service, hcVaultService: HCVaultService,fileService:FileService):
@@ -55,6 +69,9 @@ class S3ObjectRessource(BaseHTTPRessource):
         self.amazonS3Service: AmazonS3Service = amazonS3Service
         self.hcVaultService: HCVaultService = hcVaultService
         self.fileService = fileService
+
+        self.is_asset_pipe= TemplateParamsPipe(accept_none=False,inject_asset_routes=True)
+        self.free_input_pipe = ValidFreeInputTemplatePipe(False,True)
 
     async def upload(self, files:list[UploadFile | dict],encrypt:bool=False):
         
@@ -94,14 +111,15 @@ class S3ObjectRessource(BaseHTTPRessource):
             'method':method
         }
     
+
     @UsePermission(AdminPermission)
     @UseHandler(FileNamingHandler,S3Handler,VaultHandler)
     @PingService([AmazonS3Service])
     @UseGuard(GlobalsTemplateGuard)
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST])
-    async def upload_stream(self,request:Request,response:Response,backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],mount=False)
+    async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
         
         errors = {}
         upload_files:list[UploadFile]= []
@@ -110,7 +128,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             filename = file.filename
             ext = self.fileService.get_extension(ext)
             try:
-                self.fileService.is_file(filename,allowed_extensions=self.allowed_extension)
+                self.fileService.is_file(filename,allowed_extensions=ValidFreeInputTemplatePipe.allowed_extension)
             except (MultipleExtensionError,ExtensionNotAllowedError) as e:
                 if force:
                     errors[filename]= {'name':e.__class__.__name__,'description':e.mess}
@@ -127,10 +145,13 @@ class S3ObjectRessource(BaseHTTPRessource):
             upload_files.append(file)
 
         backgroundTask.add_task(self.upload,upload_files)# TODO encrypt files
+        broker.wait(len(upload_files)*2)
+        broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
         return {
         "uploaded_files": [f.filename for f in upload_files],
         "errors": errors
         }
+
 
     @UsePermission(JWTAssetPermission(accept_none_template=True))
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler)
@@ -157,7 +178,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             media_type="application/zip",
             headers={"Content-Disposition": f"attachment; filename={attachment_name}"}
         )
-                
+
     @UsePermission(AdminPermission)
     @PingService([AmazonS3Service])
     @UseHandler(S3Handler)
@@ -165,55 +186,56 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UsePipe(ValidFreeInputTemplatePipe(False,True))
     @UseServiceLock(AmazonS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/{template:path}',methods=[HTTPMethod.DELETE],response_model=ObjectS3OperationResponsePipe.ResponseModel)
-    def delete_object(self,template:str,request:Request,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/delete/{template:path}',methods=[HTTPMethod.DELETE],response_model=ObjectS3ResponseModel)
+    def delete_object(self,template:str,response:Response,request:Request,broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],force:bool=Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
         
         if objectsSearch.version_id:
-            meta= self.amazonS3Service.delete_object(template,version_id=objectsSearch.version_id)      
+            meta = self.amazonS3Service.delete_object(template,version_id=objectsSearch.version_id) 
+            if meta.is_delete_marker: # NOTE the user deleted the marker object and rollback to the latest version
+                response.status_code = status.HTTP_201_CREATED 
             return {'meta':meta}
-        
         else:
             if objectsSearch.is_file:
                 objectsSearch.recursive = False
                 objectsSearch.match = None
-            return self.amazonS3Service.delete_objects_prefix(template,objectsSearch.recursive,objectsSearch.match)
+
+            broker.wait(2)
+            broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
+            return self.amazonS3Service.delete_objects_prefix(template,objectsSearch.recursive,objectsSearch.match,force)
 
 
     @PingService([AmazonS3Service,HCVaultService])
     @UseRoles(roles=[Role.PUBLIC])
-    @UseHandler(S3Handler,VaultHandler)
+    @UseHandler(S3Handler,VaultHandler,FileNamingHandler,TemplateHandler)
     @UsePermission(JWTAssetPermission)
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
     @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
-    @UsePipe(ValidFreeInputTemplatePipe(False,False),TemplateParamsPipe(accept_none=True))
-    @BaseHTTPRessource.HTTPRoute('/{template:path}',methods=[HTTPMethod.GET],response_model=ObjectS3OperationResponsePipe.ResponseModel)
-    def read_object(self,template:str,request:Request,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    @UsePipe(ValidFreeInputTemplatePipe(False,False))
+    @UseInterceptor(ResponseCacheInterceptor('cache',MinioResponseCache,raise_default_exception=False),mount=False)
+    @BaseHTTPRessource.HTTPRoute('/single/{template:path}',methods=[HTTPMethod.GET],response_model=ObjectS3ResponseModel)
+    async def read_object(self,template:str,request:Request,response:Response,backgroundTasks:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission)):
         ext = self.fileService.get_extension(template)
 
         if objectsSearch.assets and ext==Extension.HTML.value:
-            asset_routes = self.assetService.get_assets_dict_by_path(template)
+            asset_routes = await self.is_asset_pipe.pipe(template)
             template:HTMLTemplate = asset_routes[template]
             content = template.content
         else:
-            objects = self.amazonS3Service.read_object(template,objectsSearch.version_id)
+            objects = self.amazonS3Service.read_object(template,objectsSearch.version_id) 
             content = objects.read().decode()
             objects.close()
 
-        meta= self.amazonS3Service.stat_objet(template,objectsSearch.version_id,False)
         content = b64_encode(content)
-        return {
-            'content':content,
-            'meta':meta
-        }
+        return {'content':content}
 
 
     @PingService([AmazonS3Service])
     @UseRoles(roles=[Role.PUBLIC])
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseServiceLock(AmazonS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET],response_model=ObjectS3OperationResponsePipe.ResponseModel)
-    def list_objects_stat(self,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
+    def list_objects_stat(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         objects = self.assetService.objects.copy()
         if authPermission != None:
             filter_asset_permission(authPermission)
@@ -227,13 +249,13 @@ class S3ObjectRessource(BaseHTTPRessource):
                 
     @PingService([AmazonS3Service,HCVaultService])
     @UsePermission(AdminPermission)
-    @UseHandler(S3Handler,VaultHandler,TemplateHandler)
+    @UseHandler(S3Handler,VaultHandler,TemplateHandler,FileNamingHandler)
     @UseGuard(GlobalsTemplateGuard)
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}))
     @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectS3OperationResponsePipe.ResponseModel)
-    def modify_object(self,template:str,backgroundTask:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],content: str = Body(..., media_type="text/plain"),authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/modify/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectS3ResponseModel,mount=False)
+    def modify_object(self,template:str,request:Request,broker:Annotated[Broker,Depends(Broker)],backgroundTask:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],content: str = Body(..., media_type="text/plain"),authPermission:AuthPermission=Depends(get_auth_permission)):
         meta= self.amazonS3Service.stat_objet(template,objectsSearch.version_id,True)
         encrypted = meta.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if meta.metadata else False
         assetType = template.split('/')[0]
@@ -244,32 +266,37 @@ class S3ObjectRessource(BaseHTTPRessource):
             case 'sms': SMSTemplate('',content,'')
 
         backgroundTask.add_task(self.upload,[{'content':content.encode(),'filename':template}],False)
+        broker.wait(3)
+        broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
         return {
             'meta':meta,
         }
-        
     
+
     @PingService([AmazonS3Service])
     @UseHandler(S3Handler,FileNamingHandler)
     @UsePermission(AdminPermission)
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UsePipe(ValidFreeInputTemplatePipe(False,False))
-    @UsePipe(ObjectS3OperationResponsePipe,before=False)
+    @UsePipe(ValidFreeInputTemplatePipe(False,False),pipe_restore)
     @UseGuard(GlobalsTemplateGuard)
     @UseServiceLock(AmazonS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/{template:path}/to/{destination_template:path}',methods=[HTTPMethod.PATCH],response_model=ObjectS3OperationResponsePipe.ResponseModel,mount=False)
-    def copy_object(self,template:str,destination_template:str,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],move:bool = Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/copy/{template:path}/to/{destination_template:path}',methods=[HTTPMethod.PATCH],response_model=ObjectS3ResponseModel,mount=False)
+    def copy_object(self,template:str,request:Request,response:Response,destination_template:str,broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],move:bool = Query(False),restore:bool = Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
 
-        ValidFreeInputTemplatePipe(False,True).pipe(destination_template,objectsSearch)
+        self.free_input_pipe.pipe(destination_template,objectsSearch)
         if objectsSearch.is_file:
             if self.fileService.get_extension(template) != self.fileService.get_extension(destination_template):
                 raise ExtensionNotAllowedError('Extension of the destination_template should be the same as the template')    
         else:
-            destination_template+=self.fileService.soft_get_filename(template)
+            destination_template  = destination_template if destination_template.endswith('/') else destination_template+ "/" 
+            destination_template += self.fileService.soft_get_filename(template)
         
         if template.split('/')[0] !=  destination_template.split('/')[0]:
             raise AssetTypeNotAllowedError
-    
+        
+        broker.wait(3)
+        broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
+
         return self.amazonS3Service.copy_object(template,destination_template,objectsSearch.version_id,move)
 
     

@@ -1,5 +1,6 @@
 from asyncio import CancelledError
 import asyncio
+import traceback
 from typing import Callable
 
 from fastapi.exceptions import ResponseValidationError
@@ -35,8 +36,11 @@ from requests.exceptions import SSLError, Timeout
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError
+from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
+from aiomcache.exceptions import ClientException, ValidationException 
+from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
+
 
 class ServiceAvailabilityHandler(Handler):
 
@@ -122,7 +126,10 @@ class TemplateHandler(Handler):
                 'message': 'Failed to create template',
                 'error': e.args[0]
             })
+
         except ValueError as e:
+            print(e)
+            traceback.print_exc()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
                 'message':'Could not be able to properly display the value'
             })
@@ -665,12 +672,17 @@ class MiniServiceHandler(Handler):
 
 class S3Handler(Handler):
 
-    async def handle(self, function, *args, **kwargs):
+    error_codes_to_http_codes= {
+        'NoSuchKey':status.HTTP_404_NOT_FOUND
+    }
+
+    async def handle(self, function:Callable, *args, **kwargs):
         try:
             return await function(*args,**kwargs)
         except S3Error as e:
+
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=self.error_codes_to_http_codes.get(e.code,status.HTTP_500_INTERNAL_SERVER_ERROR),
                 detail={
                     'message':'S3 Service error occurred',
                     'error_code':e.code,
@@ -689,7 +701,7 @@ class S3Handler(Handler):
 
 class FileNamingHandler(Handler):
 
-    async def handle(function: Callable, *args, **kwargs):
+    async def handle(self,function: Callable, *args, **kwargs):
         try:
             return await function(*args, **kwargs)
 
@@ -711,13 +723,42 @@ class FileNamingHandler(Handler):
                 detail="Multiple file extensions detected; only one is allowed."
             )
 
-        except ExtensionNotAllowedError:
+        except ExtensionNotAllowedError as e :
+            print(e.args)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="The file extension is not allowed for this asset type."
+                detail="The file extension is not allowed for this asset type." if not e.args else e.args[0]
             )
         except AssetConfusionError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
             )
+
+class MemCachedHandler(Handler):
+
+    async def handle(self,function:Callable,*args,**kwargs):
+
+        try:
+            return await function(*args,**kwargs)
+        
+        except MemCachedTypeValueError as e:
+            ...
+        
+        except MemCacheNoValidKeysDefinedError as e:
+            ...
+        
+        except MemcacheClientError as e:
+            ...
+        
+        except MemcacheServerError as e:
+            ...
+        
+        except MemcacheUnexpectedCloseError as e:
+            ...
+        
+        except ValidationException as e:
+            ...
+        
+        except ClientException as e:
+            ...

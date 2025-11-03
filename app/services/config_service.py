@@ -4,6 +4,7 @@ from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from app.errors.service_error import BuildAbortError, BuildWarningError
+from app.utils.constant import RedisConstant
 from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
@@ -233,11 +234,14 @@ class ConfigService(_service.BaseService):
 
         # REDIS CONFIG #
 
-        self.REDIS_URL:str = self.getenv("REDIS_URL","redis://localhost" if self.MODE == MODE.DEV_MODE else "redis://redis")
+        self.REDIS_URL:str = "redis://"+self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")
+
+        # REDIS CONFIG #
+        self.MEMCACHED_URL:str = self.getenv("MEMCHACHED_URL","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
 
         # SLOW API CONFIG #
 
-        self.SLOW_API_REDIS_URL:str = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL", '/1')
+        self.SLOW_API_REDIS_URL:str = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL", f'/{RedisConstant.LIMITER_DB}')
 
         # POSTGRES DB CONFIG #
 
@@ -245,8 +249,8 @@ class ConfigService(_service.BaseService):
 
         # CELERY CONFIG #
 
-        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL",self.REDIS_URL +  '/0')
-        self.CELERY_BACKEND_URL =  self.getenv("CELERY_BACKEND_URL", self.REDIS_URL +'/0')
+        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL",self.REDIS_URL +  f'/{RedisConstant.CELERY_DB}')
+        self.CELERY_BACKEND_URL =  self.getenv("CELERY_BACKEND_URL", self.REDIS_URL +f'/{RedisConstant.CELERY_DB}')
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_WORKERS_COUNT = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_COUNT","1"), 1)

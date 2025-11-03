@@ -1,14 +1,17 @@
 import json
+from random import randint
 import traceback
 from minio.datatypes import Object
 from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
+from app.interface.timers import IntervalParams, SchedulerInterface
 from app.services.aws_service import AmazonS3Service
 import app.services.aws_service as aws_service
+from app.services.database_service import RedisService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
-from app.utils.constant import MinioConstant
+from app.utils.constant import MinioConstant, RedisConstant
 from app.utils.prettyprint import printJSON
 from .config_service import AssetMode, CeleryMode, ConfigService, ProcessWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
@@ -182,11 +185,7 @@ class S3ObjectReader(Reader):
 
     def __init__(self, configService: ConfigService, awsService: AmazonS3Service,vaultService:HCVaultService,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         super().__init__(configService,fileService,asset_cache, asset, additionalCode)
-        self.asset = asset
-        self.func = additionalCode
-        self.configService = configService
         self.awsService = awsService
-        self.fileService = fileService
         self.vaultService = vaultService
         self.objects:list[Object] =objects
     
@@ -194,15 +193,16 @@ class S3ObjectReader(Reader):
         ext= f".{ext.value}"
         # objects = self.awsService.list_objects(rootParam,True,match=ext)
         for obj in self.objects:
-            
-            encrypted = obj.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if obj.metadata else False
+            if not (not obj.is_delete_marker and obj.is_latest=='true'):
+                continue
             
             if not self.fileService.soft_is_file(obj.object_name):
                 continue
-            if self.asset_cache.cache(obj.object_name,obj.etag):
-                continue
 
-            if self.fileService.simple_file_matching(obj.object_name,rootParam,ext):
+            encrypted = obj.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if obj.metadata else False
+
+            if self.fileService.simple_file_matching(obj.object_name,rootParam,ext) and not self.asset_cache.cache(obj.object_name,obj.etag):
+
                 obj_content = self.awsService.read_object(object_name=obj.object_name)
                 obj_content = obj_content.read()
                 if encrypted:
@@ -223,12 +223,13 @@ class S3ObjectReader(Reader):
 @_service.Service(
     links=[_service.LinkDep(AmazonS3Service,to_destroy=True, to_build=True)]
 )
-class AssetService(_service.BaseService):
+class AssetService(_service.BaseService,SchedulerInterface):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:HCVaultService, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:ProcessWorkerService) -> None:
+    def __init__(self,hcVaultService:HCVaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:ProcessWorkerService) -> None:
         super().__init__()
+        SchedulerInterface.__init__(self,)
 
         self.fileService:FileService = fileService
         self.configService = configService
@@ -236,6 +237,7 @@ class AssetService(_service.BaseService):
         self.amazonS3Service = amazonS3Service
         self.settingService = settingService
         self.hcVaultService = hcVaultService
+        self.redisService = redisService
 
         self.ASSETS_GLOBALS_VARIABLES =f"{self.configService.ASSETS_DIR}globals.json"
         self.objects:list[Object] = []
@@ -249,6 +251,13 @@ class AssetService(_service.BaseService):
         self.pdf:dict[str,Asset] = {}
         self.phone:dict[str,Asset] = {}
         self.sms:dict[str,Asset] = {}
+
+        self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events)
+
+    async def clear_object_events(self,):
+        objects_events = await self.redisService.hash_iter(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,iter=False)
+        print(objects_events)
+        await self.redisService.hash_del(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,*objects_events.keys())
 
     def _read_globals_disk(self):
 
@@ -290,7 +299,7 @@ class AssetService(_service.BaseService):
             if not self.amazonS3Service.service_status == _service.ServiceStatus.AVAILABLE:
                 raise _service.BuildFailureError('Amazon S3 Service not available')
 
-    def read_asset_from_s3(self):       
+    def read_asset_from_s3(self):
 
         self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value))
@@ -314,8 +323,6 @@ class AssetService(_service.BaseService):
             if obj.object_name not in self.non_obj_template:
                 self.objects.append(obj)
         
-        print(self.buckets_size)
-  
     def read_asset_from_disk(self):
         self._read_globals_disk()
 
@@ -339,12 +346,13 @@ class AssetService(_service.BaseService):
         return temp
 
     def loadHTMLData(self,iterator:Literal['disk','s3']):
+        non_marker_obj = [obj for obj in self.objects if not obj.is_delete_marker]
 
         def callback(html: HTMLTemplate):
             if iterator == 'disk':  
                 cssInPath = self.fileService.listExtensionPath(html.dirName, Extension.CSS.value)
             else:
-                cssInPath = self.fileService.root_to_path_matching(self.objects,html.dirName,Extension.CSS.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
+                cssInPath = self.fileService.root_to_path_matching(non_marker_obj,html.dirName,Extension.CSS.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
             
             css_content=""
 
@@ -362,7 +370,7 @@ class AssetService(_service.BaseService):
             if iterator == 'disk':
                 imagesInPath = self.fileService.listExtensionPath(html.dirName, Extension.JPEG.value)
             else:
-                imagesInPath = self.fileService.root_to_path_matching(self.objects,html.dirName,Extension.JPEG.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
+                imagesInPath = self.fileService.root_to_path_matching(non_marker_obj,html.dirName,Extension.JPEG.value,sep=ASSET_SEPARATOR,pointer=PointerIterator('object_name'))
                 
             for imagesPath in imagesInPath:
                 try:

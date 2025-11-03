@@ -20,7 +20,7 @@ from .file_service import BaseFileRetrieverService, FileService
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Dict
-from app.services.database_service import RotateCredentialsInterface
+from app.services.database_service import TempCredentialsDatabaseService
 from fnmatch import fnmatch
 
 class AmazonS3ServiceError(BaseError):
@@ -40,12 +40,12 @@ class AmazonSNSError(Exception):
 MINIO_OBJECT_BUILD_STATE = 1001
 MINIO_OBJECT_DESTROY_STATE = 1001
 
-@Service()
-class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
+@Service(abstract_service_register=[BaseFileRetrieverService])
+class AmazonS3Service(TempCredentialsDatabaseService):
     
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
-        super().__init__(configService,fileService)
-        RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.MINIO_TTL)
+        TempCredentialsDatabaseService.__init__(self,configService,fileService,vaultService,VaultTTLSyncConstant.MINIO_TTL)
+        
         self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
         self.download_cache = {}
     
@@ -101,8 +101,9 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
         self.client.remove_object(MinioConstant.ASSETS_BUCKET, object_name, version_id=version_id)
         return _object
 
-    def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None):
-        objects = self.list_objects(prefix=prefix, recursive=recursive,match=match)
+    def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None,delete_version=False,objects=None):
+        if not objects:
+            objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=delete_version,include_delete_marker=False)
         if not objects:
             raise ObjectNotFoundError 
         
@@ -121,11 +122,10 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             raise ObjectNotFoundError(f'Object {object_name} not found in bucket {MinioConstant.ASSETS_BUCKET}')
         return _object
     
-    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None):
-        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive)
-        if match:
-            objects = [o for o in objects if ((match and self.fileService.file_matching(o.object_name,match)) and not o.is_dir)]
-        return objects
+    def list_objects(self,prefix: str='',recursive: bool = True,match:str=None,include_version=True,include_delete_marker=True):
+        objects = self.client.list_objects(MinioConstant.ASSETS_BUCKET, prefix=prefix, recursive=recursive,include_version=include_version)
+        return [o for o in objects if (self.fileService.file_matching(o.object_name,match) and not o.is_dir and (include_delete_marker or not o.is_delete_marker))]
+        
 
     def copy_object(self,source_object_name: str,dest_object_name: str,version_id: str = None,move=False):
         self.read_object(source_object_name,version_id).close()
@@ -143,7 +143,7 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
             'meta':meta
         }
 
-    def upload_object(self,object_name: str,data, content_type: str = 'application/octet-stream',metadata: Dict = None):
+    def upload_object(self,object_name: str,data:bytes, content_type: str = 'application/octet-stream',metadata: Dict = None):
         return self.client.put_object(
             MinioConstant.ASSETS_BUCKET,object_name,data,len(data),content_type=content_type,metadata=metadata
         )
@@ -157,7 +157,7 @@ class AmazonS3Service(BaseFileRetrieverService,RotateCredentialsInterface):
     
     def download_objects(self,prefix: str,recursive: bool = True,match:str=None,objects:list[Object]=None):
         if objects == None:
-            objects = self.list_objects(prefix=prefix, recursive=recursive,match=match)
+            objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=False,include_delete_marker=False)
         downloaded_objects = {}
         if not objects:
             raise ObjectNotFoundError

@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, Callable
 
 from fastapi import HTTPException, Response
-from app.utils.helper import APIFilterInject,AsyncAPIFilterInject
+from app.utils.helper import APIFilterInject,AsyncAPIFilterInject, SkipCode
 from asgiref.sync import sync_to_async
 from enum import Enum
 
@@ -16,11 +16,12 @@ class DecoratorPriority(Enum):
 
 class DecoratorException(Exception):
 
-    def __init__(self,status_code=None,details:Any=None,headers:dict[str,str]=None, *args):
+    def __init__(self,status_code=None,details:Any=None,headers:dict[str,str]=None,response:Response=None, *args):
         super().__init__(*args)
         self.status_code = status_code
         self.details = details
         self.headers=headers
+        self.response = response
 
     def raise_http_exception(self):
         if self.status_code == None:
@@ -105,25 +106,33 @@ class PermissionDefaultException(DecoratorException):
 
 class Interceptor(DecoratorObj):
 
-    def __init__(self,):
+    def __init__(self,filter_before_params:bool= True,filter_after_params:bool=True):
         super().__init__(self.intercept, True)
+        self.filter_before_params = filter_before_params
+        self.filter_after_params = filter_after_params
 
 
-    def _before(self):
+    def intercept_before(self):
         ...
     
-    def _after(self,result:Response|Any):
+    def intercept_after(self,result:Response|Any):
         ...
     
     async def intercept(self,function:Callable,*args,**kwargs):
-        r = APIFilterInject(self._before)(*args,**kwargs)
-        if asyncio.iscoroutinefunction(self._before):
-            await r
-            
+        try:
+            if self.filter_before_params:r = APIFilterInject(self.intercept_before)(*args,**kwargs) 
+            else:r=self.intercept_before(*args,**kwargs)
+
+            if asyncio.iscoroutine(r): await r
+        except SkipCode as e:
+            return e.args[0]
+                    
         result = await function(*args,**kwargs)
-        r= APIFilterInject(self._after)(result,**kwargs)
-        if asyncio.iscoroutinefunction(self._after):
-            await  r
+
+        if self.filter_after_params: r = APIFilterInject(self.intercept_after)(result,*args,**kwargs) 
+        else: r=self.intercept_after(result,*args,**kwargs)
+
+        if asyncio.iscoroutine(r): await  r
 
         return result
     

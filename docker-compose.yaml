@@ -11,6 +11,14 @@ services:
       - settingdb-data:/data
       - vault-api-key:/vault/api-key
 
+  memcached:
+    image: memcached:latest
+    container_name: memcached
+    ports:
+      - "11211:11211"
+    command: memcached -m 64 -vv
+    restart: unless-stopped
+
   redis:
     image: redis:latest #Queue for the taks
     container_name: redis
@@ -58,10 +66,11 @@ services:
   minio:
     image: minio/minio:latest
     container_name: minio
-    restart: always
+    restart: unless-stopped
     build:
       args:
-        - S3_STORAGE_LIMIT=${S3_STORAGE_LIMIT}
+        - ASSETS_STORAGE_LIMIT=${ASSETS_STORAGE_LIMIT:-500MB}
+        - STATIC_STORAGE_LIMIT=${STATIC_STORAGE_LIMIT:-500MB}
         - S3_MODE=dev
       context: .
       dockerfile: docker/Dockerfile.minio
@@ -73,6 +82,7 @@ services:
       - minio-secret:/minio/secrets
     environment:
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
+      - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
     
     depends_on:
       - redis

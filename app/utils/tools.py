@@ -1,7 +1,7 @@
 from functools import wraps
 import json
 from time import perf_counter,time,time_ns
-from typing import Callable, Literal
+from typing import Callable, Literal, get_args
 from aiohttp_retry import Any
 from cachetools import LRUCache
 import asyncio
@@ -68,9 +68,10 @@ class MyJSONCoder(JsonCoder):
             return None
 
 
-def Cache(cache_type:Literal['in-memory', 'redis'] = 'in-memory'):
+
+def Cache(cache_type:Literal['custom-in-memory','fastapi-default-cache'] = 'custom-in-memory'):
     
-    def InMemoryCache(maxsize: int = 1000):
+    def CustomInMemoryCache(maxsize: int = 1000):
         """
         A decorator to cache function results in memory using LRUCache.
         Args:
@@ -115,7 +116,7 @@ def Cache(cache_type:Literal['in-memory', 'redis'] = 'in-memory'):
         return callback
 
     @wraps(cache)
-    def RedisCache(*args, **kwargs):
+    def DefaultCache(*args, **kwargs):
         """
         A decorator to cache function results using Redis.
         Args:
@@ -129,11 +130,11 @@ def Cache(cache_type:Literal['in-memory', 'redis'] = 'in-memory'):
         return callback
 
     if cache_type == 'in-memory':
-        return InMemoryCache
-    elif cache_type == 'redis':
-        return RedisCache
+        return CustomInMemoryCache
+    elif cache_type == 'fastapi-default-cache':
+        return DefaultCache
     else:
-        raise ValueError("Invalid cache type. Choose 'in-memory' or 'redis'.")
+        raise ValueError("Invalid cache type. Choose 'in-memory' or 'fastapi-default-cache'.")
 
     
 

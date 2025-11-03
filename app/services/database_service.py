@@ -16,7 +16,7 @@ from app.definition._interface import Interface, IsInterface
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import MongooseDBConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.helper import quote_safe_url, reverseDict
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
@@ -37,17 +37,27 @@ from random import randint,random
 from app.models.profile_model import *
 from app.errors.db_error import *
 from pymongo import MongoClient
+from pymemcache import Client as SyncClient,MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
+from aiomcache import Client
 
 MS_1000 = 1000
 ENGINE_KEY = 'engine'
 DB_KEY = 'db'
 
 
-@IsInterface
-class RotateCredentialsInterface(Interface):
+@AbstractServiceClass()
+class DatabaseService(BaseService): 
+    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
+        BaseService.__init__(self)
+        self.configService= configService
+        self.fileService = fileService
 
-    
-    def __init__(self,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+@AbstractServiceClass()
+class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
+
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+        DatabaseService.__init__(self,configService,fileService)
+        SchedulerInterface.__init__(self,)
         self.vaultService = vaultService
         self.creds:VaultDatabaseCredentials = {}
         self.max_retry = max_retry
@@ -57,10 +67,23 @@ class RotateCredentialsInterface(Interface):
         self.last_rotated = None
         self.auth_ttl = ttl
 
+        delay = IntervalParams( 
+            seconds=self.random_buffer_interval(self.auth_ttl) 
+            )
+        self.interval_schedule(delay, self.creds_rotation)
+
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError("Vault Service can’t issue creds")
-        
+
+    async def async_pingService(self, **kwargs):
+        self.check_auth()
+        super().async_pingService(**kwargs)
+
+    def sync_pingService(self, **kwargs):
+        self.check_auth()
+        super().sync_pingService(**kwargs)
+             
     @staticmethod
     def random_buffer_interval(ttl):
         return ttl - (ttl*.08*random() + randint(20,40))
@@ -119,15 +142,9 @@ class RotateCredentialsInterface(Interface):
         if self.last_rotated == None:
             return True
         
-        return  time.time() - self.last_rotated < self.auth_ttl
+        return  time.time() - self.last_rotated < self.auth_ttl    
 
-@AbstractServiceClass()
-class DatabaseService(BaseService): 
-    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__()
-        self.configService= configService
-        self.fileService = fileService
-    
+
 
 @Service()
 class RedisService(DatabaseService):
@@ -292,20 +309,20 @@ class RedisService(DatabaseService):
     def build(self,build_state=-1):
         host = self.configService.REDIS_URL
         host = host.replace('redis://','')
-        self.redis_celery = Redis(host=host,db=0)
-        self.redis_limiter = Redis(host=host,db=1)
-        self.redis_cache = Redis(host=host,db=3,decode_responses=True)
+        self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB)
+        self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB)
+        self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True)
 
         if self.configService.celery_env == CeleryMode.none:
-            self.redis_events=Redis(host=host,db=2,decode_responses=True)
+            self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
         else :
-            self.redis_events = SyncRedis(host=host,db=2,decode_responses=True)
+            self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
 
         self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
-            0:self.redis_celery,
-            1:self.redis_limiter,
-            2:self.redis_events,
-            3:self.redis_cache,
+            RedisConstant.CELERY_DB:self.redis_celery,
+            RedisConstant.LIMITER_DB:self.redis_limiter,
+            RedisConstant.EVENT_DB:self.redis_events,
+            RedisConstant.CACHE_DB:self.redis_cache,
             'celery':self.redis_celery,
             'limiter':self.redis_limiter,
             'events': self.redis_events,
@@ -384,12 +401,103 @@ class RedisService(DatabaseService):
             await self.db[i].close()
 
 
+    @check_db
+    async def hash_iter(self,database:int|str,hash_name:str,iter=False,match:str=None,count=None,redis:Redis=None):
+        if iter:
+            return await redis.hscan_iter(hash_name,match,count)
+        else:
+            return await redis.hgetall(hash_name)
+    
+    @check_db
+    async def hash_del(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
+        return await redis.hdel(*keys)
+
+    
+@Service()
+class MemCachedService(DatabaseService,SchedulerInterface):
+    
+    DEFAULT_PORT= 11211  
+    POOL_MINSIZE=2
+    POOL_MAXSIZE =5
+
+    def __init__(self, configService:ConfigService, fileService:FileService):
+        super().__init__(configService, fileService)
+    
+    @staticmethod
+    def KeyEncoder(func:Callable):
+
+        @functools.wraps(func)
+        async def wrapper(self,key:str,*args,**kwargs):
+            if type(key)== str:
+                key = key.encode()
+            return await func(self,key,*args,**kwargs)
+
+        return wrapper
+    
+    def build(self, build_state = ...):
+        try:
+            self.sync_client = SyncClient((self.configService.MEMCACHED_URL,self.DEFAULT_PORT),connect_timeout=6)
+            self.client = Client(self.configService.MEMCACHED_URL,pool_minsize=self.POOL_MINSIZE,pool_size=self.POOL_MAXSIZE)
+            version = self.sync_client.version().decode()
+           
+        except MemcacheClientError as e:
+            raise BuildFailureError
+        
+        except MemcacheUnexpectedCloseError as e:
+            raise BuildFailureError
+            
+        except MemcacheServerError as e:
+            raise BuildWarningError
+            
+    @KeyEncoder
+    async def get(self,key:str,default:Any=None,_raise=False,_return_bytes=False)->Any|bytes:
+        result = await self.client.get(key,None)
+        if result == None and default != None:
+            if _raise:
+                raise MemCachedCacheMissError
+            else: return default
+    
+        return json.loads(result) if result!=None and not _return_bytes else result
+   
+    async def delete(self,*key:str):
+        if len(key) < 1:
+            raise MemCacheNoValidKeysDefinedError('Key not given')
+        
+        if len(key)==1:
+            key = key.encode()
+            return await self.client.delete(key)
+
+        return self.sync_client.delete_many(list(key))
+    
+    @KeyEncoder
+    async def set(self,key:str,value:Any|bytes,expire:int=0,multi=False):     
+        if not multi:
+            if type(value) != bytes:
+                value = json.dumps(value).encode()
+            return await self.client.set(key,value,expire)
+        
+        if type(value) != dict:
+            raise MemCachedTypeValueError('Must be a dict')
+        return self.sync_client.set_many(value,expire)
+        
+    @KeyEncoder
+    async def exist(self,key:str):
+        return self.get(key,None,False) != None
+
+    async def clear(self):
+        await self.client.flush_all()
+    
+    async def close(self):
+        self.sync_client.close()
+        self.client.close()
+
+
 D = TypeVar('D',bound=Document)
 
 @Service(
     links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
 )     
-class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInterface):
+class MongooseService(TempCredentialsDatabaseService):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
     DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
 
@@ -399,15 +507,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         fileService: FileService,
         vaultService: HCVaultService,
     ):
-        super().__init__(configService, fileService)
-        SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(
-            self, vaultService, VaultTTLSyncConstant.MONGODB_AUTH_TTL
-        )
-        delay = IntervalParams( 
-            seconds=self.random_buffer_interval(self.auth_ttl) 
-            )
-        self.interval_schedule(delay, self.creds_rotation)
+        super().__init__(configService, fileService,vaultService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
 
         self.client: AsyncIOMotorClient | None = None
         self._documents = []
@@ -537,32 +637,18 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     ##################################################
     # Healthcheck
     ##################################################
-    async def async_pingService(self, **kwargs):
-        self.check_auth()
-
-    def sync_pingService(self, **kwargs):
-        super().sync_pingService(**kwargs)
-        self.check_auth()
-
+    
     def destroy(self, destroy_state = ...):
         self.close_connection()
     
 @Service(
     links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
 )
-class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
+class TortoiseConnectionService(TempCredentialsDatabaseService):
     DATABASE_NAME = 'notifyr'
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
-        super().__init__(configService, None)
-        SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
-
-        delay = IntervalParams(
-            seconds=self.random_buffer_interval(self.auth_ttl)
-        )
-
-        self.interval_schedule(delay,self.creds_rotation)
+        super().__init__(configService, None,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
 
     def build(self,build_state=-1):
         try:
@@ -606,13 +692,6 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
         self.generate_creds()
         await self.init_connection(True)
     
-    def sync_pingService(self,**kwargs):
-        self.check_auth()
-        super().sync_pingService(**kwargs)
-
-    async def async_pingService(self,**kwargs):
-        self.check_auth()
-        await super().async_pingService(**kwargs)
 
 @Service()  
 class JSONServerDBService(DatabaseService,SchedulerInterface):

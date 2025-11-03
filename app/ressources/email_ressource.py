@@ -28,34 +28,6 @@ from app.depends.variables import populate_response_with_request_id,email_verifi
 from app.utils.constant import StreamConstant
 from app.utils.globals import DIRECTORY_SEPARATOR
 
-class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterface):
-
-    def __init__(self,bs4:bool=False):
-        super().__init__(True)
-        pipes.InjectTemplateInterface.__init__(self,Get(AssetService),'email',True)
-        self.configService=Get(ConfigService)
-        self.settingService = Get(SettingService)
-        self.bs4 = bs4
-
-    async def pipe(self,scheduler:BaseEmailSchedulerModel):
-        if scheduler.signature == None:
-            return {}
-
-        signature:HTMLTemplate = self._inject_template(scheduler.signature.template)
-        sign_data = scheduler.signature.data
-        _,_signature = signature.build(sign_data,target_lang= self.settingService.ASSET_LANG,validate=True,bs4=self.bs4)
-        scheduler._signature = _signature
-        return {}
-
-    
-async def to_signature_path(scheduler:BaseEmailSchedulerModel):    
-    if scheduler.signature != None:
-        scheduler.signature.template = "email/signature/" + scheduler.signature.template
-    return {}
-
-async def force_signature(scheduler:BaseEmailSchedulerModel):
-    scheduler._signature = None
-    return {}
 
 EMAIL_PREFIX = "email"
 
@@ -72,6 +44,38 @@ DEFAULT_RESPONSE = {
 @UsePermission(permissions.JWTRouteHTTPPermission)
 @HTTPRessource(EMAIL_PREFIX)
 class EmailRessource(BaseHTTPRessource):
+
+
+    @staticmethod
+    async def to_signature_path(scheduler:BaseEmailSchedulerModel):    
+        if scheduler.signature != None:
+            scheduler.signature.template = "email/signature/" + scheduler.signature.template
+        return {}
+
+    @staticmethod
+    async def force_signature(scheduler:BaseEmailSchedulerModel):
+        scheduler._signature = None
+        return {}
+
+    class TemplateSignatureValidationInjectionPipe(Pipe,pipes.InjectTemplateInterface):
+
+        def __init__(self,bs4:bool=False):
+            super().__init__(True)
+            pipes.InjectTemplateInterface.__init__(self,Get(AssetService),'email',True)
+            self.configService=Get(ConfigService)
+            self.settingService = Get(SettingService)
+            self.bs4 = bs4
+
+        async def pipe(self,scheduler:BaseEmailSchedulerModel):
+            if scheduler.signature == None:
+                return {}
+
+            signature:HTMLTemplate = self._inject_template(scheduler.signature.template)
+            sign_data = scheduler.signature.data
+            _,_signature = signature.build(sign_data,target_lang= self.settingService.ASSET_LANG,validate=True,bs4=self.bs4)
+            scheduler._signature = _signature
+            return {}
+    
 
     @InjectInMethod()
     def __init__(self,emailReaderService:EmailReaderService, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService,taskService:TaskService):

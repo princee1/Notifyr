@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
-APP_HOST=${1:-"app:8088"}
+ASSETS_STORAGE_LIMIT=$1
+STATIC_STORAGE_LIMIT=$2
+S3_PROD=$3
 
 export MINIO_ROOT_USER="temp-access-key"
 export MINIO_ROOT_PASSWORD="temp-secret-key"
@@ -15,15 +17,20 @@ echo "Waiting for MinIO to start..."
 sleep 20
 echo "MinIO is up!"
 
-mc alias set myminio http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+mc alias set notifyr http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
 
-mc mb myminio/static
-mc version enable myminio/static
+mc mb notifyr/static
+mc version enable notifyr/static
+mc quota set notifyr/static  --size "$STATIC_STORAGE_LIMIT"
 
-mc mb myminio/assets
-mc version enable myminio/assets
 
-mc cp --recursive /app/assets/ myminio/assets/
+mc mb notifyr/assets
+mc version enable notifyr/assets
+mc quota set notifyr/assets  --size "$ASSETS_STORAGE_LIMIT"
+
+if [ "$S3_MODE" = "dev" ]; then
+  mc cp --recursive /app/assets/ notifyr/assets/
+fi
 
 VAULT_SECRET_ACCESS_KEY="vaultuser-$(pwgen -s 10 1)"
 VAULT_SECRET_KEY=$(pwgen -s 30 1)
@@ -37,27 +44,17 @@ cat > /minio/secrets/config.json <<EOF
   "credential": {
     "accessKey": "$VAULT_SECRET_ACCESS_KEY",
     "secretKey": "$VAULT_SECRET_KEY"
-  },
-  "notify_redis": {
-    "2": {
-      "enable": "on",
-      "address": "redis:6379",
-      "key": "minio-events",
-      "queue_limit": 1000,
-      "user": "",
-      "password": ""
-    }
   }
 }
 EOF
 
-mc admin user add myminio "$VAULT_SECRET_ACCESS_KEY" "$VAULT_SECRET_KEY"
+mc admin user add notifyr "$VAULT_SECRET_ACCESS_KEY" "$VAULT_SECRET_KEY"
 
-mc admin policy attach myminio consoleAdmin --user "$VAULT_SECRET_ACCESS_KEY"
+mc admin policy attach notifyr consoleAdmin --user "$VAULT_SECRET_ACCESS_KEY"
 
-mc admin policy create myminio assets-access /app/policy/assets-access.json
+mc admin policy create notifyr assets-access /app/policy/assets-access.json
 
-mc alias remove myminio
+mc alias remove notifyr
 
 kill "$MINIO_PID"
 wait "$MINIO_PID" || true

@@ -9,6 +9,7 @@ async def S3_Event_Stream(entries:list[tuple[str,dict]]):
     valid_entries = set()
     invalid_entries = set()
 
+    print(entries)
     for ids,val in entries:
         valid_entries.add(ids)
         
