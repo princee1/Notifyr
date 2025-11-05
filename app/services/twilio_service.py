@@ -6,7 +6,7 @@ import functools
 from typing import Annotated, Callable, Coroutine, Literal
 from fastapi import HTTPException, Header, Request
 import requests
-from app.classes.profiles import ProfileState
+from app.classes.profiles import ProfileModelException,ProfileState
 from app.classes.template import SMSTemplate
 from app.definition import _service
 from app.interface.redis_event import RedisEventInterface
@@ -171,7 +171,6 @@ class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
         self.profileService = profileService
 
         self.MiniServiceStore = _service.MiniServiceStore[TwilioAccountMiniService]()
-        self.main:TwilioAccountMiniService = None
     
     async def async_pingService(self,**kwargs):
         if self.main == None:
@@ -191,11 +190,15 @@ class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
     def build(self, build_state=...):
         main_set = False
         first_available = None
+        self.main:TwilioAccountMiniService = None
+
 
         count = self.profileService.MiniServiceStore.filter_count(lambda p: p.model.__class__ == TwilioProfileModel)
         state_counter = self.StatusCounter(count)
 
         twilio_account_count = 0
+
+        self.MiniServiceStore.clear()
 
         for id, p in self.profileService.MiniServiceStore:
             if p.model.__class__ == TwilioProfileModel:
@@ -244,7 +247,11 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
     def verify_dependency(self):
         if self.twilioService.service_status not in _service.ACCEPTABLE_STATES:
             raise _service.BuildFailureError
+        
 
+    async def async_verify_dependency(self):
+        async with self.twilioService.statusLock.reader:
+            return self.twilioService.service_status not in _service.ACCEPTABLE_STATES
         
     def set_url(self,status_callback,subject_id=None,twilio_tracking=None):
         url = status_callback + self.status_callback_type
@@ -263,37 +270,47 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs) -> dict:
                 self: BaseTwilioCommunication = args[0]
-                if asyncio.iscoroutinefunction(func):
-                    message:CallInstance| MessageInstance | Coroutine = await func(*args, **kwargs)
-                else:
-                    message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
-                if message== None:
-                    return None
-                
-                if callable(async_callback):
-                    await async_callback(self,*result[1],**result[2])
-                    result = result[0]
-                else:
-                    if isinstance(result,tuple):
+                try:
+                    if asyncio.iscoroutinefunction(func):
+                        message:CallInstance| MessageInstance | Coroutine = await func(*args, **kwargs)
+                    else:
+                        message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
+                    if message== None:
+                        return None
+                    
+                    if callable(async_callback):
+                        await async_callback(self,*result[1],**result[2])
                         result = result[0]
+                    else:
+                        if isinstance(result,tuple):
+                            result = result[0]
 
-                return self.response_extractor(message)
+                    return self.response_extractor(message)
+                except ProfileModelException as e:
+                    await async_callback(self,e.topic,e.error)
+                    return e.error
+
+
 
             @functools.wraps(func)
             def sync_wrapper(*args,**kwargs):
                 self: BaseTwilioCommunication = args[0]
-
-                message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
-                if message== None:
-                    return None
-                
-                if callable(sync_callback):
-                    sync_callback(self,*result[1],**result[2])
-                    result = result[0]
-                else:
-                    if isinstance(result,tuple):
+                try:
+                    message:CallInstance| MessageInstance | Coroutine = func(*args, **kwargs)
+                    if message== None:
+                        return None
+                    
+                    if callable(sync_callback):
+                        sync_callback(self,*result[1],**result[2])
                         result = result[0]
-                return self.response_extractor(message)
+                    else:
+                        if isinstance(result,tuple):
+                            result = result[0]
+                    return self.response_extractor(message)
+                except ProfileModelException as e:
+                    sync_callback(self,e.topic,e.error)
+                    return e.error
+
 
             if ConfigService._celery_env == CeleryMode.worker:
                 return sync_wrapper
@@ -311,12 +328,15 @@ class BaseTwilioCommunication(_service.BaseService,RedisEventInterface):
     def response_extractor(self, res) -> dict:
         ...
 
-@_service.Service()
+@_service.Service(
+    links=[_service.LinkDep(TwilioService,to_build=True,to_destroy=True,to_async_verify=True)]
+)
 class SMSService(BaseTwilioCommunication):
 
     def __init__(self, configService: ConfigService, twilioService: TwilioService,redisService:RedisService):
         super().__init__(configService, twilioService,redisService)
         self.status_callback_type = '?type=sms'
+    
     def response_extractor(self, message: MessageInstance) -> dict:
         return {
             'date_created': str(message.date_created),
@@ -336,9 +356,6 @@ class SMSService(BaseTwilioCommunication):
         func = twilioProfile.client.messages.create_async if as_async else twilioProfile.client.messages.create
         status_callback = twilioProfile.logs_url + self.status_callback_type
         return func(send_as_mms=True, provide_feedback=True, to=otpModel.to, status_callback=status_callback, from_=otpModel._from, body=body)
-
-    def build(self,build_state=-1):
-        ...
 
     def _send_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None) -> MessageInstance:
         twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
@@ -397,7 +414,9 @@ class SMSService(BaseTwilioCommunication):
         twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
         
 
-@_service.Service()
+@_service.Service(
+    links=[_service.LinkDep(TwilioService,to_build=True,to_destroy=True,to_async_verify=True)]
+)
 class CallService(BaseTwilioCommunication):
     status_callback_event = ['initiated', 'ringing', 'answered', 'completed','busy','failed','no-answer']
 

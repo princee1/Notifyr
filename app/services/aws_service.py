@@ -202,7 +202,8 @@ class AmazonS3Service(TempCredentialsDatabaseService):
         
     
 @MiniService(
-    links=[LinkDep(ProfileMiniService,to_destroy=True, to_build=True)]
+    override_init=True,
+    links=[LinkDep(ProfileMiniService,to_build=True,to_destroy=True)]
 )
 class AmazonSESService(BaseMiniService):
     def __init__(self, configService: ConfigService,profileMiniService:ProfileMiniService[AWSProfileModel]) -> None:

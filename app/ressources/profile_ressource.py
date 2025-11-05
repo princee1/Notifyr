@@ -63,7 +63,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.create_profile_model_condition(profileModel)
 
         result = await self.profileService.add_profile(profileModel)
-        broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,bypass_async_verify=False))
+        broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
 
         profileMiniService = ProfileMiniService(None,None,None,result)
         channelService = ChannelMiniService(profileMiniService,self.celeryService)
@@ -71,9 +71,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         return result
 
-    @PingService([HCVaultService,CeleryService])
+    @PingService([HCVaultService,CeleryService,TaskService])
     @UseHandler(VaultHandler,MiniServiceHandler)
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UsePermission(AdminPermission)
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
@@ -117,7 +117,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return await self.profileService.update_meta_profile(profileModel)
     
 
-    @PingService([HCVaultService])
+    @PingService([HCVaultService,TaskService,CeleryService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler,PydanticHandler)

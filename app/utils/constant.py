@@ -117,6 +117,8 @@ class SubConstant:
     PROCESS_TERMINATE = 'process-terminate' 
     MINI_SERVICE_STATUS = 'mini-service-status'
 
+    _SUB_CALLBACK = {SERVICE_STATUS,MINI_SERVICE_STATUS,SERVICE_VARIABLES,PROCESS_TERMINATE}
+
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'
 
