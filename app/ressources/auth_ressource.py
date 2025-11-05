@@ -191,7 +191,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         else:
             return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,content='Could not set auth and refresh token')
         
-    @UseLimiter(limit_value='1/day',per_method=True)
+    @UseLimiter(limit_value='1/day')
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
@@ -222,12 +222,12 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
 
     @UsePipe(ForceClientPipe)
-    @UseLimiter(limit_value='1/day',per_method=True)
+    @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseGuard(AuthenticatedClientGuard)
     @UsePermission(UserPermission(accept_none_auth=True))
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
-    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.DELETE])
+    @BaseHTTPRessource.HTTPRoute('/client/disconnect/', methods=[HTTPMethod.DELETE])
     async def self_revoke_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None),ip_address:str=Depends(get_client_ip)):
         if x_client_token == None:
             raise ClientTokenHeaderNotProvidedError 

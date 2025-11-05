@@ -3,12 +3,16 @@ from fastapi.responses import JSONResponse
 from typing_extensions import Literal
 from fastapi import BackgroundTasks, Request, Response,status
 from app.container import Get
+from app.definition._cost import Cost
 from app.definition._utils_decorator import Interceptor, InterceptorDefaultException
 from app.depends.class_dep import KeepAliveQuery
 from app.depends.res_cache import ResponseCacheInterface
+from app.services.cost_service import CostService
 from app.services.database_service import MemCachedService
+from app.utils.constant import RedisConstant
 from app.utils.helper import SkipCode, copy_response
 
+RedisConstant.LIMITER_DB
 
 class KeepAliveResponseInterceptor(Interceptor):
     
@@ -53,4 +57,19 @@ class ResponseCacheInterceptor(Interceptor):
         else:
             backgroundTasks.add_task(self.cacheType.Delete,**kwargs)
         
-        
+
+class CostInterceptor(Interceptor):
+    
+    def __init__(self,mode:Literal['bind','store']='bind'):
+        super().__init__(True, True)
+        self.costService = Get(CostService)
+        self.mode=mode
+    
+    async def intercept_before(self):
+        ...
+
+    async def intercept_after(self, result:Any,cost:Cost,request:Request):
+        if self.mode == 'bind':
+            request.state.cost = cost
+        else:
+            ...

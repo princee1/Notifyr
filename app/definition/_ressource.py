@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Option
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
+from app.definition._cost import bind_cost_request
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import copy_response, issubclass_of
@@ -32,7 +33,7 @@ from app.depends.variables import SECURITY_FLAG
 
 
 configService: ConfigService = Get(ConfigService)
-rateLimitService:CostService = Get(CostService)
+costService:CostService = Get(CostService)
 
 RequestLimit = 0
 
@@ -377,15 +378,15 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             shared = meta['shared']
 
             if meta['limit_exempt']:
-                func_attr = rateLimitService.GlobalLimiter.exempt(func_attr)
+                func_attr = costService.GlobalLimiter.exempt(func_attr)
                 setattr(self, func_name, func_attr)
                 return
 
             if limit_obj:
                 if not shared:
-                    func_attr = rateLimitService.GlobalLimiter.limit(**limit_obj)(func_attr)
+                    func_attr = costService.GlobalLimiter.limit(**limit_obj)(func_attr)
                 else:
-                    func_attr = rateLimitService.GlobalLimiter.shared_limit(
+                    func_attr = costService.GlobalLimiter.shared_limit(
                         **limit_obj)(func_attr)
 
                 setattr(self, func_name, func_attr)
@@ -830,15 +831,26 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
 
 
 def HTTPStatusCode(code: int | str):
+    """
+    The `HTTPStatusCode` function is a decorator that sets the HTTP status code for a response based on
+    the provided code or code name.
+    
+    :param code: The `code` parameter in the `HTTPStatusCode` function can be either an integer or a
+    string. If it's a string, it represents the name of an HTTP status code. If it's an integer, it
+    represents the numerical value of an HTTP status code
+
+    :type code: int | str
+    """
+
     if isinstance(code, str):
         if code not in status.__all__:
-            raise ...
+            raise AttributeError(f"Code name does not exists")
         else:
             code = status.__getattr__(code)
     elif isinstance(code, int):
         ...
     else:
-        raise
+        raise ValueError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, HTTPStatusCode, code)
@@ -861,23 +873,39 @@ def HTTPStatusCode(code: int | str):
 
 ################################################################                           #########################################################
 
-@functools.wraps(rateLimitService.GlobalLimiter.limit)
-def UseLimiter(**kwargs):  # TODO
+
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None):
+    """
+    *Description copied from the slowapi library*
+
+    * **limit_value**: rate limit string or a callable that returns a string.
+        :ref:`ratelimit-string` for more details.
+    * **scope**: a string or callable that returns a string
+        for defining the rate limiting scope.
+    * **error_message**: string (or callable that returns one) to override the
+        error message used in the response.
+    * **exempt_when**: function returning a boolean indicating whether to exempt
+    the route from the limit
+    * **cost**: integer (or callable that returns one) which is the cost of a hit
+    * **override_defaults**: whether to override the default limits (default: True)
+    """
+    if isinstance(scope,str):
+        raise ValueError
+    
+    shared = scope != None
+
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseLimiter, None, **kwargs)
+        cls = common_class_decorator(func, UseLimiter, None, limit_value=limit_value,override_defaults=override_defaults,exempt_when=exempt_when,error_message=error_message)
         if cls != None:
             return cls
         meta: FuncMetaData | None = getattr(func, 'meta', None)
         if meta is not None:
-            meta['limit_obj'] = kwargs
-            limit_value: str = kwargs['limit_value']
-            meta['shared'] = False
-            try:
-                limit_value = int(limit_value.split('/')[0])
-                global RequestLimit
-                RequestLimit += limit_value
-            except:
-                ...
+            operation_id = meta['operation_id']
+            meta['limit_exempt'] = exempt
+            meta['limit_obj'] = {'limit_value':limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,
+                                 'cost':bind_cost_request}
+            meta['shared'] = shared
+            
         def wrapper(target_function):
             return Helper.response_decorator(target_function)
         
@@ -886,32 +914,6 @@ def UseLimiter(**kwargs):  # TODO
 
     return decorator
 
-
-@functools.wraps(rateLimitService.GlobalLimiter.shared_limit)
-def UseSharingLimiter(**kwargs):
-    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseLimiter, None, **kwargs)
-        if cls != None:
-            return cls
-        meta: FuncMetaData | None = getattr(func, 'meta', None)
-        if meta is not None:
-            meta['limit_obj'] = kwargs
-            meta['shared'] = True
-
-        return Helper.response_decorator(func)
-    return decorator
-
-
-def ExemptLimiter():
-    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseLimiter, None)
-        if cls != None:
-            return cls
-        meta: FuncMetaData | None = getattr(func, 'meta', None)
-        if meta is not None:
-            meta['limit_exempt'] = True
-        return func
-    return decorator
 
 ################################################################                           #########################################################
 
@@ -1015,41 +1017,6 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
             return callback
         Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
         return func
-    return decorator
-
-def UseMiniServiceLock(services:Type[S|BaseMiniServiceManager],lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True):
-    
-    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status)
-        if cls != None:
-            return cls
-    
-        def wrapper(target_function: Callable):
-
-            @functools.wraps(target_function)
-            async def callback(*args, **kwargs):
-                s:BaseMiniServiceManager = Get(services)
-                profile = kwargs.get('profile',None)
-                if profile == None:
-                    raise ProfileNotSpecifiedError
-                if profile not in s.MiniServiceStore:
-                    raise ProfileTypeNotMatchRequest
-                
-                _service:BaseMiniService = s.MiniServiceStore[profile]
-                async with s.statusLock.reader:
-                    if check_status:
-                        s.check_status('')
-
-                    async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
-                        if check_status:
-                            _service.check_status('')
-                        return await Helper.return_result(target_function,args,kwargs)
-                    
-            return callback
-
-        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
-        return func
-
     return decorator
 
 ################################################################                           #########################################################

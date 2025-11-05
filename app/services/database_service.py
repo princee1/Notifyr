@@ -400,6 +400,14 @@ class RedisService(DatabaseService):
         for i in range(len_db):
             await self.db[i].close()
 
+    @check_db
+    async def increment(self,database:int|str,name:str,amount:int,redis:Redis=None):
+        return await redis.decrby(name,amount)
+    
+    @check_db
+    async def decrement(self,database:int|str,name:str,amount:int,redis:Redis=None):
+        return await redis.incrby(name,amount)
+    
 
     @check_db
     async def hash_iter(self,database:int|str,hash_name:str,iter=False,match:str=None,count=None,redis:Redis=None):
