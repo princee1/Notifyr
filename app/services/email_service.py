@@ -44,6 +44,8 @@ class EmailService(_service.BaseMiniServiceManager):
         count = self.profilesService.MiniServiceStore.filter_count(lambda p: p.model.__class__ in self.ACCEPTABLE_MODEL )
         state_counter = self.StatusCounter(count)
 
+        self.MiniServiceStore.clear()
+
         for i,p in self.profilesService.MiniServiceStore:
             model = p.model.__class__
             miniService = self._create_mini_service(model,p)

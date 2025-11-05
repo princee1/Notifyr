@@ -20,3 +20,4 @@ from .health_service import HealthService
 from .cost_service import CostService
 from .setting_service import SettingService,DEFAULT_SETTING
 from .secret_service import HCVaultService
+from .profile_service import ProfileService
