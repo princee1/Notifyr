@@ -56,6 +56,7 @@ async def ProfileErrorStream(entries:list[tuple[str,ProfileErrorProtocol]]):
                         await redisService.publish_data(SubConstant.MINI_SERVICE_STATUS,
                         MiniStateProtocol(
                             id=sid,
+                            service=ProfileService,
                             status=status,
                             to_build=False,
                             to_destroy=True,

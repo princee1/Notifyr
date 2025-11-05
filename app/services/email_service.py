@@ -18,7 +18,7 @@ class EmailService(_service.BaseMiniServiceManager):
     ACCEPTABLE_MODEL:set = ...
 
     def __init_subclass__(cls):
-        setattr(cls,'ACCEPTABLE_MODEL',cls.ACCEPTABLE_MODEL)
+        setattr(cls,'ACCEPTABLE_MODEL',cls.ACCEPTABLE_MODEL.copy())
         return super().__init_subclass__()
 
     def verify_dependency(self):
