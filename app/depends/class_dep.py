@@ -59,7 +59,7 @@ class EmailTracker(TrackerInterface):
         
         return True
 
-    def pipe_email_data(self,email:EmailInterface,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
+    def pipe_email_data(self,email:EmailSendInterface |EmailInterface,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
         
         spam_confidence,spam_label = spam        
         emailMetaData=content.meta
@@ -89,8 +89,8 @@ class EmailTracker(TrackerInterface):
                 recipient = to
                 subject = emailMetaData.Subject
 
-                emailMetaData._Disposition_Notification_To = email.email_address
-                emailMetaData._Return_Receipt_To = email.email_address
+                emailMetaData._Disposition_Notification_To = email.disposition_notification_to
+                emailMetaData._Return_Receipt_To = email.return_receipt_to
                 
                 contact_id = get_value_in_list(contact_ids,i)
 

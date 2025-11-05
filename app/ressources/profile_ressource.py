@@ -49,8 +49,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
-    @PingService([HCVaultService,TaskService])
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @PingService([HCVaultService,MongooseService,TaskService])
+    @UseServiceLock(HCVaultService,MongooseService,lockType='reader',check_status=False)
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
@@ -147,6 +147,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             raise ProfileModelRequestBodyError
         
         model:Type[ProfileModel | Document] = getattr(cls,modelType,None)
+        print(model)
         if model == None:
             raise AttributeError
         
@@ -168,7 +169,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
                 return False
             return True
 
-        mc,force= self.model.condition
+        mc:MongoCondition = self.model.condition
         if mc == None:
             return
         
@@ -187,7 +188,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         if simple_number_validation(count,mc['rule']):
             raise ProfileModelAddConditionError()
         
-        if not force:
+        if not mc.get('force',False):
             return
 
         for k,v in mc['filter'].items():

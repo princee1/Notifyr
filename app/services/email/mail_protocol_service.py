@@ -224,7 +224,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
     def __init__(self,profileMiniService:ProfileMiniService[SMTPProfileModel], configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         self.depService = profileMiniService
         BaseEmailService.__init__(self,configService, loggerService, redisService,profileMiniService)
-        EmailSendInterface.__init__(self)
+        EmailSendInterface.__init__(self,self.depService.model.disposition_notification_to,self.depService.model.return_receipt_to)
         EmailInterface.__init__(self,self.depService.model.email_address)
         self.type_ = 'SMTP'
         self.log_level = self.SMTP_LOG_LEVEL

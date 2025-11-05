@@ -4,11 +4,18 @@ from app.definition._interface import Interface, IsInterface
 from app.interface.timers import CronParams, DateParams, IntervalParams, SchedulerInterface
 
 class EmailInterface(Interface):
-    def __init__(self,email_address):
+    def __init__(self,email_address,disposition_notification_to=None,return_receipt_to=None):
         super().__init__()
         self.email_address = email_address
+        self.disposition_notification_to = disposition_notification_to
+        self.return_receipt_to = return_receipt_to
 
 class EmailSendInterface(Interface):
+
+    def __init__(self,disposition_notification_to=None,return_receipt_to=None):
+        super().__init__()
+        self.disposition_notification_to = disposition_notification_to
+        self.return_receipt_to = return_receipt_to
 
     def sendTemplateEmail(self, data, meta, images,contact_id=None,email_profile:str=None):
         ...

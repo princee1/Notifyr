@@ -37,6 +37,7 @@ def simple_number_validation(value, condition:dict[Operator,int]):
     return True
 
 class MongoCondition(TypedDict):
+    force:bool
     rule:dict |Any
     filter:dict
     method:Method
