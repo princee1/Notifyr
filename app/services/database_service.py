@@ -535,7 +535,7 @@ class MongooseService(TempCredentialsDatabaseService):
 
     async def get(self,model:Type[D],id:str,raise_:bool = True)->D:
         m = await model.get(PydanticObjectId(id))
-        if m == None:
+        if m == None and raise_:
             raise DocumentDoesNotExistsError(id)
         return m
     

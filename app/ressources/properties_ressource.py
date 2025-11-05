@@ -113,7 +113,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         value = globalModel.model_dump()
 
         if force:
-            ptr.update(value)
+            ptr.set_val(value)
             response.status_code = status.HTTP_202_ACCEPTED
         else:
             response.status_code = status.HTTP_201_CREATED

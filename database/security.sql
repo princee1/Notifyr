@@ -348,7 +348,7 @@ BEGIN
         IF NEW.expired_at_auth IS NULL OR NEW.expired_at_refresh IS NULL THEN
             RAISE EXCEPTION 'expired_at_auth/refresh cannot be null';
             RETURN NULL;
-
+        END IF;
         IF NEW.expired_at_auth <= NOW() THEN
             RAISE EXCEPTION 'expired_at_auth cannot be in the past for ACCESS_TOKEN clients';
             RETURN NULL;

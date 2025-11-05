@@ -17,7 +17,7 @@ echo "Waiting for MinIO to start..."
 sleep 20
 echo "MinIO is up!"
 
-mc alias set notifyr http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+mc alias set notifyr http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
 
 mc mb notifyr/static
 mc version enable notifyr/static

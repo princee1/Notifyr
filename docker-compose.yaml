@@ -35,7 +35,7 @@ services:
       - "8040:8040"
 
   mongodb:
-    image: mongo:latest
+    image: mongo:8.0-noble
     container_name: mongodb
     restart: always
     ports:
