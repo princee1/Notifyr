@@ -9,11 +9,13 @@ import smtplib as smtp
 import imaplib as imap
 import poplib as pop
 import socket
+import traceback
 from typing import Callable, Iterable, Literal, Self, Type, TypedDict
 
 from bs4 import BeautifulSoup
 
 from app.classes.profiles import ProfileState,ProfileModelException
+from app.errors.service_error import BuildFailureError
 from app.interface.timers import IntervalInterface
 from app.models.profile_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
 from app.services.database_service import MongooseService, RedisService
@@ -149,6 +151,8 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
         if self.emailHost == EmailHostConstant.CUSTOM:
             self.hostPort = self.depService.model.port
             self.hostAddr = self.depService.model.server
+            if self.hostPort == None or self.hostAddr == None:
+                raise BuildFailureError('Missing connection value Port: {self.hostPort}, Addr: {self.hostAddr}')
         else:
             self.hostPort = config.setHostPort(self.connMethod) if self.depService.model.port == None else self.depService.model.port
             self.hostAddr = config.setHostAddr(self.emailHost)

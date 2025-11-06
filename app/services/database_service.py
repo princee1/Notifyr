@@ -17,7 +17,7 @@ from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInt
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
-from app.utils.helper import quote_safe_url, reverseDict
+from app.utils.helper import quote_safe_url, reverseDict, subset_model
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
@@ -567,7 +567,7 @@ class MongooseService(TempCredentialsDatabaseService):
         else:
             return is_exist
 
-    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={})->list[D]:
+    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={},return_model=False)->list[D]:
         
         filter['_class_id'] = {"$regex": f"{model.__name__}$" }
     
@@ -575,9 +575,8 @@ class MongooseService(TempCredentialsDatabaseService):
             raise MongoCollectionDoesNotExists(collection)
 
         mongo_collection = self.sync_db[collection]
-        docs = mongo_collection.find(filter,projection).to_list()
-
-        return [model.model_construct(**doc) for doc in docs]
+        docs= mongo_collection.find(filter,projection).to_list()
+        return docs if not return_model else [model.model_construct(**doc) for doc in docs]
        
     ##################################################
     # Service lifecycle

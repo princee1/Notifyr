@@ -79,12 +79,16 @@ class EmailConnInterface():
     def setConnFlag(mode: str): pass
 
     @classmethod
-    def setHostAddr(cls,host: str) -> str:
-        up_host = host.upper().strip()
+    def setHostAddr(cls,host: str|Enum) -> str:
+        if isinstance(host,str):
+            up_host = host.upper().strip()
+        else:
+            up_host = host.value
+
         if up_host in cls._member_names_:
             return cls._member_map_[up_host].value
         return host
-
+        
 class SMTPConfig(EmailConnInterface, Enum):
 
     GMAIL_RELAY = "smtp-relay.gmail.com"
