@@ -139,7 +139,7 @@ class BaseService():
     
 
     def check_status(self,func_name):
-        print(self,self.service_status) 
+        print('Service:',self,'Service Status:',self.service_status,'builded:',self._builded,'destroyed:',self._destroyed) 
         match self.service_status :
 
             case ServiceStatus.MAJOR_SYSTEM_FAILURE:

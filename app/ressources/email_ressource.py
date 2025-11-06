@@ -50,7 +50,7 @@ class EmailRessource(BaseHTTPRessource):
     @staticmethod
     async def to_signature_path(scheduler:BaseEmailSchedulerModel):    
         if scheduler.signature != None:
-            scheduler.signature.template = "email/signature/" + scheduler.signature.template
+            scheduler.signature.template = "signature/" + scheduler.signature.template
         return {}
 
     @staticmethod
@@ -110,7 +110,7 @@ class EmailRessource(BaseHTTPRessource):
         return schemas
 
 
-    @UseLimiter(limit_value='10/minutes')
+    @UseLimiter(limit_value='10/minutes',scope='send-email')
     @UseRoles([Role.MFA_OTP])
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
     @UseServiceLock(AssetService,lockType='reader')
@@ -152,7 +152,7 @@ class EmailRessource(BaseHTTPRessource):
         return taskManager.results
     
 
-    @UseLimiter(limit_value='10/minutes')
+    @UseLimiter(limit_value='10/minutes',scope='send-email')
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)

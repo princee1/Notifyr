@@ -3,8 +3,8 @@ from fastapi import Request
 
 class Cost():
 
-    def __init__(self):
-        self.c=0
+    def __init__(self,c=0):
+        self.c=c
 
     def add_cost(self,c:int=1):
         self.c+=c

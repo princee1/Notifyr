@@ -168,7 +168,7 @@ class LinkRessource(BaseHTTPRessource):
         self.contactService = contactService
     
     @UseGuard(AccessLinkGuard(True))
-    @UseLimiter(limit_value='10000/min')
+    @UseLimiter(limit_value='10000/minutes')
     @BaseHTTPRessource.HTTPRoute('/v/{link_id}/{path:path}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     async def track_visit_url(self,request:Request,response:Response,path:str,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_cache)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
 
@@ -182,7 +182,7 @@ class LinkRessource(BaseHTTPRessource):
         
         return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT,)
 
-    @UseLimiter(limit_value='10000/min')
+    @UseLimiter(limit_value='10000/minutes')
     @BaseHTTPRessource.HTTPRoute('/t/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_email_links(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
         redirect_url = link_query.redirect_url
@@ -195,7 +195,7 @@ class LinkRessource(BaseHTTPRessource):
     
         return RedirectResponse(redirect_url,status.HTTP_308_PERMANENT_REDIRECT)
 
-    @UseLimiter(limit_value='10000/min')
+    @UseLimiter(limit_value='10000/minutes')
     @BaseHTTPRessource.HTTPRoute('/p/p.png/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_pixel(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
         self.send_email_event(broker,link_query,EmailStatus.OPENED)

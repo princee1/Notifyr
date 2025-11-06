@@ -107,7 +107,7 @@ class TaskManager():
             'cost': self.cost,
             'results': self.task_result,
             'errors':self.scheduler._errors if self.scheduler else {},
-            'message': self.scheduler._message if self.scheduler else [],
+            'message': self.scheduler._message if self.scheduler else {},
         }
 
     @property
@@ -316,7 +316,7 @@ class ChannelMiniService(BaseMiniService):
         self.celeryService = celeryService
     
     def build(self, build_state = ...):
-        return super().build(build_state)
+        self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
         
     def purge(self):
         """
@@ -614,7 +614,7 @@ class OffloadTaskService(BaseService):
 
         if algorithm == 'route' and isinstance(scheduler, SchedulerModel) and scheduler.task_type != TaskType.NOW.value:
             algorithm = 'worker'
-            add_warning_messages(UNSUPPORTED_TASKS, scheduler, index=None)
+            add_warning_messages(UNSUPPORTED_TASKS, scheduler, index=index)
 
         if algorithm == 'normal':
              return await self._normal_offload(strategy,cost,scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
