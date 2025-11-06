@@ -132,10 +132,10 @@ class SMTPProfileModel(ProtocolProfileModel):
     @model_validator(mode='after')
     def email_rd_validation(self,):
         def parse_email(email:str):
-            if email.lower().strip() == '_same_as_email_address_':
-                return self.email_address
             if email == None:
                 return None
+            if email.lower().strip() == '_same_as_email_address_':
+                return self.email_address
             if not email_validator(email):
                 raise ValueError('Email format not valid')
             return email

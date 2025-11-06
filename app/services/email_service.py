@@ -35,12 +35,11 @@ class EmailService(_service.BaseMiniServiceManager):
         super().__init__()
         self.profilesService = profileService
     
-    def _create_mini_service(self,model,p)->ProfileMiniService | None:
+    def _create_mini_service(self,model,profile)->ProfileMiniService | None:
         return 
     
     def build(self,build_state=_service.DEFAULT_BUILD_STATE):
-        #TODO filter the by type of the model   
-
+        
         count = self.profilesService.MiniServiceStore.filter_count(lambda p: p.model.__class__ in self.ACCEPTABLE_MODEL )
         state_counter = self.StatusCounter(count)
 
@@ -51,7 +50,6 @@ class EmailService(_service.BaseMiniServiceManager):
             miniService = self._create_mini_service(model,p)
             if miniService == None:
                 continue
-
             miniService._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
             state_counter.count(miniService)
             self.MiniServiceStore.add(miniService)
@@ -76,9 +74,9 @@ class EmailSenderService(EmailService):
 
         self.MiniServiceStore = _service.MiniServiceStore[EmailSendInterface | _service.BaseMiniService]()
 
-    def _create_mini_service(self, model, p):
+    def _create_mini_service(self, model, profile):
         if model == SMTPProfileModel:
-            return SMTPEmailMiniService(p,self.configService,self.loggerService,self.redisService)
+            return SMTPEmailMiniService(profile,self.configService,self.loggerService,self.redisService)
         else:
             return None
 
@@ -100,9 +98,9 @@ class EmailReaderService(EmailService):
 
         self.MiniServiceStore = _service.MiniServiceStore[EmailReadInterface|_service.BaseMiniService]()
 
-    def _create_mini_service(self, model, p):
-        if model == IMAPEmailMiniService:
-            return IMAPEmailMiniService(p,self.configService,self.loggerService,self.reactiveService,self.redisService)
+    def _create_mini_service(self, model, profile):
+        if model == IMAPProfileModel:
+            return IMAPEmailMiniService(profile,self.configService,self.loggerService,self.reactiveService,self.redisService)
         else:
             return None
 

@@ -889,7 +889,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     * **cost**: integer (or callable that returns one) which is the cost of a hit
     * **override_defaults**: whether to override the default limits (default: True)
     """
-    if isinstance(scope,str):
+    if scope!= None and not isinstance(scope,str):
         raise ValueError
     
     shared = scope != None
@@ -904,6 +904,8 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
             meta['limit_exempt'] = exempt
             meta['limit_obj'] = {'limit_value':limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,
                                  'cost':bind_cost_request}
+            if shared:
+                meta['limit_obj']['scope'] = scope
             meta['shared'] = shared
             
         def wrapper(target_function):

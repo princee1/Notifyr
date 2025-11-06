@@ -3,17 +3,14 @@ from typing import Any, Callable, Iterable
 from app.definition._interface import Interface, IsInterface
 from app.interface.timers import CronParams, DateParams, IntervalParams, SchedulerInterface
 
-class EmailInterface(Interface):
-    def __init__(self,email_address,disposition_notification_to=None,return_receipt_to=None):
-        super().__init__()
+class EmailInterface:
+    def __init__(self,email_address):
         self.email_address = email_address
-        self.disposition_notification_to = disposition_notification_to
-        self.return_receipt_to = return_receipt_to
 
-class EmailSendInterface(Interface):
+class EmailSendInterface(Interface,EmailInterface):
 
-    def __init__(self,disposition_notification_to=None,return_receipt_to=None):
-        super().__init__()
+    def __init__(self,email_address:str,disposition_notification_to=None,return_receipt_to=None):
+        EmailInterface.__init__(self,email_address)
         self.disposition_notification_to = disposition_notification_to
         self.return_receipt_to = return_receipt_to
 
@@ -38,7 +35,7 @@ class Jobs:
     trigger:Any
 
 @IsInterface
-class EmailReadInterface(SchedulerInterface):
+class EmailReadInterface(SchedulerInterface,EmailInterface):
 
     JOBS_META ={}
 
@@ -59,7 +56,7 @@ class EmailReadInterface(SchedulerInterface):
             job = Jobs(**params)
 
             if classname not in cls.JOBS_META:
-                cls.JOBS_META = []
+                cls.JOBS_META[classname] = []
             
             cls.JOBS_META.append(job)
 
@@ -68,10 +65,11 @@ class EmailReadInterface(SchedulerInterface):
     
     def __init__(self,email_address:str, misfire_grace_time = None):
         SchedulerInterface.__init__(self,misfire_grace_time)
+        EmailInterface.__init__(self,email_address)
         self._schedule_jobs()
     
     def _schedule_jobs(self,id=None):
-        jobs:list[Jobs] = EmailReadInterface.JOBS_META[self.__class__.__name__]
+        jobs:list[Jobs] = EmailReadInterface.JOBS_META.get(self.__class__.__name__,[])
         for j in jobs:
             func = getattr(self,j.func,None)
             if func == None:

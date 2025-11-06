@@ -209,9 +209,8 @@ class AmazonSESService(BaseMiniService):
     def __init__(self, configService: ConfigService,profileMiniService:ProfileMiniService[AWSProfileModel]) -> None:
         self.depService = profileMiniService
         super().__init__(profileMiniService,None)
-        EmailSendInterface.__init__(self,None)
-        EmailReadInterface.__init__(self,None)
-        EmailInterface.__init__(self,self.depService.model.email_address)
+        EmailSendInterface.__init__(self,self.depService.model.email_address)
+        EmailReadInterface.__init__(self,self.depService.model.email_address)
         self.configService = configService
     
     def build(self,build_state=-1):

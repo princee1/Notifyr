@@ -217,15 +217,14 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
     override_init=True,
     links=[_service.LinkDep(ProfileMiniService,to_build=True,to_destroy=True)]
 )
-class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
+class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
 
     SMTP_LOG_LEVEL = 0
     # BUG cant resolve an abstract class
     def __init__(self,profileMiniService:ProfileMiniService[SMTPProfileModel], configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         self.depService = profileMiniService
         BaseEmailService.__init__(self,configService, loggerService, redisService,profileMiniService)
-        EmailSendInterface.__init__(self,self.depService.model.disposition_notification_to,self.depService.model.return_receipt_to)
-        EmailInterface.__init__(self,self.depService.model.email_address)
+        EmailSendInterface.__init__(self,self.depService.model.email_address,self.depService.model.disposition_notification_to,self.depService.model.return_receipt_to)
         self.type_ = 'SMTP'
         self.log_level = self.SMTP_LOG_LEVEL
         

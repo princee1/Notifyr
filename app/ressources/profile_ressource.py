@@ -112,8 +112,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         modelUpdate = modelUpdate.model_dump()
 
         await self.profileService.update_profile(profileModel,modelUpdate)
-        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
+        await self.mongooseService.exists_unique(profileModel,True)
 
+        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return await self.profileService.update_meta_profile(profileModel)
     
 
