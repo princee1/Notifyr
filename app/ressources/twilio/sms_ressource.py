@@ -25,7 +25,7 @@ from app.services.database_service import RedisService
 from app.services.twilio_service import SMSService, TwilioAccountMiniService, TwilioService
 from app.depends.dependencies import  get_auth_permission, get_query_params, get_request_id
 from app.depends.variables import profile_query
-from app.depends.funcs_dep import get_profile, get_task, get_template, verify_twilio_token,populate_response_with_request_id,as_async_query,wait_timeout_query
+from app.depends.funcs_dep import get_profile, get_task, get_template, verify_twilio_token,populate_response_with_request_id,background_query,wait_timeout_query
 from app.utils.constant import SpecialKeyAttributesConstant, StreamConstant
 from app.utils.helper import APIFilterInject, uuid_v1_mc
 

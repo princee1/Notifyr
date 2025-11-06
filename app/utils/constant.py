@@ -72,7 +72,7 @@ class SpecialKeyParameterConstant:
     SCHEDULER_SPECIAL_KEY_PARAMETER = 'scheduler'
     WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
     WAIT_TIMEOUT_PARAMETER = 'wait_timeout'
-    AS_ASYNC_PARAMETER = 'as_async'
+    BACKGROUND_PARAMETER = 'background'
 
 class SpecialKeyAttributesConstant:
     CONTACT_SPECIAL_KEY_ATTRIBUTES='_contact'

@@ -26,7 +26,7 @@ from app.services.twilio_service import CallService, TwilioAccountMiniService, T
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_request_id
-from app.depends.funcs_dep import get_client,Get_Contact, get_task, get_template, verify_twilio_token, as_async_query, populate_response_with_request_id,wait_timeout_query,get_profile
+from app.depends.funcs_dep import get_client,Get_Contact, get_task, get_template, verify_twilio_token, background_query, populate_response_with_request_id,wait_timeout_query,get_profile
 from app.depends.class_dep import Broker, KeepAliveQuery, SubjectParams, TwilioTracker
 from app.utils.constant import StreamConstant
 from app.utils.helper import uuid_v1_mc

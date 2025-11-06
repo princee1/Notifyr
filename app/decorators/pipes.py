@@ -272,18 +272,18 @@ class OffloadedTaskResponsePipe(Pipe):
         super().__init__(False)
         self.copy_res = copy_res
 
-    def pipe(self, result: Any | Response, response: Response = None, scheduler: SchedulerModel = None, otpModel: OTPModel = None, taskManager: TaskManager = None, as_async: bool = None):
-        as_async = self._determine_async(taskManager, as_async)
+    def pipe(self, result: Any | Response, response: Response = None, scheduler: SchedulerModel = None, otpModel: OTPModel = None, taskManager: TaskManager = None, background: bool = None):
+        background = self._determine_async(taskManager, background)
         result = self._process_result(result, taskManager)
-        self._set_status_code(response, scheduler, otpModel, as_async)
+        self._set_status_code(response, scheduler, otpModel, background)
         return result
 
-    def _determine_async(self, taskManager: TaskManager, as_async: bool) -> bool:
-        if taskManager is None and as_async is None:
+    def _determine_async(self, taskManager: TaskManager, background: bool) -> bool:
+        if taskManager is None and background is None:
             return False
         if taskManager is not None:
-            return taskManager.meta['as_async']
-        return as_async if as_async is not None else False
+            return taskManager.meta['background']
+        return background if background is not None else False
 
     def _process_result(self, result: Any|Response, taskManager: TaskManager) -> Any | Response:
         
@@ -291,8 +291,8 @@ class OffloadedTaskResponsePipe(Pipe):
             return taskManager.results
         return result
 
-    def _set_status_code(self, response: Response, scheduler: SchedulerModel, otpModel: OTPModel, as_async: bool):
-        if (scheduler and scheduler.task_type != TaskType.NOW.value) or (otpModel and as_async) or as_async:
+    def _set_status_code(self, response: Response, scheduler: SchedulerModel, otpModel: OTPModel, background: bool):
+        if (scheduler and scheduler.task_type != TaskType.NOW.value) or (otpModel and background) or background:
             response.status_code = 201
         else:
             response.status_code = 200

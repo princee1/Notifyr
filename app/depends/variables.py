@@ -33,7 +33,7 @@ summary_query:Callable = get_query_params('summary','false',True)
 
 # ----------------------------------------------                                    ---------------------------------- #
 
-as_async_query:Callable = get_query_params('background','true',True)
+background_query:Callable = get_query_params('background','true',True)
 
 split_query: Callable = get_query_params('split','false',True)
 

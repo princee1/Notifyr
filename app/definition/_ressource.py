@@ -978,7 +978,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
             async def callback(*args, **kwargs):
 
                 wait_timeout = kwargs.get('wait_timeout',MIN_TIMEOUT)
-                as_async = kwargs.get('as_async',True)
+                background = kwargs.get('background',True)
                 
                 def proxy(_service:BaseService|BaseMiniServiceManager,f:Callable):
                     
@@ -1010,7 +1010,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                     _service: S = Get(s)
                     inner_callback = proxy(_service,inner_callback)
 
-                if not infinite_wait and wait_timeout >=0 and as_async:
+                if not infinite_wait and wait_timeout >=0 and background:
                     return await asyncio.wait_for(inner_callback(*args,**kwargs),wait_timeout)
                 else:
                     return await inner_callback(*args,**kwargs)

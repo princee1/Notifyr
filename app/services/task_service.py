@@ -40,7 +40,7 @@ class TaskConfig(TypedDict):
 
 class TaskMeta(TypedDict):
     x_request_id:str
-    as_async:bool
+    background:bool
     algorithm:AlgorithmType
     strategy:StrategyType
     runtype:RunType
@@ -76,7 +76,7 @@ class TaskManager():
         scheduler = self.scheduler if _s is None else _s
         cost = Compute_cost(cost, scheduler.heaviness)
 
-        values = await self.offloadTask(self.meta['strategy'],cost,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['as_async'], index, callback, *args, **kwargs)
+        values = await self.offloadTask(self.meta['strategy'],cost,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index, callback, *args, **kwargs)
         self.task_result.append(values)
         self.cost += cost
 
@@ -364,8 +364,8 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
 
         self.MiniServiceStore = MiniServiceStore[ChannelMiniService]()
 
-    def _register_tasks(self, request_id: str,as_async:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool,retry:bool,split:bool,algorithm:AlgorithmType,strategy:StrategyType)->TaskManager:
-        meta = TaskMeta(x_request_id=request_id,as_async=as_async,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy)
+    def _register_tasks(self, request_id: str,background:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool,retry:bool,split:bool,algorithm:AlgorithmType,strategy:StrategyType)->TaskManager:
+        meta = TaskMeta(x_request_id=request_id,background=background,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy)
         task = TaskManager(meta=meta,offloadTask=offloadTask,return_results=return_results)
         self.sharing_task[request_id] = task
         return task
@@ -610,34 +610,34 @@ class OffloadTaskService(BaseService):
     def build(self,build_state=-1):
         ...
 
-    async def offload_task(self,strategy:StrategyType,cost: float, algorithm: AlgorithmType, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
+    async def offload_task(self,strategy:StrategyType,cost: float, algorithm: AlgorithmType, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, background: bool, index,callback: Callable, *args, **kwargs):
 
         if algorithm == 'route' and isinstance(scheduler, SchedulerModel) and scheduler.task_type != TaskType.NOW.value:
             algorithm = 'worker'
             add_warning_messages(UNSUPPORTED_TASKS, scheduler, index=index)
 
         if algorithm == 'normal':
-             return await self._normal_offload(strategy,cost,scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
+             return await self._normal_offload(strategy,cost,scheduler, delay,is_retry, x_request_id, background,index,callback, *args, **kwargs)
 
         if algorithm == 'worker':
             return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
             
         if algorithm == 'route':
-            return await self._route_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
+            return await self._route_offload(scheduler, delay,is_retry, x_request_id, background,index,callback, *args, **kwargs)
         
         if algorithm == 'mix':
             return await self._mix_offload(strategy,cost,scheduler, delay,is_retry, x_request_id,index,callback, *args, **kwargs)
 
-    async def _normal_offload(self,strategy:StrategyType, cost:float, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, as_async: bool,index, callback: Callable, *args, **kwargs):
+    async def _normal_offload(self,strategy:StrategyType, cost:float, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, background: bool,index, callback: Callable, *args, **kwargs):
 
         if scheduler.task_type == TaskType.NOW.value:
             if (await self.select_task_env(strategy,cost)).startswith('route'):
-                return await self._route_offload(scheduler, delay,is_retry, x_request_id, as_async,index,callback, *args, **kwargs)
+                return await self._route_offload(scheduler, delay,is_retry, x_request_id, background,index,callback, *args, **kwargs)
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
 
-    async def _route_offload(self,scheduler,delay: float,is_retry:bool, x_request_id: str, as_async: bool, index,callback: Callable, *args, **kwargs):
-        if as_async:
+    async def _route_offload(self,scheduler,delay: float,is_retry:bool, x_request_id: str, background: bool, index,callback: Callable, *args, **kwargs):
+        if background:
             if asyncio.iscoroutine(callback):
                 return await self.taskService.add_async_task(scheduler,x_request_id,delay,index,callback)
             return await self.taskService.add_task(scheduler, x_request_id, delay, index,callback, *args, **kwargs)

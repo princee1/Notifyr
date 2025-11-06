@@ -350,10 +350,10 @@ class SMSService(BaseTwilioCommunication):
         }
 
     @BaseTwilioCommunication.parse_to_json()
-    async def send_otp(self, otpModel: OTPModel, body: str, as_async: bool = False,twilioProfile:str=None):
-        as_async = False
+    async def send_otp(self, otpModel: OTPModel, body: str, background: bool = False,twilioProfile:str=None):
+        background = False
         twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
-        func = twilioProfile.client.messages.create_async if as_async else twilioProfile.client.messages.create
+        func = twilioProfile.client.messages.create_async if background else twilioProfile.client.messages.create
         status_callback = twilioProfile.logs_url + self.status_callback_type
         return func(send_as_mms=True, provide_feedback=True, to=otpModel.to, status_callback=status_callback, from_=otpModel._from, body=body)
 
