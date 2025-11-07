@@ -169,16 +169,10 @@ create_default_token(){
 
   vault kv put notifyr-secrets/tokens $ARGS
 
-  local setting_api_key="settingdb:$(pwgen -s 100 1)"
-
   local dmz_api_key="dmz:$(pwgen -s 100 1)"
-
-  vault kv put notifyr-secrets/api-key/SETTING_DB API_KEY="$setting_api_key"
 
   vault kv put notifyr-secrets/api-key/DMZ API_KEY="$dmz_api_key"
   
-  echo -n "$setting_api_key" > "$VAULT_SHARED_API_DIR/setting-db-api-key.txt"
-
   echo -n "$dmz_api_key" > "$VAULT_SHARED_API_DIR/dmz-api-key.txt"
 
   # echo -n "$s3_webhook_key" > "$VAULT_SHARED_API_DIR/s3-webhook-key.txt"

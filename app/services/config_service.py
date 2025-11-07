@@ -229,9 +229,6 @@ class ConfigService(_service.BaseService):
 
         self.MONGO_HOST:str = self.getenv('MONGO_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'mongodb')
 
-        # SETTING DB CONFIG #
-        self.SETTING_DB_URL:str = self.getenv("SETTING_DB_URL","http://localhost:3000" if self.MODE == MODE.DEV_MODE else "http://settingdb:3000")
-
         # REDIS CONFIG #
 
         self.REDIS_URL:str = "redis://"+self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")

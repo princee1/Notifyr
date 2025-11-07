@@ -210,6 +210,16 @@ class Helper:
             return callback
         return wrapper
 
+    @staticmethod
+    def merge_headers(excp_headers:Dict[str,str],response:Response):
+        if response == None:
+            return excp_headers
+        
+        if excp_headers == None:
+            excp_headers = {}
+
+        excp_headers.update(response.headers)
+        return excp_headers
 ################################################################                           #########################################################
 
 
@@ -386,9 +396,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 if not shared:
                     func_attr = costService.GlobalLimiter.limit(**limit_obj)(func_attr)
                 else:
-                    func_attr = costService.GlobalLimiter.shared_limit(
-                        **limit_obj)(func_attr)
-
+                    func_attr = costService.GlobalLimiter.shared_limit(**limit_obj)(func_attr)
                 setattr(self, func_name, func_attr)
 
     def __init_subclass__(cls: Type) -> None:
@@ -509,7 +517,7 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
 
 ################################################################                           #########################################################
 
-def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Type[W]] = [], add_prefix=True,mount=True):
+def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Type[W]] = [], add_prefix=True,ressource_id:str=None,mount=True):
     def class_decorator(cls: Type[R]) -> Type[R]:
         # TODO: support module-level injection
         meta: ClassMetaData= cls.meta
@@ -519,7 +527,7 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
         cls.meta['add_prefix'] = add_prefix
         cls.meta['mount'] = []
         cls.meta['mount_ressource'] = mount
-        meta['ressource_id'] = prefix
+        meta['ressource_id'] = prefix if not ressource_id else ressource_id
 
         meta['classname'] = cls.__name__
 
@@ -874,7 +882,7 @@ def HTTPStatusCode(code: int | str):
 ################################################################                           #########################################################
 
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]=lambda req:1):
     """
     *Description copied from the slowapi library*
 
@@ -894,6 +902,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     
     shared = scope != None
 
+
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseLimiter, None, limit_value=limit_value,override_defaults=override_defaults,exempt_when=exempt_when,error_message=error_message)
         if cls != None:
@@ -902,14 +911,27 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         if meta is not None:
             operation_id = meta['operation_id']
             meta['limit_exempt'] = exempt
-            meta['limit_obj'] = {'limit_value':limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,
-                                 'cost':bind_cost_request}
+            meta['limit_obj'] = {'limit_value':limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,'cost':cost}
             if shared:
                 meta['limit_obj']['scope'] = scope
             meta['shared'] = shared
             
         def wrapper(target_function):
-            return Helper.response_decorator(target_function)
+
+            @functools.wraps(target_function)
+            async def callback(*args,**kwargs):
+                try:
+                    return await Helper.response_decorator(target_function)(*args,**kwargs)
+                except HTTPException as e:
+                    response:Response = kwargs.get('response',None)
+                    request:Request = kwargs.get('request')
+                    if response != None:
+                        print(request.state.view_rate_limit)
+                        response = costService.GlobalLimiter._inject_headers(response,request.state.view_rate_limit)
+
+                    raise HTTPException(e.status_code,e.detail,Helper.merge_headers(e.headers,response))
+            
+            return callback
         
         Helper.appends_funcs_callback(func,wrapper,DecoratorPriority.LIMITER)
         return func

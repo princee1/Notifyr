@@ -83,9 +83,10 @@ class Application(EventInterface):
 
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
-        self.rateLimiterService: CostService = Get(CostService)
+        self.costService: CostService = Get(CostService)
+        
         self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
-        self.app.state.limiter = self.rateLimiterService.GlobalLimiter
+        self.app.state.limiter = self.costService.GlobalLimiter
 
         self.add_exception_handlers()
         self.add_middlewares()

@@ -1,11 +1,11 @@
 from app.definition._service import BaseService, Service, ServiceStatus
 from app.models.properties_model import SettingsModel
 from app.services.config_service import ConfigService, MODE
-from app.services.database_service import JSONServerDBService
+from app.services.database_service import JSONServerDBService, MongooseService
 from app.utils.fileIO import JSONFile
 from app.utils.constant import SettingDBConstant,DEFAULT_SETTING
 
-DEV_MODE_SETTING_FILE = './setting_db.json'
+DEV_MODE_SETTING_FILE = './settings_db.json'
 
 
 SETTING_SERVICE_SYNC_BUILD_STATE = DEFAULT_BUILD_STATE = -1
@@ -16,20 +16,20 @@ SETTING_SERVICE_DEFAULT_SETTING_BUILD_STATE = 0
 @Service()
 class SettingService(BaseService):
     
-    def __init__(self,configService:ConfigService,jsonServerService:JSONServerDBService):
+    def __init__(self,configService:ConfigService,mongooseService: MongooseService):
         super().__init__()
         self.configService = configService
-        self.jsonServerService = jsonServerService
-
+        self.mongooseService = mongooseService
+    
         self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','no'),False)
     
     async def async_verify_dependency(self):
         await super().async_verify_dependency()
-        async with self.jsonServerService.statusLock.reader:
+        async with self.mongooseService.statusLock.reader:
             return self.verify_dependency()
         
     def verify_dependency(self):
-        if self.jsonServerService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
+        if self.mongooseService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
             self.method_not_available = {'aio_get_settings'}
         else:

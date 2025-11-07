@@ -1,15 +1,4 @@
 services:
-  settingdb:
-    image: json-server:latest
-    container_name: settingdb
-    build:
-      context: .
-      dockerfile: ./docker/Dockerfile.settingdb
-    ports:
-      - "3000:3000"
-    volumes:
-      - settingdb-data:/data
-      - vault-api-key:/vault/api-key
 
   memcached:
     image: memcached:latest
@@ -92,7 +81,7 @@ services:
       context: .
       dockerfile: ./docker/Dockerfile.vault
       args:
-        - S3_CRED_TYPE=${S3_CRED_TYPE} #MINIO (minio plugin)  || AWS (aws engine)
+        - S3_CRED_TYPE=${S3_CRED_TYPE:-MINIO} #MINIO (minio plugin)  || AWS (aws engine)
     container_name: vault
     labels:
       - com.docker.compose.service=vault
@@ -117,7 +106,6 @@ services:
       - vault-shared:/vault/shared
       - vault-secrets:/vault/secrets
       - vault-audit:/vault/logs
-      - vault-api-key:/vault/api-key
       - minio-secret:/minio/secrets:ro
 
     depends_on:
@@ -292,7 +280,6 @@ volumes:
   vault-shared: {} # holds secret_id
   vault-secrets: {} # holds root_token/unseal_key (optional, only for admin access)
   vault-audit: {}
-  vault-api-key: {}
 
   mongo-data:
     driver: local
@@ -302,8 +289,6 @@ volumes:
 
   assets-data:
     driver: local
-
-  settingdb-data:
 
   neo4j_data:
   neo4j_logs:
