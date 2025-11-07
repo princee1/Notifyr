@@ -16,8 +16,9 @@ from app.depends.class_dep import Broker
 from app.services.aws_service import AmazonS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import AssetMode, ConfigService
-from app.services.database_service import JSONServerDBService
+from app.services.database_service import MongooseService
 from app.services.file_service import FTPService
+from app.services.secret_service import HCVaultService
 from app.services.setting_service import SETTING_SERVICE_ASYNC_BUILD_STATE, DEFAULT_SETTING, SettingService
 from app.utils.constant import SettingDBConstant
 from app.utils.helper import APIFilterInject, PointerIterator
@@ -144,7 +145,6 @@ class SettingsRessource(BaseHTTPRessource):
         self.configService = Get(ConfigService)
         self.settingService = Get(SettingService)
 
-    #@PingService([SettingService])
     @UseRoles([Role.PUBLIC])
     @UseLimiter(limit_value='1000/minutes')
     @UseServiceLock(SettingService,lockType='reader')
@@ -152,10 +152,10 @@ class SettingsRessource(BaseHTTPRessource):
     async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
         return self.settingService.data
     
-    @PingService([JSONServerDBService],infinite_wait=True)
+    @PingService([HCVaultService],infinite_wait=True)
     @UseRoles([Role.ADMIN])
     @UseLimiter(limit_value='1/minutes')
-    @UseServiceLock(SettingService,lockType='writer')
+    @UseServiceLock(HCVaultService,SettingService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
     async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission),default = Query(False)):
         if default:

@@ -158,6 +158,7 @@ class MongooseDBConstant:
     PROFILE_COLLECTION = 'profile'
     CHAT_COLLECTION = 'chat'
     WORKFLOW_COLLECTION ='workflow'
+    SETTING_COLLECTION = 'setting'
 
     DATABASE_NAME = 'notifyr'
 
@@ -303,3 +304,7 @@ class RedisConstant:
     CELERY_DB=2
     LIMITER_DB=1
     CACHE_DB=3
+
+
+class FastAPIConstant:
+    OO_SCOPE_HEADERS = {'X-Error-Handler':'FastAPI - Exception'}

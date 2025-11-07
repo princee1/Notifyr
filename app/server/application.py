@@ -11,7 +11,7 @@ from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
 from app.services.assets_service import AssetService
 from app.services.aws_service import AmazonS3Service
-from app.services.database_service import JSONServerDBService, MemCachedService, MongooseService, RedisService, TortoiseConnectionService
+from app.services.database_service import  MemCachedService, MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
 from app.services.cost_service import CostService
 from app.services.secret_service import HCVaultService
@@ -217,9 +217,6 @@ class Application(EventInterface):
 
         amazons3Service = Get(AmazonS3Service)
         amazons3Service.start()
-
-        jsonServerService = Get(JSONServerDBService)
-        jsonServerService.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
@@ -231,10 +228,9 @@ class Application(EventInterface):
         vaultService = Get(HCVaultService)
 
         taskService:TaskService =  Get(TaskService)
-        jsonServerService = Get(JSONServerDBService)
         
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,jsonServerService,amazons3Service]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,amazons3Service]
 
         for s in services:
             s.shutdown()

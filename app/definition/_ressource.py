@@ -926,7 +926,6 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
                     response:Response = kwargs.get('response',None)
                     request:Request = kwargs.get('request')
                     if response != None:
-                        print(request.state.view_rate_limit)
                         response = costService.GlobalLimiter._inject_headers(response,request.state.view_rate_limit)
 
                     raise HTTPException(e.status_code,e.detail,Helper.merge_headers(e.headers,response))

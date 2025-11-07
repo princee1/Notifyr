@@ -1,7 +1,7 @@
 from app.definition._service import BaseService, Service, ServiceStatus
 from app.models.properties_model import SettingsModel
 from app.services.config_service import ConfigService, MODE
-from app.services.database_service import JSONServerDBService, MongooseService
+from app.services.secret_service import HCVaultService
 from app.utils.fileIO import JSONFile
 from app.utils.constant import SettingDBConstant,DEFAULT_SETTING
 
@@ -16,10 +16,10 @@ SETTING_SERVICE_DEFAULT_SETTING_BUILD_STATE = 0
 @Service()
 class SettingService(BaseService):
     
-    def __init__(self,configService:ConfigService,mongooseService: MongooseService):
+    def __init__(self,configService:ConfigService,vaultService:HCVaultService):
         super().__init__()
         self.configService = configService
-        self.mongooseService = mongooseService
+        self.mongooseService = vaultService
     
         self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','no'),False)
     
@@ -39,7 +39,7 @@ class SettingService(BaseService):
         if self.configService.MODE == MODE.DEV_MODE and self.use_settings_file:
             self._read_setting_json_file()
         else:
-            self._data = DEFAULT_SETTING
+            self._data = DEFAULT_SETTING.copy()
             match build_state:
                 case -1: # SYNC_BUILD_STATE
                     self._data = self.get_setting()
@@ -54,25 +54,25 @@ class SettingService(BaseService):
 
     def get_setting(self):
         try:
-            data= self.jsonServerService.get_setting()
+            raise ValueError
             SettingsModel(**data) # Validate the data
             return data
         except Exception as e:
-            return DEFAULT_SETTING
+            return DEFAULT_SETTING.copy()
 
     def _read_setting_json_file(self):
         self.jsonFile = JSONFile(DEV_MODE_SETTING_FILE)
         if not self.jsonFile.exists or self.jsonFile.data == None:
-            self.jsonFile.data = DEFAULT_SETTING
+            self.jsonFile.data = DEFAULT_SETTING.copy()
         
-        self._data = self.jsonFile.data[SettingDBConstant.BASE_JSON_DB]
+        self._data = self.jsonFile.data
 
     async def aio_get_settings(self):
-        if self.configService.MODE == MODE.DEV_MODE:
+        if self.configService.MODE == MODE.DEV_MODE and self.use_settings_file:
             self._read_setting_json_file()
         else:
-            self._data = DEFAULT_SETTING
-            self._data = await self.jsonServerService.aio_get_setting()
+            self._data = DEFAULT_SETTING.copy()
+            #self._data = await self.mongooseService.find_one()
         
         return self._data
 
@@ -82,7 +82,7 @@ class SettingService(BaseService):
             self.jsonFile.save()
             return 
         
-        return await self.jsonServerService.save_settings(new_data)
+        return await self.mongooseService
 
     @property
     def API_EXPIRATION(self):

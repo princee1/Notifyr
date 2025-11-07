@@ -75,12 +75,10 @@ path "notifyr-secrets/tokens" {
 
 path "notifyr-secrets/api-key"{
   capabilities = ["read","list"]
-
 }
 
 path "notifyr-secrets/api-key/*"{
   capabilities = ["read"]
-
 }
 
 path "notifyr-secrets/profiles" {
@@ -96,6 +94,10 @@ path "notifyr-secrets/messages" {
 }
 
 path "notifyr-secrets/messages/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+path "notifyr-secrets/settings" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
@@ -224,6 +226,8 @@ EOF
 COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
 
 RUN mkdir /etc/vault && mkdir etc/vault/plugins
+
+COPY --chown=vaultuser:vaultuser ./settings_db.json /etc/vault/
 
 COPY --from=builder /build/vault-plugin-secrets-minio/vault-plugin-secrets-minio /etc/vault/plugins/
 
