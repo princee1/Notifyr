@@ -178,7 +178,6 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
 
             if self.type_ == 'SMTP':
                 connector.set_debuglevel(self.log_level)
-                
             return connector
         except (socket.gaierror, ConnectionRefusedError, TimeoutError) as e:
             if build:
@@ -497,7 +496,7 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
 
     def __init__(self,profileMiniService:ProfileMiniService[IMAPProfileModel], configService: ConfigService, loggerService: LoggerService, reactiveService: ReactiveService, redisService: RedisService) -> None:
         self.depService = profileMiniService
-        super().__init__(configService, loggerService, redisService,profileMiniService)
+        BaseEmailService.__init__(self,configService, loggerService, redisService,profileMiniService)
         EmailReadInterface.__init__(self,self.depService.model.email_address,None)
         self.reactiveService = reactiveService
         self.redisService = redisService
@@ -537,25 +536,17 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             if self.tlsConn:
                 context = ssl.create_default_context()
                 connector.starttls(context=context)
+            
+            status, data = connector.login(self.email_address, self.depService.credentials.plain['password'])
+            
+            if status != 'OK':
+                raise Exception
 
-                status, data = connector.login(self.email_address, self.depService.credentials.plain['password'])
-                if status != 'OK':
-                    raise Exception
+            self._update_mailboxes(connector)
+            self._get_capabilities(connector)
 
-                self._update_mailboxes(connector)
-                self._get_capabilities(connector)
-
-                return True
-            else:
-                if build:
-                    self.service_status = _service.ServiceStatus.NOT_AVAILABLE
-                return False
-                access_token = self.mailOAuth.encode_token(self.email_address)
-                auth_code, auth_message = connector.authenticate('AUTH XOAUTH2', access_token)
-                if auth_code != 'OK':
-                    raise imap.IMAP4.error(
-                        f"Authentication failed: {auth_message}")
-
+            return True
+            
         except imap.IMAP4.error as e:
             if build:
                 self.service_status = _service.ServiceStatus.NOT_AVAILABLE

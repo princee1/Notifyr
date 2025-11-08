@@ -14,7 +14,7 @@ from app.decorators.handlers import FileNamingHandler, S3Handler, ServiceAvailab
 from app.decorators.interceptors import ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
 from app.definition._utils_decorator import Guard
 from app.depends.class_dep import Broker, ObjectsSearch
@@ -23,6 +23,7 @@ from app.depends.res_cache import MinioResponseCache
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError
 from app.services import AmazonS3Service
 from app.services.config_service import ConfigService
+from app.services.database_service import RedisService
 from app.services.file_service import FileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import SECONDS_IN_AN_HOUR as HOUR, MinioConstant, VaultConstant
@@ -33,9 +34,28 @@ from app.utils.helper import b64_encode
 # limit the size with a guard
 # limit the minio size also 
 
+
+@HTTPRessource('webhooks')
+class S3ObjectWebhookRessource(BaseHTTPRessource):
+    
+    
+    @InjectInMethod()
+    def __init__(self,assetService:AssetService,amazonS3Service:AmazonS3Service):
+        super().__init__()
+        self.assetService = assetService
+        self.amazonS3Service = amazonS3Service
+
+    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST,HTTPMethod.GET,HTTPMethod.DELETE])
+    def webhooks(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)]):
+        ...
+
+
+
 @UseRoles([Role.ASSETS])
 @UseHandler(ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
+@IncludeRessource(S3ObjectWebhookRessource)
 @HTTPRessource('objects')
 class S3ObjectRessource(BaseHTTPRessource):
     
