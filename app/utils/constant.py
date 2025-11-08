@@ -73,6 +73,9 @@ class SpecialKeyParameterConstant:
     WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
     WAIT_TIMEOUT_PARAMETER = 'wait_timeout'
     BACKGROUND_PARAMETER = 'background'
+    PROFILE_KWARGS_PARAMETER = '__profile__'
+    ROUTE_PARAMS_KWARGS_PARAMETER = '__route_params__'
+    IS_MANAGER_KWARGS_PARAMETER = '__is_manager__'
 
 class SpecialKeyAttributesConstant:
     CONTACT_SPECIAL_KEY_ATTRIBUTES='_contact'

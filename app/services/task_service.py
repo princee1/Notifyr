@@ -11,7 +11,7 @@ from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.models.profile_model import ProfileModel
 from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
-from app.utils.constant import HTTPHeaderConstant, StreamConstant
+from app.utils.constant import HTTPHeaderConstant, SpecialKeyParameterConstant, StreamConstant
 from app.utils.transformer import none_to_empty_str
 from .config_service import ConfigService
 from app.utils.helper import flatten_dict, generateId
@@ -315,8 +315,16 @@ class ChannelMiniService(BaseMiniService):
         super().__init__(depService,None)
         self.celeryService = celeryService
     
-    def async_pingService(self,infinite_wait:bool, **kwargs):
-        print(kwargs)
+    async def async_pingService(self,infinite_wait:bool, **kwargs):
+        route_params:dict[str,Any] = kwargs.get(SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER,{})
+        scheduler:SchedulerModel = route_params.get('scheduler',None)
+        if not scheduler:
+            return
+        if scheduler.task_type == TaskType.NOW:
+            return
+        
+        # TODO if the celery queue is not available only let scheduler with now to pass, but retry is not available
+        ...
 
     def build(self, build_state = ...):
         self.service_status = ServiceStatus.PARTIALLY_AVAILABLE

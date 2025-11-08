@@ -945,9 +945,9 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
     async def inner_callback(route_params:dict):
         for s in services:
             k = {}
-            k['__route_params__'] = route_params
-            k['__profile__'] =route_params.get('profile',None)
-            k['__is_manager__'] = is_manager
+            k[SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER] = route_params
+            k[SpecialKeyParameterConstant.PROFILE_KWARGS_PARAMETER] =route_params.get('profile',None)
+            k[SpecialKeyParameterConstant.IS_MANAGER_KWARGS_PARAMETER] = is_manager
 
             if isinstance(s, dict):
                 k.update(s['kwargs'])
