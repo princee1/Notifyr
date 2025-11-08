@@ -289,7 +289,7 @@ class CeleryService(BaseService, IntervalInterface):
         async with self.task_lock.reader:
             return self.available_workers_count
 
-    async def async_pingService(self, **kwargs):
+    async def async_pingService(self,infinite_wait:bool, **kwargs):
         ...
 
     async def callback(self):
@@ -315,6 +315,9 @@ class ChannelMiniService(BaseMiniService):
         super().__init__(depService,None)
         self.celeryService = celeryService
     
+    def async_pingService(self,infinite_wait:bool, **kwargs):
+        print(kwargs)
+
     def build(self, build_state = ...):
         self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
         
@@ -583,7 +586,8 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
             
         self._delete_tasks(request_id)
 
-    async def async_pingService(self, count=None):  # TODO
+    async def async_pingService(self,infinite_wait:bool,**kwargs):  # TODO
+        count = kwargs.get('count',None)
         response_count = await self.global_task_count
         load = self.server_load.copy()
 

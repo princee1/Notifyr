@@ -76,13 +76,9 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError("Vault Service can’t issue creds")
 
-    async def async_pingService(self, **kwargs):
+    async def async_pingService(self,infinite_wait:bool, **kwargs):
         self.check_auth()
-        super().async_pingService(**kwargs)
-
-    def sync_pingService(self, **kwargs):
-        self.check_auth()
-        super().sync_pingService(**kwargs)
+        super().async_pingService(infinite_wait,**kwargs)
              
     @staticmethod
     def random_buffer_interval(ttl):

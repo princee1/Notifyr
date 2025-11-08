@@ -172,17 +172,12 @@ class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
 
         self.MiniServiceStore = _service.MiniServiceStore[TwilioAccountMiniService]()
     
-    async def async_pingService(self,**kwargs):
+    async def async_pingService(self,infinite_wait:bool,**kwargs):
         if self.main == None:
             raise _service.ServiceNotAvailableError
         
-        return super().async_pingService(**kwargs)
+        return super().async_pingService(infinite_wait,**kwargs)
     
-    def sync_pingService(self,**kwargs):
-        if self.main == None:
-            raise _service.ServiceNotAvailableError
-            
-        super().sync_pingService(**kwargs)
 
     def verify_dependency(self):
         ...

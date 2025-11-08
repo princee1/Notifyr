@@ -65,7 +65,7 @@ class HCVaultService(BaseService,SchedulerInterface):
     def is_loggedin(self):
         return self.last_rotated == None or  (time.time() - self.last_rotated) < VaultTTLSyncConstant.VAULT_TOKEN_TTL
 
-    def sync_pingService(self,**kwargs):
+    async def async_pingService(self,infinite_wait:bool,**kwargs):
         
         if not self.is_loggedin:
             raise ServiceTemporaryNotAvailableError(service=self.name)

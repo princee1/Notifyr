@@ -194,12 +194,9 @@ class BaseService():
         """
         self.method_not_available = set()
         
-    async def async_pingService(self,**kwargs):
+    async def async_pingService(self,infinite_wait:bool,**kwargs):
         ...
     
-    def sync_pingService(self,**kwargs):
-        ...
-
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
         # warnings.warn(
         #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
@@ -477,21 +474,12 @@ class BaseMiniServiceManager(BaseService):
         if counter.acceptable_service == counter.total_service:
             raise BuildSkipError
     
-    async def async_pingService(self,**kwargs):
+    async def async_pingService(self,infinite_wait:bool,**kwargs):
         if not kwargs.get('__is_manager__',False):
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
         p = mss.get(kwargs.get('__profile__',None))
-        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(p,**kwargs)
-    
-    def sync_pingService(self,**kwargs):
-        super().sync_pingService(**kwargs)
-        
-        if not kwargs.get('__is_manager__',False):
-            return
-        mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
-        p = mss.get(kwargs.get('__profile__',None))
-        return BaseService.CheckStatusBeforeHand(p.sync_pingService)(p,**kwargs)
+        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(p,infinite_wait,**kwargs)
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)
