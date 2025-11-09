@@ -3,11 +3,12 @@ from app.definition._service import BaseService, BuildAbortError, BuildWarningEr
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
 from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.services.database_service import RedisService
 from app.services.file_service import FileService
 from app.utils.constant import RedisConstant
 from app.utils.fileIO import JSONFile
-
+from app.classes.auth_permission import AuthPermission
 
 @Service()
 class CostService(BaseService):
@@ -19,6 +20,7 @@ class CostService(BaseService):
         self.fileService = fileService
 
         self.RATE_LIMITS_PATH = Path("/run/secrets/costs")
+
 
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:
@@ -32,7 +34,7 @@ class CostService(BaseService):
 
         storage_uri = None if self.configService.MODE == MODE.DEV_MODE else self.configService.SLOW_API_REDIS_URL
 
-        self.GlobalLimiter = Limiter(lambda request:'notifyr-limiter', storage_uri=storage_uri, headers_enabled=True)
+        self.GlobalLimiter = Limiter(get_remote_address, storage_uri=storage_uri, headers_enabled=True)
         
         if self.configService.MODE == MODE.PROD_MODE:
             path = self.RATE_LIMITS_PATH.name

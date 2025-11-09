@@ -1,3 +1,4 @@
+from sched import scheduler
 from typing import Any, Type
 from fastapi.responses import JSONResponse
 from typing_extensions import Literal
@@ -11,6 +12,7 @@ from app.services.cost_service import CostService
 from app.services.database_service import MemCachedService
 from app.utils.constant import RedisConstant
 from app.utils.helper import SkipCode, copy_response
+from app.depends.class_dep import TrackerInterface
 
 RedisConstant.LIMITER_DB
 
@@ -60,16 +62,14 @@ class ResponseCacheInterceptor(Interceptor):
 
 class CostInterceptor(Interceptor):
     
-    def __init__(self,mode:Literal['bind','store']='bind'):
+    def __init__(self,cost_key:str,singular_static_cost:int|None=None):
         super().__init__(True, True)
         self.costService = Get(CostService)
-        self.mode=mode
+        self.cost_key = cost_key
+        self.singular_static_cost = singular_static_cost
     
-    async def intercept_before(self):
+    async def intercept_before(self,cost:Cost,scheduler:scheduler=None,tracker:TrackerInterface=None):
         ...
 
-    async def intercept_after(self, result:Any,cost:Cost,request:Request):
-        if self.mode == 'bind':
-            request.state.cost = cost
-        else:
-            ...
+    async def intercept_after(self, result:Any,cost:Cost):
+        ...

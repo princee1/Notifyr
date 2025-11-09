@@ -72,7 +72,7 @@ class EmailSenderService(EmailService):
         self.loggerService = loggerService
         self.redisService = redisService
 
-        self.MiniServiceStore = _service.MiniServiceStore[EmailSendInterface | _service.BaseMiniService]()
+        self.MiniServiceStore = _service.MiniServiceStore[EmailSendInterface | _service.BaseMiniService](self.__class__.__name__)
 
     def _create_mini_service(self, model, profile):
         if model == SMTPProfileModel:
@@ -96,7 +96,7 @@ class EmailReaderService(EmailService):
         self.loggerService = loggerService
         self.redisService =redisService
 
-        self.MiniServiceStore = _service.MiniServiceStore[EmailReadInterface|_service.BaseMiniService]()
+        self.MiniServiceStore = _service.MiniServiceStore[EmailReadInterface|_service.BaseMiniService](self.__class__.__name__)
 
     def _create_mini_service(self, model, profile):
         if model == IMAPProfileModel:
@@ -105,9 +105,11 @@ class EmailReaderService(EmailService):
             return None
 
     def start_jobs(self):
+        return 
         for id,p in self.MiniServiceStore:
             p.start()
 
     def cancel_jobs(self):
+        return
         for id,p in self.MiniServiceStore:
             p.shutdown()

@@ -62,7 +62,7 @@ class AmazonS3Service(TempCredentialsDatabaseService):
             raise BuildFailureError(f'Failed to build AmazonS3Service due to Minio Admin error: {str(e)}') from e
         
         
-    def _creds_rotator(self):
+    async def _creds_rotator(self):
         self.client_init()        
 
     def client_init(self,):

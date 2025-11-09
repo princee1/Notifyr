@@ -170,7 +170,7 @@ class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
         self.vaultService = vaultService
         self.profileService = profileService
 
-        self.MiniServiceStore = _service.MiniServiceStore[TwilioAccountMiniService]()
+        self.MiniServiceStore = _service.MiniServiceStore[TwilioAccountMiniService](self.__class__.__name__)
     
     async def async_pingService(self,infinite_wait:bool,**kwargs):
         if self.main == None:

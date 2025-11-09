@@ -64,7 +64,7 @@ class ProfileService(BaseMiniServiceManager):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
         super().__init__()
-        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[ProfileModel]] = MiniServiceStore[ProfileMiniService[ProfileModel]]()
+        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[ProfileModel]] = MiniServiceStore[ProfileMiniService[ProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
         self.configService = configService
         self.redisService = redisService

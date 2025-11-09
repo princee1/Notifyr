@@ -1,20 +1,15 @@
+from typing import Type
 from fastapi import Request
 
 
 class Cost():
 
-    def __init__(self,c=0):
+    def __init__(self,cost_key:str,c=0):
+        self.cost_key = cost_key
         self.c=c
-
-    def add_cost(self,c:int=1):
-        self.c+=c
     
-    def compute_cost(self,c:int):
-        return c
     
 
-def bind_cost_request(request:Request):
-    cost:Cost |None = getattr(request.state,'cost',None)
-    if cost == None:
-        return 1
-    return cost.c
+
+def InjectCost(key:str,cost_type:Type[Cost],start_cost:int=0):
+    return lambda :cost_type(key,start_cost)

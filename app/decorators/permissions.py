@@ -1,5 +1,6 @@
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
+from app.definition._cost import Cost
 from app.models.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
@@ -7,6 +8,7 @@ from app.services.assets_service import AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
+from app.services.cost_service import CostService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
 from app.utils.helper import flatten_dict
@@ -250,4 +252,20 @@ class ProfilePermission(Permission):
                 detail='Profile Is not allowed to be used'
             )
         
+        return True
+    
+
+
+class CostPermission(Permission):
+    """
+    Do you have positive units?
+    Do you complied to the maximum content and To available ?
+    """
+
+    @InjectInMethod(True)
+    def __init__(self,costService:CostService,):
+        super().__init__()
+        self.costService = costService
+
+    def permission(self):
         return True

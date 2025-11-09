@@ -387,8 +387,9 @@ TMS = TypeVar("TMS",bound=BaseMiniService)
 
 class MiniServiceStore(Generic[TMS]):
     
-    def __init__(self):
+    def __init__(self,className:str):
         self._store_: Dict[str, TMS] = {}
+        self.className = className
 
     def clear(self):
         self._store_.clear()

@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict, get_args
 import typing
-from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, Compute_cost, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
+from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, Compute_Weight, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
 from app.classes.celery import CeleryTask, SchedulerModel
 from app.classes.env_selector import EnvSelection, StrategyType, get_selector
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BuildFailureError, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus,BuildWarningError
@@ -60,7 +60,7 @@ class TaskManager():
     scheduler: SchedulerModel = field(default=None)
     taskConfig: list[TaskConfig] = field(default_factory=list)
     task_result: list[dict] = field(default_factory=list)
-    cost:float = field(default=0.0)
+    weight:float = field(default=0.0)
 
     def set_algorithm(self, algorithm: AlgorithmType):
         if algorithm not in get_args(AlgorithmType):
@@ -72,13 +72,14 @@ class TaskManager():
             raise TypeError("Scheduler must be an instance of SchedulerModel")
         self.scheduler = scheduler
 
-    async def offload_task(self,cost:float,delay: float, index: int | None, callback: Callable, *args,_s:s|None=None, **kwargs):
+    async def offload_task(self,weight:float,delay: float, index: int | None, callback: Callable, *args,_s:s|None=None, **kwargs):
         scheduler = self.scheduler if _s is None else _s
-        cost = Compute_cost(cost, scheduler.heaviness)
+        weight = Compute_Weight(weight, scheduler.heaviness)
 
-        values = await self.offloadTask(self.meta['strategy'],cost,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index, callback, *args, **kwargs)
+        values = await self.offloadTask(self.meta['strategy'],weight,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index, callback, *args, **kwargs)
         self.task_result.append(values)
-        self.cost += cost
+
+        self.weight +=weight
 
     def append_taskConfig(self,task,scheduler,delay):
 
@@ -104,7 +105,7 @@ class TaskManager():
         meta.pop('tt',None)
         return {
             'meta': meta,
-            'cost': self.cost,
+            'weight': self.weight,
             'results': self.task_result,
             'errors':self.scheduler._errors if self.scheduler else {},
             'message': self.scheduler._message if self.scheduler else {},
@@ -373,7 +374,7 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
         BaseMiniServiceManager.__init__(self)
         SchedulerInterface.__init__(self)
 
-        self.MiniServiceStore = MiniServiceStore[ChannelMiniService]()
+        self.MiniServiceStore = MiniServiceStore[ChannelMiniService](self.__class__.__name__)
 
     def _register_tasks(self, request_id: str,background:bool,runtype:RunType,offloadTask:Callable,ttl:int,save_results:bool,return_results:bool,retry:bool,split:bool,algorithm:AlgorithmType,strategy:StrategyType)->TaskManager:
         meta = TaskMeta(x_request_id=request_id,background=background,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy)
@@ -604,7 +605,7 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
             ...
         
 
-    def check_system_ram():
+    def check_system_ram(self):
         ...
 
     def populate_response_with_request_id(self, request: Request, response: Response):
@@ -657,8 +658,8 @@ class OffloadTaskService(BaseService):
         else:
                 return await self.taskService.run_task_in_route_handler(scheduler,is_retry,index,callback,*args,**kwargs)
 
-    async def _mix_offload(self,strategy:StrategyType,cost,scheduler,delay,is_retry, x_request_id: str,index:int, callback: Callable, *args, **kwargs):
-        env = await self.select_task_env(strategy,cost)
+    async def _mix_offload(self,strategy:StrategyType,weight,scheduler,delay,is_retry, x_request_id: str,index:int, callback: Callable, *args, **kwargs):
+        env = await self.select_task_env(strategy,weight)
         if env == 'route':
             return await self._route_offload(scheduler, delay,is_retry, x_request_id, True,index,callback, *args, **kwargs)
         elif env == 'worker':
@@ -668,7 +669,7 @@ class OffloadTaskService(BaseService):
         else:
             raise ValueError(f"Unsupported environment: {env}")
 
-    async def select_task_env(self,strategy:StrategyType,task_cost:float)->EnvSelection:
+    async def select_task_env(self,strategy:StrategyType,task_weight:float)->EnvSelection:
         p1 = await self.celeryService.get_available_workers_count
         if p1 < 0:
             p1 = 0
@@ -676,7 +677,7 @@ class OffloadTaskService(BaseService):
         workers_count = self.configService.CELERY_WORKERS_COUNT
 
         p2  = p1 / workers_count if workers_count > 0 else 0
-        p3 = task_cost
+        p3 = task_weight
 
         return get_selector(strategy).select(p1, p2, p3)
 

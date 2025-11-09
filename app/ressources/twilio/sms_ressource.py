@@ -5,8 +5,8 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.classes.celery import SchedulerModel, TaskHeaviness, TaskType, s
 from app.classes.template import SMSTemplate
 from app.decorators.guards import CarrierTypeGuard, CeleryTaskGuard
-from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
-from app.decorators.permissions import JWTAssetPermission,JWTRouteHTTPPermission
+from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, CostHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
+from app.decorators.permissions import CostPermission, JWTAssetPermission,JWTRouteHTTPPermission
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, FilterAllowedSchemaPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, GetDependsFunc, InjectInMethod, InjectInFunction
@@ -71,8 +71,8 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseServiceLock(AssetService,lockType='reader')
     @UseServiceLock(ProfileService,TwilioService,as_manager=True,check_status=False)
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
-    @UseHandler(MiniServiceHandler,AsyncIOHandler,TemplateHandler,ProfileHandler)
-    @UsePermission(JWTAssetPermission('sms'))
+    @UseHandler(MiniServiceHandler,AsyncIOHandler,TemplateHandler,ProfileHandler,CostHandler)
+    @UsePermission(CostPermission(),JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True))
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('otp',True),TemplateParamsPipe('sms','xml'),TemplateValidationInjectionPipe('sms','','',False))
     @BaseHTTPRessource.HTTPRoute('/otp/{template:path}/',methods=[HTTPMethod.POST],dependencies=[Depends(populate_response_with_request_id)])
@@ -83,10 +83,10 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         await taskManager.offload_task(1,10,None,self.smsService.send_otp,otpModel,body,twilio_profile=twilio.miniService_id,_s=s(TaskHeaviness.LIGHT))
         return taskManager.results
         
-
+    @UsePermission(CostPermission())
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY,Role.MFA_OTP])    
-    @UseHandler(MiniServiceHandler,CeleryTaskHandler,ContactsHandler,ProfileHandler)
+    @UseHandler(MiniServiceHandler,CeleryTaskHandler,ContactsHandler,ProfileHandler,CostHandler)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UseServiceLock(ProfileService,TwilioService,as_manager=True,check_status=False,lockType='reader')
@@ -113,10 +113,10 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
     @PingService([CeleryService,ProfileService,TwilioService,TaskService,SMSService], is_manager=True)
-    @UseHandler(MiniServiceHandler,CeleryTaskHandler,TemplateHandler,ContactsHandler,AsyncIOHandler,ProfileHandler)
+    @UseHandler(MiniServiceHandler,CeleryTaskHandler,TemplateHandler,ContactsHandler,AsyncIOHandler,ProfileHandler,CostHandler)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),RegisterSchedulerPipe,TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
-    @UsePermission(JWTAssetPermission('sms'))
+    @UsePermission(CostPermission(),JWTAssetPermission('sms'))
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True),CeleryTaskGuard(['task_send_template_sms']))
     @UseServiceLock(AssetService,lockType='reader')
     @UseServiceLock(ProfileService,TwilioService,as_manager=True,check_status=False,lockType='reader')

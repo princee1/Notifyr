@@ -9,7 +9,6 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Option
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
-from app.definition._cost import bind_cost_request
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import copy_response, issubclass_of
