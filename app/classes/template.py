@@ -89,20 +89,21 @@ class TemplateCreationError(BaseError):
 
 
 class Asset():
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
+    def __init__(self, filename: str, content: str, dirName: str,size:int=0) -> None:
         super().__init__()
         self.filename = filename
         self.content = content
         self.dirName = dirName
         self.name = self.filename.split(".")[0]
         self.ignore=False
+        self.size = size
 
 
 class Template(Asset):
     LANG = None
     
     @overload
-    def __init__(self,filename:str, content:str, dirName:str) -> None:
+    def __init__(self,filename:str, content:str, dirName:str,size:int) -> None:
         ...
 
     @overload
@@ -110,9 +111,10 @@ class Template(Asset):
         ...
     
     def __init__(self,*args):
-        if len(args) == 3:
-            filename, content, dirName = args
-            super().__init__(filename, content, dirName)
+        
+        if len(args) == 4:
+            filename, content, dirName,size = args
+            super().__init__(filename, content, dirName,size)
             self.translator = Translator(['translate.google.com', 'translate.google.com'])
             self.load()
         
@@ -178,11 +180,11 @@ class MLTemplate(Template):
         "purge_unknown": False,
     }
 
-    def __init__(self, filename: str, content: str, dirName: str,extension:str,validation_selector:str) -> None:
+    def __init__(self, filename: str, content: str, dirName: str,extension:str,validation_selector:str,size:int=0) -> None:
         self.content_to_inject = None
         self.extension = extension
         self.validation_selector = validation_selector
-        super().__init__(filename, content, dirName)
+        super().__init__(filename, content, dirName,size)
         self.ignore = self.filename.endswith(f".registry.{self.extension}")
 
     def _built_template(self,content):
@@ -312,28 +314,29 @@ class MLTemplate(Template):
 class HTMLTemplate(MLTemplate):
 
     @overload
-    def __init__(self,filename:str,content:str,dirname:str):
+    def __init__(self,filename:str,content:str,dirname:str,size:int):
         ...
 
     @overload
-    def __init__(self,bs4:BeautifulSoup,schema:dict,transform:dict,images:list[tuple[str, str]]):
+    def __init__(self,bs4:BeautifulSoup,schema:dict,transform:dict,images:list[tuple[str, str]],size:int):
         ...
 
     def __init__(self,*args):
-        if len(args) == 3:
-            filename,content,dirname = args
+        if len(args) == 4:
+            filename,content,dirname,size = args
             self.parser = XMLLikeParser.HTML.value
-            super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
+            super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR,size)
             self.images: list[tuple[str, str]] = []
             self.image_needed: list[str] = []
 
-        elif len(args):
-            bs4, schema, transform, images = args
+        elif len(args) == 5:
+            bs4, schema, transform, images,size = args
             self.parser = XMLLikeParser.HTML.value
             self.bs4: BeautifulSoup = BeautifulSoup(str(bs4), self.parser)
             self.schema = schema
             self.transform = transform
             self.images = images
+            self.size = size
 
 
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
@@ -470,8 +473,8 @@ class HTMLTemplate(MLTemplate):
     
 
 class PDFTemplate(Template):
-    def __init__(self, filename: str, dirName: str) -> None:
-        super().__init__(filename, None, dirName)
+    def __init__(self, filename: str, dirName: str,size=0) -> None:
+        super().__init__(filename, None, dirName,size)
 
     def pdf_to_xml(self):
         ...
@@ -481,8 +484,8 @@ class PDFTemplate(Template):
 
 class TWIMLTemplate(MLTemplate):
 
-    def __init__(self, filename, content, dirName, extension, validation_selector):
-        super().__init__(filename, content, dirName, extension, validation_selector)
+    def __init__(self, filename, content, dirName, extension, validation_selector,size=0):
+        super().__init__(filename, content, dirName, extension, validation_selector,size=size)
         self.set_content()
 
     def _built_template(self,content):
@@ -502,9 +505,9 @@ class TWIMLTemplate(MLTemplate):
         return True,body
 
 class SMSTemplate(TWIMLTemplate):
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
+    def __init__(self, filename: str, content: str, dirName: str,size=0) -> None:
         self.parser =  XMLLikeParser.XML.value
-        super().__init__(filename, content, dirName,"xml","validation")
+        super().__init__(filename, content, dirName,"xml","validation",size)
     
     def set_content(self):
         message = self.bs4.select_one("Message")
@@ -524,9 +527,9 @@ class SMSTemplate(TWIMLTemplate):
         
 
 class PhoneTemplate(TWIMLTemplate):
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
+    def __init__(self, filename: str, content: str, dirName: str,size=0) -> None:
         self.parser =  XMLLikeParser.XML.value
-        super().__init__(filename, content, dirName,"xml","validation")
+        super().__init__(filename, content, dirName,"xml","validation",size)
     
     def set_content(self):
         super().set_content()

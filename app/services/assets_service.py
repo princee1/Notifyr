@@ -97,9 +97,9 @@ class Reader:
         self.safeReader(ext,flag,rootParam,encoding)
         return self.values
     
-    def create_assets(self, relpath, content, dir, keyName):
+    def create_assets(self, relpath, content, dir, keyName,size=0):
         try:
-            self.values[relpath] = self.asset(keyName, content, dir)
+            self.values[relpath] = self.asset(keyName, content, dir,size)
         except SkipTemplateCreationError as e:
             print(e.args[0])
                 #printJSON(e.args[1])
@@ -213,7 +213,7 @@ class S3ObjectReader(Reader):
                 if flag != FDFlag.READ_BYTES:
                     obj_content = obj_content.decode(encoding)
                 obj_dir = self.fileService.get_file_dir(obj.object_name,'pure')
-                self.create_assets(obj.object_name,obj_content,obj_dir,self.configService.normalize_assets_path(obj.object_name,'add'))
+                self.create_assets(obj.object_name,obj_content,obj_dir,self.configService.normalize_assets_path(obj.object_name,'add'),obj.size)
     
 
 #############################################                ##################################################
