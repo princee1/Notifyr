@@ -311,3 +311,10 @@ class RedisConstant:
 
 class FastAPIConstant:
     OO_SCOPE_HEADERS = {'X-Error-Handler':'FastAPI - Exception'}
+
+
+class CostConstant:
+    email_template="email_template"
+    email_custom="email_custom"
+
+    

@@ -123,7 +123,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         
         for content in scheduler.content:
             index= content.index
-            cost = len(content.to)
+            weight = len(content.to)
             content = content.model_dump(exclude=('as_contact','index','will_track','sender_type'))
             _, result = template.build(content, ...,False)
             twilio_ids = []
@@ -134,7 +134,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
                     broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
                     twilio_ids.append(tid)
 
-            await taskManager.offload_task(cost,0, index, self.callService.send_template_voice_call, result, content,None,twilio_ids,twilio.miniService_id)
+            await taskManager.offload_task(weight,0, index, self.callService.send_template_voice_call, result, content,None,twilio_ids,twilio.miniService_id)
         return taskManager.results
 
     @PingService([CeleryService,ProfileService,TwilioService,TaskService,CallService],is_manager=True)
@@ -151,7 +151,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
         for content in scheduler.content:
             
-            cost = len(content.to)
+            weight = len(content.to)
             details = content.model_dump(exclude={'url','as_contact','index','will_track','sender_type'})
             url = content.url
             twilio_ids = []
@@ -162,7 +162,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
                     broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
                     twilio_ids.append(tid)
 
-            await taskManager.offload_task(cost, 0, content.index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids,twilio_profile=twilio.miniService_id)
+            await taskManager.offload_task(weight, 0, content.index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids,twilio_profile=twilio.miniService_id)
         return taskManager.results
 
     @PingService([CeleryService,ProfileService,TwilioService,TaskService,CallService],is_manager=True)
@@ -184,7 +184,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             lang = content.language
             loop = content.loop
             twilio_id = []
-            cost = len(content.to)
+            weight = len(content.to)
 
 
             if tracker.will_track:
@@ -194,7 +194,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
                     twilio_id.append(tid)
 
-            await taskManager.offload_task(cost,0, content.index, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id,twilio_profile=twilio.miniService_id)
+            await taskManager.offload_task(weight,0, content.index, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id,twilio_profile=twilio.miniService_id)
         return taskManager.results
 
     @PingService([ProfileService,TwilioService,CallService],is_manager=True)

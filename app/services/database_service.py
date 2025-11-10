@@ -409,7 +409,6 @@ class RedisService(DatabaseService):
     @check_db
     async def decrement(self,database:int|str,name:str,amount:int,redis:Redis=None):
         return await redis.incrby(name,amount)
-    
 
     @check_db
     async def hash_iter(self,database:int|str,hash_name:str,iter=False,match:str=None,count=None,redis:Redis=None):
@@ -421,6 +420,10 @@ class RedisService(DatabaseService):
     @check_db
     async def hash_del(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
         return await redis.hdel(*keys)
+
+    @check_db
+    async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
+        return await redis.lpush(name,*element)
 
     
 @Service()

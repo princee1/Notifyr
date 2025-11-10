@@ -763,7 +763,61 @@ class MemCachedHandler(Handler):
         except ClientException as e:
             ...
     
+from app.definition._cost import (
+    CostException,
+    PaymentFailedError,
+    InsufficientCreditsError,
+    InvalidPurchaseRequestError,
+    CreditDeductionFailedError,
+    CurrencyNotSupportedError,
+    ProductNotFoundError,
+)
+
 class CostHandler(Handler):
 
-    ...
-    
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except PaymentFailedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={'message': 'Payment gateway failure', 'error': str(e)}
+            )
+
+        except InsufficientCreditsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={'message': 'Insufficient credits to complete the purchase'}
+            )
+
+        except InvalidPurchaseRequestError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'Invalid purchase request', 'error': str(e)}
+            )
+
+        except CreditDeductionFailedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={'message': 'Credit deduction failed', 'error': str(e)}
+            )
+
+        except CurrencyNotSupportedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'Currency not supported', 'error': str(e)}
+            )
+
+        except ProductNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={'message': 'Product not found', 'error': str(e)}
+            )
+
+        except CostException as e:
+            # generic cost-related errors fallback
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={'message': 'Cost processing error', 'error': str(e)}
+            )

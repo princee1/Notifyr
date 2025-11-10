@@ -881,7 +881,7 @@ def HTTPStatusCode(code: int | str):
 ################################################################                           #########################################################
 
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]=lambda req:1):
+def UseLimiter(limit_value:str,cost_key:str=None,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]=lambda req:1):
     """
     *Description copied from the slowapi library*
 
@@ -1005,7 +1005,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                             if check_status:
                                 _service.check_status('')
 
-                            if as_manager:
+                            if as_manager and isinstance(_service,BaseMiniServiceManager):
                                 profile = kwargs.get('profile',None)
                                 if profile == None:
                                     raise ProfileNotSpecifiedError

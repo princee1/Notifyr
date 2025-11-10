@@ -6,6 +6,7 @@ from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
 from app.cost.email_cost import EmailCost
+from app.decorators.interceptors import CostInterceptor
 from app.definition._cost import InjectCost
 from app.definition._service import BaseMiniService
 from app.definition._utils_decorator import Pipe
@@ -21,13 +22,13 @@ from app.services.config_service import ConfigService
 from app.services.link_service import LinkService
 from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
-from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
+from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseInterceptor, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.email_service import EmailReaderService, EmailSenderService
 from fastapi import   HTTPException, Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission
 from app.decorators import permissions, handlers,pipes,guards
 from app.depends.variables import populate_response_with_request_id,email_verifier,wait_timeout_query
-from app.utils.constant import StreamConstant
+from app.utils.constant import CostConstant, StreamConstant
 from app.utils.globals import DIRECTORY_SEPARATOR
 
 
@@ -46,6 +47,9 @@ DEFAULT_RESPONSE = {
 @UsePermission(permissions.JWTRouteHTTPPermission)
 @HTTPRessource(EMAIL_PREFIX)
 class EmailRessource(BaseHTTPRessource):
+
+    et_cost = InjectCost(CostConstant.email_template,EmailCost)
+    ec_cost = InjectCost(CostConstant.email_custom,EmailCost)
 
     @staticmethod
     async def to_signature_path(scheduler:BaseEmailSchedulerModel):    
@@ -110,18 +114,18 @@ class EmailRessource(BaseHTTPRessource):
         return schemas
 
 
-    @UseLimiter(limit_value='10/minutes',scope='send-email')
+    @UseLimiter(limit_value='1000/minutes',cost_key=CostConstant.email_template,scope='send-email')
     @UseRoles([Role.MFA_OTP])
+    @UseInterceptor(CostInterceptor())
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
-    @UseServiceLock(AssetService,lockType='reader')
-    @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
+    @UseServiceLock(ProfileService,EmailSenderService,AssetService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.CostPermission(),permissions.JWTAssetPermission('email'),permissions.JWTSignatureAssetPermission())
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.ContactsHandler(),handlers.ProfileHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('email','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('email','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{profile}/{template:path}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
-    async def send_emailTemplate(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(InjectCost('email_test',EmailCost))],template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
+    async def send_emailTemplate(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(et_cost)],template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
         signature:Tuple[str,str]|None = scheduler._signature
         for mail_content in scheduler.content:
