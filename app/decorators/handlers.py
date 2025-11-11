@@ -763,7 +763,7 @@ class MemCachedHandler(Handler):
         except ClientException as e:
             ...
     
-from app.definition._cost import (
+from app.classes.cost import (
     CostException,
     PaymentFailedError,
     InsufficientCreditsError,

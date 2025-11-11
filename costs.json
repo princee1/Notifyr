@@ -2,7 +2,7 @@
     "version": "1.0.0",
     "currency": "NOTIFYR-CREDITS",
     "system": "credits",
-    "product-name": "demo",
+    "product": "demo",
     "promotions": {},
     "rules": {
         "default_credit_reset": true,
@@ -17,6 +17,7 @@
         "task": {
             "email_template": {
                 "__credit_key__": "email",
+                "__mount__": true,
                 "__max_content__": 5,
                 "__max_recipient__": 100,
                 "__recipient_extra_cost__": 2,
@@ -64,6 +65,7 @@
             },
             "sms_message": {
                 "__credit_key__": "sms",
+                "__mount__": true,
                 "__rate_limit__": "300/minutes",
                 "__max_content__": 5,
                 "__tracking_cost__": 10,
@@ -97,6 +99,7 @@
             "phone_twiml": {
                 "__credit_key__": "phone",
                 "__api_usage_cost__": 1,
+                "__mount__": true,
                 "__rate_limit__": "5/hours",
                 "__max_content__": 3,
                 "__max_recipients__": 10,
@@ -135,6 +138,7 @@
         },
         "data": {
             "object": {
+                "count": 100,
                 "max_size": 10000,
                 "max_version_count": 3,
                 "object_size_extra_per_kb": 1000
@@ -143,20 +147,24 @@
         "simple-task": {
             "sms-otp": {
                 "__api_usage_cost__": 2,
+                "__mount__": true,
                 "__rate_limit__": "1000/sec",
                 "__credit_key__": "sms"
             },
             "phone_otp": {
                 "__api_usage_cost__": 3,
+                "__mount__": true,
                 "__rate_limit__": "5/minutes",
                 "__credit_key__": "phone_otp"
             },
             "phone_digit_otp": {
                 "__api_usage_cost__": 5,
+                "__mount__": true,
                 "__rate_limit__": "2/minutes",
                 "__scope_cost_key__": "phone"
             },
             "phone_auth": {
+                "__mount__": true,
                 "__api_usage_cost__": 10,
                 "__rate_limit__": "1/minutes",
                 "__credit_key__": "phone"
@@ -167,17 +175,12 @@
         }
     },
     "credits": {
-        "task": {
-            "email": 10000000,
-            "sms": 1000000,
-            "phone": 10000
-        },
-        "data": {
-            "contact": 1000,
-            "client": 5,
-            "profile": 10,
-            "link": 2
-        },
-        "ai": {}
+        "email": 10000000,
+        "sms": 1000000,
+        "phone": 10000,
+        "contact": 1000,
+        "client": 5,
+        "profile": 10,
+        "link": 2
     }
 }

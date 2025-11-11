@@ -7,8 +7,8 @@ from app.services.cost_service import CostService
 
 class Cost:
 
-    def __init__(self,cost_key:str,c=0):
-        self.cost_key = cost_key
+    def __init__(self,credit_key:str,c=0):
+        self.credit_key = credit_key
         self.purchase_cost = c
         self.refund_cost = 0
         self.request_id = None
@@ -33,28 +33,8 @@ class Cost:
         ...
     
 
-
-def InjectCost(key:str,cost_type:Type[Cost],start_cost:int=0):
-    return lambda :cost_type(key,start_cost)
-
-
-class CostException(BaseError):
+class DataCost:
     ...
 
-class PaymentFailedError(CostException):
-    """Payment gateway failure."""
-
-class InsufficientCreditsError(CostException):
-    """Not enough credits to complete the purchase."""
-
-class InvalidPurchaseRequestError(CostException):
-    """Missing or invalid purchase data."""
-
-class CreditDeductionFailedError(CostException):
-    """Redis optimistic locking / transaction conflict."""
-
-class CurrencyNotSupportedError(CostException):
-    """Currency code is unsupported."""
-
-class ProductNotFoundError(CostException):
-    """Requested product does not exist."""
+def InjectCost(credit_key:str,cost_type:Type[Cost],start_cost:int=0):
+    return lambda :cost_type(credit_key,start_cost)

@@ -363,7 +363,7 @@ def swapDict(values: dict):
 
 def default_flattenReducer(key1:str,key2:str): return  key1+key2
 
-def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] ={}, reducer:Callable[[str,str],str] = default_flattenReducer,serialized=False):
+def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] ={}, reducer:Callable[[str,str],str] = default_flattenReducer,serialized=False,dict_sep=DICT_SEP,_key_builder=key_builder):
     """
     See https://pypi.org/project/flatten-dict/ for a better implementation
     """
@@ -371,7 +371,7 @@ def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedD
         if type(key) is not str:
             continue
 
-        if DICT_SEP in key:
+        if dict_sep in key:
             raise KeyError
 
         from_keys = "" if from_keys is None else from_keys
@@ -385,7 +385,7 @@ def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedD
                 flattenedDict[key_val] = json.dumps(item,default=enum_encoder)
 
         if type(item) is dict: 
-            flatten_dict(item, key_builder(key_val), flattenedDict,reducer,serialized)
+            flatten_dict(item, _key_builder(key_val), flattenedDict,reducer,serialized)
     
     return flattenedDict
 

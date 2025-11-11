@@ -48,9 +48,8 @@ DEFAULT_RESPONSE = {
 @HTTPRessource(EMAIL_PREFIX)
 class EmailRessource(BaseHTTPRessource):
 
-    et_cost = InjectCost(CostConstant.email_template,EmailCost)
-    ec_cost = InjectCost(CostConstant.email_custom,EmailCost)
-
+    email_cost = InjectCost(CostConstant.EMAIL_CREDIT,EmailCost)
+    
     @staticmethod
     async def to_signature_path(scheduler:BaseEmailSchedulerModel):    
         if scheduler.signature != None:
@@ -114,7 +113,7 @@ class EmailRessource(BaseHTTPRessource):
         return schemas
 
 
-    @UseLimiter(limit_value='1000/minutes',cost_key=CostConstant.email_template,scope='send-email')
+    @UseLimiter(limit_value='1000/minutes',cost_key=CostConstant.email_template)
     @UseRoles([Role.MFA_OTP])
     @UseInterceptor(CostInterceptor())
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
@@ -125,7 +124,7 @@ class EmailRessource(BaseHTTPRessource):
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('email','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('email','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
     @BaseHTTPRessource.HTTPRoute("/template/{profile}/{template:path}", responses=DEFAULT_RESPONSE,dependencies=[Depends(populate_response_with_request_id)])
-    async def send_emailTemplate(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(et_cost)],template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
+    async def send_emailTemplate(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(email_cost)],template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
         signature:Tuple[str,str]|None = scheduler._signature
         for mail_content in scheduler.content:
@@ -155,7 +154,7 @@ class EmailRessource(BaseHTTPRessource):
         return taskManager.results
     
 
-    @UseLimiter(limit_value='10/minutes',scope='send-email')
+    @UseLimiter(limit_value='10/minutes',cost_key=CostConstant.email_custom)
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
@@ -165,7 +164,7 @@ class EmailRessource(BaseHTTPRessource):
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @BaseHTTPRessource.HTTPRoute("/custom/{profile}/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)])
-    async def send_customEmail(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(InjectCost('email_test',EmailCost))],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+    async def send_customEmail(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(email_cost)],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(get_task)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         signature:Tuple[str,str] = scheduler._signature
           
         for customEmail_content in scheduler.content:

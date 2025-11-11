@@ -314,7 +314,20 @@ class FastAPIConstant:
 
 
 class CostConstant:
-    email_template="email_template"
-    email_custom="email_custom"
+    EMAIL_CREDIT='email'
+    SMS_CREDIT = 'sms'
+    PHONE_CREDIT='phone'
+    
 
+    COST_KEY='cost'
+    RULES_KEY='rules'
+    PROMOTIONS_KEY='promotions'
+    CREDITS_KEY='credits'
+    VERSION_KEY='version'
+    SYSTEM_KEY='system'
+    CURRENCY_KEY='currency'
+    PRODUCT_KEY='product'
+
+    email_template='email_template'
+    email_custom='email_custom'
     
