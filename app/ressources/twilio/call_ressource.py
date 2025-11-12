@@ -8,7 +8,7 @@ from app.classes.template import PhoneTemplate
 from app.decorators.guards import CeleryTaskGuard, RegisteredContactsGuard, TrackGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, CostHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.interceptors import KeepAliveResponseInterceptor
-from app.decorators.permissions import CostPermission, JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
+from app.decorators.permissions import TaskCostPermission, JWTAssetPermission, JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, FilterAllowedSchemaPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
@@ -69,7 +69,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
-    @UsePermission(CostPermission())
+    @UsePermission(TaskCostPermission())
     @PingService([ProfileService,TwilioService,CallService],is_manager=True)
     @UseServiceLock(AssetService,lockType='reader')
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
@@ -85,7 +85,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
         return taskManager.results
 
-    @UsePermission(CostPermission())
+    @UsePermission(TaskCostPermission())
     @PingService([ProfileService,TwilioService,CallService],is_manager=True)
     @UseServiceLock(AssetService,lockType='reader')
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
@@ -110,7 +110,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.RELAY])
-    @UsePermission(CostPermission(),JWTAssetPermission('phone'))
+    @UsePermission(TaskCostPermission(),JWTAssetPermission('phone'))
     @PingService([CeleryService,ProfileService,TwilioService,TaskService,CallService],is_manager=True)
     @UseServiceLock(AssetService,lockType='reader')
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
@@ -141,7 +141,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
-    @UsePermission(CostPermission())
+    @UsePermission(TaskCostPermission())
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']),TrackGuard)
     @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler)
@@ -169,7 +169,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
-    @UsePermission(CostPermission())
+    @UsePermission(TaskCostPermission())
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']),TrackGuard)
     @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler)
@@ -205,7 +205,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseGuard(RegisteredContactsGuard)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),TwilioPhoneNumberPipe('default'))
     @UseInterceptor(KeepAliveResponseInterceptor)
-    @UsePermission(CostPermission())
+    @UsePermission(TaskCostPermission())
     @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,CostHandler)
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], dependencies=[Depends(populate_response_with_request_id)],mount=False)
     async def voice_authenticate(self, request: Request,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):

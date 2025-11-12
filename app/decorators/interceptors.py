@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from typing_extensions import Literal
 from fastapi import BackgroundTasks, Request, Response,status
 from app.container import Get
-from app.definition._cost import Cost
+from app.definition._cost import Cost, DataCost, SimpleTaskCost
 from app.definition._utils_decorator import Interceptor, InterceptorDefaultException
 from app.depends.class_dep import Broker, KeepAliveQuery
 from app.depends.dependencies import get_request_id
@@ -58,27 +58,76 @@ class ResponseCacheInterceptor(Interceptor):
             backgroundTasks.add_task(self.cacheType.Delete,**kwargs)
         
 
-class CostInterceptor(Interceptor):
+class TaskCostInterceptor(Interceptor):
     
-    def __init__(self,singular_static_cost:int|None=None,retry_limit=5):
+    def __init__(self,singular_static_cost:int|None=None,retry_limit=20):
         super().__init__(False, True)
-        self.singular_static_cost = singular_static_cost
         self.redisService = Get(RedisService)
         self.costService = Get(CostService)
         self.reactiveService = Get(ReactiveService)
-        self.retry_limit=retry_limit
 
-    
+        self.retry_limit=retry_limit
+        self.singular_static_cost = singular_static_cost
+
+
     async def intercept_before(self,*args,**kwargs):
-        cost:Cost = kwargs.get('cost')
+        cost:SimpleTaskCost = kwargs.get('cost')
         APIFilterInject(cost.register_meta_key)(**kwargs)
         APIFilterInject(cost.compute_cost)(**kwargs)
         balance_before = await self.costService.deduct_credits(cost.credit_key,cost.purchase_cost,self.retry_limit)
         cost.register_state(balance_before)
 
-    async def intercept_after(self, result:Any,cost:Cost,broker:Broker,response:Response):
+    async def intercept_after(self, result:Any,cost:SimpleTaskCost,broker:Broker,response:Response):
         if cost.refund_cost>0:
             await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
         receipt = cost.receipt
         broker.push(...,...)
         
+
+class DataCostInterceptor(Interceptor):
+    
+    def __init__(self,credit:str,mode:Literal['refund','purchase']='purchase',price=1,retry_limit=20):
+        super().__init__(False, False)
+
+        self.mode = mode
+        self.credit=credit
+        self.price = price
+
+        self.retry_limit = retry_limit
+
+        self.costService = Get(CostService)
+
+    async def intercept_before(self,*args,**kwargs):
+
+        match self.mode:
+            case 'purchase':
+                cost:DataCost = kwargs.get('cost',None)
+                if cost!=None:
+                    APIFilterInject(cost.pre_purchase)(**kwargs)
+                price = self.price if cost == None else cost.purchase_cost
+                await self.costService.check_enough_credits(self.credit,price,self.retry_limit)
+                cost.reset_bill()
+            case 'refund':
+                ...      
+            case _:
+                ...
+            
+    async def intercept_after(self, result:Any,*args,**kwargs):
+        match self.mode:
+            case 'purchase':
+                cost:DataCost = kwargs.get('cost',None)
+                if cost!=None:
+                    APIFilterInject(cost.post_purchase)(result,**kwargs)
+                price = self.price if cost == None else cost.purchase_cost
+                await self.costService.deduct_credits(self.credit,price,self.retry_limit)
+
+            case 'refund':
+                cost:DataCost = kwargs.get('cost',None)
+                if cost!=None:
+                    APIFilterInject(cost.refund)(result,**kwargs)
+                if cost.refund_cost>0:
+                    await self.costService.refund_credits(self.credit,cost.refund_cost)
+            case _:
+               ...
+
+        #TODO push receipt

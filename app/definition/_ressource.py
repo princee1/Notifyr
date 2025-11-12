@@ -324,22 +324,22 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         return decorator
 
     @staticmethod
-    def Get(path: str, operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Get(path: str,cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
             responses: Dict[int | str, Dict[str, Any]] | None = None,
             deprecated: bool | None = None, mount: bool = True):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.GET], operation_id, dependencies, response_model, response_description, responses, deprecated, mount)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.GET],cost_definition, operation_id, dependencies, response_model, response_description, responses, deprecated, mount)
 
     @staticmethod
-    def Post(path: str, operation_id: str = None,  dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Post(path: str,cost_definition:str=None, operation_id: str = None,  dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None, mount: bool = True):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.POST], operation_id, dependencies, response_model, response_description, responses, deprecated, mount)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.POST],cost_definition, operation_id, dependencies, response_model, response_description, responses, deprecated, mount)
 
     @staticmethod
-    def Delete(path: str, operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Delete(path: str,cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
                responses: Dict[int | str, Dict[str, Any]] | None = None,
                deprecated: bool | None = None, mount: bool = True):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE], operation_id, dependencies,  response_model, response_description, responses, deprecated, mount)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE],cost_definition, operation_id, dependencies,  response_model, response_description, responses, deprecated, mount)
 
     @staticmethod
     def OnEvent(event: str):

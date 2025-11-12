@@ -143,8 +143,7 @@
             "object": {
                 "count": 100,
                 "max_size": 10000,
-                "max_version_count": 3,
-                "object_size_extra_per_kb": 1000
+                "max_version_count": 3
             }
         },
         "simple-task": {

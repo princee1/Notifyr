@@ -77,8 +77,6 @@ class ObjectCostDefinition(TypedDict):
     count: int
     max_size: 10000
     max_version_count:int
-    allowed_extra_size:bool = True
-    object_size_extra_per_kb: int
 
 
 class CostException(BaseError):

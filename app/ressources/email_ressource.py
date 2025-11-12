@@ -6,7 +6,7 @@ from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
 from app.cost.email_cost import EmailCost
-from app.decorators.interceptors import CostInterceptor
+from app.decorators.interceptors import TaskCostInterceptor
 from app.definition._service import BaseMiniService
 from app.definition._utils_decorator import Pipe
 from app.depends.class_dep import Broker, EmailTracker
@@ -112,10 +112,10 @@ class EmailRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='1000/minutes')
     @UseRoles([Role.MFA_OTP])
-    @UseInterceptor(CostInterceptor(),inject_meta=True)
+    @UseInterceptor(TaskCostInterceptor(),inject_meta=True)
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,AssetService,lockType='reader',check_status=False,as_manager =True)
-    @UsePermission(permissions.CostPermission(),permissions.JWTAssetPermission('email'),permissions.JWTSignatureAssetPermission())
+    @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetPermission('email'),permissions.JWTSignatureAssetPermission())
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.ContactsHandler(),handlers.ProfileHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
@@ -155,10 +155,10 @@ class EmailRessource(BaseHTTPRessource):
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
-    @UsePermission(permissions.CostPermission(),permissions.JWTSignatureAssetPermission())
+    @UsePermission(permissions.TaskCostPermission(),permissions.JWTSignatureAssetPermission())
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
-    @UseInterceptor(CostInterceptor(),inject_meta=True)
+    @UseInterceptor(TaskCostInterceptor(),inject_meta=True)
     @UsePipe(to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @BaseHTTPRessource.HTTPRoute("/custom/{profile}/", responses=DEFAULT_RESPONSE,dependencies= [Depends(populate_response_with_request_id)],cost_definition=CostConstant.email_template)

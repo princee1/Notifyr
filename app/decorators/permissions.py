@@ -260,7 +260,7 @@ class ProfilePermission(Permission):
     
 
 
-class CostPermission(Permission):
+class TaskCostPermission(Permission):
     """
     Do you have positive units?
     Do you comply to the maximum content and To available ?
@@ -270,10 +270,9 @@ class CostPermission(Permission):
     def __init__(self,costService:CostService,redisService:RedisService):
         super().__init__()
         self.costService = costService
-        print(redisService,costService.redisService)
         self.redisService = redisService
 
-    async def permission(self,func_meta:FuncMetaData, cost: Cost, taskManager: TaskManager, scheduler: SchedulerModel = None):
+    async def permission(self,func_meta:FuncMetaData, taskManager: TaskManager, scheduler: SchedulerModel = None):
         definition:SimpleTaskCostDefinition = func_meta['cost_definition'] 
 
         current_credits = await self.redisService.retrieve(

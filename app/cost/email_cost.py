@@ -28,4 +28,4 @@ class EmailCost(TaskCost):
             for content in scheduler.content:
                 mimeCost+= definition['mime'].get(content.mimeType,0)
             
-            self.add_item('mime',mimeCost)
+            self.purchase('mime',mimeCost)

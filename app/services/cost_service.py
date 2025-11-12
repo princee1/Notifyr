@@ -48,9 +48,22 @@ class CostService(BaseService):
                 self.service_status = ServiceStatus.AVAILABLE
             except:
                 raise BuildWarningError(f'Could not mount the cost file so limit will revert too default settings')
+            
+            self.verify_cost_file()
         else:
             self.service_status = ServiceStatus.AVAILABLE
     
+    async def check_enough_credits(self,credit_key:str,purchase_cost:int):
+        current_balance = await self.redisService.redis_limiter.get(credit_key)
+        if current_balance == None:
+            raise InvalidPurchaseRequestError
+
+        if current_balance <= 0:
+            raise InsufficientCreditsError
+        
+        if current_balance < purchase_cost:
+            raise InsufficientCreditsError
+
     async def refund_credits(self,credit_key:str,refund_cost:int):
         if refund_cost > 0:
             await self.redisService.increment(RedisConstant.LIMITER_DB,credit_key,refund_cost)
@@ -99,6 +112,7 @@ class CostService(BaseService):
             
             definition = flatten_dict(cost,dict_sep=self.DICT_SEP,_key_builder=lambda p:p+self.DICT_SEP,max_level=1)
             for k,v in definition.items():
+                base = {}
                 if '__copy__' in v:
                     copy_rules = v['__copy__']
                     if isinstance(copy_rules,str):
@@ -110,21 +124,23 @@ class CostService(BaseService):
                     
                     if copy_from not in self.costs_definition:
                         continue
-                        
-                    v.update({key: value for key, value in v.items() if key.startswith('__')}) if mode == 'soft' else self.costs_definition[copy_from].copy()
-                
+                    
+                    base = {key: value for key, value in v.items() if key.startswith('__')} if mode == 'soft' else self.costs_definition[copy_from].copy()
+
+                base.update(v)
+                    
                 cost_type,name=k.split(self.DICT_SEP)
 
                 if cost_type == 'task':
                     if name.startswith('email'):
-                        v = EmailCostDefinition(**v)
+                        v = EmailCostDefinition(**base)
                     elif name.startswith('sms'):
-                        v = SMSCostDefinition(**v)
+                        v = SMSCostDefinition(**base)
                     elif name.startswith('phone'):
-                        v = PhoneCostDefinition(**v)
+                        v = PhoneCostDefinition(**base)
                     ...
                 elif cost_type == 'simple-task':
-                    v = SimpleTaskCostDefinition(**v)
+                    v = SimpleTaskCostDefinition(**base)
                 elif cost_type == 'data':
                     ...
                 elif cost_type == 'ai':
@@ -137,6 +153,14 @@ class CostService(BaseService):
             
         except Exception as e:
             traceback.print_exc()
+
+    def verify_cost_file(self):
+        if self.system != 'credits':
+            raise BuildFailureError
+
+        if self.currency != 'NOTIFYR-CREDITS':
+            raise BuildFailureError
+
 
     @property
     def version(self)->str:

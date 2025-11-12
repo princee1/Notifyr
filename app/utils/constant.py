@@ -339,4 +339,5 @@ class CostConstant:
     phone_twiml='phone_twiml'
     phone_custom='phone_custom'
     phone_template='phone_template'
+    _object = 'object'
     

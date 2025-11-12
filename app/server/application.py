@@ -160,6 +160,7 @@ class Application(EventInterface):
             except Exception as e:
                 print(e.__class__)
                 print(e)
+                traceback.print_exc()
                 self.pretty_printer.error(
                     f"[{now}] Error adding ressource {ressource_type.__name__} to the app", saveable=True)
                 self.pretty_printer.wait(0.1, press_to_continue=True)
