@@ -23,7 +23,7 @@ from .ping_pong_ressource import PingPongRessource
 from .properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
 from .profile_ressource import ProfilRessource
-from .objetc_s3_ressource import S3ObjectRessource
+from .object_s3_ressource import S3ObjectRessource
 from .cost_ressource import CostRessource
 from app.definition._ressource import BaseHTTPRessource
 
