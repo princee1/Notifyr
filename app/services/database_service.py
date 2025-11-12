@@ -78,7 +78,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
 
     async def async_pingService(self,infinite_wait:bool, **kwargs):
         self.check_auth()
-        super().async_pingService(infinite_wait,**kwargs)
+        await super().async_pingService(infinite_wait,**kwargs)
              
     @staticmethod
     def random_buffer_interval(ttl):

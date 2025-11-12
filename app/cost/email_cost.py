@@ -17,8 +17,8 @@ class EmailCost(TaskCost):
     
     def compute_cost(self,func_meta:FuncMetaData,scheduler:CustomEmailSchedulerModel|EmailTemplateSchedulerModel,taskManager:TaskManager,tracker:TrackerInterface,template:HTMLTemplate=None):
         definition:EmailCostDefinition = func_meta['cost_definition']
-        attachement = definition['attachement']
-        total_content,total_recipient= super().compute_cost(func_meta,scheduler,taskManager,tracker)
+        attachement = definition['attachement_cost']
+        total_content, total_recipient = super().compute_cost(func_meta,scheduler,taskManager,tracker)
         
         if isinstance(scheduler,CustomEmailSchedulerModel):
             ...

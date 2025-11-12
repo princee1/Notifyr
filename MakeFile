@@ -76,4 +76,4 @@ docker-prune:
 	docker builder prune --all -f
 
 docker-vault-sidecar:
-	docker-compose run --rm sidecar && docker rmi notifyr:vault-sidecar
+	docker-compose run --rm sidecar

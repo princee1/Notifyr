@@ -54,7 +54,7 @@ class EmailCostDefinition(TaskCostDefinition):
         text:int
         both:int
 
-    attachement:Attachement
+    attachement_cost:Attachement
     mime:Mime
     email_free_size:int
     email_size_per_extra_kb: int

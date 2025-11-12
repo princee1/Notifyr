@@ -81,6 +81,7 @@ class CostService(BaseService):
                         raise InvalidPurchaseRequestError
 
                     if current_balance < purchase_cost:
+                        self.rules['carry_over_allowed']
                         await pipe.unwatch()
                         raise InsufficientCreditsError
                     
