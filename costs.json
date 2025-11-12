@@ -148,7 +148,7 @@
             }
         },
         "simple-task": {
-            "sms-otp": {
+            "sms_otp": {
                 "__api_usage_cost__": 2,
                 "__mount__": true,
                 "__rate_limit__": "1000/sec",

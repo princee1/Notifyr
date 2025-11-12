@@ -71,11 +71,13 @@ class CostInterceptor(Interceptor):
     
     async def intercept_before(self,*args,**kwargs):
         cost:Cost = kwargs.get('cost')
-        request_cost = self.singular_static_cost if self.singular_static_cost else APIFilterInject(cost.compute_cost)(**kwargs)
-        balance_before = await self.costService.deduct_credits(cost.definition.get('__credit_key__'),request_cost,self.retry_limit)
+        APIFilterInject(cost.compute_cost)(**kwargs)
+        balance_before = await self.costService.deduct_credits(cost.definition.get('__credit_key__'),cost.purchase_cost,self.retry_limit)
         cost.register_state(balance_before)
 
-    async def intercept_after(self, result:Any,cost:Cost,broker:Broker):
-        await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
-        broker.push(...,cost.receipt)
+    async def intercept_after(self, result:Any,cost:Cost,broker:Broker,request:Request):
+        if cost.refund_cost>0:
+            await self.costService.refund_credits(cost.definition['__credit_key__'],cost.refund_cost)
+        receipt = cost.receipt
+        broker.push(...,...)
         

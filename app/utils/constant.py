@@ -330,4 +330,13 @@ class CostConstant:
 
     email_template='email_template'
     email_custom='email_custom'
+    sms_otp='sms_otp'
+    phone_otp='phone_otp'
+    phone_digit_otp='phone_digit_otp'
+    phone_auth='phone_auth'
+    sms_message='sms_message'
+    sms_template='sms_template'
+    phone_twiml='phone_twiml'
+    phone_custom='phone_custom'
+    phone_template='phone_template'
     
