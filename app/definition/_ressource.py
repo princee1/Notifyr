@@ -8,7 +8,9 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Option
 
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from app.classes.cost import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
+from app.definition._cost import inject_cost_definition
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import copy_response, issubclass_of
@@ -269,7 +271,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         return route_name.replace(PATH_SEPARATOR, "_") + '_'.join(m)
 
     @staticmethod
-    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST], operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST],cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends]|List[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
                   deprecated: bool | None = None, mount: bool = True):
         def decorator(func: Callable):
@@ -285,9 +287,19 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             func.meta['limit_exempt'] = False
             func.meta['shared'] = None
             func.meta['default_role'] = True
+            func.meta['cost_definition'] = cost_definition
+
+            injected_cost_def:SimpleTaskCostDefinition = costService.costs_definition.get(cost_definition,None)
+            if injected_cost_def ==None:
+                raise KeyError('This cost definition does not exists')
+            
+            mount = injected_cost_def.get('__mount__',mount)
 
             if not mount:
                 return func
+            
+            if dependencies and cost_definition:
+                dependencies.append(Depends(inject_cost_definition))
 
             class_name = Helper.get_class_name_from_method(func)
             kwargs = {
@@ -910,6 +922,10 @@ def UseLimiter(limit_value:str,cost_key:str=None,scope:str=None,exempt=False,ove
         if meta is not None:
             operation_id = meta['operation_id']
             meta['limit_exempt'] = exempt
+            
+            if 'cost_definition' in meta:
+                limit_value = costService.costs_definition.get(meta['cost_definition'],{}).get('__rate_limit__',limit_value)
+
             meta['limit_obj'] = {'limit_value':limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,'cost':cost}
             if shared:
                 meta['limit_obj']['scope'] = scope

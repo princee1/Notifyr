@@ -9,8 +9,11 @@ from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.cost_service import CostService
+from app.services.database_service import RedisService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
+from app.services.task_service import TaskManager
+from app.utils.constant import RedisConstant
 from app.utils.helper import flatten_dict
 
  
@@ -259,13 +262,44 @@ class ProfilePermission(Permission):
 class CostPermission(Permission):
     """
     Do you have positive units?
-    Do you complied to the maximum content and To available ?
+    Do you comply to the maximum content and To available ?
     """
 
     @InjectInMethod(True)
-    def __init__(self,costService:CostService,):
+    def __init__(self,costService:CostService,redisService:RedisService):
         super().__init__()
         self.costService = costService
+        print(redisService,costService.redisService)
+        self.redisService = redisService
 
-    def permission(self):
+    async def permission(self, cost: Cost, taskManager: TaskManager, scheduler: SchedulerModel = None):
+
+        current_credits = await self.redisService.retrieve(
+            RedisConstant.LIMITER_DB,
+            cost.definition.get('__credit_key__'),
+            None
+        )
+        if current_credits is None:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Credit information unavailable")
+
+        if current_credits <= 0:
+            if Cost.rules.get('auto_block_on_zero_credit', False):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client blocked due to zero credits")
+            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Insufficient credits")
+
+        api_cost = cost.definition.get('__api_usage_cost__', 0)
+        if current_credits < api_cost:
+            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Insufficient credits for API usage")
+
+        if scheduler is not None:
+            allowed_tasks = cost.definition.get('__allowed_task_option__', [])
+            if scheduler.task_type not in allowed_tasks:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Task type '{scheduler.task_type}' not allowed for this pricing plan"
+                )
+
+        if taskManager.meta.get('retry', False) and not Cost.rules.get('retry_allowed', False):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Retry not allowed by pricing policy")
+
         return True

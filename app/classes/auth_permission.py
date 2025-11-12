@@ -63,6 +63,7 @@ class FuncMetaData(TypedDict):
     limit_obj:dict
     limit_exempt:bool=False
     default_role:bool =True
+    cost_definition:str|None
 
 
 class RoutePermission(TypedDict):

@@ -1,4 +1,5 @@
 from pathlib import Path
+import traceback
 
 from redis import WatchError
 from app.classes.cost import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition
@@ -16,7 +17,8 @@ from app.utils.helper import flatten_dict
 
 @Service()
 class CostService(BaseService):
-    RATE_LIMITS_PATH = Path("/run/secrets/costs")
+    COST_PATH = "/run/secrets/costs"
+    COST_PATH_OBJ= Path(COST_PATH)
     DICT_SEP='/'
 
     def __init__(self,configService:ConfigService,redisService:RedisService,fileService:FileService):
@@ -28,8 +30,8 @@ class CostService(BaseService):
     
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:
-            if not self.RATE_LIMITS_PATH.exists():
-                self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+            if not self.COST_PATH_OBJ.exists():
+                raise BuildFailureError
         
         if self.redisService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError
@@ -40,16 +42,13 @@ class CostService(BaseService):
         self.GlobalLimiter = Limiter(get_remote_address, storage_uri=storage_uri, headers_enabled=True)
         
         if self.configService.MODE == MODE.PROD_MODE:
-            path = self.RATE_LIMITS_PATH.name
             try:
-                self.costs_file={"default":True}
-                self.costs_file= JSONFile(path).data
+                self.costs_file= JSONFile(self.COST_PATH)
                 self.load_file_into_objects()
                 self.service_status = ServiceStatus.AVAILABLE
             except:
                 raise BuildWarningError(f'Could not mount the cost file so limit will revert too default settings')
         else:
-            self.costs_file = {}
             self.service_status = ServiceStatus.AVAILABLE
     
     async def refund_credits(self,credit_key:str,refund_cost:int):
@@ -88,74 +87,81 @@ class CostService(BaseService):
         
         raise CreditDeductionFailedError
     
-    async def get_current_credits(self):
-        ...
+    async def get_current_credits(self):        
+        return {k:await self.redisService.retrieve(RedisConstant.LIMITER_DB,k,None) for k in self.plan_credits.keys() }
 
     def load_file_into_objects(self):
-        cost = self.costs_file.get(CostConstant.COST_KEY,None)  
+        try:
+            cost = self.costs_file.data.get(CostConstant.COST_KEY,None)  
 
-        if cost == None:
-            raise BuildFailureError
-        
-        definition = flatten_dict(cost,dict_sep=self.DICT_SEP,_key_builder=lambda p:p+self.DICT_SEP)
-         
-        for k,v in definition.items():
-            if '__copy__' in v:
-                copy_rules = v['__copy__']
-                if isinstance(copy_rules,str):
-                    copy_from = copy_rules
-                    mode = 'hard'
-                else:
-                    mode = copy_rules.get('mode','hard')
-                    copy_from = copy_rules.get('from')
-                
-                if copy_from not in self.costs_definition:
-                    continue
-                    
-                v = v.update({key: value for key, value in v.items() if key.startswith('__')}) if mode == 'soft' else self.costs_definition[copy_from].copy()
-
-            _,cost_type,name=k.split(self.DICT_SEP)
-
-            if cost_type == 'task':
-                if name.startswith('email'):
-                    v = EmailCostDefinition(**v)
-                elif name.startswith('sms'):
-                    v = SMSCostDefinition(**v)
-                elif name.startswith('phone'):
-                    v = PhoneCostDefinition(**v)
-                ...
-            elif cost_type == 'simple-task':
-                v = SimpleTaskCostDefinition(**v)
+            if cost == None:
+                raise BuildFailureError
             
-            self.costs_definition[name] = v
-        
-        if self.costs_file.get(CostConstant.RULES_KEY,None) == None:
-            raise BuildWarningError
+            definition = flatten_dict(cost,dict_sep=self.DICT_SEP,_key_builder=lambda p:p+self.DICT_SEP,max_level=1)
+            for k,v in definition.items():
+                if '__copy__' in v:
+                    copy_rules = v['__copy__']
+                    if isinstance(copy_rules,str):
+                        copy_from = copy_rules
+                        mode = 'hard'
+                    else:
+                        mode = copy_rules.get('mode','hard')
+                        copy_from = copy_rules.get('from')
+                    
+                    if copy_from not in self.costs_definition:
+                        continue
+                        
+                    v.update({key: value for key, value in v.items() if key.startswith('__')}) if mode == 'soft' else self.costs_definition[copy_from].copy()
+                
+                cost_type,name=k.split(self.DICT_SEP)
+
+                if cost_type == 'task':
+                    if name.startswith('email'):
+                        v = EmailCostDefinition(**v)
+                    elif name.startswith('sms'):
+                        v = SMSCostDefinition(**v)
+                    elif name.startswith('phone'):
+                        v = PhoneCostDefinition(**v)
+                    ...
+                elif cost_type == 'simple-task':
+                    v = SimpleTaskCostDefinition(**v)
+                elif cost_type == 'data':
+                    ...
+                elif cost_type == 'ai':
+                    ...
+                
+                self.costs_definition[name] = v
+            
+            if self.costs_file.data.get(CostConstant.RULES_KEY,None) == None:
+                raise BuildWarningError
+            
+        except Exception as e:
+            traceback.print_exc()
 
     @property
     def version(self)->str:
-        return self.costs_file.get(CostConstant.VERSION_KEY,None)
+        return self.costs_file.data.get(CostConstant.VERSION_KEY,None)
 
     @property
     def system(self)->str:
-        return self.costs_file.get(CostConstant.SYSTEM_KEY,None)
+        return self.costs_file.data.get(CostConstant.SYSTEM_KEY,None)
 
     @property
     def currency(self)->str:
-        return self.costs_file.get(CostConstant.CURRENCY_KEY,None)
+        return self.costs_file.data.get(CostConstant.CURRENCY_KEY,None)
     
     @property
     def product(self)->str:
-        return self.costs_file.get(CostConstant.PRODUCT_KEY,None)
+        return self.costs_file.data.get(CostConstant.PRODUCT_KEY,None)
 
     @property
     def promotions(self):
-        return self.costs_file.get(CostConstant.PROMOTIONS_KEY,{})
+        return self.costs_file.data.get(CostConstant.PROMOTIONS_KEY,{})
     
     @property
     def plan_credits(self)->CostCredits:
-        return self.costs_file.get(CostConstant.CREDITS_KEY,{})
+        return self.costs_file.data.get(CostConstant.CREDITS_KEY,{})
 
     @property
     def rules(self)->CostRules:
-        self.costs_file.get(CostConstant.RULES_KEY,{})
+        return self.costs_file.data.get(CostConstant.RULES_KEY,{})

@@ -10,7 +10,7 @@
         "bonus_percentage_on_topup": 0,
         "credit_overdraft_allowed": false,
         "auto_block_on_zero_credit": true,
-        "extra_recipient_allowed": false,
+        "track_allowed":true,
         "retry_allowed": true
     },
     "cost": {
@@ -18,9 +18,10 @@
             "email_template": {
                 "__credit_key__": "email",
                 "__mount__": true,
-                "__max_content__": 5,
-                "__max_recipient__": 100,
+                "__max_free_content__": 5,
+                "__max_free_recipient__": 100,
                 "__recipient_extra_cost__": 2,
+                "__content_extra_cost__":5,
                 "__priority_cost__": 10,
                 "email_free_size": 1000,
                 "email_size_per_extra_kb": 10,
@@ -36,9 +37,9 @@
                 "__tracking_cost__": 10,
                 "__retry_cost__": 5,
                 "mime_cost": {
-                    "html": 2,
-                    "text": 1,
-                    "both": 3
+                    "html": -5,
+                    "text": -1,
+                    "both": 0
                 },
                 "__allowed_task_option__": [
                     "now",
@@ -47,7 +48,7 @@
                     "solar",
                     "crontab"
                 ],
-                "__task_option__": {
+                "__task_type_cost__": {
                     "now": 1,
                     "once": 1,
                     "crontab": 10,
@@ -61,15 +62,16 @@
                     "mode": "hard"
                 },
                 "__rate_limit__": "30/minutes",
-                "__max_recipient__": 30
+                "__max_free_recipient__": 30
             },
             "sms_message": {
                 "__credit_key__": "sms",
                 "__mount__": true,
+                "__content_extra_cost__":5,
                 "__rate_limit__": "300/minutes",
-                "__max_content__": 5,
+                "__max_free_content__": 5,
                 "__tracking_cost__": 10,
-                "__max_recipient__": 30,
+                "__max_free_recipient__": 30,
                 "__recipient_extra_cost__": 3,
                 "__priority_cost__": 15,
                 "body": {
@@ -82,7 +84,7 @@
                     "once",
                     "rrule"
                 ],
-                "__task_option__": {
+                "__task_type_cost__": {
                     "now": 1,
                     "once": 1,
                     "rrule": 5,
@@ -101,8 +103,9 @@
                 "__api_usage_cost__": 1,
                 "__mount__": true,
                 "__rate_limit__": "5/hours",
-                "__max_content__": 3,
+                "__max_free_content__": 3,
                 "__max_recipients__": 10,
+                "__content_extra_cost__":5,
                 "__recipient_extra_cost__": 10,
                 "__priority_cost__": 25,
                 "__allowed_task_option__": [
@@ -110,7 +113,7 @@
                     "once",
                     "rrule"
                 ],
-                "__task_option__": {
+                "__task_type_cost__": {
                     "now": 1,
                     "once": 1,
                     "rrule": 10,

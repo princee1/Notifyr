@@ -363,10 +363,12 @@ def swapDict(values: dict):
 
 def default_flattenReducer(key1:str,key2:str): return  key1+key2
 
-def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] ={}, reducer:Callable[[str,str],str] = default_flattenReducer,serialized=False,dict_sep=DICT_SEP,_key_builder=key_builder):
+def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] =None, reducer:Callable[[str,str],str] = default_flattenReducer,serialized=False,dict_sep=DICT_SEP,_key_builder=key_builder,max_level=-1,current_level=0):
     """
     See https://pypi.org/project/flatten-dict/ for a better implementation
     """
+    flattenedDict = {} if flattenedDict == None else flattenedDict
+
     for key, item in current_dict.items():
         if type(key) is not str:
             continue
@@ -378,14 +380,12 @@ def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedD
         key_val  = reducer(from_keys,key)  
 
         if type(item) is not dict:
-            if not serialized:
-                flattenedDict[key_val] = item
+            flattenedDict[key_val] = item if not serialized else json.dumps(item,default=enum_encoder)
+        else:
+            if max_level>0 and current_level>=max_level:
+                flattenedDict[key_val]=item
             else:
-                #flattenedDict[key_val] = str(item)
-                flattenedDict[key_val] = json.dumps(item,default=enum_encoder)
-
-        if type(item) is dict: 
-            flatten_dict(item, _key_builder(key_val), flattenedDict,reducer,serialized)
+                flatten_dict(item, _key_builder(key_val), flattenedDict,reducer,serialized,dict_sep,_key_builder,max_level=max_level,current_level=current_level+1)
     
     return flattenedDict
 

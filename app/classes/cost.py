@@ -1,4 +1,5 @@
-from typing import Dict, TypedDict
+from typing_extensions import TypedDict,Dict
+from pydantic import BaseModel
 from app.classes.celery import TaskTypeLiteral
 from app.definition._error import BaseError
 
@@ -18,9 +19,8 @@ class CostRules(TypedDict):
     bonus_percentage_on_topup: float
     credit_overdraft_allowed: bool
     auto_block_on_zero_credit: bool
-    extra_recipient_allowed: bool
     retry_allowed: bool
-
+    track_allowed:bool
 
 class SimpleTaskCostDefinition(TypedDict):
     __api_usage_cost__:int
@@ -30,14 +30,15 @@ class SimpleTaskCostDefinition(TypedDict):
     __copy__:dict | str
 
 class TaskCostDefinition(SimpleTaskCostDefinition):
-    __max_content__:int
-    __max_recipient__:int
+    __max_free_content__:int
+    __max_free_recipient__:int
+    __content_extra_cost__:int
     __recipient_extra_cost__:int
     __priority_cost__: int
     __tracking_cost__:int
     __retry_cost__:int
     __allowed_task_option__:list[str]
-    __task_option__:Dict[TaskTypeLiteral,int]
+    __task_type_cost__:Dict[TaskTypeLiteral,int]
 
 
 class EmailCostDefinition(TaskCostDefinition):
@@ -58,8 +59,6 @@ class EmailCostDefinition(TaskCostDefinition):
     email_free_size:int
     email_size_per_extra_kb: int
     
-
-
 class SMSCostDefinition(TaskCostDefinition):
     class Body(TypedDict):
         max_content_size: int
