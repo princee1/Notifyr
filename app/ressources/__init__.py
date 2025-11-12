@@ -24,6 +24,7 @@ from .properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
 from .profile_ressource import ProfilRessource
 from .objetc_s3_ressource import S3ObjectRessource
+from .cost_ressource import CostRessource
 from app.definition._ressource import BaseHTTPRessource
 
 #from .push_notification_ressource import PushNotificationRessource
@@ -41,6 +42,7 @@ BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
                                                  PropertiesRessource,
                                                  AnalyticsRessource,
                                                  ProfilRessource,
+                                                 CostRessource
                                                  #PushNotificationRessource,
 ]
 if configService.ASSET_MODE == AssetMode.s3:

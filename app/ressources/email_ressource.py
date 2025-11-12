@@ -116,7 +116,7 @@ class EmailRessource(BaseHTTPRessource):
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,AssetService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetPermission('email'),permissions.JWTSignatureAssetPermission())
-    @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.ContactsHandler(),handlers.ProfileHandler)
+    @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.CostHandler,handlers.ContactsHandler(),handlers.ProfileHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard())
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),to_signature_path,pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('email','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('email','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
@@ -152,7 +152,7 @@ class EmailRessource(BaseHTTPRessource):
     
 
     @UseLimiter(limit_value='10/minutes')
-    @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
+    @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
     @PingService([CeleryService,ProfileService,EmailSenderService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.TaskCostPermission(),permissions.JWTSignatureAssetPermission())
@@ -213,8 +213,7 @@ class EmailRessource(BaseHTTPRessource):
                 if resp.status == 200:
                     return await resp.json()
             return {"error": f"Failed to verify email. Status code: {resp.status}"}
-
-
+    
     def on_startup(self):
         super().on_startup()
         self.emailReaderService.start_jobs()

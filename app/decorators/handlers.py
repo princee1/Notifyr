@@ -735,6 +735,9 @@ class FileNamingHandler(Handler):
                 detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
             )
 
+class RedisHandler(Handler):
+    ...
+
 class MemCachedHandler(Handler):
 
     async def handle(self,function:Callable,*args,**kwargs):

@@ -81,6 +81,7 @@ class TaskCostInterceptor(Interceptor):
         if cost.refund_cost>0:
             await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
         receipt = cost.receipt
+        print(receipt)
         broker.push(...,...)
         
 
@@ -94,7 +95,6 @@ class DataCostInterceptor(Interceptor):
         self.price = price
 
         self.retry_limit = retry_limit
-
         self.costService = Get(CostService)
 
     async def intercept_before(self,*args,**kwargs):
@@ -113,6 +113,7 @@ class DataCostInterceptor(Interceptor):
                 ...
             
     async def intercept_after(self, result:Any,*args,**kwargs):
+        response = kwargs.get('response')
         match self.mode:
             case 'purchase':
                 cost:DataCost = kwargs.get('cost',None)
