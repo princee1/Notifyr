@@ -1,4 +1,4 @@
-from app.classes.cost import EmailCostDefinition
+from app.classes.cost_definition import EmailCostDefinition
 from app.classes.template import HTMLTemplate
 from app.definition._cost import Cost
 from app.depends.class_dep import TrackerInterface

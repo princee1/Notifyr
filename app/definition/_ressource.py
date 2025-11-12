@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Option
 
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from app.classes.cost import SimpleTaskCostDefinition
+from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._cost import inject_cost_definition
 from app.definition._ws import W

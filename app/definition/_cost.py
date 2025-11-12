@@ -1,6 +1,6 @@
 from typing import Self, Type, List, Dict, Any, Optional
 from fastapi import Request
-from app.classes.cost import SimpleTaskCostDefinition, TaskCostDefinition
+from app.classes.cost_definition import SimpleTaskCostDefinition, TaskCostDefinition
 from app.container import Get
 from app.depends.class_dep import TrackerInterface
 from app.depends.dependencies import get_request_id

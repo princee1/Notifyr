@@ -2,7 +2,7 @@ from pathlib import Path
 import traceback
 
 from redis import WatchError
-from app.classes.cost import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition
+from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
