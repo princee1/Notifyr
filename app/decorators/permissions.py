@@ -1,5 +1,6 @@
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
+from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.definition._cost import Cost
 from app.models.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
@@ -272,11 +273,12 @@ class CostPermission(Permission):
         print(redisService,costService.redisService)
         self.redisService = redisService
 
-    async def permission(self, cost: Cost, taskManager: TaskManager, scheduler: SchedulerModel = None):
+    async def permission(self,func_meta:FuncMetaData, cost: Cost, taskManager: TaskManager, scheduler: SchedulerModel = None):
+        definition:SimpleTaskCostDefinition = func_meta['cost_definition'] 
 
         current_credits = await self.redisService.retrieve(
             RedisConstant.LIMITER_DB,
-            cost.definition.get('__credit_key__'),
+            definition.get('__credit_key__'),
             None
         )
         if current_credits is None:
@@ -287,12 +289,12 @@ class CostPermission(Permission):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client blocked due to zero credits")
             raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Insufficient credits")
 
-        api_cost = cost.definition.get('__api_usage_cost__', 0)
+        api_cost = definition.get('__api_usage_cost__', 0)
         if current_credits < api_cost:
             raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Insufficient credits for API usage")
 
         if scheduler is not None:
-            allowed_tasks = cost.definition.get('__allowed_task_option__', [])
+            allowed_tasks = definition.get('__allowed_task_option__', [])
             if scheduler.task_type not in allowed_tasks:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,

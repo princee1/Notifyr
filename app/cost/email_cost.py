@@ -1,3 +1,4 @@
+from app.classes.auth_permission import FuncMetaData
 from app.classes.cost_definition import EmailCostDefinition
 from app.classes.template import HTMLTemplate
 from app.definition._cost import Cost, TaskCost
@@ -14,10 +15,10 @@ class EmailCost(TaskCost):
         setattr(cls,'pointer',cls.pointer)
         return super().__init_subclass__()
     
-    def compute_cost(self,scheduler:CustomEmailSchedulerModel|EmailTemplateSchedulerModel,taskManager:TaskManager,tracker:TrackerInterface,template:HTMLTemplate=None):
-        definition:EmailCostDefinition = self.definition
+    def compute_cost(self,func_meta:FuncMetaData,scheduler:CustomEmailSchedulerModel|EmailTemplateSchedulerModel,taskManager:TaskManager,tracker:TrackerInterface,template:HTMLTemplate=None):
+        definition:EmailCostDefinition = func_meta['cost_definition']
         attachement = definition['attachement']
-        total_content,total_recipient= super().compute_cost(scheduler,taskManager,tracker)
+        total_content,total_recipient= super().compute_cost(func_meta,scheduler,taskManager,tracker)
         
         if isinstance(scheduler,CustomEmailSchedulerModel):
             ...

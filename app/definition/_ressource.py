@@ -169,11 +169,18 @@ class Helper:
         return temp_pipe_func
 
     @staticmethod
-    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[DecoratorException]):
+    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[DecoratorException],inject_func_meta=False):
         def wrapper(function: Callable):
 
             @functools.wraps(function)
             async def callback(*args, **kwargs):  # Function that will be called
+
+                if inject_func_meta:
+                    if SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER in kwargs:
+                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                                        'message': 'special key used'})
+                    kwargs[SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER] = function.meta
+
                 if empty_decorator:
                     return await function(*args, **kwargs)
 
@@ -287,20 +294,14 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             func.meta['limit_exempt'] = False
             func.meta['shared'] = None
             func.meta['default_role'] = True
-            func.meta['cost_definition'] = cost_definition
+            func.meta['cost_definition_name'] = cost_definition
+            func.meta['cost_definition'] = {} if cost_definition == None else costService.costs_definition[cost_definition]  
 
-            injected_cost_def:SimpleTaskCostDefinition = costService.costs_definition.get(cost_definition,None)
-            if injected_cost_def ==None and cost_definition!=None:
-                raise KeyError('This cost definition does not exists')
-            
-            mount = injected_cost_def.get('__mount__',mount)
+            is_mount = func.meta['cost_definition'].get('__mount__',mount)
 
-            if not mount:
+            if not is_mount:
                 return func
             
-            if dependencies and cost_definition:
-                dependencies.append(Depends(inject_cost_definition))
-
             class_name = Helper.get_class_name_from_method(func)
             kwargs = {
                 'path': path,
@@ -785,13 +786,12 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                     raise HTTPException(**default_error)
             return callback
 
-        Helper.appends_funcs_callback(
-            func, wrapper, DecoratorPriority.PIPE, touch=0 if before else 0.5)
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE, touch=0 if before else 0.5)
         return func
     return decorator
 
 
-def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams = None,mount=True):
+def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams = None,inject_meta=False,mount=True):
 
     if not mount:
         def decorator(func:Callable):
@@ -811,9 +811,7 @@ def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, 
         if cls != None:
             return cls
 
-        wrapper = Helper.stack_decorator(interceptor_function, Interceptor,
-                                  empty_decorator, default_error, InterceptorDefaultException)
-
+        wrapper = Helper.stack_decorator(interceptor_function, Interceptor,empty_decorator, default_error, InterceptorDefaultException,inject_meta)
         Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.INTERCEPTOR)
         return func
     return decorator
@@ -893,7 +891,7 @@ def HTTPStatusCode(code: int | str):
 ################################################################                           #########################################################
 
 
-def UseLimiter(limit_value:str,cost_key:str=None,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]=lambda req:1):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]=lambda req:1):
     """
     *Description copied from the slowapi library*
 
@@ -922,11 +920,8 @@ def UseLimiter(limit_value:str,cost_key:str=None,scope:str=None,exempt=False,ove
         if meta is not None:
             operation_id = meta['operation_id']
             meta['limit_exempt'] = exempt
-            
-            if 'cost_definition' in meta:
-                limit_value = costService.costs_definition.get(meta['cost_definition'],{}).get('__rate_limit__',limit_value)
-
-            meta['limit_obj'] = {'limit_value':limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,'cost':cost}
+            _limit_value = meta['cost_definition'].get('__rate_limit__',limit_value)
+            meta['limit_obj'] = {'limit_value':_limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,'cost':cost}
             if shared:
                 meta['limit_obj']['scope'] = scope
             meta['shared'] = shared

@@ -1,5 +1,6 @@
 from typing import Self, Type, List, Dict, Any, Optional
 from fastapi import Depends, Request
+from app.classes.auth_permission import FuncMetaData
 from app.classes.cost_definition import SimpleTaskCostDefinition, TaskCostDefinition
 from app.container import Get
 from app.depends.class_dep import TrackerInterface
@@ -28,18 +29,11 @@ class Cost:
     rules = costService.rules
     pointer: PointerIterator = None
 
-
-    @staticmethod
-    def cost_definition_inject(request: Request):
-        return request.state.cost_definition
-
-    def __init__(self, request_id: str=Depends(get_request_id), cost_definition: str=Depends(cost_definition_inject)):
+    def __init__(self, request_id: str=Depends(get_request_id)):
         self.purchase_cost: float = 0.0
         self.refund_cost: float = 0.0
 
         self.request_id = request_id
-        self.cost_definition_key = cost_definition
-        self.definition: SimpleTaskCostDefinition | TaskCostDefinition = costService.costs_definition.get(cost_definition)
 
         self.balance_before: Optional[int] = None
         self.created_at: datetime = datetime.now()
@@ -48,11 +42,9 @@ class Cost:
     def register_state(self, balance_before: int):
         self.balance_before = balance_before
 
-    def allow_cost_usage(self,cost_definition:str):
-        raise NotImplementedError
-        self.cost_definition_key = cost_definition
-        self.definition: SimpleTaskCostDefinition | TaskCostDefinition = costService.costs_definition.get(cost_definition)
-
+    def register_meta_key(self,func_meta:FuncMetaData):
+        self.credit_key=func_meta['cost_definition']["__credit_key__"]
+        self.definition_name = func_meta["cost_definition_name"]
 
     def add_item(self,description:str,amount:int,quantity=1):
         item = ReceiptItem(description,amount,quantity)
@@ -78,8 +70,8 @@ class Cost:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "request_id": self.request_id,
-            "credit_key":self.definition['__credit_key__'],
-            "cost_definition_key": self.cost_definition_key,
+            "credit_key":self.credit_key,
+            "definition_name": self.definition_name,
             "created_at": self.created_at.isoformat(),
             "items": [
                 {"description": it.description, "amount": it.amount, "quantity": it.quantity, "subtotal":it.amount*it.quantity}
@@ -94,29 +86,31 @@ class Cost:
 
 class TaskCost(Cost):
 
-    def compute_cost(self, scheduler: SchedulerModel, taskManager: TaskManager, tracker: TrackerInterface):
+    def compute_cost(self,func_meta:FuncMetaData, scheduler: SchedulerModel, taskManager: TaskManager, tracker: TrackerInterface):
         total_recipient = 0
+        definition:TaskCostDefinition = func_meta['cost_definition']
+
         for content in scheduler.content:
             ptr = self.pointer.ptr(content)
             total_recipient += len(ptr.get_val())
 
         total_content = len(scheduler.content)
 
-        content_diff = total_content - self.definition['__max_free_content__']
-        recipient_diff = total_recipient - self.definition['__max_free_recipient__']
+        content_diff = total_content - definition['__max_free_content__']
+        recipient_diff = total_recipient - definition['__max_free_recipient__']
 
         if content_diff>0:
-            self.add_item("content_extra", self.definition['__content_extra_cost__'],content_diff)
+            self.add_item("content_extra", definition['__content_extra_cost__'],content_diff)
         if recipient_diff>0:
-            self.add_item("recipient_extra", amount=self.definition['__recipient_extra_cost__'],quantity=recipient_diff)        
+            self.add_item("recipient_extra", amount=definition['__recipient_extra_cost__'],quantity=recipient_diff)        
         if tracker.will_track:
-            self.add_item("tracking", amount=self.definition['__tracking_cost__'],quantity=total_recipient)
+            self.add_item("tracking", amount=definition['__tracking_cost__'],quantity=total_recipient)
         if taskManager.meta.get('retry', False):
-            self.add_item(description="retry", amount=self.definition['__retry_cost__'], quantity=total_recipient)
+            self.add_item(description="retry", amount=definition['__retry_cost__'], quantity=total_recipient)
         
-        self.add_item(description="priority", amount=self.definition['__priority_cost__'] / max(1, scheduler.priority))
-        self.add_item(description=f"task_type:{scheduler.task_type}", amount=self.definition['__task_type_cost__'].get(scheduler.task_type, 1))
-        self.add_item('api_usage',amount=self.definition['__api_usage_cost__'])
+        self.add_item(description="priority", amount=definition['__priority_cost__'] / max(1, scheduler.priority))
+        self.add_item(description=f"task_type:{scheduler.task_type}", amount=definition['__task_type_cost__'].get(scheduler.task_type, 1))
+        self.add_item('api_usage',amount=definition['__api_usage_cost__'])
         return total_content, total_recipient
 
 
@@ -125,8 +119,9 @@ class DataCost:
 
 class SimpleCost(Cost):
     
-    def compute_cost(self):
-        self.add_item('api_usage',amount=self.definition['__api_usage_cost__'])
+    def compute_cost(self,func_meta:FuncMetaData):
+        definition:SimpleTaskCostDefinition=func_meta['cost_definition']
+        self.add_item('api_usage',amount=definition['__api_usage_cost__'])
         
 ###################################################             ################################################33333
 

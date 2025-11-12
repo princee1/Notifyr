@@ -4,6 +4,8 @@ from pydantic import BaseModel, field_validator, model_validator
 from typing_extensions import TypedDict
 from enum import Enum
 from time import time
+
+from app.classes.cost_definition import SimpleTaskCostDefinition
 from .template import Extension
 from app.definition._error import BaseError
 from app.utils.fileIO import is_file
@@ -63,7 +65,8 @@ class FuncMetaData(TypedDict):
     limit_obj:dict
     limit_exempt:bool=False
     default_role:bool =True
-    cost_definition:str|None
+    cost_definition:SimpleTaskCostDefinition
+    cost_definition_name:str
 
 
 class RoutePermission(TypedDict):
