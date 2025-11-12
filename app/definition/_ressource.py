@@ -290,7 +290,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             func.meta['cost_definition'] = cost_definition
 
             injected_cost_def:SimpleTaskCostDefinition = costService.costs_definition.get(cost_definition,None)
-            if injected_cost_def ==None:
+            if injected_cost_def ==None and cost_definition!=None:
                 raise KeyError('This cost definition does not exists')
             
             mount = injected_cost_def.get('__mount__',mount)
