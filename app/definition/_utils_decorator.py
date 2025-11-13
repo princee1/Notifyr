@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Callable
 
 from fastapi import HTTPException, Response
+from app.utils.constant import SpecialKeyParameterConstant
 from app.utils.helper import APIFilterInject,AsyncAPIFilterInject, SkipCode
 from asgiref.sync import sync_to_async
 from enum import Enum
@@ -126,8 +127,15 @@ class Interceptor(DecoratorObj):
             if asyncio.iscoroutine(r): await r
         except SkipCode as e:
             return e.args[0]
-                    
-        result = await function(*args,**kwargs)
+        
+        
+        if SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER in kwargs:
+            k_star = kwargs.copy()
+            del k_star[SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER]
+        else:
+            k_star = kwargs
+        
+        result = await function(*args,**k_star)
 
         if self.filter_after_params: r = APIFilterInject(self.intercept_after)(result,*args,**kwargs) 
         else: r=self.intercept_after(result,*args,**kwargs)

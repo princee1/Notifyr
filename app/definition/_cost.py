@@ -18,7 +18,7 @@ import logging
 @dataclass
 class ReceiptItem:
     description: str
-    amount: float
+    amount: int
     quantity: int = 1
 
 
@@ -29,8 +29,8 @@ class Cost:
     rules = costService.rules
     
     def __init__(self, request_id: str=Depends(get_request_id)):
-        self.purchase_cost: float = 0.0
-        self.refund_cost: float = 0.0
+        self.purchase_cost: int = 0
+        self.refund_cost: int = 0
 
         self.request_id = request_id
 
@@ -38,6 +38,9 @@ class Cost:
         self.created_at: datetime = datetime.now()
         self.purchase_items: List[ReceiptItem] = []
         self.refund_items:List[ReceiptItem] = []
+
+        self.credit_key=...
+        self.definition_name=None
         
     def purchase(self,description:str,amount:int,quantity=1):
         item = ReceiptItem(description,amount,quantity)
@@ -45,7 +48,11 @@ class Cost:
         self.purchase_cost += item.amount * item.quantity
 
     def reset_bill(self):
-        ...
+        self.purchase_items.clear()
+        self.refund_items.clear()
+
+        self.purchase_cost = 0
+        self.refund_cost = 0
     
     def refund(self,description:str,amount:int,quantity=1):
         ...
@@ -118,7 +125,7 @@ class TaskCost(SimpleTaskCost):
         if taskManager.meta.get('retry', False):
             self.purchase(description="retry", amount=definition['__retry_cost__'], quantity=total_recipient)
         
-        self.purchase(description="priority", amount=definition['__priority_cost__'] / max(1, scheduler.priority))
+        self.purchase(description="priority", amount=int(definition['__priority_cost__'] / scheduler.priority))
         self.purchase(description=f"task_type:{scheduler.task_type}", amount=definition['__task_type_cost__'].get(scheduler.task_type, 1))
         self.purchase('api_usage',amount=definition['__api_usage_cost__'])
         return total_content, total_recipient
@@ -128,12 +135,3 @@ class TaskCost(SimpleTaskCost):
 ###################################################             ################################################33333
 
 ###################################################             ################################################33333
-
-
-def inject_cost_definition(cost_definition: str):
-
-    def callback(request: Request):
-        request.state.cost_definition = cost_definition
-        return
-
-    return callback

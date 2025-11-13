@@ -78,8 +78,7 @@ class TaskCostInterceptor(Interceptor):
         cost.register_state(balance_before)
 
     async def intercept_after(self, result:Any,cost:SimpleTaskCost,broker:Broker,response:Response):
-        if cost.refund_cost>0:
-            await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
+        await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
         receipt = cost.receipt
         print(receipt)
         broker.push(...,...)
@@ -98,35 +97,39 @@ class DataCostInterceptor(Interceptor):
         self.costService = Get(CostService)
 
     async def intercept_before(self,*args,**kwargs):
-
         match self.mode:
             case 'purchase':
                 cost:DataCost = kwargs.get('cost',None)
+                cost.credit_key = self.credit
                 if cost!=None:
                     APIFilterInject(cost.pre_purchase)(**kwargs)
                 price = self.price if cost == None else cost.purchase_cost
-                await self.costService.check_enough_credits(self.credit,price,self.retry_limit)
-                cost.reset_bill()
+                await self.costService.check_enough_credits(self.credit,price)
+                if cost!=None:
+                    cost.reset_bill()
             case 'refund':
                 ...      
             case _:
                 ...
             
     async def intercept_after(self, result:Any,*args,**kwargs):
-        response = kwargs.get('response')
+        response:Response = kwargs.get('response')
+        request:Request = kwargs.get('request')
+        broker:Broker = kwargs.get('broker')
+        cost:DataCost = kwargs.get('cost',None)
         match self.mode:
             case 'purchase':
-                cost:DataCost = kwargs.get('cost',None)
                 if cost!=None:
                     APIFilterInject(cost.post_purchase)(result,**kwargs)
                 price = self.price if cost == None else cost.purchase_cost
                 await self.costService.deduct_credits(self.credit,price,self.retry_limit)
 
             case 'refund':
-                cost:DataCost = kwargs.get('cost',None)
+                cost.credit_key = self.credit
                 if cost!=None:
                     APIFilterInject(cost.refund)(result,**kwargs)
-                if cost.refund_cost>0:
+                price = self.price if cost == None else cost.refund_cost
+                if price > 0:
                     await self.costService.refund_credits(self.credit,cost.refund_cost)
             case _:
                ...

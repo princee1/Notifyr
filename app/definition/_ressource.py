@@ -2,18 +2,14 @@
 The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 instance imported from `container`.
 """
-from inspect import isclass
-from types import NoneType
 from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
-
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
-from app.definition._cost import inject_cost_definition
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
-from app.utils.helper import copy_response, issubclass_of
+from app.utils.helper import copy_response
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services import AssetService, CostService
 from app.container import Get, Need
@@ -21,7 +17,6 @@ from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
-from fastapi import BackgroundTasks
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
@@ -187,10 +182,7 @@ class Helper:
                 def proxy(deco, f: Callable):
                     @functools.wraps(deco)
                     async def delegator(*a, **k):
-                        if type(deco) == type:
-                            obj: DecoratorObj = deco()
-                            return await obj.do(f, *a, **k)
-                        elif isinstance(deco, deco_type):
+                        if isinstance(deco, deco_type):
                             return await deco.do(f, *a, **k)
                         else:
                             return await deco(f, *a, **k)
@@ -594,9 +586,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
                 for permission in permission_function:
                     try:
-                        if type(permission) == type:
-                            flag = await permission().do(*args, **kwargs_prime)
-                        elif isinstance(permission, Permission):
+                        if isinstance(permission, Permission):
                             flag = await permission.do(*args, **kwargs_prime)
                         else:
                             flag = await APIFilterInject(permission)(*args, **kwargs_prime)
@@ -640,7 +630,7 @@ def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[H
     handler_function = Helper.filter_type_function(handler_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseHandler, handler_function)
+        cls = common_class_decorator(func, UseHandler, handler_function,default_error=default_error,mount=mount)
         if cls != None:
             return cls
 
@@ -667,7 +657,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
     guard_function = Helper.filter_type_function(guard_function)
 
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
-        cls = common_class_decorator(func, UseGuard, guard_function)
+        cls = common_class_decorator(func, UseGuard, guard_function,default_error=default_error,mount=mount)
         if cls != None:
             return cls
 
@@ -680,10 +670,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
                 try:
                     for guard in guard_function:
-                        if type(guard) == type:
-                            flag, message = await guard().do(*args, **kwargs)
-
-                        elif isinstance(guard, Guard):
+                        if isinstance(guard, Guard):
                             flag, message = await guard.do(*args, **kwargs)
                         else:
                             flag, message = await APIFilterInject(guard)(*args, **kwargs)
@@ -734,7 +721,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(
-            func, UsePipe, pipe_function, before=before)
+            func, UsePipe, pipe_function, before=before,default_error=default_error,mount=mount)
         if cls != None:
             return cls
 
@@ -746,9 +733,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                     if before:
                         kwargs_prime = kwargs.copy()
                         for pipe in pipe_function:  # verify annotation
-                            if type(pipe) == type:
-                                result = await pipe().do(*args, **kwargs_prime)
-                            elif isinstance(pipe, Pipe):
+                            if isinstance(pipe, Pipe):
                                 result = await pipe.do(*args, **kwargs_prime)
                             else:
                                 result = await APIFilterInject(pipe)(*args, **kwargs_prime)
@@ -807,7 +792,7 @@ def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, 
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(
-            func, UseInterceptor, interceptor_function)
+            func, UseInterceptor, interceptor_function,default_error=default_error,inject_meta=inject_meta,mount=mount)
         if cls != None:
             return cls
 

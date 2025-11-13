@@ -55,8 +55,11 @@ class CostService(BaseService):
     
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.redis_limiter.get(credit_key)
+
         if current_balance == None:
             raise InvalidPurchaseRequestError
+        
+        current_balance = int(current_balance)
 
         if current_balance <= 0:
             raise InsufficientCreditsError
@@ -75,7 +78,8 @@ class CostService(BaseService):
                 try:
                     await pipe.watch(credit_key)
                     current_balance = await pipe.get(credit_key)
-
+                    current_balance = int(current_balance)
+                    
                     if current_balance is None:
                         await pipe.unwatch()
                         raise InvalidPurchaseRequestError
@@ -86,7 +90,8 @@ class CostService(BaseService):
                         raise InsufficientCreditsError
                     
                     new_balance = current_balance - purchase_cost
-
+                    new_balance = int(new_balance)
+                    
                     pipe.multi()
                     pipe.set(credit_key, new_balance)
 
@@ -102,7 +107,7 @@ class CostService(BaseService):
         raise CreditDeductionFailedError
     
     async def get_current_credits(self):        
-        return {k:await self.redisService.retrieve(RedisConstant.LIMITER_DB,k,None) for k in self.plan_credits.keys() }
+        return {k:await self.redisService.retrieve(RedisConstant.LIMITER_DB,k) for k in self.plan_credits.keys() }
 
     def load_file_into_objects(self):
         try:
