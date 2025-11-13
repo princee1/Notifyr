@@ -1,6 +1,6 @@
 import functools
 import time
-from typing import Any, Callable, Dict, Self, Type, TypeVar, TypedDict
+from typing import Any, Callable, Dict, List, Self, Type, TypeVar, TypedDict
 from urllib.parse import urlencode
 import aiohttp
 from beanie import Document, PydanticObjectId, init_beanie
@@ -404,11 +404,11 @@ class RedisService(DatabaseService):
 
     @check_db
     async def increment(self,database:int|str,name:str,amount:int,redis:Redis=None):
-        return await redis.decrby(name,amount)
+        return await redis.incrby(name,amount)
     
     @check_db
     async def decrement(self,database:int|str,name:str,amount:int,redis:Redis=None):
-        return await redis.incrby(name,amount)
+        return await redis.decrby(name,amount)
 
     @check_db
     async def hash_iter(self,database:int|str,hash_name:str,iter=False,match:str=None,count=None,redis:Redis=None):
@@ -538,6 +538,9 @@ class MongooseService(TempCredentialsDatabaseService):
             raise DocumentDoesNotExistsError(id)
         return m
     
+    async def find_all(self,model:Type[D])->List[D]:
+        return await model.find_all().to_list()
+
     async def find(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).to_list()
 

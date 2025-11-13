@@ -6,10 +6,11 @@
     "promotions": {},
     "rules": {
         "default_credit_reset": true,
-        "carry_over_allowed": false,
+        "carry_over_allowed": true,
         "bonus_percentage_on_topup": 0,
         "credit_overdraft_allowed": false,
         "auto_block_on_zero_credit": true,
+        "overdraft_ratio_allowed":0.15,
         "track_allowed":true,
         "retry_allowed": true
     },

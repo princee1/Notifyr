@@ -47,7 +47,7 @@ class CostRessource(BaseHTTPRessource):
     async def show_current_credits(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         """Return current credits for all plan keys. May be restricted in production via permissions in future.
         """
-        return await self.costService.get_current_credits()
+        return await self.costService.get_all_credits_balance()
 
 
     @UseRoles([Role.ADMIN])

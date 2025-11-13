@@ -108,7 +108,11 @@ def uuid_v1_mc(len=1):
 ################################   ** Code Helper **      #################################
 
 class SkipCode(Exception):
-    pass
+    
+    def __init__(self,result=None,_return=False, *args):
+        super().__init__(*args)
+        self.result = result
+        self._return = _return
 
 ################################   ** Key Helper **      #################################
 

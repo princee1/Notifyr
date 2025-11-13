@@ -274,18 +274,14 @@ class TaskCostPermission(Permission):
 
     async def permission(self,func_meta:FuncMetaData, taskManager: TaskManager, scheduler: SchedulerModel = None):
         definition:SimpleTaskCostDefinition = func_meta['cost_definition'] 
+        credit_key  = definition.get('__credit_key__')
 
-        current_credits = await self.redisService.retrieve(
-            RedisConstant.LIMITER_DB,
-            definition.get('__credit_key__'),
-            None
-        )
+        current_credits = await self.costService.get_credit_balance(credit_key)
+
         if current_credits is None:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Credit information unavailable")
 
-        if current_credits <= 0:
-            if Cost.rules.get('auto_block_on_zero_credit', False):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client blocked due to zero credits")
+        if current_credits <= 0 and self.costService.is_current_credit_overdraft_allowed(current_credits,credit_key): 
             raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Insufficient credits")
 
         api_cost = definition.get('__api_usage_cost__', 0)

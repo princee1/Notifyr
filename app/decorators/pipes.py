@@ -539,21 +539,33 @@ class DocumentFriendlyPipe(Pipe):
         self.exclude_none = exclude_none
         self.exclude_defaults = exclude_defaults
 
-    def pipe(self,result:Document):
-        result_id = str(result.id)
+    def pipe(self,result:Document|list[Document]):
+        is_list = isinstance(result,list)
+        temp = []
+        if not is_list:
+            result=[result]
         
-        dump_kwargs = {'mode': 'json'}
-        if self.include:
-            dump_kwargs['include'] = self.include
-        if self.exclude:
-            dump_kwargs['exclude'] = self.exclude
+        for r in result:
+            result_id = str(r.id)
+            
+            dump_kwargs = {'mode': 'json'}
+            if self.include:
+                dump_kwargs['include'] = self.include
+            if self.exclude:
+                dump_kwargs['exclude'] = self.exclude
 
-        dump_kwargs['exclude_none'] = self.exclude_none
-        dump_kwargs['exclude_defaults'] = self.exclude_defaults
+            dump_kwargs['exclude_none'] = self.exclude_none
+            dump_kwargs['exclude_defaults'] = self.exclude_defaults
 
-        result = result.model_dump(**dump_kwargs)
-        result['id'] =result_id
-        return result
+            r = r.model_dump(**dump_kwargs)
+            r['id'] =result_id
+
+            temp.append(r)
+        
+        if is_list:
+            return temp
+    
+        return temp[0]
 
 class ObjectRelationalFriendlyPipe(Pipe):
 

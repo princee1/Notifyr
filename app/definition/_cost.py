@@ -1,7 +1,7 @@
-from typing import Self, Type, List, Dict, Any, Optional
+from typing import Self, Type, List, Dict, Any, Optional, TypedDict
 from fastapi import Depends, Request
 from app.classes.auth_permission import FuncMetaData
-from app.classes.cost_definition import SimpleTaskCostDefinition, TaskCostDefinition
+from app.classes.cost_definition import Receipt, ReceiptItem, SimpleTaskCostDefinition, TaskCostDefinition
 from app.container import Get
 from app.depends.class_dep import TrackerInterface
 from app.depends.dependencies import get_request_id
@@ -9,17 +9,8 @@ from app.services.cost_service import CostService
 from app.services.task_service import TaskManager
 from app.utils.helper import PointerIterator
 from app.classes.celery import SchedulerModel
-
-from dataclasses import dataclass, field
 from datetime import datetime
-import logging
 
-
-@dataclass
-class ReceiptItem:
-    description: str
-    amount: int
-    quantity: int = 1
 
 
 costService: CostService = Get(CostService)
@@ -55,35 +46,48 @@ class Cost:
         self.refund_cost = 0
     
     def refund(self,description:str,amount:int,quantity=1):
-        ...
+        item = ReceiptItem(description,amount,quantity)
+        self.refund_items.append(item)
+        self.refund_cost += item.subtotal
 
-    @property
-    def receipt(self):
-        return self.to_dict()
-    
-    def to_dict(self) -> Dict[str, Any]:
+    def generate_receipt(self)-> Receipt:
         return {
             "request_id": self.request_id,
-            "credit_key":self.credit_key,
-            "definition_name": self.definition_name,
+            "credit":self.credit_key,
+            "definition": self.definition_name,
             "created_at": self.created_at.isoformat(),
-            "items": [
-                {"description": it.description, "amount": it.amount, "quantity": it.quantity, "subtotal":it.amount*it.quantity}
+            "p-items": [
+                {"description": it.description, "amount": it.amount, "quantity": it.quantity, "subtotal":it.subtotal}
                 for it in self.purchase_items
+            ],
+            "r-items":[
+                {"description": it.description, "amount": it.amount, "quantity": it.quantity, "subtotal":it.subtotal}
+                for it in self.refund_items
             ],
             "purchase_total": self.purchase_cost,
             "refund_total": self.refund_cost,
+            "total":self.purchase_cost - self.refund_cost,
             "balance_before": self.balance_before,
             "balance_after": self.balance_before - (self.purchase_cost - self.refund_cost),
         }
 
 class DataCost(Cost):
     
+    def init(self,default_price:int,credit_key:str,definition_name=None):
+        self.default_price = default_price
+        self.credit_key = credit_key
+        self.definition_name = definition_name
+
     def pre_purchase(self):
-        ...
+        self.purchase(self.credit_key,self.default_price)
+
     
-    def post_purchase(self):
-        ...
+    def post_purchase(self,result:Any):
+        self.purchase(self.credit_key,self.default_price)
+    
+    
+    def post_refund(self,result:Any):
+        self.refund(self.credit_key,self.default_price)
 
 class SimpleTaskCost(Cost):
 

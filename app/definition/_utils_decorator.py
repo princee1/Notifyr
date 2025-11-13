@@ -126,8 +126,8 @@ class Interceptor(DecoratorObj):
 
             if asyncio.iscoroutine(r): await r
         except SkipCode as e:
-            return e.args[0]
-        
+            if e._return:
+                return e.result
         
         if SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER in kwargs:
             k_star = kwargs.copy()
@@ -137,10 +137,14 @@ class Interceptor(DecoratorObj):
         
         result = await function(*args,**k_star)
 
-        if self.filter_after_params: r = APIFilterInject(self.intercept_after)(result,*args,**kwargs) 
-        else: r=self.intercept_after(result,*args,**kwargs)
+        try:
+            if self.filter_after_params: r = APIFilterInject(self.intercept_after)(result,*args,**kwargs) 
+            else: r=self.intercept_after(result,*args,**kwargs)
 
-        if asyncio.iscoroutine(r): await  r
+            if asyncio.iscoroutine(r): await  r
+        except SkipCode as e:
+            if e._return:
+                return e.result
 
         return result
     

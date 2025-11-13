@@ -1,8 +1,9 @@
 from pathlib import Path
 import traceback
 
+from fastapi import Response
 from redis import WatchError
-from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition
+from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition,Receipt
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
@@ -20,6 +21,8 @@ class CostService(BaseService):
     COST_PATH = "/run/secrets/costs"
     COST_PATH_OBJ= Path(COST_PATH)
     DICT_SEP='/'
+
+    OVERDRAFT_ALLOWED = 0.15
 
     def __init__(self,configService:ConfigService,redisService:RedisService,fileService:FileService):
         super().__init__()
@@ -55,7 +58,6 @@ class CostService(BaseService):
     
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.redis_limiter.get(credit_key)
-
         if current_balance == None:
             raise InvalidPurchaseRequestError
         
@@ -84,8 +86,7 @@ class CostService(BaseService):
                         await pipe.unwatch()
                         raise InvalidPurchaseRequestError
 
-                    if current_balance < purchase_cost:
-                        self.rules['carry_over_allowed']
+                    if current_balance < purchase_cost and not self.rules.get('credit_overdraft_allowed',False):
                         await pipe.unwatch()
                         raise InsufficientCreditsError
                     
@@ -106,8 +107,14 @@ class CostService(BaseService):
         
         raise CreditDeductionFailedError
     
-    async def get_current_credits(self):        
-        return {k:await self.redisService.retrieve(RedisConstant.LIMITER_DB,k) for k in self.plan_credits.keys() }
+    async def get_credit_balance(self,credit_name:str):
+        credit = await self.redisService.retrieve(RedisConstant.LIMITER_DB,credit_name)
+        if credit != None:
+            credit = int(credit)
+        return credit
+
+    async def get_all_credits_balance(self):        
+        return {k:await self.get_credit_balance(k) for k in self.plan_credits.keys() }
 
     def load_file_into_objects(self):
         try:
@@ -167,6 +174,21 @@ class CostService(BaseService):
         if self.currency != 'NOTIFYR-CREDITS':
             raise BuildFailureError
 
+    def inject_cost_info(self,response:Response,receipt:Receipt):
+        
+        credit = receipt['credit']
+        current_balance = receipt['balance_after']
+        total = receipt['total']
+        definition_name = receipt.get('definition',None)
+
+        response.headers.append('X-Credit-Name',credit)
+        response.headers.append('X-Current-Balance',str(current_balance))
+        response.headers.append('X-Total-Cost',str(total))
+        if definition_name:
+            response.headers.append('X-Definition',definition_name)
+
+    def is_current_credit_overdraft_allowed(self,current_credits:int,credit_key:str):
+        return (self.rules.get('auto_block_on_zero_credit', True) or (((-1 * current_credits)  / self.plan_credits[credit_key]) <self.rules.get('overdraft_ratio_allowed',self.OVERDRAFT_ALLOWED) ))
 
     @property
     def version(self)->str:

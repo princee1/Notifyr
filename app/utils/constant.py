@@ -317,6 +317,8 @@ class CostConstant:
     EMAIL_CREDIT='email'
     SMS_CREDIT = 'sms'
     PHONE_CREDIT='phone'
+    PROFILE_CREDIT='profile'
+    CLIENT_CREDIT='client'
     
 
     COST_KEY='cost'

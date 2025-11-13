@@ -1,7 +1,33 @@
+from dataclasses import dataclass
+from typing import Any, List, Optional
 from typing_extensions import TypedDict,Dict
 from pydantic import BaseModel
 from app.classes.celery import TaskTypeLiteral
 from app.definition._error import BaseError
+from dataclasses import dataclass, field
+
+
+@dataclass
+class ReceiptItem:
+    description: str
+    amount: int
+    quantity: int = 1
+    subtotal: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.subtotal = self.amount * self.quantity
+
+class Receipt(TypedDict):
+    request_id: str
+    credit: Any
+    definition: Optional[str]
+    created_at: str
+    items: List[ReceiptItem]
+    purchase_total: int
+    refund_total: int
+    total: int
+    balance_before: Optional[int]
+    balance_after: Optional[int]
 
 
 class CostCredits(TypedDict):
@@ -14,11 +40,16 @@ class CostCredits(TypedDict):
     link:int
 
 class CostRules(TypedDict):
+    bonus_percentage_on_topup: float
+
     default_credit_reset: bool
     carry_over_allowed: bool
-    bonus_percentage_on_topup: float
+    
     credit_overdraft_allowed: bool
+
     auto_block_on_zero_credit: bool
+    overdraft_ratio_allowed:float
+
     retry_allowed: bool
     track_allowed:bool
 
