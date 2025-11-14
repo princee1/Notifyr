@@ -157,8 +157,10 @@ class HTMLTemplateConstant:
 
 ########################                     ########################################
 class MongooseDBConstant:
+    ERROR_PROFILE_COLLECTION ='errorProfile'
     AGENT_COLLECTION = 'agent'
-    PROFILE_COLLECTION = 'profile'
+    COMMUNICATION_PROFILE_COLLECTION = 'communication'
+    WEBHOOK_PROFILE_COLLECTION = 'webhook'
     CHAT_COLLECTION = 'chat'
     WORKFLOW_COLLECTION ='workflow'
     SETTING_COLLECTION = 'setting'

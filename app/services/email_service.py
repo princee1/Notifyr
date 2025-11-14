@@ -1,7 +1,7 @@
 
 from typing import Type
 from app.definition import _service
-from app.models.profile_model import IMAPProfileModel, ProfilModelValues, ProfileModel, SMTPProfileModel
+from app.models.communication_model import IMAPProfileModel, SMTPProfileModel
 from app.services.config_service import ConfigService
 from app.services.database_service import MongooseService, RedisService
 from app.services.email.email_api_service import EmailAPIService

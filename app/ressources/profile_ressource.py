@@ -16,7 +16,7 @@ from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.class_dep import Broker
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
-from app.models.profile_model import ErrorProfileModel, ProfilModelValues, ProfileModel,PROFILE_TYPE_KEY
+from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.services.database_service import MongooseService
 from app.services.email_service import EmailSenderService
 from app.services.profile_service import ProfileMiniService, ProfileService
@@ -36,9 +36,9 @@ PROFILE_PREFIX = 'profile'
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('will be overwritten')
 class BaseProfilModelRessource(BaseHTTPRessource):
-    model: Type[ProfileModel | Document]
-    model_update:Type[ProfileModel | Document]
-    model_creds:Type[ProfileModel | Document]
+    model: Type[BaseProfileModel | Document]
+    model_update:Type[BaseProfileModel | Document]
+    model_creds:Type[BaseProfileModel | Document]
     profileType:str
 
     @InjectInMethod()
@@ -132,7 +132,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
     async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission)):
         
-        profileModel:ProfileModel = await self.mongooseService.get(self.model,profile,True)
+        profileModel:BaseProfileModel = await self.mongooseService.get(self.model,profile,True)
         modelCreds = await self.pipe_profil_model(request,'model_creds')
 
         modelCreds = modelCreds.model_dump()
@@ -151,7 +151,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         except:
             raise ProfileModelRequestBodyError
         
-        model:Type[ProfileModel | Document] = getattr(cls,modelType,None)
+        model:Type[BaseProfileModel | Document] = getattr(cls,modelType,None)
         print(model)
         if model == None:
             raise AttributeError
@@ -161,7 +161,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         return model.model_validate(body)
 
-    async def create_profile_model_condition(self,profileModel:ProfileModel | dict):
+    async def create_profile_model_condition(self,profileModel:BaseProfileModel | dict):
         
         def validate_filter(m:MongoCondition,p_dump):
             try:
@@ -178,7 +178,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         if mc == None:
             return
         
-        if isinstance(profileModel,ProfileModel):
+        if isinstance(profileModel,BaseProfileModel):
             profile_dump = profileModel.model_dump(mode='json')    
         else:
             profile_dump = profileModel
@@ -200,7 +200,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             if not isinstance(v,(str,int,float,bool,list,dict)):
                 continue
 
-            if isinstance(profileModel,ProfileModel):
+            if isinstance(profileModel,BaseProfileModel):
                 print(k,v)
                 setattr(profileModel,k,v)
             else:
@@ -210,14 +210,14 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 base_meta = BaseProfilModelRessource.meta
 base_attr = {'id','revision_id','created_at','last_modified','version'}
 
-def generate_profil_model_ressource(model:Type[ProfileModel],path:str):
+def generate_profil_model_ressource(model:Type[BaseProfileModel],path:str):
 
     forbid_extra = ConfigDict(extra="forbid")
     
     model_update = subset_model(model,f'Update{model.__name__}',exclude=set(model.unique_indexes).union(model.secrets_keys).union(base_attr),__config__=forbid_extra)
     model_creds = subset_model(model,f'Secrets{model.__name__}',include=set(model.secrets_keys).union(base_attr),__config__=forbid_extra)
 
-    ModelRessource = type(f"{model.__name__}{BaseProfilModelRessource.__name__}",(BaseProfilModelRessource,),{'model':model,PROFILE_TYPE_KEY:path,'model_update':model_update,'model_creds':model_creds})
+    ModelRessource = type(f"{model.__name__}{BaseProfilModelRessource.__name__}",(BaseProfilModelRessource,),{'model':model,'profileType':path,'model_update':model_update,'model_creds':model_creds})
     setattr(ModelRessource,'meta',base_meta.copy())
 
     meta:ClassMetaData = getattr(ModelRessource,'meta',{})
@@ -258,7 +258,7 @@ class ProfilRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe(include={'ignore'}),before=False)
     @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
     async def get_all(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        return await self.mongooseService.find_all(ProfileModel)
+        return await self.mongooseService.find_all(BaseProfileModel)
     
     
     

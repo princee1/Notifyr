@@ -1,7 +1,6 @@
 """
 Contains the FastAPI app
 """
-from dataclasses import dataclass
 from fastapi.responses import FileResponse, JSONResponse
 from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
@@ -12,13 +11,11 @@ from app.ressources import *
 from app.services.assets_service import AssetService
 from app.services.aws_service import AmazonS3Service
 from app.services.database_service import  MemCachedService, MongooseService, RedisService, TortoiseConnectionService
-from app.services.health_service import HealthService
 from app.services.cost_service import CostService
 from app.services.secret_service import HCVaultService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
 from app.services.config_service import ConfigService, MODE
-from app.services.security_service import JWTAuthService, SecurityService
 from fastapi import Request, Response, FastAPI
 from slowapi.middleware import SlowAPIMiddleware
 from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload, TypedDict
@@ -38,14 +35,15 @@ from fastapi_cache.backends.memcached import MemcachedBackend
 from .app_meta import *
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
-from app.models.profile_model import *
+from app.models.communication_model import *
+
+from app.classes.profiles import ProfilModelValues, BaseProfileModel
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
 BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
 
 DOCUMENTS = [
-                    ProfileModel,
                     SMTPProfileModel,
                     IMAPProfileModel,
                     AWSProfileModel,

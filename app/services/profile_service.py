@@ -13,10 +13,11 @@ from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from app.utils.helper import subset_model
 from .database_service import MongooseService, RedisService
-from app.models.profile_model import ErrorProfileModel, ProfileModel, ProfilModelValues
+from app.models.communication_model import  BaseProfileModel, ProfilModelValues
+from app.classes.profiles import ErrorProfileModel
 from typing import Generic, TypeVar
 
-TModel = TypeVar("TModel",bound=ProfileModel)
+TModel = TypeVar("TModel",bound=BaseProfileModel)
 
 @MiniService(
     override_init=True
@@ -69,7 +70,7 @@ class ProfileService(BaseMiniServiceManager):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
         super().__init__()
-        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[ProfileModel]] = MiniServiceStore[ProfileMiniService[ProfileModel]](self.__class__.__name__)
+        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[BaseProfileModel]] = MiniServiceStore[ProfileMiniService[BaseProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
         self.configService = configService
         self.redisService = redisService
@@ -80,7 +81,7 @@ class ProfileService(BaseMiniServiceManager):
         self.MiniServiceStore.clear()
         
         for v in ProfilModelValues.values():
-            for m in self.mongooseService.sync_find(MongooseDBConstant.PROFILE_COLLECTION,v):
+            for m in self.mongooseService.sync_find(v._collection,v):
                 p = ProfileMiniService[v](
                     self.vaultService,
                     self.mongooseService,
@@ -88,6 +89,7 @@ class ProfileService(BaseMiniServiceManager):
                     model=m,model_type=v)
                 p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 self.MiniServiceStore.add(p)
+            
         
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:
@@ -120,7 +122,7 @@ class ProfileService(BaseMiniServiceManager):
     
     ########################################################       ################################3
 
-    async def add_profile(self,profile:ProfileModel):
+    async def add_profile(self,profile:BaseProfileModel):
         creds = {}
 
         for skey in profile.secrets_keys:
@@ -141,18 +143,18 @@ class ProfileService(BaseMiniServiceManager):
                     creds[skey] = secret
             
         
-        result:ProfileModel = await self.mongooseService.insert(profile)
+        result:BaseProfileModel = await self.mongooseService.insert(profile)
         result_id = str(result.id)
         self._put_encrypted_creds(result_id,creds)
         return result
     
-    async def delete_profile(self,profileModel:ProfileModel,raise_:bool = False):
+    async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False):
         profile_id = str(profileModel.id)
         result = await profileModel.delete()
         self._delete_encrypted_creds(profile_id)
         return result
      
-    async def update_profile(self,profileModel:ProfileModel,body:dict):
+    async def update_profile(self,profileModel:BaseProfileModel,body:dict):
         for k,v in body.items():
             if v is not None:
                 try:
@@ -166,7 +168,7 @@ class ProfileService(BaseMiniServiceManager):
         current_creds.update(creds)
         self._put_encrypted_creds(profiles_id,current_creds)
 
-    async def update_meta_profile(self,profile:ProfileModel):
+    async def update_meta_profile(self,profile:BaseProfileModel):
         profile.last_modified =  datetime.utcnow().isoformat()
         profile.version+=1
         await profile.save()

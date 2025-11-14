@@ -7,7 +7,7 @@ from beanie import Document
 from app.classes.condition import MongoCondition
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.phone import PhoneModel
-from app.classes.profiles import ProfileModelAuthToken, ProfilModelConstant, ProfileState
+from app.classes.profiles import ProfilModelValues, BaseProfileModel, ProfileModelAuthToken, ProfilModelConstant, ProfileState
 from app.utils.constant import EmailHostConstant, MongooseDBConstant
 from app.utils.validation import email_validator, port_validator, phone_number_validator,url_validator
 from app.utils.helper import phone_parser
@@ -18,45 +18,23 @@ ProfileType = Literal["email", "twilio"]
 ServiceMode = Literal["smtp", "aws", "api", "imap"]
 ProtocolConnMode = Literal["tls", "ssl", "normal"]
 
-PROFILE_TYPE_KEY = 'profileType'
-
 ######################################################
-# Base Profile Model (Root)
+# Communication-related Profiles (Root)
 ######################################################
-class ProfileModel(Document):
+class CommunicationProfileModel(BaseProfileModel):
 
-    
-    alias: str
-    description: Optional[str] = Field(default=None,min_length=0,max_length=1000)
-    role: list[str] = Field(default_factory=list)
-    profile_state: ProfileState = ProfileState.ACTIVE
-    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    last_modified: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    version: int = 1
-
-    _secret_key: ClassVar[list[str]] = []
-    unique_indexes: ClassVar[list[str]] = []
-    condition:ClassVar[Optional[MongoCondition]] = None
-    
+    _collection:ClassVar[Optional[str]] = MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
     class Settings:
-        name = MongooseDBConstant.PROFILE_COLLECTION
-        is_root = True 
+        abstract=True
+        is_root=True
+        collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
-    def __init_subclass__(cls, **kwargs):
-        # Ensure secret keys are inherited but isolated
-        setattr(cls, "_secret_key", cls._secret_key.copy())
-        super().__init_subclass__(**kwargs)
-
-    @classmethod
-    @property
-    def secrets_keys(cls):
-        return getattr(cls, "_secret_key", [])
 
 ######################################################
 # Email-related Profiles (Abstract)
 ######################################################
 
-class EmailProfileModel(ProfileModel):
+class EmailProfileModel(CommunicationProfileModel):
     email_address: EmailStr
 
     class Settings:
@@ -175,7 +153,7 @@ class OutlookAPIProfileModel(APIEmailProfileModel):
 ######################################################
 # Twilio Profile
 ######################################################
-class TwilioProfileModel(ProfileModel):
+class TwilioProfileModel(CommunicationProfileModel):
     account_sid: str
     auth_token: str
     from_number: PhoneModel | str
@@ -229,31 +207,12 @@ class TwilioProfileModel(ProfileModel):
 # Registry of Profile Implementations
 ######################################################
 
-ProfilModelValues: dict[str, Type[ProfileModel]] = {
+ProfilModelValues.update({
     ProfilModelConstant.OUTLOOK_API: OutlookAPIProfileModel,
     ProfilModelConstant.GMAIL_API: GMailAPIProfileModel,
     ProfilModelConstant.AWS: AWSProfileModel,
     ProfilModelConstant.IMAP: IMAPProfileModel,
     ProfilModelConstant.SMTP: SMTPProfileModel,
     ProfilModelConstant.TWILIO: TwilioProfileModel,
-}
+})
 
-P = TypeVar('P',bound=ProfileModel)
-
-######################################################
-# Error Model
-######################################################
-class ErrorProfileModel(Document):
-    profile_id: Optional[str]
-
-    error_code: Optional[int]
-    error_name: Optional[str]
-    error_description: Optional[str]
-    error_level:Optional[Literal['warn','critical','message']]
-    error_type:Optional[Literal['connect','authenticate','permission','rate_limit','general']]
-
-    ignore:Optional[bool] = False
-
-    class Settings:
-        name = MongooseDBConstant.PROFILE_COLLECTION
-    

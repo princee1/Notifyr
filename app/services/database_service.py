@@ -34,7 +34,7 @@ import psycopg2
 from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
 from app.utils.constant import SettingDBConstant
 from random import randint,random
-from app.models.profile_model import *
+from app.models.communication_model import *
 from app.errors.db_error import *
 from pymongo import MongoClient
 from pymemcache import Client as SyncClient,MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError

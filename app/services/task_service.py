@@ -8,7 +8,7 @@ from app.classes.env_selector import EnvSelection, StrategyType, get_selector
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BuildFailureError, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus,BuildWarningError
 from app.errors.service_error import BuildError, BuildOkError, BuildSkipError
 from app.interface.timers import IntervalInterface, SchedulerInterface
-from app.models.profile_model import ProfileModel
+from app.models.communication_model import BaseProfileModel
 from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.utils.constant import HTTPHeaderConstant, SpecialKeyParameterConstant, StreamConstant
@@ -311,7 +311,7 @@ class CeleryService(BaseService, IntervalInterface):
 @MiniService()
 class ChannelMiniService(BaseMiniService):
 
-    def __init__(self, depService:ProfileMiniService[ProfileModel],celeryService:CeleryService):
+    def __init__(self, depService:ProfileMiniService[BaseProfileModel],celeryService:CeleryService):
         self.depService = depService
         super().__init__(depService,None)
         self.celeryService = celeryService
