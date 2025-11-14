@@ -1,0 +1,189 @@
+{
+    "version": "1.0.0",
+    "currency": "NOTIFYR-CREDITS",
+    "system": "credits",
+    "product": "demo",
+    "promotions": {},
+    "rules": {
+        "default_credit_reset": true,
+        "carry_over_allowed": true,
+        "bonus_percentage_on_topup": 0,
+        "credit_overdraft_allowed": false,
+        "auto_block_on_zero_credit": true,
+        "overdraft_ratio_allowed":0.15,
+        "track_allowed":true,
+        "retry_allowed": true
+    },
+    "cost": {
+        "task": {
+            "email_template": {
+                "__credit_key__": "email",
+                "__mount__": true,
+                "__max_free_content__": 5,
+                "__max_free_recipient__": 100,
+                "__recipient_extra_cost__": 2,
+                "__content_extra_cost__":5,
+                "__priority_cost__": 10,
+                "email_free_size": 1000,
+                "email_size_per_extra_kb": 10,
+                "attachement_cost": {
+                    "attachement_free_count": 5,
+                    "attachement_per_extra": 5,
+                    "attachement_allowed": true,
+                    "attachement_free_size": 1000,
+                    "attachement_cost_per_extra_kb": 100
+                },
+                "__api_usage_cost__": 1,
+                "__rate_limit__": "20/minutes",
+                "__tracking_cost__": 10,
+                "__retry_cost__": 5,
+                "mime_cost": {
+                    "html": -5,
+                    "text": -1,
+                    "both": 0
+                },
+                "__allowed_task_option__": [
+                    "now",
+                    "once",
+                    "rrule",
+                    "solar",
+                    "crontab"
+                ],
+                "__task_type_cost__": {
+                    "now": 1,
+                    "once": 1,
+                    "crontab": 10,
+                    "rrule": 8,
+                    "solar": 5
+                }
+            },
+            "email_custom": {
+                "__copy__": {
+                    "from": "email_template",
+                    "mode": "hard"
+                },
+                "__rate_limit__": "30/minutes",
+                "__max_free_recipient__": 30
+            },
+            "sms_message": {
+                "__credit_key__": "sms",
+                "__mount__": true,
+                "__content_extra_cost__":5,
+                "__rate_limit__": "300/minutes",
+                "__max_free_content__": 5,
+                "__tracking_cost__": 10,
+                "__max_free_recipient__": 30,
+                "__recipient_extra_cost__": 3,
+                "__priority_cost__": 15,
+                "body": {
+                    "max_content_size": 60,
+                    "max_medial_url": 5,
+                    "body_cost_per_extra_size": 20
+                },
+                "__allowed_task_option__": [
+                    "now",
+                    "once",
+                    "rrule"
+                ],
+                "__task_type_cost__": {
+                    "now": 1,
+                    "once": 1,
+                    "rrule": 5,
+                    "solar": 10,
+                    "crontab": 10
+                }
+            },
+            "sms_template": {
+                "__copy__": {
+                    "from": "sms_message",
+                    "mode": "soft"
+                }
+            },
+            "phone_twiml": {
+                "__credit_key__": "phone",
+                "__api_usage_cost__": 1,
+                "__mount__": true,
+                "__rate_limit__": "5/hours",
+                "__max_free_content__": 3,
+                "__max_recipients__": 10,
+                "__content_extra_cost__":5,
+                "__recipient_extra_cost__": 10,
+                "__priority_cost__": 25,
+                "__allowed_task_option__": [
+                    "now",
+                    "once",
+                    "rrule"
+                ],
+                "__task_type_cost__": {
+                    "now": 1,
+                    "once": 1,
+                    "rrule": 10,
+                    "solar": 20,
+                    "crontab": 20
+                },
+                "time": {
+                    "max_free_time": 60,
+                    "allowed_extra_time": true,
+                    "time_cost_per_extra_second": 1
+                }
+            },
+            "phone_custom": {
+                "__copy__": {
+                    "from": "phone_twiml",
+                    "mode": "hard"
+                }
+            },
+            "phone_template": {
+                "__copy__": {
+                    "from": "phone_twiml",
+                    "mode": "hard"
+                }
+            }
+        },
+        "data": {
+            "object": {
+                "count": 100,
+                "max_size": 10000,
+                "max_version_count": 3
+            }
+        },
+        "simple-task": {
+            "sms_otp": {
+                "__api_usage_cost__": 2,
+                "__mount__": true,
+                "__rate_limit__": "1000/sec",
+                "__credit_key__": "sms"
+            },
+            "phone_otp": {
+                "__api_usage_cost__": 3,
+                "__mount__": true,
+                "__rate_limit__": "5/minutes",
+                "__credit_key__": "phone_otp"
+            },
+            "phone_digit_otp": {
+                "__api_usage_cost__": 5,
+                "__mount__": true,
+                "__rate_limit__": "2/minutes",
+                "__scope_cost_key__": "phone"
+            },
+            "phone_auth": {
+                "__mount__": true,
+                "__api_usage_cost__": 10,
+                "__rate_limit__": "1/minutes",
+                "__credit_key__": "phone"
+            }
+        },
+        "ai": {
+            "models_access": []
+        }
+    },
+    "credits": {
+        "email": 10000000,
+        "sms": 1000000,
+        "phone": 10000,
+        "contact": 1000,
+        "client": 5,
+        "profile": 10,
+        "link": 2
+    }
+}

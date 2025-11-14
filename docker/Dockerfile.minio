@@ -1,0 +1,88 @@
+FROM debian:stable-slim AS builder
+
+RUN apt-get update && apt-get install -y pwgen curl && rm -rf /var/lib/apt/lists/*
+
+RUN curl -L -o /usr/bin/jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 \
+    && chmod +x /usr/bin/jq
+
+FROM minio/minio:latest
+
+ARG ASSETS_STORAGE_LIMIT=500MB
+ARG STATIC_STORAGE_LIMIT=500MB
+ARG S3_MODE=dev
+
+WORKDIR /app
+
+# Copy pwgen for generating secrets
+COPY --from=builder /usr/bin/pwgen /usr/bin/pwgen
+COPY --from=builder /usr/bin/jq /usr/bin/jq
+
+# Copy assets
+COPY ./assets/ ./assets/
+
+# Create policy folder
+RUN mkdir ./policy/
+
+# Create empty policy files
+RUN touch ./policy/template-access.json ./policy/vault-admin.json
+
+# Directory for secrets
+RUN mkdir /minio /minio/secrets
+
+
+RUN cat <<EOF > ./policy/assets-access.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:HeadBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::assets",
+        "arn:aws:s3:::assets/*"
+      ]
+    }
+  ]
+}
+EOF
+
+RUN cat <<EOF > ./policy/vault-admin.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutBucketNotification",
+        "s3:GetBucketNotification",
+        "admin:user:svcacct",
+        "admin:user:list",
+        "admin:policy:list",
+        "admin:SetConfig",
+        "admin:GetConfig",
+        "admin:ServerUpdate"
+      ],
+      "Resource": ["*"]
+    }
+  ]
+}
+EOF
+
+COPY --chmod=700 ./scripts/minio-init.sh .
+RUN ./minio-init.sh ${ASSETS_STORAGE_LIMIT} ${STATIC_STORAGE_LIMIT} ${S3_MODE}
+
+COPY --chmod=700 ./scripts/minio-entrypoint.sh .
+
+# Make secrets readable
+RUN chmod 664 /minio/secrets/*
+
+# Default user
+# USER minio
+ENTRYPOINT ["./minio-entrypoint.sh"]

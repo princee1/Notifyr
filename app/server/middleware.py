@@ -2,10 +2,10 @@ import asyncio
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientType, Role, Scope, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
-from app.depends.orm_cache import BlacklistORMCache, ChallengeORMCache, ClientORMCache
+from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
-from app.services.celery_service import TaskService
+from app.services.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod
@@ -16,6 +16,7 @@ from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
 from app.depends.dependencies import get_api_key, get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
 from cryptography.fernet import InvalidToken
 from app.depends.variables import SECURITY_FLAG
+from app.utils.globals import PARENT_PID, PROCESS_PID
 from app.utils.helper import generateId
 from app.depends.funcs_dep import GetClient
 from starlette.background import BackgroundTask
@@ -30,6 +31,8 @@ class MetaDataMiddleWare(MiddleWare):
         self.configService:ConfigService = Get(ConfigService)
 
         self.instance_id = str(self.configService.INSTANCE_ID)
+        self.process_pid = PROCESS_PID
+        self.parent_pid = PARENT_PID
 
 
     @ExcludeOn(['/docs/*','/openapi.json'])
@@ -41,8 +44,12 @@ class MetaDataMiddleWare(MiddleWare):
         try:
             response: Response = await call_next(request)
             process_time = time.time() - start_time
-            response.headers["X-Process-Time"] = str(process_time) + ' (s)'
-            response.headers["X-Instance-Id"]= self.instance_id
+            
+            response.headers[HTTPHeaderConstant.X_PROCESS_TIME] = f"{process_time * 1000:.1f} (ms)"
+            response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.instance_id
+            response.headers[HTTPHeaderConstant.X_PROCESS_PID] =self.process_pid
+            response.headers[HTTPHeaderConstant.X_PARENT_PROCESS_PID] = self.parent_pid
+
             self.taskService.request_latency.observe(process_time)
             return response
         except HTTPException as e:
@@ -53,6 +60,8 @@ class MetaDataMiddleWare(MiddleWare):
             self.taskService.connection_count.dec()
 
 class LoadBalancerMiddleWare(MiddleWare):
+    priority = MiddlewarePriority.LOAD_BALANCER
+
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
         self.configService: ConfigService = Get(ConfigService)
@@ -73,26 +82,12 @@ class SecurityMiddleWare(MiddleWare):
 
     @BypassOn()
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
-        current_time = time.time()
-        timestamp =  self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY]
-
-        diff = timestamp -current_time
-        if diff< 0:
-            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"message": "Unauthorized", "detail": "All Access and Auth token are expired"})
-        try:
-            request_api_key = get_api_key(request)
-            if request_api_key is None:
-                return Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Unauthorized")
-            client_ip = get_client_ip(request)
-            if not self.securityService.verify_server_access(request_api_key, client_ip):
-                return Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Unauthorized")
-            response: Response = await call_next(request)
-            return response
-        except InvalidToken:
-            return Response(status_code=status.HTTP_401_UNAUTHORIZED, content='Unauthorized')
+        return  await call_next(request)
+            
        
 class AnalyticsMiddleware(MiddleWare):
     priority = MiddlewarePriority.ANALYTICS
+    
     async def dispatch(self, request, call_next):
         return await call_next(request)
 
@@ -104,6 +99,16 @@ class JWTAuthMiddleware(MiddleWare):
         self.configService: ConfigService = Get(ConfigService)
         self.adminService: AdminService = Get(AdminService)
 
+
+    def _copy_client_into_auth(self,client:ClientORM,permission:AuthPermission):
+        permission['client_type'] = client.client_type
+        permission['scope'] = client.client_scope
+        permission['issued_for'] = client.issued_for
+        permission['auth_type'] = client.auth_type
+        permission['client_username'] = client.client_username
+
+        
+
     @BypassOn(not SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
@@ -113,6 +118,8 @@ class JWTAuthMiddleware(MiddleWare):
         try:  
             token = get_bearer_token_from_request(request)
             client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
+            origin = ...
+
             authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
           
             client_id = authPermission['client_id']
@@ -120,23 +127,31 @@ class JWTAuthMiddleware(MiddleWare):
 
             client:ClientORM = await ClientORMCache.Cache([group_id,client_id],client_id=client_id,cid="id",authPermission=authPermission)
 
+            self._copy_client_into_auth(client,authPermission)
+            self.jwtService.verify_client_origin(authPermission,client_ip,origin)
+
             #TODO check group id
             if not client.authenticated:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client is not authenticated")
 
             if client.client_type != ClientType.Admin: 
-                is_blacklisted:bool = await BlacklistORMCache.Cache([group_id,client_id],client)
 
-                if is_blacklisted :
-                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
+                if await BlacklistORMCache.Cache([group_id,client_id],client):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
 
             request.state.client = client
+
+            policies = await AuthPermissionCache.Cache([group_id,client_id],client)
+            authPermission= AuthPermission(**{**authPermission,**policies})
+
             parse_authPermission_enum(authPermission)
             request.state.authPermission = authPermission
+
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
         return await call_next(request)
+    
 
     
 class BackgroundTaskMiddleware(MiddleWare):
@@ -196,6 +211,6 @@ class ChallengeMatchMiddleware(MiddleWare):
         db_challenge:ChallengeORM = await ChallengeORMCache.Cache(client.client_id,client) 
 
         if challenge != db_challenge.challenge_auth:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Challenge does not match") 
         
         return await call_next(request)

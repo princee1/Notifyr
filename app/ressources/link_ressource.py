@@ -8,7 +8,7 @@ from app.decorators.guards import AccessLinkGuard
 from app.decorators.handlers import ORMCacheHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._error import ServerFileError
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import GetLink
 from app.depends.class_dep import Broker, LinkQuery
@@ -49,10 +49,11 @@ async def get_link_cache(link_id:str,)->LinkORM:
 @UseRoles([Role.LINK])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(TortoiseHandler)
+@PingService([LinkService])
 @HTTPRessource(LINK_MANAGER_PREFIX)
 class CRUDLinkRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,configService:ConfigService,linkService:LinkService):
         super().__init__()
         self.configService = configService
@@ -158,7 +159,7 @@ LINK_PREFIX='link'
 @HTTPRessource(LINK_PREFIX,routers=[CRUDLinkRessource])
 class LinkRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,configService:ConfigService,redisService:RedisService,linkService:LinkService,contactService:ContactsService):
         super().__init__()
         self.configService = configService
@@ -167,7 +168,7 @@ class LinkRessource(BaseHTTPRessource):
         self.contactService = contactService
     
     @UseGuard(AccessLinkGuard(True))
-    @UseLimiter(limit_value='10000/min')
+    @UseLimiter(limit_value='10000/minutes')
     @BaseHTTPRessource.HTTPRoute('/v/{link_id}/{path:path}',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     async def track_visit_url(self,request:Request,response:Response,path:str,broker:Annotated[Broker,Depends(Broker)],link:Annotated[LinkORM,Depends(get_link_cache)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
 
@@ -181,7 +182,7 @@ class LinkRessource(BaseHTTPRessource):
         
         return  RedirectResponse(redirect_link,status.HTTP_308_PERMANENT_REDIRECT,)
 
-    @UseLimiter(limit_value='10000/min')
+    @UseLimiter(limit_value='10000/minutes')
     @BaseHTTPRessource.HTTPRoute('/t/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_email_links(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
         redirect_url = link_query.redirect_url
@@ -194,7 +195,7 @@ class LinkRessource(BaseHTTPRessource):
     
         return RedirectResponse(redirect_url,status.HTTP_308_PERMANENT_REDIRECT)
 
-    @UseLimiter(limit_value='10000/min')
+    @UseLimiter(limit_value='10000/minutes')
     @BaseHTTPRessource.HTTPRoute('/p/p.png/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_pixel(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
         self.send_email_event(broker,link_query,EmailStatus.OPENED)

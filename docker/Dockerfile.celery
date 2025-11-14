@@ -1,0 +1,17 @@
+from debian:bookworm-slim as builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends make  && rm -rf /var/lib/apt/lists/*
+
+FROM notifyr:fastapi
+
+COPY --from=builder /usr/bin/make /usr/bin/make
+
+COPY ./prod.Makefile ./Makefile
+
+COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
+
+RUN pip install gevent
+
+ENV PATH="/home/celery/.local/bin:${PATH}"
+
+RUN celery --version

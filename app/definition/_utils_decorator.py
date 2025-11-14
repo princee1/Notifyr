@@ -1,20 +1,38 @@
 import asyncio
 from typing import Any, Callable
 
-from fastapi import Response
-from app.utils.helper import APIFilterInject,AsyncAPIFilterInject
+from fastapi import HTTPException, Response
+from app.utils.constant import SpecialKeyParameterConstant
+from app.utils.helper import APIFilterInject,AsyncAPIFilterInject, SkipCode
 from asgiref.sync import sync_to_async
 from enum import Enum
 
 class DecoratorPriority(Enum):
+    LIMITER = 0
     PERMISSION = 1
     HANDLER = 2
     PIPE = 3
     GUARD = 4
     INTERCEPTOR = 5
 
+class DecoratorException(Exception):
 
-class NextHandlerException(Exception):
+    def __init__(self,status_code=None,details:Any=None,headers:dict[str,str]=None,response:Response=None, *args):
+        super().__init__(*args)
+        self.status_code = status_code
+        self.details = details
+        self.headers=headers
+        self.response = response
+
+    def raise_http_exception(self):
+        if self.status_code == None:
+            return
+        
+        raise HTTPException(self.status_code,self.details,self.headers)
+        
+
+
+class NextHandlerException(DecoratorException):
     ...
 
 
@@ -40,11 +58,11 @@ class Guard(DecoratorObj):
     def __init__(self):
         super().__init__(self.guard, True)
 
-    def guard(self) -> tuple[tuple, dict]:
+    def guard(self) -> tuple[bool, str]:
         ...
 
 
-class GuardDefaultException(Exception):
+class GuardDefaultException(DecoratorException):
     ...
 
 class Handler(DecoratorObj):
@@ -56,9 +74,9 @@ class Handler(DecoratorObj):
         return await self.ref(*args, **kwargs)
 
     async def handle(self, function: Callable, *args, **kwargs):
-        await function(*args,**kwargs)
+        return await function(*args,**kwargs)
 
-class HandlerDefaultException(Exception):
+class HandlerDefaultException(DecoratorException):
     ...
 
 
@@ -71,7 +89,7 @@ class Pipe(DecoratorObj):
         ...
 
 
-class PipeDefaultException(Exception):
+class PipeDefaultException(DecoratorException):
     ...
 
 
@@ -84,36 +102,54 @@ class Permission(DecoratorObj):
         ...
 
 
-class PermissionDefaultException(Exception):
+class PermissionDefaultException(DecoratorException):
     ...
 
 class Interceptor(DecoratorObj):
 
-    def __init__(self,):
+    def __init__(self,filter_before_params:bool= True,filter_after_params:bool=True):
         super().__init__(self.intercept, True)
+        self.filter_before_params = filter_before_params
+        self.filter_after_params = filter_after_params
 
 
-    def _intercept_before(self):
+    def intercept_before(self):
         ...
     
-    def _intercept_after(self,result:Response|Any):
+    def intercept_after(self,result:Response|Any):
         ...
     
     async def intercept(self,function:Callable,*args,**kwargs):
-        if asyncio.iscoroutinefunction(self._intercept_before):
-            await  AsyncAPIFilterInject(self._intercept_before)(*args,**kwargs)
-        else:
-            APIFilterInject(self._intercept_before)(*args,**kwargs)
+        try:
+            if self.filter_before_params:r = APIFilterInject(self.intercept_before)(*args,**kwargs) 
+            else:r=self.intercept_before(*args,**kwargs)
 
-        result = await function(*args,**kwargs)
-        if asyncio.iscoroutinefunction(self._intercept_after):
-            await self._intercept_after(result)
+            if asyncio.iscoroutine(r): await r
+        except SkipCode as e:
+            if e._return:
+                return e.result
+        
+        if SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER in kwargs:
+            k_star = kwargs.copy()
+            del k_star[SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER]
         else:
-            self._intercept_after(result)
+            k_star = kwargs
+        
+        result = await function(*args,**k_star)
+
+        try:
+            if self.filter_after_params: r = APIFilterInject(self.intercept_after)(result,*args,**kwargs) 
+            else: r=self.intercept_after(result,*args,**kwargs)
+
+            if asyncio.iscoroutine(r): await  r
+        except SkipCode as e:
+            if e._return:
+                return e.result
+
         return result
     
     async def do(self,function:Callable, *args, **kwargs):
         return await self.intercept(function,*args,**kwargs)
 
-class InterceptorDefaultException(Exception):
+class InterceptorDefaultException(DecoratorException):
     ...

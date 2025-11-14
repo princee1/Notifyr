@@ -3,23 +3,24 @@ from typing import Any, Dict, Literal
 
 from app.classes.rsa import RSA
 from app.definition._interface import Interface, IsInterface
+from app.services.setting_service import SettingService
+from app.utils.tools import Time
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
-from app.definition._service import AbstractServiceClass, BaseService, Service
+from app.definition._service import AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 import base64
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 import time
 from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
-from app.utils.constant import ConfigAppConstant
-from datetime import datetime, timezone
 import os
 import hmac
 import hashlib
+from app.services.secret_service import HCVaultService
 
 
 SEPARATOR = "|"
@@ -34,10 +35,12 @@ def generate_salt(length=64):
 class EncryptDecryptInterface(Interface):
 
     def _encode_value(self, value: str, key: bytes | str) -> str:
+        print(key)
         value = base64.b64encode(value.encode()).decode()
         cipher_suite = Fernet(key)
         return cipher_suite.encrypt(value.encode()).decode()
 
+    @Time
     def _decode_value(self, value: str, key: bytes | str) -> str:
         cipher_suite = Fernet(key)
         value = cipher_suite.decrypt(value.encode())
@@ -48,54 +51,37 @@ class EncryptDecryptInterface(Interface):
         return generate_salt()
 
 
-@Service
+@Service()
 class JWTAuthService(BaseService, EncryptDecryptInterface):
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+    GENERATION_ID_LEN = 32
+    gen_id_path='generation-id'
+
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
         self.configService = configService
         self.fileService = fileService
+        self.settingService = settingService
+        self.vaultService = vaultService
 
-    def set_generation_id(self, gen=False) -> None:
-        if gen:
-            self.generation_id = generateId(ID_LENGTH)
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][
-                ConfigAppConstant.GENERATION_ID_KEY] = self.generation_id
-            current_utc = datetime.now(timezone.utc)
-            expired_ = current_utc.timestamp() + self.configService.ALL_ACCESS_EXPIRATION
-            expired_utc = datetime.fromtimestamp(expired_, timezone.utc)
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.CREATION_DATE_KEY] = current_utc.strftime(
-                "%Y-%m-%d %H:%M:%S")
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][ConfigAppConstant.EXPIRATION_DATE_KEY] = expired_utc.strftime(
-                "%Y-%m-%d %H:%M:%S")
-            self.configService.config_json_app.data[ConfigAppConstant.META_KEY][
-                ConfigAppConstant.EXPIRATION_TIMESTAMP_KEY] = expired_
-            self.configService.config_json_app.save()
-
-        else:
-            self.generation_id = self.configService.config_json_app.data[
-                ConfigAppConstant.META_KEY][ConfigAppConstant.GENERATION_ID_KEY]
-
-    def encode_auth_token(self,authz_id,client_type:ClientType, client_id:str, scope: str, data: Dict[str, RoutePermission], challenge: str, roles: list[str], group_id: str | None, issue_for: str, hostname,allowed_assets: list[str] = []) -> str:
+    def encode_auth_token(self,authz_id, client_id:str, challenge: str, group_id: str | None) -> str:
         try:
-            if data == None:
-                data = {}
             salt = str(self.salt)
             created_time = time.time()
-            permission = AuthPermission(client_type=client_type.value,scope=scope, generation_id=self.generation_id, issued_for=issue_for, created_at=created_time,
-                                        expired_at=created_time + self.configService.AUTH_EXPIRATION*0.5, allowed_routes=data, roles=roles, allowed_assets=allowed_assets,
-                                        salt=salt, group_id=group_id, challenge=challenge,hostname=hostname,client_id=client_id,authz_id=authz_id)
+            permission = AuthPermission(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5,
+                                        salt=salt, group_id=group_id, challenge=challenge,client_id=client_id,
+                                        authz_id=authz_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def encode_refresh_token(self,client_id:str, issued_for: str, challenge: str, group_id:str,client_type:ClientType):
+    def encode_refresh_token(self,client_id:str,challenge: str, group_id:str):
         try:
             salt = str(self.salt)
             created_time = time.time()
-            permission = RefreshPermission(client_id=client_id, generation_id=self.generation_id, issued_for=issued_for, created_at=created_time, salt=salt, challenge=challenge,
-                                           expired_at=created_time + self.configService.REFRESH_EXPIRATION*0.5,group_id=group_id,client_type=client_type.value)
+            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt, challenge=challenge,
+                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
@@ -129,7 +115,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         salt = str(self.salt)
         permission = WSPermission(
             operation_id=operation_id, expired_at=expired_at, created_at=now, run_id=run_id, salt=salt)
-        return self._encode_token(permission, 'WS_JWT_SECRET_KEY')
+        return self._encode_token(permission, self.vaultService.WS_JWT_SECRET_KEY,False)
 
     def encode_contact_token(self, contact_id: str, expiration: float, scope: ContactPermissionScope):
         now = time.time()
@@ -137,32 +123,28 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         salt = str(self.salt)
         permission = ContactPermission(
             expired_at=expiration, create_at=now, scope=scope, contact_id=contact_id, salt=salt)
-        return self._encode_token(permission, 'CONTACT_JWT_SECRET_KEY')
+        return self._encode_token(permission, self.vaultService.CONTACT_JWT_SECRET_KEY,False)
 
-    def _encode_token(self, obj, secret_key: str = None):
+    def _encode_token(self, obj, secret_key: str = None, lookup=True):
         if secret_key == None:
-            secret_key = self.configService.JWT_SECRET_KEY
+            secret_key = self.vaultService.JWT_SECRET_KEY
         else:
-            secret_key = self.configService.getenv(
-                secret_key, self.configService.JWT_SECRET_KEY)
-        encoded = jwt.encode(
-            obj, secret_key, algorithm=self.configService.JWT_ALGORITHM)
-        token = self._encode_value(
-            encoded, self.configService.ON_TOP_SECRET_KEY)
+            if lookup:
+                secret_key = self.vaultService.tokens.get(secret_key,self.vaultService.JWT_SECRET_KEY)
+
+        encoded = jwt.encode(obj, secret_key, algorithm=self.vaultService.JWT_ALGORITHM)
+        token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY)
         return token
 
-    def decode_token(self, token: str, secret_key: str = None) -> dict:
+    def _decode_token(self, token: str, secret_key: str = None) -> dict:
         try:
             if secret_key == None:
-                secret_key = self.configService.JWT_SECRET_KEY
+                secret_key = self.vaultService.JWT_SECRET_KEY
             else:
-                secret_key = self.configService.getenv(
-                    secret_key, self.configService.JWT_SECRET_KEY)
+                secret_key = self.vaultService.tokens(secret_key, self.vaultService.JWT_SECRET_KEY)
 
-            token = self._decode_value(
-                token, self.configService.ON_TOP_SECRET_KEY)
-            decoded = jwt.decode(token, self.configService.JWT_SECRET_KEY,
-                                 algorithms=self.configService.JWT_ALGORITHM)
+            token = self._decode_value(token, self.vaultService.ON_TOP_SECRET_KEY)
+            decoded = jwt.decode(token, secret_key,algorithms=self.vaultService.JWT_ALGORITHM)
             return decoded
 
         # TODO: For each exception, we should return a specific error message
@@ -189,25 +171,36 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
 
-    def verify_auth_permission(self, token: str, issued_for: str) -> AuthPermission:
-
-        token = self.decode_token(token)
-        permission: AuthPermission = AuthPermission(**token)
-        try:
-            if permission['scope'] == Scope.SoloDolo.value:
+    def verify_client_origin(self,permission:AuthPermission,issued_for,origin=None):
+        match permission['scope']:
+            case Scope.SoloDolo:
                 if issued_for != permission["issued_for"]:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
-            else:
+            case Scope.Organization:
                 # TODO verify subnet
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+            case Scope.Domain:
+                if origin == None:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Origin header missing")
+            
+            case Scope.Free:
                 ...
+                
+    def verify_auth_permission(self, token: str, issued_for: str) -> AuthPermission:
+
+        token = self._decode_token(token)
+        permission: AuthPermission = AuthPermission(**token)
+        try:
 
             self.set_status(permission,'auth')
             # if permission['status'] == 'expired': # NOTE might accept expired
             #     raise HTTPException(
             #         status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
 
-            if permission["generation_id"] != self.generation_id:
+            if permission["generation_id"] != self.GENERATION_ID:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
             return permission
@@ -216,19 +209,19 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
                 status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
 
     def verify_refresh_permission(self,tokens:str):
-        token =self.decode_token(tokens)
+        token =self._decode_token(tokens)
         permission = RefreshPermission(**token)
         self.set_status(permission,'refresh')
 
         if permission['status'] == 'expired':
             raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
+                    status_code=status.HTTP_401_UNAUTHORIZED,  detail="Token expired")
         
         return permission
 
     def verify_contact_permission(self, token: str) -> ContactPermission:
 
-        token = self.decode_token(token, 'CONTACT_JWT_SECRET_KEY')
+        token = self._decode_token(token, 'CONTACT_JWT_SECRET_KEY')
         permission: ContactPermission = ContactPermission(**token)
 
         try:
@@ -239,20 +232,50 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
 
-    def build(self):
-        ...
+    def read_generation_id(self):
+        data=self.vaultService.generation_engine.read('',self.gen_id_path)
+        self.generation_id_data = data
 
+    def revoke_all_tokens(self) -> None:
+        new_generation_id = generateId(self.GENERATION_ID_LEN)
+        self.vaultService.generation_engine.put('',{
+            'GENERATION_ID':new_generation_id,
+        },path=self.gen_id_path)
+        self.read_generation_id()
+        
+    def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool,version_to_delete:list[int]=[]):
+        self.vaultService.generation_engine.rollback('',self.gen_id_path,version,destroy,delete,version_to_delete)
+        self.read_generation_id()
 
-@Service
+    def verify_dependency(self):
+        if self.vaultService.service_status not in {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}:
+            raise BuildFailureError
+
+    def build(self,build_state=-1):
+        self.read_generation_id()
+        if self.GENERATION_ID == None:
+            raise BuildFailureError
+
+    @property
+    def GENERATION_ID(self)->None|str:
+        return self.generation_id_data.get('data',{}).get('GENERATION_ID',None)
+
+    @property
+    def GENERATION_METADATA(self)->dict:
+        return self.generation_id_data.get('metadata',{})
+
+@Service()
 class SecurityService(BaseService, EncryptDecryptInterface):
 
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
         self.configService = configService
         self.fileService = fileService
+        self.settingService= settingService
+        self.vaultService = vaultService
 
     def verify_server_access(self, token: str, sent_ip_addr) -> bool:
-        token = self._decode_value(token, self.configService.API_ENCRYPT_TOKEN)
+        token = self._decode_value(token, self.vaultService.API_ENCRYPT_TOKEN)
         token = token.split("|")
 
         if len(token) != 3:
@@ -262,7 +285,7 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         if ip_addr != sent_ip_addr:
             return False
 
-        if time.time() - float(token[1]) > self.configService.API_EXPIRATION:
+        if time.time() - float(token[1]) > self.settingService.API_EXPIRATION:
             return False
 
         if token[2] != self.configService.API_KEY:
@@ -274,9 +297,9 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         time.sleep(random()/100)
         data = ip_address + SEPARATOR +  \
             str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
-        return self._encode_value(data, self.configService.API_ENCRYPT_TOKEN)
+        return self._encode_value(data, self.vaultService.API_ENCRYPT_TOKEN)
 
-    def build(self):
+    def build(self,build_state=-1):
         ...
 
     def hash_value_with_salt(self, value, key, salt):
@@ -302,11 +325,11 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         ...
 
     def generate_rsa_key_pair(self,key_size=2048):
-        rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
+        rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
         return RSA(password=rsa_secret_pwd,key_size=key_size)
 
     def generate_rsa_from_encrypted_keys(self,private_key=None,public_key=None):
-        rsa_secret_pwd = self.configService.getenv('RSA_SECRET_PASSWORD','test')
+        rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
         return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
 
         

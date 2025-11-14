@@ -4,10 +4,11 @@ from uuid import UUID
 
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import ContactPermissionScope
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
 from app.errors.contact_error import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.models.contacts_model import *
 from app.services.config_service import ConfigService
+from app.services.database_service import TortoiseConnectionService
 from app.services.link_service import LinkService
 from app.services.security_service import JWTAuthService, SecurityService
 from random import randint
@@ -19,13 +20,20 @@ MIN_OPT_IN_CODE = 100000000
 MAX_OPT_IN_CODE = 999999999
 
 
-@Service
+@Service()
 class SubscriptionService(BaseService):
 
-    
 
-    def build(self):
+    def __init__(self,tortoiseConnService:TortoiseConnectionService):
+        super().__init__()    
+        self.tortoiseConnService= tortoiseConnService
+
+    def build(self,build_state=-1):
         ...
+    
+    def verify_dependency(self):
+        if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError
 
     async def get_contact_subscription(self, contact: ContactORM, content: ContentSubscriptionORM):
         subs = await SubscriptionORM.filter(contact=contact, content=content).first()
@@ -54,19 +62,25 @@ class SubscriptionService(BaseService):
         return JSONResponse(content={"detail": "Subscription updated", "subscription": subs}, status_code=200)
 
 
-@Service
+@Service()
 class ContactsService(BaseService):
 
-    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService,linkService:LinkService):
+    def __init__(self, securityService: SecurityService, configService: ConfigService, jwtService: JWTAuthService,linkService:LinkService,tortoiseConnService:TortoiseConnectionService):
         super().__init__()
         self.securityService = securityService
         self.configService = configService
         self.jwtService = jwtService
         self.linkService = linkService
+        self.tortoiseConnService= tortoiseConnService
 
         self.expiration = 3600000000
 
-    def build(self):
+
+    def verify_dependency(self):
+        if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError
+
+    def build(self,build_state=-1):
         ...
 
     @property

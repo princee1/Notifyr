@@ -2,35 +2,38 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 from app.classes.auth_permission import Role
 from app.container import InjectInMethod
-from app.decorators.handlers import ServiceAvailabilityHandler, TwilioHandler
+from app.decorators.handlers import MiniServiceHandler, ServiceAvailabilityHandler, TwilioHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import parse_phone_number
-from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.dependencies import get_auth_permission
 from app.depends.variables import parse_to_phone_format,carrier_info,callee_info
 from app.ressources.twilio.sms_ressource import SMSRessource
 from app.ressources.twilio.call_ressource import CallRessource
-#from app.ressources.fax_ressource import FaxRessource
+from app.ressources.twilio.fax_ressource import FaxRessource
 from app.services.twilio_service import TwilioService, CallService
+from app.ressources.twilio.conversation_ressource import ConversationRessource
 
 
 @UsePermission(JWTRouteHTTPPermission)
-@UseHandler(ServiceAvailabilityHandler,TwilioHandler)
-@HTTPRessource('twilio',routers=[SMSRessource,CallRessource])
+@UseHandler(ServiceAvailabilityHandler,TwilioHandler,MiniServiceHandler)
+@HTTPRessource('twilio',routers=[SMSRessource,CallRessource,ConversationRessource,FaxRessource])
 class TwilioRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,twilioService:TwilioService,callService:CallService) -> None:
         super().__init__()
         self.twilioService = twilioService
         self.callService = callService
 
+    @PingService([TwilioService])
     @UseLimiter(limit_value= '1000/day')
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/balance/',methods=[HTTPMethod.GET])
     def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
-        return self.callService.fetch_balance()
+        ...
     
+    @PingService([TwilioService])
     @UsePipe(parse_phone_number)
     @UseLimiter(limit_value= '10/day')
     @UseRoles([Role.PUBLIC])

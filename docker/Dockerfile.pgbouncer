@@ -3,7 +3,7 @@ FROM edoburu/pgbouncer
 # Write the PgBouncer configuration using the cat command
 RUN cat <<EOF > /etc/pgbouncer/pgbouncer.ini
 [databases]
-notifyr = host=notifyr-postgres port=5432 dbname=${POSTGRES_DB} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD}
+notifyr = host=notifyr-postgres port=5432 dbname=notifyr user=${POSTGRES_USER} password=${POSTGRES_PASSWORD}
 
 [pgbouncer]
 listen_addr = 0.0.0.0

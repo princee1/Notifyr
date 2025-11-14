@@ -1,7 +1,9 @@
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from dataclasses import dataclass
+import datetime
 from enum import Enum
 import os
+from pathlib import PurePath
 import sys
 import json
 import pickle
@@ -29,10 +31,8 @@ def getFd(path: str, flag: FDFlag, enc: str = "utf-8"):
     except:
         return None
 
-
 def exist(path):
     return getFd(path, FDFlag.READ) != None
-
 
 def readFileContent(path: str, flag: FDFlag, enc: str = "utf-8"):
     try:
@@ -44,7 +44,6 @@ def readFileContent(path: str, flag: FDFlag, enc: str = "utf-8"):
         return file_content
     except:
         return None
-
 
 def writeContent(path: str, content, flag: FDFlag, enc: str = "utf-8"):
     try:
@@ -59,8 +58,7 @@ def writeContent(path: str, content, flag: FDFlag, enc: str = "utf-8"):
         print(e)
         pass
 
-
-def listFilesExtension(extension: str, root=None, recursive: bool = False,exclude_extension:list[str]=None):
+def listFilesExtension(extension: str, root=None, recursive: bool = False,exclude_extension:list[str]=None,):
     if root != None and not os.path.isdir(f"{os.path.curdir}/{root}"):
         raise OSError
 
@@ -69,7 +67,6 @@ def listFilesExtension(extension: str, root=None, recursive: bool = False,exclud
     if exclude_extension!= None:
         return  [file for file in result if not file.endswith(tuple(exclude_extension))]
     return result
-
 
 def listFilesExtensionCertainPath(path: str, extension: str):
     if not os.path.isdir(path):
@@ -90,15 +87,50 @@ def listFilesExtensionCertainPath(path: str, extension: str):
 
     return results
 
-
-def getFileDir(path: str):
+def getFileOSDir(path: str):
     if not os.path.isfile(path):
         raise OSError
     return os.path.dirname(path)
 
-
 def getFilenameOnly(path: str):
     return os.path.split(path)[1]
+
+def get_file_info(path):
+    stat = os.stat(path)
+    size = stat.st_size  # Size in bytes
+    last_modified = datetime.datetime.fromtimestamp(stat.st_mtime)  # Last modification time as datetime
+    return size, last_modified
+
+
+
+class MultipleExtensionError(ValueError):
+    def __init__(self,mess, *args):
+        super().__init__(*args)
+        self.mess=mess
+
+class ExtensionNotAllowedError(ValueError):
+    def __init__(self,mess, *args):
+        super().__init__(*args)
+        self.mess=mess
+
+def is_file(path:str,allowed_multiples_suffixes=False,allowed_extension:set|list = None):
+        suffixes =PurePath(path).suffixes
+        suf_len = len(suffixes)
+        if suf_len == 0:
+            return False
+        if suf_len == 1:
+            if allowed_extension and suffixes[0] not in allowed_extension:
+                raise ExtensionNotAllowedError(f'Extension not allowed only those {allowed_extension} are allowed')
+            return True
+        
+        if not allowed_multiples_suffixes:
+            raise MultipleExtensionError(f'Path {path} as multiple extension: {suffixes}')
+        
+        if allowed_extension and len(set(suffixes).difference(allowed_extension)) >= 1:
+            raise ExtensionNotAllowedError(f'Extension not allowed only those {allowed_extension} are allowed')
+
+        return True
+
 
 
 @dataclass
@@ -126,14 +158,18 @@ class File:
     @property
     def exists(self):
         return exist(self.file)
+
+    def export(self)->bytes:
+        ...
     
 
 
 class JSONFile(File):
 
-    def __init__(self, jsonFilename, from_data=None):
+    def __init__(self, jsonFilename, from_data=None,os_link=True):
+        self.os_link = os_link
         super().__init__(jsonFilename, from_data)
-
+        
     def load(self, from_data=None):
         super().load(from_data)
         if not self.exists and from_data is None:
@@ -142,7 +178,7 @@ class JSONFile(File):
         if from_data != None:
             self.data = from_data
             self.loaded = True
-            self.save()
+            self.save(FDFlag.CREATE)
             return 
 
         fd = getFd(self.file, FDFlag.READ)
@@ -159,10 +195,12 @@ class JSONFile(File):
         
         return
 
-    def save(self):
+    def save(self,flag=FDFlag.WRITE):
+        if not self.os_link:
+            return
         if not self.loaded:
             return
-        fd = getFd(self.file, FDFlag.WRITE)
+        fd = getFd(self.file, flag)
         json.dump(self.data, fd)
 
     def clear(self):
@@ -170,12 +208,13 @@ class JSONFile(File):
         self.save()
     
     def __getitem__(self, name):
-        print(name)
         return self.data[name] if name in self.data else None
     
     def __setitem__(self,key,value):
         self.data[key] = value
 
+    def export(self,encoding='utf-8'):
+        return json.dumps(self.data).encode()
 
 class ConfigFile(File):
     """

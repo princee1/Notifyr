@@ -1,17 +1,25 @@
 from dataclasses import dataclass
-from typing import Callable, List, Literal,Dict,NotRequired
-from pydantic import BaseModel
+from typing import Callable, List, Literal,Dict,NotRequired, Optional, Self
+from pydantic import BaseModel, field_validator, model_validator
 from typing_extensions import TypedDict
 from enum import Enum
 from time import time
 
+from app.classes.cost_definition import SimpleTaskCostDefinition
+from .template import Extension
 from app.definition._error import BaseError
+from app.utils.fileIO import is_file
+from app.utils.helper import filter_paths, subset_model
 
 PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
 PermissionStatus= Literal['active','inactive','expired']
 ClientTypeLiteral = Literal['User','Admin']
+
+PolicyUpdateMode = Literal['set','merge','delete']
+
+EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
@@ -20,24 +28,32 @@ class Role(Enum):
     CUSTOM ='CUSTOM'
     MFA_OTP ='MFA_OTP'
     CHAT = 'CHAT'
-    REDIS = 'REDIS'
+    REDIS_RESULT = 'REDIS-RESULT'
     REFRESH = 'REFRESH'
     CONTACTS = 'CONTACTS'
     TWILIO = 'TWILIO'
     SUBSCRIPTION = 'SUBSCRIPTION'
     CLIENT = "CLIENT"
     LINK = "LINK"
+    ASSETS = "ASSETS"
+    PROFILE ="PROFILE"
 
 class Scope(Enum):
     SoloDolo = 'SoloDolo'
     Organization = 'Organization'
-    #Domain = 'Domain'
+    Domain = 'Domain'
+    Free='Free'
 
 
 class ClientType(Enum):
     User = 'User'
     Admin = 'Admin'
     Twilio = 'Twilio'
+
+
+class AuthType(Enum):
+    ACCESS_TOKEN = 'ACCESS_TOKEN'
+    API_TOKEN = 'API_TOKEN'
 
 
 class FuncMetaData(TypedDict):
@@ -49,6 +65,8 @@ class FuncMetaData(TypedDict):
     limit_obj:dict
     limit_exempt:bool=False
     default_role:bool =True
+    cost_definition:SimpleTaskCostDefinition
+    cost_definition_name:str
 
 
 class RoutePermission(TypedDict):
@@ -59,20 +77,25 @@ class AssetsPermission(TypedDict):
     scope: PermissionScope
     name: str
     custom_files: NotRequired[list[str]]
+
+class AssetsPermission(TypedDict):
+    files: list[str] = []
+    dirs: set[str] = []
         
 class AuthPermission(TypedDict):
     generation_id: str
-    hostname:str
+    client_username: str
     client_id: str
     client_type:ClientTypeLiteral = 'User'
-    #application_id: str = None # TODO
     roles:list[str|Role]
     issued_for: str # Subnets
     group_id:str | None = None
+    auth_type:AuthType
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
-    allowed_assets:List[str]
+    allowed_assets:List[str] | AssetsPermission
+    allowed_profiles:List[str]=[]
     challenge: str
     scope:str
     salt:str
@@ -92,10 +115,53 @@ class RefreshPermission(TypedDict): # NOTE if someone from an organization chang
     client_type:ClientTypeLiteral = 'User'
 
 
+class RoutePermissionModel(BaseModel):
+    scope:PermissionScope
+    custom_routes:Optional[List[str]] = []
+
+    @model_validator(mode='after')
+    def check_model(self)->Self:
+        if self.scope == 'all':
+            self.custom_routes = []
+        else:
+            if not self.custom_routes:
+                raise ValueError('Custom Routes must have at least one routes')
+        return self
+
+
+class PolicyModel(BaseModel):
+    allowed_profiles:List[str]=[]
+    allowed_routes: Dict[str, RoutePermissionModel] = {}
+    allowed_assets: List[str] =[]
+    roles: Optional[List[Role]] = [Role.PUBLIC]
+
+    @field_validator('allowed_assets')
+    def filter_assets_paths(cls,allowed_assets):
+        for asset in allowed_assets:
+            is_file(asset,allowed_extension=EXTENSION)
+        return filter_paths(allowed_assets,'/')
+    
+    @field_validator('roles')
+    def checks_roles(cls, roles: list[Role]):
+        if Role.PUBLIC not in roles:
+            roles.append(Role.PUBLIC)
+        roles = list(set(roles))
+        #return roles
+        return [r.value for r in roles]
+
 def parse_authPermission_enum(authPermission):
         authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
-        authPermission['scope'] = Scope._member_map_[authPermission['scope']]
         
+def filter_asset_permission(authPermission:AuthPermission):
+    files = set()
+    dirs = set()
+    for p in authPermission['allowed_assets']:
+        if is_file(p):
+            files.add(p)
+        else:
+            dirs.add(p)
+    
+    authPermission['allowed_assets'] = AssetsPermission(files=files,dirs=dirs)
 
 class ContactPermission(TypedDict):
     expired_at:int

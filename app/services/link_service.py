@@ -1,41 +1,63 @@
-from typing import Callable
+from typing import Callable, Literal
 from urllib.parse import urlparse
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, Request, Response, status
 from app.classes.rsa import RSA
 from app.classes.template import HTMLTemplate
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
 from app.models.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
+from app.services.database_service import RedisService, TortoiseConnectionService
 from app.services.reactive_service import ReactiveService
 import qrcode as qr
 import io
 from app.services.security_service import SecurityService
+from app.utils.constant import SECONDS_IN_AN_HOUR
 from app.utils.helper import b64_encode, generateId
 import aiohttp
 import json
-from app.utils.tools import Cache
+from app.utils.tools import Cache, MyJSONCoder
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 import re
+from fastapi_cache.decorator import cache
+
+def ip_lookup_key_builder(
+    func: Callable,
+    namespace: str = "",
+    *,
+    request: Request = None,
+    response: Response = None,
+    **kwargs,
+):
+    args = kwargs.get('args', [])
+    return "-".join([
+        namespace,
+        func.__name__,
+        args[1]
+    ])
 
 
-@Service
+
+@Service()
 class LinkService(BaseService):
 
-    def __init__(self, configService: ConfigService, redisService: RedisService, reactiveService: ReactiveService, securityService: SecurityService):
+    def __init__(self, configService: ConfigService, redisService: RedisService, reactiveService: ReactiveService, securityService: SecurityService,tortoiseConnService:TortoiseConnectionService):
         super().__init__()
 
+        self.tortoiseConnService = tortoiseConnService
         self.configService = configService
         self.reactiveService = reactiveService
         self.redisService = redisService
         self.securityService = securityService
 
-        self.BASE_URL: Callable[[str], str] = lambda v: self.configService.getenv(
-            'PROD_URL', "")+v
+        self.BASE_URL: Callable[[str], str] = lambda v: self.configService.getenv('PROD_URL', "")+v
         self.IPINFO_API_KEY = self.configService['IPINFO_API_KEY']
 
-    def build(self):
+    def build(self,build_state=-1):
         ...
+
+    def verify_dependency(self):
+        if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError
 
     async def generate_public_signature(self, link: LinkORM):
         rsa: RSA = self.securityService.generate_rsa_key_pair(512)
@@ -105,7 +127,7 @@ class LinkService(BaseService):
             **ip_data
         }
 
-    @Cache(10)
+    @Cache('fastapi-default-cache')(SECONDS_IN_AN_HOUR*2,coder=MyJSONCoder,key_builder=ip_lookup_key_builder, namespace="")
     async def ip_lookup(self, ip_address):
         headers = {
             "Accept": "application/json",
@@ -173,7 +195,7 @@ class LinkService(BaseService):
         base64_img = b64_encode(img_io.read())
         return f'data:image/png;base64,{base64_img}'
 
-    def create_tracking_pixel(self, template: HTMLTemplate | str | None, email_id: str, contact_id: str = None, esp=None) -> str:
+    def create_tracking_pixel(self,format:Literal['html','raw_url'],email_id: str, contact_id: str = None, esp=None) -> str:
         """
         Generate a tracking pixel URL for the given email ID.
 
@@ -187,7 +209,7 @@ class LinkService(BaseService):
         esp = f'&esp={esp}' if esp else 'Untracked Provider'
         tracking_path = f"/link/p/p.png/?message_id={email_id}{contact_id}{esp}"
         url = self.BASE_URL(tracking_path)
-        if template == None:
+        if  format== 'html':
             return f"""
                     <!DOCTYPE html>
                     <html lang="en">
@@ -199,15 +221,13 @@ class LinkService(BaseService):
                     </body>
                     </html>
                     """
-        elif isinstance(template, HTMLTemplate):
-            template.add_tracking_pixel(url)
         else:
-            return template
+            return url
 
-    def create_link_re(self, message_tracking_id, contact_id=None, add_params={}):
+    def create_link_re(self, message_tracking_id, contact_id=None, add_params:dict={}) -> Callable[[str], str]:
 
         def callback(content: str) -> str:
-
+            esp = add_params.get('esp',None)
             if content == None:
                 return None
 
@@ -244,26 +264,6 @@ class LinkService(BaseService):
             return new_content
 
         return callback
-
-    def set_tracking_link(self, template: HTMLTemplate, message_tracking_id: str, contact_id: str = None, add_params: dict = {}) -> str:
-        """
-        Replace every link in the given content with a new tracking URL.
-
-        Args:
-            message_tracking_id (str): The message tracking ID to include in the query.
-            contact_id (str): The contact ID to include in the query.
-            content (str): The content containing links to be replaced.
-
-        Returns:
-            str: The content with replaced tracking links.
-        """
-        params = {
-            **add_params
-        }
-        callback = self.create_link_re(
-            message_tracking_id, contact_id, add_params=params)
-        new_content = callback(template.body)
-        template.set_to_email_tracking_link(new_content)
 
     def generate_html(self, img_data):
         html_content = f"""

@@ -4,7 +4,7 @@ from app.classes.broker import SubjectType
 from app.definition._error import BaseError
 from app.definition._service import BaseService, Service
 from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundError
-from app.interface.timers import IntervalInterface
+from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.utils.helper import generateId
@@ -76,12 +76,12 @@ class ReactiveSubject():
             if lock.locked():
                 lock.release()
 
-@Service
-class ReactiveService(BaseService,IntervalInterface):
+@Service()
+class ReactiveService(BaseService,SchedulerInterface):
     
     def __init__(self,configService:ConfigService,loggerService:LoggerService):
         BaseService.__init__(self)
-        IntervalInterface.__init__(self,start_now=True, interval=0.10)
+        SchedulerInterface.__init__(self,None) # Fire reactive even if the process ends
         self.configService = configService
         self.loggerService = loggerService
         self._subscriptions:dict[str,ReactiveSubject] = {}
@@ -124,7 +124,7 @@ class ReactiveService(BaseService,IntervalInterface):
     def publish(self):
         ...
     
-    def build(self):
+    def build(self,build_state=-1):
         ...
     
 

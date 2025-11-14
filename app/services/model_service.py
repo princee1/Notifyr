@@ -4,7 +4,7 @@ from .file_service import FileService
 from app.definition import _service
 from injector import inject
 
-@_service.Service
+@_service.Service()
 class LLMModelService(_service.BaseService):
     @inject
     def __init__(self, configService: ConfigService, fileService: FileService,emailReaderService:EmailReaderService) -> None:

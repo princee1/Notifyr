@@ -2,18 +2,20 @@ import functools
 from typing import Annotated, Any, Callable, Literal, TypedDict
 from fastapi import Depends, HTTPException, Header, Query, Response, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ContactPermission, Role
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role
 from app.container import Get, GetAttr
 from app.definition._error import ServerFileError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
-from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM
+from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyMappingORM, PolicyORM
 from app.services.admin_service import AdminService
-from app.services.celery_service import OffloadTaskService, RunType, TaskService
+from app.services.task_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
 from tortoise.exceptions import OperationalError
+
+from app.utils.helper import filter_paths
 from .variables import *
 
 
@@ -180,22 +182,6 @@ async def get_subs_content(content_id: str, content_idtype: str = Query('id'), a
             404, {"message": "Subscription Content does not exists with those information"})
 
 
-def cost() -> int:
-    ...
-
-
-def key_contact_id() -> str:
-    ...
-
-
-def key_client_id() -> str:
-    ...
-
-
-def key_group_id() -> str:
-    ...
-
-
 async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
     configService: ConfigService = Get(ConfigService)
 
@@ -314,12 +300,13 @@ def GetLink(raise_file_error:bool,raise_err:bool=True):
     return get_link
 
 
-async def get_task(request_id: str = Depends(get_request_id), as_async: bool = Depends(as_async_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query)):
+async def get_task(request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query)):
     taskService: TaskService = Get(TaskService)
-    offload_task: Callable = GetAttr(OffloadTaskService, 'offload_task')
+    offload_task: Callable = GetAttr(OffloadTaskService, OffloadTaskService.offload_task.__name__)
     if offload_task == None:
         raise HTTPException(500, detail='Offload task is not available')
-    return taskService._register_tasks(request_id, as_async, runtype, offload_task, ttl, save, return_results,retry)
+    return taskService._register_tasks(request_id, background, runtype, offload_task, ttl, save, return_results,retry,split,algorithm,strategy)
+
 
 async def get_challenge(client:ClientORM):
     return await ChallengeORM.filter(client=client).first()
@@ -327,3 +314,76 @@ async def get_challenge(client:ClientORM):
 
 def get_template(template:str):
     return template
+
+
+def get_profile(profile:str):
+    return profile
+
+
+def GetPolicy(skipPermission:bool):
+
+    async def get_policy(policy:str,authPermission:AuthPermission=Depends(wrapper_auth_permission)):
+
+        if not skipPermission:
+            print('Auth Permission',authPermission)
+            if authPermission['client_type'] != ClientType.Admin:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,)
+        try:
+            p = await PolicyORM.filter(policy_id=policy).first()
+            if p == None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f'Policy does not exists'
+                )
+            return p
+        except OperationalError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e.args[0])
+            )
+    
+    return get_policy
+
+
+async def get_combined_policies(client:ClientORM):
+    
+    client_id = str(client.client_id)
+    group_id = None if client.group == None else str(client.group.group_id)
+    policies:list[PolicyORM] = [pm.policy for pm in  await PolicyMappingORM.filter(client_id=client_id,group_id=group_id)]
+
+    roles= set()
+    allowed_assets = set()
+    allowed_profiles = set()
+    allowed_routes = {}
+    
+    for p in policies:
+        p = await p
+        roles.update(p.roles)
+        allowed_assets.update(p.allowed_assets)
+        allowed_profiles.update(p.allowed_profiles)
+
+        for k,r in p.allowed_routes.items():
+            
+            if k not in allowed_routes:
+                allowed_routes[k] = r
+            else:
+                if r['scope'] == 'all':
+                    if allowed_routes['scope'] !='all':
+                        allowed_routes['scope'] = 'all'
+                        allowed_routes['custom_routes'] = []
+                else:
+                    if allowed_routes['scope'] == 'custom':
+                        allowed_routes['custom_routes'] = list[set(allowed_routes['custom_routes']).union(r['scope'])]
+    
+    print(allowed_assets)
+
+    allowed_assets = filter_paths(list(allowed_assets),'/')
+    allowed_profiles = list(allowed_profiles)
+    roles = list(roles)
+
+    return AuthPermission(
+        roles=roles,
+        allowed_routes=allowed_routes,
+        allowed_profiles=allowed_profiles,
+        allowed_assets=allowed_assets
+    )

@@ -1,6 +1,10 @@
 from enum import Enum
 from typing_extensions import Literal
+import random
 ########################  ** Dependencies **   ########################################
+
+
+SECONDS_IN_AN_HOUR = 60*60
 
 class DependencyConstant:
     TYPE_KEY = "type"
@@ -32,6 +36,8 @@ class ValidationHTMLConstant:
 class ConfigAppConstant:
     META_KEY = 'meta'
     APPS_KEY = 'apps'
+    FROM_KEY = 'from'
+    RESSOURCE_KEY='ressources'
     GENERATION_ID_KEY = 'generation_id'
     CREATION_DATE_KEY = 'creation_date'
     EXPIRATION_DATE_KEY = 'expiration_date'
@@ -42,8 +48,12 @@ class HTTPHeaderConstant:
     API_KEY_HEADER = 'X-API-KEY'
     ADMIN_KEY = 'X-Admin-Key'
     CONTACT_TOKEN='X-Contact-TOKEN'
-    WS_KEY = 'X-WS-Key'
+    WS_KEY = 'X-WS-Auth-Key'
     REQUEST_ID = 'x-request-id'
+    X_PROCESS_TIME="X-Process-Time"
+    X_INSTANCE_ID= "X-Instance-Id"
+    X_PROCESS_PID = "X-Process-PID"
+    X_PARENT_PROCESS_PID="X-Parent-Process-PID"
 
 
 class CookieConstant:
@@ -61,6 +71,11 @@ class SpecialKeyParameterConstant:
     TEMPLATE_SPECIAL_KEY_PARAMETER = 'template'
     SCHEDULER_SPECIAL_KEY_PARAMETER = 'scheduler'
     WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
+    WAIT_TIMEOUT_PARAMETER = 'wait_timeout'
+    BACKGROUND_PARAMETER = 'background'
+    PROFILE_KWARGS_PARAMETER = '__profile__'
+    ROUTE_PARAMS_KWARGS_PARAMETER = '__route_params__'
+    IS_MANAGER_KWARGS_PARAMETER = '__is_manager__'
 
 class SpecialKeyAttributesConstant:
     CONTACT_SPECIAL_KEY_ATTRIBUTES='_contact'
@@ -75,7 +90,7 @@ class EmailHostConstant(Enum):
     YAHOO = "YAHOO"
     AOL = 'AOL'
     ICLOUD = 'ICLOUD'
-
+    CUSTOM = 'CUSTOM'
 
 ########################                     ########################################
 
@@ -95,10 +110,17 @@ class StreamConstant:
     CONTACT_SUBS_EVENT = 'contact-subs-event'
     CONTACT_CREATION_EVENT= 'contact-creation-event'
     CELERY_RETRY_MECHANISM='retry-mechanism'
+    PROFILE_ERROR_STREAM='profile-error-stream'
+    S3_EVENT_STREAM='s3_object_events'
 
 
 class SubConstant:
     SERVICE_STATUS = 'service-status'
+    SERVICE_VARIABLES = 'service-variables'
+    PROCESS_TERMINATE = 'process-terminate' 
+    MINI_SERVICE_STATUS = 'mini-service-status'
+
+    _SUB_CALLBACK = {SERVICE_STATUS,MINI_SERVICE_STATUS,SERVICE_VARIABLES,PROCESS_TERMINATE}
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'
@@ -115,3 +137,209 @@ class EmailHeadersConstant(str,Enum):
 
 class LinkConstant(str,Enum):
     PIXEL = 'pixel'
+
+
+class VariableConstant:
+    WAIT_TIMEOUT = 'wait'
+    MAX_WAIT_TIMEOUT = 60*3
+
+
+class RunModeConstant(Enum):
+    SERVER = "server"
+    REGISTER = "register"
+
+class HTMLTemplateConstant:
+    _tracking_url = '_tracking_url'
+    _signature = '_signature'
+
+    values= {_tracking_url,_signature}
+
+
+########################                     ########################################
+class MongooseDBConstant:
+    AGENT_COLLECTION = 'agent'
+    PROFILE_COLLECTION = 'profile'
+    CHAT_COLLECTION = 'chat'
+    WORKFLOW_COLLECTION ='workflow'
+    SETTING_COLLECTION = 'setting'
+
+    DATABASE_NAME = 'notifyr'
+
+
+    def __init__(self):
+        self.available_collection = []
+
+        for x in dir(self.__class__):
+            if x.endswith('_COLLECTION'):
+                x = getattr(self.__class__,x)
+                self.available_collection.append(x)
+            
+########################                     ########################################
+
+class SettingDBConstant:
+    BASE_JSON_DB='settings'
+    HEALTH_JSON_DB='health'
+    
+    AUTH_EXPIRATION_SETTING='AUTH_EXPIRATION'
+    REFRESH_EXPIRATION_SETTING='REFRESH_EXPIRATION'
+    CHAT_EXPIRATION_SETTING='CHAT_EXPIRATION'
+    ASSET_LANG_SETTING='ASSET_LANG'
+    CONTACT_TOKEN_EXPIRATION_SETTING='CONTACT_TOKEN_EXPIRATION'
+    API_EXPIRATION_SETTING='API_EXPIRATION'
+    ALL_ACCESS_EXPIRATION_SETTING='ALL_ACCESS_EXPIRATION_SETTING'
+
+    #_available_db_key=[AUTH_EXPIRATION_SETTING,REFRESH_EXPIRATION_SETTING,CHAT_EXPIRATION_SETTING,ASSET_LANG_SETTING,CONTACT_TOKEN_EXPIRATION_SETTING]
+
+    def __init__(self):
+
+        self.available_setting_key = []
+        self.available_db_key = []
+
+        for x in dir(self.__class__):
+            if x.endswith('_SETTING'):
+                self.available_setting_key.append(x)
+            
+            elif x.endswith('_DB'):
+                self.available_db_key.append(x)
+
+
+DEFAULT_SETTING = {
+    SettingDBConstant.AUTH_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR * 10,
+    SettingDBConstant.REFRESH_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR * 24 * 1,
+    SettingDBConstant.CHAT_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR,
+    SettingDBConstant.ASSET_LANG_SETTING: "en",
+    SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING:360000000,
+    SettingDBConstant.API_EXPIRATION_SETTING: 360000000,
+    SettingDBConstant.ALL_ACCESS_EXPIRATION_SETTING: 36000000000,
+}
+
+
+########################                     ########################################
+
+class VaultConstant:
+
+    SECRET_ID_FILE= 'secret-id.txt' 
+    ROLE_ID_FILE = 'role_id.txt' # in the secrets shared by the vault
+    SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
+    
+
+    
+    @staticmethod
+    def VAULT_SECRET_DIR(file:str)->str:
+        return f'../../vault/secrets/{file}'
+
+    @staticmethod
+    def VAULT_SHARED_DIR(file:str)->str:
+        return f'../../vault/shared/{file}'
+
+
+    NotifyrSecretType = Literal['tokens','profiles','messages','generation-id']
+    TOKENS_SECRETS = 'tokens'
+    PROFILES_SECRETS = 'profiles'
+    MESSAGES_SECRETS = 'messages'
+    GENERATION_ID = 'generation-id'
+
+
+    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
+    SECRETS_MESSAGE_KEY = 'messages-key'
+    PROFILES_KEY = 'profiles-key'
+    CHAT_KEY='chat-key'
+    S3_REST_KEY='s3-rest-key'
+
+    NotifyrDynamicSecretsRole= Literal['postgres','mongo']
+    MONGO_ROLE='mongo'
+    POSTGRES_ROLE='postgres'
+
+    NotifyrMinioRole = Literal['static-minio','sts-minio']
+
+
+    NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
+    NOTIFYR_TRANSIT_MOUNT_POINT = 'notifyr-transit'
+    NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
+    NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
+    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio-s3'
+
+
+    @staticmethod
+    def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType='',path:str=''):
+        if sub_mount == '':
+            return path+'/'
+        return f'{sub_mount}/{path}'
+
+    @staticmethod
+    def DATABASE_ENGINE_BASE_PATH(sub_mount:NotifyrTransitKeyType,path:str=''):
+        return f'{sub_mount}/{path}'
+    
+
+
+class VaultTTLSyncConstant:
+    SECRET_ID_ROTATION = SECONDS_IN_AN_HOUR*24
+    TRANSIT_ROTATION = SECONDS_IN_AN_HOUR*24
+
+    SECRET_ID_TTL= SECONDS_IN_AN_HOUR*24*3
+    
+    VAULT_TOKEN_TTL=SECONDS_IN_AN_HOUR*24
+    VAULT_TOKEN_MAX_TTL=SECONDS_IN_AN_HOUR*28
+
+    POSTGRES_AUTH_TTL=SECONDS_IN_AN_HOUR*12
+    POSTGRES_MAX_TTL=SECONDS_IN_AN_HOUR*16
+
+    MONGODB_AUTH_TTL=SECONDS_IN_AN_HOUR*12
+    MONGODB_MAX_TTL=SECONDS_IN_AN_HOUR*16
+
+    MINIO_TTL=SECONDS_IN_AN_HOUR*12
+    MINIO_MAX_TTL= SECONDS_IN_AN_HOUR *16
+
+    
+
+
+class MinioConstant:
+    STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
+    ASSETS_BUCKET = 'assets'
+    STATIC_TEMPLATE = 'static'
+    ENCRYPTED_KEY = 'encrypted'
+    MINIO_EVENT='s3_object_events'
+
+
+class RedisConstant:
+
+    EVENT_DB=0
+    CELERY_DB=2
+    LIMITER_DB=1
+    CACHE_DB=3
+
+
+class FastAPIConstant:
+    OO_SCOPE_HEADERS = {'X-Error-Handler':'FastAPI - Exception'}
+
+
+class CostConstant:
+    EMAIL_CREDIT='email'
+    SMS_CREDIT = 'sms'
+    PHONE_CREDIT='phone'
+    PROFILE_CREDIT='profile'
+    CLIENT_CREDIT='client'
+    
+
+    COST_KEY='cost'
+    RULES_KEY='rules'
+    PROMOTIONS_KEY='promotions'
+    CREDITS_KEY='credits'
+    VERSION_KEY='version'
+    SYSTEM_KEY='system'
+    CURRENCY_KEY='currency'
+    PRODUCT_KEY='product'
+
+    email_template='email_template'
+    email_custom='email_custom'
+    sms_otp='sms_otp'
+    phone_otp='phone_otp'
+    phone_digit_otp='phone_digit_otp'
+    phone_auth='phone_auth'
+    sms_message='sms_message'
+    sms_template='sms_template'
+    phone_twiml='phone_twiml'
+    phone_custom='phone_custom'
+    phone_template='phone_template'
+    _object = 'object'
+    

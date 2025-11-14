@@ -2,105 +2,92 @@
 Contains the FastAPI app
 """
 from dataclasses import dataclass
-
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from app.container import Get
+from fastapi.responses import FileResponse, JSONResponse
+from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
+from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
+from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
+from app.services.assets_service import AssetService
+from app.services.aws_service import AmazonS3Service
+from app.services.database_service import  MemCachedService, MongooseService, RedisService, TortoiseConnectionService
+from app.services.health_service import HealthService
+from app.services.cost_service import CostService
+from app.services.secret_service import HCVaultService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService, MODE
 from app.services.security_service import JWTAuthService, SecurityService
 from fastapi import Request, Response, FastAPI
 from slowapi.middleware import SlowAPIMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload, TypedDict
 import uvicorn
 from slowapi.errors import RateLimitExceeded
-from slowapi import Limiter, _rate_limit_exceeded_handler
-import multiprocessing
-import threading
-import sys
+from slowapi import _rate_limit_exceeded_handler
 import datetime as dt
-from app.definition._ressource import RESSOURCES, BaseHTTPRessource, ClassMetaData, GlobalLimiter
+from app.definition._ressource import RESSOURCES, BaseHTTPRessource, ClassMetaData
 from app.interface.events import EventInterface
 from tortoise.contrib.fastapi import register_tortoise
-import ngrok
 import traceback
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.backends.memcached import MemcachedBackend
 
-
-AppParameterKey = Literal['title', 'summary', 'description',
-                          'ressources', 'middlewares', 'port', 'log_level', 'log_config']
+from .app_meta import *
+from .middleware import MIDDLEWARE
+from app.definition._service import PROCESS_SERVICE_REPORT
+from app.models.profile_model import *
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
 BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
 
+DOCUMENTS = [
+                    ProfileModel,
+                    SMTPProfileModel,
+                    IMAPProfileModel,
+                    AWSProfileModel,
+                    GMailAPIProfileModel,
+                    OutlookAPIProfileModel,
+                    TwilioProfileModel,
+                ]
 
-@dataclass
-class AppParameter:
-    title: str
-    summary: str
-    description: str
-    ressources: list[type[BaseHTTPRessource]]
-    middlewares: list[type[BaseHTTPMiddleware]]
-    port: int = 8000
-    log_level: str = 'debug'
-    log_config: Any = None
+_shutdown_hooks=[]
+_startup_hooks=[]
 
-    def __init__(self, title: str, summary: str, description: str, ressources: list[type[BaseHTTPRessource]], middlewares: list[type[BaseHTTPMiddleware]] = [], port=8000, log_level='debug',):
-        self.title: str = title
-        self.summary: str = summary
-        self.description: str = description
-        self.ressources = ressources
-        self.middlewares = middlewares
-        self.port = port
-        self.log_level = log_level
+def register_hook(state:Literal['shutdown','startup'],active=True):
+        
+    def callback(func:Callable):
+        if not active:
+            return func
+        
+        func_name = func.__name__
+        
+        if state == 'shutdown':
+            _shutdown_hooks.append(func_name)
+        else:
+            _startup_hooks.append(func_name)
+        return func
 
-    def toJSON(self) -> Dict[AppParameterKey, Any]:
-        return {
-            'title': self.title,
-            'summary': self.summary,
-            'description': self.description,
-            'ressources': [ressource.__name__ for ressource in self.ressources],
-            'middlewares': [middleware.__name__ for middleware in self.middlewares],
-            'port': self.port,
-            'log_level': self.log_level,
-        }
-
-    def set_fromJSON(self, json: Dict[AppParameterKey, Any], RESSOURCES, MIDDLEWARE):
-        clone = AppParameter.fromJSON(json, RESSOURCES, MIDDLEWARE)
-        self.__dict__ = clone.__dict__
-        return self
-
-    @staticmethod
-    def fromJSON(json: Dict[AppParameterKey, Any], RESSOURCES, MIDDLEWARE):
-        title = json['title']
-        summary = json['summary']
-        description = json['description']
-        ressources = [RESSOURCES[ressource]
-                      for ressource in json['ressources'] if ressource in RESSOURCES]
-        middlewares = [MIDDLEWARE[middleware]
-                       for middleware in json['middlewares'] if middleware in MIDDLEWARE]
-        port = json['port']
-        slog_level = json['log_level']
-        return AppParameter(title, summary, description, ressources, middlewares, port, slog_level,)
-
+    return callback
 
 class Application(EventInterface):
 
     # TODO if it important add other on_start_up and on_shutdown hooks
-    def __init__(self, appParameter: AppParameter):
+    def __init__(self,port:int=None,log_level:str=None,host:str=None):
+        self.log_level = log_level
+        self.host = host
+        self.port =port
+
         self.pretty_printer = PrettyPrinter_
-        # self.thread = threading.Thread(None, self.run, appParameter.title, daemon=False)
-        self.appParameter = appParameter
         self.configService: ConfigService = Get(ConfigService)
-        self.app = FastAPI(title=appParameter.title, summary=appParameter.summary, description=appParameter.description,
-                           on_shutdown=[self.on_shutdown], on_startup=[self.on_startup])
-        self.app.state.limiter = GlobalLimiter
-        self.register_tortoise()
+        self.costService: CostService = Get(CostService)
+        
+        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
+        self.app.state.limiter = self.costService.GlobalLimiter
+
         self.add_exception_handlers()
         self.add_middlewares()
         self.add_ressources()
@@ -114,6 +101,7 @@ class Application(EventInterface):
             @self.app.exception_handler(exception)
             async def callback(request,e:type[Exception]):
                 print(e.__class__,e.args)
+                traceback.print_exc()
                 return JSONResponse({'message': 'An unexpected error occurred!'}, status_code=500)
 
 
@@ -127,7 +115,6 @@ class Application(EventInterface):
             #return HTMLResponse()
             return FileResponse(e.filename,e.status_code,e.headers)# TODO change to html_response
 
-
     def set_httpMode(self):
         self.mode = self.configService.HTTP_MODE
         if self.configService.HTTPS_CERTIFICATE is None or self.configService.HTTPS_KEY:
@@ -135,32 +122,14 @@ class Application(EventInterface):
         return
 
     def start(self):
-        # self.thread.start()
-        self.run()
-
-    def start_server(self):
-
-        # match self.configService.MODE:
-        #     case 'TEST':
-        #         domain = self.configService.NGROK_DOMAIN
-        #         ngrok_tunnel = ngrok.connect(self.appParameter.port,hostname=domain)
-        #     case 'DEV':
-        #         listener = ngrok.forward(f'http://localhost:{self.appParameter.port}')
-        #         NGROK_URL = listener.url()
-        #     case 'PROD':
-        #         ...
-
         if self.mode == 'HTTPS':
-            uvicorn.run(self.app, port=self.appParameter.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
-                        ssl_certfile=self.configService.HTTPS_CERTIFICATE)
+            uvicorn.run(self.app,host=self.host, port=self.port, loop="asyncio", ssl_keyfile=self.configService.HTTPS_KEY,
+                        ssl_certfile=self.configService.HTTPS_CERTIFICATE,log_level=self.log_level)
         else:
-            uvicorn.run(self.app, port=self.appParameter.port, loop="asyncio",)
+            uvicorn.run(self.app, host=self.host, port=self.port, loop="asyncio",log_level=self.log_level)
 
     def stop_server(self):
         pass
-
-    def run(self) -> None:
-        self.start_server()
 
     def _mount_directories(self,ress_type:type[BaseHTTPRessource]):
         meta:ClassMetaData = ress_type.meta
@@ -174,12 +143,16 @@ class Application(EventInterface):
     def add_ressources(self):
         self.pretty_printer.show(
             pause_before=1, clear_stack=True, space_line=True)
-        for ressource_type in self.appParameter.ressources:
+        for ressource_type in BASE_RESSOURCES:
             try:
                 now = dt.datetime.now()
                 res = ressource_type()
-                self.app.include_router(
-                    res.router, responses=res.default_response)
+                meta:ClassMetaData = ressource_type.meta
+                
+                if not meta['mount_ressource']:
+                    continue
+                
+                self.app.include_router(res.router, responses=res.default_response)
                 self._mount_directories(ressource_type)
                 self.pretty_printer.success(
                     f"[{now}] Ressource {ressource_type.__name__} added successfully", saveable=True)
@@ -187,6 +160,7 @@ class Application(EventInterface):
             except Exception as e:
                 print(e.__class__)
                 print(e)
+                traceback.print_exc()
                 self.pretty_printer.error(
                     f"[{now}] Error adding ressource {ressource_type.__name__} to the app", saveable=True)
                 self.pretty_printer.wait(0.1, press_to_continue=True)
@@ -197,40 +171,119 @@ class Application(EventInterface):
     def add_middlewares(self):
         self.app.add_middleware(SlowAPIMiddleware)
         
-        for middleware in sorted(self.appParameter.middlewares, key=lambda x: x.priority.value, reverse=True):
+        for middleware in sorted(MIDDLEWARE.values(), key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
-        
-    def register_tortoise(self):
-        pg_user = self.configService.getenv('POSTGRES_USER')
-        pg_password = self.configService.getenv('POSTGRES_PASSWORD')
-        pg_database = self.configService.getenv('POSTGRES_DB')
-        pg_schemas = self.configService.getenv('POSTGRES_SCHEMAS', 'contacts,security')
-        register_tortoise(
-            app=self.app,
-            db_url=f"postgres://{pg_user}:{pg_password}@localhost:5432/{pg_database}",
-            modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
-            generate_schemas=False,
-            add_exception_handlers=True,    
-        )
-
+            
+    @register_hook('startup')
     async def on_startup(self):
-        jwtService = Get(JWTAuthService)
-        jwtService.set_generation_id(False)
+
+        BaseService.CONTEXT = 'async'
+        BaseService.CONTAINER_LIFECYCLE_SCOPE = False
 
         redisService = Get(RedisService)
+        memcachedService = Get(MemCachedService)
         
-        await redisService.create_group()
-        redisService.register_consumer(callbacks_stream=Callbacks_Stream)
+        if redisService.service_status == ServiceStatus.AVAILABLE:
+            await redisService.create_group()
+            redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
 
-        taskService:TaskService =  Get(TaskService)
-        #taskService.start()
+        FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
+        # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
+        # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
 
-        celery_service: CeleryService = Get(CeleryService)
-        celery_service.start_interval(10)
-
+        assetService:AssetService = Get(AssetService)
+        
+    @register_hook('shutdown',active=True)
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
         await redisService.close_connections()
 
+    @register_hook('startup',)
+    def start_tickers(self):
+        taskService:TaskService =  Get(TaskService)
+        taskService.start()
+
+        vaultService: HCVaultService = Get(HCVaultService) 
+        vaultService.start()
+
+        celery_service: CeleryService = Get(CeleryService)
+        celery_service.start_interval(10)
+
+        tortoiseConnService = Get(TortoiseConnectionService)
+        tortoiseConnService.start()
+
+        mongooseService = Get(MongooseService)
+        mongooseService.start()
+
+        amazons3Service = Get(AmazonS3Service)
+        amazons3Service.start()
+    
+    @register_hook('shutdown')
+    def stop_tickers(self):
+
+        tortoiseConnService = Get(TortoiseConnectionService)
+        celery_service: CeleryService = Get(CeleryService)
+        mongooseService = Get(MongooseService)
+        amazons3Service = Get(AmazonS3Service)
+        vaultService = Get(HCVaultService)
+
+        taskService:TaskService =  Get(TaskService)
+        
+
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,amazons3Service]
+
+        for s in services:
+            s.shutdown()
+        
+        celery_service.stop_interval()
+
+    @register_hook('startup')
+    async def register_tortoise(self):
+
+        tortoiseConnService = Get(TortoiseConnectionService)
+        if tortoiseConnService.service_status not in ACCEPTABLE_STATES:
+            return
+        
+        await tortoiseConnService.init_connection()
+
+    @register_hook('shutdown')
+    async def close_tortoise(self):
+        tortoiseConnService = Get(TortoiseConnectionService)
+        if tortoiseConnService.service_status not in ACCEPTABLE_STATES:
+            return
+
+        await tortoiseConnService.close_connections()
+
+    @register_hook('startup',active=False)
+    def print_report_on_startup(self):
+        CONTAINER.show_report()
+        CONTAINER.show_dep_graph()
+
+    @register_hook('startup')
+    async def register_beanie(self):
+        mongooseService: MongooseService = Get(MongooseService)
+        if mongooseService.service_status not in ACCEPTABLE_STATES:
+            return 
+        
+        mongooseService.register_document(*DOCUMENTS)
+        await mongooseService.init_connection()
+    
+    @register_hook('shutdown')
+    async def close_beanie(self):
+        mongooseService: MongooseService = Get(MongooseService)
+        if mongooseService.service_status not in ACCEPTABLE_STATES:
+            return 
+        
+        mongooseService.close_connection()
+
+
+    @property
+    def shutdown_hooks(self):
+        return [getattr(self,x) for x in _shutdown_hooks]
+
+    @property
+    def startup_hooks(self):
+        return [getattr(self,x) for x in _startup_hooks]
+    
 #######################################################                          #####################################################

@@ -1,35 +1,21 @@
-FROM python:3.11-slim
+FROM python:3.11.4-slim
 
-#FROM python:3.11-alpine
+RUN useradd -m notifyr
 
-RUN apt-get update && apt-get install -y make
-
-# RUN apk add --no-cache make gcc musl-dev
-
-RUN useradd -m celery
-
-USER celery
+USER notifyr
 
 WORKDIR /usr/src/
 
-COPY ./assets ./assets/
-
-COPY ./app ./app/
-
 COPY ./requirements_dev.txt .
 
-COPY ./Makefile .
+RUN pip install --no-cache-dir -r requirements_dev.txt
 
-COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
+COPY ./gunicorn_main.py .
 
-#RUN chmod +x ./spawn_celery_worker.sh
+COPY ./main.py .
 
-RUN make install
+COPY ./app/ ./app/
 
-RUN pip show celery
+ENV PATH="/home/notifyr/.local/bin:${PATH}"
 
-ENV PATH="/home/celery/.local/bin:${PATH}"
-
-#ENV PATH="/home/uvicorn/.local/bin:${PATH}"
-
-RUN celery --version
+RUN uvicorn --version

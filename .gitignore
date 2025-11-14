@@ -173,6 +173,7 @@ config.app.json
 yahoo.secrets.txt
 email.test.py
 .vscode
-
-database/*.md
 GOAL
+update.txt
+thoughts.txt
+assets/.minio.sys/

@@ -6,7 +6,7 @@ FAX_INCOMING_PREFIX = "incoming"
 
 @HTTPRessource(FAX_INCOMING_PREFIX)
 class IncomingFaxRessource(BaseHTTPRessource):
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,) -> None:
         super().__init__()
     
@@ -14,14 +14,14 @@ class IncomingFaxRessource(BaseHTTPRessource):
 FAX_OUTGOING_PREFIX = "outgoing"
 @HTTPRessource(FAX_OUTGOING_PREFIX)
 class OutgoingFaxRessource(BaseHTTPRessource):
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,) -> None:
         super().__init__()
     
 FAX_PREFIX = "fax"
 
-@HTTPRessource(FAX_PREFIX,routers=[IncomingFaxRessource, OutgoingFaxRessource])
+@HTTPRessource(FAX_PREFIX,routers=[IncomingFaxRessource, OutgoingFaxRessource],mount=False)
 class FaxRessource(BaseHTTPRessource):
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,) -> None:
         super().__init__()

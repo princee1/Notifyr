@@ -1,5 +1,5 @@
 from typing import Any, List
-from app.classes.auth_permission import AuthPermission, RefreshPermission
+from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPermission
 from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
@@ -10,7 +10,8 @@ from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.assets_service import AssetService
-from app.services.celery_service import TaskService, CeleryService,task_name
+from app.services.profile_service import ProfileService
+from app.services.task_service import TaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
@@ -19,19 +20,19 @@ from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
-from fastapi import HTTPException, Request,status
+from fastapi import HTTPException, Request, UploadFile,status
 
 class CeleryTaskGuard(Guard):
-    def __init__(self,task_names:list[str],task_types:list[TaskType]=None):
+    def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
         super().__init__()
         self.task_names = [task_name(t) for t in  task_names]
-        self.task_types = task_types
+        self.task_types = [t.value for t in task_types]
     
     def guard(self,scheduler:SchedulerModel):        
         if self.task_names and scheduler.task_name not in self.task_names:
             return False,f'The task: [{scheduler.task_name}] is  not permitted for this route'
         
-        if self.task_types != None and scheduler.task_name not in self.task_types:
+        if self.task_types and scheduler.task_type not in self.task_types:
             return False,f'The task_type: [{scheduler.task_type}] is not permitted for this route'
         
         return True,''
@@ -43,7 +44,7 @@ class AssetGuard(Guard):
         self.assetService = Get(AssetService)       
         self.configService = Get(ConfigService)
         self.options = options
-        self.allowed_path = [self.configService.ASSET_DIR +p for p in  allowed_path]
+        self.allowed_path = [self.configService.ASSETS_DIR +p for p in  allowed_path]
         self.content_keys = content_keys
         self.accepted_type = accepted_type
 
@@ -56,7 +57,7 @@ class AssetGuard(Guard):
             return True,_
         content = scheduler.model_dump(include={'content'})
         content = flatten_dict(content)
-        flag = self.assetService.verify_asset_permission(content,self.content_keys,self.allowed_path,self.options)
+        flag = self.assetService.verify_content_asset_permission(content,self.content_keys,self.allowed_path,self.options)
         if not flag:
             return False, 'message'
         return True,''
@@ -185,6 +186,7 @@ class CarrierTypeGuard(Guard):
         self.accept_landline = accept_landline
     
     async def guard(self,otpModel:OTPModel=None,contact:ContactORM=None,scheduler:SchedulerModel=None):
+        return True
         if otpModel != None:
             phone_number = [[otpModel.to]]
         elif contact != None:
@@ -257,10 +259,37 @@ class AccessLinkGuard(Guard):
         return True,''
 
 class TrackGuard(Guard):
+    allowed=set(['now','once'])
 
     async def guard(self,scheduler:SchedulerModel,tracker:TrackerInterface):
         if not tracker.will_track:
             return True,''
-        if scheduler.task_type !='now' or scheduler.task_type!='once':
+        if scheduler.task_type not in self.allowed:
             return False,'Cannot track task that are not ran once'
+        return True,''
+
+class PolicyGuard(Guard):
+    
+    def guard(self,policyModel:PolicyModel):
+        profileService:ProfileService = Get(ProfileService)
+        profiles_set=set(policyModel.allowed_profiles).difference(profileService.MiniServiceStore.ids)
+        if len(profiles_set) >= 1:
+            return False,f'Those profiles does not exists at the moment: {profiles_set}'
+    
+        return True,''
+
+class GlobalsTemplateGuard(Guard):
+
+    def __init__(self,error_message:str='Access to the template is forbidden at this route'):
+        super().__init__()
+        self.error_message = error_message
+
+    def guard(self,template:str=None,files: List[UploadFile]=None,destination_template:str=None):
+        if template and template == 'globals.json':
+            return False,self.error_message
+        if files and 'globals.json' in set([file.filename for file in files]):
+            return False,self.error_message
+        if destination_template and destination_template == 'globals.json':
+            return False,self.error_message
+
         return True,''

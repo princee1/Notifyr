@@ -1,30 +1,28 @@
 import functools
 import sys
 from typing import Any, Callable
-from typing_extensions import Literal
 from celery import Celery, shared_task
-from celery.result import AsyncResult
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService,CeleryEnv
-from app.services.email_service import EmailSenderService,EmailReaderService
 from app.container import Get, build_container,__DEPENDENCY
-from app.services.security_service import JWTAuthService
-from app.services.twilio_service import SMSService, CallService
-from app.services.webhook_service import WebhookService
 from app.utils.prettyprint import PrettyPrinter_
 from flower import VERSION
 from celery import Task
+from app.services import *
 
 
 ##############################################           ##################################################
 
 if sys.argv[0] == CELERY_EXE_PATH:
-    PrettyPrinter_.message('Building container for the celery worker')
-    PrettyPrinter_.message(ConfigService._celery_env.value)
-    if ConfigService._celery_env == CeleryMode.purge:
+    PrettyPrinter_.message(f'Building container for the celery {ConfigService._celery_env.value}')
+    if ConfigService._celery_env != CeleryMode.worker:
         build_container(False,dep=[ConfigService])
     else:
-        build_container(False)
+        dependency = __DEPENDENCY.copy()
+        dependency.remove(AssetService)
+        dependency.remove(HealthService)
+        dependency.remove(CostService)
+        build_container(False,dep=dependency)
         
 ##############################################           ##################################################
 
@@ -64,10 +62,12 @@ celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
 celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL
 celery_app.conf.timezone = "UTC"
 
-celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
-celery_app.autodiscover_tasks(
-    ['app.ressources'], related_name='email_ressource')
-celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
+if ConfigService._celery_env == CeleryMode.none:
+
+    celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
+    celery_app.autodiscover_tasks(
+        ['app.ressources'], related_name='email_ressource')
+    celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 
 ##############################################           ##################################################
 
@@ -99,57 +99,52 @@ def SharedTask(heaviness: TaskHeaviness, **kwargs):
 
 ##############################################           ##################################################
 
-def WebHook():
-    webhookService = Get(WebhookService)
-    def decorator(func:Callable):
-        t_name:str = task_name(func.__qualname__)
-        def wrapper(*args,**kwargs):
-            result = func(*args,**kwargs)
-            
-            return result
-        return wrapper
-    
-    return decorator
-        
 
 ##############################################           ##################################################
 
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_mail(self:Task,data, meta, images,contact_id=None):
+def task_send_template_mail(self:Task,*args,**kwargs):
+    emailService: EmailSenderService = Get(EmailSenderService),
+    email_profile = kwargs.get('email_profile',None)
+    emailMiniService=emailService.MiniServiceStore.get(email_profile)
+    return emailMiniService.sendTemplateEmail(*args,**kwargs)
+
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_custom_mail(self:Task,*args,**kwargs):
     emailService: EmailSenderService = Get(EmailSenderService)
-    return emailService.sendTemplateEmail(data, meta, images,contact_id)
+    email_profile = kwargs.get('email_profile',None)
+    emailMiniService=emailService.MiniServiceStore.get(email_profile)
+    return emailMiniService.sendCustomEmail(*args,**kwargs)
 
-
-@RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_mail(self:Task,content, meta, images, attachment,contact_id=None):
-    emailService: EmailSenderService = Get(EmailSenderService)
-    return emailService.sendCustomEmail(content, meta, images, attachment,contact_id)
+#============================================================================================================#
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_sms(self:Task,messages):
+def task_send_custom_sms(self:Task,*args,**kwargs):
     smsService:SMSService = Get(SMSService)
-    return smsService.send_custom_sms(messages)
+    return smsService.send_custom_sms(*args,**kwargs)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_sms(self:Task,messages):
+def task_send_template_sms(self:Task,*args,**kwargs):
     smsService:SMSService = Get(SMSService)
-    return smsService.send_template_sms(messages)
+    return smsService.send_template_sms(*args,**kwargs)
+
+#============================================================================================================#
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_voice_call(self:Task,result,content):
+def task_send_template_voice_call(self:Task,*args,**kwargs):
     callService:CallService = Get(CallService)
-    return callService.send_template_voice_call(result,content)
+    return callService.send_template_voice_call(*args,**kwargs)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_twiml_voice_call(self:Task,url,details):
+def task_send_twiml_voice_call(self:Task,*args,**kwargs):
     callService:CallService = Get(CallService)
-    return callService.send_twiml_voice_call(url,details)
-    
+    return callService.send_twiml_voice_call(*args,**kwargs)
     
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_voice_call(self:Task,body,details):
+def task_send_custom_voice_call(self:Task, *args,**kwargs):
     callService:CallService = Get(CallService)
-    return callService.send_custom_voice_call(body,details)
+    return callService.send_custom_voice_call(*args,**kwargs)
 
 ##############################################           ##################################################

@@ -12,7 +12,7 @@ from app.services.security_service import JWTAuthService
 @WebSocketRessource
 class ChatWebSocket(BaseWebSocketRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,configService:ConfigService,chatService:ChatService):
         super().__init__()
         self.configService = configService

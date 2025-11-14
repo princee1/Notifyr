@@ -7,7 +7,7 @@ PUSH_NOTIFICATION_PREFIX = 'push-notification'
 @HTTPRessource(PUSH_NOTIFICATION_PREFIX)
 class PushNotificationRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,push_notificationService:PushNotificationService,):
         super().__init__()
         self.push_notificationService = push_notificationService

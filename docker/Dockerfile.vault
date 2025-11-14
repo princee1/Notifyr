@@ -1,0 +1,253 @@
+FROM golang:latest AS builder
+
+RUN apt-get update && apt-get install -y git make && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+ARG COMMIT_SHA=75862a1065ff489a4601791ad22062e22ee7a1d1
+
+# RUN git clone https://github.com/ram-parameswaran/vault-plugin-secrets-minio.git
+
+RUN git clone https://github.com/jayxiong1/vault-plugin-secrets-minio.git
+
+WORKDIR /build/vault-plugin-secrets-minio/
+
+RUN make deps
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/vault-plugin-secrets-minio
+
+FROM hashicorp/vault:latest
+
+# Use root for setup
+USER root
+
+ARG S3_CRED_TYPE="MINIO"
+
+ENV S3_CRED_TYPE=${S3_CRED_TYPE}
+
+# Install dependencies
+RUN apk add --no-cache bash curl jq tini ca-certificates pwgen
+
+# Create Vault config directories
+RUN mkdir -p /vault/config /vault/data /vault/logs /vault/shared /vault/api-key /vault/secrets /home/vaultuser /vault/cron/
+
+# Vault config
+RUN cat <<EOF > /vault/config/vault.hcl
+ui = true
+disable_mlock = true
+
+storage "raft" {
+  path    = "/vault/data"
+  node_id = "vault-node-1"
+}
+
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  cluster_address = "127.0.0.1:8201"
+  tls_disable = "true"
+}
+
+api_addr     = "http://127.0.0.1:8200"
+cluster_addr = "http://127.0.0.1:8201"
+
+audit "file" {
+  path   = "/vault/logs/audit.log"
+  format = "json"
+}
+
+plugin_directory = "/etc/vault/plugins"
+EOF
+
+# Vault policies
+RUN mkdir -p /vault/policies
+
+RUN cat <<EOF > /vault/policies/app-policy.hcl
+
+# ---- SECRETS ENGINE ----
+
+path "notifyr-secrets/" {
+  capabilities = ["list"]
+}
+
+path "notifyr-secrets/tokens" {
+  capabilities = ["read","list"]
+}
+
+path "notifyr-secrets/api-key"{
+  capabilities = ["read","list"]
+}
+
+path "notifyr-secrets/api-key/*"{
+  capabilities = ["read"]
+}
+
+path "notifyr-secrets/profiles" {
+  capabilities =["read","list"]
+}
+
+path "notifyr-secrets/profiles/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+path "notifyr-secrets/messages" {
+  capabilities = ["read","list"]
+}
+
+path "notifyr-secrets/messages/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+path "notifyr-secrets/settings" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+# ---- GENERATION ID ENGINE ---- 
+
+path "notifyr-generation/data/generation-id" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+path "notifyr-generation/metadata/generation-id" {
+  capabilities = ["read", "list", "delete"]
+}
+
+# ---- TRANSIT ENGINE ----
+
+path "transit/" {
+  capabilities = ["list"]
+}
+# Encrypt and decrypt data
+path "notifyr-transit/encrypt/*" {
+  capabilities = ["update"]
+}
+
+path "notifyr-transit/decrypt/*" {
+  capabilities = ["update"]
+}
+
+path "notifyr-transit/sign/*" {
+  capabilities = ["update"]
+}
+
+path "notifyr-transit/verify/*" {
+  capabilities = ["update"]
+}
+
+path "notifyr-transit/keys/*" {
+  capabilities = ["read"]
+}
+
+# ---- DATABASE ENGINE ----
+
+path "notifyr-database/creds/*" {
+  capabilities = ["read"]
+}
+
+path "notifyr-database/roles" {
+  capabilities = ["list"]
+}
+
+# ---- MINIO ENGINE ----
+
+path "notifyr-minio-s3/creds/*"{
+  capabilities = ["read"]
+}
+
+path "notifyr-minio-s3/sts/*"{
+  capabilities=["update","read"]
+}
+
+EOF
+
+RUN cat <<EOF > /vault/policies/rotate-approle.hcl
+
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+
+path "auth/approle/role/notifyr-app-role/secret-id" {
+  capabilities = ["update","create","read"]
+}
+
+path "transit/keys/*/rotate" {
+  capabilities = ["update"]
+}
+
+path "notifyr-database/rotate-root/*" {
+  capabilities=["update"]
+}
+
+path "notifyr-config/*"{
+  capabilities=["update","read","create","list","delete"]
+}
+
+EOF
+
+RUN cat <<EOF > /vault/policies/db-config.hcl 
+
+path "notifyr-database/config/*" {
+  capabilities = ["update","create"]
+}
+
+path "notifyr-database/rotate-root/*" {
+  capabilities=["update"]
+}
+
+path "notifyr-minio-s3/*"{
+  capabilities = ["read","update","create"]
+}
+
+path "notifyr-secrets/api-key/S3-WEBHOOK" {
+  capabilities=["read","update","create"]
+}
+
+EOF
+
+# Add non-root user
+RUN adduser -D -u 1500 -g vaultuser vaultuser \
+    && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared /home/vaultuser /vault/cron \
+    && chmod 700 /vault/data /vault/logs /home/vaultuser /vault/cron \
+    && chown root:vaultuser /vault/secrets \
+    && chmod 755 /vault/secrets /vault/shared
+
+# Install supercronic
+ADD https://github.com/aptible/supercronic/releases/download/v0.2.31/supercronic-linux-amd64 /usr/local/bin/supercronic
+RUN chmod 755 /usr/local/bin/supercronic
+
+RUN touch /vault/cron/crontab
+
+RUN cat <<EOF > /vault/cron/crontab
+0 0 * * * /usr/local/bin/vault-secret-id-rotator.sh >> /vault/logs/vault-secret-id-rotator.log 2>&1
+0 0 1 */2 * /usr/local/bin/vault-transit-rotator.sh >> /vault/logs/vault-transit-rotator.log 2>&1
+0 0 1 * * /usr/local/bin/vault-db-admin-rotator.sh >> /vault/logs/vault-db-admin-rotator.log 2>&1
+EOF
+
+# Copy scripts with correct permissions
+COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
+
+RUN mkdir /etc/vault && mkdir etc/vault/plugins
+
+COPY --chown=vaultuser:vaultuser ./settings_db.json /etc/vault/
+
+COPY --from=builder /build/vault-plugin-secrets-minio/vault-plugin-secrets-minio /etc/vault/plugins/
+
+RUN chown root:vaultuser /etc/vault/plugins/ && chmod 755 /etc/vault/plugins
+RUN chown root:vaultuser /etc/vault/plugins/vault-plugin-secrets-minio && chmod 755 /etc/vault/plugins/vault-plugin-secrets-minio
+
+# Initialize Vault (can run as root for setup)
+RUN /usr/local/bin/vault-init.sh ${CRED_TYPE}
+
+COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
+COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator/*.sh /usr/local/bin/
+
+
+RUN chmod +x /usr/local/bin/vault-entrypoint.sh
+RUN chmod 770 /usr/local/bin/*-rotator.sh 
+
+# Switch to non-root user
+USER vaultuser
+
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Entrypoint
+CMD ["/usr/local/bin/vault-entrypoint.sh"]

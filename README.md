@@ -1,4 +1,4 @@
-# 📡 Multi-Channel Message Relay & AI Customer Service Assistant  
+# 📡 Notifyr
 
 This project is a powerful and flexible messaging relay system supporting OTPs and simple notifications through multiple communication channels, including **Email**, **SMS**, and **Voice Calls**. It is built to be **robust, reliable, and highly available**, leveraging advanced scheduling powered by **Redis** and offloading tasks to **FastAPI Background Tasks** or **Celery Workers**.  
 

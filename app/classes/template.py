@@ -4,7 +4,9 @@ from aiohttp_retry import Callable
 from bs4 import BeautifulSoup, PageElement, Tag, element
 from app.definition._error import BaseError
 from app.classes.schema import MLSchemaBuilder
+from app.utils.constant import HTMLTemplateConstant
 from app.utils.helper import strict_parseToBool, flatten_dict
+from app.utils.tools import Time
 from app.utils.validation import CustomValidator
 # import fitz as pdf
 from cerberus import DocumentError, SchemaError
@@ -17,12 +19,27 @@ from jinja2 import Environment, Template as JJ2Template
 from app.utils.transformer import transform,coerce
 
 
+TRACKING_PIXEL_CODE = '''
+{% if _tracking_url %}
+  <img src="{{ _tracking_url }}" width="1" height="1" style="display:none;" alt="">
+{% endif %}
+'''
+
+FOOTER_SIGNATURE_CODE='''
+{% if _signature %}
+  <div>{{ _signature }}</div>
+{% endif %}
+'''
+
+CONTENT_HTML=0
+CONTENT_TEXT=1
 
 class XMLLikeParser(Enum):
     HTML = "html.parser"
     LXML = "lxml"
     XML ="xml"
 
+AVAILABLE_LANG = ['en', 'es', 'fr', 'de']
 
 # ============================================================================================================
 ROUTE_SEP = "-"
@@ -30,7 +47,17 @@ VALIDATION_CSS_SELECTOR = "head > validation"
 VALIDATION_REGISTRY_SELECTOR = "validation-registry"
 def BODY_SELECTOR(select): return f"body {select}"
 # ============================================================================================================
-
+class Extension(Enum):
+    """
+    The class `Extension` defines an enumeration of file extensions.
+    """
+    HTML = "html"
+    CSS = "css"
+    SCSS = "scss"
+    JPEG = "jpg"
+    PDF = "pdf"
+    TXT = "txt"
+    XML= "xml"
 
 class TemplateAssetError(BaseError):
     ...
@@ -62,23 +89,21 @@ class TemplateCreationError(BaseError):
 
 
 class Asset():
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
+    def __init__(self, filename: str, content: str, dirName: str,size:int=0) -> None:
         super().__init__()
         self.filename = filename
         self.content = content
         self.dirName = dirName
         self.name = self.filename.split(".")[0]
-        # BUG need to replace the path separator
-        self.name.replace("\\", ROUTE_SEP)
-        self.name.replace("/", ROUTE_SEP)
         self.ignore=False
+        self.size = size
 
 
 class Template(Asset):
     LANG = None
     
     @overload
-    def __init__(self,filename:str, content:str, dirName:str) -> None:
+    def __init__(self,filename:str, content:str, dirName:str,size:int) -> None:
         ...
 
     @overload
@@ -86,9 +111,10 @@ class Template(Asset):
         ...
     
     def __init__(self,*args):
-        if len(args) == 3:
-            filename, content, dirName = args
-            super().__init__(filename, content, dirName)
+        
+        if len(args) == 4:
+            filename, content, dirName,size = args
+            super().__init__(filename, content, dirName,size)
             self.translator = Translator(['translate.google.com', 'translate.google.com'])
             self.load()
         
@@ -107,7 +133,7 @@ class Template(Asset):
         """
         pass
 
-    def build(self, lang, data,validate=False) -> Any:
+    def build(self, data, lang=None, validate=False) -> Any:
         """
         Build a representation of the template with injected, verified and translated value and return 
         a content output
@@ -115,7 +141,7 @@ class Template(Asset):
         Override this function and call the super value
         """
         if validate:
-            self.validate(data)
+            return self.validate(data)
 
     def translate(self, targetLang: str, text: str) -> str:
         """
@@ -154,11 +180,11 @@ class MLTemplate(Template):
         "purge_unknown": False,
     }
 
-    def __init__(self, filename: str, content: str, dirName: str,extension:str,validation_selector:str) -> None:
+    def __init__(self, filename: str, content: str, dirName: str,extension:str,validation_selector:str,size:int=0) -> None:
         self.content_to_inject = None
         self.extension = extension
         self.validation_selector = validation_selector
-        super().__init__(filename, content, dirName)
+        super().__init__(filename, content, dirName,size)
         self.ignore = self.filename.endswith(f".registry.{self.extension}")
 
     def _built_template(self,content):
@@ -288,28 +314,29 @@ class MLTemplate(Template):
 class HTMLTemplate(MLTemplate):
 
     @overload
-    def __init__(self,filename:str,content:str,dirname:str):
+    def __init__(self,filename:str,content:str,dirname:str,size:int):
         ...
 
     @overload
-    def __init__(self,bs4:BeautifulSoup,schema:dict,transform:dict,images:list[tuple[str, str]]):
+    def __init__(self,bs4:BeautifulSoup,schema:dict,transform:dict,images:list[tuple[str, str]],size:int):
         ...
 
     def __init__(self,*args):
-        if len(args) == 3:
-            filename,content,dirname = args
+        if len(args) == 4:
+            filename,content,dirname,size = args
             self.parser = XMLLikeParser.HTML.value
-            super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR)
+            super().__init__(filename,content,dirname,"html",VALIDATION_CSS_SELECTOR,size)
             self.images: list[tuple[str, str]] = []
             self.image_needed: list[str] = []
 
-        elif len(args):
-            bs4, schema, transform, images = args
+        elif len(args) == 5:
+            bs4, schema, transform, images,size = args
             self.parser = XMLLikeParser.HTML.value
             self.bs4: BeautifulSoup = BeautifulSoup(str(bs4), self.parser)
             self.schema = schema
             self.transform = transform
             self.images = images
+            self.size = size
 
 
     def loadCSS(self, cssContent: str):  # TODO Try to remove any css rules not needed
@@ -351,10 +378,28 @@ class HTMLTemplate(MLTemplate):
     def set_content(self,):
         super().set_content("html5")
 
-    def build(self,data,target_lang,re_replace=None):
-        super().build(data,target_lang)
+    def build(self,data:dict,target_lang=None,re_replace=None,validate=False,bs4=False,tracking_url=None,signature=None):
+
+        if len(HTMLTemplateConstant.values.intersection(data.keys())) > 0: 
+            raise TemplateInjectError("Data contains reserved keys: {}".format(HTMLTemplateConstant.values))
+        
+        if validate:
+            data = super().build(data,target_lang,validate)
+        
+        if tracking_url:
+            data[HTMLTemplateConstant._tracking_url] = tracking_url
+
+        if signature:
+            data[HTMLTemplateConstant._signature] = signature[1]
+
         content_html, content_text = self.inject(data,re_replace=re_replace)
+        if not target_lang or target_lang == Template.LANG:
+            if bs4:
+                content_html = str(BeautifulSoup(content_html, self.parser).select("body")[0])
+            return True, (content_html, content_text)
         content_html = self.translate(target_lang, content_html)
+        if bs4:
+            content_html = BeautifulSoup(content_html, self.parser).select("body")[0]
         content_text = self.translate(target_lang, content_text)
         return True, (content_html, content_text)
     
@@ -362,7 +407,7 @@ class HTMLTemplate(MLTemplate):
         content_text = self.exportText(content)
         return content, content_text
 
-    def add_tracking_pixel(self, tracking_url: str):
+    def add_tracking_pixel(self):
         """
         Add a tracking pixel to the HTML content.
 
@@ -372,32 +417,33 @@ class HTMLTemplate(MLTemplate):
         if not hasattr(self, 'bs4') or not self.bs4:
             raise TemplateCreationError("HTML content is not loaded or initialized.")
         
-        tracking_pixel_tag = self.bs4.new_tag("img", src=tracking_url, width="1", height="1", style="display:none;")
+        tracking_pixel_tag = self.bs4.new_tag("div", attrs={"style": "display:none;"},string=TRACKING_PIXEL_CODE)
         body_tag = self.bs4.select_one("body")
         if body_tag:
             body_tag.append(tracking_pixel_tag)
         else:
             raise TemplateFormatError("No <body> tag found in the HTML content.")
     
-        self.set_content()
+        #self.set_content()
 
-    def add_signature(self, signature_content: str):
+    def add_signature(self):
+        signature_content = ("\n"*5)+FOOTER_SIGNATURE_CODE
         self.update_footer(signature_content)
+        #self.set_content()
+
+    def add_unsubscribe_footer(self):
+        self.update_footer()
         self.set_content()
 
-    def add_unsubscribe_footer(self, content: str):
-        self.update_footer(content)
-        self.set_content()
-
-    def update_footer(self, content):
+    def update_footer(self,content: str = ""):
         footer = self.bs4.select_one('footer')
         if footer is None:
             footer = Tag(name="footer")
-            body = self.bs4.select_one('body')
-            if body:
-                body.append(footer)
+            html = self.bs4.select_one('html')
+            if html:
+                html.append(footer)
             else:
-                raise TemplateFormatError("No <body> tag found in the HTML content.")
+                raise TemplateFormatError("No <html> tag found in the HTML content.")
         
         if footer.string is None:
             footer.string = content
@@ -427,8 +473,8 @@ class HTMLTemplate(MLTemplate):
     
 
 class PDFTemplate(Template):
-    def __init__(self, filename: str, dirName: str) -> None:
-        super().__init__(filename, None, dirName)
+    def __init__(self, filename: str, dirName: str,size=0) -> None:
+        super().__init__(filename, None, dirName,size)
 
     def pdf_to_xml(self):
         ...
@@ -438,8 +484,8 @@ class PDFTemplate(Template):
 
 class TWIMLTemplate(MLTemplate):
 
-    def __init__(self, filename, content, dirName, extension, validation_selector):
-        super().__init__(filename, content, dirName, extension, validation_selector)
+    def __init__(self, filename, content, dirName, extension, validation_selector,size=0):
+        super().__init__(filename, content, dirName, extension, validation_selector,size=size)
         self.set_content()
 
     def _built_template(self,content):
@@ -459,9 +505,9 @@ class TWIMLTemplate(MLTemplate):
         return True,body
 
 class SMSTemplate(TWIMLTemplate):
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
+    def __init__(self, filename: str, content: str, dirName: str,size=0) -> None:
         self.parser =  XMLLikeParser.XML.value
-        super().__init__(filename, content, dirName,"xml","validation")
+        super().__init__(filename, content, dirName,"xml","validation",size)
     
     def set_content(self):
         message = self.bs4.select_one("Message")
@@ -481,9 +527,9 @@ class SMSTemplate(TWIMLTemplate):
         
 
 class PhoneTemplate(TWIMLTemplate):
-    def __init__(self, filename: str, content: str, dirName: str) -> None:
+    def __init__(self, filename: str, content: str, dirName: str,size=0) -> None:
         self.parser =  XMLLikeParser.XML.value
-        super().__init__(filename, content, dirName,"xml","validation")
+        super().__init__(filename, content, dirName,"xml","validation",size)
     
     def set_content(self):
         super().set_content()

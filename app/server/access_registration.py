@@ -10,7 +10,7 @@ from app.utils.question import FuzzyInputHandler, SimpleInputHandler, ask_questi
 
 from app.utils.prettyprint import printJSON, show, PrettyPrinter_
 from app.utils.validation import ipv4_validator
-from app.definition._ressource import PROTECTED_ROUTES
+from app.definition._ressource import PROTECTED_ROUTES, RESSOURCES
 from app.classes.auth_permission import Role, RoutePermission, PermissionScope
 from app.utils.question import ask_question, ConfirmInputHandler, SimpleInputHandler, FileInputHandler,CheckboxInputHandler
 from app.utils.fileIO import ConfigFile, FDFlag, JSONFile, exist, inputFilePath, writeContent,listFilesExtension
@@ -41,14 +41,10 @@ def register_client_services(set_gen_id:bool):
     configService = Get(ConfigService)
     
     PrettyPrinter_.show(1, print_stack=False,)
-    jwtAuthService.set_generation_id(set_gen_id)
-    if not configService.config_json_app.exists:
-        # TODO not implemented the error
-        return
+    jwtAuthService.revoke_all_tokens()
+    
     # BUG this works only for the first app
-    current_ressources = configService.config_json_app.data[
-        ConfigAppConstant.APPS_KEY][0]['ressources']
-
+    current_ressources = [x.__name__ for x in RESSOURCES.values()]
     client_number = ask_question([NumberInputHandler(
         "Enter the number of clients you want to register", 1, 'client_number', 1, 1,)])['client_number']  # BUG the max value will be 1 for now
     client_number = int(client_number)

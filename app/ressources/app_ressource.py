@@ -29,7 +29,7 @@ async def get_contacts_summary_cache(contact_id:str)->ContactSummary:
 @HTTPRessource(APP_PREFIX,add_prefix=False)
 class AppRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,fileService:FileService,contactService:ContactsService,linkService:LinkService,configService:ConfigService):
         super().__init__()
         self.fileService = fileService

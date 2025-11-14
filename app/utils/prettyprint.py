@@ -21,7 +21,7 @@ pprinter = pprint.PrettyPrinter()
 
 ########################################################################
 
-text = '<<<  N o t i f y r >>>'
+text = '<<<  N o t i f y r  App>>>'
 justify = 'left'
 
 figlet = pyfiglet.Figlet(font='standard')
@@ -283,7 +283,7 @@ class PrettyPrinter:
             self.warning('Press to continue', saveable=False, position='both')
             try:
                 input('')
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, EOFError):
                 self.info(message='Exiting gracefully')
                 exit(0)
         clear_line()

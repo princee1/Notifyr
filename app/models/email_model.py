@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Any, Callable, List, Literal, Optional, Self, TypeVar, TypedDict
+from typing import Any, Callable, List, Literal, Optional, Self, Tuple, TypeVar, TypedDict
 from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 from enum import Enum
 from tortoise import fields, models, Tortoise, run_async
 from tortoise.transactions import in_transaction
-from app.classes.celery import SchedulerModel, SubContentBaseModel
+from app.classes.celery import SchedulerModel, SubContentBaseModel,SubContentIndexBaseModel
 from app.classes.email import MimeType
 from app.classes.mail_provider import SMTPErrorCode
 from app.utils.helper import uuid_v1_mc
@@ -74,14 +74,14 @@ class EmailMetaModel(SubContentBaseModel):
 
 
 
-class EmailTemplateModel(BaseModel):
+class EmailTemplateModel(SubContentIndexBaseModel):
     meta: EmailMetaModel
     data: dict[str, Any]
     attachments: Optional[dict[str, Any]] = {}
     mimeType: MimeType = 'both'
 
 
-class CustomEmailModel(BaseModel):
+class CustomEmailModel(SubContentIndexBaseModel):
     meta: EmailMetaModel
     text_content: str | None = None
     html_content: str | None = None
@@ -149,10 +149,20 @@ def map_smtp_error_to_status(error_code: SMTPErrorCode | str) -> EmailStatus:
 
     return mapping.get(error_code, EmailStatus.FAILED)
 
-class EmailTemplateSchedulerModel(SchedulerModel):
+
+class EmailSignatureModel(BaseModel):
+    template:str
+    data:dict[str,Any] = {}
+
+class BaseEmailSchedulerModel(SchedulerModel):
+    signature:Optional[EmailSignatureModel] = None
+    _signature:Tuple[str,str] = PrivateAttr(None)
+
+class EmailTemplateSchedulerModel(BaseEmailSchedulerModel):
     content: EmailTemplateModel | list[EmailTemplateModel]
 
-class CustomEmailSchedulerModel(SchedulerModel):
+
+class CustomEmailSchedulerModel(BaseEmailSchedulerModel):
     content: CustomEmailModel | list[CustomEmailModel]
 
 

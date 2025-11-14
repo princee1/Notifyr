@@ -1,1 +1,4 @@
-/database/init.sh text eol=lf
+/scripts/*.sh text eol=lf
+/scripts/vault-rotator/*.sh text eol=lf
+
+

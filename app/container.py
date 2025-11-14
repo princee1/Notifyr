@@ -1,5 +1,6 @@
 import asyncio
 from threading import Thread
+from aiorwlock import RWLock
 import injector
 from inspect import signature, getmro
 # from dependencies import __DEPENDENCY
@@ -9,7 +10,7 @@ from app.utils.helper import issubclass_of, SkipCode
 from app.utils.prettyprint import printJSON,PrettyPrinter_
 from typing import TypeVar, Type
 from ordered_set import OrderedSet
-from app.definition._service import S, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, PossibleDependencies, __DEPENDENCY
+from app.definition._service import __MINI_SERVICE_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, PROCESS_SERVICE_REPORT, S, LiaisonDependency, LinkParams, MethodServiceNotExistsError, BaseService, AbstractDependency, AbstractServiceClasses, BuildOnlyIfDependencies, MiniServiceMeta, PossibleDependencies, __DEPENDENCY
 import app.services
 import functools
 
@@ -74,20 +75,29 @@ def isabstract(cls):
 
 class Container():
 
-    def __init__(self, D: list[type],quiet=False,scopes:list[Any]=None) -> None:  # TODO add the scope option
+    def __init__(self, D: list[type],MD:list[Type],quiet=False,scopes:list[Any]=None,build_state:int=DEFAULT_BUILD_STATE,destroy_state:int=DEFAULT_DESTROY_STATE) -> None:  # TODO add the scope option
         self.__app = injector.Injector()
         self.quiet_print = quiet
+
+        self.build_state=build_state
+        self.destroy_state = destroy_state
+
         self.DEPENDENCY_MetaData = {}
         self.__hashKeyAbsResolving: dict = {}
+
+        self.container_lock = RWLock()
 
         self.__D: set[str] = self.__load_baseSet(D)
         dep_count = self.__load_dep(D)
         self.__D: OrderedSet[str] = self.__order_dependency(dep_count)
+        self.D:list[Type[S]] = D
+        self.MD = MD
 
         PrettyPrinter_.show()
         PrettyPrinter_.message('Building the Container... !')
         PrettyPrinter_.space_line()
 
+        #self.__override_mini_service_init()
         self.__buildContainer()
 
     def __bind(self, type_:type, obj:Any, scope=None):
@@ -102,7 +112,9 @@ class Container():
             raise ValueError
         self.__bind(type_, to=obj, scope=scope)
         
-    def get(self, typ: Type[S], scope=None, all=False) -> dict[type, Type[S]] | Type[S]:
+    def get(self, typ: Type[S] |str, scope=None, all=False) -> dict[Type[S], S] | S:
+        typ = self._str_to_service(typ)
+
         if not all and isabstract(typ.__name__):
             raise InvalidDependencyError
 
@@ -114,6 +126,13 @@ class Container():
             return provider
 
         return self.__app.get(typ, scope)
+
+    def _str_to_service(self, typ):
+        if isinstance(typ,str):
+            if not typ in self.DEPENDENCY_MetaData:
+                raise NotInDependenciesError(typ)
+            typ = self.DEPENDENCY_MetaData[typ][DependencyConstant.TYPE_KEY]
+        return typ
 
     def getFromClassName(self, classname: str, scope=None):
         return self.__app.get(self.DEPENDENCY_MetaData[classname][DependencyConstant.TYPE_KEY], scope)
@@ -197,13 +216,19 @@ class Container():
     def __getAbstractResolving(self, typ: type):
         return AbstractDependency[typ.__name__]
 
-    def getSignature(self, t: type | Callable):
+    def getSignature(self, t: type | Callable,accepts_others=False):
         params = signature(t).parameters.values()
         types: list[str] = []
         paramNames: list[str] = []
         for p in params:
             if types.count(p.annotation.__name__) == 1:
                 raise MultipleParameterSameDependencyError
+            
+            if p.annotation.__name__ not in self.DEPENDENCY_MetaData and p.annotation.__name__ != '_empty':
+                if not accepts_others:
+                    raise NoResolvedDependencyError(p.annotation.__name__)
+                else:
+                    continue
 
             types.append(p.annotation.__name__)
             paramNames.append(p.name)
@@ -222,7 +247,6 @@ class Container():
         D = [D] if not isinstance(D,list) else D
         set_d = self.__load_baseSet(D)
         self.__D.update(set_d)
-
 
     def __buildContainer(self):
         D = self.__D.copy()
@@ -339,35 +363,52 @@ class Container():
             pass
         return current_type
 
-    def toParams(self, dep, params_names):
+    def toParams(self, dep, params_names,accept_others=False,scope=None):
         try:
             params = {}
             for i,d in enumerate(dep):
-                obj_dep = self.get(self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY])
+                if d not in self.DEPENDENCY_MetaData:
+                    if not accept_others:
+                        raise KeyError
+                    else:
+                        continue
+                    
+                cls = self.DEPENDENCY_MetaData[d][DependencyConstant.TYPE_KEY]
+                obj_dep = self.get(cls,scope=scope)
                 params[params_names[i]] = obj_dep
             return params
         except KeyError as e :
             raise NoResolvedDependencyError(e.args)
 
-    def __createDep(self, typ: type, params:dict):
+    def __createDep(self, typ: type, params:dict[str,S]):
         flag = issubclass(typ)
         obj: BaseService = typ(**params)
         
         if flag:
-            obj.service_list= list(params.values())
+            dep_services = {}
+
+            for s in params.values():
+                c = s.__class__ 
+                dep_services[c]=s
+                s.used_by_services[obj.__class__] = obj
+            
+            obj.dependant_services= dep_services
             willBuild = self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.FLAG_BUILD_KEY]
             if willBuild:
-                obj._builder()  # create the dependency but not calling the builder
+                obj._builder(build_state=self.build_state)  # create the dependency but not calling the builder
         else:
             # WARNING raise we cant verify the data provided
             pass
+
         return obj
 
-    def need(self, typ: Type[S]) -> Type[S]:
+    def need(self, typ: Type[S]) -> S:
+        typ = self._str_to_service(typ)
+
         if not self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY]:
             dependency: Type[S] = self.get(typ)
             try:
-                dependency._builder()
+                dependency._builder(build_state=self.build_state)
                 self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.BUILD_ONLY_FLAG_KEY] = True
                 return dependency
             except:
@@ -375,25 +416,94 @@ class Container():
         return self.get(typ)
 
     def destroyAllDependency(self, scope=None):
-        raise NotImplementedError
-        for dep in __DEPENDENCY:
-            self.destroyDep(dep, scope)
+        for dep in self.D:
+            dep._destroyer(destroy_state=self.destroy_state)
 
-    def destroyDep(self, typ: type, scope=None):
-        raise NotImplementedError
-        D = self.__app.get(typ, scope)
-        if issubclass(D):  # BUG need to ensure that this a Service type
-            D: BaseService = D  # NOTE access to the intellisense
-            D._destroyer()
+    def destroyDep(self, typ: type, scope=None,all=False,rebuild:bool = True):
+        
+        dependency = self.get(typ, scope,all=all)
+        cache = {}
 
-    def reloadDep(self, typ: type, scope=None):  # TODO
-        pass
+        def __destroy(dep:BaseService,linkParams:LinkParams={}):
+            print(dep.name)
 
+            if dep.name in cache:
+                return 
+            
+            if linkParams.get('destroy_follow_dep',True):
+                dep._destroyer(destroy_state=linkParams.get('destroy_state',self.destroy_state))
+            if rebuild and linkParams.get('rebuild',False):
+                dep._builder(build_state=linkParams.get('build_state',self.build_state),force_sync_verify=True)
+
+            cache[dep.name] = True
+            
+            for x in dep.used_by_services.values():
+                if x.name in cache:
+                    continue
+                linkP =  LiaisonDependency[x.name]
+                linkP = linkP[dep.__class__]
+                __destroy(x,linkParams=linkP)
+        
+        if all: 
+            for d in dependency.values():
+                __destroy(d)
+        else:
+            __destroy(d)
+               
+    def reloadDep(self, typ: type, scope=None,all=True,bypass_destroy=False):
+
+        s:dict[str,BaseService] |BaseService =self.get(typ,scope,False,all)
+        
+        cache = {}
+        def __reload(service:BaseService,link_params:LinkParams={}):
+            print(service.name)
+
+            if service.name in cache:
+                return 
+            
+            if not bypass_destroy and link_params.get('to_destroy',False):
+                service._destroyer(destroy_state=link_params.get('build_state',self.destroy_state))
+            
+            if link_params.get('to_build',False):
+                service._builder(build_state=link_params.get('build_state',self.build_state),force_sync_verify=True)
+
+            cache[service.name] = True
+            
+            for used_s in service.used_by_services.values():
+                if used_s.name in cache:
+                    continue
+
+                linkP =  LiaisonDependency[used_s.name]
+                linkP = linkP[service.__class__]
+                __reload(used_s,linkP)
+
+        if all:
+            for all_s in s.values():
+                __reload(all_s)
+        else:
+            __reload(s)
+        
     def register_new_dep(self,typ:type,scope= None):
         self.__add_dep([typ])
         self.__load_dep([typ])
         self.__inject(typ.__name__)
     
+    def show_dep_graph(self):
+        for d in self.D:
+            s:BaseService= self.get(d)
+            PrettyPrinter_.info(f"=================================== {s.name} ===================================",saveable=False)
+            PrettyPrinter_.json(s.used_by_services ,saveable=False)
+
+    def show_report(self):
+       PrettyPrinter_.json(PROCESS_SERVICE_REPORT,saveable=False)
+
+    def __override_mini_service_init(self):
+        for mini_service,scope in MiniServiceMeta:
+            if mini_service not in self.MD:
+                continue
+            decorator = InjectInMethod(True,scope)
+            mini_service.__init__  = decorator(mini_service.__init__)
+        
     @property
     def dependencies(self) -> list[BaseService]: return [x[DependencyConstant.TYPE_KEY]
                                                   for x in self.DEPENDENCY_MetaData.values()]
@@ -416,12 +526,12 @@ class Container():
 
 CONTAINER: Container = None #Container(__DEPENDENCY)
 
-def build_container(quiet=False,dep=__DEPENDENCY):
+def build_container(quiet=False,dep=__DEPENDENCY,mini_dep=__MINI_SERVICE_DEPENDENCY,build_state=DEFAULT_BUILD_STATE,destroy_state=DEFAULT_DESTROY_STATE):
     PrettyPrinter_.quiet=quiet
     global CONTAINER
-    CONTAINER = Container(dep)
+    CONTAINER = Container(dep,mini_dep,quiet,build_state=build_state,destroy_state=destroy_state)
 
-def InjectInFunction(func: Callable):
+def InjectInFunction(accept_others=True,scope=None):
     """
     The `InjectInFunction` decorator takes the function and inspect it's signature, if the `CONTAINER` can resolve the 
     dependency it will inject the values otherwise it will throw a `NoResolvedDependencyError`. You can call the function with the position parameter 
@@ -453,17 +563,18 @@ def InjectInFunction(func: Callable):
         <__main__.A object at 0x000001A76EC3FB90>
         ok
     """
-    types, paramNames = CONTAINER.getSignature(func)  # ERROR if theres is other parameter that is not in dependencies
-    paramsToInject = CONTAINER.toParams(types, paramNames)
+    def decorator(func: Callable):
+        types, paramNames = CONTAINER.getSignature(func,accept_others)  # ERROR if theres is other parameter that is not in dependencies
+        paramsToInject = CONTAINER.toParams(types, paramNames,accept_others,scope)
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            paramsToInject.update(kwargs)
+            return func(*args,**paramsToInject)
+        return wrapper
+    return decorator
 
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        paramsToInject.update(kwargs)
-        return func(**paramsToInject)
-    return wrapper
 
-
-def InjectInMethod(func: Callable):
+def InjectInMethod(accept_others=False,scope=None):
     """
     The `InjectInConstructor` decorator takes the __init__ function from a class and inspect it's signature, if the `CONTAINER` can resolve the 
     dependency it will inject the values otherwise it will throw a `NoResolvedDependencyError`. You must call the function with the position parameter 
@@ -508,23 +619,24 @@ def InjectInMethod(func: Callable):
     >>> TypeError: Test.__init__() missing 2 required positional arguments: 'securityService' and 'test'
 
     """
-    types, paramNames = CONTAINER.getSignature(func) # ERROR if the function is not a method and if theres is other parameter that is not in depencies
-    del types[0]
-    del paramNames[0]
-    paramsToInject = CONTAINER.toParams(types, paramNames)
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        paramsToInject.update(kwargs)
-        return func(*args, **paramsToInject)
-    return wrapper
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            types, paramNames = CONTAINER.getSignature(func,accept_others) # ERROR if the function is not a method and if theres is other parameter that is not in depencies
+            del types[0]
+            del paramNames[0]
+            paramsToInject = CONTAINER.toParams(types, paramNames,accept_others,scope)
+            paramsToInject.update(kwargs)
+            return func(*args, **paramsToInject)
+        return wrapper
+    return decorator
 
 def Injectable(scope: Any |None = None ):
     def class_decorator(cls:type) -> type:
         return cls
     return class_decorator
 
-def Get(typ: Type[S], scope=None, all=False) -> dict[str, Type[S]] | Type[S]:
+def Get(typ: Type[S]|str, scope=None, all=False) -> dict[Type[S], S] | S:
     """
     The `Get` function retrieves a service from a container based on the specified type, scope, and
     whether to retrieve all instances if it`s an AbstractService  [or in a multibind context].
@@ -544,22 +656,21 @@ def Get(typ: Type[S], scope=None, all=False) -> dict[str, Type[S]] | Type[S]:
     """
     return CONTAINER.get(typ, scope=scope, all=all)
 
-def Register(typ:Type[S],scope=None)->Type[S]:
+def Register(typ:Type[S],scope=None)->S:
     CONTAINER.register_new_dep(typ,scope)
     return Get(typ,scope)
 
-def Need(typ: Type[S]) -> Type[S]:
+def Need(typ: Type[S]|str) -> S:
     """
     The function `Need` takes a type parameter `Service` and returns the result of calling the `need`
     method on the `CONTAINER` object with the specified type.
     """
     return CONTAINER.need(typ)
 
-
 def Bind(type_:type, obj:Any, scope=None):
     return CONTAINER.bind(type_,obj,scope)
 
-def GetDepends(typ:type[S])->Type[S] | dict[str,Type[S]]:
+def GetDepends(typ:type[S])->Type[S] | dict[str,S]:
     def depends():
         return Get(typ)
     return depends

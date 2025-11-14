@@ -5,12 +5,12 @@ from logging import Logger, LogRecord
 import sqlite3
 
 
-@_service.Service
+@_service.Service()
 class LoggerService(_service.BaseService):
 
     def __init__(self, configService: ConfigService) -> None:
         super().__init__()
         self.configService = configService
     
-    def build(self):
+    def build(self,build_state=-1):
        ...

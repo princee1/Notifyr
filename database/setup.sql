@@ -105,3 +105,15 @@ CREATE DOMAIN public.DeviceType AS VARCHAR(50) CHECK (
         
     )
 );
+
+
+CREATE ROLE vault_ntrfyr_app_role;
+
+GRANT CONNECT ON DATABASE notifyr TO vault_ntrfyr_app_role;
+
+GRANT USAGE ON SCHEMA contacts, security, public, links, twilio, emails TO vault_ntrfyr_app_role;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA contacts, security, public, links, twilio, emails TO vault_ntrfyr_app_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA contacts, security, public, links, twilio, emails
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO vault_ntrfyr_app_role;

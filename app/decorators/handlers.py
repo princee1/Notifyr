@@ -1,30 +1,45 @@
 from asyncio import CancelledError
 import asyncio
+import traceback
 from typing import Callable
+
+from fastapi.exceptions import ResponseValidationError
+from h11 import LocalProtocolError
+import hvac
+from minio import S3Error, ServerError
+import requests
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
-from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
+from app.classes.template import SchemaValidationError, SkipTemplateCreationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
 from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
-from app.definition._service import MethodServiceNotExistsError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceTemporaryNotAvailableError
+from app.definition._service import MethodServiceNotExistsError, MethodServiceNotImplementedError, ServiceDoesNotExistError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceNotImplementedError, ServiceTemporaryNotAvailableError, StateProtocolMalFormattedError
 from fastapi import status, HTTPException
 from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
+from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDoesNotExistsError,MiniServiceCannotBeIdentifiedError
 
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
+from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
 from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
-from app.services.assets_service import AssetNotFoundError
+from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
+from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
 from requests.exceptions import SSLError, Timeout
 
 from app.services.logger_service import LoggerService
+from pydantic import BaseModel, ValidationError as PydanticValidationError
+from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
+from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
+from aiomcache.exceptions import ClientException, ValidationException 
+from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
 
 
 class ServiceAvailabilityHandler(Handler):
@@ -35,11 +50,11 @@ class ServiceAvailabilityHandler(Handler):
 
         except ServiceNotAvailableError as e:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Service not available')
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Service not available')
 
         except MethodServiceNotAvailableError as e:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Method service not available')
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Method service not available')
 
         except MethodServiceNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -47,8 +62,25 @@ class ServiceAvailabilityHandler(Handler):
 
         except ServiceTemporaryNotAvailableError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                                detail='Service temporary not available')
+                                detail={
+                                    'service':e.service,
+                                    'message':'Service temporary not available'
+                                })
+        
+        except ServiceNotImplementedError as e:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail='Service not implemented')
 
+        except MethodServiceNotImplementedError as e:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail='Method Service not implemented')
+            
+        except StateProtocolMalFormattedError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                detail='State Protocol MalFormatted')
+
+        except ServiceDoesNotExistError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                detail='Service does not exists')
+            
 
 class TemplateHandler(Handler):
 
@@ -71,28 +103,33 @@ class TemplateHandler(Handler):
             )
 
         except TemplateBuildError as e:
+            detail = e.args[0] if e.args and len(e.args)>=1 else 'Cannot build template with data specified'
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='Cannot build template with data specified')
+                                detail={'detail': detail,
+                                'message': 'Template build error'})
 
         except TemplateValidationError as e:
             error = e.args[0]
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'details': error,
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+                'error': error,
                 'message': 'Validation Error'
             })
     
         except TemplateFormatError as e:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
                 'message': 'Template format is invalid',
-                'details': e.args[0]
+                'error': e.args[0]
             })
 
         except TemplateCreationError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'Failed to create template',
-                'details': e.args[0]
+                'error': e.args[0]
             })
+
         except ValueError as e:
+            print(e)
+            traceback.print_exc()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
                 'message':'Could not be able to properly display the value'
             })
@@ -100,9 +137,11 @@ class TemplateHandler(Handler):
         except SchemaValidationError as e:
             error = e.args[0]
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
-                'details': error,
+                'error': error,
                 'message': 'Validation Error'
             })
+        except SkipTemplateCreationError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,detail='Couldnt create a template')
 
 
 class WebSocketHandler(Handler):
@@ -179,7 +218,7 @@ class TwilioHandler(Handler):
             })
 
         except SSLError as e:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'SSL error',
             })
 
@@ -389,12 +428,29 @@ class ValueErrorHandler(Handler):
 
 
 class MotorErrorHandler(Handler):
-    ...
+    
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+
+        except DocumentDoesNotExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f'Document with id {e.id} does not exists'
+            )
+            
+        except DocumentExistsUniqueConstraintError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message":f"The document with the values entered {'already exists' if e.exists  else 'does not exists'}"
+                }
+            )
 
 
 class AsyncIOHandler(Handler):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, loggerService: LoggerService):
         super().__init__()
         self.loggerService = loggerService
@@ -405,7 +461,9 @@ class AsyncIOHandler(Handler):
             return await function(*args, **kwargs)
         
         except asyncio.CancelledError as e:
-            ...
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
+                'message': 'A Task was Cancelled',
+            })
 
         except LockNotFoundError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
@@ -502,3 +560,267 @@ async def handle_http_exception(function, *args, **kwargs):
             raise ServerFileError('app/static/error-400-page/index.html',e.status_code)
 
         raise ServerFileError('app/static/error-500-page/index.html',e.status_code)
+    
+
+
+class FastAPIHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+
+        except ResponseValidationError as e :
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Error while sending the response","error":e.errors()})
+
+        except LocalProtocolError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail=e.error_status_hint)
+
+
+
+class GlobalVarHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except GlobalKeyAlreadyExistsError as e:
+            raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,detail=f"Key '{e.key}' already exists")
+            
+        
+        except GlobalKeyDoesNotExistsError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f"Key '{e.key}' does not exists or it is not a JSON")
+            
+
+class ProfileHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        
+        except PydanticValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors(include_url=False,include_context=False))
+        
+        except ProfileModelTypeDoesNotExistsError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,)
+    
+        except ProfileNotAvailableError as e:
+            raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE)
+        
+        except ProfileHasNotCapabilitiesError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+
+        except ProfileDoesNotExistsError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    
+        except ProfileNotSpecifiedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    
+        except ProfileModelRequestBodyError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,detail=e.message)
+        
+        except ProfileTypeNotMatchRequest as e:
+            if e.motor_fallback:
+                raise DocumentDoesNotExistsError(e.profile)
+            
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    
+class PydanticHandler(Handler):
+
+    def handle(self, function, *args, **kwargs):
+        try:
+            return super().handle(function, *args, **kwargs)
+        except PydanticValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors(include_url=False,include_context=False))
+        
+class VaultHandler(Handler):
+    
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except hvac.exceptions.InvalidRequest as e:
+            raise HTTPException(500,)
+
+        except hvac.exceptions.Forbidden as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+        except hvac.exceptions.Unauthorized as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+        except requests.exceptions.ReadTimeout:
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,detail="Vault server did not respond in time")
+
+
+class MiniServiceHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except MiniServiceAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="MiniService already exists"
+            )
+        except MiniServiceDoesNotExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="MiniService does not exist"
+            )
+        except MiniServiceCannotBeIdentifiedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+               detail="MiniService cannot be identified"
+            )
+
+class S3Handler(Handler):
+
+    error_codes_to_http_codes= {
+        'NoSuchKey':status.HTTP_404_NOT_FOUND
+    }
+
+    async def handle(self, function:Callable, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except S3Error as e:
+
+            raise HTTPException(
+                status_code=self.error_codes_to_http_codes.get(e.code,status.HTTP_500_INTERNAL_SERVER_ERROR),
+                detail={
+                    'message':'S3 Service error occurred',
+                    'error_code':e.code,
+                    'error_message':e.message,
+                    'request_id':e.request_id,
+                    'resource':e.resource,
+                    'object_name':e.object_name
+                }
+            )
+    
+        except ServerError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Failed to build S3 Service due to server error: {str(e)}'
+            )
+
+class FileNamingHandler(Handler):
+
+    async def handle(self,function: Callable, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except AssetTypeNotAllowedError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Asset type not allowed for upload."
+            )
+
+        except AssetTypeNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Asset type not found."
+            )
+
+        except MultipleExtensionError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Multiple file extensions detected; only one is allowed."
+            )
+
+        except ExtensionNotAllowedError as e :
+            print(e.args)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The file extension is not allowed for this asset type." if not e.args else e.args[0]
+            )
+        except AssetConfusionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
+            )
+
+class RedisHandler(Handler):
+    ...
+
+class MemCachedHandler(Handler):
+
+    async def handle(self,function:Callable,*args,**kwargs):
+
+        try:
+            return await function(*args,**kwargs)
+        
+        except MemCachedTypeValueError as e:
+            ...
+        
+        except MemCacheNoValidKeysDefinedError as e:
+            ...
+        
+        except MemcacheClientError as e:
+            ...
+        
+        except MemcacheServerError as e:
+            ...
+        
+        except MemcacheUnexpectedCloseError as e:
+            ...
+        
+        except ValidationException as e:
+            ...
+        
+        except ClientException as e:
+            ...
+    
+from app.classes.cost_definition import (
+    CostException,
+    PaymentFailedError,
+    InsufficientCreditsError,
+    InvalidPurchaseRequestError,
+    CreditDeductionFailedError,
+    CurrencyNotSupportedError,
+    ProductNotFoundError,
+)
+
+class CostHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except PaymentFailedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={'message': 'Payment gateway failure', 'error': str(e)}
+            )
+
+        except InsufficientCreditsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={'message': 'Insufficient credits to complete the purchase'}
+            )
+
+        except InvalidPurchaseRequestError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'Invalid purchase request', 'error': str(e)}
+            )
+
+        except CreditDeductionFailedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={'message': 'Credit deduction failed', 'error': str(e)}
+            )
+
+        except CurrencyNotSupportedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'Currency not supported', 'error': str(e)}
+            )
+
+        except ProductNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={'message': 'Product not found', 'error': str(e)}
+            )
+
+        except CostException as e:
+            # generic cost-related errors fallback
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={'message': 'Cost processing error', 'error': str(e)}
+            )

@@ -6,7 +6,7 @@ from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request, Response,status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
 from app.services.config_service import ConfigService
-from app.utils.constant import HTTPHeaderConstant
+from app.utils.constant import FastAPIConstant, HTTPHeaderConstant
 from app.utils.helper import parse_value, reverseDict
 from app.container import Get
 
@@ -119,11 +119,12 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
             value = parse_value(value,return_none)
         
         if value == None and raise_except:
-            raise HTTPException(400,detail=f'Query {name} not specified')
+            raise HTTPException(400,detail=f'Query {name} not properly specified',headers=FastAPIConstant.OO_SCOPE_HEADERS)
 
         if checker:
-            if not checker(value):
-                raise HTTPException(400,detail='Error in params') # TODO raise a better error
+            mess = checker(value)
+            if mess != None:
+                raise HTTPException(400,detail=f'Error in params: {mess}',headers=FastAPIConstant.OO_SCOPE_HEADER) # TODO raise a better error
         return value
     return depends
 

@@ -7,18 +7,20 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData, MustHave, MustHaveRoleSuchAs, RefreshPermission, Role, TokensModel, parse_authPermission_enum
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.decorators.handlers import ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
+from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.depends.funcs_dep import GetClient, get_client_by_password,verify_admin_signature, verify_admin_token,verify_twilio_token
 from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, TwilioPermission, UserPermission, same_client_authPermission
 from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ChallengeORMCache, ClientORMCache
 from app.errors.security_error import AuthzIdMisMatchError, ClientDoesNotExistError,ClientTokenHeaderNotProvidedError, CouldNotCreateAuthTokenError
 from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ChallengeORM, ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
+from app.services.database_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
+from app.services.setting_service import SettingService
 from app.services.twilio_service import TwilioService
 from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip
 from app.utils.constant import ConfigAppConstant
@@ -29,24 +31,27 @@ REFRESH_AUTH_PREFIX = 'refresh'
 GENERATE_AUTH_PREFIX = 'generate'
 AUTH_PREFIX = 'auth'    
 
-
+@PingService([TortoiseConnectionService])
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler)   
 @UsePipe(ForceClientPipe)
-@UseHandler(ServiceAvailabilityHandler,SecurityClientHandler)
+@UseHandler(ServiceAvailabilityHandler,SecurityClientHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission(True))
 @HTTPRessource(REFRESH_AUTH_PREFIX)
 class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     
-    @InjectInMethod
-    def __init__(self,adminService:AdminService,twilioService:TwilioService):
+    @InjectInMethod()
+    def __init__(self,adminService:AdminService,twilioService:TwilioService,jwtService:JWTAuthService):
         BaseHTTPRessource.__init__(self)
         IssueAuthInterface.__init__(self,adminService)
         self.twilioService = twilioService
+        self.jwtService = jwtService
 
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
     @UsePipe(RefreshTokenPipe)
     @UseRoles(roles=[Role.REFRESH])
     @UseHandler(ORMCacheHandler)
+    @UseServiceLock(SettingService,JWTAuthService,lockType='reader')
     @UsePermission(UserPermission,JWTRefreshTokenPermission)
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard,)
     @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST])
@@ -54,12 +59,12 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         refreshPermission:RefreshPermission = tokens
         async with in_transaction():    
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
             client.authenticated = True # NOTE just to make sure
             await client.save()
 
         await ChallengeORMCache.Invalid(client.client_id)
-        await ClientORMCache.Invalid(client.client_id)
+        #await ClientORMCache.Invalid(client.client_id)
         
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token}, "message": "Tokens successfully refreshed"})
 
@@ -67,31 +72,35 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
     @UsePipe(RefreshTokenPipe)
     @UseHandler(ORMCacheHandler)
+    @UseServiceLock(SettingService,JWTAuthService,lockType='reader')
     @UseRoles(roles=[Role.ADMIN,Role.REFRESH],options=[MustHave(Role.ADMIN)])
     @UsePermission(AdminPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_signature)], )
     async def refresh_admin_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
         async with in_transaction():    
-
             refreshPermission:RefreshPermission = tokens
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
 
-        await ClientORMCache.Invalid(client.client_id)
+        #await ClientORMCache.Invalid(client.client_id)
+        await ChallengeORMCache.Invalid(client.client_id)
         
+
         return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token,}, "message": "Tokens successfully refreshed"})
     
 
     @UsePipe(RefreshTokenPipe)
     @UseHandler(SecurityClientHandler)
+    @UseServiceLock(SettingService,JWTAuthService,lockType='reader')
     @UseRoles(roles=[Role.ADMIN,Role.REFRESH,Role.TWILIO],options=[MustHaveRoleSuchAs(Role.ADMIN,Role.TWILIO)])
     @UsePermission(TwilioPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_twilio_token)],mount=False )
     async def refresh_twilio_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
+        return
         async with in_transaction():    
             refreshPermission:RefreshPermission = tokens
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
 
         status_code = await self.twilioService.update_env_variable(auth_token, refresh_token)
 
@@ -99,17 +108,18 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
                 return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
         else:
-            return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,content='Could not set auth and refresh token')
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED,content='Could not set auth and refresh token')
 
-
+@PingService([TortoiseConnectionService])
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
-@UseHandler(TortoiseHandler,ServiceAvailabilityHandler)
+@UseHandler(TortoiseHandler,ServiceAvailabilityHandler,AsyncIOHandler)
 @HTTPRessource(GENERATE_AUTH_PREFIX)
 class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     admin_roles = [Role.ADMIN,Role.CUSTOM,Role.CONTACTS,Role.SUBSCRIPTION,Role.REFRESH,Role.CLIENT,Role.PUBLIC]
     twilio_roles = admin_roles + [Role.TWILIO]
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,adminService:AdminService,configService:ConfigService,jwtAuthService:JWTAuthService,twilioService:TwilioService):
         BaseHTTPRessource.__init__(self)
         #BaseHTTPRessource.__init__(self,dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
@@ -125,17 +135,14 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             raise ClientDoesNotExistError()
                 
         return client
-
-    def _create_superuser_auth_permission(self,admin:ClientORM,roles,allowed_assets=[],allowed_routes={})->AuthPermission:
-        return AuthPermission(roles=roles,scope=admin.client_scope,allowed_assets=allowed_assets,allowed_routes=allowed_routes) #TODO add more routes
     
     def _decode_and_verify(self, client: ClientORM, x_client_token):
-        authPermission: AuthPermission = self.jwtAutService.decode_token(x_client_token)
+        authPermission: AuthPermission = self.jwtAutService._decode_token(x_client_token)
         
         if authPermission["client_id"] != str(client.client_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
 
-        if authPermission['generation_id'] != self.jwtAutService.generation_id:
+        if authPermission['generation_id'] != self.jwtAutService.GENERATION_ID:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
         
         if authPermission["issued_for"] != client.issued_for:
@@ -150,8 +157,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         async with in_transaction():
             client = await self._get_client_by_type(client_type)
             await raw_revoke_challenges(client)
-            authPermission = self._create_superuser_auth_permission(client,roles)
-            auth_token, refresh_token = await self.issue_auth(client,authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
         
         if auth_token == None:
             raise CouldNotCreateAuthTokenError
@@ -162,6 +168,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
+    @UseServiceLock(SettingService,JWTAuthService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
     async def issue_admin_auth(self, request: Request,):
         #TODO Protect requests
@@ -172,10 +179,11 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
+    @UseServiceLock(SettingService,JWTAuthService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/twilio/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)],mount=False)
     async def issue_twilio_auth(self,request:Request):
         
-        auth_token, refresh_token = await self._create_superuser_auth(ClientType.Twilio,self.twilio_roles)
+        auth_token, refresh_token = await self._create_superuser_auth(ClientType.Twilio)
         status_code = await self.twilioService.update_env_variable(auth_token,refresh_token)
 
         if status_code == status.HTTP_200_OK:
@@ -183,11 +191,12 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         else:
             return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,content='Could not set auth and refresh token')
         
-    @UseLimiter(limit_value='1/day',per_method=True)
+    @UseLimiter(limit_value='1/day')
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
     @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
+    @UseServiceLock(SettingService,JWTAuthService,lockType='reader')
     @UsePermission(UserPermission(accept_none_auth=True))
     @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST])
     async def self_issue_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None)):
@@ -203,7 +212,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
                 raise AuthzIdMisMatchError
             
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client, authPermission)
+            auth_token, refresh_token = await self.issue_auth(client)
             
             await client.save()
 
@@ -213,12 +222,12 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
 
     @UsePipe(ForceClientPipe)
-    @UseLimiter(limit_value='1/day',per_method=True)
+    @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseGuard(AuthenticatedClientGuard)
     @UsePermission(UserPermission(accept_none_auth=True))
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
-    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.DELETE])
+    @BaseHTTPRessource.HTTPRoute('/client/disconnect/', methods=[HTTPMethod.DELETE])
     async def self_revoke_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None),ip_address:str=Depends(get_client_ip)):
         if x_client_token == None:
             raise ClientTokenHeaderNotProvidedError 

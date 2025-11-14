@@ -1,3 +1,4 @@
+import argparse
 from enum import Enum
 from typing import Any,Literal
 import phonenumbers
@@ -11,6 +12,47 @@ import re
 import ipaddress
 from .transformer import transform
 from langcodes import Language
+
+
+def port_validator(value: str|int) -> int:
+    try:
+        if not isinstance(value,int):
+            port = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value} is not an integer")
+
+    if not (1 <= port <= 65535):
+        raise argparse.ArgumentTypeError(f"{port} is not a valid TCP port")
+    
+    return port
+
+def host_validator(value: str) -> str:
+    # reject if scheme looks present
+    if "://" in value:
+        raise argparse.ArgumentTypeError(f"{value!r} must not include scheme (e.g. http://)")
+
+    # reject if port is included (IPv4 or hostname case)
+    if ":" in value and not re.match(r'^\[.*\]$', value):
+        # IPv6 literal may contain ":", but must be enclosed in [ ]
+        raise argparse.ArgumentTypeError(f"{value!r} must not include port")
+
+    # If IPv6 in [addr] format, strip brackets for validation
+    candidate = value.strip("[]")
+
+    # try IP first
+    try:
+        ipaddress.ip_address(candidate)
+        return candidate
+    except ValueError:
+        pass
+
+    # fallback: allow simple hostname (RFC 1123 style)
+    if re.match(r'^[a-zA-Z0-9.-]+$', candidate):
+        return candidate
+
+    raise argparse.ArgumentTypeError(f"{value!r} is not a valid host address")
+
+#######################                      #################################
 
 
 def ipv4_validator(ip):

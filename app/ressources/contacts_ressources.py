@@ -6,15 +6,16 @@ from fastapi.responses import JSONResponse
 from app.classes.auth_permission import MustHave, MustHaveRoleSuchAs, Role
 from app.container import Get,InjectInMethod
 from app.decorators.guards import ActiveContactGuard, ContactActionCodeGuard, RegisteredContactsGuard
-from app.decorators.handlers import ContactsHandler, TemplateHandler, TortoiseHandler, handle_http_exception
+from app.decorators.handlers import AsyncIOHandler, ContactsHandler, TemplateHandler, TortoiseHandler, handle_http_exception
 from app.depends.funcs_dep import get_contact_permission, Get_Contact, get_subs_content,verify_twilio_token
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ContactORMCache,ContactSummaryORMCache
 from app.models.contacts_model import AppRegisteredContactModel, ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
-from app.services.celery_service import TaskService, CeleryService
+from app.services.task_service import TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
+from app.services.database_service import TortoiseConnectionService
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.twilio_service import SMSService, CallService
@@ -33,13 +34,15 @@ get_contacts = Get_Contact(False,False)
        
 ##############################################                   ##################################################
 
-@UseHandler(TortoiseHandler)
+@PingService([TortoiseConnectionService])
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
+@UseHandler(TortoiseHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @UseRoles([Role.SUBSCRIPTION])
 @HTTPRessource(SUBSCRIPTION_PREFIX)
 class ContentSubscriptionRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,contactsService:ContactsService,subscriptionService:SubscriptionService):
         super().__init__()
         self.contactsService = contactsService
@@ -77,14 +80,15 @@ class ContentSubscriptionRessource(BaseHTTPRessource):
         return JSONResponse(content={"detail": "Subscription updated", "content": subs_content}, status_code=status.HTTP_200_OK)
 
 ##############################################                   ##################################################
-@UseHandler(TortoiseHandler, ContactsHandler)
+@UseHandler(TortoiseHandler, ContactsHandler,AsyncIOHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
-@PingService([ContactsService])
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
+@PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_SUBSCRIPTION_PREFIX)
 class ContactsSubscriptionRessource(BaseHTTPRessource):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, contactService: ContactsService, subscriptionService: SubscriptionService):
         super().__init__()
         self.contactService = contactService
@@ -159,14 +163,15 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
         return await self.subscriptionService.get_contact_subscription(contact, subs_content)
         
 
-@UseHandler(TortoiseHandler,ContactsHandler)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
+@UseHandler(TortoiseHandler,ContactsHandler,AsyncIOHandler)
 @UseRoles([Role.CONTACTS])
 @UsePermission(JWTRouteHTTPPermission)
-@PingService([ContactsService])
+@PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_SECURITY_PREFIX)
 class ContactSecurityRessource(BaseHTTPRessource):
     
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,securityService:SecurityService,jwtService:JWTAuthService,contactsService:ContactsService,celeryService:CeleryService ):
         super().__init__()
         self.securityService = securityService
@@ -220,11 +225,12 @@ class ContactSecurityRessource(BaseHTTPRessource):
 
 
 #@UseHandler(handle_http_exception)
-@UseHandler(TortoiseHandler, ContactsHandler)
-@PingService([ContactsService])
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
+@UseHandler(TortoiseHandler, ContactsHandler,AsyncIOHandler)
+@PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
 class ContactsCRUDRessource(BaseHTTPRessource):
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: TaskService, emailService: EmailSenderService, smsService: SMSService):
         super().__init__()
         self.contactsService = contactsService
@@ -278,10 +284,10 @@ class ContactsCRUDRessource(BaseHTTPRessource):
         await contact.delete()
         return JSONResponse(content={"detail": "Contact deleted", "contact":content_data}, status_code=status.HTTP_200_OK)
 
-
-@UseHandler(TortoiseHandler, ContactsHandler)
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
+@UseHandler(TortoiseHandler, ContactsHandler,AsyncIOHandler)
 @UseRoles([Role.CONTACTS])
-@PingService([ContactsService])
+@PingService([ContactsService,TortoiseConnectionService])
 @HTTPRessource(CONTACTS_PREFIX, routers=[ContactsCRUDRessource,ContactSecurityRessource,ContentSubscriptionRessource, ContactsSubscriptionRessource,])
 class ContactsRessource(BaseHTTPRessource):
 

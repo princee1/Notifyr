@@ -1,35 +1,31 @@
 services:
+
+  memcached:
+    image: memcached:latest
+    container_name: memcached
+    ports:
+      - "11211:11211"
+    command: memcached -m 64 -vv
+    restart: unless-stopped
+
   redis:
-    image: redis #Queue for the taks
+    image: redis:latest #Queue for the taks
     container_name: redis
     restart: always
     ports:
       - 6379:6379
     volumes:
       - redis-data:/data
-  
-  redis-commander:
-    container_name: redis-commander
-    hostname: redis-commander
-    image: rediscommander/redis-commander:latest
-    restart: always
-    depends_on:
-      - redis
-    environment:
-      - REDIS_HOSTS=local:redis:6379
-    ports:
-      - 8081:8081
 
   reacherhq:
     image: reacherhq/backend
     container_name: reacherhq
     ports:
-      - "8080:8080"
-      
-    
+      - "8040:8040"
+
   mongodb:
-    image: mongo:latest
-    container_name: my-mongo
+    image: mongo:8.0-noble
+    container_name: mongodb
     restart: always
     ports:
       - "27017:27017"
@@ -38,69 +34,169 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-  
+      MONGO_INITDB_DATABASE: notifyr
+      
   postgres:
     build:
       context: .
       dockerfile: docker/Dockerfile.postgres
     image: postgres:15
-    container_name: notifyr-postgres
+    container_name: postgres
     restart: always
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${POSTGRES_USER} 
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: notifyr-pgadmin
-    restart: always
-    hostname: pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      POSTGRES_DB: notifyr
+    
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    build:
+      args:
+        - ASSETS_STORAGE_LIMIT=${ASSETS_STORAGE_LIMIT:-500MB}
+        - STATIC_STORAGE_LIMIT=${STATIC_STORAGE_LIMIT:-500MB}
+        - S3_MODE=dev
+      context: .
+      dockerfile: docker/Dockerfile.minio
     ports:
-      - "8080:8088"
-    depends_on:
-      - postgres
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+      - minio-secret:/minio/secrets
+    environment:
+      - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
+      - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
     
-  celery:
-    image: python:3.11-slim
-    command: ["./spawn_celery_worker.sh", "30" ]
-    container_name: notifyr-worker
+    depends_on:
+      - redis
+    
+  vault:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.vault
+      args:
+        - S3_CRED_TYPE=${S3_CRED_TYPE:-MINIO} #MINIO (minio plugin)  || AWS (aws engine)
+    container_name: vault
+    labels:
+      - com.docker.compose.service=vault
+    image: hashicorp/vault:latest
+    cap_add: ["IPC_LOCK"]
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_CONTAINER_READY: "false"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      AWS_VAULT_USER: set_user_in_container_start
+      AWS_VAULT_PASSWORD: set_password_in_container_start
+      S3_HOST: ${S3_HOST}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      MONGO_HOST: ${MONGO_HOST}
+    volumes:
+      - vault-data:/vault/data
+      - vault-shared:/vault/shared
+      - vault-secrets:/vault/secrets
+      - vault-audit:/vault/logs
+      - minio-secret:/minio/secrets:ro
+
+    depends_on:
+      - mongodb
+ 
+  app:
+    image: notifyr:fastapi
+    #container_name: ntfyr-app
+    labels:
+      - "com.docker.compose.service=app"
+    command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
+    #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
+    ports:
+      - 8088:8088
+    volumes:
+      - ./costs.json:/run/secrets/costs:ro
+      - vault-shared:/vault/shared:ro
+      - vault-secrets:/vault/secrets:ro
     build:
       context: ./
       dockerfile: Dockerfile
-    restart: always
+    environment:
+      - MODE=prod
     env_file:
       - .env
     depends_on:
       - redis
-    
-  redbeat:
-    container_name: redbeat
-    image: python:3.11-slim
+      - mongodb
+
+  balancer:
+    image: notifyr:balancer
+    #container_name: ntfyr-balancer
     build:
-      context: ./
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/Dockerfile.balancer
+    environment:
+      - ADDR=0.0.0.0:8088
+    env_file:
+      - ./balancer/.env
+    ports:
+      - 8080:8080
+
+  worker:
+    image: notifyr:celery
+    command: ["./spawn_celery_worker.sh", "1", "false"]
+    #container_name: ntfyr-worker
+    # deploy:
+    #   replicas: 3
+    # labels:
+    #   - "com.docker.compose.service=worker"
+    volumes:
+      - vault-shared:/vault/shared
+      - vault-secrets:/vault/secrets
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.celery
+    restart: always
+    environment:
+      - MODE=prod
     env_file:
       - .env
-    restart: always
     depends_on:
       - redis
-    command: ["make ", "redbeat"]
-    
+      # - beat
+
+  beat:
+    image: notifyr:celery
+    command: ["make", "redbeat"]
+    container_name: beat
+    labels:
+      - com.docker.compose.service=beat
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.celery
+    restart: always
+    environment:
+      - MODE=prod
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
   flower:
-    image: python:3.11-slim
+    image: notifyr:flower
     command: ["make", "flower"]
-    container_name: flower
+    #container_name: ntfyr-flower
+    # labels:
+    #   - com.docker.compose.servie=flower
     build:
-      context: ./
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/Dockerfile.celery
     restart: always
     env_file:
       - .env
@@ -111,7 +207,7 @@ services:
 
   neo4j:
     image: neo4j:5.15
-    container_name: neo4j
+    container_name: ntfyr-neo4j
     restart: unless-stopped
     ports:
       - "7687:7687"
@@ -124,10 +220,10 @@ services:
       - NEO4J_dbms_default__database=${NEO4J_DATABASE}
 
     volumes:
-        - neo4j_data:/data
-        - neo4j_logs:/logs
-        - neo4j_conf:/conf
-  
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_conf:/conf
+
   prometheus:
     image: prom/prometheus
     container_name: prometheus
@@ -136,24 +232,10 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-  
 
-  twilio:
-    image: node:20.19.0-slim
-    container_name: local-twilio
-    restart: always
-    build:
-      context: ./docker/
-      dockerfile: Dockerfile.twilio
-    ports:
-      - "3000:3000"
-    environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-      - NGROK_URL=${NGROK_URL}
-    
   pgbouncer:
     image: edoburu/pgbouncer
-    container_name: notifyr-pgbouncer
+    #container_name: ntfyr-pgbouncer
     restart: always
     ports:
       - "6432:6432" # PgBouncer listens on port 6432
@@ -161,14 +243,44 @@ services:
       - ./docker/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
       - ./docker/userlist.txt:/etc/pgbouncer/userlist.txt
     environment:
-      - DB_HOST=notifyr-postgres
+      - DB_HOST=ntfyr-postgres
       - DB_PORT=5432
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
     depends_on:
       - postgres
-    
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    hostname: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: test@test.com
+      PGADMIN_DEFAULT_PASSWORD: test
+    ports:
+      - "7070:7070"
+    depends_on:
+      - postgres
+
+  redis-commander:
+    container_name: redis-commander
+    hostname: redis-commander
+    image: rediscommander/redis-commander:latest
+    restart: always
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - 6060:6060
+      
 volumes:
+  vault-data: {}
+  vault-shared: {} # holds secret_id
+  vault-secrets: {} # holds root_token/unseal_key (optional, only for admin access)
+  vault-audit: {}
+
   mongo-data:
     driver: local
 
@@ -183,3 +295,19 @@ volumes:
   neo4j_conf:
   redis-data:
     driver: local
+  
+  minio-data: {}
+  minio-secret: {}
+
+secrets:
+  approle_role_id:
+    file: ./bootstrap/role_id.txt # created after first container init
+
+  minio_root_user:
+    file: ./secrets/minio_root_user.txt
+  minio_root_password:
+    file: ./secrets/minio_root_password.txt
+
+networks:
+  notifyr-net:
+    driver: bridge

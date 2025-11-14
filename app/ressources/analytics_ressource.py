@@ -1,17 +1,25 @@
 
 from fastapi import Depends, Request
 from app.classes.auth_permission import Role
-from app.decorators.handlers import TortoiseHandler
+from app.decorators.handlers import AsyncIOHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, UseHandler, UsePermission, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, UseServiceLock, UseHandler, UsePermission, UseRoles,HTTPMethod
 from app.depends.dependencies import get_auth_permission
+from app.services.database_service import TortoiseConnectionService
 
+@PingService([TortoiseConnectionService])
+@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseRoles([Role.ADMIN])
-@UseHandler(TortoiseHandler)
+@UseHandler(TortoiseHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('analytics')
 class AnalyticsRessource(BaseHTTPRessource):
 
+    @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.OPTIONS])
+    def analytics_options(self):
+        return {
+
+        }
     
     @BaseHTTPRessource.Get('/email/', mount=False)
     async def fetch_email_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):
