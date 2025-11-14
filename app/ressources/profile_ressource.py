@@ -123,7 +123,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return await self.profileService.update_meta_profile(profileModel)
     
     @PingService([HCVaultService,TaskService,CeleryService])
-    @UseServiceLock(HCVaultService,ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler,PydanticHandler)
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'))
     @UsePermission(AdminPermission)
