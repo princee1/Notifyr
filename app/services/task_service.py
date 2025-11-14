@@ -6,7 +6,7 @@ from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CeleryScheduler
 from app.classes.celery import CeleryTask, SchedulerModel
 from app.classes.env_selector import EnvSelection, StrategyType, get_selector
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BuildFailureError, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus,BuildWarningError
-from app.errors.service_error import BuildError, BuildSkipError
+from app.errors.service_error import BuildError, BuildOkError, BuildSkipError
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.models.profile_model import ProfileModel
 from app.services.database_service import RedisService
@@ -328,7 +328,7 @@ class ChannelMiniService(BaseMiniService):
         ...
 
     def build(self, build_state = ...):
-        self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+        raise BuildOkError
         
     def purge(self):
         """

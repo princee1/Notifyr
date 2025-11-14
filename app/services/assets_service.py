@@ -289,11 +289,12 @@ class AssetService(_service.BaseService,SchedulerInterface):
                     self.read_asset_from_s3()
                 else:
                     self.read_asset_from_disk()
-                self.service_status = _service.ServiceStatus.AVAILABLE
             
             case aws_service.MINIO_OBJECT_BUILD_STATE:
                 self.download_into_disk()
 
+        self.service_status = _service.ServiceStatus.AVAILABLE
+        
     def verify_dependency(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
             if not self.amazonS3Service.service_status == _service.ServiceStatus.AVAILABLE:

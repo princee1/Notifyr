@@ -15,7 +15,7 @@ from typing import Callable, Iterable, Literal, Self, Type, TypedDict
 from bs4 import BeautifulSoup
 
 from app.classes.profiles import ProfileState,ProfileModelException
-from app.errors.service_error import BuildFailureError
+from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.interface.timers import IntervalInterface
 from app.models.profile_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
 from app.services.database_service import MongooseService, RedisService
@@ -181,16 +181,16 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
             return connector
         except (socket.gaierror, ConnectionRefusedError, TimeoutError) as e:
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
 
         except ssl.SSLError as e:
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
 
         except NameError as e:
             # BUG need to change the error name and a builder error
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
 
         return None
 
@@ -292,20 +292,20 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
             return True
         except smtp.SMTPHeloError as e:
             if build:
-                self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
+                raise BuildWarningError
                 # TODO Depends on the error code
 
         except smtp.SMTPNotSupportedError as e:
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
 
         except smtp.SMTPAuthenticationError as e:
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
 
         except smtp.SMTPServerDisconnected as e:
             if build:
-                self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
+                raise BuildWarningError
             # TODO Depends on the error code
         return False
 
@@ -372,7 +372,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
                 description = "Email failed due to sender refusal."
 
             except smtp.SMTPNotSupportedError as e:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
                 email_status = EmailStatus.FAILED.value
                 description = "Email failed due to unsupported SMTP operation."
 
@@ -549,19 +549,19 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             
         except imap.IMAP4.error as e:
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
         except imap.IMAP4.abort as e:
             if build:
-                self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
+                raise BuildWarningError
         except imap.IMAP4.readonly as e:
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
         except ssl.SSLError as e:
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
         except Exception as e:
             if build:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
 
     def read_email(self, message_ids, connector: imap.IMAP4 | imap.IMAP4_SSL, max_count: int = None):
         for num in message_ids[:max_count]:

@@ -31,6 +31,8 @@ class BuildAbortError(BuildError):
 class BuildWarningError(BuildError):
     pass
 
+class BuildOkError(BuildError):
+    pass
 
 class BuildSkipError(BuildError):
     pass

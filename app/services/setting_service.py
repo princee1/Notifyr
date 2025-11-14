@@ -1,4 +1,5 @@
 from app.definition._service import BaseService, Service, ServiceStatus
+from app.errors.service_error import BuildOkError
 from app.models.properties_model import SettingsModel
 from app.services.config_service import ConfigService, MODE
 from app.services.secret_service import HCVaultService
@@ -30,10 +31,9 @@ class SettingService(BaseService):
         
     def verify_dependency(self):
         if self.mongooseService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
-            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
             self.method_not_available = {'aio_get_settings'}
-        else:
-            self.service_status = ServiceStatus.AVAILABLE
+            raise BuildOkError
+        
 
     def build(self,build_state:int=SETTING_SERVICE_SYNC_BUILD_STATE):
         if self.configService.MODE == MODE.DEV_MODE and self.use_settings_file:

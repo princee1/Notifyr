@@ -254,8 +254,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
     def build(self,build_state=-1):
         self.read_generation_id()
         if self.GENERATION_ID == None:
-            self.service_status = ServiceStatus.NOT_AVAILABLE
-            return    
+            raise BuildFailureError
 
     @property
     def GENERATION_ID(self)->None|str:

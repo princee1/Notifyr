@@ -69,7 +69,7 @@ class ServiceStatus(Enum):
 STATUS_TO_ERROR_MAP = {
     ServiceStatus.NOT_AVAILABLE: BuildFailureError,
     ServiceStatus.TEMPORARY_NOT_AVAILABLE: BuildWarningError,
-    ServiceStatus.PARTIALLY_AVAILABLE: BuildWarningError,
+    ServiceStatus.PARTIALLY_AVAILABLE: BuildOkError,
     ServiceStatus.WORKS_ALMOST_ATT: BuildSkipError,
     ServiceStatus.MAJOR_SYSTEM_FAILURE:BuildAbortError
 }
@@ -247,16 +247,10 @@ class BaseService():
             self._builded = True
             self._destroyed = False
 
-            self.service_status = self.service_status if self.service_status != None else ServiceStatus.AVAILABLE
-            
-            if self.service_status in STATUS_TO_ERROR_MAP:
-                if not quiet:
-                    raise STATUS_TO_ERROR_MAP[self.service_status](f'Service {self.__class__.__name__} has status {self.service_status} after build')
-            else:
-                if not quiet:
-                    self.service_status = ServiceStatus.AVAILABLE
-                    self.prettyPrinter.success(
-                        f'{is_mini_service}[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
+            self.service_status = ServiceStatus.AVAILABLE            
+            if not quiet:
+                self.prettyPrinter.success(
+                    f'{is_mini_service}[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
             
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 self.prettyPrinter.wait(self.pretty_print_wait_time, False)
@@ -278,12 +272,21 @@ class BaseService():
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 exit(-1)
 
+        except BuildOkError as e:
+            if not quiet:
+                self.prettyPrinter.message(
+                    f'{is_mini_service}[{now}] The state is ok but some function might not work{self.__class__.__name__}.',saveable=True)
+            
+            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+
         except BuildWarningError as e:
             # TODO might to change the color because of the error since, it will be for malfunction dependent service
             if not quiet:
                 self.prettyPrinter.warning(
                     f'{is_mini_service}[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
-            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE if self.service_status == None else self.service_status
+                
+            self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
@@ -300,6 +303,7 @@ class BaseService():
                 self.prettyPrinter.warning( # TODO change color
                     f'{is_mini_service}[{now}] Service Not Implemented Yet: {self.__class__.__name__} ', saveable=True)
                 self.prettyPrinter.wait(WAIT_TIME, False)
+                
             self.service_status = ServiceStatus.NOT_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
@@ -454,6 +458,11 @@ class BaseMiniServiceManager(BaseService):
                 self.acceptable_service+=1
             if miniService.service_status == ServiceStatus.AVAILABLE:
                 self.available_service += 1
+        
+        def __repr__(self):
+            return (f"StatusCounter(total_service={self.total_service}, "
+                    f"acceptable_service={self.acceptable_service}, "
+                    f"available_service={self.available_service})")
 
     def __init__(self):
         super().__init__()
@@ -467,13 +476,14 @@ class BaseMiniServiceManager(BaseService):
             return
         
         if counter.acceptable_service < 1:
-            self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
+            raise BuildWarningError
         
         if counter.acceptable_service < counter.total_service:
-            raise BuildWarningError
+            raise BuildOkError
         
         if counter.acceptable_service == counter.total_service:
             raise BuildSkipError
+        
     
     async def async_pingService(self,infinite_wait:bool,**kwargs):
         if not kwargs.get('__is_manager__',False):
