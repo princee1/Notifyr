@@ -275,7 +275,7 @@ class BaseService():
         except BuildOkError as e:
             if not quiet:
                 self.prettyPrinter.message(
-                    f'{is_mini_service}[{now}] The state is ok but some function might not work{self.__class__.__name__}.',saveable=True)
+                    f'{is_mini_service}[{now}] The state is ok but some function might not work: {self.__class__.__name__}.',saveable=True)
             
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
