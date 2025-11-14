@@ -1,6 +1,5 @@
 from typing import Annotated
 from fastapi import Depends, Request,status
-from fastapi.responses import JSONResponse
 from app.container import Get, InjectInMethod
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, WebSocketHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
@@ -11,8 +10,7 @@ from app.services.database_service import RedisService
 from app.services.security_service import JWTAuthService
 from app.depends.dependencies import get_auth_permission
 from app.classes.auth_permission import AuthPermission, MustHave, Role
-from app.websockets.redis_backend_ws  import RedisBackendWebSocket
-from pydantic.fields import Field
+from app.services.task_service import TaskService,ChannelMiniService
 
 
 REDIS_EXPIRATION = 360000
@@ -51,24 +49,11 @@ class CeleryRessource(BaseHTTPRessource):
     def check_schedule(self,schedule_id:str,request:Request,authPermission=Depends(get_auth_permission)):
         return self.celeryService.seek_schedule(schedule_id)
         
-
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/schedule/{schedule_id}')
     def delete_schedule(self,schedule_id:str,request:Request,authPermission=Depends(get_auth_permission)):
        return  self.celeryService.delete_schedule(schedule_id)
-        
-    @PingService([JWTAuthService])
-    @UseHandler(WebSocketHandler)
-    @BaseHTTPRessource.Get('/create-permission/{ws_path}',)
-    def invoke_notify_permission(self, ws_path:str,request:Request, authPermission=Depends(get_auth_permission)):
-        self._check_ws_path(ws_path)
-
-        redis_run_id = self.websockets[RedisBackendWebSocket.__name__].run_id
-        token = self.jwtAuthService.encode_ws_token(redis_run_id,REDIS_EXPIRATION)
-        return JSONResponse(status_code=status.HTTP_201_CREATED,content={
-            'redis-token':token,
-        })
-    
+            
     @UseRoles([Role.ADMIN],options=[MustHave(Role.ADMIN)])
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/purge/{queue}/{task_id}',mount=False)
@@ -99,15 +84,30 @@ class BackgroundTaskRessource(BaseHTTPRessource):
         ...
     
 
-@HTTPRessource(prefix=REDIS_RESULT_PREFIX, routers=[CeleryRessource,BackgroundTaskRessource],websockets=[RedisBackendWebSocket])
+@HTTPRessource(prefix=REDIS_RESULT_PREFIX, routers=[CeleryRessource,BackgroundTaskRessource])
 class RedisResultBackendRessource(BaseHTTPRessource):
     
+
+    @InjectInMethod()
+    def __init__(self,jwtAuthService:JWTAuthService):
+        super().__init__(None,None)
+        self.jwtAuthService = jwtAuthService
+
     @UseHandler(ServiceAvailabilityHandler)
     @UsePermission(JWTRouteHTTPPermission)
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.Get('/')
     def get_result(self,request:Request,authPermission=Depends(get_auth_permission)):
         return 
+    
+
+    @BaseHTTPRessource.Get('/permission/{ws_path}',)
+    def invoke_notify_permission(self, ws_path:str,request:Request, authPermission=Depends(get_auth_permission)):
+        self._check_ws_path(ws_path)
+
+
+    async def server_side_event(self):
+        ...
     
 
 

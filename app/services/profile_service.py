@@ -13,7 +13,7 @@ from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from app.utils.helper import subset_model
 from .database_service import MongooseService, RedisService
-from app.models.profile_model import ErrorProfileModel, ProfileModel, SMTPProfileModel,IMAPProfileModel,TwilioProfileModel, ProfilModelValues
+from app.models.profile_model import ErrorProfileModel, ProfileModel, ProfilModelValues
 from typing import Generic, TypeVar
 
 TModel = TypeVar("TModel",bound=ProfileModel)
@@ -31,7 +31,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         else:
             super().__init__(None,str(model.id))
         self.model:TModel = model
-        self.credentials = ...
+        self.credentials:ChaCha20Poly1305SecretsWrapper = ...
         self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.redisService = redisService
@@ -46,12 +46,17 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         
         self._read_encrypted_creds()
         
-    def _read_encrypted_creds(self):
+    def _read_encrypted_creds(self,return_only=False):
         data = self.vaultService.secrets_engine.read(VaultConstant.PROFILES_SECRETS,self.miniService_id)
         for k,v in data.items():
             data[k]= self.vaultService.transit_engine.decrypt(v,VaultConstant.PROFILES_KEY)
-        self.credentials =  ChaCha20Poly1305SecretsWrapper(data)
-    
+        
+        if return_only:
+            return data
+        else:
+            self.credentials = ChaCha20Poly1305SecretsWrapper(data)
+            return 
+
     async def async_create_profile(self):
         print('Template Profile Model:', TModel)
         self.model = await self.mongooseService.get(self.model.__class__,self.miniService_id)
@@ -145,6 +150,7 @@ class ProfileService(BaseMiniServiceManager):
         profile_id = str(profileModel.id)
         result = await profileModel.delete()
         self._delete_encrypted_creds(profile_id)
+        return result
      
     async def update_profile(self,profileModel:ProfileModel,body:dict):
         for k,v in body.items():
@@ -156,7 +162,7 @@ class ProfileService(BaseMiniServiceManager):
                     continue
         
     def update_credentials(self,profiles_id:str,creds:dict):
-        current_creds = self._read_encrypted_creds(profiles_id,False)
+        current_creds:dict = self._read_encrypted_creds(profiles_id)
         current_creds.update(creds)
         self._put_encrypted_creds(profiles_id,current_creds)
 
@@ -165,6 +171,7 @@ class ProfileService(BaseMiniServiceManager):
         profile.version+=1
         await profile.save()
         return profile
+    
 
     ########################################################       ################################
     async def addError(self,profile_id: str | None,error_code: int | None,error_name: str | None,error_description: str | None,error_type: Literal['warn', 'critical', 'message'] | None):
@@ -181,6 +188,10 @@ class ProfileService(BaseMiniServiceManager):
         await self.mongooseService.delete_all(ErrorProfileModel,{'profile_id':profile_id})
     ########################################################       ################################
 
+
+    def _read_encrypted_creds(self,profile_id:str):
+        return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)
+
     def _put_encrypted_creds(self,profiles_id:str,data:dict):
         for k,v in data.items():
             data[k] = self.vaultService.transit_engine.encrypt(v,VaultConstant.PROFILES_KEY)
@@ -191,9 +202,3 @@ class ProfileService(BaseMiniServiceManager):
         return self.vaultService.secrets_engine.delete(VaultConstant.PROFILES_SECRETS,profiles_id)
     
     ########################################################       ################################
-
-    def loadStore(self,):
-        ...
-    
-    def destroyStore(self):
-        ...
