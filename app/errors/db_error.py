@@ -27,3 +27,13 @@ class DocumentAlreadyDeletedError(BaseError):
 
 class MongoCollectionDoesNotExists(BaseError):
     ...
+
+
+class MemCachedTypeValueError(BaseError):
+    ...
+
+class MemCacheNoValidKeysDefinedError(BaseError):
+    ...
+
+class MemCachedCacheMissError(BaseError):
+    ...

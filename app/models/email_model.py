@@ -155,7 +155,7 @@ class EmailSignatureModel(BaseModel):
     data:dict[str,Any] = {}
 
 class BaseEmailSchedulerModel(SchedulerModel):
-    signature:EmailSignatureModel = None
+    signature:Optional[EmailSignatureModel] = None
     _signature:Tuple[str,str] = PrivateAttr(None)
 
 class EmailTemplateSchedulerModel(BaseEmailSchedulerModel):

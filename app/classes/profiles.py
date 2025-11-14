@@ -1,8 +1,10 @@
 from enum import Enum
 from typing import ClassVar, Optional, TypedDict
+from typing_extensions import Literal
 from pydantic import BaseModel
 from app.classes.mail_provider import TokenType
 from app.definition._error import BaseError
+from app.utils.constant import StreamConstant
 
 
 EMAIL_PROFILE_TYPE = 'email'
@@ -19,11 +21,11 @@ class ProfileModelAuthToken(BaseModel):
     secret_key:ClassVar[list[str]]= ['access_token','refresh_token']
 
 class ProfilModelConstant:
-    OUTLOOK_API=f'{EMAIL_PROFILE_TYPE}:outlook-api'
-    GMAIL_API=f'{EMAIL_PROFILE_TYPE}:gmail-api'
-    AWS=f'{EMAIL_PROFILE_TYPE}:aws'
-    IMAP=f'{EMAIL_PROFILE_TYPE}:imap'
-    SMTP=f'{EMAIL_PROFILE_TYPE}:smtp'
+    OUTLOOK_API=f'{EMAIL_PROFILE_TYPE}/outlook-api'
+    GMAIL_API=f'{EMAIL_PROFILE_TYPE}/gmail-api'
+    AWS=f'{EMAIL_PROFILE_TYPE}/aws'
+    IMAP=f'{EMAIL_PROFILE_TYPE}/imap'
+    SMTP=f'{EMAIL_PROFILE_TYPE}/smtp'
     TWILIO='twilio'
 
 ####################################                 #####################################333
@@ -82,6 +84,21 @@ class ProfileState(Enum):
 
 class ProfileStateProtocol(TypedDict):
     ...
+
+class ProfileErrorProtocol(TypedDict):
+    profile_id:str
+    error_type:Literal['connect','authenticate','permission','rate_limit','general']
+    profile_status: int
+    error_code: Optional[int]
+    error_name: Optional[str]
+    error_description: Optional[str]
+    error_level:Optional[Literal['warn','critical','message']]
+
+class ProfileModelException(BaseException):
+    topic = StreamConstant.PROFILE_ERROR_STREAM
+    def __init__(self,error:ProfileErrorProtocol):
+        super().__init__()
+        self.error = error
 
 ####################################                 #####################################333
 

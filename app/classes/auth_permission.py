@@ -5,7 +5,10 @@ from typing_extensions import TypedDict
 from enum import Enum
 from time import time
 
+from app.classes.cost_definition import SimpleTaskCostDefinition
+from .template import Extension
 from app.definition._error import BaseError
+from app.utils.fileIO import is_file
 from app.utils.helper import filter_paths, subset_model
 
 PermissionScope= Literal['custom','all']
@@ -16,6 +19,7 @@ ClientTypeLiteral = Literal['User','Admin']
 
 PolicyUpdateMode = Literal['set','merge','delete']
 
+EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
@@ -31,6 +35,7 @@ class Role(Enum):
     SUBSCRIPTION = 'SUBSCRIPTION'
     CLIENT = "CLIENT"
     LINK = "LINK"
+    ASSETS = "ASSETS"
     PROFILE ="PROFILE"
 
 class Scope(Enum):
@@ -60,6 +65,8 @@ class FuncMetaData(TypedDict):
     limit_obj:dict
     limit_exempt:bool=False
     default_role:bool =True
+    cost_definition:SimpleTaskCostDefinition
+    cost_definition_name:str
 
 
 class RoutePermission(TypedDict):
@@ -70,6 +77,10 @@ class AssetsPermission(TypedDict):
     scope: PermissionScope
     name: str
     custom_files: NotRequired[list[str]]
+
+class AssetsPermission(TypedDict):
+    files: list[str] = []
+    dirs: set[str] = []
         
 class AuthPermission(TypedDict):
     generation_id: str
@@ -83,7 +94,7 @@ class AuthPermission(TypedDict):
     created_at: float
     expired_at: float
     allowed_routes: Dict[str, RoutePermission]
-    allowed_assets:List[str]
+    allowed_assets:List[str] | AssetsPermission
     allowed_profiles:List[str]=[]
     challenge: str
     scope:str
@@ -126,7 +137,9 @@ class PolicyModel(BaseModel):
 
     @field_validator('allowed_assets')
     def filter_assets_paths(cls,allowed_assets):
-        return filter_paths(allowed_assets)
+        for asset in allowed_assets:
+            is_file(asset,allowed_extension=EXTENSION)
+        return filter_paths(allowed_assets,'/')
     
     @field_validator('roles')
     def checks_roles(cls, roles: list[Role]):
@@ -139,6 +152,16 @@ class PolicyModel(BaseModel):
 def parse_authPermission_enum(authPermission):
         authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
         
+def filter_asset_permission(authPermission:AuthPermission):
+    files = set()
+    dirs = set()
+    for p in authPermission['allowed_assets']:
+        if is_file(p):
+            files.add(p)
+        else:
+            dirs.add(p)
+    
+    authPermission['allowed_assets'] = AssetsPermission(files=files,dirs=dirs)
 
 class ContactPermission(TypedDict):
     expired_at:int

@@ -1,15 +1,12 @@
 services:
-  settingdb:
-    image: json-server:latest
-    container_name: settingdb
-    build:
-      context: .
-      dockerfile: ./docker/Dockerfile.settingdb
+
+  memcached:
+    image: memcached:latest
+    container_name: memcached
     ports:
-      - "3000:3000"
-    volumes:
-      - settingdb-data:/data
-      - vault-shared:/vault/shared
+      - "11211:11211"
+    command: memcached -m 64 -vv
+    restart: unless-stopped
 
   redis:
     image: redis:latest #Queue for the taks
@@ -20,18 +17,6 @@ services:
     volumes:
       - redis-data:/data
 
-  redis-commander:
-    container_name: redis-commander
-    hostname: redis-commander
-    image: rediscommander/redis-commander:latest
-    restart: always
-    depends_on:
-      - redis
-    environment:
-      - REDIS_HOSTS=local:redis:6379
-    ports:
-      - 6060:6060
-
   reacherhq:
     image: reacherhq/backend
     container_name: reacherhq
@@ -39,7 +24,7 @@ services:
       - "8040:8040"
 
   mongodb:
-    image: mongo:latest
+    image: mongo:8.0-noble
     container_name: mongodb
     restart: always
     ports:
@@ -66,15 +51,41 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifyr
-
+    
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    build:
+      args:
+        - ASSETS_STORAGE_LIMIT=${ASSETS_STORAGE_LIMIT:-500MB}
+        - STATIC_STORAGE_LIMIT=${STATIC_STORAGE_LIMIT:-500MB}
+        - S3_MODE=dev
+      context: .
+      dockerfile: docker/Dockerfile.minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+      - minio-secret:/minio/secrets
+    environment:
+      - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
+      - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
+    
+    depends_on:
+      - redis
+    
   vault:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.vault
+      args:
+        - S3_CRED_TYPE=${S3_CRED_TYPE:-MINIO} #MINIO (minio plugin)  || AWS (aws engine)
     container_name: vault
     labels:
       - com.docker.compose.service=vault
-    image: hashicorp/vault:1.16
+    image: hashicorp/vault:latest
     cap_add: ["IPC_LOCK"]
     ports:
       - "8200:8200"
@@ -85,6 +96,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      AWS_VAULT_USER: set_user_in_container_start
+      AWS_VAULT_PASSWORD: set_password_in_container_start
+      S3_HOST: ${S3_HOST}
       POSTGRES_HOST: ${POSTGRES_HOST}
       MONGO_HOST: ${MONGO_HOST}
     volumes:
@@ -92,29 +106,47 @@ services:
       - vault-shared:/vault/shared
       - vault-secrets:/vault/secrets
       - vault-audit:/vault/logs
+      - minio-secret:/minio/secrets:ro
+
     depends_on:
       - mongodb
-    #restart: always
-    #stop_grace_period: 5m
-    # healthcheck:
-    #   test: ["CMD-SHELL", '[ "$VAULT_CONTAINER_READY" = "true" ]']
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 5
-    #   start_period: 120s
-
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: pgadmin
-    restart: always
-    hostname: pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: test@test.com
-      PGADMIN_DEFAULT_PASSWORD: test
+ 
+  app:
+    image: notifyr:fastapi
+    #container_name: ntfyr-app
+    labels:
+      - "com.docker.compose.service=app"
+    command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
+    #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
     ports:
-      - "7070:7070"
+      - 8088:8088
+    volumes:
+      - ./costs.json:/run/secrets/costs:ro
+      - vault-shared:/vault/shared:ro
+      - vault-secrets:/vault/secrets:ro
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    environment:
+      - MODE=prod
+    env_file:
+      - .env
     depends_on:
-      - postgres
+      - redis
+      - mongodb
+
+  balancer:
+    image: notifyr:balancer
+    #container_name: ntfyr-balancer
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.balancer
+    environment:
+      - ADDR=0.0.0.0:8088
+    env_file:
+      - ./balancer/.env
+    ports:
+      - 8080:8080
 
   worker:
     image: notifyr:celery
@@ -140,11 +172,11 @@ services:
       # - beat
 
   beat:
-    image: notifyr:redbeat
+    image: notifyr:celery
     command: ["make", "redbeat"]
     container_name: beat
-    # labels:
-    #   - com.docker.compose.service=beat
+    labels:
+      - com.docker.compose.service=beat
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
@@ -218,40 +250,31 @@ services:
     depends_on:
       - postgres
 
-  app:
-    image: notifyr:fastapi
-    #container_name: ntfyr-app
-    labels:
-      - "com.docker.compose.service=app"
-    command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
-    #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
-    ports:
-      - 8088:8088
-    volumes:
-      - ./rate_limits.json:/run/secrets/rate_limits:ro
-      - vault-shared:/vault/shared:ro
-      - vault-secrets:/vault/secrets:ro
-    build:
-      context: ./
-      dockerfile: Dockerfile
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    hostname: pgadmin
     environment:
-      - MODE=prod
-    env_file:
-      - .env
+      PGADMIN_DEFAULT_EMAIL: test@test.com
+      PGADMIN_DEFAULT_PASSWORD: test
+    ports:
+      - "7070:7070"
+    depends_on:
+      - postgres
+
+  redis-commander:
+    container_name: redis-commander
+    hostname: redis-commander
+    image: rediscommander/redis-commander:latest
+    restart: always
     depends_on:
       - redis
-      - mongodb
-
-  # balancer:
-  #   #container_name: ntfyr-balancer
-  #   build:
-  #     context: .
-  #     dockerfile: docker/Dockerfile.balancer
-  #   env_file:
-  #     - ./balancer/.env
-  #   ports:
-  #     - 8080:8080
-
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - 6060:6060
+      
 volumes:
   vault-data: {}
   vault-shared: {} # holds secret_id
@@ -267,17 +290,23 @@ volumes:
   assets-data:
     driver: local
 
-  settingdb-data:
-
   neo4j_data:
   neo4j_logs:
   neo4j_conf:
   redis-data:
     driver: local
+  
+  minio-data: {}
+  minio-secret: {}
 
 secrets:
   approle_role_id:
     file: ./bootstrap/role_id.txt # created after first container init
+
+  minio_root_user:
+    file: ./secrets/minio_root_user.txt
+  minio_root_password:
+    file: ./secrets/minio_root_password.txt
 
 networks:
   notifyr-net:

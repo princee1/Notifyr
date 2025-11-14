@@ -1,11 +1,12 @@
 from app.definition._service import BaseService, Service, ServiceStatus
+from app.errors.service_error import BuildOkError
 from app.models.properties_model import SettingsModel
 from app.services.config_service import ConfigService, MODE
-from app.services.database_service import JSONServerDBService
+from app.services.secret_service import HCVaultService
 from app.utils.fileIO import JSONFile
 from app.utils.constant import SettingDBConstant,DEFAULT_SETTING
 
-DEV_MODE_SETTING_FILE = './setting_db.json'
+DEV_MODE_SETTING_FILE = './settings_db.json'
 
 
 SETTING_SERVICE_SYNC_BUILD_STATE = DEFAULT_BUILD_STATE = -1
@@ -16,30 +17,29 @@ SETTING_SERVICE_DEFAULT_SETTING_BUILD_STATE = 0
 @Service()
 class SettingService(BaseService):
     
-    def __init__(self,configService:ConfigService,jsonServerService:JSONServerDBService):
+    def __init__(self,configService:ConfigService,vaultService:HCVaultService):
         super().__init__()
         self.configService = configService
-        self.jsonServerService = jsonServerService
-
-        self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','no'))
+        self.mongooseService = vaultService
+    
+        self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','no'),False)
     
     async def async_verify_dependency(self):
         await super().async_verify_dependency()
-        async with self.jsonServerService.statusLock.reader:
+        async with self.mongooseService.statusLock.reader:
             return self.verify_dependency()
         
     def verify_dependency(self):
-        if self.jsonServerService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
-            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+        if self.mongooseService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
             self.method_not_available = {'aio_get_settings'}
-        else:
-            self.service_status = ServiceStatus.AVAILABLE
+            raise BuildOkError
+        
 
     def build(self,build_state:int=SETTING_SERVICE_SYNC_BUILD_STATE):
         if self.configService.MODE == MODE.DEV_MODE and self.use_settings_file:
             self._read_setting_json_file()
         else:
-            self._data = DEFAULT_SETTING
+            self._data = DEFAULT_SETTING.copy()
             match build_state:
                 case -1: # SYNC_BUILD_STATE
                     self._data = self.get_setting()
@@ -54,25 +54,25 @@ class SettingService(BaseService):
 
     def get_setting(self):
         try:
-            data= self.jsonServerService.get_setting()
+            raise ValueError
             SettingsModel(**data) # Validate the data
             return data
         except Exception as e:
-            return DEFAULT_SETTING
+            return DEFAULT_SETTING.copy()
 
     def _read_setting_json_file(self):
         self.jsonFile = JSONFile(DEV_MODE_SETTING_FILE)
         if not self.jsonFile.exists or self.jsonFile.data == None:
-            self.jsonFile.data = DEFAULT_SETTING
+            self.jsonFile.data = DEFAULT_SETTING.copy()
         
-        self._data = self.jsonFile.data[SettingDBConstant.BASE_JSON_DB]
+        self._data = self.jsonFile.data
 
     async def aio_get_settings(self):
-        if self.configService.MODE == MODE.DEV_MODE:
+        if self.configService.MODE == MODE.DEV_MODE and self.use_settings_file:
             self._read_setting_json_file()
         else:
-            self._data = DEFAULT_SETTING
-            self._data = await self.jsonServerService.aio_get_setting()
+            self._data = DEFAULT_SETTING.copy()
+            #self._data = await self.mongooseService.find_one()
         
         return self._data
 
@@ -82,7 +82,7 @@ class SettingService(BaseService):
             self.jsonFile.save()
             return 
         
-        return await self.jsonServerService.save_settings(new_data)
+        return await self.mongooseService
 
     @property
     def API_EXPIRATION(self):

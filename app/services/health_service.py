@@ -4,8 +4,9 @@ from app.services.config_service import ConfigService
 from app.services.notification_service import DiscordService, NotificationService,SystemNotificationService
 import psutil
 
-from app.services.rate_limiter_service import RateLimiterService
+from app.services.cost_service import CostService
 from app.utils.constant import ConfigAppConstant
+from app.utils.globals import PARENT_PID, PROCESS_PID
 
 def resolve_notification_service(configService:ConfigService):
     return DiscordService if True else SystemNotificationService
@@ -13,7 +14,7 @@ def resolve_notification_service(configService:ConfigService):
 @Service()
 class HealthService(BaseService):
     
-    def __init__(self,configService:ConfigService,discordService:DiscordService,rateLimiterService:RateLimiterService):
+    def __init__(self,configService:ConfigService,discordService:DiscordService,rateLimiterService:CostService):
         super().__init__()
         self.configService = configService
         self.notificationService = discordService
@@ -50,7 +51,8 @@ class HealthService(BaseService):
     def notifyr_app_info(self)->dict:
         return {
             'InstanceId':self.configService.INSTANCE_ID,
-            'ParentPid':self.configService.PARENT_PID,
+            'ParentPid':PARENT_PID,
+            'Pid':PROCESS_PID,
             'Spec':{
                 'CpuCount':self.cpu_count,
                 'Ram':self.ram_size_gb,

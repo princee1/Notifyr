@@ -1,16 +1,20 @@
 from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
-from app.definition._service import BaseMiniServiceManager
+from app.classes.cost_definition import SimpleTaskCostDefinition
+from app.definition._cost import Cost
 from app.models.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
-from app.services.admin_service import AdminService
-from app.services.assets_service import DIRECTORY_SEPARATOR, REQUEST_DIRECTORY_SEPARATOR, AssetService, RouteAssetType
+from app.services.assets_service import AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
+from app.services.cost_service import CostService
+from app.services.database_service import RedisService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel
+from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
+from app.services.task_service import TaskManager
+from app.utils.constant import RedisConstant
 from app.utils.helper import flatten_dict
 
  
@@ -73,7 +77,7 @@ class JWTRouteHTTPPermission(Permission):
 
 class JWTAssetPermission(Permission):
 
-    def __init__(self,template_type:RouteAssetType,model_keys:list[str]=[],options=[]):
+    def __init__(self,template_type:RouteAssetType=None,extension:str=None,model_keys:list[str]=[],options=[],accept_none_template:bool=False):
         #TODO Look for the scheduler object and the template
         super().__init__()
         self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
@@ -81,34 +85,37 @@ class JWTAssetPermission(Permission):
         self.model_keys=model_keys
         self.template_type = template_type
         self.options = options
-        self.model_keys_size = len(self.model_keys) == 0
+        self.extension = extension
+        self.accept_none= accept_none_template
 
     def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
         if authPermission['client_type'] == ClientType.Admin:
             return True
-
-        assetPermission = authPermission['allowed_assets']
+        
+        filter_asset_permission(authPermission)
         template_type = self.template_type if template_type == None else template_type
-        permission = tuple(assetPermission)
+
+        if template == '':
+            if self.accept_none:
+                if template_type==None:
+                    return '/' in authPermission['allowed_assets']['dirs']
+            else:
+                return False
+       
+        if self.extension:
+            template +=f".{self.extension}"
         
-        if template:
-            t = template.replace(REQUEST_DIRECTORY_SEPARATOR,DIRECTORY_SEPARATOR)
-            t = self.assetService.asset_rel_path(t,template_type)
-            if not t.startswith(permission):
-                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':f'Assets [{t}] not allowed' })
-        
+        self.assetService.verify_asset_permission(template,authPermission,template_type,self.options)
+
         if scheduler == None:
             return True
 
         if len(self.model_keys) == 0:
             return True
         
-        if not self.model_keys_size:
-            return True
-
         for content in scheduler.model_dump(include={'content'}):
             content = flatten_dict(content)
-            if not self.assetService.verify_asset_permission(content,self.model_keys,assetPermission,self.options):
+            if not self.assetService.verify_content_asset_permission(content,self.model_keys,authPermission,self.options):
                 return False
                                 
         return True
@@ -117,7 +124,7 @@ class JWTAssetPermission(Permission):
 class JWTSignatureAssetPermission(JWTAssetPermission):
 
     def __init__(self):
-        super().__init__('html')
+        super().__init__('email')
     
     def permission(self, authPermission:AuthPermission, scheduler:BaseEmailSchedulerModel):
         if  scheduler.signature == None:
@@ -126,21 +133,6 @@ class JWTSignatureAssetPermission(JWTAssetPermission):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Signature template not provided")
         
         return super().permission(authPermission, scheduler.signature, None, None)
-
-class JWTQueryAssetPermission(JWTAssetPermission):
-     
-    def __init__(self,allowed_assets:RouteAssetType, model_keys = [], options=[]):
-        """
-        Use kwargs the model_keys and options parameter
-        """
-        super().__init__(None, model_keys, options)
-        self.allowed_assets = allowed_assets
-        self.template_type=...
-        
-    def permission(self,template:str, scheduler:SchedulerModel, asset:str,authPermission:AuthPermission):
-        self.assetService.check_asset(asset,self.allowed_assets)
-        return super().permission(template,scheduler,authPermission,asset)
-    
 
 class JWTContactPermission(Permission):
 
@@ -264,4 +256,47 @@ class ProfilePermission(Permission):
                 detail='Profile Is not allowed to be used'
             )
         
+        return True
+    
+
+
+class TaskCostPermission(Permission):
+    """
+    Do you have positive units?
+    Do you comply to the maximum content and To available ?
+    """
+
+    @InjectInMethod(True)
+    def __init__(self,costService:CostService,redisService:RedisService):
+        super().__init__()
+        self.costService = costService
+        self.redisService = redisService
+
+    async def permission(self,func_meta:FuncMetaData, taskManager: TaskManager, scheduler: SchedulerModel = None):
+        definition:SimpleTaskCostDefinition = func_meta['cost_definition'] 
+        credit_key  = definition.get('__credit_key__')
+
+        current_credits = await self.costService.get_credit_balance(credit_key)
+
+        if current_credits is None:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Credit information unavailable")
+
+        if current_credits <= 0 and self.costService.is_current_credit_overdraft_allowed(current_credits,credit_key): 
+            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Insufficient credits")
+
+        api_cost = definition.get('__api_usage_cost__', 0)
+        if current_credits < api_cost:
+            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Insufficient credits for API usage")
+
+        if scheduler is not None:
+            allowed_tasks = definition.get('__allowed_task_option__', [])
+            if scheduler.task_type not in allowed_tasks:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Task type '{scheduler.task_type}' not allowed for this pricing plan"
+                )
+
+        if taskManager.meta.get('retry', False) and not Cost.rules.get('retry_allowed', False):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Retry not allowed by pricing policy")
+
         return True

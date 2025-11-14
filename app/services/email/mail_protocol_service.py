@@ -9,10 +9,13 @@ import smtplib as smtp
 import imaplib as imap
 import poplib as pop
 import socket
+import traceback
 from typing import Callable, Iterable, Literal, Self, Type, TypedDict
 
 from bs4 import BeautifulSoup
 
+from app.classes.profiles import ProfileState,ProfileModelException
+from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.interface.timers import IntervalInterface
 from app.models.profile_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
 from app.services.database_service import MongooseService, RedisService
@@ -65,59 +68,65 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
         self.type_: Literal['IMAP', 'SMTP'] = None
 
     @staticmethod
-    def task_lifecycle(pref: Literal['async', 'sync'] = None, async_callback: Callable = None, sync_callback: Callable = None):
+    def task_lifecycle(pref: Literal['async', 'sync'] = None, async_callback: Callable = None, sync_callback: Callable = None,build:bool =False):
 
         def callback(func: Callable):
 
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
-
+                
                 self: BaseEmailService = args[0]
+                try:
+                    connector = self.connect(build)
+                    if connector == None:
+                        return
 
-                connector = self.connect()
-                if connector == None:
-                    return
+                    if not self.authenticate(connector,build):
+                        return
+                
+                    kwargs['connector'] = connector
 
-                if not self.authenticate(connector):
-                    return
-            
-                kwargs['connector'] = connector
-
-                if asyncio.iscoroutinefunction(func):
-                    result = await func(*args, **kwargs)
-                else:
-                    result = func(*args, **kwargs)
-                if callable(async_callback):
-                    await async_callback(self, *result[1], **result[2])
-                    result = result[0]
-                else:
-                    if isinstance(result, (list, tuple)):
+                    if asyncio.iscoroutinefunction(func):
+                        result = await func(*args, **kwargs)
+                    else:
+                        result = func(*args, **kwargs)
+                    if callable(async_callback):
+                        await async_callback(self, *result[1], **result[2])
                         result = result[0]
-                self.logout(connector)
-                return result
+                    else:
+                        if isinstance(result, (list, tuple)):
+                            result = result[0]
+                    self.logout(connector,build)
+                    return result
+                except ProfileModelException as e:
+                    await async_callback(self,e.topic,e.error)
+                    return e.error
 
             @functools.wraps(func)
             def sync_wrapper(*args, **kwargs):
                 self: BaseEmailService = args[0]
+                try:
+                    connector = self.connect(build)
+                    if connector == None:
+                        return
 
-                connector = self.connect()
-                if connector == None:
-                    return
+                    if not self.authenticate(connector,build):
+                        return
+                    kwargs['connector'] = connector
+                    result = func(*args, **kwargs)
 
-                if not self.authenticate(connector):
-                    return
-                kwargs['connector'] = connector
-                result = func(*args, **kwargs)
-
-                if callable(sync_callback):
-                    sync_callback(self, *result[1], **result[2])
-                    result = result[0]
-                else:
-                    if isinstance(result, tuple):
+                    if callable(sync_callback):
+                        sync_callback(self, *result[1], **result[2])
                         result = result[0]
+                    else:
+                        if isinstance(result, tuple):
+                            result = result[0]
 
-                self.logout(connector)
-                return result
+                    self.logout(connector,build)
+                    return result
+                except ProfileModelException as e:
+                    sync_callback(self,e.topic,e.error)
+                    return e.error
 
             if ConfigService._celery_env == CeleryMode.worker:
                 return sync_wrapper
@@ -142,6 +151,8 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
         if self.emailHost == EmailHostConstant.CUSTOM:
             self.hostPort = self.depService.model.port
             self.hostAddr = self.depService.model.server
+            if self.hostPort == None or self.hostAddr == None:
+                raise BuildFailureError('Missing connection value Port: {self.hostPort}, Addr: {self.hostAddr}')
         else:
             self.hostPort = config.setHostPort(self.connMethod) if self.depService.model.port == None else self.depService.model.port
             self.hostAddr = config.setHostAddr(self.emailHost)
@@ -155,7 +166,7 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
     def authenticate(self): 
         pass
 
-    def connect(self):
+    def connect(self,build:bool):
         server_type_ssl: type = smtp.SMTP_SSL if self.type_ == 'SMTP' else imap.IMAP4_SSL
         server_type: type = smtp.SMTP if self.type_ == 'SMTP' else imap.IMAP4
 
@@ -167,17 +178,19 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
 
             if self.type_ == 'SMTP':
                 connector.set_debuglevel(self.log_level)
-                
             return connector
         except (socket.gaierror, ConnectionRefusedError, TimeoutError) as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
 
         except ssl.SSLError as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
 
         except NameError as e:
             # BUG need to change the error name and a builder error
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
 
         return None
 
@@ -190,31 +203,35 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
     def help(self):
         ...
 
-    @task_lifecycle('sync')
+    @task_lifecycle('sync',build=True)
     def verify_connection(self,connector = None):
         ...
 
+    def verify_dependency(self):
+        if self.depService.model.profile_state != ProfileState.ACTIVE:
+            raise _service.BuildFailureError(f'Profile is not active {self.depService.model.profile_state.name} ')
+
     async def async_verify_dependency(self):
-        self.verify_dependency()
-        return True
+        async with self.depService.statusLock.reader:
+            self.verify_dependency()
+            return True
 
 @_service.MiniService(
     override_init=True,
-    links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True)]
+    links=[_service.LinkDep(ProfileMiniService,to_build=True,to_destroy=True)]
 )
-class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
+class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
 
     SMTP_LOG_LEVEL = 0
     # BUG cant resolve an abstract class
     def __init__(self,profileMiniService:ProfileMiniService[SMTPProfileModel], configService: ConfigService, loggerService: LoggerService, redisService: RedisService):
         self.depService = profileMiniService
         BaseEmailService.__init__(self,configService, loggerService, redisService,profileMiniService)
-        EmailSendInterface.__init__(self)
-        EmailInterface.__init__(self,self.depService.model.email_address)
+        EmailSendInterface.__init__(self,self.depService.model.email_address,self.depService.model.disposition_notification_to,self.depService.model.return_receipt_to)
         self.type_ = 'SMTP'
         self.log_level = self.SMTP_LOG_LEVEL
         
-    def logout(self, connector: smtp.SMTP):
+    def logout(self, connector: smtp.SMTP,build:bool):
         try:
             connector.quit()
             connector.close()
@@ -254,7 +271,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
         self.service_status = _service.ServiceStatus.AVAILABLE
         self.prettyPrinter.show()
 
-    def authenticate(self, connector: smtp.SMTP):
+    def authenticate(self, connector: smtp.SMTP,build:bool):
 
         try:
             if self.tlsConn:
@@ -274,17 +291,21 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
                     raise smtp.SMTPAuthenticationError(auth_code, auth_mess)
             return True
         except smtp.SMTPHeloError as e:
-            self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
-            # TODO Depends on the error code
+            if build:
+                raise BuildWarningError
+                # TODO Depends on the error code
 
         except smtp.SMTPNotSupportedError as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
 
         except smtp.SMTPAuthenticationError as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
 
         except smtp.SMTPServerDisconnected as e:
-            self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
+            if build:
+                raise BuildWarningError
             # TODO Depends on the error code
         return False
 
@@ -351,7 +372,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
                 description = "Email failed due to sender refusal."
 
             except smtp.SMTPNotSupportedError as e:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+                raise BuildFailureError
                 email_status = EmailStatus.FAILED.value
                 description = "Email failed due to unsupported SMTP operation."
 
@@ -396,7 +417,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface,EmailInterface):
 
 @_service.MiniService(
     override_init=True,
-    links=[_service.LinkDep(ProfileMiniService,build_follow_dep=True)]
+    links=[_service.LinkDep(ProfileMiniService,to_build=True,to_destroy=True)]
     )
 class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
 
@@ -458,7 +479,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             if self._mailboxes[inbox].no_select:
                 raise imap.IMAP4.error(f'This inbox cannot be selected')
 
-            self._current_mailbox = inbox
             connector: imap.IMAP4 | imap.IMAP4_SSL = kwargs['connector']
             connector.select(inbox)
 
@@ -476,15 +496,13 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
 
     def __init__(self,profileMiniService:ProfileMiniService[IMAPProfileModel], configService: ConfigService, loggerService: LoggerService, reactiveService: ReactiveService, redisService: RedisService) -> None:
         self.depService = profileMiniService
-        super().__init__(configService, loggerService, redisService,profileMiniService)
+        BaseEmailService.__init__(self,configService, loggerService, redisService,profileMiniService)
         EmailReadInterface.__init__(self,self.depService.model.email_address,None)
         self.reactiveService = reactiveService
         self.redisService = redisService
         self.type_ = 'IMAP'
 
         self._mailboxes: dict[str, IMAPEmailMiniService.IMAPMailboxes] = {}
-        self._current_mailbox: str = None
-
         self._capabilities: list = None
         self.auth_method = 'password'
 
@@ -512,40 +530,38 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
         capabilities = b' '.join(capabilities).decode().upper()
         self._capabilities = capabilities.split(' ')
 
-    def authenticate(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
+    def authenticate(self, connector: imap.IMAP4 | imap.IMAP4_SSL,build:bool):
 
         try:
             if self.tlsConn:
                 context = ssl.create_default_context()
                 connector.starttls(context=context)
+            
+            status, data = connector.login(self.email_address, self.depService.credentials.plain['password'])
+            
+            if status != 'OK':
+                raise Exception
 
-                status, data = connector.login(self.email_address, self.depService.credentials.plain['password'])
-                if status != 'OK':
-                    raise Exception
+            self._update_mailboxes(connector)
+            self._get_capabilities(connector)
 
-                self._update_mailboxes(connector)
-                self._get_capabilities(connector)
-
-                return True
-            else:
-                self.service_status = _service.ServiceStatus.NOT_AVAILABLE
-                return False
-                access_token = self.mailOAuth.encode_token(self.email_address)
-                auth_code, auth_message = connector.authenticate('AUTH XOAUTH2', access_token)
-                if auth_code != 'OK':
-                    raise imap.IMAP4.error(
-                        f"Authentication failed: {auth_message}")
-
+            return True
+            
         except imap.IMAP4.error as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
         except imap.IMAP4.abort as e:
-            self.service_status = _service.ServiceStatus.TEMPORARY_NOT_AVAILABLE
+            if build:
+                raise BuildWarningError
         except imap.IMAP4.readonly as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
         except ssl.SSLError as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
         except Exception as e:
-            self.service_status = _service.ServiceStatus.NOT_AVAILABLE
+            if build:
+                raise BuildFailureError
 
     def read_email(self, message_ids, connector: imap.IMAP4 | imap.IMAP4_SSL, max_count: int = None):
         for num in message_ids[:max_count]:
@@ -556,7 +572,7 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             msg = message_from_bytes(raw_email)
             yield EmailReader(msg)
 
-    def logout(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
+    def logout(self, connector: imap.IMAP4 | imap.IMAP4_SSL,build:bool):
         try:
             connector.close()
             connector.logout()

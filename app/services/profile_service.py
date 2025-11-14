@@ -1,6 +1,8 @@
 from datetime import datetime
 from random import randint
 from typing import Literal, Type
+
+from pydantic import ValidationError
 from app.classes.secrets import ChaCha20Poly1305SecretsWrapper, ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.db_error import MongoCollectionDoesNotExists
@@ -9,6 +11,7 @@ from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, VaultConstant
+from app.utils.helper import subset_model
 from .database_service import MongooseService, RedisService
 from app.models.profile_model import ErrorProfileModel, ProfileModel, SMTPProfileModel,IMAPProfileModel,TwilioProfileModel, ProfilModelValues
 from typing import Generic, TypeVar
@@ -20,8 +23,13 @@ TModel = TypeVar("TModel",bound=ProfileModel)
 )
 class ProfileMiniService(BaseMiniService,Generic[TModel]):
     
-    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,redisService:RedisService, model:TModel):
-        super().__init__(None,str(model.id))
+    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,redisService:RedisService, model:TModel,model_type:Type[TModel]=None):
+        if model_type != None:
+            self.model_type = model_type
+            self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__name__}')
+            super().__init__(None,str(model['_id']))
+        else:
+            super().__init__(None,str(model.id))
         self.model:TModel = model
         self.credentials = ...
         self.vaultService = vaultService
@@ -29,8 +37,15 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         self.redisService = redisService
     
     def build(self, build_state = ...):
+        try:
+            if self.model_type != None:
+                m = self.validationModel.model_validate(self.model).model_dump()
+                self.model = self.model_type.model_construct(**m)
+        except ValidationError as e:
+            raise BuildFailureError()
+        
         self._read_encrypted_creds()
-                
+        
     def _read_encrypted_creds(self):
         data = self.vaultService.secrets_engine.read(VaultConstant.PROFILES_SECRETS,self.miniService_id)
         for k,v in data.items():
@@ -49,7 +64,7 @@ class ProfileService(BaseMiniServiceManager):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
         super().__init__()
-        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[ProfileModel]] = MiniServiceStore[ProfileMiniService[ProfileModel]]()
+        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[ProfileModel]] = MiniServiceStore[ProfileMiniService[ProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
         self.configService = configService
         self.redisService = redisService
@@ -57,25 +72,24 @@ class ProfileService(BaseMiniServiceManager):
         self.vaultService = vaultService
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
-        try:
-            for v in ProfilModelValues.values():
-                for m in self.mongooseService.sync_find(MongooseDBConstant.PROFILE_COLLECTION,v):
-                    p = ProfileMiniService[v](
-                        self.vaultService,
-                        self.mongooseService,
-                        self.redisService,
-                        model=m)
-                    p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
-                    self.MiniServiceStore.add(p)
-        except MongoCollectionDoesNotExists:
-            raise BuildFailureError
-
+        self.MiniServiceStore.clear()
+        
+        for v in ProfilModelValues.values():
+            for m in self.mongooseService.sync_find(MongooseDBConstant.PROFILE_COLLECTION,v):
+                p = ProfileMiniService[v](
+                    self.vaultService,
+                    self.mongooseService,
+                    self.redisService,
+                    model=m,model_type=v)
+                p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
+                self.MiniServiceStore.add(p)
+        
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:
-            ...
+            raise BuildFailureError
         
         if self.mongooseService.service_status not in HCVaultService._ping_available_state:
-            ...
+            raise BuildFailureError
     
     async def async_verify_dependency(self):
         try:

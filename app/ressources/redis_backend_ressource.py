@@ -106,7 +106,7 @@ class RedisResultBackendRessource(BaseHTTPRessource):
     @UsePermission(JWTRouteHTTPPermission)
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.Get('/')
-    def get(self,request:Request,authPermission=Depends(get_auth_permission)):
+    def get_result(self,request:Request,authPermission=Depends(get_auth_permission)):
         return 
     
 

@@ -34,6 +34,10 @@ DEFAULT_ASYNC_DESTROY_STATE = -2
 DEFAULT_BUILD_STATE = -1
 DEFAULT_DESTROY_STATE = -1
 
+
+GUNICORN_BUILD_STATE =  -3
+GUNICORN_DESTROY_STATE = -3
+
 #################################            #####################################
 
 class ServiceStatus(Enum):
@@ -41,19 +45,19 @@ class ServiceStatus(Enum):
     """
     The service is fully operational and available for use.
     """
-    NOT_AVAILABLE = 2
-    """
-    The service is not available and cannot be used."""
-    TEMPORARY_NOT_AVAILABLE=3
-    """
-    The service is temporarily not available, possibly due to maintenance or transient issues."""
-    PARTIALLY_AVAILABLE = 4
+    PARTIALLY_AVAILABLE = 2
     """
     The service is operational but may have some limitations or issues that affect its performance or reliability."""
-    WORKS_ALMOST_ATT = 5
+    WORKS_ALMOST_ATT = 3
     """
     The service is operational but may have some features or functionalities that are not fully working as expected, potentially leading to minor issues or inconveniences for users.
     """
+    TEMPORARY_NOT_AVAILABLE=4
+    """
+    The service is temporarily not available, possibly due to maintenance or transient issues."""
+    NOT_AVAILABLE = 5
+    """
+    The service is not available and cannot be used."""
     MAJOR_SYSTEM_FAILURE=6
     """
     The fact that the service does not work will not permit the program to properly run
@@ -65,7 +69,7 @@ class ServiceStatus(Enum):
 STATUS_TO_ERROR_MAP = {
     ServiceStatus.NOT_AVAILABLE: BuildFailureError,
     ServiceStatus.TEMPORARY_NOT_AVAILABLE: BuildWarningError,
-    ServiceStatus.PARTIALLY_AVAILABLE: BuildWarningError,
+    ServiceStatus.PARTIALLY_AVAILABLE: BuildOkError,
     ServiceStatus.WORKS_ALMOST_ATT: BuildSkipError,
     ServiceStatus.MAJOR_SYSTEM_FAILURE:BuildAbortError
 }
@@ -135,7 +139,7 @@ class BaseService():
     
 
     def check_status(self,func_name):
-        print(self,self.service_status) 
+        print('Service:',self,'Service Status:',self.service_status,'builded:',self._builded,'destroyed:',self._destroyed) 
         match self.service_status :
 
             case ServiceStatus.MAJOR_SYSTEM_FAILURE:
@@ -190,12 +194,9 @@ class BaseService():
         """
         self.method_not_available = set()
         
-    async def async_pingService(self,**kwargs):
+    async def async_pingService(self,infinite_wait:bool,**kwargs):
         ...
     
-    def sync_pingService(self,**kwargs):
-        ...
-
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
         # warnings.warn(
         #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
@@ -246,16 +247,10 @@ class BaseService():
             self._builded = True
             self._destroyed = False
 
-            self.service_status = self.service_status if self.service_status != None else ServiceStatus.AVAILABLE
-            
-            if self.service_status in STATUS_TO_ERROR_MAP:
-                if not quiet:
-                    raise STATUS_TO_ERROR_MAP[self.service_status](f'Service {self.__class__.__name__} has status {self.service_status} after build')
-            else:
-                if not quiet:
-                    self.service_status = ServiceStatus.AVAILABLE
-                    self.prettyPrinter.success(
-                        f'{is_mini_service}[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
+            self.service_status = ServiceStatus.AVAILABLE            
+            if not quiet:
+                self.prettyPrinter.success(
+                    f'{is_mini_service}[{now}] Successfully built the service: {self.__class__.__name__}', saveable=True)
             
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 self.prettyPrinter.wait(self.pretty_print_wait_time, False)
@@ -277,12 +272,21 @@ class BaseService():
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 exit(-1)
 
+        except BuildOkError as e:
+            if not quiet:
+                self.prettyPrinter.message(
+                    f'{is_mini_service}[{now}] The state is ok but some function might not work: {self.__class__.__name__}.',saveable=True)
+            
+            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
+
         except BuildWarningError as e:
             # TODO might to change the color because of the error since, it will be for malfunction dependent service
             if not quiet:
                 self.prettyPrinter.warning(
                     f'{is_mini_service}[{now}] Warning issued while building: {self.__class__.__name__}. Service might malfunction properly', saveable=True)
-            self.service_status = ServiceStatus.PARTIALLY_AVAILABLE if self.service_status == None else self.service_status
+                
+            self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
@@ -299,6 +303,7 @@ class BaseService():
                 self.prettyPrinter.warning( # TODO change color
                     f'{is_mini_service}[{now}] Service Not Implemented Yet: {self.__class__.__name__} ', saveable=True)
                 self.prettyPrinter.wait(WAIT_TIME, False)
+                
             self.service_status = ServiceStatus.NOT_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
@@ -386,8 +391,12 @@ TMS = TypeVar("TMS",bound=BaseMiniService)
 
 class MiniServiceStore(Generic[TMS]):
     
-    def __init__(self):
+    def __init__(self,className:str):
         self._store_: Dict[str, TMS] = {}
+        self.className = className
+
+    def clear(self):
+        self._store_.clear()
 
     def add(self, miniService: TMS):
         if miniService.miniService_id in self._store_:
@@ -449,6 +458,11 @@ class BaseMiniServiceManager(BaseService):
                 self.acceptable_service+=1
             if miniService.service_status == ServiceStatus.AVAILABLE:
                 self.available_service += 1
+        
+        def __repr__(self):
+            return (f"StatusCounter(total_service={self.total_service}, "
+                    f"acceptable_service={self.acceptable_service}, "
+                    f"available_service={self.available_service})")
 
     def __init__(self):
         super().__init__()
@@ -462,29 +476,21 @@ class BaseMiniServiceManager(BaseService):
             return
         
         if counter.acceptable_service < 1:
-            self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
+            raise BuildWarningError
         
         if counter.acceptable_service < counter.total_service:
-            raise BuildWarningError
+            raise BuildOkError
         
         if counter.acceptable_service == counter.total_service:
             raise BuildSkipError
-    
-    async def async_pingService(self,**kwargs):
-        if not kwargs.get('__is_manager__',False):
-            return
-        mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
-        p = mss.get(kwargs.get('__profile__',None))
-        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(p,**kwargs)
-    
-    def sync_pingService(self,**kwargs):
-        super().sync_pingService(**kwargs)
         
+    
+    async def async_pingService(self,infinite_wait:bool,**kwargs):
         if not kwargs.get('__is_manager__',False):
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
         p = mss.get(kwargs.get('__profile__',None))
-        return BaseService.CheckStatusBeforeHand(p.sync_pingService)(p,**kwargs)
+        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(p,infinite_wait,**kwargs)
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)
@@ -547,7 +553,7 @@ def AbstractServiceClass()->Callable[[Type[S]],Type[S]]:
         return cls
     return class_decorator
 
-def Service(links:list[LinkDep]=[],is_manager = False)->Callable[[Type[S]],Type[S]]:
+def Service(links:list[LinkDep]=[],is_manager = False,abstract_service_register:list[Type[BaseService]]=[])->Callable[[Type[S]],Type[S]]:
 
     def class_decorator(cls: Type[S]) -> Type[S]:
         if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:

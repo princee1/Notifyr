@@ -1,5 +1,4 @@
-from typing import Self
-from pyparsing import Optional
+from typing import Optional, Self
 from tortoise import Tortoise, fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, field_validator, model_validator
@@ -196,7 +195,7 @@ class ClientModel(ClientModelBase):
         return client_password_validator(password)
     
     @field_validator('max_connection')
-    def validate_max_connection(self,max_connection:int)->int:
+    def validate_max_connection(cls,max_connection:int)->int:
         if max_connection <1:
             raise ValueError('max_connection must be greater than 0')
         if max_connection >5:
@@ -204,13 +203,13 @@ class ClientModel(ClientModelBase):
         return max_connection
 
     @field_validator('client_type')
-    def validate_client_type(self,clientType:AuthType):
+    def validate_client_type(cls,clientType:AuthType):
         if clientType == ClientType.Admin:
             raise ValueError('Cannot create an Admin client')
         return clientType
     
     @field_validator('client_description')
-    def validate_description(self,description:str)->str:
+    def validate_description(cls,description:str)->str:
         if len(description)>500:
             raise ValueError('Description must be less than 500 characters')
         return description.strip()
@@ -249,7 +248,7 @@ class UpdateClientModel(ClientModel):
         return password
 
     @field_validator('client_description')
-    def validate_description(self,description:str|None)->str|None:
+    def validate_description(cls,description:str|None)->str|None:
         if description!=None:
             return super().validate_description(description)
         return description

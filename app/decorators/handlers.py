@@ -1,15 +1,17 @@
 from asyncio import CancelledError
 import asyncio
+import traceback
 from typing import Callable
 
 from fastapi.exceptions import ResponseValidationError
 from h11 import LocalProtocolError
 import hvac
+from minio import S3Error, ServerError
 import requests
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
-from app.classes.template import SchemaValidationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
+from app.classes.template import SchemaValidationError, SkipTemplateCreationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
 from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
@@ -26,7 +28,7 @@ from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
-from app.services.assets_service import AssetNotFoundError
+from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
 from twilio.base.exceptions import TwilioRestException
 
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
@@ -34,7 +36,11 @@ from requests.exceptions import SSLError, Timeout
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError
+from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
+from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
+from aiomcache.exceptions import ClientException, ValidationException 
+from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
+
 
 class ServiceAvailabilityHandler(Handler):
 
@@ -120,7 +126,10 @@ class TemplateHandler(Handler):
                 'message': 'Failed to create template',
                 'error': e.args[0]
             })
+
         except ValueError as e:
+            print(e)
+            traceback.print_exc()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
                 'message':'Could not be able to properly display the value'
             })
@@ -131,6 +140,8 @@ class TemplateHandler(Handler):
                 'error': error,
                 'message': 'Validation Error'
             })
+        except SkipTemplateCreationError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,detail='Couldnt create a template')
 
 
 class WebSocketHandler(Handler):
@@ -657,4 +668,159 @@ class MiniServiceHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                detail="MiniService cannot be identified"
+            )
+
+class S3Handler(Handler):
+
+    error_codes_to_http_codes= {
+        'NoSuchKey':status.HTTP_404_NOT_FOUND
+    }
+
+    async def handle(self, function:Callable, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except S3Error as e:
+
+            raise HTTPException(
+                status_code=self.error_codes_to_http_codes.get(e.code,status.HTTP_500_INTERNAL_SERVER_ERROR),
+                detail={
+                    'message':'S3 Service error occurred',
+                    'error_code':e.code,
+                    'error_message':e.message,
+                    'request_id':e.request_id,
+                    'resource':e.resource,
+                    'object_name':e.object_name
+                }
+            )
+    
+        except ServerError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Failed to build S3 Service due to server error: {str(e)}'
+            )
+
+class FileNamingHandler(Handler):
+
+    async def handle(self,function: Callable, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except AssetTypeNotAllowedError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Asset type not allowed for upload."
+            )
+
+        except AssetTypeNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Asset type not found."
+            )
+
+        except MultipleExtensionError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Multiple file extensions detected; only one is allowed."
+            )
+
+        except ExtensionNotAllowedError as e :
+            print(e.args)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The file extension is not allowed for this asset type." if not e.args else e.args[0]
+            )
+        except AssetConfusionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
+            )
+
+class RedisHandler(Handler):
+    ...
+
+class MemCachedHandler(Handler):
+
+    async def handle(self,function:Callable,*args,**kwargs):
+
+        try:
+            return await function(*args,**kwargs)
+        
+        except MemCachedTypeValueError as e:
+            ...
+        
+        except MemCacheNoValidKeysDefinedError as e:
+            ...
+        
+        except MemcacheClientError as e:
+            ...
+        
+        except MemcacheServerError as e:
+            ...
+        
+        except MemcacheUnexpectedCloseError as e:
+            ...
+        
+        except ValidationException as e:
+            ...
+        
+        except ClientException as e:
+            ...
+    
+from app.classes.cost_definition import (
+    CostException,
+    PaymentFailedError,
+    InsufficientCreditsError,
+    InvalidPurchaseRequestError,
+    CreditDeductionFailedError,
+    CurrencyNotSupportedError,
+    ProductNotFoundError,
+)
+
+class CostHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except PaymentFailedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={'message': 'Payment gateway failure', 'error': str(e)}
+            )
+
+        except InsufficientCreditsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={'message': 'Insufficient credits to complete the purchase'}
+            )
+
+        except InvalidPurchaseRequestError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'Invalid purchase request', 'error': str(e)}
+            )
+
+        except CreditDeductionFailedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={'message': 'Credit deduction failed', 'error': str(e)}
+            )
+
+        except CurrencyNotSupportedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'Currency not supported', 'error': str(e)}
+            )
+
+        except ProductNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={'message': 'Product not found', 'error': str(e)}
+            )
+
+        except CostException as e:
+            # generic cost-related errors fallback
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={'message': 'Cost processing error', 'error': str(e)}
             )

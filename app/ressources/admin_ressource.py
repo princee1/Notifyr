@@ -4,6 +4,7 @@ from typing import Annotated, Any, List, Optional
 from fastapi import Depends, Query, Request, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard, PolicyGuard
+from app.decorators.interceptors import DataCostInterceptor
 from app.definition._service import StateProtocol
 from app.depends.class_dep import Broker
 from app.depends.funcs_dep import GetPolicy, get_blacklist, get_group, get_client
@@ -18,14 +19,14 @@ from app.services.setting_service import SettingService
 from app.services.task_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
-from app.utils.constant import ConfigAppConstant
+from app.utils.constant import ConfigAppConstant, CostConstant
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
-from app.definition._ressource import PingService, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
+from app.definition._ressource import PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthType, PolicyModel, PolicyUpdateMode, Role, Scope
 from pydantic import BaseModel,  field_validator
-from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, PydanticHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, ORMCacheHandler, PydanticHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe, ObjectRelationalFriendlyPipe
 from app.utils.helper import filter_paths, parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
@@ -153,6 +154,8 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
         self.key = self.vaultService.CLIENT_PASSWORD_HASH_KEY
 
+    @UseHandler(CostHandler)
+    @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT))
     @UseServiceLock(SettingService,lockType='reader')
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/')
@@ -235,7 +238,8 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
-    @UseHandler(ORMCacheHandler)
+    @UseHandler(ORMCacheHandler,CostHandler)
+    @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT,'refund'))
     @BaseHTTPRessource.Delete('/')
     async def delete_client(self, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         async with in_transaction():

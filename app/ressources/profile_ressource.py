@@ -6,10 +6,12 @@ from pydantic import BaseModel, ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.classes.condition import MongoCondition, simple_number_validation
 from app.container import InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
+from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
-from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._cost import DataCost
+from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.class_dep import Broker
 from app.depends.dependencies import get_auth_permission
@@ -21,6 +23,7 @@ from app.services.profile_service import ProfileMiniService, ProfileService
 from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
 from app.services.task_service import CeleryService, ChannelMiniService, TaskService
+from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
 
 PROFILE_PREFIX = 'profile'
@@ -49,21 +52,22 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
-    @PingService([HCVaultService,TaskService])
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-    @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler)
+    @PingService([HCVaultService,MongooseService,TaskService])
+    @UseServiceLock(HCVaultService,MongooseService,lockType='reader',check_status=False)
+    @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler)
     @UsePermission(AdminPermission)
+    @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request,'model')
         
         await self.mongooseService.exists_unique(profileModel,True)
         await self.create_profile_model_condition(profileModel)
 
         result = await self.profileService.add_profile(profileModel)
-        broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,bypass_async_verify=False))
+        broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
 
         profileMiniService = ProfileMiniService(None,None,None,result)
         channelService = ChannelMiniService(profileMiniService,self.celeryService)
@@ -71,15 +75,16 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         return result
 
-    @PingService([HCVaultService,CeleryService])
-    @UseHandler(VaultHandler,MiniServiceHandler)
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @PingService([HCVaultService,CeleryService,TaskService])
+    @UseHandler(VaultHandler,MiniServiceHandler,CostHandler)
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UsePermission(AdminPermission)
+    @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
-    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
         await self.profileService.delete_profile(profileModel)
@@ -112,12 +117,12 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         modelUpdate = modelUpdate.model_dump()
 
         await self.profileService.update_profile(profileModel,modelUpdate)
-        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
+        await self.mongooseService.exists_unique(profileModel,True)
 
+        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return await self.profileService.update_meta_profile(profileModel)
     
-
-    @PingService([HCVaultService])
+    @PingService([HCVaultService,TaskService,CeleryService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler,PydanticHandler)
@@ -147,6 +152,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             raise ProfileModelRequestBodyError
         
         model:Type[ProfileModel | Document] = getattr(cls,modelType,None)
+        print(model)
         if model == None:
             raise AttributeError
         
@@ -168,7 +174,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
                 return False
             return True
 
-        mc,force= self.model.condition
+        mc:MongoCondition = self.model.condition
         if mc == None:
             return
         
@@ -187,7 +193,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         if simple_number_validation(count,mc['rule']):
             raise ProfileModelAddConditionError()
         
-        if not force:
+        if not mc.get('force',False):
             return
 
         for k,v in mc['filter'].items():
@@ -248,6 +254,11 @@ class ProfilRessource(BaseHTTPRessource):
         await errorModel.save()
 
         return errorModel
+    
+    @UsePipe(DocumentFriendlyPipe(include={'ignore'}),before=False)
+    @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
+    async def get_all(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+        return await self.mongooseService.find_all(ProfileModel)
     
     
     

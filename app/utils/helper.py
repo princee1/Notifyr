@@ -9,6 +9,7 @@ from inspect import currentframe, getargvalues
 from typing import Any, Callable, Literal, Optional, Tuple, Type, TypeVar, get_args, get_origin
 import urllib.parse
 from aiohttp_retry import Union
+from cachetools import Cache
 from fastapi import Response
 from namespace import Namespace
 from pydantic import BaseModel, ConfigDict, create_model
@@ -21,6 +22,8 @@ import urllib
 from uuid import UUID,uuid1
 import hashlib
 import socket
+
+from app.utils.globals import DIRECTORY_SEPARATOR
 
 alphanumeric = digits + ascii_letters
 
@@ -105,7 +108,11 @@ def uuid_v1_mc(len=1):
 ################################   ** Code Helper **      #################################
 
 class SkipCode(Exception):
-    pass
+    
+    def __init__(self,result=None,_return=False, *args):
+        super().__init__(*args)
+        self.result = result
+        self._return = _return
 
 ################################   ** Key Helper **      #################################
 
@@ -179,6 +186,43 @@ def get_value_in_list(data,index):
 
 
 class PointerIterator:
+
+    class Pointer:
+        def __init__(self,ptr:object |dict,data_key:str,type_:type[object | dict]):
+            self.ptr = ptr
+            self.data_key = data_key
+            self._type = type_
+
+        def get_val(self):
+            if self._type == object:
+                return getattr(self.ptr,self.data_key,None)
+            if isinstance(self.ptr,dict):
+                if self.data_key not in self.ptr:
+                    return False,None
+                return True,self.ptr[self.data_key]
+            return None
+    
+        def set_val(self,new_val):
+            if self._type == object:
+                setattr(self.ptr,self.data_key,new_val)
+            else:
+                if isinstance(self.ptr,dict):
+                    self.ptr[self.data_key] = new_val
+
+        def del_val(self):
+            exists = self.get_val()
+            if self._type == object:
+                if exists == None:
+                    return None
+                delattr(self.ptr,self.data_key)
+                return exists
+            else:
+                exists,val= exists
+                if not exists:
+                    return None
+                self.ptr.pop(self.data_key,None)   
+                return val  
+
     def __init__(self,var:str,split:str='.',_type:Type[object|dict]=object):
         self._type=_type
         self.var = var
@@ -198,41 +242,14 @@ class PointerIterator:
                 if not isinstance(next_ptr,dict):
                     break
             ptr = next_ptr
-        return ptr
+        
+        return self.Pointer(ptr,self.data_key,self._type)
     
     @property
     def data_key(self):
         return self.ptr_iterator[-1]
     
-    def get_val(self,ptr):
-        if self._type == object:
-            return getattr(ptr,self.data_key,None)
-        if isinstance(ptr,dict):
-            if self.data_key not in ptr:
-                return False,None
-            return True,ptr[self.data_key]
-        return None
-    
-    def set_val(self,ptr,new_val):
-        if self._type == object:
-            setattr(ptr,self.data_key,new_val)
-        else:
-            if isinstance(ptr,dict):
-                ptr[self.data_key] = new_val
-
-    def del_val(self,ptr:dict|object):
-        exists = self.get_val(ptr)
-        if self._type == object:
-            if exists == None:
-                return None
-            delattr(ptr,self.data_key)
-            return exists
-        else:
-            exists,val= exists
-            if not exists:
-                return None
-            ptr.pop(self.data_key,None)   
-            return val     
+       
 
 ################################   ** Parsing Helper **      #################################
 
@@ -350,29 +367,29 @@ def swapDict(values: dict):
 
 def default_flattenReducer(key1:str,key2:str): return  key1+key2
 
-def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] ={}, reducer:Callable[[str,str],str] = default_flattenReducer,serialized=False):
+def flatten_dict(current_dict: dict[str, Any], from_keys: str = None, flattenedDict: dict[str,Any] =None, reducer:Callable[[str,str],str] = default_flattenReducer,serialized=False,dict_sep=DICT_SEP,_key_builder=key_builder,max_level=-1,current_level=0):
     """
     See https://pypi.org/project/flatten-dict/ for a better implementation
     """
+    flattenedDict = {} if flattenedDict == None else flattenedDict
+
     for key, item in current_dict.items():
         if type(key) is not str:
             continue
 
-        if DICT_SEP in key:
+        if dict_sep in key:
             raise KeyError
 
         from_keys = "" if from_keys is None else from_keys
         key_val  = reducer(from_keys,key)  
 
         if type(item) is not dict:
-            if not serialized:
-                flattenedDict[key_val] = item
+            flattenedDict[key_val] = item if not serialized else json.dumps(item,default=enum_encoder)
+        else:
+            if max_level>0 and current_level>=max_level:
+                flattenedDict[key_val]=item
             else:
-                #flattenedDict[key_val] = str(item)
-                flattenedDict[key_val] = json.dumps(item,default=enum_encoder)
-
-        if type(item) is dict: 
-            flatten_dict(item, key_builder(key_val), flattenedDict,reducer,serialized)
+                flatten_dict(item, _key_builder(key_val), flattenedDict,reducer,serialized,dict_sep,_key_builder,max_level=max_level,current_level=current_level+1)
     
     return flattenedDict
 
@@ -535,17 +552,15 @@ def phone_parser(phone_number:str,country_code=None):
     else:
         cleaned_number = f'+{phone_number}'
     return cleaned_number
-    
-def filter_paths(paths,append_asset=True):
-        paths = sorted(paths, key=lambda x: x.count("\\"))  # Trier par profondeur
+
+def filter_paths(paths: list[str],sep=DIRECTORY_SEPARATOR) -> list[str]:
+        paths = sorted(paths, key=lambda x: x.count(sep))  # Trier par profondeur
         results = []
-
+        if sep in paths:
+            return [sep]
         for path in paths:
-            if not any(path.startswith(d + "\\") for d in results):
+            if not any(path.startswith(d + sep) for d in results):
                 results.append(path)
-
-        if append_asset:
-            return ['assets/'+ p for p in results ]
         return results
 
 ###################################### ** Time Helper **  ###########################################
@@ -611,3 +626,46 @@ def subset_model(
         fields[field_name] = (ann, default)
     
     return create_model(name,__config__=__config__, **fields)
+
+################################   ** Cache Helper **      #################################
+
+
+class IntegrityCache:
+    """
+    The `IntegrityCache` class implements a caching mechanism with support for two modes:
+    'presence-only' which only checks if the value is inside of the cache and 'value' checks the presence and the integrity of the value.
+    """
+
+    def __init__(self,mode:Literal['presence-only','value'],_cache:Callable[[],dict|Cache]=lambda:dict()):
+        self._cache_init = _cache
+        self.mode = mode
+        self.init()
+
+    def init(self):
+        self._cache = self._cache_init()
+        
+    def cache(self,key,value=None)->bool:
+        """
+        Return if it is a cache hit. If the mode is `value` then it performs also the value validation
+        """
+        if self.mode == 'presence-only':
+            value = None
+
+        if key not in self._cache:
+            self._cache[key]=value
+            return False
+        
+        if self.mode == "presence-only":
+            return True
+        
+        if self._cache[key] == value:
+            return True
+
+        self._cache[key] = value
+        return False
+
+    def clear(self):
+        self.init()
+    
+    def invalid(self,key:str,default:Any=None):
+        return self._cache.pop(key,default)

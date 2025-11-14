@@ -1,24 +1,14 @@
-FROM python:3.11-slim
+from debian:bookworm-slim as builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends make  && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m celery
+FROM notifyr:fastapi
 
-USER celery
+COPY --from=builder /usr/bin/make /usr/bin/make
 
-WORKDIR /usr/src/
-
-# COPY ./assets ./assets/
-
-COPY ./app ./app/
-
-COPY ./requirements_dev.txt .
-
-COPY ./Makefile .
+COPY ./prod.Makefile ./Makefile
 
 COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
-
-RUN make install
 
 RUN pip install gevent
 

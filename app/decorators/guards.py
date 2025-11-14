@@ -20,7 +20,7 @@ from app.services.twilio_service import TwilioService
 from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
-from fastapi import HTTPException, Request,status
+from fastapi import HTTPException, Request, UploadFile,status
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
@@ -44,7 +44,7 @@ class AssetGuard(Guard):
         self.assetService = Get(AssetService)       
         self.configService = Get(ConfigService)
         self.options = options
-        self.allowed_path = [self.configService.ASSET_DIR +p for p in  allowed_path]
+        self.allowed_path = [self.configService.ASSETS_DIR +p for p in  allowed_path]
         self.content_keys = content_keys
         self.accepted_type = accepted_type
 
@@ -57,7 +57,7 @@ class AssetGuard(Guard):
             return True,_
         content = scheduler.model_dump(include={'content'})
         content = flatten_dict(content)
-        flag = self.assetService.verify_asset_permission(content,self.content_keys,self.allowed_path,self.options)
+        flag = self.assetService.verify_content_asset_permission(content,self.content_keys,self.allowed_path,self.options)
         if not flag:
             return False, 'message'
         return True,''
@@ -278,5 +278,18 @@ class PolicyGuard(Guard):
     
         return True,''
 
+class GlobalsTemplateGuard(Guard):
 
-        
+    def __init__(self,error_message:str='Access to the template is forbidden at this route'):
+        super().__init__()
+        self.error_message = error_message
+
+    def guard(self,template:str=None,files: List[UploadFile]=None,destination_template:str=None):
+        if template and template == 'globals.json':
+            return False,self.error_message
+        if files and 'globals.json' in set([file.filename for file in files]):
+            return False,self.error_message
+        if destination_template and destination_template == 'globals.json':
+            return False,self.error_message
+
+        return True,''

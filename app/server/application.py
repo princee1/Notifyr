@@ -9,9 +9,11 @@ from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.ressources import *
-from app.services.database_service import JSONServerDBService, MongooseService, RedisService, TortoiseConnectionService
+from app.services.assets_service import AssetService
+from app.services.aws_service import AmazonS3Service
+from app.services.database_service import  MemCachedService, MongooseService, RedisService, TortoiseConnectionService
 from app.services.health_service import HealthService
-from app.services.rate_limiter_service import RateLimiterService
+from app.services.cost_service import CostService
 from app.services.secret_service import HCVaultService
 from app.utils.prettyprint import PrettyPrinter_
 from starlette.types import ASGIApp
@@ -30,6 +32,9 @@ from tortoise.contrib.fastapi import register_tortoise
 import traceback
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.backends.memcached import MemcachedBackend
+
 from .app_meta import *
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
@@ -78,9 +83,10 @@ class Application(EventInterface):
 
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
-        self.rateLimiterService: RateLimiterService = Get(RateLimiterService)
+        self.costService: CostService = Get(CostService)
+        
         self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
-        self.app.state.limiter = self.rateLimiterService.GlobalLimiter
+        self.app.state.limiter = self.costService.GlobalLimiter
 
         self.add_exception_handlers()
         self.add_middlewares()
@@ -154,6 +160,7 @@ class Application(EventInterface):
             except Exception as e:
                 print(e.__class__)
                 print(e)
+                traceback.print_exc()
                 self.pretty_printer.error(
                     f"[{now}] Error adding ressource {ressource_type.__name__} to the app", saveable=True)
                 self.pretty_printer.wait(0.1, press_to_continue=True)
@@ -174,13 +181,18 @@ class Application(EventInterface):
         BaseService.CONTAINER_LIFECYCLE_SCOPE = False
 
         redisService = Get(RedisService)
+        memcachedService = Get(MemCachedService)
         
         if redisService.service_status == ServiceStatus.AVAILABLE:
             await redisService.create_group()
             redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
 
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
+        # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
+        # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
 
+        assetService:AssetService = Get(AssetService)
+        
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
@@ -204,8 +216,8 @@ class Application(EventInterface):
         mongooseService = Get(MongooseService)
         mongooseService.start()
 
-        jsonServerService = Get(JSONServerDBService)
-        jsonServerService.start()
+        amazons3Service = Get(AmazonS3Service)
+        amazons3Service.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
@@ -213,13 +225,13 @@ class Application(EventInterface):
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
+        amazons3Service = Get(AmazonS3Service)
         vaultService = Get(HCVaultService)
 
         taskService:TaskService =  Get(TaskService)
-        jsonServerService = Get(JSONServerDBService)
         
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,jsonServerService]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,amazons3Service]
 
         for s in services:
             s.shutdown()

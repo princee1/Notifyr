@@ -1,6 +1,6 @@
 import functools
 import time
-from typing import Any, Callable, Dict, Self, Type, TypeVar, TypedDict
+from typing import Any, Callable, Dict, List, Self, Type, TypeVar, TypedDict
 from urllib.parse import urlencode
 import aiohttp
 from beanie import Document, PydanticObjectId, init_beanie
@@ -8,6 +8,7 @@ import hvac
 import requests
 from typing_extensions import Literal
 from random import random,randint
+from app.classes.callbacks import CALLBACKS_CONFIG
 from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.vault_engine import VaultDatabaseCredentials
 from app.definition._error import BaseError
@@ -15,8 +16,8 @@ from app.definition._interface import Interface, IsInterface
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
-from app.utils.helper import quote_safe_url, reverseDict
+from app.utils.constant import MongooseDBConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.helper import quote_safe_url, reverseDict, subset_model
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService
 from .file_service import FileService
@@ -36,17 +37,27 @@ from random import randint,random
 from app.models.profile_model import *
 from app.errors.db_error import *
 from pymongo import MongoClient
+from pymemcache import Client as SyncClient,MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
+from aiomcache import Client
 
 MS_1000 = 1000
 ENGINE_KEY = 'engine'
 DB_KEY = 'db'
 
 
-@IsInterface
-class RotateCredentialsInterface(Interface):
+@AbstractServiceClass()
+class DatabaseService(BaseService): 
+    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
+        BaseService.__init__(self)
+        self.configService= configService
+        self.fileService = fileService
 
-    
-    def __init__(self,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+@AbstractServiceClass()
+class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
+
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+        DatabaseService.__init__(self,configService,fileService)
+        SchedulerInterface.__init__(self,)
         self.vaultService = vaultService
         self.creds:VaultDatabaseCredentials = {}
         self.max_retry = max_retry
@@ -55,7 +66,20 @@ class RotateCredentialsInterface(Interface):
         self.b = b
         self.last_rotated = None
         self.auth_ttl = ttl
-    
+
+        delay = IntervalParams( 
+            seconds=self.random_buffer_interval(self.auth_ttl) 
+            )
+        self.interval_schedule(delay, self.creds_rotation)
+
+    def verify_dependency(self):
+        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError("Vault Service can’t issue creds")
+
+    async def async_pingService(self,infinite_wait:bool, **kwargs):
+        self.check_auth()
+        await super().async_pingService(infinite_wait,**kwargs)
+             
     @staticmethod
     def random_buffer_interval(ttl):
         return ttl - (ttl*.08*random() + randint(20,40))
@@ -114,28 +138,12 @@ class RotateCredentialsInterface(Interface):
         if self.last_rotated == None:
             return True
         
-        return  time.time() - self.last_rotated < self.auth_ttl
+        return  time.time() - self.last_rotated < self.auth_ttl    
 
-@AbstractServiceClass()
-class DatabaseService(BaseService): 
-    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__()
-        self.configService= configService
-        self.fileService = fileService
-    
+
 
 @Service()
 class RedisService(DatabaseService):
-
-    class StreamConfig(TypedDict):
-        sub:bool
-        count:int|None = None
-        block:int|None=None
-        wait:int|None=None
-        stream:bool
-        channel_tasks:asyncio.Task | None = None
-        stream_tasks: asyncio.Task | None = None
-
 
     GROUP = 'NOTIFYR-GROUP'
     
@@ -144,91 +152,7 @@ class RedisService(DatabaseService):
         self.configService = configService
         self.reactiveService = reactiveService
         self.to_shutdown = False
-        
-        self.streams:Dict[StreamConstant.StreamLiteral,RedisService.StreamConfig] = {
-            StreamConstant.LINKS_EVENT_STREAM:self.StreamConfig(**{
-                'sub':True,
-                'count':MS_1000*4,
-                'block':MS_1000*5,
-                'stream':True
-            }),
-            StreamConstant.EMAIL_EVENT_STREAM:self.StreamConfig(**{
-                'sub':True,
-                'count':MS_1000,
-                'block':MS_1000*15,
-                'wait':70,
-                'stream':True
-            }),
-            StreamConstant.TWILIO_REACTIVE:self.StreamConfig(**{
-                'sub':True,
-                'stream':False}),
-            
-            StreamConstant.EMAIL_TRACKING:self.StreamConfig(**{
-                'sub':False,
-                'stream':True,
-                'block':MS_1000*2,
-                'wait':5,
-            }),
-
-            StreamConstant.TWILIO_TRACKING_CALL:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait=5,
-                block=MS_1000*5
-            ),
-            StreamConstant.TWILIO_TRACKING_SMS:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait=5,
-                block=MS_1000*5
-            ),
-            StreamConstant.TWILIO_EVENT_STREAM_CALL:self.StreamConfig(
-                sub=True,
-                stream=True,
-                wait=45,
-                block=MS_1000*15,
-                count=MS_1000*5,
-
-            ),
-            StreamConstant.TWILIO_EVENT_STREAM_SMS:self.StreamConfig(
-                sub=True,
-                stream=True,
-                wait=45,
-                block=MS_1000*15,
-                count=500,
-            ),
-            StreamConstant.CONTACT_CREATION_EVENT:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait = 60*60*6,
-                block=MS_1000*10,
-                count=1000
-            ),
-            StreamConstant.CONTACT_SUBS_EVENT:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait = 60*60*4,
-                block=MS_1000*20,
-                count=10000
-            ),
-            StreamConstant.CELERY_RETRY_MECHANISM:self.StreamConfig(
-                sub=False,
-                stream=True,
-                wait=10,
-                block=10,
-                count=1000,
-            ),
-
-            SubConstant.SERVICE_STATUS:self.StreamConfig(
-                sub=True,
-                stream=False
-            ),
-            SubConstant.MINI_SERVICE_STATUS:self.StreamConfig(
-                sub=True,
-                stream=False,
-            )
-        }
-
+        self.callbacks = CALLBACKS_CONFIG.copy()
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
 
 
@@ -245,7 +169,7 @@ class RedisService(DatabaseService):
 
     @dynamic_context
     def stream_data(self,stream:str,data:dict):
-        if stream not in self.streams.keys():
+        if stream not in self.callbacks.keys():
             raise RedisStreamDoesNotExistsError(stream)
         
         if not isinstance(data,dict):
@@ -258,7 +182,7 @@ class RedisService(DatabaseService):
 
     @dynamic_context
     def publish_data(self,channel:str,data:Any):
-        if channel not in self.streams.keys():
+        if channel not in self.callbacks.keys():
             return
         #if data:   
         data = json.dumps(data)
@@ -267,7 +191,7 @@ class RedisService(DatabaseService):
     async def _consume_channel(self,channels,handler:Callable[[Any],MessageBroker|Any|None]):
         pubsub = self.redis_events.pubsub()
 
-        if channels != SubConstant.SERVICE_STATUS:
+        if channels not in SubConstant._SUB_CALLBACK:
             def handler_wrapper(message):
                 if message is None:
                     print('No message')
@@ -299,12 +223,18 @@ class RedisService(DatabaseService):
                         ...
         else:
             async def handler_wrapper(message):
-                if 'data' not in message: 
-                    return
-                data= json.loads(message["data"])
-                if asyncio.iscoroutinefunction(handler):
-                    return await handler(data)
-                return handler(data)
+                try:
+                    
+                    if 'data' not in message: 
+                        return
+                    data= json.loads(message["data"])
+                    if asyncio.iscoroutinefunction(handler):
+                        return await handler(data)
+                    return handler(data)
+                except Exception as e:
+                    print(e)
+                    print(e.__class__)
+                    
 
         await pubsub.subscribe(**{channels:handler_wrapper}) # TODO Maybe add the function as await
 
@@ -316,7 +246,7 @@ class RedisService(DatabaseService):
 
     async def create_group(self):
 
-        for stream in self.streams.keys():
+        for stream in self.callbacks.keys():
             try:
                 await self.redis_events.xgroup_create(stream, RedisService.GROUP, id='0-0', mkstream=True)
             except ResponseError as e:
@@ -326,7 +256,7 @@ class RedisService(DatabaseService):
                     ...
 
     def register_consumer(self,callbacks_sub:dict[str,Callable]={},callbacks_stream:dict[str,Callable]={}):
-        for stream_name,config in self.streams.items():
+        for stream_name,config in self.callbacks.items():
             is_stream = config['stream']
             is_sub = config['sub']
             if is_stream:
@@ -381,20 +311,20 @@ class RedisService(DatabaseService):
     def build(self,build_state=-1):
         host = self.configService.REDIS_URL
         host = host.replace('redis://','')
-        self.redis_celery = Redis(host=host,db=0)
-        self.redis_limiter = Redis(host=host,db=1)
-        self.redis_cache = Redis(host=host,db=3,decode_responses=True)
+        self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB)
+        self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB)
+        self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True)
 
         if self.configService.celery_env == CeleryMode.none:
-            self.redis_events=Redis(host=host,db=2,decode_responses=True)
+            self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
         else :
-            self.redis_events = SyncRedis(host=host,db=2,decode_responses=True)
+            self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
 
         self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
-            0:self.redis_celery,
-            1:self.redis_limiter,
-            2:self.redis_events,
-            3:self.redis_cache,
+            RedisConstant.CELERY_DB:self.redis_celery,
+            RedisConstant.LIMITER_DB:self.redis_limiter,
+            RedisConstant.EVENT_DB:self.redis_events,
+            RedisConstant.CACHE_DB:self.redis_cache,
             'celery':self.redis_celery,
             'limiter':self.redis_limiter,
             'events': self.redis_events,
@@ -462,7 +392,7 @@ class RedisService(DatabaseService):
         return response
         
     async def close_connections(self,):
-        for config in self.streams.values():
+        for config in self.callbacks.values():
             if 'channel_tasks' in config and  config['channel_tasks']:
                 config['channel_tasks'].cancel()
             if 'stream_tasks' in config and config['stream_tasks']:
@@ -472,13 +402,115 @@ class RedisService(DatabaseService):
         for i in range(len_db):
             await self.db[i].close()
 
+    @check_db
+    async def increment(self,database:int|str,name:str,amount:int,redis:Redis=None):
+        return await redis.incrby(name,amount)
+    
+    @check_db
+    async def decrement(self,database:int|str,name:str,amount:int,redis:Redis=None):
+        return await redis.decrby(name,amount)
+
+    @check_db
+    async def hash_iter(self,database:int|str,hash_name:str,iter=False,match:str=None,count=None,redis:Redis=None):
+        if iter:
+            return await redis.hscan_iter(hash_name,match,count)
+        else:
+            return await redis.hgetall(hash_name)
+    
+    @check_db
+    async def hash_del(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
+        return await redis.hdel(*keys)
+
+    @check_db
+    async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
+        return await redis.lpush(name,*element)
+
+    
+@Service()
+class MemCachedService(DatabaseService,SchedulerInterface):
+    
+    DEFAULT_PORT= 11211  
+    POOL_MINSIZE=2
+    POOL_MAXSIZE =5
+
+    def __init__(self, configService:ConfigService, fileService:FileService):
+        super().__init__(configService, fileService)
+    
+    @staticmethod
+    def KeyEncoder(func:Callable):
+
+        @functools.wraps(func)
+        async def wrapper(self,key:str,*args,**kwargs):
+            if type(key)== str:
+                key = key.encode()
+            return await func(self,key,*args,**kwargs)
+
+        return wrapper
+    
+    def build(self, build_state = ...):
+        try:
+            self.sync_client = SyncClient((self.configService.MEMCACHED_URL,self.DEFAULT_PORT),connect_timeout=6)
+            self.client = Client(self.configService.MEMCACHED_URL,pool_minsize=self.POOL_MINSIZE,pool_size=self.POOL_MAXSIZE)
+            version = self.sync_client.version().decode()
+           
+        except MemcacheClientError as e:
+            raise BuildFailureError
+        
+        except MemcacheUnexpectedCloseError as e:
+            raise BuildFailureError
+            
+        except MemcacheServerError as e:
+            raise BuildWarningError
+            
+    @KeyEncoder
+    async def get(self,key:str,default:Any=None,_raise=False,_return_bytes=False)->Any|bytes:
+        result = await self.client.get(key,None)
+        if result == None and default != None:
+            if _raise:
+                raise MemCachedCacheMissError
+            else: return default
+    
+        return json.loads(result) if result!=None and not _return_bytes else result
+   
+    async def delete(self,*key:str):
+        if len(key) < 1:
+            raise MemCacheNoValidKeysDefinedError('Key not given')
+        
+        if len(key)==1:
+            key = key.encode()
+            return await self.client.delete(key)
+
+        return self.sync_client.delete_many(list(key))
+    
+    @KeyEncoder
+    async def set(self,key:str,value:Any|bytes,expire:int=0,multi=False):     
+        if not multi:
+            if type(value) != bytes:
+                value = json.dumps(value).encode()
+            return await self.client.set(key,value,expire)
+        
+        if type(value) != dict:
+            raise MemCachedTypeValueError('Must be a dict')
+        return self.sync_client.set_many(value,expire)
+        
+    @KeyEncoder
+    async def exist(self,key:str):
+        return self.get(key,None,False) != None
+
+    async def clear(self):
+        await self.client.flush_all()
+    
+    async def close(self):
+        self.sync_client.close()
+        self.client.close()
+
 
 D = TypeVar('D',bound=Document)
 
 @Service(
     links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
 )     
-class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInterface):
+class MongooseService(TempCredentialsDatabaseService):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
     DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
 
@@ -488,15 +520,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         fileService: FileService,
         vaultService: HCVaultService,
     ):
-        super().__init__(configService, fileService)
-        SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(
-            self, vaultService, VaultTTLSyncConstant.MONGODB_AUTH_TTL
-        )
-        delay = IntervalParams( 
-            seconds=self.random_buffer_interval(self.auth_ttl) 
-            )
-        self.interval_schedule(delay, self.creds_rotation)
+        super().__init__(configService, fileService,vaultService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
 
         self.client: AsyncIOMotorClient | None = None
         self._documents = []
@@ -510,10 +534,13 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
 
     async def get(self,model:Type[D],id:str,raise_:bool = True)->D:
         m = await model.get(PydanticObjectId(id))
-        if m == None:
+        if m == None and raise_:
             raise DocumentDoesNotExistsError(id)
         return m
     
+    async def find_all(self,model:Type[D])->List[D]:
+        return await model.find_all().to_list()
+
     async def find(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).to_list()
 
@@ -542,7 +569,7 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
         else:
             return is_exist
 
-    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={})->list[D]:
+    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={},return_model=False)->list[D]:
         
         filter['_class_id'] = {"$regex": f"{model.__name__}$" }
     
@@ -550,16 +577,12 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
             raise MongoCollectionDoesNotExists(collection)
 
         mongo_collection = self.sync_db[collection]
-        docs = mongo_collection.find(filter,projection).to_list()
-
-        return [model.model_construct(**doc) for doc in docs]
+        docs= mongo_collection.find(filter,projection).to_list()
+        return docs if not return_model else [model.model_construct(**doc) for doc in docs]
        
     ##################################################
     # Service lifecycle
     ##################################################
-    def verify_dependency(self):
-        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError("Vault Service can’t issue creds")
 
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
@@ -629,37 +652,18 @@ class MongooseService(DatabaseService, SchedulerInterface, RotateCredentialsInte
     ##################################################
     # Healthcheck
     ##################################################
-    async def async_pingService(self, **kwargs):
-        self.check_auth()
-
-    def sync_pingService(self, **kwargs):
-        super().sync_pingService(**kwargs)
-        self.check_auth()
-
+    
     def destroy(self, destroy_state = ...):
         self.close_connection()
     
 @Service(
     links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
 )
-class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredentialsInterface):
+class TortoiseConnectionService(TempCredentialsDatabaseService):
     DATABASE_NAME = 'notifyr'
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService):
-        super().__init__(configService, None)
-        SchedulerInterface.__init__(self)
-        RotateCredentialsInterface.__init__(self,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
-
-        delay = IntervalParams(
-            seconds=self.random_buffer_interval(self.auth_ttl)
-        )
-
-        self.interval_schedule(delay,self.creds_rotation)
-
-    def verify_dependency(self):
-        if self.vaultService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError('Vault Service Cant issue creds')
-        
+        super().__init__(configService, None,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
 
     def build(self,build_state=-1):
         try:
@@ -702,91 +706,3 @@ class TortoiseConnectionService(DatabaseService,SchedulerInterface,RotateCredent
     async def _creds_rotator(self):
         self.generate_creds()
         await self.init_connection(True)
-    
-    def sync_pingService(self,**kwargs):
-        self.check_auth()
-        super().sync_pingService(**kwargs)
-
-    async def async_pingService(self,**kwargs):
-        self.check_auth()
-        await super().async_pingService(**kwargs)
-
-@Service()  
-class JSONServerDBService(DatabaseService,SchedulerInterface):
-
-    #_error_to_status = reverseDict(STATUS_TO_ERROR_MAP)
-    
-    def __init__(self,configService:ConfigService,fileService:FileService,redisService:RedisService,vaultService:HCVaultService):
-        super().__init__(configService, fileService)
-        self.json_server_url = configService.SETTING_DB_URL
-        self.redisService = redisService
-        self.vaultService = vaultService
-        
-        SchedulerInterface.__init__(self,)
-        interval = IntervalParams(
-            hours=6
-        )
-        self.interval_schedule(interval,self.check_health)
-    
-    def build(self,build_state=-1):
-        try:
-            response = requests.get(f"{self.json_server_url}/health",timeout=10)
-            if response.json()["status"] == "ok":
-                ...
-            else:
-                raise BuildFailureError(f"Status Code: {response.status_code}, Reason: {response.reason}")
-
-        except TimeoutError as e:
-            raise BuildWarningError(e.args)
-
-        except requests.RequestException as e:
-            raise BuildFailureError(e.args)
-
-        except KeyError as e:
-            raise BuildWarningError(e.args)
-    
-    async def check_health(self):
-        async with self.statusLock.writer:
-
-            try:
-                self.build()
-            except:
-                if self.service_status == ServiceStatus.AVAILABLE:
-                    self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE      
-                else:
-                    self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE                     
-
-    def get_setting(self)->dict:
-        try:
-        
-            response=  requests.get(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}")
-            if response.status_code == 200:
-                return response.json()
-            else:
-                raise BuildWarningError(f"Error fetching data: {response.status_code}")
-        except:
-            raise BuildWarningError("Error connecting to JSON server")
-
-    async def aio_get_setting(self)->dict:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}") as resp:
-                    if resp.status == 200:
-                        return await resp.json()
-        except Exception:
-            self.redisService.publish_data(SubConstant.SERVICE_STATUS,StateProtocol(service=self.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
-            print("Error connecting to JSON server while getting settings")
-
-    async def save_settings(self,data:Any):
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.put(f"{self.json_server_url}/{SettingDBConstant.BASE_JSON_DB}",json=data) as resp:
-                    if resp.status == 200:
-                        return await resp.json()
-                    else:
-                        ...
-        except Exception:
-            self.redisService.publish_data(SubConstant.SERVICE_STATUS,StateProtocol(service=self.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
-            print("Error connecting to JSON server while saving settings")
-
-

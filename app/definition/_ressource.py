@@ -2,24 +2,21 @@
 The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 instance imported from `container`.
 """
-from inspect import isclass
-from types import NoneType
 from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
-
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
-from app.utils.helper import copy_response, issubclass_of
+from app.utils.helper import copy_response
 from app.utils.constant import SpecialKeyParameterConstant
-from app.services import AssetService, RateLimiterService
+from app.services import AssetService, CostService
 from app.container import Get, Need
 from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, BaseService
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
-from fastapi import BackgroundTasks
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
@@ -32,7 +29,7 @@ from app.depends.variables import SECURITY_FLAG
 
 
 configService: ConfigService = Get(ConfigService)
-rateLimitService:RateLimiterService = Get(RateLimiterService)
+costService:CostService = Get(CostService)
 
 RequestLimit = 0
 
@@ -167,21 +164,25 @@ class Helper:
         return temp_pipe_func
 
     @staticmethod
-    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[Exception]):
+    def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[DecoratorException],inject_func_meta=False):
         def wrapper(function: Callable):
 
             @functools.wraps(function)
             async def callback(*args, **kwargs):  # Function that will be called
+
+                if inject_func_meta:
+                    if SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER in kwargs:
+                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                                        'message': 'special key used'})
+                    kwargs[SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER] = function.meta
+
                 if empty_decorator:
                     return await function(*args, **kwargs)
 
                 def proxy(deco, f: Callable):
                     @functools.wraps(deco)
                     async def delegator(*a, **k):
-                        if type(deco) == type:
-                            obj: DecoratorObj = deco()
-                            return await obj.do(f, *a, **k)
-                        elif isinstance(deco, deco_type):
+                        if isinstance(deco, deco_type):
                             return await deco.do(f, *a, **k)
                         else:
                             return await deco(f, *a, **k)
@@ -195,6 +196,11 @@ class Helper:
                     return await deco_prime(*args, **kwargs)
                 except error_type as e:
 
+                    if e.response != None and isinstance(e.response,Response):
+                        return e.response                    
+
+                    e.raise_http_exception()
+
                     if default_error == None:
                         raise HTTPException(
                             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Could not correctly treat the error')
@@ -204,6 +210,16 @@ class Helper:
             return callback
         return wrapper
 
+    @staticmethod
+    def merge_headers(excp_headers:Dict[str,str],response:Response):
+        if response == None:
+            return excp_headers
+        
+        if excp_headers == None:
+            excp_headers = {}
+
+        excp_headers.update(response.headers)
+        return excp_headers
 ################################################################                           #########################################################
 
 
@@ -254,7 +270,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         return route_name.replace(PATH_SEPARATOR, "_") + '_'.join(m)
 
     @staticmethod
-    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST], operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST],cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends]|List[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
                   deprecated: bool | None = None, mount: bool = True):
         def decorator(func: Callable):
@@ -270,10 +286,14 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             func.meta['limit_exempt'] = False
             func.meta['shared'] = None
             func.meta['default_role'] = True
+            func.meta['cost_definition_name'] = cost_definition
+            func.meta['cost_definition'] = {} if cost_definition == None else costService.costs_definition[cost_definition]  
 
-            if not mount:
+            is_mount = func.meta['cost_definition'].get('__mount__',mount)
+
+            if not is_mount:
                 return func
-
+            
             class_name = Helper.get_class_name_from_method(func)
             kwargs = {
                 'path': path,
@@ -296,22 +316,22 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         return decorator
 
     @staticmethod
-    def Get(path: str, operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Get(path: str,cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
             responses: Dict[int | str, Dict[str, Any]] | None = None,
             deprecated: bool | None = None, mount: bool = True):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.GET], operation_id, dependencies, response_model, response_description, responses, deprecated, mount)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.GET],cost_definition, operation_id, dependencies, response_model, response_description, responses, deprecated, mount)
 
     @staticmethod
-    def Post(path: str, operation_id: str = None,  dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Post(path: str,cost_definition:str=None, operation_id: str = None,  dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
              responses: Dict[int | str, Dict[str, Any]] | None = None,
              deprecated: bool | None = None, mount: bool = True):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.POST], operation_id, dependencies, response_model, response_description, responses, deprecated, mount)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.POST],cost_definition, operation_id, dependencies, response_model, response_description, responses, deprecated, mount)
 
     @staticmethod
-    def Delete(path: str, operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+    def Delete(path: str,cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
                responses: Dict[int | str, Dict[str, Any]] | None = None,
                deprecated: bool | None = None, mount: bool = True):
-        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE], operation_id, dependencies,  response_model, response_description, responses, deprecated, mount)
+        return BaseHTTPRessource.HTTPRoute(path, [HTTPMethod.DELETE],cost_definition, operation_id, dependencies,  response_model, response_description, responses, deprecated, mount)
 
     @staticmethod
     def OnEvent(event: str):
@@ -356,6 +376,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 c = getattr(self, f)
                 if not asyncio.iscoroutinefunction(c):
                     setattr(self, f, sync_to_async(c))
+                    c= getattr(self,f)
                 for sc in sorted(stacked_callback, key=lambda x: x[1], reverse=True):
                     sc_ = sc[0]
                     c = sc_(c)
@@ -371,17 +392,15 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             shared = meta['shared']
 
             if meta['limit_exempt']:
-                func_attr = rateLimitService.GlobalLimiter.exempt(func_attr)
+                func_attr = costService.GlobalLimiter.exempt(func_attr)
                 setattr(self, func_name, func_attr)
                 return
 
             if limit_obj:
                 if not shared:
-                    func_attr = rateLimitService.GlobalLimiter.limit(**limit_obj)(func_attr)
+                    func_attr = costService.GlobalLimiter.limit(**limit_obj)(func_attr)
                 else:
-                    func_attr = rateLimitService.GlobalLimiter.shared_limit(
-                        **limit_obj)(func_attr)
-
+                    func_attr = costService.GlobalLimiter.shared_limit(**limit_obj)(func_attr)
                 setattr(self, func_name, func_attr)
 
     def __init_subclass__(cls: Type) -> None:
@@ -414,12 +433,6 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
 
         self.default_response: Dict[int | str,
                                     Dict[str, Any]] | None = router_default_response
-
-    def get(self, dep: Type[S]|str, scope=None, all=False) -> S:
-        return Get(dep, scope, all)
-
-    def need(self, dep: Type[S]|str) -> S:
-        return Need(dep)
 
     def on_startup(self):
         """
@@ -508,7 +521,7 @@ def common_class_decorator(cls: Type[R] | Callable, decorator: Callable, handlin
 
 ################################################################                           #########################################################
 
-def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Type[W]] = [], add_prefix=True,mount=True):
+def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Type[W]] = [], add_prefix=True,ressource_id:str=None,mount=True):
     def class_decorator(cls: Type[R]) -> Type[R]:
         # TODO: support module-level injection
         meta: ClassMetaData= cls.meta
@@ -518,7 +531,7 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
         cls.meta['add_prefix'] = add_prefix
         cls.meta['mount'] = []
         cls.meta['mount_ressource'] = mount
-        meta['ressource_id'] = prefix
+        meta['ressource_id'] = prefix if not ressource_id else ressource_id
 
         meta['classname'] = cls.__name__
 
@@ -527,7 +540,12 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
 
 ################################################################                           #########################################################
 
-def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams = None):
+def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams = None,mount=True):
+    if not mount:
+        def decorator(func:Callable):
+            return func
+        return decorator
+
     empty_decorator = len(permission_function) == 0
     if empty_decorator:
         warnings.warn(
@@ -568,9 +586,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
                 for permission in permission_function:
                     try:
-                        if type(permission) == type:
-                            flag = await permission().do(*args, **kwargs_prime)
-                        elif isinstance(permission, Permission):
+                        if isinstance(permission, Permission):
                             flag = await permission.do(*args, **kwargs_prime)
                         else:
                             flag = await APIFilterInject(permission)(*args, **kwargs_prime)
@@ -581,7 +597,12 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                             raise HTTPException(
                                 status_code=status.HTTP_403_FORBIDDEN)
 
-                    except PermissionDefaultException:
+                    except PermissionDefaultException as e:
+                        if e.response != None and isinstance(e.response,Response):
+                            return e.response
+                        
+                        e.raise_http_exception()
+
                         if default_error == None:
                             raise HTTPException(
                                 status_code=status.HTTP_501_NOT_IMPLEMENTED)
@@ -594,8 +615,13 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
     return decorator
 
 
-def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[Handler] | Handler, default_error: HTTPExceptionParams = None):
+def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[Handler] | Handler, default_error: HTTPExceptionParams = None,mount=True):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
+    if not mount:
+        def decorator(func:Callable):
+            return func
+        return decorator
+    
     empty_decorator = len(handler_function) == 0
     if empty_decorator:
         warnings.warn("No Handler function or object was provided.",
@@ -604,7 +630,7 @@ def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[H
     handler_function = Helper.filter_type_function(handler_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseHandler, handler_function)
+        cls = common_class_decorator(func, UseHandler, handler_function,default_error=default_error,mount=mount)
         if cls != None:
             return cls
 
@@ -616,9 +642,14 @@ def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[H
     return decorator
 
 
-def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Guard, default_error: HTTPExceptionParams = None):
+def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Guard, default_error: HTTPExceptionParams = None,mount=True):
     # INFO guards only purpose is to validate the request
     # NOTE:  be mindful of the order
+    if not mount:
+        def decorator(func:Callable):
+            return func
+        return decorator
+
     empty_decorator = len(guard_function) == 0
     if empty_decorator:
         warnings.warn("No Guard function or object was provided.",NoFunctionProvidedWarning)
@@ -626,7 +657,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
     guard_function = Helper.filter_type_function(guard_function)
 
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
-        cls = common_class_decorator(func, UseGuard, guard_function)
+        cls = common_class_decorator(func, UseGuard, guard_function,default_error=default_error,mount=mount)
         if cls != None:
             return cls
 
@@ -639,10 +670,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
 
                 try:
                     for guard in guard_function:
-                        if type(guard) == type:
-                            flag, message = await guard().do(*args, **kwargs)
-
-                        elif isinstance(guard, Guard):
+                        if isinstance(guard, Guard):
                             flag, message = await guard.do(*args, **kwargs)
                         else:
                             flag, message = await APIFilterInject(guard)(*args, **kwargs)
@@ -656,6 +684,11 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
                                 status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
 
                 except GuardDefaultException as e:
+                    if e.response != None and isinstance(e.response,Response):
+                        return e.response
+                    
+                    e.raise_http_exception()
+
                     if default_error == None:
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED, detail='Request Validation Aborted')
@@ -669,9 +702,15 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
     return decorator
 
 
-def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]] | Any] | Type[Pipe] | Pipe, before: bool = True, default_error: HTTPExceptionParams = None):
-    # NOTE be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
-
+def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]] | Any] | Type[Pipe] | Pipe, before: bool = True, default_error: HTTPExceptionParams = None,mount=True):
+    """
+    be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
+    """
+    if not mount:
+        def decorator(func:Callable):
+            return func
+        return decorator
+    
     empty_decorator = len(pipe_function) == 0
     if empty_decorator:
         warnings.warn("No Pipe function or object was provided.",
@@ -682,7 +721,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(
-            func, UsePipe, pipe_function, before=before)
+            func, UsePipe, pipe_function, before=before,default_error=default_error,mount=mount)
         if cls != None:
             return cls
 
@@ -694,12 +733,13 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
                     if before:
                         kwargs_prime = kwargs.copy()
                         for pipe in pipe_function:  # verify annotation
-                            if type(pipe) == type:
-                                result = await pipe().do(*args, **kwargs_prime)
-                            elif isinstance(pipe, Pipe):
+                            if isinstance(pipe, Pipe):
                                 result = await pipe.do(*args, **kwargs_prime)
                             else:
                                 result = await APIFilterInject(pipe)(*args, **kwargs_prime)
+
+                            if result == None:
+                                continue
 
                             if not isinstance(result, dict):
                                 raise PipeDefaultException
@@ -720,21 +760,29 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
 
                         return result
 
-                except PipeDefaultException:
+                except PipeDefaultException as e:
+                    if e.response != None and isinstance(e.response,Response):
+                        return e.response
+                    
+                    e.raise_http_exception() 
                     if default_error == None:
                         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
                     
                     raise HTTPException(**default_error)
             return callback
 
-        Helper.appends_funcs_callback(
-            func, wrapper, DecoratorPriority.PIPE, touch=0 if before else 0.5)
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.PIPE, touch=0 if before else 0.5)
         return func
     return decorator
 
 
-def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams = None):
+def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, Any]], Type[R] | Callable], default_error: HTTPExceptionParams = None,inject_meta=False,mount=True):
 
+    if not mount:
+        def decorator(func:Callable):
+            return func
+        return decorator
+    
     empty_decorator = len(interceptor_function) == 0
     if empty_decorator:
         warnings.warn("No Pipe function or object was provided.",NoFunctionProvidedWarning)
@@ -744,13 +792,11 @@ def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, 
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(
-            func, UseInterceptor, interceptor_function)
+            func, UseInterceptor, interceptor_function,default_error=default_error,inject_meta=inject_meta,mount=mount)
         if cls != None:
             return cls
 
-        wrapper = Helper.stack_decorator(interceptor_function, Interceptor,
-                                  empty_decorator, default_error, InterceptorDefaultException)
-
+        wrapper = Helper.stack_decorator(interceptor_function, Interceptor,empty_decorator, default_error, InterceptorDefaultException,inject_meta)
         Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.INTERCEPTOR)
         return func
     return decorator
@@ -787,15 +833,26 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
 
 
 def HTTPStatusCode(code: int | str):
+    """
+    The `HTTPStatusCode` function is a decorator that sets the HTTP status code for a response based on
+    the provided code or code name.
+    
+    :param code: The `code` parameter in the `HTTPStatusCode` function can be either an integer or a
+    string. If it's a string, it represents the name of an HTTP status code. If it's an integer, it
+    represents the numerical value of an HTTP status code
+
+    :type code: int | str
+    """
+
     if isinstance(code, str):
         if code not in status.__all__:
-            raise ...
+            raise AttributeError(f"Code name does not exists")
         else:
             code = status.__getattr__(code)
     elif isinstance(code, int):
         ...
     else:
-        raise
+        raise ValueError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, HTTPStatusCode, code)
@@ -818,54 +875,63 @@ def HTTPStatusCode(code: int | str):
 
 ################################################################                           #########################################################
 
-@functools.wraps(rateLimitService.GlobalLimiter.limit)
-def UseLimiter(**kwargs):  # TODO
+
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]=lambda req:1):
+    """
+    *Description copied from the slowapi library*
+
+    * **limit_value**: rate limit string or a callable that returns a string.
+        :ref:`ratelimit-string` for more details.
+    * **scope**: a string or callable that returns a string
+        for defining the rate limiting scope.
+    * **error_message**: string (or callable that returns one) to override the
+        error message used in the response.
+    * **exempt_when**: function returning a boolean indicating whether to exempt
+    the route from the limit
+    * **cost**: integer (or callable that returns one) which is the cost of a hit
+    * **override_defaults**: whether to override the default limits (default: True)
+    """
+    if scope!= None and not isinstance(scope,str):
+        raise ValueError
+    
+    shared = scope != None
+
+
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseLimiter, None, **kwargs)
+        cls = common_class_decorator(func, UseLimiter, None, limit_value=limit_value,override_defaults=override_defaults,exempt_when=exempt_when,error_message=error_message)
         if cls != None:
             return cls
         meta: FuncMetaData | None = getattr(func, 'meta', None)
         if meta is not None:
-            meta['limit_obj'] = kwargs
-            limit_value: str = kwargs['limit_value']
-            meta['shared'] = False
-            try:
-                limit_value = int(limit_value.split('/')[0])
-                global RequestLimit
-                RequestLimit += limit_value
-            except:
-                ...
+            operation_id = meta['operation_id']
+            meta['limit_exempt'] = exempt
+            _limit_value = meta['cost_definition'].get('__rate_limit__',limit_value)
+            meta['limit_obj'] = {'limit_value':_limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,'cost':cost}
+            if shared:
+                meta['limit_obj']['scope'] = scope
+            meta['shared'] = shared
+            
+        def wrapper(target_function):
 
-        return Helper.response_decorator(func)
+            @functools.wraps(target_function)
+            async def callback(*args,**kwargs):
+                try:
+                    return await Helper.response_decorator(target_function)(*args,**kwargs)
+                except HTTPException as e:
+                    response:Response = kwargs.get('response',None)
+                    request:Request = kwargs.get('request')
+                    if response != None:
+                        response = costService.GlobalLimiter._inject_headers(response,request.state.view_rate_limit)
 
-    return decorator
-
-
-@functools.wraps(rateLimitService.GlobalLimiter.shared_limit)
-def UseSharingLimiter(**kwargs):
-    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseLimiter, None, **kwargs)
-        if cls != None:
-            return cls
-        meta: FuncMetaData | None = getattr(func, 'meta', None)
-        if meta is not None:
-            meta['limit_obj'] = kwargs
-            meta['shared'] = True
-
-        return Helper.response_decorator(func)
-    return decorator
-
-
-def ExemptLimiter():
-    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseLimiter, None)
-        if cls != None:
-            return cls
-        meta: FuncMetaData | None = getattr(func, 'meta', None)
-        if meta is not None:
-            meta['limit_exempt'] = True
+                    raise HTTPException(e.status_code,e.detail,Helper.merge_headers(e.headers,response))
+            
+            return callback
+        
+        Helper.appends_funcs_callback(func,wrapper,DecoratorPriority.LIMITER)
         return func
+
     return decorator
+
 
 ################################################################                           #########################################################
 
@@ -874,19 +940,16 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
     async def inner_callback(route_params:dict):
         for s in services:
             k = {}
-            k['__route_params__'] = route_params
-            k['__profile__'] =route_params.get('profile',None)
-            k['__is_manager__'] = is_manager
+            k[SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER] = route_params
+            k[SpecialKeyParameterConstant.PROFILE_KWARGS_PARAMETER] =route_params.get('profile',None)
+            k[SpecialKeyParameterConstant.IS_MANAGER_KWARGS_PARAMETER] = is_manager
 
             if isinstance(s, dict):
                 k.update(s['kwargs'])
                 s = s['cls']
 
             cls: BaseService = Get(s)
-            if infinite_wait:
-                await BaseService.CheckStatusBeforeHand(cls.async_pingService)(cls,**k)
-            else:
-                BaseService.CheckStatusBeforeHand(cls.sync_pingService)(cls,**k)
+            await BaseService.CheckStatusBeforeHand(cls.async_pingService)(cls,infinite_wait,**k)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait)
@@ -928,7 +991,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
             async def callback(*args, **kwargs):
 
                 wait_timeout = kwargs.get('wait_timeout',MIN_TIMEOUT)
-                as_async = kwargs.get('as_async',True)
+                background = kwargs.get('background',True)
                 
                 def proxy(_service:BaseService|BaseMiniServiceManager,f:Callable):
                     
@@ -938,7 +1001,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                             if check_status:
                                 _service.check_status('')
 
-                            if as_manager:
+                            if as_manager and isinstance(_service,BaseMiniServiceManager):
                                 profile = kwargs.get('profile',None)
                                 if profile == None:
                                     raise ProfileNotSpecifiedError
@@ -960,7 +1023,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                     _service: S = Get(s)
                     inner_callback = proxy(_service,inner_callback)
 
-                if not infinite_wait and wait_timeout >=0 and as_async:
+                if not infinite_wait and wait_timeout >=0 and background:
                     return await asyncio.wait_for(inner_callback(*args,**kwargs),wait_timeout)
                 else:
                     return await inner_callback(*args,**kwargs)
@@ -969,41 +1032,6 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
             return callback
         Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
         return func
-    return decorator
-
-def UseMiniServiceLock(services:Type[S|BaseMiniServiceManager],lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True):
-    
-    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status)
-        if cls != None:
-            return cls
-    
-        def wrapper(target_function: Callable):
-
-            @functools.wraps(target_function)
-            async def callback(*args, **kwargs):
-                s:BaseMiniServiceManager = Get(services)
-                profile = kwargs.get('profile',None)
-                if profile == None:
-                    raise ProfileNotSpecifiedError
-                if profile not in s.MiniServiceStore:
-                    raise ProfileTypeNotMatchRequest
-                
-                _service:BaseMiniService = s.MiniServiceStore[profile]
-                async with s.statusLock.reader:
-                    if check_status:
-                        s.check_status('')
-
-                    async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
-                        if check_status:
-                            _service.check_status('')
-                        return await Helper.return_result(target_function,args,kwargs)
-                    
-            return callback
-
-        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER,STATUS_LOCK_TOUCH)
-        return func
-
     return decorator
 
 ################################################################                           #########################################################

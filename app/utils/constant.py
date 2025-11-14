@@ -72,7 +72,10 @@ class SpecialKeyParameterConstant:
     SCHEDULER_SPECIAL_KEY_PARAMETER = 'scheduler'
     WS_MESSAGE_SPECIAL_KEY_PARAMETER = 'message'
     WAIT_TIMEOUT_PARAMETER = 'wait_timeout'
-    AS_ASYNC_PARAMETER = 'as_async'
+    BACKGROUND_PARAMETER = 'background'
+    PROFILE_KWARGS_PARAMETER = '__profile__'
+    ROUTE_PARAMS_KWARGS_PARAMETER = '__route_params__'
+    IS_MANAGER_KWARGS_PARAMETER = '__is_manager__'
 
 class SpecialKeyAttributesConstant:
     CONTACT_SPECIAL_KEY_ATTRIBUTES='_contact'
@@ -108,6 +111,7 @@ class StreamConstant:
     CONTACT_CREATION_EVENT= 'contact-creation-event'
     CELERY_RETRY_MECHANISM='retry-mechanism'
     PROFILE_ERROR_STREAM='profile-error-stream'
+    S3_EVENT_STREAM='s3_object_events'
 
 
 class SubConstant:
@@ -115,6 +119,8 @@ class SubConstant:
     SERVICE_VARIABLES = 'service-variables'
     PROCESS_TERMINATE = 'process-terminate' 
     MINI_SERVICE_STATUS = 'mini-service-status'
+
+    _SUB_CALLBACK = {SERVICE_STATUS,MINI_SERVICE_STATUS,SERVICE_VARIABLES,PROCESS_TERMINATE}
 
 class ServerParamsConstant(Enum):
     SESSION_ID = 'session-id'
@@ -155,6 +161,7 @@ class MongooseDBConstant:
     PROFILE_COLLECTION = 'profile'
     CHAT_COLLECTION = 'chat'
     WORKFLOW_COLLECTION ='workflow'
+    SETTING_COLLECTION = 'setting'
 
     DATABASE_NAME = 'notifyr'
 
@@ -214,6 +221,7 @@ class VaultConstant:
     SECRET_ID_FILE= 'secret-id.txt' 
     ROLE_ID_FILE = 'role_id.txt' # in the secrets shared by the vault
     SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
+    
 
     
     @staticmethod
@@ -232,20 +240,24 @@ class VaultConstant:
     GENERATION_ID = 'generation-id'
 
 
-    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key']
+    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
     SECRETS_MESSAGE_KEY = 'messages-key'
     PROFILES_KEY = 'profiles-key'
     CHAT_KEY='chat-key'
+    S3_REST_KEY='s3-rest-key'
 
     NotifyrDynamicSecretsRole= Literal['postgres','mongo']
     MONGO_ROLE='mongo'
     POSTGRES_ROLE='postgres'
+
+    NotifyrMinioRole = Literal['static-minio','sts-minio']
 
 
     NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
     NOTIFYR_TRANSIT_MOUNT_POINT = 'notifyr-transit'
     NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
     NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
+    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio-s3'
 
 
     @staticmethod
@@ -275,6 +287,59 @@ class VaultTTLSyncConstant:
     MONGODB_AUTH_TTL=SECONDS_IN_AN_HOUR*12
     MONGODB_MAX_TTL=SECONDS_IN_AN_HOUR*16
 
+    MINIO_TTL=SECONDS_IN_AN_HOUR*12
+    MINIO_MAX_TTL= SECONDS_IN_AN_HOUR *16
+
     
 
+
+class MinioConstant:
+    STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
+    ASSETS_BUCKET = 'assets'
+    STATIC_TEMPLATE = 'static'
+    ENCRYPTED_KEY = 'encrypted'
+    MINIO_EVENT='s3_object_events'
+
+
+class RedisConstant:
+
+    EVENT_DB=0
+    CELERY_DB=2
+    LIMITER_DB=1
+    CACHE_DB=3
+
+
+class FastAPIConstant:
+    OO_SCOPE_HEADERS = {'X-Error-Handler':'FastAPI - Exception'}
+
+
+class CostConstant:
+    EMAIL_CREDIT='email'
+    SMS_CREDIT = 'sms'
+    PHONE_CREDIT='phone'
+    PROFILE_CREDIT='profile'
+    CLIENT_CREDIT='client'
+    
+
+    COST_KEY='cost'
+    RULES_KEY='rules'
+    PROMOTIONS_KEY='promotions'
+    CREDITS_KEY='credits'
+    VERSION_KEY='version'
+    SYSTEM_KEY='system'
+    CURRENCY_KEY='currency'
+    PRODUCT_KEY='product'
+
+    email_template='email_template'
+    email_custom='email_custom'
+    sms_otp='sms_otp'
+    phone_otp='phone_otp'
+    phone_digit_otp='phone_digit_otp'
+    phone_auth='phone_auth'
+    sms_message='sms_message'
+    sms_template='sms_template'
+    phone_twiml='phone_twiml'
+    phone_custom='phone_custom'
+    phone_template='phone_template'
+    _object = 'object'
     

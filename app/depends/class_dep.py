@@ -59,7 +59,7 @@ class EmailTracker(TrackerInterface):
         
         return True
 
-    def pipe_email_data(self,email:EmailInterface,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
+    def pipe_email_data(self,email:EmailSendInterface |EmailInterface,content:EmailTemplateModel|CustomEmailModel, spam:tuple[float,str]=(100,'no-spam')):
         
         spam_confidence,spam_label = spam        
         emailMetaData=content.meta
@@ -89,8 +89,8 @@ class EmailTracker(TrackerInterface):
                 recipient = to
                 subject = emailMetaData.Subject
 
-                emailMetaData._Disposition_Notification_To = email.email_address
-                emailMetaData._Return_Receipt_To = email.email_address
+                emailMetaData._Disposition_Notification_To = email.disposition_notification_to
+                emailMetaData._Return_Receipt_To = email.return_receipt_to
                 
                 contact_id = get_value_in_list(contact_ids,i)
 
@@ -379,6 +379,10 @@ class Broker:
 
         self.backgroundTasks.add_task(self.redisService.stream_data,channel,value)
     
+    @Mock()
+    def push(self,db:int,name,*values):
+        self.backgroundTasks.add_task(self.redisService.push,db,name,*values)
+
     def propagate_state(self,protocol:StateProtocol|MiniStateProtocol):
 
         if isinstance(protocol.get('service',None),type):
@@ -569,3 +573,13 @@ class CampaignQuery:
         self.utm_term = self.request.query_params.get("utm_term", None)
         self.utm_content = self.request.query_params.get("utm_content", None)
 
+
+
+class ObjectsSearch:
+
+    def __init__(self,recursive:bool=Query(True),match:str=Query(None),version_id:str=Query(None),assets:bool=Query(False)):
+        self.recursive = recursive
+        self.match = match
+        self.version_id = version_id
+        self.assets = assets
+        self.is_file:bool = None

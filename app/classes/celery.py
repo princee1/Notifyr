@@ -41,7 +41,7 @@ COST_LEVELS = {
 }
 
 
-def Compute_cost(cost:float,heaviness:TaskHeaviness):
+def Compute_Weight(cost:float,heaviness:TaskHeaviness):
     return cost * COST_LEVELS[heaviness]
 
 

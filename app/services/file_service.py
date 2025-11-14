@@ -1,9 +1,17 @@
+from fnmatch import fnmatch
+from pathlib import PurePath
+import traceback
+from typing import Any, Literal
+from app.definition._error import BaseError
 from app.interface.timers import IntervalInterface
-from .config_service import ConfigService
-from app.definition._service import BaseService,Service,AbstractServiceClass
-from app.utils.fileIO import FDFlag, get_file_info, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileDir, getFilenameOnly
+from app.utils.globals import DIRECTORY_SEPARATOR
+from .config_service import AssetMode, ConfigService
+from app.definition._service import GUNICORN_BUILD_STATE, BaseService,Service,AbstractServiceClass
+from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
 from ftplib import FTP, FTP_TLS
 import git_clone as git
+from app.utils.helper import PointerIterator
+import htmlmin
 
 @Service()
 class FileService(BaseService,):
@@ -17,9 +25,12 @@ class FileService(BaseService,):
 
         filename  = getFilenameOnly(path)
         content = readFileContent(path, flag, enc)
-        dirName = getFileDir(path)
+        dirName = getFileOSDir(path)
 
         return filename,content,dirName
+
+    def build(self,build_state=-1):
+        ...
 
     def get_file_info(self,path):
         return get_file_info(path)
@@ -42,17 +53,85 @@ class FileService(BaseService,):
     def addWatcher(self,path,):
         pass
 
-    def build(self,build_state=-1):
-        ...
-        
-    pass
+    def is_file(self,path:str,allowed_multiples_suffixes=False,allowed_extensions:set|list=None):
+        return is_file(path,allowed_multiples_suffixes,allowed_extensions)
+    
+    def soft_get_filename(self,path:str):
+        if not self.soft_is_file(path):
+            raise ValueError('Can only check if it is a file')
+    
+        return PurePath(path).name
 
+    def get_file_dir(self,path:str,method:Literal['os','pure','custom']='os',sep=DIRECTORY_SEPARATOR):
+        match method:
+            case 'os':
+                return getFileOSDir(path)
+            case 'custom':
+                return path.rsplit(sep, 1)[0] if "/" in path else ""
+            case 'pure':
+                return str(PurePath(path).parent)
+            case _:
+                raise ValueError(method)
+
+    def simple_file_matching(self,path:str,root:str|tuple[str,...]=None,ext:str|tuple[str,...]=None):
+        if root== None and ext==None:
+            raise ValueError
+        
+        if root != None and ext == None:
+            return  path.startswith(ext)
+
+        if root == None and ext!= None:
+            return path.endswith(ext)
+        
+        return path.startswith(root) and path.endswith(ext)
+
+    def file_matching(self,path,pattern:str):
+        if not pattern:
+            return True
+        return PurePath(path).match(pattern)
+
+    def root_to_path_matching(self,path_list:list[str], path:str,ext:str,sep=DIRECTORY_SEPARATOR,pointer:PointerIterator=None):
+        cursor=""
+        files = []
+        try:
+            set_paths = set(path_list)
+        except TypeError as e :
+            if pointer != None:
+                set_paths = set([pointer.ptr(x).get_val() for x in path_list ])
+            else:
+                raise e
+            
+        for p in path.split(sep):
+            cursor+=f"{p}{sep}"
+            
+            for f in set_paths:
+                if self.file_matching(f,f"{cursor}*{ext}"):
+                    files.append(f)
+                
+            set_paths.difference_update(files)
+
+        return files
+
+    def get_extension(self,path:str)->str:
+        return PurePath(path).suffix
+
+    def soft_is_file(self,path:str):
+        return self.get_extension(path) != ''
+
+    def html_minify(self,input:bytes|str):
+        input_type = type(input)
+        if input_type == bytes:
+            input = input.decode()
+        
+        return htmlmin.minify(input,False,True,True,).encode()
+        
 
 @AbstractServiceClass()
 class BaseFileRetrieverService(BaseService,IntervalInterface):
     
-    def __init__(self,configService:ConfigService,fileService:FileService):
-        super().__init__()
+    def __init__(self,configService:ConfigService,fileService:FileService,start_now:bool=False,interval:float=None):
+        BaseService.__init__(self)
+        IntervalInterface.__init__(self,start_now,interval)
         self.configService = configService
         self.fileService = fileService
     
@@ -63,6 +142,13 @@ class FTPService(BaseFileRetrieverService):
         self.ftpClient: FTP
         pass
 
+    def build(self, build_state = ...):
+        if build_state != GUNICORN_BUILD_STATE:
+            return
+        
+        if self.configService.ASSET_MODE != AssetMode.ftp:
+            return
+        
     def authenticate(self):
         try:
             self.ftpClient = FTP()
@@ -83,6 +169,14 @@ class GitCloneRepoService(BaseFileRetrieverService):
     def __init__(self,configService:ConfigService,fileService:FileService) -> None:
         super().__init__(configService,fileService)
     
+    def build(self, build_state = ...):
+        if build_state != GUNICORN_BUILD_STATE:
+            return
+        
+        if self.configService.ASSET_MODE != AssetMode.github:
+            return
+        
+
     def destroy(self,destroy_state=-1):
         return super().destroy()
     pass

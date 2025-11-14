@@ -117,9 +117,7 @@ func (config *ConfigService) Addr() string {
 func (config *ConfigService) LoadEnv() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-		config.set = false
-		return
+		log.Printf("Error loading .env file: %v", err)
 	}
 
 	api_key, exists := os.LookupEnv("API_KEY")

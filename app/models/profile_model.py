@@ -36,9 +36,8 @@ class ProfileModel(Document):
 
     _secret_key: ClassVar[list[str]] = []
     unique_indexes: ClassVar[list[str]] = []
-    condition:ClassVar[tuple[MongoCondition,bool]] = None,False
+    condition:ClassVar[Optional[MongoCondition]] = None
     
-
     class Settings:
         name = MongooseDBConstant.PROFILE_COLLECTION
         is_root = True 
@@ -69,7 +68,7 @@ class ProtocolProfileModel(EmailProfileModel):
     email_host: EmailHostConstant
     server: Optional[str] = None
     port: Optional[int] = None
-    unique_indexes: ClassVar[list[str]] = ['email_host','email_address','username']
+    unique_indexes: ClassVar[list[str]] = ['email_host','email_address']
 
 
     @model_validator(mode='after')
@@ -130,13 +129,20 @@ class SMTPProfileModel(ProtocolProfileModel):
         
         return self
 
-    @field_validator('disposition_notification_to','return_receipt_to')
-    def email_rd_validation(cls,email):
-        if email == None:
-            return cls.email_address
-        if not email_validator(email):
-            raise ValueError('Email format not valid')
-        return email
+    @model_validator(mode='after')
+    def email_rd_validation(self,):
+        def parse_email(email:str):
+            if email == None:
+                return None
+            if email.lower().strip() == '_same_as_email_address_':
+                return self.email_address
+            if not email_validator(email):
+                raise ValueError('Email format not valid')
+            return email
+        
+        self.disposition_notification_to = parse_email(self.disposition_notification_to)
+        self.return_receipt_to = parse_email(self.return_receipt_to)
+        return self
 
 class IMAPProfileModel(ProtocolProfileModel):
     password: str = Field(min_length=1,max_length=400)
@@ -181,11 +187,12 @@ class TwilioProfileModel(ProfileModel):
 
     _secret_key: ClassVar[list[str]] = ["auth_token"]
     unique_indexes: ClassVar[list[str]] = ['account_sid']
-    condition:ClassVar[tuple[MongoCondition,bool]] = (MongoCondition(
+    condition:ClassVar[Optional[MongoCondition]] = MongoCondition(
+        force=True,
         rule={"$ge":1},
         filter={"main":True},
         method='simple-number-validation',
-    ),True)
+    )
 
     @field_validator('twilio_url')
     def twilio_url_validator(cls,twilio_url)->str:
@@ -238,10 +245,13 @@ P = TypeVar('P',bound=ProfileModel)
 ######################################################
 class ErrorProfileModel(Document):
     profile_id: Optional[str]
+
     error_code: Optional[int]
     error_name: Optional[str]
     error_description: Optional[str]
-    error_type:Optional[Literal['warn','critical','message']]
+    error_level:Optional[Literal['warn','critical','message']]
+    error_type:Optional[Literal['connect','authenticate','permission','rate_limit','general']]
+
     ignore:Optional[bool] = False
 
     class Settings:

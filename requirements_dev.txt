@@ -2,6 +2,7 @@ aiofiles==24.1.0
 aiohappyeyeballs==2.4.6
 aiohttp==3.11.12
 aiohttp-retry==2.9.1
+aiomcache==0.8.2
 aiorwlock==1.5.0
 aiosignal==1.3.2
 aiosqlite==0.20.0
@@ -9,6 +10,8 @@ amqp==5.3.1
 annotated-types==0.7.0
 anyio==4.8.0
 APScheduler==3.11.0
+argon2-cffi==25.1.0
+argon2-cffi-bindings==25.1.0
 asgiref==3.8.1
 asyncpg==0.30.0
 atlastk==0.13.3
@@ -68,6 +71,7 @@ h11==0.9.0
 h2==3.2.0
 hpack==3.0.0
 hstspreload==2025.1.1
+htmlmin==0.1.12
 httpcore==0.9.1
 httplib2==0.22.0
 httpx==0.13.3
@@ -90,14 +94,13 @@ marisa-trie==1.2.1
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
 mdurl==0.1.2
+minio==7.2.18
 modcall==0.1.0
 motor==3.7.0
 msal==1.31.1
 msgpack==1.1.0
 multidict==6.1.0
 namespace==0.1.4
-ngrok==1.4.0
-numpy==2.2.3
 oauthlib==3.2.2
 ordered-set==4.1.0
 packaging==24.2
@@ -116,12 +119,14 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.1
 pybind11==2.13.6
 pycparser==2.22
+pycryptodome==3.23.0
 pydantic==2.10.6
 pydantic_core==2.27.2
 pyfiglet==0.7
 Pygments==2.19.1
 pyhcl==0.4.5
 PyJWT==2.10.1
+pymemcache==4.0.0
 pymongo==4.11.3
 pyparsing==3.2.1
 pypika-tortoise==0.5.0
