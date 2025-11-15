@@ -25,7 +25,6 @@ class CommunicationProfileModel(BaseProfileModel):
 
     _collection:ClassVar[Optional[str]] = MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
     class Settings:
-        abstract=True
         is_root=True
         collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
@@ -38,7 +37,9 @@ class EmailProfileModel(CommunicationProfileModel):
     email_address: EmailStr
 
     class Settings:
-        abstract = True
+        is_root=True
+        collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
+
 
 class ProtocolProfileModel(EmailProfileModel):
     username: Optional[str] = None
@@ -63,14 +64,16 @@ class ProtocolProfileModel(EmailProfileModel):
         return self
         
     class Settings:
-        abstract = True
+        is_root=True
+        collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
 class APIEmailProfileModel(EmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
     unique_indexes: ClassVar[list[str]] = ['email_address']
 
     class Settings:
-        abstract = True
+        is_root=True
+        collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
 
 ######################################################

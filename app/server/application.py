@@ -36,6 +36,7 @@ from .app_meta import *
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
 from app.models.communication_model import *
+from app.models.webhook_model import *
 
 from app.classes.profiles import ProfilModelValues, BaseProfileModel
 
@@ -43,14 +44,7 @@ HTTPMode = Literal['HTTPS', 'HTTP']
 
 BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
 
-DOCUMENTS = [
-                    SMTPProfileModel,
-                    IMAPProfileModel,
-                    AWSProfileModel,
-                    GMailAPIProfileModel,
-                    OutlookAPIProfileModel,
-                    TwilioProfileModel,
-                ]
+DOCUMENTS = [*ProfilModelValues.values(),CommunicationProfileModel,WebhookProfileModel]
 
 _shutdown_hooks=[]
 _startup_hooks=[]

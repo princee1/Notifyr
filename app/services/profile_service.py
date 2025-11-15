@@ -11,7 +11,7 @@ from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, VaultConstant
-from app.utils.helper import subset_model
+from app.utils.helper import flatten_dict, subset_model
 from .database_service import MongooseService, RedisService
 from app.models.communication_model import  BaseProfileModel, ProfilModelValues
 from app.classes.profiles import ErrorProfileModel
@@ -137,12 +137,11 @@ class ProfileService(BaseMiniServiceManager):
                 setattr(profile,skey,None)
             
             if secret != None:
-                if isinstance(secret,dict):
-                    creds.update(secret)
-                else:
-                    creds[skey] = secret
+                if not isinstance(secret,(dict,str,int,float,bool)):
+                    raise TypeError
+                
+                creds[skey] = secret
             
-        
         result:BaseProfileModel = await self.mongooseService.insert(profile)
         result_id = str(result.id)
         self._put_encrypted_creds(result_id,creds)
@@ -195,7 +194,11 @@ class ProfileService(BaseMiniServiceManager):
         return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)
 
     def _put_encrypted_creds(self,profiles_id:str,data:dict):
+        data = flatten_dict(data,dict_sep='/',_key_builder=lambda x:x+'/')
         for k,v in data.items():
+            if not isinstance(v,str):
+                v = str(v)
+            
             data[k] = self.vaultService.transit_engine.encrypt(v,VaultConstant.PROFILES_KEY)
         
         return self.vaultService.secrets_engine.put(VaultConstant.PROFILES_SECRETS,data,profiles_id)

@@ -128,10 +128,6 @@ class BaseProfileModel(Document):
     condition:ClassVar[Optional[MongoCondition]] = None
     _collection:ClassVar[Optional[str]] = None
     
-    class Settings:
-        abstract=True
-        is_root=False
-
     def __init_subclass__(cls, **kwargs):
         # Ensure secret keys are inherited but isolated
         setattr(cls, "_secret_key", cls._secret_key.copy())
