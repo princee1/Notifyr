@@ -1,4 +1,6 @@
 from typing import ClassVar, Dict, List, Literal, Optional
+
+from aiohttp_retry import Tuple
 from app.classes.profiles import BaseProfileModel
 from app.utils.constant import MongooseDBConstant
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
@@ -12,6 +14,10 @@ class BatchConfig(TypedDict):
     allow:bool = False
     max_batch:int = 50
     flush_interval:float = 5.0
+
+class AuthConfig(TypedDict):
+    username:str
+    password:str
 
 class SignatureConfig(TypedDict):
     allow:bool = True
@@ -53,6 +59,10 @@ class HTTPWebhookModel(WebhookProfileModel):
     http2:bool = False
     secret_headers : Optional[Dict[str, str]] = Field(default_factory=dict)
     params: Optional[Dict[str, str]] = Field(default_factory=dict)
+    auth:Optional[AuthConfig] = None
+
+class DiscordHTTPWebhookModel(HTTPWebhookModel):
+    url:SecretStr
 
 
 class DiscordWebhookModel(HTTPWebhookModel):
@@ -61,6 +71,20 @@ class DiscordWebhookModel(HTTPWebhookModel):
     mention_everyone: bool = False
     webhook_token:SecretStr
     webhook_id:str
+
+class SlackHTTPWebhookModel(HTTPWebhookModel):
+    channel:str
+    username:str
+    icon_emoji:Optional[str]
+
+
+class ZapierHTTPWebhookModel(HTTPWebhookModel):
+    encoding:Literal['json','form']='json'
+
+class MakeHTTPWebhookModel(HTTPWebhookModel):
+    encoding:Literal['json','form'] = 'json'
+
+    # pipe the model name
     
 class KafkaWebhookModel(WebhookProfileModel):
     client_id:str

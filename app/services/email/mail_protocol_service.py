@@ -281,7 +281,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
                 connector.ehlo()
             
             if self.auth_method == 'password':
-                auth_status = connector.login(self.email_address, self.depService.credentials.plain['password'])
+                auth_status = connector.login(self.email_address, self.depService.credentials.to_plain()['password'])
             else:
                 access_token = self.mailOAuth.encode_token(self.email_address)
                 auth_status = connector.docmd("AUTH XOAUTH2", access_token)
@@ -537,7 +537,7 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                 context = ssl.create_default_context()
                 connector.starttls(context=context)
             
-            status, data = connector.login(self.email_address, self.depService.credentials.plain['password'])
+            status, data = connector.login(self.email_address, self.depService.credentials.to_plain()['password'])
             
             if status != 'OK':
                 raise Exception

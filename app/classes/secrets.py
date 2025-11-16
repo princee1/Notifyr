@@ -2,7 +2,7 @@ from os import urandom
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from typing import Union
-from app.utils.helper import flatten_dict, unflattened_dict
+from app.utils.helper import DICT_SEP, flatten_dict, unflattened_dict
 from app.utils.tools import Time
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
@@ -24,12 +24,11 @@ class SecretsWrapper:
     def _decrypt(self):
         ...
     
-    @property
-    def plain(self) -> Union[str, dict]:
+    
+    def to_plain(self,sep='/') -> Union[str, dict]:
         """Access decrypted plaintext."""
-        return self._decrypt()
-
-
+        return unflattened_dict(self._decrypt(),sep)
+        
 class ChaCha20SecretsWrapper(SecretsWrapper):
     
     def _new_cipher(self):

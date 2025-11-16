@@ -7,7 +7,7 @@ from aiohttp_retry import Tuple
 import httpx
 from app.definition._service import BaseMiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
-from app.models.webhook_model import HTTPWebhookModel, SignatureConfig
+from app.models.webhook_model import AuthConfig, HTTPWebhookModel, SignatureConfig
 from app.services.profile_service import ProfileMiniService
 
 
@@ -17,6 +17,7 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
     def __init__(self,profileMiniService:ProfileMiniService[HTTPWebhookModel],):
         self.depService = profileMiniService
         super().__init__(profileMiniService,None)
+        self.is_url_secret=False
 
     @property
     def model(self):
@@ -59,25 +60,16 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
             content_kwargs["content"] = body_bytes
 
         
-    def sign(self,headers:dict,body_bytes,config:SignatureConfig):
-        if not bool(config.get(self.signature_key_builder('allow'))):return 
+    def sign(self,headers:dict,body_bytes,config:dict):
+        config:SignatureConfig = config['signature_config']
 
-        sig_header = config.get(self.signature_key_builder('header_name'),'X-Signature')
-        algo = config.get(self.signature_key_builder("algo"), "sha256")
-        secrets = config.get(self.signature_key_builder('secret',None))
+        if not bool(config.get('allow',False)):return 
+
+        sig_header = config.get('header_name','X-Signature')
+        algo = config.get("algo", "sha256")
+        secrets = config.get('secret',None)
         headers[sig_header] = self.hmac_signature(secrets, body_bytes, algo=algo)
     
-
-    def get_secret_header(self,cred:dict[str,str]):
-        h = {}
-
-        for k,v in cred.items():
-            if not k.startswith('secrets_headers/'):
-                continue
-            k = k.split('/')[1]
-            h[k] = v
-        
-        return h
 
     async def deliver(self,payload: Any,event_type:str='event') -> Tuple[int, bytes]:
 
@@ -87,14 +79,19 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
         headers = {"Content-Type": "application/json","X-Delivery-Id": delivery_id,"X-Event-Type": event_type,}
 
-        cred= self.depService.credentials.plain
+        cred= self.depService.credentials.to_plain()
 
         headers.update(self.model.headers)
-        headers.update(self.get_secret_header())
+        headers.update(cred['secret_headers'])
 
         self.sign(headers,body_bytes,cred)
         request_kwargs = self.set_encoding_data(payload,body_bytes)
-        resp = await self.client.request(method, self.model.url,headers=headers,params=self.model.params,timeout=self.model.timeout, **request_kwargs)
+        
+        auth:AuthConfig = cred['auth']
+        auth = tuple(auth.values()) if auth else None
+        url = self.model.url if not self.is_url_secret else cred['url']
+        
+        resp = await self.client.request(method, url,auth=auth,headers=headers,params=self.model.params,timeout=self.model.timeout, **request_kwargs)
        
         return resp.status_code, resp.content
 

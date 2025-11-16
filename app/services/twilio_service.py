@@ -65,7 +65,7 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
     def build(self,build_state=-1):
 
         self.account_sid = self.depService.model.account_sid
-        self.auth_token = self.depService.credentials.plain['auth_token']
+        self.auth_token = self.depService.credentials.to_plain()['auth_token']
         try:
             
             self.client = Client(self.account_sid,self.auth_token)
