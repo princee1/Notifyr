@@ -138,7 +138,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         modelCreds = modelCreds.model_dump()
         await self.create_profile_model_condition(modelCreds)
 
-        await self.profileService.update_credentials(profile,modelCreds)
+        await self.profileService.update_credentials(profile,modelCreds,self.model._vault)
         await self.profileService.update_meta_profile(profileModel)
 
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))

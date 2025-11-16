@@ -2,7 +2,7 @@ from typing import ClassVar, Dict, List, Literal, Optional
 
 from aiohttp_retry import Tuple
 from app.classes.profiles import BaseProfileModel
-from app.utils.constant import MongooseDBConstant
+from app.utils.constant import MongooseDBConstant, VaultConstant
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
 from typing_extensions import TypedDict
 
@@ -28,26 +28,25 @@ class SignatureConfig(TypedDict):
 BodyEncoding = Literal['raw','json','form']
 
 class WebhookProfileModel(BaseProfileModel):
-    retry_statuses: List[int] = Field(default_factory=lambda: [408, 429, 500, 502, 503, 504])
+    _retry_statuses: ClassVar[List[int]] = Field(default_factory=lambda: [408, 429, 500, 502, 503, 504])
     batch_config: Optional[BatchConfig] = None
     timeout: float = 10.0
-    max_connections: int = 100
     max_attempt:int = 3
     send_and_wait:bool = True
     url: str
     
-    @field_validator("timeout")
+    @field_validator("timeout","max_attempt")
     def timeout_positive(cls, v):
         if v <= 0:
             raise ValueError("timeout_seconds must be > 0")
         return v
 
     _collection:ClassVar[Optional[str]]= MongooseDBConstant.WEBHOOK_PROFILE_COLLECTION
+    _vault:ClassVar[Optional[str]] = VaultConstant.WEBHOOK_SECRETS
+
     class Settings:
         is_root=True
         collection=MongooseDBConstant.WEBHOOK_PROFILE_COLLECTION
-
-
 
 class HTTPWebhookModel(WebhookProfileModel):
     url: AnyHttpUrl
@@ -61,17 +60,20 @@ class HTTPWebhookModel(WebhookProfileModel):
     params: Optional[Dict[str, str]] = Field(default_factory=dict)
     auth:Optional[AuthConfig] = None
 
-class DiscordHTTPWebhookModel(HTTPWebhookModel):
-    url:SecretStr
+    _secret_key:ClassVar[list[str]] = ['auth','secret_headers','signature_config']
+
 
 
 class DiscordWebhookModel(HTTPWebhookModel):
+    url:SecretStr
     username: Optional[str] = None
     avatar_url: Optional[AnyHttpUrl] = None
-    mention_everyone: bool = False
-    webhook_token:SecretStr
-    webhook_id:str
+    thread_id:Optional[str] =None
+    thread_name:Optional[str] =None
+    allowed_mentions:Optional[Dict[str, List[str]]] = None
 
+    _secret_key:ClassVar[list[str]] = ['url']
+    
 class SlackHTTPWebhookModel(HTTPWebhookModel):
     channel:str
     username:str
@@ -97,6 +99,11 @@ class KafkaWebhookModel(WebhookProfileModel):
     compression: Optional[Literal["gzip", "snappy", "lz4", "zstd"]] = None
     enable_idempotence:bool=False
 
+    sasl_plain_password: Optional[SecretStr] = None,
+    sasl_plain_username: Optional[str] = None
+
+    _secret_key:ClassVar[list[str]] = ['sasl_plain_username']
+
     @field_validator("bootstrap_servers")
     def non_empty_bootstrap(cls, v):
         if not v:
@@ -111,6 +118,7 @@ class SQSWebhookModel(WebhookProfileModel):
     deduplication_id_template: Optional[str] = None
     queue_url:str
     
+    _secret_key:ClassVar[list[str]] = ['aws_secret_access_key']
 
 class RedisWebhookModel(WebhookProfileModel):
     url:str
@@ -122,4 +130,5 @@ class RedisWebhookModel(WebhookProfileModel):
     from_url:bool=False
     username:Optional[str]=None
     password:Optional[SecretStr] = None
-    # TODO add url to the secret
+    
+    _secret_key:ClassVar[list[str]] = ['url','password']

@@ -1,34 +1,67 @@
 import json
-from typing import Any
+from typing import Any, Dict, Optional, TypedDict
+from aiohttp_retry import Tuple
 from app.definition._service import BaseMiniService
 from app.services.profile_service import ProfileMiniService
 from app.services.webhook.http_webhook_service import HTTPWebhookMiniService
-from app.models.webhook_model import DiscordHTTPWebhookModel, DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
-import json
-from typing import Any
+from app.models.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
+from discord_webhook import DiscordEmbed,DiscordWebhook,AsyncDiscordWebhook
 
-class DiscordHTTPWebhookMiniService(HTTPWebhookMiniService):
-    """
-    Discord incoming webhooks accept JSON payloads like {"content": "...", "embeds": [...]}.
-    This adapter maps a generic payload to a Discord-friendly shape. It delegates actual
-    HTTP delivery to HTTPAdapter.
-    """
-    def __init__(self,profileMiniService:ProfileMiniService[DiscordHTTPWebhookModel]):
+
+class DiscordBody(TypedDict):
+    embeds:list[DiscordEmbed | Dict]
+    attachements:list[dict[str,Any]]
+    files:Dict[str, Tuple[Optional[str], bytes| str]]
+
+class DiscordWebhookMiniService(BaseMiniService):
+
+    def __init__(self,profileMiniService:ProfileMiniService[DiscordWebhookModel]):
         self.depService = profileMiniService
-        super().__init__()
+        super().__init__(profileMiniService,None)
+    
+    @property
+    def model(self):
+        return self.depService.model
 
-    async def deliver(self,payload: Any, event_type:str='event'):
-        if isinstance(payload, dict):
-            content = payload.get("message") or payload.get("text") or json.dumps(payload)
-            embeds = payload.get("embeds")
-        else:
-            content = str(payload)
-            embeds = None
-
-        discord_payload = {"content": content}
-        if embeds:
-            discord_payload["embeds"] = embeds
-        return await super().deliver(discord_payload,event_type)
+    def build(self, build_state = ...):
+        ...
+    
+    def deliver(self,payload:DiscordBody):
+        plain_cred = self.depService.credentials.to_plain()
+        url = plain_cred['url']
+        return DiscordWebhook(
+            url,
+            username = self.model.username,
+            avatar_url=self.model.avatar_url,
+            wait= self.model.send_and_wait,
+            timeout = self.model.timeout,
+            thread_id = self.model.thread_id,
+            thread_name = self.model.thread_name,
+            allowed_mentions= self.model.allowed_mentions,
+            rate_limit_retry=False,
+            embeds=payload.get('embeds',None),
+            attachments=payload.get('attachements',None),
+            files=payload.get('files',None)
+        ).execute()
+    
+    async def deliver_async(self,payload:DiscordBody):
+        plain_cred = self.depService.credentials.to_plain()
+        url = plain_cred['url']
+        resp = await AsyncDiscordWebhook(
+            url,
+            username = self.model.username,
+            avatar_url=self.model.avatar_url,
+            wait= self.model.send_and_wait,
+            timeout = self.model.timeout,
+            thread_id = self.model.thread_id,
+            thread_name = self.model.thread_name,
+            allowed_mentions= self.model.allowed_mentions,
+            rate_limit_retry=True,
+            embeds=payload.get('embeds',None),
+            attachments=payload.get('attachements',None),
+            files=payload.get('files',None)
+        ).execute()
+        return resp
 
 # ---------- ZapierAdapter (thin HTTP wrapper, optional transforms) ----------
 class ZapierAdapter(HTTPWebhookMiniService):

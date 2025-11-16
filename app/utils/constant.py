@@ -237,9 +237,11 @@ class VaultConstant:
 
     NotifyrSecretType = Literal['tokens','profiles','messages','generation-id']
     TOKENS_SECRETS = 'tokens'
-    PROFILES_SECRETS = 'profiles'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
+    COMMUNICATION_SECRETS = 'communication'
+    WEBHOOK_SECRETS = 'webhook'
+
 
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']

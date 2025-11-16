@@ -1,6 +1,6 @@
 import json
 from typing import Any
-from aiokafka import AIOKafkaProducer
+from aiokafka import AIOKafkaProducer, abc
 import aiobotocore3 as aiobotocore_session
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface

@@ -127,6 +127,7 @@ class BaseProfileModel(Document):
     unique_indexes: ClassVar[list[str]] = []
     condition:ClassVar[Optional[MongoCondition]] = None
     _collection:ClassVar[Optional[str]] = None
+    _vault:ClassVar[Optional[str]]  = None
     
     def __init_subclass__(cls, **kwargs):
         # Ensure secret keys are inherited but isolated

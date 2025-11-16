@@ -48,7 +48,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         self._read_encrypted_creds()
         
     def _read_encrypted_creds(self,return_only=False):
-        data = self.vaultService.secrets_engine.read(VaultConstant.PROFILES_SECRETS,self.miniService_id)
+        data = self.vaultService.secrets_engine.read(self.model._vault,self.miniService_id)
         for k,v in data.items():
             data[k]= self.vaultService.transit_engine.decrypt(v,VaultConstant.PROFILES_KEY)
         
@@ -144,13 +144,13 @@ class ProfileService(BaseMiniServiceManager):
             
         result:BaseProfileModel = await self.mongooseService.insert(profile)
         result_id = str(result.id)
-        self._put_encrypted_creds(result_id,creds)
+        self._put_encrypted_creds(result_id,creds,result._vault)
         return result
     
     async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False):
         profile_id = str(profileModel.id)
         result = await profileModel.delete()
-        self._delete_encrypted_creds(profile_id)
+        self._delete_encrypted_creds(profile_id,profileModel._vault)
         return result
      
     async def update_profile(self,profileModel:BaseProfileModel,body:dict):
@@ -162,10 +162,10 @@ class ProfileService(BaseMiniServiceManager):
                 except:
                     continue
         
-    def update_credentials(self,profiles_id:str,creds:dict):
+    def update_credentials(self,profiles_id:str,creds:dict,vault_path:str):
         current_creds:dict = self._read_encrypted_creds(profiles_id)
         current_creds.update(creds)
-        self._put_encrypted_creds(profiles_id,current_creds)
+        self._put_encrypted_creds(profiles_id,current_creds,vault_path)
 
     async def update_meta_profile(self,profile:BaseProfileModel):
         profile.last_modified =  datetime.utcnow().isoformat()
@@ -193,7 +193,7 @@ class ProfileService(BaseMiniServiceManager):
     def _read_encrypted_creds(self,profile_id:str):
         return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)
 
-    def _put_encrypted_creds(self,profiles_id:str,data:dict):
+    def _put_encrypted_creds(self,profiles_id:str,data:dict,vault_path:str):
         data = flatten_dict(data,dict_sep='/',_key_builder=lambda x:x+'/')
         for k,v in data.items():
             if not isinstance(v,str):
@@ -201,9 +201,9 @@ class ProfileService(BaseMiniServiceManager):
             
             data[k] = self.vaultService.transit_engine.encrypt(v,VaultConstant.PROFILES_KEY)
         
-        return self.vaultService.secrets_engine.put(VaultConstant.PROFILES_SECRETS,data,profiles_id)
+        return self.vaultService.secrets_engine.put(vault_path,data,profiles_id)
 
-    def _delete_encrypted_creds(self,profiles_id:str):
-        return self.vaultService.secrets_engine.delete(VaultConstant.PROFILES_SECRETS,profiles_id)
+    def _delete_encrypted_creds(self,profiles_id:str,vault_path):
+        return self.vaultService.secrets_engine.delete(vault_path,profiles_id)
     
     ########################################################       ################################
