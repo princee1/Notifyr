@@ -3,14 +3,13 @@ from enum import Enum
 from typing import ClassVar, Optional, Type, TypedDict
 from beanie import Document
 from typing_extensions import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.classes.condition import MongoCondition
 from app.classes.mail_provider import TokenType
 from app.definition._error import BaseError
 from app.utils.constant import MongooseDBConstant, StreamConstant
 
 
-EMAIL_PROFILE_TYPE = 'email'
 
 class ProfileModelAuthToken(BaseModel):
     access_token: str
@@ -22,14 +21,6 @@ class ProfileModelAuthToken(BaseModel):
     mail_provider: str
     
     secret_key:ClassVar[list[str]]= ['access_token','refresh_token']
-
-class ProfilModelConstant:
-    OUTLOOK_API=f'{EMAIL_PROFILE_TYPE}/outlook-api'
-    GMAIL_API=f'{EMAIL_PROFILE_TYPE}/gmail-api'
-    AWS=f'{EMAIL_PROFILE_TYPE}/aws'
-    IMAP=f'{EMAIL_PROFILE_TYPE}/imap'
-    SMTP=f'{EMAIL_PROFILE_TYPE}/smtp'
-    TWILIO='twilio'
 
 ####################################                 #####################################333
 
@@ -111,12 +102,13 @@ class ProfileModelException(BaseException):
 ######################################################
 
 
+MAX_LEN =600
 
 class BaseProfileModel(Document):
 
     
     alias: str
-    description: Optional[str] = Field(default=None,min_length=0,max_length=1000)
+    description: Optional[str] = Field(default=None,min_length=0,max_length=400)
     role: list[str] = Field(default_factory=list)
     profile_state: ProfileState = ProfileState.ACTIVE
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
@@ -133,6 +125,12 @@ class BaseProfileModel(Document):
         # Ensure secret keys are inherited but isolated
         setattr(cls, "_secret_key", cls._secret_key.copy())
         super().__init_subclass__(**kwargs)
+
+    @field_validator("*", mode="before")
+    def limit_all_strings(cls, v):
+        if isinstance(v, str) and len(v) > MAX_LEN:
+            raise ValueError(f"String too long (max {MAX_LEN})")
+        return v
 
     @classmethod
     @property

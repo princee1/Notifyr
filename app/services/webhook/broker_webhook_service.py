@@ -1,11 +1,12 @@
 import json
 from typing import Any
 from aiokafka import AIOKafkaProducer, abc
-import aiobotocore3 as aiobotocore_session
+import aiobotocore as aiobotocore_session
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import KafkaWebhookModel, RedisWebhookModel, SQSWebhookModel
 from app.services.config_service import ConfigService
+from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from redis.asyncio import Redis,from_url as async_from_url
 from redis import Redis as SyncRedis,from_url
@@ -13,10 +14,11 @@ from redis import Redis as SyncRedis,from_url
 # ---------- KafkaAdapter (aiokafka) ----------
 class KafkaWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
-    def __init__(self,profileMiniService:ProfileMiniService[KafkaWebhookModel]):
-        self.depService = profileMiniService
+    def __init__(self,profileMiniService:ProfileMiniService[KafkaWebhookModel],redisService:RedisService):
         super().__init__(profileMiniService,None)
-
+        self.redisService = redisService
+        self.depService = profileMiniService
+    
     @property
     def model(self):
         return self.depService.model
@@ -62,9 +64,10 @@ class KafkaWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 # ---------- SQSAdapter (aiobotocore) ----------
 class SQSWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
-        def __init__(self,profileMiniService:ProfileMiniService[SQSWebhookModel]):
-            self.depService = profileMiniService
+        def __init__(self,profileMiniService:ProfileMiniService[SQSWebhookModel],redisService:RedisService):
             super().__init__(profileMiniService, None)
+            self.redisService = redisService
+            self.depService = profileMiniService
 
         @property
         def model(self):
@@ -81,7 +84,7 @@ class SQSWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
                                                 aws_secret_access_key=self.model.aws_access_key_id,
                                                 aws_access_key_id=self.depService.credentials['aws_secret_access_key']) as client:
                 body = json.dumps(payload)
-                kwargs = {"QueueUrl": self.model.queue_url, "MessageBody": body}
+                kwargs = {"QueueUrl": self.model.url, "MessageBody": body}
                 # support FIFO features if present in config
                 if self.model.message_group_id_template:
                     kwargs["MessageGroupId"] = self.model.message_group_id_template
@@ -90,14 +93,14 @@ class SQSWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
                 # return 200 + stringified response for logging
                 return 200, json.dumps(resp).encode("utf-8")
 
-
 # ---------- RedisAdapter (streams, lists, pubsub) ----------
 class RedisWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
-    def __init__(self,profileMiniService:ProfileMiniService[RedisWebhookModel],configService:ConfigService):
-        self.configService = configService
+    def __init__(self,profileMiniService:ProfileMiniService[RedisWebhookModel],configService:ConfigService,redisService:RedisService):
+        super().__init__(profileMiniService, None)
         self.depService = profileMiniService
-        super().__init__(profileMiniService, id)
+        self.configService = configService
+        self.redisService = redisService
 
     @property
     def model(self):

@@ -61,13 +61,11 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
         
     def sign(self,headers:dict,body_bytes,config:dict):
-        config:SignatureConfig = config['signature_config']
-
-        if not bool(config.get('allow',False)):return 
-
-        sig_header = config.get('header_name','X-Signature')
-        algo = config.get("algo", "sha256")
-        secrets = config.get('secret',None)
+        config:SignatureConfig = config.get('signature_config',None)
+        if not config: return 
+        sig_header = config.get('header_name')
+        algo = config.get("algo")
+        secrets = config.get('secret')
         headers[sig_header] = self.hmac_signature(secrets, body_bytes, algo=algo)
     
 
@@ -87,7 +85,7 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         self.sign(headers,body_bytes,cred)
         request_kwargs = self.set_encoding_data(payload,body_bytes)
         
-        auth:AuthConfig = cred['auth']
+        auth:AuthConfig = cred.get('auth',None)
         auth = tuple(auth.values()) if auth else None
         url = self.model.url if not self.is_url_secret else cred['url']
         
