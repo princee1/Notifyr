@@ -235,12 +235,13 @@ class VaultConstant:
         return f'../../vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','profiles','messages','generation-id']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting']
     TOKENS_SECRETS = 'tokens'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
     COMMUNICATION_SECRETS = 'communication'
     WEBHOOK_SECRETS = 'webhook'
+    SETTINGS_SECRETS='setting'
 
 
 

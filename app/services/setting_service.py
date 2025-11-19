@@ -4,7 +4,7 @@ from app.models.properties_model import SettingsModel
 from app.services.config_service import ConfigService, MODE
 from app.services.secret_service import HCVaultService
 from app.utils.fileIO import JSONFile
-from app.utils.constant import SettingDBConstant,DEFAULT_SETTING
+from app.utils.constant import SettingDBConstant,DEFAULT_SETTING, VaultConstant
 
 DEV_MODE_SETTING_FILE = './settings_db.json'
 
@@ -20,18 +20,17 @@ class SettingService(BaseService):
     def __init__(self,configService:ConfigService,vaultService:HCVaultService):
         super().__init__()
         self.configService = configService
-        self.mongooseService = vaultService
+        self.vaultService = vaultService
     
-        self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','no'),False)
+        self.use_settings_file = ConfigService.parseToBool(self.configService.getenv('USE_SETTING_FILE','false'),False)
     
     async def async_verify_dependency(self):
         await super().async_verify_dependency()
-        async with self.mongooseService.statusLock.reader:
+        async with self.vaultService.statusLock.reader:
             return self.verify_dependency()
         
     def verify_dependency(self):
-        if self.mongooseService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
-            self.method_not_available = {'aio_get_settings'}
+        if self.vaultService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
             raise BuildOkError
         
 
@@ -54,10 +53,12 @@ class SettingService(BaseService):
 
     def get_setting(self):
         try:
-            raise ValueError
+            data= self.vaultService.secrets_engine.read(VaultConstant.SETTINGS_SECRETS)
             SettingsModel(**data) # Validate the data
             return data
         except Exception as e:
+            print(e.__class__)
+            print(e)
             return DEFAULT_SETTING.copy()
 
     def _read_setting_json_file(self):
@@ -72,7 +73,7 @@ class SettingService(BaseService):
             self._read_setting_json_file()
         else:
             self._data = DEFAULT_SETTING.copy()
-            #self._data = await self.mongooseService.find_one()
+            self._data = self.vaultService.secrets_engine.read(VaultConstant.SETTINGS_SECRETS)
         
         return self._data
 
@@ -82,7 +83,7 @@ class SettingService(BaseService):
             self.jsonFile.save()
             return 
         
-        return await self.mongooseService
+        self.vaultService.secrets_engine.put(VaultConstant.SETTINGS_SECRETS,self.data)
 
     @property
     def API_EXPIRATION(self):

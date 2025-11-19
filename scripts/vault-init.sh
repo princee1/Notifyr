@@ -177,6 +177,8 @@ create_default_token(){
 
   # echo -n "$s3_webhook_key" > "$VAULT_SHARED_API_DIR/s3-webhook-key.txt"
 
+  vault kv put notifyr-secrets/setting @/vault/config/settings_db.json
+
   chown root:vaultuser $VAULT_SHARED_API_DIR/*.txt
   chmod 664 $VAULT_SHARED_API_DIR/*.txt
 
