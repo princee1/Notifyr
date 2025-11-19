@@ -12,12 +12,10 @@ from app.services.profile_service import ProfileMiniService
 
 
 class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
-    signature_key_builder = lambda x:f'signature_config/{x}'
 
     def __init__(self,profileMiniService:ProfileMiniService[HTTPWebhookModel],):
         self.depService = profileMiniService
         super().__init__(profileMiniService,None)
-        self.is_url_secret=False
 
     @property
     def model(self):
@@ -80,14 +78,14 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         cred= self.depService.credentials.to_plain()
 
         headers.update(self.model.headers)
-        headers.update(cred['secret_headers'])
+        headers.update(cred.get('secret_headers',{}))
 
         self.sign(headers,body_bytes,cred)
         request_kwargs = self.set_encoding_data(payload,body_bytes)
         
         auth:AuthConfig = cred.get('auth',None)
         auth = tuple(auth.values()) if auth else None
-        url = self.model.url if not self.is_url_secret else cred['url']
+        url = cred['url']
         
         resp = await self.client.request(method, url,auth=auth,headers=headers,params=self.model.params,timeout=self.model.timeout, **request_kwargs)
        

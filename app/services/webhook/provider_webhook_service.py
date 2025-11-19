@@ -7,17 +7,17 @@ from app.services.webhook.http_webhook_service import HTTPWebhookMiniService
 from app.models.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
 from discord_webhook import DiscordEmbed,DiscordWebhook,AsyncDiscordWebhook
 
-
-class DiscordBody(TypedDict):
-    embeds:list[DiscordEmbed | Dict]
-    attachements:list[dict[str,Any]]
-    files:Dict[str, Tuple[Optional[str], bytes| str]]
-
 class DiscordWebhookMiniService(BaseMiniService):
+    
+    class DiscordBody(TypedDict):
+        embeds:list[DiscordEmbed | Dict]
+        attachements:list[dict[str,Any]]
+        files:Dict[str, Tuple[Optional[str], bytes| str]]
 
     def __init__(self,profileMiniService:ProfileMiniService[DiscordWebhookModel]):
-        self.depService = profileMiniService
         super().__init__(profileMiniService,None)
+        self.depService = profileMiniService
+
     
     @property
     def model(self):
@@ -63,19 +63,13 @@ class DiscordWebhookMiniService(BaseMiniService):
         ).execute()
         return resp
 
-# ---------- ZapierAdapter (thin HTTP wrapper, optional transforms) ----------
-class ZapierAdapter(HTTPWebhookMiniService):
+class ZapierWebhookMiniService(HTTPWebhookMiniService):
     
     def __init__(self,profileMiniService:ProfileMiniService[ZapierHTTPWebhookModel]):
         self.depService = profileMiniService
         super().__init__(profileMiniService)
         
-
-    async def deliver(self,payload: Any,event_type:str):
-        return await super().deliver(payload,event_type)
-
-# ---------- MakeAdapter (Integromat) ----------
-class MakeAdapter(HTTPWebhookMiniService):
+class MakeWebhookMiniService(HTTPWebhookMiniService):
     """
     Make (Integromat) webhooks are HTTP endpoints that accept JSON or form data.
     This wrapper mirrors ZapierAdapter but provides the common header name
@@ -85,10 +79,7 @@ class MakeAdapter(HTTPWebhookMiniService):
         self.depService = profileMiniService
         super().__init__(profileMiniService)
 
-    async def deliver(self, payload: Any,event_type):
-        return await super().deliver(payload, event_type)
-
-class SlackAdapterIcoming(HTTPWebhookMiniService):
+class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
     """
     Slack Incoming Webhooks accept JSON payloads:
        {"text": "message", "blocks": [...], "attachments": [...]}
@@ -107,8 +98,8 @@ class SlackAdapterIcoming(HTTPWebhookMiniService):
         return self.depService.model
 
     def __init__(self, profileMiniService:ProfileMiniService[SlackHTTPWebhookModel]):
-        self.profileMiniService = profileMiniService
         super().__init__(profileMiniService)
+        self.depService = profileMiniService
 
     async def deliver(self,payload: Any):
 
@@ -138,3 +129,9 @@ class SlackAdapterIcoming(HTTPWebhookMiniService):
             base["icon_emoji"] =  self.model.icon_emoji
 
         return base
+
+class N8NWebhookMiniService(HTTPWebhookMiniService):
+    def __init__(self,profileMiniService:ProfileMiniService[MakeHTTPWebhookModel]):
+        super().__init__(profileMiniService)
+        self.depService = profileMiniService
+

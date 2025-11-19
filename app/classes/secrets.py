@@ -27,7 +27,10 @@ class SecretsWrapper:
     
     def to_plain(self,sep='/') -> Union[str, dict]:
         """Access decrypted plaintext."""
-        return unflattened_dict(self._decrypt(),sep)
+        d = self._decrypt()
+        if self.plain_type == dict:
+            return unflattened_dict(d,sep)
+        return d
         
 class ChaCha20SecretsWrapper(SecretsWrapper):
     

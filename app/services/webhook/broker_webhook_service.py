@@ -4,7 +4,7 @@ from aiokafka import AIOKafkaProducer, abc
 import aiobotocore as aiobotocore_session
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
-from app.models.webhook_model import KafkaWebhookModel, RedisWebhookModel, SQSWebhookModel
+from app.models.webhook_model import AuthConfig, KafkaWebhookModel, RedisWebhookModel, SQSWebhookModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService
@@ -26,13 +26,17 @@ class KafkaWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
     def build(self,build_state=DEFAULT_BUILD_STATE):
 
         bootstrap_servers  =self.model.bootstrap_servers
+        creds = self.depService.credentials.to_plain()
+        auth:AuthConfig = creds.get('auth',{})
         client_id = self.model.client_id
         self.producer = AIOKafkaProducer(
             bootstrap_servers,
             client_id=client_id,
             acks=self.model.acks,
             compression_type=self.model.compression,
-            enable_idempotence=self.model.enable_idempotence
+            enable_idempotence=self.model.enable_idempotence,
+            sasl_plain_username=auth.get('username',None),
+            sasl_plain_password=auth.get('password',None)
             )
         self._started = False
 
@@ -75,23 +79,20 @@ class SQSWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
         def build(self,build_state=DEFAULT_BUILD_STATE):
             self._session = aiobotocore_session.get_session()
+            self.client = self._session.create_client("sqs", region_name=self.model.region,
+                                                aws_secret_access_key=self.model.aws_access_key_id,
+                                                aws_access_key_id=self.depService.credentials['aws_secret_access_key'])
 
         async def deliver(self, payload: Any):
-            
             delivery_id = self.default_gen_id()
 
-            async with self._session.create_client("sqs", region_name=self.model.region,
-                                                aws_secret_access_key=self.model.aws_access_key_id,
-                                                aws_access_key_id=self.depService.credentials['aws_secret_access_key']) as client:
-                body = json.dumps(payload)
-                kwargs = {"QueueUrl": self.model.url, "MessageBody": body}
-                # support FIFO features if present in config
-                if self.model.message_group_id_template:
-                    kwargs["MessageGroupId"] = self.model.message_group_id_template
-                    kwargs["MessageDeduplicationId"] = self.model.message_group_id_template or delivery_id
-                resp = await client.send_message(**kwargs)
-                # return 200 + stringified response for logging
-                return 200, json.dumps(resp).encode("utf-8")
+            body = json.dumps(payload)
+            kwargs = {"QueueUrl": self.model.url, "MessageBody": body}
+            if self.model.message_group_id_template:
+                kwargs["MessageGroupId"] = self.model.message_group_id_template
+                kwargs["MessageDeduplicationId"] = self.model.message_group_id_template or delivery_id
+            resp = await self.client.send_message(**kwargs)
+            return 200, json.dumps(resp).encode("utf-8")
 
 # ---------- RedisAdapter (streams, lists, pubsub) ----------
 class RedisWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
@@ -107,6 +108,10 @@ class RedisWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         return self.depService.model
 
     def build(self,build_state= DEFAULT_BUILD_STATE):
+        creds = self.depService.credentials.to_plain()
+        auth:AuthConfig = creds.get('auth',{})
+        username = auth.get('username',None)
+        password = auth.get('password',None)
         if self.model.from_url:
             self.sync_conn = from_url(self.model.url)
             self.conn = async_from_url(self.model.url)
@@ -114,14 +119,14 @@ class RedisWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
             self.sync_conn = SyncRedis(
                 host=self.model.url,
                 port=self.model.port,
-                username=self.model.username,
-                password=self.model.password
+                username=username,
+                password=password
             )
             self.conn= Redis(
                 host=self.model.url,
                 port=self.model.port,
-                username=self.model.username,
-                password=self.model.password
+                username=username,
+                password=password
             )
 
     def close(self):

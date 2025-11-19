@@ -66,7 +66,7 @@ class HTTPWebhookModel(WebhookProfileModel):
     params: Optional[Dict[str, str]] = Field(default_factory=dict)
     auth:Optional[AuthConfig] = None
 
-    _secret_key:ClassVar[list[str]] = ['auth','secret_headers','signature_config']
+    _secret_key:ClassVar[list[str]] = ['auth','secret_headers','signature_config','url']
 
     @field_validator('url',mode='after')
     def url_validator(cls,url):
@@ -101,8 +101,6 @@ class DiscordWebhookModel(HTTPWebhookModel):
     thread_name:Optional[str] =None
     allowed_mentions:Optional[Dict[str, List[str]]] = None
 
-    _secret_key:ClassVar[list[str]] = ['url']
-
 class SlackHTTPWebhookModel(HTTPWebhookModel):
     channel:str = Field(max_length=50)
     username:str = Field(max_length=100)
@@ -115,7 +113,10 @@ class MakeHTTPWebhookModel(HTTPWebhookModel):
     encoding:Literal['json','form'] = 'json'
 
     # pipe the model name
-    
+
+class N8nHTTPWebhookModel(HTTPWebhookModel):
+    ...    
+
 
 ################################################################################################
             #######################     Broker   ###########################
@@ -132,10 +133,9 @@ class KafkaWebhookModel(WebhookProfileModel):
     compression: Optional[Literal["gzip", "snappy", "lz4", "zstd"]] = None
     enable_idempotence:bool=False
 
-    sasl_plain_password: Optional[str] = None
-    sasl_plain_username: Optional[str] = None
+    auth:Optional[AuthConfig] = None
 
-    _secret_key:ClassVar[list[str]] = ['sasl_plain_password']
+    _secret_key:ClassVar[list[str]] = ['auth']
 
     @field_validator("bootstrap_servers")
     def non_empty_bootstrap(cls, v):
@@ -161,10 +161,9 @@ class RedisWebhookModel(WebhookProfileModel):
     db:int = Field(0,ge=0,le=15)  
     port: int = 6379
     from_url:bool=False
-    username:Optional[str]=None
-    password:Optional[str] = None
+    auth: Optional[AuthConfig] = None
     
-    _secret_key:ClassVar[list[str]] = ['url','password']
+    _secret_key:ClassVar[list[str]] = ['url','auth']
 
 
 ################################################################################################
@@ -187,6 +186,7 @@ class DBWebhookModel(WebhookProfileModel):
     def validate_connection(self)->Self:
 
         if self.from_url:
+            HttpUrl(self.url)
             if not self.url:
                 raise ValueError("`url` is required when `from_url=True`.")
         else:
