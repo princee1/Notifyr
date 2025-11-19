@@ -586,10 +586,7 @@ class MongooseService(TempCredentialsDatabaseService):
 
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
-            self.service_status = ServiceStatus.NOT_AVAILABLE
             self.db_connection()
-            self.service_status = ServiceStatus.AVAILABLE
-
         except ConnectionFailure as e:
             if build_state == DEFAULT_BUILD_STATE:
                 raise BuildFailureError(f"MongoDB connection error: {e}")

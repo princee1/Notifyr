@@ -50,7 +50,6 @@ class VaultError(BaseError):
     ...
 
 
-
 class VaultEngine:
     def __init__(self,client:Client,mount_point:str):
         self.client = client
@@ -252,9 +251,6 @@ class MinioS3VaultEngine(VaultEngine):
 
         return self.client.adapter.post(f"/v1/{self.mount_point}/sts/{role_name}", json=ttl )
 
-        
-   
-    
 class AwsEngine(VaultEngine):
     """ AWS Vault Engine for generating dynamic AWS credentials.
     """

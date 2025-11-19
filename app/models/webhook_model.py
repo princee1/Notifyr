@@ -13,6 +13,7 @@ from app.utils.helper import generateId
 class BatchConfig(TypedDict):
     max_batch:int
     flush_interval:float
+    mode:Literal['single','group']
 
 class AuthConfig(TypedDict):
     username:str
@@ -28,8 +29,8 @@ BodyEncoding = Literal['raw','json','form']
 class WebhookProfileModel(BaseProfileModel):
     _retry_statuses: ClassVar[List[int]] = [408, 429, 500, 502, 503, 504]
     batch_config: Optional[BatchConfig] = None
-    timeout: float = Field(3,ge=3,le=25)
-    max_attempt:int = Field(3,ge=3,le=20)
+    timeout: float = Field(3,ge=1,le=25)
+    max_attempt:int = Field(3,ge=1,le=20)
     send_and_wait:bool = True
     url: str = Field(max_length=500)
     
@@ -37,10 +38,16 @@ class WebhookProfileModel(BaseProfileModel):
     def validate_batch_config(cls,batch_config:BatchConfig):
         if batch_config:
             if not ( 20 < batch_config["max_batch"] <1500):
-                raise ValueError('')
+                raise ValueError('Max batch size must be between 20 and 1500')
             if not (5.0 < batch_config['flush_interval'] <260):
-                raise ValueError('')
-        
+                raise ValueError('Flush interval must be between 5.0 and 260 seconds')
+            mode = batch_config.get("mode",None)
+            if not mode:
+                raise ValueError('Batch mode is required')
+            if mode not in ['single','group']:
+                raise ValueError('Batch mode must be either single or group')
+            batch_config['mode']='single' # TODO default to single for now
+
         return batch_config
 
     _collection:ClassVar[Optional[str]]= MongooseDBConstant.WEBHOOK_PROFILE_COLLECTION
@@ -61,7 +68,6 @@ class HTTPWebhookModel(WebhookProfileModel):
     encoding:BodyEncoding = 'json'
     headers: Optional[Dict[str, str]] = Field(default_factory=dict)
     require_tls: bool = True
-    http2:bool = False
     secret_headers : Optional[Dict[str, str]] = Field(default_factory=dict)
     params: Optional[Dict[str, str]] = Field(default_factory=dict)
     auth:Optional[AuthConfig] = None
@@ -87,10 +93,10 @@ class HTTPWebhookModel(WebhookProfileModel):
 
         if self.auth:
             if not self.auth['password']:
-                raise ValueError('')
+                raise ValueError('Auth password is required')
             
             if not self.auth['username']:
-                raise ('')
+                raise ValueError('Auth username is required')
 
         return self
 
@@ -171,40 +177,79 @@ class RedisWebhookModel(WebhookProfileModel):
 ################################################################################################
 class DBWebhookModel(WebhookProfileModel):
     auth: Optional[AuthConfig] = None
-    from_url: bool = True                   
+    from_url: bool = True     
     url: Optional[str] = None               
     host: Optional[str] = None
     port: Optional[int] = None
+    database:Optional[str] = None
 
     _secret_key: ClassVar[list[str]] = ["url", "auth"]
+    _scheme:ClassVar[Optional[str]] = None
 
     class Settings:
-        is_root=True
-        collection=MongooseDBConstant.WEBHOOK_PROFILE_COLLECTION
+        abstract=True
+        name=MongooseDBConstant.WEBHOOK_PROFILE_COLLECTION
 
     @model_validator(mode='after')
     def validate_connection(self)->Self:
 
         if self.from_url:
-            HttpUrl(self.url)
+            url = HttpUrl(self.url)
             if not self.url:
                 raise ValueError("`url` is required when `from_url=True`.")
+            
+            if url.scheme != self._scheme:
+                raise ValueError(f'Scheme does not match {self._scheme}')
+            
+            self.database= url.path
+
         else:
             if not self.host:
                 raise ValueError("`host` is required when `from_url=False`.")
             if not self.port:
                 raise ValueError("`port` is required when `from_url=False`.")
+            if not self.database:
+                raise ValueError("`database` is required when `from_url=False`.")
 
         return self
 
 class PostgresWebhookModel(DBWebhookModel):
     url: Optional[str] = None
     port: Optional[int] = 5432
+    _scheme:ClassVar[Optional[str]] = 'postgresql'
 
 class MongoDBWebhookModel(DBWebhookModel):
     url: Optional[str] = None
     port: Optional[int] = 27017
+    _scheme:ClassVar[Optional[str]] = 'mongodb'
 
 ######################################################
 # Registry of Profile Implementations
 ######################################################
+
+class WebhookModelConstant:
+    DISCORD='discord'
+    SLACK='slack'
+    ZAPIER='zapier'
+    MAKE='make'
+    N8N='n8n'
+    KAFKA='kafka'
+    SQS='sqs'
+    REDIS='redis'
+    POSTGRES='postgres'
+    MONGODB='mongodb'
+    HTTP='http'
+
+ProfilModelValues.update({
+    WebhookModelConstant.DISCORD:DiscordWebhookModel,
+    WebhookModelConstant.SLACK:SlackHTTPWebhookModel,
+    WebhookModelConstant.ZAPIER:ZapierHTTPWebhookModel,
+    WebhookModelConstant.MAKE:MakeHTTPWebhookModel,
+    WebhookModelConstant.N8N:N8nHTTPWebhookModel,
+    WebhookModelConstant.KAFKA:KafkaWebhookModel,
+    WebhookModelConstant.SQS:SQSWebhookModel,
+    WebhookModelConstant.REDIS:RedisWebhookModel,
+    WebhookModelConstant.POSTGRES:PostgresWebhookModel,
+    WebhookModelConstant.MONGODB:MongoDBWebhookModel,
+    WebhookModelConstant.HTTP:HTTPWebhookModel,
+})

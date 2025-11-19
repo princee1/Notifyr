@@ -2,23 +2,29 @@ import json
 from typing import Any, Dict, Optional, TypedDict
 from aiohttp_retry import Tuple
 from app.definition._service import BaseMiniService
+from app.interface.webhook_adapter import WebhookAdapterInterface
+from app.services.config_service import ConfigService
+from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.webhook.http_webhook_service import HTTPWebhookMiniService
 from app.models.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
 from discord_webhook import DiscordEmbed,DiscordWebhook,AsyncDiscordWebhook
 
-class DiscordWebhookMiniService(BaseMiniService):
+class DiscordWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
     
     class DiscordBody(TypedDict):
         embeds:list[DiscordEmbed | Dict]
         attachements:list[dict[str,Any]]
         files:Dict[str, Tuple[Optional[str], bytes| str]]
 
-    def __init__(self,profileMiniService:ProfileMiniService[DiscordWebhookModel]):
+    def __init__(self,profileMiniService:ProfileMiniService[DiscordWebhookModel],redisService:RedisService,configService:ConfigService):
         super().__init__(profileMiniService,None)
-        self.depService = profileMiniService
+        WebhookAdapterInterface.__init__(self)
 
-    
+        self.depService = profileMiniService
+        self.redisService = redisService
+        self.configService = configService
+
     @property
     def model(self):
         return self.depService.model
@@ -26,10 +32,11 @@ class DiscordWebhookMiniService(BaseMiniService):
     def build(self, build_state = ...):
         ...
     
-    def deliver(self,payload:DiscordBody):
+    @WebhookAdapterInterface.retry
+    def deliver(self,payload:DiscordBody|list[DiscordBody]):
         plain_cred = self.depService.credentials.to_plain()
         url = plain_cred['url']
-        return DiscordWebhook(
+        res = DiscordWebhook(
             url,
             username = self.model.username,
             avatar_url=self.model.avatar_url,
@@ -43,8 +50,11 @@ class DiscordWebhookMiniService(BaseMiniService):
             attachments=payload.get('attachements',None),
             files=payload.get('files',None)
         ).execute()
-    
-    async def deliver_async(self,payload:DiscordBody):
+        return res.status_code,res.content
+
+    @WebhookAdapterInterface.batch
+    @WebhookAdapterInterface.retry
+    async def deliver_async(self,payload:DiscordBody|list[DiscordBody]):
         plain_cred = self.depService.credentials.to_plain()
         url = plain_cred['url']
         resp = await AsyncDiscordWebhook(
@@ -61,13 +71,13 @@ class DiscordWebhookMiniService(BaseMiniService):
             attachments=payload.get('attachements',None),
             files=payload.get('files',None)
         ).execute()
-        return resp
+        return resp.status_code,resp.content
 
 class ZapierWebhookMiniService(HTTPWebhookMiniService):
-    
-    def __init__(self,profileMiniService:ProfileMiniService[ZapierHTTPWebhookModel]):
+
+    def __init__(self,profileMiniService:ProfileMiniService[ZapierHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         self.depService = profileMiniService
-        super().__init__(profileMiniService)
+        super().__init__(profileMiniService,configService,redisService)
         
 class MakeWebhookMiniService(HTTPWebhookMiniService):
     """
@@ -75,9 +85,9 @@ class MakeWebhookMiniService(HTTPWebhookMiniService):
     This wrapper mirrors ZapierAdapter but provides the common header name
     X-Make-Signature if user wants HMAC verification.
     """
-    def __init__(self,profileMiniService:ProfileMiniService[MakeHTTPWebhookModel]):
+    def __init__(self,profileMiniService:ProfileMiniService[MakeHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         self.depService = profileMiniService
-        super().__init__(profileMiniService)
+        super().__init__(profileMiniService,configService,redisService)
 
 class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
     """
@@ -97,14 +107,17 @@ class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
     def model(self):
         return self.depService.model
 
-    def __init__(self, profileMiniService:ProfileMiniService[SlackHTTPWebhookModel]):
-        super().__init__(profileMiniService)
+    def __init__(self, profileMiniService:ProfileMiniService[SlackHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
+        super().__init__(profileMiniService,configService,redisService)
         self.depService = profileMiniService
 
-    async def deliver(self,payload: Any):
-
+    async def deliver_async(self,payload: Any):
         slack_message = self._convert_payload(payload)
-        return await super().deliver(slack_message)
+        return await super().deliver_deliver(slack_message)
+    
+    def deliver(self,payload:Any):
+        slack_message = self._convert_payload(payload)
+        return super().deliver(slack_message)
 
     def _convert_payload(self, payload: Any) -> dict:
         """
@@ -131,7 +144,6 @@ class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
         return base
 
 class N8NWebhookMiniService(HTTPWebhookMiniService):
-    def __init__(self,profileMiniService:ProfileMiniService[MakeHTTPWebhookModel]):
-        super().__init__(profileMiniService)
+    def __init__(self,profileMiniService:ProfileMiniService[MakeHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
+        super().__init__(profileMiniService,configService,redisService)
         self.depService = profileMiniService
-
