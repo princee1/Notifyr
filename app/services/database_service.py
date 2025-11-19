@@ -2,10 +2,8 @@ import functools
 import time
 from typing import Any, Callable, Dict, List, Self, Type, TypeVar, TypedDict
 from urllib.parse import urlencode
-import aiohttp
 from beanie import Document, PydanticObjectId, init_beanie
 import hvac
-import requests
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.callbacks import CALLBACKS_CONFIG

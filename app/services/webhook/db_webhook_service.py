@@ -1,25 +1,34 @@
+from typing import TypedDict
 from httplib2 import Credentials
 import psycopg2
 from pymongo import MongoClient
 from motor.motor_asyncio import AsyncIOMotorClient
+from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import DBWebhookModel, MongoDBWebhookModel, PostgresWebhookModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService
+from app.utils.constant import StreamConstant
 
 
-class DBInterface(BaseMiniService,WebhookAdapterInterface):
+class DBPayload(TypedDict):
+    mini_service_id: str
+    data: dict
 
-    def __init__(self,scheme:str,topic:str, depService:ProfileMiniService[DBWebhookModel],configService:ConfigService,redisService:RedisService):
+class WebhookBulkUploadError(BaseError):
+    ...
+
+class DBWebhookInterface(BaseMiniService,WebhookAdapterInterface):
+
+    def __init__(self,scheme:str,depService:ProfileMiniService[DBWebhookModel],configService:ConfigService,redisService:RedisService):
         BaseMiniService.__init__(self,depService, None)
         WebhookAdapterInterface.__init__(self)
         self.scheme = scheme
         self.depService = depService
         self.configService = configService
         self.redisService = redisService
-        self.topic=topic
 
     @property
     def model(self):
@@ -44,20 +53,28 @@ class DBInterface(BaseMiniService,WebhookAdapterInterface):
         return f"{self.scheme}://{auth}{self.model.host}:{self.model.port}/{self.model.database}"
 
     def deliver(self,payload):
-        resp = self.redisService.stream_data(self.topic,payload)
+        payload:DBPayload = {
+            "mini_service_id":self.miniService_id,
+            "data":payload
+        }
+        resp = self.redisService.stream_data(StreamConstant.DB_WEBHOOK_STREAM,payload)
         return 201,resp
     
     async def deliver(self,payload):
-        resp = await self.redisService.stream_data(self.topic,payload)
+        payload:DBPayload = {
+            "mini_service_id":self.miniService_id,
+            "data":payload
+        }
+        resp = await self.redisService.stream_data(StreamConstant.DB_WEBHOOK_STREAM,payload)
         return 201,resp
     
     async def bulk(self,payloads:list[dict]):
         ...
 
-class PostgresWebhookMiniService(DBInterface):
+class PostgresWebhookMiniService(DBWebhookInterface):
 
     def __init__(self, profileMiniService:ProfileMiniService[PostgresWebhookModel],configService:ConfigService,redisService:RedisService):
-        super().__init__("postgresql","",profileMiniService,configService,redisService)
+        super().__init__("postgresql",profileMiniService,configService,redisService)
         self.depService = profileMiniService
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
@@ -71,7 +88,7 @@ class PostgresWebhookMiniService(DBInterface):
         self.conn.close()
         self.conn_async.close()
 
-class MongoDBWebhookMiniService(DBInterface):
+class MongoDBWebhookMiniService(DBWebhookInterface):
 
     def __init__(self, profileMiniService:ProfileMiniService[MongoDBWebhookModel],configService:ConfigService,redisService:RedisService):
         super().__init__("mongodb","",profileMiniService,configService,redisService)

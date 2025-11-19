@@ -92,11 +92,12 @@ class KafkaWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 # ---------- SQSAdapter (aiobotocore + boto3 sync) ----------
 class SQSWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
-    def __init__(self,profileMiniService:ProfileMiniService[SQSWebhookModel],redisService:RedisService):
+    def __init__(self,profileMiniService:ProfileMiniService[SQSWebhookModel],configService:ConfigService,redisService:RedisService):
         super().__init__(profileMiniService, None)
         WebhookAdapterInterface.__init__(self)
 
         self.redisService = redisService
+        self.configService= configService
         self.depService = profileMiniService
         self.client = None
         self.client_sync = None

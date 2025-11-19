@@ -112,7 +112,7 @@ class StreamConstant:
     CELERY_RETRY_MECHANISM='retry-mechanism'
     PROFILE_ERROR_STREAM='profile-error-stream'
     S3_EVENT_STREAM='s3_object_events'
-
+    DB_WEBHOOK_STREAM='db_webhook_stream'
 
 class SubConstant:
     SERVICE_STATUS = 'service-status'

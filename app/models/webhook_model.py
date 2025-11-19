@@ -216,11 +216,13 @@ class DBWebhookModel(WebhookProfileModel):
 class PostgresWebhookModel(DBWebhookModel):
     url: Optional[str] = None
     port: Optional[int] = 5432
+    table:str = Field("notifyr_webhooks",max_length=150)
     _scheme:ClassVar[Optional[str]] = 'postgresql'
 
 class MongoDBWebhookModel(DBWebhookModel):
     url: Optional[str] = None
     port: Optional[int] = 27017
+    collection:str = Field("notifyr_webhooks",max_length=150)
     _scheme:ClassVar[Optional[str]] = 'mongodb'
 
 ######################################################

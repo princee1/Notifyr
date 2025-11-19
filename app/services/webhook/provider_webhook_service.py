@@ -17,7 +17,7 @@ class DiscordWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         attachements:list[dict[str,Any]]
         files:Dict[str, Tuple[Optional[str], bytes| str]]
 
-    def __init__(self,profileMiniService:ProfileMiniService[DiscordWebhookModel],redisService:RedisService,configService:ConfigService):
+    def __init__(self,profileMiniService:ProfileMiniService[DiscordWebhookModel],configService:ConfigService,redisService:RedisService):
         super().__init__(profileMiniService,None)
         WebhookAdapterInterface.__init__(self)
 
