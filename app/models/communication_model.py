@@ -1,13 +1,10 @@
-from datetime import datetime
 from typing import Any, Optional, Self, Type, TypeVar, Union, ClassVar
 from typing_extensions import Literal
 from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
-from beanie import Document
-
 from app.classes.condition import MongoCondition
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.phone import PhoneModel
-from app.classes.profiles import ProfilModelValues, BaseProfileModel, ProfileModelAuthToken, ProfilModelConstant, ProfileState
+from app.classes.profiles import ProfilModelValues, BaseProfileModel, ProfileModelAuthToken, ProfileState
 from app.utils.constant import EmailHostConstant, MongooseDBConstant, VaultConstant
 from app.utils.validation import email_validator, port_validator, phone_number_validator,url_validator
 from app.utils.helper import phone_parser
@@ -27,7 +24,7 @@ class CommunicationProfileModel(BaseProfileModel):
     _vault:ClassVar[str] = VaultConstant.COMMUNICATION_SECRETS
     class Settings:
         is_root=True
-        collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
+        name=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
 
 ######################################################
@@ -74,7 +71,7 @@ class APIEmailProfileModel(EmailProfileModel):
 
     class Settings:
         is_root=True
-        collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
+        name=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
 
 ######################################################

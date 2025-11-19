@@ -1,4 +1,5 @@
-from typing import ClassVar, Dict, List, Literal, Optional, Self, TypedDict
+from typing import ClassVar, Dict, List, Literal, Optional, Self
+from typing_extensions import TypedDict
 from urllib.parse import quote_plus
 from app.classes.profiles import BaseProfileModel,ProfilModelValues
 from app.utils.constant import MongooseDBConstant, VaultConstant
@@ -47,7 +48,7 @@ class WebhookProfileModel(BaseProfileModel):
 
     class Settings:
         is_root=True
-        collection=MongooseDBConstant.WEBHOOK_PROFILE_COLLECTION
+        name=MongooseDBConstant.WEBHOOK_PROFILE_COLLECTION
 
 
 ################################################################################################

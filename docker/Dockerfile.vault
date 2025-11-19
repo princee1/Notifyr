@@ -81,13 +81,22 @@ path "notifyr-secrets/api-key/*"{
   capabilities = ["read"]
 }
 
-path "notifyr-secrets/profiles" {
+path "notifyr-secrets/communication" {
   capabilities =["read","list"]
 }
 
-path "notifyr-secrets/profiles/*" {
+path "notifyr-secrets/communication/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
+
+path "notifyr-secrets/webhook" {
+  capabilities =["read","list"]
+}
+
+path "notifyr-secrets/webhook/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
 
 path "notifyr-secrets/messages" {
   capabilities = ["read","list"]
