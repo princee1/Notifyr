@@ -57,8 +57,6 @@ class SettingService(BaseService):
             SettingsModel(**data) # Validate the data
             return data
         except Exception as e:
-            print(e.__class__)
-            print(e)
             return DEFAULT_SETTING.copy()
 
     def _read_setting_json_file(self):

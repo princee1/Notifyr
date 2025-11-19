@@ -369,7 +369,7 @@ class BaseMiniService(BaseService,):
                 raise MiniServiceCannotBeIdentifiedError
             self.miniService_id = self.depService.miniService_id
         else:
-            self.miniService_id = id()
+            self.miniService_id = id if isinstance(id,str) else id()
         
         self.register()
 
