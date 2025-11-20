@@ -163,6 +163,8 @@ class MongooseDBConstant:
     WEBHOOK_PROFILE_COLLECTION = 'webhook'
     CHAT_COLLECTION = 'chat'
     WORKFLOW_COLLECTION ='workflow'
+    ARC_COLLECTION='arc'
+    NODE_COLLECTION='node'
     SETTING_COLLECTION = 'setting'
 
     DATABASE_NAME = 'notifyr'
@@ -274,8 +276,8 @@ class VaultConstant:
     @staticmethod
     def DATABASE_ENGINE_BASE_PATH(sub_mount:NotifyrTransitKeyType,path:str=''):
         return f'{sub_mount}/{path}'
-    
 
+########################                     ########################################
 
 class VaultTTLSyncConstant:
     SECRET_ID_ROTATION = SECONDS_IN_AN_HOUR*24
@@ -295,8 +297,7 @@ class VaultTTLSyncConstant:
     MINIO_TTL=SECONDS_IN_AN_HOUR*12
     MINIO_MAX_TTL= SECONDS_IN_AN_HOUR *16
 
-    
-
+########################                     ########################################
 
 class MinioConstant:
     STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
@@ -305,6 +306,7 @@ class MinioConstant:
     ENCRYPTED_KEY = 'encrypted'
     MINIO_EVENT='s3_object_events'
 
+########################                     ########################################
 
 class RedisConstant:
 
@@ -313,10 +315,12 @@ class RedisConstant:
     LIMITER_DB=1
     CACHE_DB=3
 
+########################                     ########################################
 
 class FastAPIConstant:
     OO_SCOPE_HEADERS = {'X-Error-Handler':'FastAPI - Exception'}
 
+########################                     ########################################
 
 class CostConstant:
     EMAIL_CREDIT='email'
