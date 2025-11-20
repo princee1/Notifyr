@@ -36,7 +36,7 @@ from requests.exceptions import SSLError, Timeout
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
+from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError, DocumentPrimaryKeyConflictError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
@@ -438,7 +438,16 @@ class MotorErrorHandler(Handler):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f'Document with id {e.id} does not exists'
             )
-            
+
+        except DocumentPrimaryKeyConflictError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": f'Document with "{e.pk_field}: {e.pk_value}" already exists',
+                    "model": str(e.model)
+                }
+            )
+
         except DocumentExistsUniqueConstraintError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

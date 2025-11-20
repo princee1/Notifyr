@@ -69,6 +69,8 @@ if ConfigService._celery_env == CeleryMode.none:
         ['app.ressources'], related_name='email_ressource')
     celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
 
+##############################################           ##################################################
+
 
 @functools.wraps(celery_app.task)
 def RegisterTask(heaviness: TaskHeaviness, **kwargs):
@@ -94,6 +96,9 @@ def SharedTask(heaviness: TaskHeaviness, **kwargs):
         
         return task
     return decorator
+
+##############################################           ##################################################
+
 
 ##############################################           ##################################################
 
@@ -141,5 +146,14 @@ def task_send_twiml_voice_call(self:Task,*args,**kwargs):
 def task_send_custom_voice_call(self:Task, *args,**kwargs):
     callService:CallService = Get(CallService)
     return callService.send_custom_voice_call(*args,**kwargs)
+
+#============================================================================================================#
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_webhook(self:Task,*args,**kwargs):
+    webhookService:WebhookService = Get(WebhookService)
+    webhook_profile = kwargs.get('webhook_profile',None)
+    webhookMiniService=webhookService.MiniServiceStore.get(webhook_profile)
+    return webhookMiniService.deliver(*args,**kwargs)
 
 ##############################################           ##################################################

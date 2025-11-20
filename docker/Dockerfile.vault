@@ -18,14 +18,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/vault-plugin-secrets-mi
 
 FROM hashicorp/vault:latest
 
-# Use root for setup
 USER root
 
 ARG S3_CRED_TYPE="MINIO"
 
 ENV S3_CRED_TYPE=${S3_CRED_TYPE}
 
-# Install dependencies
 RUN apk add --no-cache bash curl jq tini ca-certificates pwgen
 
 # Create Vault config directories
@@ -58,6 +56,9 @@ audit "file" {
 plugin_directory = "/etc/vault/plugins"
 EOF
 
+##############################################################################################################
+##############################################################################################################
+
 # Vault policies
 RUN mkdir -p /vault/policies
 
@@ -73,6 +74,11 @@ path "notifyr-secrets/tokens" {
   capabilities = ["read","list"]
 }
 
+
+path "notifyr-secrets/setting" {
+  capabilities = ["read","list","update","create"]
+}
+
 path "notifyr-secrets/api-key"{
   capabilities = ["read","list"]
 }
@@ -81,13 +87,22 @@ path "notifyr-secrets/api-key/*"{
   capabilities = ["read"]
 }
 
-path "notifyr-secrets/profiles" {
+path "notifyr-secrets/communication" {
   capabilities =["read","list"]
 }
 
-path "notifyr-secrets/profiles/*" {
+path "notifyr-secrets/communication/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
+
+path "notifyr-secrets/webhook" {
+  capabilities =["read","list"]
+}
+
+path "notifyr-secrets/webhook/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
 
 path "notifyr-secrets/messages" {
   capabilities = ["read","list"]
@@ -203,6 +218,10 @@ path "notifyr-secrets/api-key/S3-WEBHOOK" {
 
 EOF
 
+##############################################################################################################
+##############################################################################################################
+
+
 # Add non-root user
 RUN adduser -D -u 1500 -g vaultuser vaultuser \
     && chown -R vaultuser:vaultuser /vault/data /vault/logs /vault/shared /home/vaultuser /vault/cron \
@@ -224,6 +243,7 @@ EOF
 
 # Copy scripts with correct permissions
 COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
+COPY --chown=vaultuser:vaultuser ./settings_db.json ./vault/config/settings_db.json
 
 RUN mkdir /etc/vault && mkdir etc/vault/plugins
 

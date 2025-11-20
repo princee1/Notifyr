@@ -12,7 +12,7 @@ from app.definition import _service
 from app.interface.redis_event import RedisEventInterface
 from app.interface.twilio import TwilioInterface
 from app.models.otp_model import GatherDtmfOTPModel, GatherOTPBaseModel, GatherSpeechOTPModel, OTPModel
-from app.models.profile_model import TwilioProfileModel
+from app.models.communication_model import TwilioProfileModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.assets_service import AssetService
 from app.services.database_service import MongooseService, RedisService
@@ -65,7 +65,7 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
     def build(self,build_state=-1):
 
         self.account_sid = self.depService.model.account_sid
-        self.auth_token = self.depService.credentials.plain['auth_token']
+        self.auth_token = self.depService.credentials.to_plain()['auth_token']
         try:
             
             self.client = Client(self.account_sid,self.auth_token)

@@ -11,7 +11,7 @@ from app.definition._service import DEFAULT_BUILD_STATE, GUNICORN_BUILD_STATE, B
 from app.errors.service_error import BuildFailureError
 from app.interface.timers import SchedulerInterface
 from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface
-from app.models.profile_model import AWSProfileModel
+from app.models.communication_model import AWSProfileModel
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MinioConstant, VaultConstant, VaultTTLSyncConstant

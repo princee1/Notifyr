@@ -2,10 +2,8 @@ import functools
 import time
 from typing import Any, Callable, Dict, List, Self, Type, TypeVar, TypedDict
 from urllib.parse import urlencode
-import aiohttp
 from beanie import Document, PydanticObjectId, init_beanie
 import hvac
-import requests
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.callbacks import CALLBACKS_CONFIG
@@ -34,7 +32,7 @@ import psycopg2
 from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
 from app.utils.constant import SettingDBConstant
 from random import randint,random
-from app.models.profile_model import *
+from app.models.communication_model import *
 from app.errors.db_error import *
 from pymongo import MongoClient
 from pymemcache import Client as SyncClient,MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
@@ -556,6 +554,23 @@ class MongooseService(TempCredentialsDatabaseService):
     async def count(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).count()
     
+    async def primary_key_constraint(self,model:D,raise_when:bool = None):
+        pk_field = getattr(model,'_primary_key',None)
+        if not pk_field:
+            return
+        
+        pk_value = getattr(model,pk_field,None)
+        if pk_value == None:
+            return
+        
+        params = {pk_field:pk_value}
+        is_exist= (await self.find_one(model.__class__,params) != None)
+        if raise_when != None:
+            if (raise_when and is_exist) or (not raise_when and not is_exist):
+                raise DocumentPrimaryKeyConflictError(pk_value=pk_value,model=model.__class__,pk_field=pk_field)
+        else:
+            return is_exist
+
     async def exists_unique(self,model:D,raise_when:bool = None):
         unique_indexes = getattr(model,'unique_indexes',None)
         if unique_indexes == None:
@@ -586,10 +601,7 @@ class MongooseService(TempCredentialsDatabaseService):
 
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
-            self.service_status = ServiceStatus.NOT_AVAILABLE
             self.db_connection()
-            self.service_status = ServiceStatus.AVAILABLE
-
         except ConnectionFailure as e:
             if build_state == DEFAULT_BUILD_STATE:
                 raise BuildFailureError(f"MongoDB connection error: {e}")

@@ -356,7 +356,11 @@ class BaseMiniService(BaseService,):
     QUIET_MINI_SERVICE = False
     ID_LEN = 20
 
-    def __init__(self, depService:Self, id=generateId(ID_LEN)):
+    @classmethod
+    def default_gen_id(cls)->str|bytes:
+        return generateId(cls.ID_LEN)
+
+    def __init__(self, depService:Self, id=default_gen_id):
         super().__init__()
         self.depService = depService
         
@@ -365,7 +369,7 @@ class BaseMiniService(BaseService,):
                 raise MiniServiceCannotBeIdentifiedError
             self.miniService_id = self.depService.miniService_id
         else:
-            self.miniService_id = id
+            self.miniService_id = id if isinstance(id,str) else id()
         
         self.register()
 

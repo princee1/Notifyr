@@ -112,7 +112,7 @@ class StreamConstant:
     CELERY_RETRY_MECHANISM='retry-mechanism'
     PROFILE_ERROR_STREAM='profile-error-stream'
     S3_EVENT_STREAM='s3_object_events'
-
+    DB_WEBHOOK_STREAM='db_webhook_stream'
 
 class SubConstant:
     SERVICE_STATUS = 'service-status'
@@ -157,8 +157,10 @@ class HTMLTemplateConstant:
 
 ########################                     ########################################
 class MongooseDBConstant:
+    ERROR_PROFILE_COLLECTION ='errorProfile'
     AGENT_COLLECTION = 'agent'
-    PROFILE_COLLECTION = 'profile'
+    COMMUNICATION_PROFILE_COLLECTION = 'communication'
+    WEBHOOK_PROFILE_COLLECTION = 'webhook'
     CHAT_COLLECTION = 'chat'
     WORKFLOW_COLLECTION ='workflow'
     SETTING_COLLECTION = 'setting'
@@ -233,11 +235,14 @@ class VaultConstant:
         return f'../../vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','profiles','messages','generation-id']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting']
     TOKENS_SECRETS = 'tokens'
-    PROFILES_SECRETS = 'profiles'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
+    COMMUNICATION_SECRETS = 'communication'
+    WEBHOOK_SECRETS = 'webhook'
+    SETTINGS_SECRETS='setting'
+
 
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']

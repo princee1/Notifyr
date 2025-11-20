@@ -1,6 +1,6 @@
 from app.classes.profiles import ProfileErrorProtocol
 from app.utils.constant import StreamConstant,SubConstant
-from app.models.profile_model import ErrorProfileModel
+from app.classes.profiles import ErrorProfileModel
 from app.container import Get
 from app.services import MongooseService,RedisService,ProfileService
 from app.definition._service import MiniStateProtocol

@@ -1,14 +1,11 @@
-from datetime import datetime
 from typing import Any, Optional, Self, Type, TypeVar, Union, ClassVar
 from typing_extensions import Literal
 from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
-from beanie import Document
-
 from app.classes.condition import MongoCondition
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.phone import PhoneModel
-from app.classes.profiles import ProfileModelAuthToken, ProfilModelConstant, ProfileState
-from app.utils.constant import EmailHostConstant, MongooseDBConstant
+from app.classes.profiles import ProfilModelValues, BaseProfileModel, ProfileModelAuthToken, ProfileState
+from app.utils.constant import EmailHostConstant, MongooseDBConstant, VaultConstant
 from app.utils.validation import email_validator, port_validator, phone_number_validator,url_validator
 from app.utils.helper import phone_parser
 
@@ -18,49 +15,29 @@ ProfileType = Literal["email", "twilio"]
 ServiceMode = Literal["smtp", "aws", "api", "imap"]
 ProtocolConnMode = Literal["tls", "ssl", "normal"]
 
-PROFILE_TYPE_KEY = 'profileType'
-
 ######################################################
-# Base Profile Model (Root)
+# Communication-related Profiles (Root)
 ######################################################
-class ProfileModel(Document):
+class CommunicationProfileModel(BaseProfileModel):
 
-    
-    alias: str
-    description: Optional[str] = Field(default=None,min_length=0,max_length=1000)
-    role: list[str] = Field(default_factory=list)
-    profile_state: ProfileState = ProfileState.ACTIVE
-    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    last_modified: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    version: int = 1
-
-    _secret_key: ClassVar[list[str]] = []
-    unique_indexes: ClassVar[list[str]] = []
-    condition:ClassVar[Optional[MongoCondition]] = None
-    
+    _collection:ClassVar[Optional[str]] = MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
+    _vault:ClassVar[str] = VaultConstant.COMMUNICATION_SECRETS
     class Settings:
-        name = MongooseDBConstant.PROFILE_COLLECTION
-        is_root = True 
+        is_root=True
+        name=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
-    def __init_subclass__(cls, **kwargs):
-        # Ensure secret keys are inherited but isolated
-        setattr(cls, "_secret_key", cls._secret_key.copy())
-        super().__init_subclass__(**kwargs)
-
-    @classmethod
-    @property
-    def secrets_keys(cls):
-        return getattr(cls, "_secret_key", [])
 
 ######################################################
 # Email-related Profiles (Abstract)
 ######################################################
 
-class EmailProfileModel(ProfileModel):
+class EmailProfileModel(CommunicationProfileModel):
     email_address: EmailStr
 
     class Settings:
-        abstract = True
+        is_root=True
+        collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
+
 
 class ProtocolProfileModel(EmailProfileModel):
     username: Optional[str] = None
@@ -85,14 +62,16 @@ class ProtocolProfileModel(EmailProfileModel):
         return self
         
     class Settings:
-        abstract = True
+        is_root=True
+        collection=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
 class APIEmailProfileModel(EmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
     unique_indexes: ClassVar[list[str]] = ['email_address']
 
     class Settings:
-        abstract = True
+        is_root=True
+        name=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
 
 
 ######################################################
@@ -175,7 +154,7 @@ class OutlookAPIProfileModel(APIEmailProfileModel):
 ######################################################
 # Twilio Profile
 ######################################################
-class TwilioProfileModel(ProfileModel):
+class TwilioProfileModel(CommunicationProfileModel):
     account_sid: str
     auth_token: str
     from_number: PhoneModel | str
@@ -228,32 +207,24 @@ class TwilioProfileModel(ProfileModel):
 ######################################################
 # Registry of Profile Implementations
 ######################################################
+EMAIL_PROFILE_TYPE = 'email'
+COMM_PREFIX="communication"
 
-ProfilModelValues: dict[str, Type[ProfileModel]] = {
-    ProfilModelConstant.OUTLOOK_API: OutlookAPIProfileModel,
-    ProfilModelConstant.GMAIL_API: GMailAPIProfileModel,
-    ProfilModelConstant.AWS: AWSProfileModel,
-    ProfilModelConstant.IMAP: IMAPProfileModel,
-    ProfilModelConstant.SMTP: SMTPProfileModel,
-    ProfilModelConstant.TWILIO: TwilioProfileModel,
-}
+class CommunicationModelConstant:
+    OUTLOOK_API=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/outlook-api'
+    GMAIL_API=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/gmail-api'
+    AWS=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/aws'
+    IMAP=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/imap'
+    SMTP=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/smtp'
+    TWILIO=f'{COMM_PREFIX}/twilio'
 
-P = TypeVar('P',bound=ProfileModel)
 
-######################################################
-# Error Model
-######################################################
-class ErrorProfileModel(Document):
-    profile_id: Optional[str]
+ProfilModelValues.update({
+    CommunicationModelConstant.OUTLOOK_API: OutlookAPIProfileModel,
+    CommunicationModelConstant.GMAIL_API: GMailAPIProfileModel,
+    CommunicationModelConstant.AWS: AWSProfileModel,
+    CommunicationModelConstant.IMAP: IMAPProfileModel,
+    CommunicationModelConstant.SMTP: SMTPProfileModel,
+    CommunicationModelConstant.TWILIO: TwilioProfileModel,
+})
 
-    error_code: Optional[int]
-    error_name: Optional[str]
-    error_description: Optional[str]
-    error_level:Optional[Literal['warn','critical','message']]
-    error_type:Optional[Literal['connect','authenticate','permission','rate_limit','general']]
-
-    ignore:Optional[bool] = False
-
-    class Settings:
-        name = MongooseDBConstant.PROFILE_COLLECTION
-    

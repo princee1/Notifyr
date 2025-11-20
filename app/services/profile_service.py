@@ -11,12 +11,13 @@ from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, VaultConstant
-from app.utils.helper import subset_model
+from app.utils.helper import flatten_dict, subset_model
 from .database_service import MongooseService, RedisService
-from app.models.profile_model import ErrorProfileModel, ProfileModel, SMTPProfileModel,IMAPProfileModel,TwilioProfileModel, ProfilModelValues
+from app.models.communication_model import  BaseProfileModel, ProfilModelValues
+from app.classes.profiles import ErrorProfileModel
 from typing import Generic, TypeVar
 
-TModel = TypeVar("TModel",bound=ProfileModel)
+TModel = TypeVar("TModel",bound=BaseProfileModel)
 
 @MiniService(
     override_init=True
@@ -31,7 +32,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         else:
             super().__init__(None,str(model.id))
         self.model:TModel = model
-        self.credentials = ...
+        self.credentials:ChaCha20Poly1305SecretsWrapper = ...
         self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.redisService = redisService
@@ -46,12 +47,17 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         
         self._read_encrypted_creds()
         
-    def _read_encrypted_creds(self):
-        data = self.vaultService.secrets_engine.read(VaultConstant.PROFILES_SECRETS,self.miniService_id)
+    def _read_encrypted_creds(self,return_only=False):
+        data = self.vaultService.secrets_engine.read(self.model._vault,self.miniService_id)
         for k,v in data.items():
             data[k]= self.vaultService.transit_engine.decrypt(v,VaultConstant.PROFILES_KEY)
-        self.credentials =  ChaCha20Poly1305SecretsWrapper(data)
-    
+        
+        if return_only:
+            return data
+        else:
+            self.credentials = ChaCha20Poly1305SecretsWrapper(data)
+            return 
+
     async def async_create_profile(self):
         print('Template Profile Model:', TModel)
         self.model = await self.mongooseService.get(self.model.__class__,self.miniService_id)
@@ -64,7 +70,7 @@ class ProfileService(BaseMiniServiceManager):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
         super().__init__()
-        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[ProfileModel]] = MiniServiceStore[ProfileMiniService[ProfileModel]](self.__class__.__name__)
+        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[BaseProfileModel]] = MiniServiceStore[ProfileMiniService[BaseProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
         self.configService = configService
         self.redisService = redisService
@@ -75,7 +81,7 @@ class ProfileService(BaseMiniServiceManager):
         self.MiniServiceStore.clear()
         
         for v in ProfilModelValues.values():
-            for m in self.mongooseService.sync_find(MongooseDBConstant.PROFILE_COLLECTION,v):
+            for m in self.mongooseService.sync_find(v._collection,v):
                 p = ProfileMiniService[v](
                     self.vaultService,
                     self.mongooseService,
@@ -83,6 +89,7 @@ class ProfileService(BaseMiniServiceManager):
                     model=m,model_type=v)
                 p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 self.MiniServiceStore.add(p)
+            
         
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:
@@ -115,7 +122,7 @@ class ProfileService(BaseMiniServiceManager):
     
     ########################################################       ################################3
 
-    async def add_profile(self,profile:ProfileModel):
+    async def add_profile(self,profile:BaseProfileModel):
         creds = {}
 
         for skey in profile.secrets_keys:
@@ -130,23 +137,23 @@ class ProfileService(BaseMiniServiceManager):
                 setattr(profile,skey,None)
             
             if secret != None:
-                if isinstance(secret,dict):
-                    creds.update(secret)
-                else:
-                    creds[skey] = secret
+                if not isinstance(secret,(dict,str,int,float,bool)):
+                    raise TypeError
+                
+                creds[skey] = secret
             
-        
-        result:ProfileModel = await self.mongooseService.insert(profile)
+        result:BaseProfileModel = await self.mongooseService.insert(profile)
         result_id = str(result.id)
-        self._put_encrypted_creds(result_id,creds)
+        self._put_encrypted_creds(result_id,creds,result._vault)
         return result
     
-    async def delete_profile(self,profileModel:ProfileModel,raise_:bool = False):
+    async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False):
         profile_id = str(profileModel.id)
         result = await profileModel.delete()
-        self._delete_encrypted_creds(profile_id)
+        self._delete_encrypted_creds(profile_id,profileModel._vault)
+        return result
      
-    async def update_profile(self,profileModel:ProfileModel,body:dict):
+    async def update_profile(self,profileModel:BaseProfileModel,body:dict):
         for k,v in body.items():
             if v is not None:
                 try:
@@ -155,16 +162,17 @@ class ProfileService(BaseMiniServiceManager):
                 except:
                     continue
         
-    def update_credentials(self,profiles_id:str,creds:dict):
-        current_creds = self._read_encrypted_creds(profiles_id,False)
+    def update_credentials(self,profiles_id:str,creds:dict,vault_path:str):
+        current_creds:dict = self._read_encrypted_creds(profiles_id)
         current_creds.update(creds)
-        self._put_encrypted_creds(profiles_id,current_creds)
+        self._put_encrypted_creds(profiles_id,current_creds,vault_path)
 
-    async def update_meta_profile(self,profile:ProfileModel):
+    async def update_meta_profile(self,profile:BaseProfileModel):
         profile.last_modified =  datetime.utcnow().isoformat()
         profile.version+=1
         await profile.save()
         return profile
+    
 
     ########################################################       ################################
     async def addError(self,profile_id: str | None,error_code: int | None,error_name: str | None,error_description: str | None,error_type: Literal['warn', 'critical', 'message'] | None):
@@ -181,19 +189,21 @@ class ProfileService(BaseMiniServiceManager):
         await self.mongooseService.delete_all(ErrorProfileModel,{'profile_id':profile_id})
     ########################################################       ################################
 
-    def _put_encrypted_creds(self,profiles_id:str,data:dict):
+
+    def _read_encrypted_creds(self,profile_id:str):
+        return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)
+
+    def _put_encrypted_creds(self,profiles_id:str,data:dict,vault_path:str):
+        data = flatten_dict(data,dict_sep='/',_key_builder=lambda x:x+'/')
         for k,v in data.items():
+            if not isinstance(v,str):
+                v = str(v)
+            
             data[k] = self.vaultService.transit_engine.encrypt(v,VaultConstant.PROFILES_KEY)
         
-        return self.vaultService.secrets_engine.put(VaultConstant.PROFILES_SECRETS,data,profiles_id)
+        return self.vaultService.secrets_engine.put(vault_path,data,profiles_id)
 
-    def _delete_encrypted_creds(self,profiles_id:str):
-        return self.vaultService.secrets_engine.delete(VaultConstant.PROFILES_SECRETS,profiles_id)
+    def _delete_encrypted_creds(self,profiles_id:str,vault_path):
+        return self.vaultService.secrets_engine.delete(vault_path,profiles_id)
     
     ########################################################       ################################
-
-    def loadStore(self,):
-        ...
-    
-    def destroyStore(self):
-        ...
