@@ -1,7 +1,7 @@
 import json
 from typing import Any, Dict, Optional, TypedDict
 from aiohttp_retry import Tuple
-from app.definition._service import BaseMiniService
+from app.definition._service import BaseMiniService, MiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
@@ -10,6 +10,7 @@ from app.services.webhook.http_webhook_service import HTTPWebhookMiniService
 from app.models.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
 from discord_webhook import DiscordEmbed,DiscordWebhook,AsyncDiscordWebhook
 
+@MiniService()
 class DiscordWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
     
     class DiscordBody(TypedDict):
@@ -72,13 +73,15 @@ class DiscordWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
             files=payload.get('files',None)
         ).execute()
         return resp.status_code,resp.content
-
+    
+@MiniService()
 class ZapierWebhookMiniService(HTTPWebhookMiniService):
 
     def __init__(self,profileMiniService:ProfileMiniService[ZapierHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         self.depService = profileMiniService
         super().__init__(profileMiniService,configService,redisService)
-        
+
+@MiniService()      
 class MakeWebhookMiniService(HTTPWebhookMiniService):
     """
     Make (Integromat) webhooks are HTTP endpoints that accept JSON or form data.
@@ -89,6 +92,7 @@ class MakeWebhookMiniService(HTTPWebhookMiniService):
         self.depService = profileMiniService
         super().__init__(profileMiniService,configService,redisService)
 
+@MiniService()
 class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
     """
     Slack Incoming Webhooks accept JSON payloads:
@@ -143,6 +147,7 @@ class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
 
         return base
 
+@MiniService()
 class N8NWebhookMiniService(HTTPWebhookMiniService):
     def __init__(self,profileMiniService:ProfileMiniService[MakeHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         super().__init__(profileMiniService,configService,redisService)

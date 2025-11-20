@@ -5,7 +5,7 @@ import asyncpg
 from pymongo import InsertOne, MongoClient
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.definition._error import BaseError
-from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, MiniService
 from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import DBWebhookModel, MongoDBWebhookModel, PostgresWebhookModel
@@ -73,6 +73,7 @@ class DBWebhookInterface(BaseMiniService,WebhookAdapterInterface):
     async def bulk(self,payloads:list[dict]):
         ...
 
+@MiniService()
 class PostgresWebhookMiniService(DBWebhookInterface):
 
     def __init__(self, profileMiniService:ProfileMiniService[PostgresWebhookModel],configService:ConfigService,redisService:RedisService):
@@ -107,6 +108,7 @@ class PostgresWebhookMiniService(DBWebhookInterface):
                 f"INSERT INTO {self.model.table} (id, name) VALUES($1, $2)", payloads
             )
 
+@MiniService()
 class MongoDBWebhookMiniService(DBWebhookInterface):
 
     def __init__(self, profileMiniService:ProfileMiniService[MongoDBWebhookModel],configService:ConfigService,redisService:RedisService):

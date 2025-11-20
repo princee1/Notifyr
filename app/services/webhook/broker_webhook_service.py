@@ -4,7 +4,7 @@ from aiokafka import AIOKafkaProducer, abc
 import aiobotocore as aiobotocore_session
 import boto3
 from confluent_kafka import Producer as SyncKafkaProducer
-from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, MiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import AuthConfig, KafkaWebhookModel, RedisWebhookModel, SQSWebhookModel
 from app.services.config_service import ConfigService
@@ -14,6 +14,7 @@ from redis.asyncio import Redis,from_url as async_from_url
 from redis import Redis as SyncRedis,from_url
 
 # ---------- KafkaAdapter (aiokafka + optional sync kafka-python) ----------
+@MiniService()
 class KafkaWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
     def __init__(self,profileMiniService:ProfileMiniService[KafkaWebhookModel],configService:ConfigService,redisService:RedisService):
@@ -90,6 +91,7 @@ class KafkaWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         return 200, b"OK"
 
 # ---------- SQSAdapter (aiobotocore + boto3 sync) ----------
+@MiniService()
 class SQSWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
     def __init__(self,profileMiniService:ProfileMiniService[SQSWebhookModel],configService:ConfigService,redisService:RedisService):
@@ -146,6 +148,7 @@ class SQSWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
 
 # ---------- RedisAdapter (streams, lists, pubsub) ----------
+@MiniService()
 class RedisWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
     def __init__(self,profileMiniService:ProfileMiniService[RedisWebhookModel],configService:ConfigService,redisService:RedisService):

@@ -5,7 +5,7 @@ import json
 from typing import Any, Tuple
 import requests
 import aiohttp
-from app.definition._service import BaseMiniService
+from app.definition._service import BaseMiniService, MiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import AuthConfig, HTTPWebhookModel, SignatureConfig
 from app.services.config_service import ConfigService
@@ -13,6 +13,7 @@ from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService
 
 
+@MiniService()
 class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
 
     def __init__(self,profileMiniService:ProfileMiniService[HTTPWebhookModel],configService:ConfigService,redisService:RedisService):
