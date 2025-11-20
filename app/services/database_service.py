@@ -567,7 +567,7 @@ class MongooseService(TempCredentialsDatabaseService):
         is_exist= (await self.find_one(model.__class__,params) != None)
         if raise_when != None:
             if (raise_when and is_exist) or (not raise_when and not is_exist):
-                raise DocumentPrimaryKeyConflictError(pk_value=pk_value,model=model.__class__)
+                raise DocumentPrimaryKeyConflictError(pk_value=pk_value,model=model.__class__,pk_field=pk_field)
         else:
             return is_exist
 
