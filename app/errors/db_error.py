@@ -8,6 +8,13 @@ class RedisStreamDoesNotExistsError(BaseError):
 class RedisDatabaseDoesNotExistsError(BaseError):
     ...
 
+class DocumentPrimaryKeyConflictError(BaseError):
+    def __init__(self, *args, pk_value=None, model=None,pk_field=None):
+        super().__init__(*args)
+        self.pk_value = pk_value
+        self.model = model
+        self.pk_field = pk_field
+
 class DocumentExistsUniqueConstraintError(BaseError):
     def __init__(self, *args,exists=True,model=None,params = {}):
         super().__init__(*args)

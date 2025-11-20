@@ -120,6 +120,7 @@ class BaseProfileModel(Document):
     condition:ClassVar[Optional[MongoCondition]] = None
     _collection:ClassVar[Optional[str]] = None
     _vault:ClassVar[Optional[str]]  = None
+    _primary_key:ClassVar[str]  = 'alias'
     
     def __init_subclass__(cls, **kwargs):
         # Ensure secret keys are inherited but isolated

@@ -107,10 +107,15 @@ class DiscordWebhookModel(HTTPWebhookModel):
     thread_name:Optional[str] =None
     allowed_mentions:Optional[Dict[str, List[str]]] = None
 
+    unique_indexes: ClassVar[list[str]] = ['username','thread_id']
+
 class SlackHTTPWebhookModel(HTTPWebhookModel):
-    channel:str = Field(max_length=50)
+    channel:str = Field(max_length=70)
     username:str = Field(max_length=100)
     icon_emoji:Optional[str] = Field(None,max_length=20)
+
+    unique_indexes: ClassVar[list[str]] = ['username','channel']
+
 
 class ZapierHTTPWebhookModel(HTTPWebhookModel):
     encoding:Literal['json','form']='json'
@@ -143,6 +148,8 @@ class KafkaWebhookModel(WebhookProfileModel):
 
     _secret_key:ClassVar[list[str]] = ['auth']
 
+    unique_indexes: ClassVar[list[str]] = ['client_id','topic']
+
     @field_validator("bootstrap_servers")
     def non_empty_bootstrap(cls, v):
         if not v:
@@ -156,6 +163,8 @@ class SQSWebhookModel(WebhookProfileModel):
     message_group_id_template: Optional[str] = None 
     deduplication_id_template: Optional[str] = None
     # NOTE queue_url is the url
+
+    unique_indexes: ClassVar[list[str]] = ['aws_access_key_id','region']
     
     _secret_key:ClassVar[list[str]] = ['aws_secret_access_key']
 
@@ -202,6 +211,8 @@ class DBWebhookModel(WebhookProfileModel):
                 raise ValueError(f'Scheme does not match {self._scheme}')
             
             self.database= url.path
+            self.host= url.host
+            self.port= url.port
 
         else:
             if not self.host:
@@ -219,28 +230,33 @@ class PostgresWebhookModel(DBWebhookModel):
     table:str = Field("notifyr_webhooks",max_length=150)
     _scheme:ClassVar[Optional[str]] = 'postgresql'
 
+    unique_indexes: ClassVar[list[str]] = ['table','host']
+
 class MongoDBWebhookModel(DBWebhookModel):
     url: Optional[str] = None
     port: Optional[int] = 27017
     collection:str = Field("notifyr_webhooks",max_length=150)
     _scheme:ClassVar[Optional[str]] = 'mongodb'
 
+    unique_indexes: ClassVar[list[str]] = ['table','collection']
+
 ######################################################
 # Registry of Profile Implementations
 ######################################################
+WEBHOOK_PREFIX = 'webhook'
 
 class WebhookModelConstant:
-    DISCORD='discord'
-    SLACK='slack'
-    ZAPIER='zapier'
-    MAKE='make'
-    N8N='n8n'
-    KAFKA='kafka'
-    SQS='sqs'
-    REDIS='redis'
-    POSTGRES='postgres'
-    MONGODB='mongodb'
-    HTTP='http'
+    DISCORD=F'{WEBHOOK_PREFIX}/discord'
+    SLACK=F'{WEBHOOK_PREFIX}/slack'
+    ZAPIER=F'{WEBHOOK_PREFIX}/zapier'
+    MAKE=F'{WEBHOOK_PREFIX}/make'
+    N8N=F'{WEBHOOK_PREFIX}/n8n'
+    KAFKA=F'{WEBHOOK_PREFIX}/kafka'
+    SQS=F'{WEBHOOK_PREFIX}/sqs'
+    REDIS=F'{WEBHOOK_PREFIX}/redis'
+    POSTGRES=F'{WEBHOOK_PREFIX}/postgres'
+    MONGODB=F'{WEBHOOK_PREFIX}/mongodb'
+    HTTP=F'{WEBHOOK_PREFIX}/http'
 
 ProfilModelValues.update({
     WebhookModelConstant.DISCORD:DiscordWebhookModel,

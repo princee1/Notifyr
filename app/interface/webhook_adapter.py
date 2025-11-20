@@ -1,4 +1,5 @@
 import asyncio
+from functools import wraps
 import json
 import random
 from typing import Any, Self
@@ -19,6 +20,7 @@ class WebhookAdapterInterface(SchedulerInterface):
     @staticmethod
     def batch(func:Callable):
         
+        @wraps(func)
         async def w(self:Self,payload:Any,**kwargs):
             if self.is_batch_allowed:
                 return await self.add(payload)
@@ -28,7 +30,8 @@ class WebhookAdapterInterface(SchedulerInterface):
 
     @staticmethod
     def retry(func:Callable):
-        
+
+        @wraps(func)
         def s(self:Self,payload:Any,**kwargs):
             attempt = 0
             while attempt<=self.model.max_attempt:
@@ -41,7 +44,8 @@ class WebhookAdapterInterface(SchedulerInterface):
                     attempt+=1
                 except NonRetryableError as e:
                     return None,None
-            
+                
+        @wraps(func)
         async def a(self:Self,payload,**kwargs):
             attempt = 0
             while attempt<=self.model.max_attempt:

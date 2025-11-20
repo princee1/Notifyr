@@ -1,17 +1,19 @@
 from typing import TypedDict
 from httplib2 import Credentials
 import psycopg2
-from pymongo import MongoClient
+import asyncpg
+from pymongo import InsertOne, MongoClient
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService
+from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import DBWebhookModel, MongoDBWebhookModel, PostgresWebhookModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.utils.constant import StreamConstant
-
+from pymongo.errors import ServerSelectionTimeoutError, ConfigurationError, OperationFailure
 
 class DBPayload(TypedDict):
     mini_service_id: str
@@ -77,31 +79,57 @@ class PostgresWebhookMiniService(DBWebhookInterface):
         super().__init__("postgresql",profileMiniService,configService,redisService)
         self.depService = profileMiniService
 
-    def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
-            self.conn_async = psycopg2.connect(async_=True,dsn=self.url)
             self.conn = psycopg2.connect(dsn=self.url)
-        except:
-            ...
-        
-    def close(self):
-        self.conn.close()
-        self.conn_async.close()
+            return self.conn
+
+        except psycopg2.OperationalError as e:
+            # Network issues, authentication failure, DB not reachable, max connections
+            raise BuildFailureError("OperationalError: Failed to connect to database:", e)
+
+        except psycopg2.ProgrammingError as e:
+            # Invalid DSN parameters or misuse
+            raise BuildFailureError("ProgrammingError: Incorrect usage or parameters:", e)
+
+        except psycopg2.DatabaseError as e:
+            # Database-specific errors (e.g., SSL issues)
+            raise BuildWarningError("DatabaseError: Database rejected the connection:", e)
+
+    async def start(self):
+        self.pool = await asyncpg.create_pool(dsn=self.url)
+
+    async def close(self):
+        await self.pool.close()
+
+    async def bulk(self, payloads: list[tuple]):
+        async with self.pool.acquire() as conn:
+            await conn.executemany(
+                f"INSERT INTO {self.model.table} (id, name) VALUES($1, $2)", payloads
+            )
 
 class MongoDBWebhookMiniService(DBWebhookInterface):
 
     def __init__(self, profileMiniService:ProfileMiniService[MongoDBWebhookModel],configService:ConfigService,redisService:RedisService):
-        super().__init__("mongodb","",profileMiniService,configService,redisService)
+        super().__init__("mongodb",profileMiniService,configService,redisService)
         self.depService = profileMiniService
     
     def close(self):
-        self.client_async.close()
         self.client.close()
 
     def build(self, build_state = ...):
+       
         try:
-            self.client_async = AsyncIOMotorClient(self.url)
-            self.client = MongoClient(self.url)
-        except:
-            ...
+            self.client = AsyncIOMotorClient(self.url, serverSelectionTimeoutMS=5000)
+            client = MongoClient(self.url, serverSelectionTimeoutMS=5000)
 
+            client[self.model.database][self.model.collection].find_one()
+        except ServerSelectionTimeoutError:
+            raise BuildFailureError("ServerSelectionTimeoutError: MongoDB server is unreachable.")
+        except ConfigurationError:
+            raise BuildFailureError("ConfigurationError: Invalid MongoDB configuration.")
+        except OperationFailure:
+            raise BuildFailureError("OperationFailure: Authentication failed or insufficient permissions.")
+
+    async def bulk(self, payloads: list[dict]):
+       operations = [InsertOne(payload) for payload in payloads]
+       await self.client[self.model.database][self.model.collection].bulk_write(operations)   

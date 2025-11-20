@@ -554,6 +554,23 @@ class MongooseService(TempCredentialsDatabaseService):
     async def count(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).count()
     
+    async def primary_key_constraint(self,model:D,raise_when:bool = None):
+        pk_field = getattr(model,'_primary_key',None)
+        if not pk_field:
+            return
+        
+        pk_value = getattr(model,pk_field,None)
+        if pk_value == None:
+            return
+        
+        params = {pk_field:pk_value}
+        is_exist= (await self.find_one(model.__class__,params) != None)
+        if raise_when != None:
+            if (raise_when and is_exist) or (not raise_when and not is_exist):
+                raise DocumentPrimaryKeyConflictError(pk_value=pk_value,model=model.__class__)
+        else:
+            return is_exist
+
     async def exists_unique(self,model:D,raise_when:bool = None):
         unique_indexes = getattr(model,'unique_indexes',None)
         if unique_indexes == None:

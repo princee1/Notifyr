@@ -63,8 +63,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request,'model')
         
+        await self.mongooseService.primary_key_constraint(profileModel,True)
         await self.mongooseService.exists_unique(profileModel,True)
-        await self.create_profile_model_condition(profileModel)
+        await self.profile_model_satisfaction(profileModel)
 
         result = await self.profileService.add_profile(profileModel)
         broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
@@ -136,7 +137,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         modelCreds = await self.pipe_profil_model(request,'model_creds')
 
         modelCreds = modelCreds.model_dump()
-        await self.create_profile_model_condition(modelCreds)
+        await self.profile_model_satisfaction(modelCreds)
 
         await self.profileService.update_credentials(profile,modelCreds,self.model._vault)
         await self.profileService.update_meta_profile(profileModel)
@@ -161,7 +162,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         return model.model_validate(body)
 
-    async def create_profile_model_condition(self,profileModel:BaseProfileModel | dict):
+    async def profile_model_satisfaction(self,profileModel:BaseProfileModel | dict):
         
         def validate_filter(m:MongoCondition,p_dump):
             try:

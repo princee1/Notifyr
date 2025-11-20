@@ -208,14 +208,15 @@ class TwilioProfileModel(CommunicationProfileModel):
 # Registry of Profile Implementations
 ######################################################
 EMAIL_PROFILE_TYPE = 'email'
+COMM_PREFIX="communication"
 
 class CommunicationModelConstant:
-    OUTLOOK_API=f'{EMAIL_PROFILE_TYPE}/outlook-api'
-    GMAIL_API=f'{EMAIL_PROFILE_TYPE}/gmail-api'
-    AWS=f'{EMAIL_PROFILE_TYPE}/aws'
-    IMAP=f'{EMAIL_PROFILE_TYPE}/imap'
-    SMTP=f'{EMAIL_PROFILE_TYPE}/smtp'
-    TWILIO='twilio'
+    OUTLOOK_API=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/outlook-api'
+    GMAIL_API=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/gmail-api'
+    AWS=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/aws'
+    IMAP=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/imap'
+    SMTP=f'{COMM_PREFIX}/{EMAIL_PROFILE_TYPE}/smtp'
+    TWILIO=f'{COMM_PREFIX}/twilio'
 
 
 ProfilModelValues.update({
