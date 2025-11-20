@@ -147,4 +147,13 @@ def task_send_custom_voice_call(self:Task, *args,**kwargs):
     callService:CallService = Get(CallService)
     return callService.send_custom_voice_call(*args,**kwargs)
 
+#============================================================================================================#
+
+@RegisterTask(TaskHeaviness.LIGHT)
+def task_send_webhook(self:Task,*args,**kwargs):
+    webhookService:WebhookService = Get(WebhookService)
+    webhook_profile = kwargs.get('webhook_profile',None)
+    webhookMiniService=webhookService.MiniServiceStore.get(webhook_profile)
+    return webhookMiniService.deliver(*args,**kwargs)
+
 ##############################################           ##################################################
