@@ -49,8 +49,8 @@ prompt_toolkit==3.0.43
 protobuf==6.33.1
 psutil==7.0.0
 psycopg2_binary==2.9.10
-pydantic==2.12.4
-pydantic_core==2.41.5
+pydantic==2.10.6
+pydantic_core==2.27.2
 pyfiglet==0.7
 PyJWT==2.10.1
 PyJWT==2.10.1
