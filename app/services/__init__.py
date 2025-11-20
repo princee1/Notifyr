@@ -14,7 +14,7 @@ from .contacts_service import ContactsService
 from .admin_service import AdminService
 from .reactive_service import ReactiveService
 from .link_service import LinkService
-from .model_service import LLMModelService
+from .llm_service import LLMModelService
 from .aws_service import AmazonS3Service,AmazonSESService,AmazonSNSService
 from .health_service import HealthService
 from .cost_service import CostService
