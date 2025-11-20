@@ -4,7 +4,7 @@ from .config_service import ConfigService
 from app.definition._service import BaseMiniService, MiniServiceStore, Service, BaseMiniServiceManager
 
 @Service()
-class LLMModelService(BaseMiniServiceManager):
+class LLMService(BaseMiniServiceManager):
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService) -> None:
         super().__init__()

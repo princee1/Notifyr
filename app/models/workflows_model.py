@@ -14,7 +14,7 @@ class NodeModel(BaseWorkflowModel):
     class Settings:
         name = MongooseDBConstant.NODE_COLLECTION
 
-class ArcModel(BaseWorkflowModel):
+class EdgesModel(BaseWorkflowModel):
     class Settings:
         name = MongooseDBConstant.ARC_COLLECTION
 

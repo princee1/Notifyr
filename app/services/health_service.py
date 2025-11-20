@@ -1,23 +1,17 @@
-from app.definition._service import InjectWithCondition, Service,BaseService
+from app.definition._service import Service,BaseService
 from app.definition._service import Service
 from app.services.config_service import ConfigService
-from app.services.notification_service import DiscordService, NotificationService,SystemNotificationService
 import psutil
-
 from app.services.cost_service import CostService
-from app.utils.constant import ConfigAppConstant
 from app.utils.globals import PARENT_PID, PROCESS_PID
 
-def resolve_notification_service(configService:ConfigService):
-    return DiscordService if True else SystemNotificationService
 
 @Service()
 class HealthService(BaseService):
     
-    def __init__(self,configService:ConfigService,discordService:DiscordService,rateLimiterService:CostService):
+    def __init__(self,configService:ConfigService,rateLimiterService:CostService):
         super().__init__()
         self.configService = configService
-        self.notificationService = discordService
         self.rateLimiterService = rateLimiterService
 
     def build(self,build_state=-1):
