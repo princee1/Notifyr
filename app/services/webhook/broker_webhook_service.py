@@ -3,7 +3,7 @@ from typing import Any
 from aiokafka import AIOKafkaProducer, abc
 import aiobotocore as aiobotocore_session
 import boto3
-from kafka import KafkaProducer as SyncKafkaProducer
+from confluent_kafka import Producer as SyncKafkaProducer
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import AuthConfig, KafkaWebhookModel, RedisWebhookModel, SQSWebhookModel

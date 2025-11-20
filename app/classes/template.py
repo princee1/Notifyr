@@ -10,7 +10,6 @@ from app.utils.tools import Time
 from app.utils.validation import CustomValidator
 # import fitz as pdf
 from cerberus import DocumentError, SchemaError
-from googletrans import Translator
 import os
 import re
 from app.utils.prettyprint import printJSON
@@ -115,11 +114,11 @@ class Template(Asset):
         if len(args) == 4:
             filename, content, dirName,size = args
             super().__init__(filename, content, dirName,size)
-            self.translator = Translator(['translate.google.com', 'translate.google.com'])
+            self.translator = ...
             self.load()
         
         else:
-            self.translator = Translator(['translate.google.com', 'translate.google.com'])
+            self.translator = ...
 
     def inject(self, data:  dict) -> bool:
         """
@@ -296,6 +295,7 @@ class MLTemplate(Template):
         self.extractValidation()
         
     def translate(self, targetLang: str, text: str):
+        return text
         if targetLang == Template.LANG:
             return text
         src = 'auto' if Template.LANG is None else Template.LANG
