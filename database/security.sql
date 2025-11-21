@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS Blacklist (
 CREATE TABLE IF NOT EXISTS Policy (
     policy_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc(),
     allowed_profiles TEXT[] DEFAULT '{}',
+    allowed_agents TEXT[] DEFAULT '{}',
     allowed_routes JSONB DEFAULT '{}'::jsonb,
     allowed_assets TEXT[] DEFAULT '{}',
     roles role[] DEFAULT ARRAY['PUBLIC']::Role[],

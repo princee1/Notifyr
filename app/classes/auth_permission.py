@@ -96,6 +96,7 @@ class AuthPermission(TypedDict):
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str] | AssetsPermission
     allowed_profiles:List[str]=[]
+    allowed_agents:List[str]=[]
     challenge: str
     scope:str
     salt:str
@@ -131,6 +132,7 @@ class RoutePermissionModel(BaseModel):
 
 class PolicyModel(BaseModel):
     allowed_profiles:List[str]=[]
+    allowed_agents:List[str] = []
     allowed_routes: Dict[str, RoutePermissionModel] = {}
     allowed_assets: List[str] =[]
     roles: Optional[List[Role]] = [Role.PUBLIC]

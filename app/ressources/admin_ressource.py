@@ -117,6 +117,7 @@ class PolicyRessource(BaseHTTPRessource):
             case 'merge':    
                 policy.allowed_assets = list(set(model.allowed_assets + policy.allowed_assets))
                 policy.allowed_profiles = list(set(model.allowed_profiles +policy.allowed_profiles))
+                policy.allowed_agents = list(set(model.allowed_agents +policy.allowed_agents))
                 policy.roles = list(set(model.roles + policy.roles))
                 policy.allowed_routes = {**policy.allowed_routes,**model.allowed_routes}
             
@@ -125,11 +126,13 @@ class PolicyRessource(BaseHTTPRessource):
                 policy.allowed_profiles = model.allowed_profiles
                 policy.roles = model.roles
                 policy.allowed_routes = model.allowed_routes
+                policy.allowed_agents = model.allowed_agents
             
             case 'delete':
                 policy.allowed_assets = list(set(policy.allowed_assets) - set(model.allowed_assets))
                 policy.allowed_profiles = list(set(policy.allowed_profiles) - set(model.allowed_profiles))
                 policy.roles = list(set(policy.roles) - set(model.roles))
+                policy.allowed_agents = list(set(policy.allowed_agents) - set(model.allowed_agents))
                 policy.allowed_routes = {k: v for k, v in policy.allowed_routes.items() if k not in model.allowed_routes}
 
         
