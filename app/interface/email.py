@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
+from typing_extensions import Literal
 from app.definition._interface import Interface, IsInterface
 from app.interface.timers import CronParams, DateParams, IntervalParams, SchedulerInterface
+
+Mode = Literal['read','send']
 
 class EmailInterface:
     def __init__(self,email_address):

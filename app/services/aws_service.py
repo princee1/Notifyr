@@ -10,9 +10,10 @@ from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, GUNICORN_BUILD_STATE, BaseMiniService, BaseService, LinkDep, MiniService, Service
 from app.errors.service_error import BuildFailureError
 from app.interface.timers import SchedulerInterface
-from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface
+from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface, Mode
 from app.models.communication_model import AWSProfileModel
 from app.services.profile_service import ProfileMiniService, ProfileService
+from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MinioConstant, VaultConstant, VaultTTLSyncConstant
 from .config_service import AssetMode, ConfigService
@@ -20,7 +21,7 @@ from .file_service import BaseFileRetrieverService, FileService
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Dict
-from app.services.database_service import TempCredentialsDatabaseService
+from app.services.database_service import RedisService, TempCredentialsDatabaseService
 from fnmatch import fnmatch
 
 class AmazonS3ServiceError(BaseError):
@@ -199,19 +200,22 @@ class AmazonS3Service(TempCredentialsDatabaseService):
         if addr =='localhost':
             return False
         return not addr.startswith('127.0.0')
-        
-    
+          
 @MiniService(
     override_init=True,
     links=[LinkDep(ProfileMiniService,to_build=True,to_destroy=True)]
 )
 class AmazonSESService(BaseMiniService):
-    def __init__(self, configService: ConfigService,profileMiniService:ProfileMiniService[AWSProfileModel]) -> None:
+    def __init__(self,mode:Mode, profileMiniService:ProfileMiniService[AWSProfileModel], configService: ConfigService,reactiveService:ReactiveService,redisService:RedisService) -> None:
         self.depService = profileMiniService
+        self.mode=mode
         super().__init__(profileMiniService,None)
         EmailSendInterface.__init__(self,self.depService.model.email_address)
         EmailReadInterface.__init__(self,self.depService.model.email_address)
         self.configService = configService
+        self.reactiveService = reactiveService
+        self.redisService = redisService
+
     
     def build(self,build_state=-1):
         return super().build()
@@ -247,9 +251,11 @@ class AmazonSESService(BaseMiniService):
 
 @Service()
 class AmazonSNSService(BaseService):
-    def __init__(self, configService: ConfigService) -> None:
+    def __init__(self, configService: ConfigService,reactiveService:ReactiveService,redisService:RedisService) -> None:
         super().__init__()
         self.configService = configService
+        self.reactiveService = reactiveService
+        self.redisService = redisService
 
     def build(self,build_state=-1):
         return super().build()
