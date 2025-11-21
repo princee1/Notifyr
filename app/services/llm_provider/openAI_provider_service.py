@@ -19,4 +19,4 @@ class OpenAIProviderMiniService(BaseMiniService,LLMProvider):
 
     def build(self, build_state = ...):
         self.client = OpenAI()
-    
+        

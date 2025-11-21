@@ -1,6 +1,5 @@
 from app.definition._interface import Interface
-from typing import Any, Dict, List
-from pyparsing import Optional
+from typing import Any, Dict, List,Optional
 from app.definition._interface import Interface
 
 

@@ -1,9 +1,8 @@
 from datetime import datetime
-from typing import ClassVar, Self, TypedDict
+from typing import ClassVar, Self, TypedDict,Optional
 import operator
 from aiohttp_retry import Any, Callable
 from pydantic import BaseModel, Field
-from pyparsing import Optional
 from typing_extensions import Literal
 
 Operator = Literal["$eq","$ne","$gt","$ge","$lt","$le","$in","$nin"]

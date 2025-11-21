@@ -20,3 +20,4 @@ from .setting_service import SettingService
 from .secret_service import HCVaultService
 from .profile_service import ProfileService
 from .webhook_service import WebhookService
+from .llm_service import LLMService
