@@ -115,13 +115,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         profileModel = await self.mongooseService.get(self.model,profile,True)
         modelUpdate = await self.pipe_profil_model(request,'model_update')
 
-        modelUpdate = modelUpdate.model_dump()
+        await profileModel.update_profile(modelUpdate)
 
-        await self.profileService.update_profile(profileModel,modelUpdate)
+        await self.mongooseService.primary_key_constraint(profileModel,True)
         await self.mongooseService.exists_unique(profileModel,True)
+        await profileModel.update_meta_profile()
 
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
-        await profileModel.update_meta_profile()
         return profileModel
     
     @PingService([HCVaultService,TaskService,CeleryService])
@@ -215,7 +215,7 @@ def generate_profil_model_ressource(model:Type[BaseProfileModel],path:str):
 
     forbid_extra = ConfigDict(extra="forbid")
     
-    model_update = subset_model(model,f'Update{model.__name__}',exclude=set(model.unique_indexes).union(model._secrets_keys).union(base_attr),__config__=forbid_extra)
+    model_update = subset_model(model,f'Update{model.__name__}',exclude=set(model._unique_indexes).union(model._secrets_keys).union(base_attr),__config__=forbid_extra)
     model_creds = subset_model(model,f'Secrets{model.__name__}',include=set(model._secrets_keys).union(base_attr),__config__=forbid_extra)
 
     ModelRessource = type(f"{model.__name__}{BaseProfilModelRessource.__name__}",(BaseProfilModelRessource,),{'model':model,'profileType':path,'model_update':model_update,'model_creds':model_creds})

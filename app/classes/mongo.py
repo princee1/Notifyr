@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import ClassVar, Self, TypedDict
 import operator
 from aiohttp_retry import Any, Callable
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pyparsing import Optional
 from typing_extensions import Literal
 
@@ -61,11 +61,20 @@ class BaseDocument(Document):
     _collection:ClassVar[Optional[str]] = None
     _primary_key:ClassVar[str]  = 'alias'
 
-    async def update_meta_profile(self,base_doc:Self):
-        base_doc.last_modified =  datetime.utcnow().isoformat()
-        base_doc.version+=1
-        await base_doc.save()
+    async def update_meta_profile(self):
+        self.last_modified =  datetime.utcnow().isoformat()
+        self.version+=1
+        await self.save()
         
+    async def update_profile(self,body:BaseModel):
+        _body  = body.model_dump()
+        for k,v in _body.items():
+            if v is not None:
+                try:
+                    getattr(self,k)
+                    setattr(self,k,v)
+                except:
+                    continue
 
     class Settings:
         abstract=True

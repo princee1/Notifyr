@@ -259,6 +259,17 @@ class ProfilePermission(Permission):
         return True
     
 
+class AgentPermission(Permission):
+
+    async def permission(self,authPermission:AuthPermission,agent:str):
+        
+        if agent not in authPermission['allowed_agents']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Agent Is not allowed to be used'
+            )
+        return True
+
 
 class TaskCostPermission(Permission):
     """

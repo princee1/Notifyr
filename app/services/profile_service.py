@@ -152,15 +152,6 @@ class ProfileService(BaseMiniServiceManager):
         result = await profileModel.delete()
         self._delete_encrypted_creds(profile_id,profileModel._vault)
         return result
-     
-    async def update_profile(self,profileModel:BaseProfileModel,body:dict):
-        for k,v in body.items():
-            if v is not None:
-                try:
-                    getattr(profileModel,k)
-                    setattr(profileModel,k,v)
-                except:
-                    continue
         
     def update_credentials(self,profiles_id:str,creds:dict,vault_path:str):
         current_creds:dict = self._read_encrypted_creds(profiles_id)

@@ -330,6 +330,8 @@ class CostConstant:
     PHONE_CREDIT='phone'
     PROFILE_CREDIT='profile'
     CLIENT_CREDIT='client'
+    AGENT_CREDIT='agent'
+    WORKFLOW_CREDIT='workflow'
     
 
     COST_KEY='cost'

@@ -545,8 +545,8 @@ class MongooseService(TempCredentialsDatabaseService):
     async def find_one(self, model: Type[D], *args, **kwargs):
         return await model.find_one(*args, **kwargs)
 
-    async def delete(self, model: D, *args, **kwargs):
-        return await model.delete(*args, **kwargs)
+    async def delete(self, model: D):
+        return await model.delete()
 
     async def delete_all(self,model:Type[D],*args,**kwargs):
         return await model.delete_all(*args,**kwargs)
