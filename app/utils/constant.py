@@ -356,3 +356,11 @@ class CostConstant:
     phone_template='phone_template'
     _object = 'object'
     
+
+class LLMProviderConstant:
+    OPENAI='openAI'
+    DEEPSEEK='deepseek'
+    ANTHROPIC='anthropic'
+    GEMINI='gemini'
+    COHERE='cohere'
+    GROQ='groq'

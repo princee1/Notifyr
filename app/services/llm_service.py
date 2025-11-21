@@ -1,7 +1,8 @@
-from app.interface.ai_driver import AIDriver
+from app.interface.llm_provider import LLMProvider
 from app.services.secret_service import HCVaultService
 from .config_service import ConfigService
 from app.definition._service import BaseMiniService, MiniServiceStore, Service, BaseMiniServiceManager
+from app.classes.secrets import ChaCha20Poly1305SecretsWrapper
 
 @Service()
 class LLMService(BaseMiniServiceManager):
@@ -10,7 +11,7 @@ class LLMService(BaseMiniServiceManager):
         super().__init__()
         self.configService = configService
         self.vaultService = vaultService
-        self.MiniServiceStore = MiniServiceStore[AIDriver|BaseMiniService](self.name)
+        self.MiniServiceStore = MiniServiceStore[LLMProvider|BaseMiniService](self.name)
 
     def verify_dependency(self):
         ...
@@ -21,17 +22,25 @@ class LLMService(BaseMiniServiceManager):
         return super().build(counter, build_state)
 
     @property
-    def OPEN_API_KEY(self)->str|None:
+    def OPEN_API_KEY(self)->ChaCha20Poly1305SecretsWrapper|None:
         ...
 
     @property
-    def DEEPSEEK_API_KEY(self)->str|None:
+    def DEEPSEEK_API_KEY(self)->ChaCha20Poly1305SecretsWrapper|None:
         ...
 
     @property
-    def ANTHROPIC_API_KEY(self)->str|None:
+    def ANTHROPIC_API_KEY(self)->ChaCha20Poly1305SecretsWrapper|None:
         ...
     
     @property
-    def GEMINI_API_KEY(self)->str|None:
+    def GEMINI_API_KEY(self)->ChaCha20Poly1305SecretsWrapper|None:
+        ...
+
+    @property
+    def COHERE_API_KEY(self)->ChaCha20Poly1305SecretsWrapper|None:
+        ...
+
+    @property
+    def GROQ_API_KEY(self)->ChaCha20Poly1305SecretsWrapper|None:
         ...
