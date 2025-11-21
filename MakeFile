@@ -10,8 +10,11 @@ install	:
 cleandep:
 	pipreqs --clean requirements_dev.txt
 
-getdep: 
+get_dev_dep: 
 	pip freeze > requirements_dev.txt
+
+get_dep:
+	pipreqs --ignore twilio,test,scripts,docs,docker,database,dashboard,balancer,assets,.venv .  
 
 venv:
 	python -m venv .venv

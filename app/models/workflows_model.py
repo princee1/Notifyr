@@ -1,16 +1,16 @@
-from typing import Any
+from typing import Any, ClassVar
 from beanie import Document
 from pydantic import Field
 from pyparsing import Optional
+from app.classes.mongo import BaseDocument
 from app.utils.constant import MongooseDBConstant
 import cerberus
 from app.classes.celery import TaskTypeLiteral
 
 ####################################################                              ###########################################
 ####################################################                              ###########################################
-class BaseWorkflowModel(Document):
-    alias:str
-    description:Optional[str]|None = Field(None,description="A brief description of the workflow")
+class BaseWorkflowModel(BaseDocument):
+
     class Settings:
         abstract = True
 
@@ -18,6 +18,8 @@ class BaseWorkflowModel(Document):
 ####################################################                              ###########################################
 class NodeModel(BaseWorkflowModel):
     
+    _collection:ClassVar[str] = MongooseDBConstant.NODE_COLLECTION
+
     class Settings:
         is_root = True
         name = MongooseDBConstant.NODE_COLLECTION
@@ -43,8 +45,10 @@ class PipeNode(NodeModel):
 ####################################################                              ###########################################
 ####################################################                              ###########################################
 class EdgesModel(BaseWorkflowModel):
+    _collection:ClassVar[str] = MongooseDBConstant.EDGE_COLLECTION
+
     class Settings:
-        name = MongooseDBConstant.ARC_COLLECTION
+        name = MongooseDBConstant.EDGE_COLLECTION
 
 
 class DirectNode(EdgesModel):

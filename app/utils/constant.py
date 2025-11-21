@@ -163,7 +163,7 @@ class MongooseDBConstant:
     WEBHOOK_PROFILE_COLLECTION = 'webhook'
     CHAT_COLLECTION = 'chat'
     WORKFLOW_COLLECTION ='workflow'
-    ARC_COLLECTION='arc'
+    EDGE_COLLECTION='edge'
     NODE_COLLECTION='node'
     SETTING_COLLECTION = 'setting'
 
@@ -323,6 +323,8 @@ class FastAPIConstant:
 ########################                     ########################################
 
 class CostConstant:
+    RECEIPT_LIST_NAME='notifyr-cost'
+
     EMAIL_CREDIT='email'
     SMS_CREDIT = 'sms'
     PHONE_CREDIT='phone'

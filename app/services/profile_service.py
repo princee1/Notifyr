@@ -125,7 +125,7 @@ class ProfileService(BaseMiniServiceManager):
     async def add_profile(self,profile:BaseProfileModel):
         creds = {}
 
-        for skey in profile.secrets_keys:
+        for skey in profile._secrets_keys:
             secret = getattr(profile,skey,None)
             if isinstance(secret,str):
                 setattr(profile,skey,randint(40,60)*'*')
@@ -166,12 +166,6 @@ class ProfileService(BaseMiniServiceManager):
         current_creds:dict = self._read_encrypted_creds(profiles_id)
         current_creds.update(creds)
         self._put_encrypted_creds(profiles_id,current_creds,vault_path)
-
-    async def update_meta_profile(self,profile:BaseProfileModel):
-        profile.last_modified =  datetime.utcnow().isoformat()
-        profile.version+=1
-        await profile.save()
-        return profile
     
 
     ########################################################       ################################

@@ -4,7 +4,7 @@ from beanie import Document
 from fastapi import Depends, HTTPException, Request, Response,status
 from pydantic import BaseModel, ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
-from app.classes.condition import MongoCondition, simple_number_validation
+from app.classes.mongo import MongoCondition, simple_number_validation
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
@@ -121,7 +121,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(profileModel,True)
 
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
-        return await self.profileService.update_meta_profile(profileModel)
+        await profileModel.update_meta_profile()
+        return profileModel
     
     @PingService([HCVaultService,TaskService,CeleryService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
@@ -140,7 +141,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.profile_model_satisfaction(modelCreds)
 
         await self.profileService.update_credentials(profile,modelCreds,self.model._vault)
-        await self.profileService.update_meta_profile(profileModel)
+        await profileModel.update_meta_profile()
 
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return None
@@ -153,7 +154,6 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             raise ProfileModelRequestBodyError
         
         model:Type[BaseProfileModel | Document] = getattr(cls,modelType,None)
-        print(model)
         if model == None:
             raise AttributeError
         
@@ -175,7 +175,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
                 return False
             return True
 
-        mc:MongoCondition = self.model.condition
+        mc:MongoCondition = self.model._condition
         if mc == None:
             return
         
@@ -215,8 +215,8 @@ def generate_profil_model_ressource(model:Type[BaseProfileModel],path:str):
 
     forbid_extra = ConfigDict(extra="forbid")
     
-    model_update = subset_model(model,f'Update{model.__name__}',exclude=set(model.unique_indexes).union(model.secrets_keys).union(base_attr),__config__=forbid_extra)
-    model_creds = subset_model(model,f'Secrets{model.__name__}',include=set(model.secrets_keys).union(base_attr),__config__=forbid_extra)
+    model_update = subset_model(model,f'Update{model.__name__}',exclude=set(model.unique_indexes).union(model._secrets_keys).union(base_attr),__config__=forbid_extra)
+    model_creds = subset_model(model,f'Secrets{model.__name__}',include=set(model._secrets_keys).union(base_attr),__config__=forbid_extra)
 
     ModelRessource = type(f"{model.__name__}{BaseProfilModelRessource.__name__}",(BaseProfilModelRessource,),{'model':model,'profileType':path,'model_update':model_update,'model_creds':model_creds})
     setattr(ModelRessource,'meta',base_meta.copy())

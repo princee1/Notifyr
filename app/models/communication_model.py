@@ -1,7 +1,7 @@
 from typing import Any, Optional, Self, Type, TypeVar, Union, ClassVar
 from typing_extensions import Literal
 from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
-from app.classes.condition import MongoCondition
+from app.classes.mongo import MongoCondition
 from app.classes.mail_provider import AuthToken, TokenType
 from app.classes.phone import PhoneModel
 from app.classes.profiles import ProfilModelValues, BaseProfileModel, ProfileModelAuthToken, ProfileState

@@ -4,7 +4,7 @@ from typing import ClassVar, Optional, Type, TypedDict
 from beanie import Document
 from typing_extensions import Literal
 from pydantic import BaseModel, Field, field_validator
-from app.classes.condition import MongoCondition
+from app.classes.mongo import BaseDocument
 from app.classes.mail_provider import TokenType
 from app.definition._error import BaseError
 from app.utils.constant import MongooseDBConstant, StreamConstant
@@ -104,41 +104,19 @@ class ProfileModelException(BaseException):
 
 MAX_LEN =600
 
-class BaseProfileModel(Document):
+class BaseProfileModel(BaseDocument):
 
-    
-    alias: str
-    description: Optional[str] = Field(default=None,min_length=0,max_length=400)
     role: list[str] = Field(default_factory=list)
     profile_state: ProfileState = ProfileState.ACTIVE
-    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    last_modified: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    version: int = 1
 
-    _secret_key: ClassVar[list[str]] = []
-    unique_indexes: ClassVar[list[str]] = []
-    condition:ClassVar[Optional[MongoCondition]] = None
-    _collection:ClassVar[Optional[str]] = None
+    _secrets_keys: ClassVar[list[str]] = []
     _vault:ClassVar[Optional[str]]  = None
-    _primary_key:ClassVar[str]  = 'alias'
     
-    def __init_subclass__(cls, **kwargs):
-        # Ensure secret keys are inherited but isolated
-        setattr(cls, "_secret_key", cls._secret_key.copy())
-        super().__init_subclass__(**kwargs)
-
     @field_validator("*", mode="before")
     def limit_all_strings(cls, v):
         if isinstance(v, str) and len(v) > MAX_LEN:
             raise ValueError(f"String too long (max {MAX_LEN})")
         return v
-
-    @classmethod
-    @property
-    def secrets_keys(cls):
-        return getattr(cls, "_secret_key", [])
-
-
 
 ######################################################
 # Error Model
