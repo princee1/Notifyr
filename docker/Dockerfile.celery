@@ -11,7 +11,3 @@ COPY ./prod.Makefile ./Makefile
 COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
 
 RUN pip install gevent
-
-ENV PATH="/home/celery/.local/bin:${PATH}"
-
-RUN celery --version

@@ -1,19 +1,26 @@
 from functools import wraps
 import json
-from time import perf_counter,time,time_ns
+from time import perf_counter,time,time_ns, sleep  as time_sleep
 from typing import Callable, Literal, get_args
 from aiohttp_retry import Any
 from cachetools import LRUCache
 import asyncio
-
 from fastapi_cache.coder import JsonCoder,object_hook
 from fastapi_cache.decorator import cache
 
 
-
-def hash_args(args):
-    a, k = args
-    return str(a)+"<==>"+str(k)
+class MyJSONCoder(JsonCoder):
+    
+    @classmethod
+    def decode(cls, value: bytes|str) -> Any:
+        """Decode bytes to JSON object."""
+        if isinstance(value, str):
+            return json.loads(value, object_hook=object_hook)
+        try:
+            return super().decode(value)
+        except Exception as e:
+            print(f"Decoding error: {e}")
+            return None
 
 def Time(func: Callable):
     """
@@ -53,23 +60,11 @@ def Time(func: Callable):
         return result
     return wrapper_async if asyncio.iscoroutinefunction(func) else wrapper
 
-
-class MyJSONCoder(JsonCoder):
-    
-    @classmethod
-    def decode(cls, value: bytes|str) -> Any:
-        """Decode bytes to JSON object."""
-        if isinstance(value, str):
-            return json.loads(value, object_hook=object_hook)
-        try:
-            return super().decode(value)
-        except Exception as e:
-            print(f"Decoding error: {e}")
-            return None
-
-
-
 def Cache(cache_type:Literal['custom-in-memory','fastapi-default-cache'] = 'custom-in-memory'):
+    def hash_args(args):
+        a, k = args
+        return str(a)+"<==>"+str(k)
+
     
     def CustomInMemoryCache(maxsize: int = 1000):
         """
@@ -136,8 +131,6 @@ def Cache(cache_type:Literal['custom-in-memory','fastapi-default-cache'] = 'cust
     else:
         raise ValueError("Invalid cache type. Choose 'in-memory' or 'fastapi-default-cache'.")
 
-    
-
 def Mock(sleep:float=2,result:Any = None):
     """
     A decorator to mock asynchronous function execution by introducing a delay.
@@ -159,9 +152,29 @@ def Mock(sleep:float=2,result:Any = None):
 
         @wraps(func)
         def callback_sync(*args,**kwargs):
+            time_sleep(sleep)
             return result
 
         return callback_async if asyncio.iscoroutinefunction(func) else callback_sync    
 
     return wrapper
 
+def RunAsync(func:Callable):
+    """
+    The `RunAsync` function takes a callable function and returns an asynchronous wrapper function that
+    runs the original function in a separate thread if it's not already a coroutine function.
+    
+    :param func: The `func` parameter in the `RunAsync` function is expected to be a callable object,
+    such as a function or a method, that may or may not be a coroutine function
+    :type func: Callable
+    :return: The `RunAsync` function returns a coroutine function.
+    """
+
+    if asyncio.iscoroutinefunction(func):
+        return func  # type: ignore
+
+    @wraps(func)
+    async def wrapper(*args,**kwargs):
+        return await asyncio.to_thread(func,*args,**kwargs)
+    
+    return wrapper

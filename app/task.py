@@ -62,6 +62,13 @@ celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
 celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL
 celery_app.conf.timezone = "UTC"
 
+celery_app.conf.result_backend_transport_options = {
+    'global_keyprefix': 'notifyr_task_',
+    'retry_policy': {
+       'timeout': 5.0
+    }
+}
+
 if ConfigService._celery_env == CeleryMode.none:
 
     celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
@@ -76,6 +83,7 @@ if ConfigService._celery_env == CeleryMode.none:
 def RegisterTask(heaviness: TaskHeaviness, **kwargs):
     def decorator(task: Callable):
         kwargs['bind'] =True
+        kwargs['store_errors_even_if_ignored']=True
         TASK_REGISTRY[task_name(task.__qualname__)] = {
             'heaviness': heaviness,
             'task': celery_app.task(**kwargs)(task)

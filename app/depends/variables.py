@@ -56,7 +56,7 @@ split_query: Callable = get_query_params('split','false',True)
 
 runtype_query:Callable=get_query_params('runtype','sequential',False,checker=_wrap_checker('runtype', lambda v: v in get_args(RunType), choices=list(get_args(RunType))))
 
-save_results_query:Callable=get_query_params('save','false',True)
+save_results_query:Callable=get_query_params('save','false',True,raise_except=True)
 
 get_task_results:Callable= get_query_params('get_task_results','true',True)
 
