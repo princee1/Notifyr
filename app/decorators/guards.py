@@ -70,7 +70,7 @@ class TaskWorkerGuard(Guard):
         self.heaviness = heaviness
     
     async def guard(self,scheduler:SchedulerModel):
-        task_heaviness:TaskHeaviness = scheduler.heaviness
+        task_heaviness:TaskHeaviness = scheduler._heaviness
         ...
     #TODO Check before hand if the background task and the workers are available to do some job
     # NOTE Already have a pingService
@@ -262,6 +262,7 @@ class TrackGuard(Guard):
     allowed=set(['now','once'])
 
     async def guard(self,scheduler:SchedulerModel,tracker:TrackerInterface):
+        return True,''
         if not tracker.will_track:
             return True,''
         if scheduler.task_type not in self.allowed:

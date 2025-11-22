@@ -28,14 +28,12 @@ if sys.argv[0] == CELERY_EXE_PATH:
 
 CELERY_MODULE_NAME = __name__
 
-
 def compute_name(t: str) -> str:
 
     name = task_name(t)
     if name not in TASK_REGISTRY:
         raise CeleryTaskNameNotExistsError(name)
     return name
-
 
 def task_name(t):
     return f'{CELERY_MODULE_NAME}.{t}'
@@ -68,6 +66,8 @@ celery_app.conf.result_backend_transport_options = {
        'timeout': 5.0
     }
 }
+celery_app.conf.task_store_errors_even_if_ignored = True
+celery_app.conf.task_ignore_result = True
 
 if ConfigService._celery_env == CeleryMode.none:
 
@@ -78,12 +78,10 @@ if ConfigService._celery_env == CeleryMode.none:
 
 ##############################################           ##################################################
 
-
 @functools.wraps(celery_app.task)
 def RegisterTask(heaviness: TaskHeaviness, **kwargs):
     def decorator(task: Callable):
         kwargs['bind'] =True
-        kwargs['store_errors_even_if_ignored']=True
         TASK_REGISTRY[task_name(task.__qualname__)] = {
             'heaviness': heaviness,
             'task': celery_app.task(**kwargs)(task)
@@ -91,22 +89,6 @@ def RegisterTask(heaviness: TaskHeaviness, **kwargs):
 
         return task
     return decorator
-
-
-@functools.wraps(shared_task)
-def SharedTask(heaviness: TaskHeaviness, **kwargs):
-    def decorator(task: Callable):
-        kwargs['bind'] =True
-        TASK_REGISTRY[task_name(task.__qualname__)] = {
-            'heaviness':heaviness,
-            'task':shared_task(**kwargs)(task)
-        }
-        
-        return task
-    return decorator
-
-##############################################           ##################################################
-
 
 ##############################################           ##################################################
 

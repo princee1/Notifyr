@@ -110,16 +110,7 @@ class CeleryTaskPipe(Pipe):
     
     def pipe(self,scheduler:SchedulerModel):
         scheduler.task_name = task_name(scheduler.task_name)
-        
-        if scheduler.task_type != 'now' and scheduler.task_type != 'once':
-            rules_keys = SCHEDULER_VALID_KEYS[scheduler.task_type]
-            s_keys = set(scheduler.task_option.keys())
-            if len(s_keys) == 0:
-                raise CelerySchedulerOptionError
-            if len(s_keys.difference(rules_keys)) != 0:
-                raise CelerySchedulerOptionError
-        
-        setattr(scheduler,'heaviness' , self.celeryService._task_registry[scheduler.task_name]['heaviness'])
+        scheduler._heaviness = self.celeryService._task_registry[scheduler.task_name]['heaviness']
         return {'scheduler':scheduler}
     
 class ContactsIdPipe(Pipe):

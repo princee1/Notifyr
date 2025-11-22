@@ -131,7 +131,7 @@ def Cache(cache_type:Literal['custom-in-memory','fastapi-default-cache'] = 'cust
     else:
         raise ValueError("Invalid cache type. Choose 'in-memory' or 'fastapi-default-cache'.")
 
-def Mock(sleep:float=2,result:Any = None):
+def Mock(sleep:float=2,result:Any = None,same:bool=False):
     """
     A decorator to mock asynchronous function execution by introducing a delay.
     This decorator wraps an asynchronous function and replaces its execution
@@ -142,18 +142,36 @@ def Mock(sleep:float=2,result:Any = None):
     Returns:
         Callable: A decorator that replaces the wrapped function's execution with a delay.
     """
-    
+
+    def build_result(r:Any)->Any:
+        if callable(r):
+            return r()
+
+        if isinstance(r, Exception) or issubclass(type(r), BaseException):
+            raise r
+        
+        if isinstance(r, dict):
+            return {k: build_result(v) for k, v in r.items()}
+
+        if isinstance(r,list):
+            return [build_result(item) for item in r]
+
+        return r
+
+    if same:
+        result= build_result(result)   
+
     def wrapper(func:Callable):
 
         @wraps(func)
         async def callback_async(*args,**kwargs):
             await asyncio.sleep(sleep)
-            return result
+            return build_result(result) if not same else result
 
         @wraps(func)
         def callback_sync(*args,**kwargs):
             time_sleep(sleep)
-            return result
+            return build_result(result) if not same else result
 
         return callback_async if asyncio.iscoroutinefunction(func) else callback_sync    
 

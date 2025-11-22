@@ -74,7 +74,7 @@ class TaskManager():
 
     async def offload_task(self,weight:float,delay: float, index: int | None, callback: Callable, *args,_s:s|None=None, **kwargs):
         scheduler = self.scheduler if _s is None else _s
-        weight = Compute_Weight(weight, scheduler.heaviness)
+        weight = Compute_Weight(weight, scheduler._heaviness)
 
         values = await self.offloadTask(self.meta['strategy'],weight,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index,self.meta['save_results'], callback, *args, **kwargs)
         self.task_result.append(values)
@@ -153,9 +153,8 @@ class CeleryService(BaseService, IntervalInterface):
         schedule_id = schedule_name if schedule_name is not None else generateId(25)
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
-        now = str(dt.datetime.now())
         result = {
-            'date': now,
+            'date': str(dt.datetime.now()),
             'offloaded': True,
             'index': index,
             'message': f'Task [{t_name}] received successfully',
@@ -164,24 +163,13 @@ class CeleryService(BaseService, IntervalInterface):
             'expected_tbd': naturaldelta(0)
         }
 
+        option = celery_task.get('task_option',{})
         if c_type == 'now':
-            task_result = self._task_registry[t_name]['task'].delay(*celery_task['args'], **celery_task['kwargs'], ignore_result=not save_results)
-            result.update({'task_id': task_result.id, 'type': 'task'})
-            return result
-
-        options = celery_task['task_option']
-        if c_type == 'once':
-            task_result = self._task_registry[t_name]['task'].apply_async(**options, args=celery_task['args'], kwargs=celery_task['kwargs'], ignore_results=not save_results)
-            eta = options.get('eta') or (dt.datetime.now() + dt.timedelta(seconds=options.get('countdown', 0)))
+            task_result = self._task_registry[t_name]['task'].apply_async(**option, args=celery_task['args'], kwargs=celery_task['kwargs'])
+            eta = option.get('eta') or (dt.datetime.now() + dt.timedelta(seconds=option.get('countdown', 0)))
             time_until_first_run = (eta - dt.datetime.now()).total_seconds() if eta else None
             result.update({'task_id': task_result.id, 'type': 'task', 'expected_tbd': naturaldelta(time_until_first_run) if time_until_first_run else None})
             return result
-
-        schedule = SCHEDULER_RULES[c_type]
-        try:
-            schedule = schedule(**options)  # ERROR
-        except ValueError:
-            raise CelerySchedulerOptionError
 
         entry = RedBeatSchedulerEntry(schedule_id, t_name, schedule, args=celery_task['args'], kwargs=celery_task['kwargs'], app=self._celery_app)
         entry.save()
@@ -191,7 +179,6 @@ class CeleryService(BaseService, IntervalInterface):
             time = entry.due_at
         else:
             time = None
-            
         result.update({'task_id': schedule_id, 'type': 'schedule','expected_tbd':None if time == None else naturaldelta(time)})
         return result
 
@@ -242,12 +229,6 @@ class CeleryService(BaseService, IntervalInterface):
             return response
         except KeyError:
             raise CeleryTaskNotFoundError
-
-    def manually_set_task_expires_result(self, expires: int, scheduler: SchedulerModel):
-        raise NotImplementedError
-        if scheduler.task_type == 'now':
-            self.redis_client.expire(
-                f'celery-task-meta-{scheduler.task_name}', 3600)  # Expire in 1 hour
     
     def verify_dependency(self):
         if self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
@@ -304,6 +285,16 @@ class CeleryService(BaseService, IntervalInterface):
     def stats(self):
         ...
 
+    def purge(self):
+        """
+        Purge the Celery queue.
+        If queue_name is provided, it will purge that specific queue.
+        If not, it will purge all queues.
+        """
+        count = self.celeryService.celery_app.control.purge(queue=self.miniService_id)
+        
+        return {'message': 'Celery queue purged successfully.', 'count': count}
+
 @MiniService()
 class ChannelMiniService(BaseMiniService):
 
@@ -326,16 +317,6 @@ class ChannelMiniService(BaseMiniService):
     def build(self, build_state = ...):
         raise BuildOkError
         
-    def purge(self):
-        """
-        Purge the Celery queue.
-        If queue_name is provided, it will purge that specific queue.
-        If not, it will purge all queues.
-        """
-        count = self.celeryService.celery_app.control.purge(queue=self.miniService_id)
-        
-        return {'message': 'Celery queue purged successfully.', 'count': count}
-    
     def pause(self):
         ...
 
@@ -445,7 +426,7 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
             'task_id':request_id,
             'offloaded':True,
             'index':index,
-                'message': f"[{name}] - Task added successfully", 'heaviness': str(scheduler.heaviness), 'estimate_tbd': naturaldelta(new_delay),}
+                'message': f"[{name}] - Task added successfully", 'heaviness': str(scheduler._heaviness), 'estimate_tbd': naturaldelta(new_delay),}
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
 
@@ -511,7 +492,7 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
 
         for i, t in enumerate(task_config):  # TODO add the index i to the results
             task:BackgroundTask = t['task']
-            heaviness_ = t['scheduler'].heaviness
+            heaviness_ = t['scheduler']._heaviness
             scheduler = t['scheduler']
             delay = t['delay']
             if delay and delay>0:
@@ -600,7 +581,6 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
         if count:
             ...
         
-
     def check_system_ram(self):
         ...
 
