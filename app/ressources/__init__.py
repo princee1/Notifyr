@@ -2,10 +2,12 @@ from typing import Type
 from app.services.config_service import AssetMode, ConfigService
 from app.services.task_service import CeleryService,TaskService,OffloadTaskService
 from app.container import Register, Get
+from app.services.workflow_service import WorkflowService
 
 Register(CeleryService)
 Register(TaskService)
 Register(OffloadTaskService)
+Register(WorkflowService)
 
 
 configService = Get(ConfigService)
