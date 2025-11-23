@@ -78,10 +78,11 @@ if ConfigService._celery_env == CeleryMode.none:
 
 ##############################################           ##################################################
 
-@functools.wraps(celery_app.task)
-def RegisterTask(heaviness: TaskHeaviness, **kwargs):
+def RegisterTask(heaviness: TaskHeaviness, retry_policy=None):
     def decorator(task: Callable):
+        kwargs = {}
         kwargs['bind'] =True
+        kwargs['retry_policy'] = retry_policy
         TASK_REGISTRY[task_name(task.__qualname__)] = {
             'heaviness': heaviness,
             'task': celery_app.task(**kwargs)(task)

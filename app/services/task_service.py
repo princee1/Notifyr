@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict, get_args, Optional
 import typing
 from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, Compute_Weight, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
@@ -32,19 +32,25 @@ from aiorwlock import RWLock
 P = ParamSpec("P")
 RunType = Literal['parallel','sequential']
 
-
-class TaskExecutionResult(TypedDict):
-    handler: Literal['Celery','RouteHandler','BackgroundTask']
+@dataclass
+class TaskExecutionResult():
     offloaded: bool
     date: str
-    message:Optional[str] = None
+    handler: Literal['Celery','RouteHandler','BackgroundTask']
     expected_tbd: Optional[str]
     index: Optional[int]
+    heaviness:str
     result: Any = None
     error: Optional[bool] = False
     task_id:Optional[str] = None
     type: Literal['task','schedule'] = 'task'
+    message:Optional[str] = None
 
+
+    def update(self,task_id,type,expected_tdb):
+        self.task_id = task_id
+        self.type = type 
+        self.expected_tbd = expected_tdb
 
 class TaskConfig(TypedDict):
     task: BackgroundTask | Coroutine
@@ -89,8 +95,8 @@ class TaskManager():
         scheduler = self.scheduler if _s is None else _s
         weight = Compute_Weight(weight, scheduler._heaviness)
 
-        values = await self.offloadTask(self.meta['strategy'],weight,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index, callback, *args, **kwargs)
-        self.task_result.append(values)
+        values:TaskExecutionResult = await self.offloadTask(self.meta['strategy'],weight,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index, callback, *args, **kwargs)
+        self.task_result.append(asdict(values))
 
         self.weight +=weight
 
@@ -172,7 +178,7 @@ class CeleryService(BaseService, IntervalInterface):
             task_result = self._task_registry[t_name]['task'].apply_async(**option, args=celery_task['args'], kwargs=celery_task['kwargs'])
             eta = (dt.datetime.now() + dt.timedelta(seconds=option.get('countdown', 0)))
             time_until_first_run = (eta - dt.datetime.now()).total_seconds() if eta else None
-            result.update({'task_id': task_result.id, 'type': 'task', 'expected_tbd': naturaldelta(time_until_first_run) if time_until_first_run else None})
+            result.update(task_result.id,'task',naturaldelta(time_until_first_run) if time_until_first_run else None)
             return result
 
         schedule = celery_task['schedule']
@@ -184,7 +190,7 @@ class CeleryService(BaseService, IntervalInterface):
             time = entry.due_at
         else:
             time = None
-        result.update({'task_id': schedule_id, 'type': 'schedule','expected_tbd':None if time == None else naturaldelta(time)})
+        result.update(schedule_id,'schedule',None if time == None else naturaldelta(time))
         return result
 
     def cancel_task(self, task_id, force=False):
@@ -380,14 +386,14 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
             else:    
                 result = callback(*args, **kwargs)
 
-            return TaskExecutionResult(handler='Route Handler',offloaded=False,date=now,expected_tbd='now',index=index,result=result)
+            return TaskExecutionResult(handler='Route Handler',offloaded=False,date=now,expected_tbd='now',index=index,result=result,heaviness=str(scheduler._heaviness))
         except TaskRetryError as e:
             if is_retry:
                 if not isinstance(scheduler,s):
                     params = self.celeryService.scheduler_to_celery_task(scheduler,index,*args,**kwargs)
                     params = flatten_dict(params,serialized=True)
                     await self.redisService.stream_data(StreamConstant.CELERY_RETRY_MECHANISM,params)
-            return TaskExecutionResult(handler='Route Handler',offloaded=True,date=now,index=index,error=True,result=None,error=True)
+            return TaskExecutionResult(handler='Route Handler',offloaded=True,date=now,index=index,error=True,result=None,heaviness=str(scheduler._heaviness))
             
     async def add_task(self, scheduler:SchedulerModel |s , request_id: str,delay:float|None,index,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
         task = BackgroundTask(func, *args, **kwargs)
@@ -398,26 +404,9 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
 
     async def _create_task_(self, scheduler:SchedulerModel |s, task, request_id:str,delay:float,index):
         now = dt.datetime.now().isoformat()
-        # async with self.task_lock.writer:
-        #     self.server_load[scheduler.heaviness] += 1
-        #     self.running_background_tasks_count+=1
-        #     print(self.running_background_tasks_count)
-
-        #delay = self._compute_ttd()
-
-        if isinstance(task, BackgroundTask):
-            name = task.func.__qualname__
-        else:
-            name = task.__qualname__
-
+        name = task.func.__qualname__ if isinstance(task, BackgroundTask) else task.__qualname__
         new_delay = self.sharing_task[request_id].append_taskConfig(task,scheduler,delay)
-        
-        return {
-            'date': now,'handler': 'BackgroundTask',
-            'task_id':request_id,
-            'offloaded':True,
-            'index':index,
-                'message': f"[{name}] - Task added successfully", 'heaviness': str(scheduler._heaviness), 'estimate_tbd': naturaldelta(new_delay),}
+        return TaskExecutionResult(True,now,'BackgroundTask',naturaldelta(new_delay),index,None,task_id= request_id,message=f"[{name}] - Task added successfully",heaviness=str(scheduler._heaviness) )
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
 

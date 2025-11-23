@@ -84,6 +84,7 @@ class SubContentIndexBaseModel(BaseModel):
 class CeleryOptionModel(BaseModel):
     countdown:Optional[int]= None
     expires:Optional[DateTimeSchedulerModel] = None
+    priority:Literal[1,2,3,4,5] = 5
     _retry:Optional[bool]= PrivateAttr(default=False)
     _queue:Optional[str]= PrivateAttr(default=None)
     _ignore_result:bool=PrivateAttr(default=True)
@@ -105,8 +106,8 @@ class SchedulerModel(BaseModel):
     task_type:TaskType
     task_option:CeleryOptionModel
     scheduler_option: Optional[dict] = None
-    priority:Literal[1,2,3,4,5] = 1
     content: Any | list[Any]
+    _priority:Literal[1,2,3,4,5] = PrivateAttr(5)
     _heaviness: TaskHeaviness = None
     _errors:dict[int,dict|str] = PrivateAttr({})
     _message:dict[int,str] = PrivateAttr({})

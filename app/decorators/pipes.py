@@ -108,6 +108,7 @@ class CeleryTaskPipe(Pipe):
             scheduler.task_option._ignore_result = not taskManager.meta.get('save_result',False)
             scheduler.task_option._retry = taskManager.meta.get('retry',False)
             scheduler.task_option._queue = taskManager.meta.get('queue',None)
+            scheduler._priority = scheduler.task_option.priority
 
         scheduler.task_name = task_name(scheduler.task_name)
         scheduler._heaviness = self.celeryService._task_registry[scheduler.task_name]['heaviness']

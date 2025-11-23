@@ -170,7 +170,7 @@ def Mock(sleep:float=2,result:Any = None,same:bool=False):
 
         @wraps(func)
         def callback_sync(*args,**kwargs):
-            time_sleep(sleep)
+            
             return build_result(result) if not same else result
 
         return callback_async if asyncio.iscoroutinefunction(func) else callback_sync    
