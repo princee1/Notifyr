@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict, get_args
 import typing
-from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, SCHEDULER_RULES, Compute_Weight, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
+from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, Compute_Weight, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
 from app.classes.celery import CeleryTask, SchedulerModel
 from app.classes.env_selector import EnvSelection, StrategyType, get_selector
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BuildFailureError, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus,BuildWarningError

@@ -1,15 +1,10 @@
 from dataclasses import asdict
 from typing import Any, Callable, Coroutine, Literal, Optional, Type, get_args
-
-from aiohttp_retry import List
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from urllib3 import HTTPHeaderDict
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.broker import exception_to_json
-from app.classes.celery import AlgorithmType, SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
+from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod

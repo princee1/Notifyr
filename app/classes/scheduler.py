@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, List, Optional, Self
-from pyparsing import Literal
+from typing import Any, List, Optional, Self,Literal
 from redbeat.schedules import rrule
 from celery.schedules import solar
 from celery.schedules import crontab
@@ -106,42 +105,41 @@ class RRuleSchedulerModel(Scheduler):
     until: Optional[DateTimeSchedulerModel] = None
     dtstart: Optional[DateTimeSchedulerModel] = None
 
-    @field_validator("bymonth", each_item=True)
-    def validate_month(cls, v):
-        if not 1 <= v <= 12:
-            raise ValueError("bymonth values must be between 1 and 12")
+    @staticmethod
+    def clock_limit(name:str,v:list[int],a:int,b:int):
+        if v is None:
+            return v
+        values = v if isinstance(v, (list, tuple, set)) else [v]
+        for item in values:
+            if not a <= item <= b:
+                raise ValueError(f"{name} values must be between {a} and {b}")
         return v
 
-    @field_validator("bymonthday", each_item=True)
-    def validate_monthday(cls, v):
-        if not -31 <= v <= 31 or v == 0:
-            raise ValueError("bymonthday must be between 1–31 or -31–-1")
-        return v
+    @field_validator("bymonth")
+    def validate_bymonth(cls, v):
+        return cls.clock_limit("bymonth",v,1,12)
 
-    @field_validator("byweekday", each_item=True)
-    def validate_weekday(cls, v):
-        if not 0 <= v <= 6:
-            raise ValueError("byweekday must be between 0 (Monday) and 6 (Sunday)")
-        return v
+    @field_validator("bymonthday")
+    def validate_bymonthday(cls, v):
+        return cls.clock_limit("bymonthday",v,1,31)
 
-    @field_validator("byhour", each_item=True)
-    def validate_hour(cls, v):
-        if not 0 <= v <= 23:
-            raise ValueError("byhour must be between 0 and 23")
-        return v
+    @field_validator("byweekday")
+    def validate_byweekday(cls, v):
+        return cls.clock_limit("byweekday",v,0,6)
 
-    @field_validator("byminute", each_item=True)
-    def validate_minute(cls, v):
-        if not 0 <= v <= 59:
-            raise ValueError("byminute must be between 0 and 59")
-        return v
+    @field_validator("byhour")
+    def validate_byhour(cls, v):
+        return cls.clock_limit("byhour",v,0,23)
 
-    @field_validator("bysecond", each_item=True)
-    def validate_second(cls, v):
-        if not 0 <= v <= 59:
-            raise ValueError("bysecond must be between 0 and 59")
-        return v
-    
+    @field_validator("byminute")
+    def validate_byminute(cls, v):
+        return cls.clock_limit("byminute",v,0,59)
+
+    @field_validator("bysecond")
+    def validate_bysecond(cls, v):
+        return cls.clock_limit("bysecond",v,0,59)
+
+
     @model_validator(mode='after')
     def check_valid(self):
         if self.interval is not None and self.interval <= 0:
@@ -184,7 +182,7 @@ class SolarSchedulerModel(Scheduler):
             return solar(self.event, self.latitude, self.longitude)
         return solar(self.event, self.latitude, self.longitude, offset=self.offset, timezone=self.timezone)
 
-class CrontabSchedulerModel(BaseModel, Scheduler):
+class CrontabSchedulerModel(Scheduler):
     minute: Optional[str] = '*'
     hour: Optional[str] = '*'
     day_of_week: Optional[str] = '*'
