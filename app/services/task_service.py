@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict, get_args
+from typing import Any, Callable, Coroutine, Literal, ParamSpec, TypedDict, get_args, Optional
 import typing
 from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, CelerySchedulerOptionError, CeleryTaskNotFoundError, Compute_Weight, TaskRetryError, TaskHeaviness, TaskType, add_warning_messages, s
 from app.classes.celery import CeleryTask, SchedulerModel
@@ -33,6 +33,19 @@ P = ParamSpec("P")
 RunType = Literal['parallel','sequential']
 
 
+class TaskExecutionResult(TypedDict):
+    handler: Literal['Celery','RouteHandler','BackgroundTask']
+    offloaded: bool
+    date: str
+    message:Optional[str] = None
+    expected_tbd: Optional[str]
+    index: Optional[int]
+    result: Any = None
+    error: Optional[bool] = False
+    task_id:Optional[str] = None
+    type: Literal['task','schedule'] = 'task'
+
+
 class TaskConfig(TypedDict):
     task: BackgroundTask | Coroutine
     scheduler: SchedulerModel |s 
@@ -59,7 +72,7 @@ class TaskManager():
     return_results:bool
     scheduler: SchedulerModel = field(default=None)
     taskConfig: list[TaskConfig] = field(default_factory=list)
-    task_result: list[dict] = field(default_factory=list)
+    task_result: list[TaskExecutionResult] = field(default_factory=list)
     weight:float = field(default=0.0)
 
     def set_algorithm(self, algorithm: AlgorithmType):
@@ -152,15 +165,7 @@ class CeleryService(BaseService, IntervalInterface):
         schedule_id = schedule_name if schedule_name is not None else generateId(25)
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
-        result = {
-            'date': str(dt.datetime.now()),
-            'offloaded': True,
-            'index': index,
-            'message': f'Task [{t_name}] received successfully',
-            'heaviness': str(celery_task['heaviness']),
-            'handler': 'Celery',
-            'expected_tbd': naturaldelta(0)
-        }
+        result = TaskExecutionResult(date= str(dt.datetime.now()),offloaded=True,handler='Celery',index=index,result=None,message=f'Task [{t_name}] received successfully',heaviness=str(celery_task['heaviness']))
 
         option = celery_task.get('task_option',{})
         if c_type == 'now':
@@ -375,29 +380,15 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
             else:    
                 result = callback(*args, **kwargs)
 
-            return {
-                'handler':'Route Handler',
-                'offloaded':False,
-                'date':now,
-                'expected_tbd':'now',
-                'index':index,
-                'result':result
-            }
+            return TaskExecutionResult(handler='Route Handler',offloaded=False,date=now,expected_tbd='now',index=index,result=result)
         except TaskRetryError as e:
             if is_retry:
                 if not isinstance(scheduler,s):
                     params = self.celeryService.scheduler_to_celery_task(scheduler,index,*args,**kwargs)
                     params = flatten_dict(params,serialized=True)
                     await self.redisService.stream_data(StreamConstant.CELERY_RETRY_MECHANISM,params)
-            return {
-                'handler':'Route Handler',
-                'offloaded':True,
-                'date':now,
-                'index':index,
-                'result':None,
-                'error':True
-            }
-
+            return TaskExecutionResult(handler='Route Handler',offloaded=True,date=now,index=index,error=True,result=None,error=True)
+            
     async def add_task(self, scheduler:SchedulerModel |s , request_id: str,delay:float|None,index,func: typing.Callable[P, typing.Any], *args: P.args, **kwargs: P.kwargs):
         task = BackgroundTask(func, *args, **kwargs)
         return await self._create_task_(scheduler, task, request_id,delay,index,)
@@ -597,7 +588,7 @@ class OffloadTaskService(BaseService):
     def build(self,build_state=-1):
         ...
 
-    async def offload_task(self,strategy:StrategyType,cost: float, algorithm: AlgorithmType, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, background: bool, index,callback: Callable, *args, **kwargs):
+    async def offload_task(self,strategy:StrategyType,cost: float, algorithm: AlgorithmType, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, background: bool, index,callback: Callable, *args, **kwargs)->TaskExecutionResult:
 
         if algorithm == 'route' and isinstance(scheduler, SchedulerModel) and scheduler.task_type != TaskType.NOW:
             algorithm = 'worker'
@@ -615,7 +606,7 @@ class OffloadTaskService(BaseService):
         if algorithm == 'mix':
             return await self._mix_offload(strategy,cost,scheduler, delay,is_retry, x_request_id,index,callback, *args, **kwargs)
 
-    async def _normal_offload(self,strategy:StrategyType, cost:float, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, background: bool,index:int, callback: Callable, *args, **kwargs):
+    async def _normal_offload(self,strategy:StrategyType, cost:float, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, background: bool,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
 
         if scheduler.task_type == TaskType.NOW:
             if (await self.select_task_env(strategy,cost)).startswith('route'):
@@ -623,7 +614,7 @@ class OffloadTaskService(BaseService):
 
         return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
 
-    async def _route_offload(self,scheduler,delay: float,is_retry:bool, x_request_id: str, background: bool, index,callback: Callable, *args, **kwargs):
+    async def _route_offload(self,scheduler,delay: float,is_retry:bool, x_request_id: str, background: bool, index,callback: Callable, *args, **kwargs)->TaskExecutionResult:
         if background:
             if asyncio.iscoroutine(callback):
                 return await self.taskService.add_async_task(scheduler,x_request_id,delay,index,callback)
@@ -632,7 +623,7 @@ class OffloadTaskService(BaseService):
         else:
                 return await self.taskService.run_task_in_route_handler(scheduler,is_retry,index,callback,*args,**kwargs)
 
-    async def _mix_offload(self,strategy:StrategyType,weight,scheduler,delay,is_retry, x_request_id: str,index:int, callback: Callable, *args, **kwargs):
+    async def _mix_offload(self,strategy:StrategyType,weight,scheduler,delay,is_retry, x_request_id: str,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
         env = await self.select_task_env(strategy,weight)
         if env == 'route':
             return await self._route_offload(scheduler, delay,is_retry, x_request_id, True,index,callback, *args, **kwargs)
@@ -654,9 +645,3 @@ class OffloadTaskService(BaseService):
         p3 = task_weight
 
         return get_selector(strategy).select(p1, p2, p3)
-
-
-
-
-        
-        
