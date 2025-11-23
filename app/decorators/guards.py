@@ -14,10 +14,7 @@ from app.services.profile_service import ProfileService
 from app.services.task_service import TaskService, CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.logger_service import LoggerService
-from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
-from app.utils.constant  import HTTPHeaderConstant
 from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request, UploadFile,status
@@ -26,7 +23,7 @@ class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
         super().__init__()
         self.task_names = [task_name(t) for t in  task_names]
-        self.task_types = [t.value for t in task_types]
+        self.task_types = task_types
     
     def guard(self,scheduler:SchedulerModel):        
         if self.task_names and scheduler.task_name not in self.task_names:

@@ -76,7 +76,7 @@ class TaskManager():
         scheduler = self.scheduler if _s is None else _s
         weight = Compute_Weight(weight, scheduler._heaviness)
 
-        values = await self.offloadTask(self.meta['strategy'],weight,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index,self.meta['save_results'], callback, *args, **kwargs)
+        values = await self.offloadTask(self.meta['strategy'],weight,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index, callback, *args, **kwargs)
         self.task_result.append(values)
 
         self.weight +=weight
@@ -132,24 +132,23 @@ class CeleryService(BaseService, IntervalInterface):
         self.timeout_count = 0
         self.task_lock = RWLock()
 
-    def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None,save_results:bool, *args, **kwargs):
-        params = self.scheduler_to_celery_task(scheduler,index,save_results,*args,**kwargs)
+    def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None, *args, **kwargs):
+        params = self.scheduler_to_celery_task(scheduler,index,*args,**kwargs)
         return self._trigger_task(**params)
 
-    def trigger_task_from_task(self, celery_task: CeleryTask,index:int|None, schedule_name: str = None, save_results:bool=False):
-        return self._trigger_task(celery_task, schedule_name,index,save_results)
+    def trigger_task_from_task(self, celery_task: CeleryTask,index:int|None, schedule_name: str = None):
+        return self._trigger_task(celery_task, schedule_name,index)
 
-    def scheduler_to_celery_task(self,scheduler: SchedulerModel,index:int|None,save_results:bool, *args, **kwargs):
-        celery_task = scheduler.model_dump(mode='python', exclude={'content','sender_type','filter_error'})
-        celery_task: CeleryTask = CeleryTask(args=args, kwargs=kwargs, **celery_task)
+    def scheduler_to_celery_task(self,scheduler: SchedulerModel,index:int|None, *args, **kwargs):
+        celery_task = scheduler.model_dump(mode='python', exclude={'content','sender_type','filter_error','scheduler_option'})
+        celery_task: CeleryTask = CeleryTask(args=args, kwargs=kwargs,schedule=scheduler._scheduler, **celery_task)
         return {
             'celery_task':celery_task,
             'index':index,
-            'schedule_name':scheduler.schedule_name,
-            'save_results':save_results
+            'schedule_name':scheduler.schedule_name
         }
 
-    def _trigger_task(self, celery_task: CeleryTask, schedule_name: str = None,index:int|None=None,save_results:bool=False):
+    def _trigger_task(self, celery_task: CeleryTask, schedule_name: str = None,index:int|None=None):
         schedule_id = schedule_name if schedule_name is not None else generateId(25)
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
@@ -166,11 +165,12 @@ class CeleryService(BaseService, IntervalInterface):
         option = celery_task.get('task_option',{})
         if c_type == 'now':
             task_result = self._task_registry[t_name]['task'].apply_async(**option, args=celery_task['args'], kwargs=celery_task['kwargs'])
-            eta = option.get('eta') or (dt.datetime.now() + dt.timedelta(seconds=option.get('countdown', 0)))
+            eta = (dt.datetime.now() + dt.timedelta(seconds=option.get('countdown', 0)))
             time_until_first_run = (eta - dt.datetime.now()).total_seconds() if eta else None
             result.update({'task_id': task_result.id, 'type': 'task', 'expected_tbd': naturaldelta(time_until_first_run) if time_until_first_run else None})
             return result
 
+        schedule = celery_task['schedule']
         entry = RedBeatSchedulerEntry(schedule_id, t_name, schedule, args=celery_task['args'], kwargs=celery_task['kwargs'], app=self._celery_app)
         entry.save()
         if isinstance(entry.due_at,dt.datetime):
@@ -547,9 +547,7 @@ class TaskService(BackgroundTasks, BaseMiniServiceManager, SchedulerInterface):
                     error = e.error
                     if is_retry:
                         if not isinstance(scheduler,s) and isinstance(task,BackgroundTask):
-                            params = self.celeryService.scheduler_to_celery_task(scheduler,i,meta['save_result'],task,task.args,task.kwargs)
-                            params = flatten_dict(params,serialized=True)
-                            await self.redisService.stream_data(StreamConstant.CELERY_RETRY_MECHANISM,params)
+                            self.celeryService.trigger_task_from_scheduler(scheduler,i,*task.args,**task.kwargs)
                             return
                         
                         return await parse_error(error,True)
@@ -599,31 +597,31 @@ class OffloadTaskService(BaseService):
     def build(self,build_state=-1):
         ...
 
-    async def offload_task(self,strategy:StrategyType,cost: float, algorithm: AlgorithmType, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, background: bool, index,save_results:bool,callback: Callable, *args, **kwargs):
+    async def offload_task(self,strategy:StrategyType,cost: float, algorithm: AlgorithmType, scheduler: SchedulerModel|s,delay: float,is_retry:bool, x_request_id: str, background: bool, index,callback: Callable, *args, **kwargs):
 
-        if algorithm == 'route' and isinstance(scheduler, SchedulerModel) and scheduler.task_type != TaskType.NOW.value:
+        if algorithm == 'route' and isinstance(scheduler, SchedulerModel) and scheduler.task_type != TaskType.NOW:
             algorithm = 'worker'
             add_warning_messages(UNSUPPORTED_TASKS, scheduler, index=index)
 
         if algorithm == 'normal':
-             return await self._normal_offload(strategy,cost,scheduler, delay,is_retry, x_request_id, background,index,save_results,callback, *args, **kwargs)
+             return await self._normal_offload(strategy,cost,scheduler, delay,is_retry, x_request_id, background,index,callback, *args, **kwargs)
 
         if algorithm == 'worker':
-            return self.celeryService.trigger_task_from_scheduler(scheduler,index, save_results,*args, **kwargs)
+            return self.celeryService.trigger_task_from_scheduler(scheduler,index,*args, **kwargs)
             
         if algorithm == 'route':
             return await self._route_offload(scheduler, delay,is_retry, x_request_id, background,index,callback, *args, **kwargs)
         
         if algorithm == 'mix':
-            return await self._mix_offload(strategy,cost,scheduler, delay,is_retry, x_request_id,index,save_results,callback, *args, **kwargs)
+            return await self._mix_offload(strategy,cost,scheduler, delay,is_retry, x_request_id,index,callback, *args, **kwargs)
 
-    async def _normal_offload(self,strategy:StrategyType, cost:float, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, background: bool,index:int, save_results:bool,callback: Callable, *args, **kwargs):
+    async def _normal_offload(self,strategy:StrategyType, cost:float, scheduler: SchedulerModel|s, delay: float,is_retry:bool, x_request_id: str, background: bool,index:int, callback: Callable, *args, **kwargs):
 
-        if scheduler.task_type == TaskType.NOW.value:
+        if scheduler.task_type == TaskType.NOW:
             if (await self.select_task_env(strategy,cost)).startswith('route'):
                 return await self._route_offload(scheduler, delay,is_retry, x_request_id, background,index,callback, *args, **kwargs)
 
-        return self.celeryService.trigger_task_from_scheduler(scheduler,index,save_results, *args, **kwargs)
+        return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
 
     async def _route_offload(self,scheduler,delay: float,is_retry:bool, x_request_id: str, background: bool, index,callback: Callable, *args, **kwargs):
         if background:
@@ -634,12 +632,12 @@ class OffloadTaskService(BaseService):
         else:
                 return await self.taskService.run_task_in_route_handler(scheduler,is_retry,index,callback,*args,**kwargs)
 
-    async def _mix_offload(self,strategy:StrategyType,weight,scheduler,delay,is_retry, x_request_id: str,index:int,save_results:bool, callback: Callable, *args, **kwargs):
+    async def _mix_offload(self,strategy:StrategyType,weight,scheduler,delay,is_retry, x_request_id: str,index:int, callback: Callable, *args, **kwargs):
         env = await self.select_task_env(strategy,weight)
         if env == 'route':
             return await self._route_offload(scheduler, delay,is_retry, x_request_id, True,index,callback, *args, **kwargs)
         elif env == 'worker':
-            return self.celeryService.trigger_task_from_scheduler(scheduler,index,save_results, *args, **kwargs)
+            return self.celeryService.trigger_task_from_scheduler(scheduler,index, *args, **kwargs)
         elif env == 'route-background':
             return await self._route_offload(scheduler, delay,is_retry, x_request_id, False,index,callback, *args, **kwargs)
         else:

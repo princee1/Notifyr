@@ -107,7 +107,7 @@ class SchedulerModel(BaseModel):
     scheduler_option: Optional[dict] = None
     priority:Literal[1,2,3,4,5] = 1
     content: Any | list[Any]
-    _heaviness: Any = None
+    _heaviness: TaskHeaviness = None
     _errors:dict[int,dict|str] = PrivateAttr({})
     _message:dict[int,str] = PrivateAttr({})
     _scheduler:Scheduler = PrivateAttr(None)
@@ -130,7 +130,7 @@ class SchedulerModel(BaseModel):
 
 class CeleryTask(TypedDict):
     task_name:str
-    task_type:TaskTypeLiteral
+    task_type:TaskType
     task_option:Optional[dict] = None
     args: tuple[Any] | Iterable[Any] = ()
     kwargs: dict[str,Any] = {}
@@ -139,6 +139,7 @@ class CeleryTask(TypedDict):
     schedule_name:Optional[str] = None
     task_id:Optional[str] = None
     heaviness:TaskHeaviness
+    schedule:Optional[Scheduler] = None
 
 @dataclass
 class s:

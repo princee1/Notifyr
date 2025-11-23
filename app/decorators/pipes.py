@@ -108,7 +108,12 @@ class CeleryTaskPipe(Pipe):
         super().__init__(True)
         self.celeryService = Get(CeleryService)
     
-    def pipe(self,scheduler:SchedulerModel):
+    def pipe(self,scheduler:SchedulerModel,taskManager:TaskManager):
+        if scheduler.task_option:
+            scheduler.task_option._ignore_result = not taskManager['meta'].get('save_result',False)
+            scheduler.task_option._retry = taskManager['meta'].get('retry',False)
+            scheduler.task_option._queue = taskManager['meta'].get('queue',None)
+
         scheduler.task_name = task_name(scheduler.task_name)
         scheduler._heaviness = self.celeryService._task_registry[scheduler.task_name]['heaviness']
         return {'scheduler':scheduler}
@@ -283,7 +288,7 @@ class OffloadedTaskResponsePipe(Pipe):
         return result
 
     def _set_status_code(self, response: Response, scheduler: SchedulerModel, otpModel: OTPModel, background: bool):
-        if (scheduler and scheduler.task_type != TaskType.NOW.value) or (otpModel and background) or background:
+        if (scheduler and scheduler.task_type != TaskType.NOW) or (otpModel and background) or background:
             response.status_code = 201
         else:
             response.status_code = 200

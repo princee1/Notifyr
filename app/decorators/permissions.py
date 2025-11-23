@@ -290,7 +290,7 @@ class TaskCostPermission(Permission):
 
         if scheduler is not None:
             allowed_tasks = definition.get('__allowed_task_option__', [])
-            if scheduler.task_type not in allowed_tasks:
+            if scheduler.task_type.value not in allowed_tasks:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Task type '{scheduler.task_type}' not allowed for this pricing plan"

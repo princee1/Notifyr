@@ -130,7 +130,7 @@ class TaskCost(SimpleTaskCost):
             self.purchase(description="retry", amount=definition['__retry_cost__'], quantity=total_recipient)
         
         self.purchase(description="priority", amount=int(definition['__priority_cost__'] / scheduler.priority))
-        self.purchase(description=f"task_type:{scheduler.task_type}", amount=definition['__task_type_cost__'].get(scheduler.task_type, 1))
+        self.purchase(description=f"task_type:{scheduler.task_type}", amount=definition['__task_type_cost__'].get(scheduler.task_type.value, 1))
         self.purchase('api_usage',amount=definition['__api_usage_cost__'])
         return total_content, total_recipient
 
