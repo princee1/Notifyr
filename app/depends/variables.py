@@ -1,17 +1,14 @@
 
 from typing import Callable,get_args
-
-from aiohttp_retry import Any
 from fastapi import Query, Request, Response
 from app.classes.auth_permission import PolicyUpdateMode
-from app.classes.celery import AlgorithmType, CeleryTask
+from app.classes.celery import AlgorithmType,RunType
 from app.classes.env_selector import StrategyType
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
-from app.services.task_service import CeleryService, RunType, TaskService
+from app.services.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.twilio_service import TwilioService
-
 from app.classes.broker import SubjectType
 from app.classes.email import MimeType
 from app.utils.constant import VariableConstant
@@ -33,16 +30,9 @@ def _wrap_checker(name: str, predicate: Callable[[object], bool], choices: list 
     return _checker
 
 
-
-SECURITY_FLAG=GetAttr(ConfigService,'SECURITY_FLAG')
-
 verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_token')
 
 parse_to_phone_format: Callable = GetDependsFunc(TwilioService, 'parse_to_phone_format')
-
-populate_response_with_request_id: Callable[[Request,Response],None] = GetDependsFunc(TaskService,'populate_response_with_request_id')
-
-trigger_task: Callable[[CeleryTask,int|None,str],dict[str,Any]] = GetDependsFunc(CeleryService,'trigger_task_from_task')
 
 # ----------------------------------------------                                    ---------------------------------- #
 

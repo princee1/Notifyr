@@ -9,7 +9,7 @@ from app.utils.prettyprint import PrettyPrinter_
 from flower import VERSION
 from celery import Task
 from app.services import *
-
+from celery.exceptions import SoftTimeLimitExceeded
 
 ##############################################           ##################################################
 
@@ -78,12 +78,17 @@ if ConfigService._celery_env == CeleryMode.none:
 
 ##############################################           ##################################################
 
-def RegisterTask(heaviness: TaskHeaviness, retry_policy=None):
+def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None,time_limit:dict[str,int]=None,name:str=None,queue_name:str=None):
     def decorator(task: Callable):
         kwargs = {}
         kwargs['bind'] =True
         kwargs['retry_policy'] = retry_policy
-        TASK_REGISTRY[task_name(task.__qualname__)] = {
+        kwargs['rate_limit'] = rate_limit
+        kwargs['time_limit'] = time_limit
+
+        _name = name if name is not None else task_name(task.__qualname__)
+        kwargs['name'] = _name
+        TASK_REGISTRY[name] = {
             'heaviness': heaviness,
             'task': celery_app.task(**kwargs)(task)
         }

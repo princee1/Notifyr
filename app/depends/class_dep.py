@@ -1,13 +1,9 @@
-import asyncio
-from typing import Annotated, Any, Literal, Dict,TypedDict
+from typing import Annotated, Literal,TypedDict
 from urllib.parse import urlparse
-from fastapi import BackgroundTasks, Depends, HTTPException, Query, Request, Response
-from app.classes.broker import MessageBroker, SubjectType,exception_to_json
-from app.classes.celery import SchedulerModel
+from fastapi import  Depends,  Query, Request, Response
+from app.classes.broker import SubjectType
 from app.classes.mail_provider import get_email_provider_name
 from app.definition._error import ServerFileError
-from app.definition._service import BaseMiniServiceManager, MiniStateProtocol, ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
-from app.depends.dependencies import get_request_id
 from app.interface.email import EmailInterface, EmailSendInterface
 from app.models.call_model import BaseVoiceCallModel
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
@@ -15,28 +11,21 @@ from app.models.link_model import LinkORM
 from app.models.sms_model import OnGoingBaseSMSModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
 from app.container import Get
-from app.utils.constant import SpecialKeyAttributesConstant, SubConstant
-from app.utils.tools import Mock
+from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.validation import url_validator
 from .variables import *
 from app.services.link_service import LinkService
-from app.services.logger_service import LoggerService
-from app.services.reactive_service import ReactiveService, ReactiveType,Disposable
-from app.errors.async_error import ReactiveSubjectNotFoundError
-from time import perf_counter,time
-from app.classes.stream_data_parser import StreamContinuousDataParser, StreamDataParser, StreamSequentialDataParser
-from app.utils.helper import get_value_in_list, issubclass_of, uuid_v1_mc,UUID
+from app.utils.helper import get_value_in_list,  uuid_v1_mc
 from datetime import datetime, timedelta, timezone
 import random
+from time import time
 
 
 class TrackerInterface:
 
     def __init__(self,flag):
         self.will_track=flag
-
 
 class EmailTracker(TrackerInterface):
 
@@ -126,7 +115,6 @@ class EmailTracker(TrackerInterface):
             
         return (event,tracking) 
 
-    
 class TwilioTracker(TrackerInterface):
 
     def __init__(self, track_twilio: bool = Depends(track)):
@@ -335,233 +323,6 @@ class LinkQuery:
         redirect_url = self.request.query_params.get('r',None)
         return urlparse(redirect_url).netloc == self.base_url
     
-        
-class Broker:
-    
-    def __init__(self,request:Request,response:Response,backgroundTasks:BackgroundTasks):
-        self.reactiveService:ReactiveService = Get(ReactiveService)
-        self.redisService:RedisService = Get(RedisService)
-        self.configService:ConfigService = Get(ConfigService)
-        
-        self.backgroundTasks = backgroundTasks
-        self.request = request
-        self.response = response
-
-    @Mock()
-    def publish(self,channel:str,sid_type:SubjectType,subject_id:str, value:Any,state:Literal['next','complete']='next'):
-
-        if self.configService.pool:
-            subject = self.reactiveService[subject_id]
-            if isinstance(value,Exception):
-                self.backgroundTasks.add_task(subject.on_error,value) 
-            else:
-                self.backgroundTasks.add_task(subject.on_next,value)
-        
-        else:
-            if subject_id == None:
-                return 
-            if isinstance(value,Exception):
-                error = exception_to_json(value)
-                message_broker = MessageBroker(error=error,sid_type=sid_type,subject_id=subject_id,state='error',value=None)
-            else:
-                message_broker = MessageBroker(error=None,sid_type=sid_type,subject_id=subject_id,state=state,value=value)
-
-            self.backgroundTasks.add_task(self.redisService.publish_data,channel,message_broker)
-
-    @Mock()
-    def stream(self,channel,value,handler=None,args=None,kwargs=None):
-        
-        async def callback():
-            if asyncio.iscoroutinefunction(handler):
-                await handler(*args,**kwargs)
-            else:
-                handler(*args,kwargs) 
-
-        self.backgroundTasks.add_task(self.redisService.stream_data,channel,value)
-    
-    @Mock()
-    def push(self,db:int,name,*values):
-        self.backgroundTasks.add_task(self.redisService.push,db,name,*values)
-
-    def propagate_state(self,protocol:StateProtocol|MiniStateProtocol):
-
-        if isinstance(protocol.get('service',None),type):
-            protocol['service'] = protocol['service'].__name__
-
-        if protocol['service'] not in _CLASS_DEPENDENCY.keys():
-            raise ServiceDoesNotExistError
-        
-        if protocol.get('id',None) != None:
-            sub_queue = SubConstant.MINI_SERVICE_STATUS
-            if not issubclass_of(BaseMiniServiceManager,_CLASS_DEPENDENCY[protocol['service']]):
-                raise StateProtocolMalFormattedError('Service is not a MiniServiceManager')
-        else:
-            sub_queue = SubConstant.SERVICE_STATUS
-
-        try:
-            if protocol.get('status',None) is not None:
-                ServiceStatus(protocol['status'])
-        except:
-            raise StateProtocolMalFormattedError
-
-        self.backgroundTasks.add_task(self.redisService.publish_data,sub_queue,protocol)
-    
-    def wait(self,seconds:float):
-
-        self.backgroundTasks.add_task(asyncio.sleep,seconds)
-        
-
-class KeepAliveQuery:
-
-    def __init__(self, response: Response, x_request_id: Annotated[str, Depends(get_request_id)], keep_alive: Annotated[bool, Depends(keep_connection)], timeout: int = Query(0, description="Time in seconds to delay the response", ge=0, le=60*3)):
-        self.timeout = timeout
-        self.response = response
-        self.x_request_id = x_request_id
-        self.keep_alive = keep_alive
-
-        self.value = {}
-        self.error = None
-        self.subscription:dict[str,Disposable] = {}
-
-
-        self.start_time = perf_counter()
-        self.rx_subject = None
-
-        self.reactiveService: ReactiveService = Get(ReactiveService)
-        self.loggerService: LoggerService = Get(LoggerService)
-
-        self.subject_list:list[str] = []
-        self.parser:StreamContinuousDataParser|StreamSequentialDataParser= None
-
-    def set_stream_parser(self,parser):
-        self.parser = parser
-
-    def register_subject(self,subject_id:str,only_subject:bool):
-        subscription = self.reactiveService.subscribe(
-            subject_id,
-            on_next= self.on_next,
-            on_completed=self.on_complete,
-            on_error=self.on_error
-        )
-        
-        if only_subject:
-            self.rx_subject = self.reactiveService[subject_id]
-        else:
-            self.subject_list.append(subject_id)
-        
-        self.subscription[subject_id] = subscription
-
-    def create_subject(self, reactiveType: ReactiveType):
-
-        if self.keep_alive:
-            rx_subject = self.reactiveService.create_subject(self.x_request_id, reactiveType)
-            rx_id = rx_subject.subject_id
-
-            subscription = self.reactiveService.subscribe(
-                rx_id,
-                on_next=self.on_next,
-                on_error=self.on_error,
-                on_completed=self.on_complete
-            )
-            self.rx_subject = rx_subject
-            self.subscription[rx_id] =subscription
-            return rx_subject.subject_id
-        else:
-            return None
-
-    def on_next(self, v: dict):
-        try:
-            state = v['state']
-            if state in self.parser.state:
-                value = {state:v['data']}
-                self.value.update(value)
-
-            self.parser.up_state(state)
-
-            self.on_error(None)
-        except Exception as e:
-            self.on_error(e)
-
-    def on_error(self, e: Exception):
-        self.process_time = perf_counter() - self.start_time
-        self.error = e
-        if self.error !=None:
-            setattr(self.error, 'process_time', self.process_time)
-
-    def on_complete(self,):
-        self.parser._completed = True
-
-    def register_lock(self,subject_id=None):
-        if subject_id == None:
-            self.rx_subject.register_lock(self.x_request_id)
-        else:
-            rx_sub = self.reactiveService._subscriptions.get(subject_id,None)
-            if rx_sub != None:
-                rx_sub.register_lock(self.x_request_id)
-            else:
-                raise ReactiveSubjectNotFoundError(subject_id)
-
-    def dispose(self):
-
-        self.process_time = perf_counter() - self.start_time
-        
-        for rx_sub_id in self.subject_list:
-            rx_sub = self.reactiveService._subscriptions.get(rx_sub_id,None)
-            if rx_sub==None:
-                continue
-            rx_sub.dispose_lock(self.x_request_id)
-            if rx_sub_id in self.subscription:
-                self.subscription[rx_sub_id].dispose()
-
-        if self.rx_subject !=None:
-            self.subscription[self.rx_subject.subject_id].dispose()
-            self.reactiveService.delete_subject(self.rx_subject.subject_id)
-            
-    async def wait_for(self, result_to_return: Any = None, coerce: str = None,subject_id=None):
-        if self.keep_alive:
-            if subject_id == None:
-                rx_sub = self.rx_subject
-            else:
-                rx_sub = self.reactiveService._subscriptions.get(subject_id,None)
-                if rx_sub != None:
-                    rx_sub.register_lock(self.x_request_id)
-                else:
-                    raise ReactiveSubjectNotFoundError(subject_id)
-            current_timeout = self.timeout
-            current_time = time()
-
-            while True:
-                await rx_sub.wait_for(self.x_request_id,current_timeout, result_to_return)
-                if self.error != None:
-                    raise self.error
-                
-                if self.parser.completed:
-                    break
-                rx_sub.lock_lock(self.x_request_id)
-
-                delta = self._compute_delta(current_timeout, current_time)
-                current_time= time()
-                current_timeout -=delta 
-
-            key = 'value' if coerce == None else coerce
-            return {
-                key: self.value,
-                'results': result_to_return,
-            }
-        else:
-            return result_to_return
-
-    def _compute_delta(self, current_timeout, current_time):
-        delta= time() - current_time
-
-        if delta> current_timeout:
-            raise TimeoutError
-        return delta
-
-    def __repr__(self):
-        subj_id = None if self.rx_subject == None else self.rx_subject.subject_id
-        return f'KeepAliveQuery(timeout={self.timeout}, subject_id={subj_id}, request_id={self.x_request_id})'
-
 class CampaignQuery:
     
     def __init__(self,request:Request):
@@ -572,8 +333,6 @@ class CampaignQuery:
         self.utm_campaign = self.request.query_params.get("utm_campaign", None)
         self.utm_term = self.request.query_params.get("utm_term", None)
         self.utm_content = self.request.query_params.get("utm_content", None)
-
-
 
 class ObjectsSearch:
 

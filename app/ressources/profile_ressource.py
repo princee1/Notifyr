@@ -13,16 +13,16 @@ from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
-from app.depends.class_dep import Broker
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
 from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfileModel
+from app.manager.broker_manager import Broker
 from app.services.database_service import MongooseService
 from app.services.email_service import EmailSenderService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
-from app.services.task_service import CeleryService, ChannelMiniService, TaskService
+from app.services.task_service import CeleryService, QueueMiniService, TaskService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
 
@@ -71,7 +71,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
 
         profileMiniService = ProfileMiniService(None,None,None,result)
-        channelService = ChannelMiniService(profileMiniService,self.celeryService)
+        channelService = QueueMiniService(profileMiniService,self.celeryService)
         channelService.create()
 
         return result
@@ -85,7 +85,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
-    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_profile(self,profile:str,channel:Annotated[QueueMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
         await self.profileService.delete_profile(profileModel)
@@ -110,7 +110,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @HTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
-    async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def update_profile(self,profile:str,channel:Annotated[QueueMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
         modelUpdate = await self.pipe_profil_model(request,'model_update')
@@ -131,7 +131,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
-    async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def set_credentials(self,profile:str,channel:Annotated[QueueMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission)):
         
         profileModel:BaseProfileModel = await self.mongooseService.get(self.model,profile,True)
         modelCreds = await self.pipe_profil_model(request,'model_creds')

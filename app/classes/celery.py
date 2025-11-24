@@ -7,6 +7,7 @@ from app.definition._error import BaseError
 from pydantic import BaseModel
 from datetime import timedelta,datetime
 
+RunType = Literal[ 'parallel', 'sequential']
 
 ###############################################################################################################
 ###############################################################################################################
@@ -24,6 +25,26 @@ class CelerySchedulerOptionError(BaseError):
 
 ###############################################################################################################
 ###############################################################################################################
+
+@dataclass
+class TaskExecutionResult():
+    offloaded: bool
+    date: str
+    handler: Literal['Celery','RouteHandler','BackgroundTask','APSScheduler']
+    expected_tbd: Optional[str]
+    index: Optional[int]
+    heaviness:str
+    result: Any = None
+    error: Optional[bool] = False
+    task_id:Optional[str] = None
+    type: Literal['task','schedule'] = 'task'
+    message:Optional[str] = None
+
+
+    def update(self,task_id,type,expected_tdb):
+        self.task_id = task_id
+        self.type = type 
+        self.expected_tbd = expected_tdb
 
 
 class TaskHeaviness(Enum):
@@ -57,7 +78,7 @@ class TaskType(Enum):
 
 TaskTypeLiteral = Literal['rrule','solar','crontab','now','timedelta','datetime']
 SenderType =Literal['raw','subs','contact']
-AlgorithmType = Literal['normal','mix','worker','route']
+AlgorithmType = Literal['normal','mix','worker','route','aps']
 
 
 SCHEDULER_MODEL_MAP: dict[TaskType, type[Scheduler]] = {
@@ -84,21 +105,20 @@ class SubContentIndexBaseModel(BaseModel):
 class CeleryOptionModel(BaseModel):
     countdown:Optional[int]= None
     expires:Optional[DateTimeSchedulerModel] = None
-    priority:Literal[1,2,3,4,5] = 5
+    priority:Literal[1,2,3] = 3
     _retry:Optional[bool]= PrivateAttr(default=False)
-    _queue:Optional[str]= PrivateAttr(default=None)
     _ignore_result:bool=PrivateAttr(default=True)
 
 
     def model_dump(self, *, mode = 'python', include = None, exclude = None, context = None, by_alias = False, exclude_unset = False, exclude_defaults = False, exclude_none = False, round_trip = False, warnings = True, serialize_as_any = False):
         vals = super().model_dump(mode=mode, include=include, exclude=exclude, context=context, by_alias=by_alias, exclude_unset=exclude_unset, exclude_defaults=exclude_defaults, exclude_none=exclude_none, round_trip=round_trip, warnings=warnings, serialize_as_any=serialize_as_any)
+        vals['priority'] = vals['priority'] -1
         return {
             'retry':self._retry,
-            'queue':self._queue,
             'ignore_result':self._ignore_result,
             **vals
         }
-
+    
 class SchedulerModel(BaseModel):
     filter_error:bool=True
     schedule_name:Optional[str] = None
@@ -107,7 +127,7 @@ class SchedulerModel(BaseModel):
     task_option:CeleryOptionModel
     scheduler_option: Optional[dict] = None
     content: Any | list[Any]
-    _priority:Literal[1,2,3,4,5] = PrivateAttr(5)
+    _priority:Literal[1,2,3] = PrivateAttr(3)
     _heaviness: TaskHeaviness = None
     _errors:dict[int,dict|str] = PrivateAttr({})
     _message:dict[int,str] = PrivateAttr({})

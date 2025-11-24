@@ -17,9 +17,10 @@ from app.decorators.pipes import ObjectS3OperationResponsePipe, TemplateParamsPi
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
 from app.definition._utils_decorator import Guard
-from app.depends.class_dep import Broker, ObjectsSearch
+from app.depends.class_dep import ObjectsSearch
 from app.depends.dependencies import get_auth_permission
 from app.depends.res_cache import MinioResponseCache
+from app.manager.broker_manager import Broker
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError
 from app.services import AmazonS3Service
 from app.services.config_service import ConfigService

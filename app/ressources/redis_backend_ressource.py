@@ -10,7 +10,7 @@ from app.services.database_service import RedisService
 from app.services.security_service import JWTAuthService
 from app.depends.dependencies import get_auth_permission
 from app.classes.auth_permission import AuthPermission, MustHave, Role
-from app.services.task_service import TaskService,ChannelMiniService
+from app.services.task_service import TaskService,QueueMiniService
 
 
 REDIS_EXPIRATION = 360000

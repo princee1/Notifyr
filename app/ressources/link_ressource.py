@@ -7,24 +7,23 @@ from app.container import InjectInMethod
 from app.decorators.guards import AccessLinkGuard
 from app.decorators.handlers import ORMCacheHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._error import ServerFileError
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import GetLink
-from app.depends.class_dep import Broker, LinkQuery
+from app.depends.class_dep import  LinkQuery
 from app.depends.orm_cache import LinkORMCache
+from app.manager.broker_manager import Broker
 from app.models.email_model import EmailStatus, TrackingEmailEventORM
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
 from app.services.link_service import LinkService
 from fastapi import status
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from app.depends.variables import  verify_url
 from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkModel
 from app.utils.constant import  StreamConstant
 from app.utils.helper import  uuid_v1_mc
-from app.classes.broker import MessageBroker,MessageError
 from tortoise.transactions import in_transaction
 from datetime import datetime, timezone
 

@@ -24,9 +24,6 @@ from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
-from app.depends.variables import SECURITY_FLAG
-
-
 
 configService: ConfigService = Get(ConfigService)
 costService:CostService = Get(CostService)
@@ -566,7 +563,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
             @functools.wraps(function)
             async def callback(*args, **kwargs):
 
-                if not SECURITY_FLAG:
+                if not configService.SECURITY_FLAG:
                     return await function(*args, **kwargs)
 
                 if empty_decorator:
