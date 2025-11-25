@@ -138,17 +138,16 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         
         return  time.time() - self.last_rotated < self.auth_ttl    
 
-
-
 @Service()
 class RedisService(DatabaseService):
 
     GROUP = 'NOTIFYR-GROUP'
     
-    def __init__(self,configService:ConfigService,reactiveService:ReactiveService):
+    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:HCVaultService):
         super().__init__(configService,None)
         self.configService = configService
         self.reactiveService = reactiveService
+        self.vaultService = vaultService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
         self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
@@ -157,7 +156,7 @@ class RedisService(DatabaseService):
     def dynamic_context(func:Callable):
         
         async def async_wrapper(self:Self,topic:str,data:Any|dict):
-            await func(self,topic,data)
+            return await func(self,topic,data)
         
         def sync_wrapper(self:Self,topic:str,data:Any|dict):
             return func(self,topic,data)
@@ -422,7 +421,6 @@ class RedisService(DatabaseService):
     @check_db
     async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
         return await redis.lpush(name,*element)
-
     
 @Service()
 class MemCachedService(DatabaseService,SchedulerInterface):
@@ -501,7 +499,6 @@ class MemCachedService(DatabaseService,SchedulerInterface):
     async def close(self):
         self.sync_client.close()
         self.client.close()
-
 
 D = TypeVar('D',bound=Document)
 
@@ -718,3 +715,4 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     async def _creds_rotator(self):
         self.generate_creds()
         await self.init_connection(True)
+

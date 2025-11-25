@@ -17,6 +17,8 @@ import datetime as dt
 from humanize import naturaldelta
 from uuid import uuid4
 
+from app.utils.tools import RunInThreadPool
+
 
 CHANNEL_BUILD_STATE=0
 
@@ -42,27 +44,31 @@ class ChannelMiniService(BaseMiniService):
     def build(self, build_state = ...):
         raise BuildOkError
 
-    def purge(self):
+    @RunInThreadPool
+    async def purge(self):
         """
         Purge the Celery queue.
         If queue_name is provided, it will purge that specific queue.
         If not, it will purge all queues.
         """
-        self.pause()
+        await self.pause()
         count = celery_app.control.purge(queue=self.queue)
         return {'message': 'Celery queue purged successfully.', 'count': count}
-        
+    
+    @RunInThreadPool
     def pause(self):
         return celery_app.control.cancel_consumer(self.queue, reply=True)
 
+    @RunInThreadPool
     def resume(self):
         return self.create()
 
     async def delete(self):
-        self.purge()
+        await self.purge()
         prefix = f'{self.queue}:'
         return await self.redisService.delete_all(RedisConstant.CELERY_DB,prefix)
-    
+
+    @RunInThreadPool
     def create(self):
         return celery_app.control.add_consumer(self.queue, reply=True)
 
@@ -204,8 +210,8 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         return 1 * (1.1 ** self.timeout_count)
 
     async def _check_workers_status(self):
-        response = self.ping()
-        async with self.task_lock.writer:
+        response = await self.ping()
+        async with self.statusLock.writer:
             self._workers = response.copy()
 
     @property
@@ -223,9 +229,11 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         return celery_app.control.rate_limit(task_name, rate_limit,
            destination=destination,reply=True,timeout=5)
 
+    @RunInThreadPool
     def revoke(self,tasks:list[str]):
         return celery_app.control.revoke(tasks)
 
+    @RunInThreadPool
     def inspect(self,mode:Literal['active_queue','registered','scheduled','active','stats','reserved'],destination:list[str]=None):
         inspect = celery_app.control.inspect(destination)
         match mode:
@@ -245,12 +253,15 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
             case _:
                 raise 
 
+    @RunInThreadPool
     def ping(self,destination:list[str]=None):
         return celery_app.control.ping(timeout=self.set_next_timeout,destination=destination)
 
+    @RunInThreadPool
     def shutdown(self,destination:list[str]=None):
         return self._broadcast('shutdown',destination=destination)
     
+    @RunInThreadPool
     def _broadcast(self,command:str,destination:list[str]=None,reply=True):
         return celery_app.control.broadcast(command,destination=destination,reply=reply)
     

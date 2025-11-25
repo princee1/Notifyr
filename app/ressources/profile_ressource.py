@@ -87,19 +87,11 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
         await self.profileService.delete_profile(profileModel)
-        
-        channel.delete()
+        await channel.delete()
 
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         return profileModel
     
-    @UseRoles([Role.PUBLIC])        
-    @UsePermission(ProfilePermission)
-    @UsePipe(DocumentFriendlyPipe,before=False)
-    @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
-    async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
-        return await self.mongooseService.get(self.model,profile,True)
-
     @PingService([CeleryService])
     @UseHandler(PydanticHandler)
     @UsePermission(AdminPermission)
@@ -143,6 +135,22 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return None
        
+    @UseRoles([Role.PUBLIC])        
+    @UsePermission(ProfilePermission)
+    @UseServiceLock(ProfileService,lockType='reader',check_status=False,as_manager=True)
+    @UsePipe(DocumentFriendlyPipe,before=False)
+    @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
+    async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+        return await self.mongooseService.get(self.model,profile,True)
+
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
+    @UsePermission(ProfilePermission)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True)
+    @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
+    async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+        ...
+
+    
     @classmethod
     async def pipe_profil_model(cls,request:Request,modelType:Literal['model','model_creds','model_update']): 
         try:

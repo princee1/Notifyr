@@ -59,8 +59,7 @@ setup_engine(){
   vault secrets enable -path=notifyr-secrets -seal-wrap -version=1 kv
   vault secrets enable -path=notifyr-transit -seal-wrap transit 
   vault secrets enable -path=notifyr-database -seal-wrap database
-
-  vault secrets enable -path=notifyr-config kv
+  vault secrets enable -path=setup-config kv
 
   if [ "$S3_CRED_TYPE" = "AWS" ]; then  
     vault secrets enable -path=notifyr-minio-s3 -seal-wrap aws
@@ -209,7 +208,8 @@ setup_database_config(){
     db_name="mongodb" \
     creation_statements='{ "db": "notifyr", "roles": [
     { "role": "readWrite", "db": "notifyr", "collection":"agent" },
-    { "role": "readWrite", "db": "notifyr", "collection":"profile" },
+    { "role": "readWrite", "db": "notifyr", "collection":"communication" },
+    { "role": "readWrite", "db": "notifyr", "collection":"webhook" },
     { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
     { "role": "readWrite", "db": "notifyr", "collection":"chat" }]}' \
     default_ttl="12h" \

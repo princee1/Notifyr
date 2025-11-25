@@ -1,18 +1,18 @@
-from aiorwlock import RWLock
-from fastapi import Request, Response
 from prometheus_client import Counter, Gauge, Histogram
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service
 from app.errors.service_error import BuildWarningError
 from app.interface.timers import SchedulerInterface
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService, ProcessWorkerService
+from app.services.database_service import MongooseService, RedisService
 
 @Service()
 class TaskService(BaseService,SchedulerInterface):
 
-    def __init__(self, configService: ConfigService):
+    def __init__(self, configService: ConfigService,redisService:RedisService,mongooseService:MongooseService,processWorkerService:ProcessWorkerService):
         self.configService = configService
-        self.task_lock = RWLock()
-        self.route_lock = RWLock()
+        self.redisService = redisService
+        self.mongooseService = mongooseService
+        self.processWorkerService = processWorkerService
         super().__init__()
         SchedulerInterface.__init__(self,None)
 

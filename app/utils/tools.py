@@ -7,6 +7,7 @@ from cachetools import LRUCache
 import asyncio
 from fastapi_cache.coder import JsonCoder,object_hook
 from fastapi_cache.decorator import cache
+from fastapi.concurrency import run_in_threadpool,run_until_first_complete
 
 
 class MyJSONCoder(JsonCoder):
@@ -195,4 +196,22 @@ def RunAsync(func:Callable):
     async def wrapper(*args,**kwargs):
         return await asyncio.to_thread(func,*args,**kwargs)
     
+    return wrapper
+
+
+def RunInThreadPool(func:Callable):
+    """
+    Run an synchronous function in a threadpool using fastapi concurrency
+    
+    :param func: Function to decorate
+    :type func: Callable
+    """
+
+    if asyncio.iscoroutinefunction(func):
+        return func  # type: ignore
+
+    @wraps(func)
+    async def wrapper(*args,**kwargs):
+        return await run_in_threadpool(func,*args,**kwargs)
+
     return wrapper

@@ -156,7 +156,7 @@ class EmailRessource(BaseHTTPRessource):
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseInterceptor(TaskCostInterceptor(),inject_meta=True)
-    @UsePipe(pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.ContentIndexPipe(),pipes.ContactToInfoPipe('email','meta.To'))
+    @UsePipe(pipes.TemplateSignatureQueryPipe,TemplateSignatureValidationInjectionPipe,force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe,pipes.ContentIndexPipe,pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard())
     @BaseHTTPRessource.HTTPRoute("/custom/{profile}/", responses=DEFAULT_RESPONSE,cost_definition=CostConstant.email_template)
     async def send_customEmail(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):

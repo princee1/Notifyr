@@ -85,7 +85,8 @@ if ConfigService._celery_env == CeleryMode.none:
     celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
     celery_app.autodiscover_tasks(['app.signals'], related_name='middleware')
 
-import app.signals
+if configService._celery_env == CeleryMode.worker:
+    import app.signals
 
 ##############################################           ##################################################
 

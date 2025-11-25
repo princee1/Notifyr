@@ -10,6 +10,7 @@ from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
+from app.services.task_service import TaskService
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from app.utils.helper import flatten_dict, subset_model
 from .database_service import MongooseService, RedisService
@@ -24,7 +25,7 @@ TModel = TypeVar("TModel",bound=BaseProfileModel)
 )
 class ProfileMiniService(BaseMiniService,Generic[TModel]):
     
-    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,redisService:RedisService, model:TModel,model_type:Type[TModel]=None):
+    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,redisService:RedisService,taskService:TaskService, model:TModel,model_type:Type[TModel]=None):
         if model_type != None:
             self.model_type = model_type
             self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__name__}')
@@ -70,7 +71,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
 @Service()
 class ProfileService(BaseMiniServiceManager):
 
-    def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
+    def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService,taskService:TaskService):
         super().__init__()
         self.MiniServiceStore:MiniServiceStore[ProfileMiniService[BaseProfileModel]] = MiniServiceStore[ProfileMiniService[BaseProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
@@ -78,6 +79,7 @@ class ProfileService(BaseMiniServiceManager):
         self.redisService = redisService
         self.loggerService = loggerService
         self.vaultService = vaultService
+        self.taskService = taskService
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         self.MiniServiceStore.clear()
@@ -88,11 +90,11 @@ class ProfileService(BaseMiniServiceManager):
                     self.vaultService,
                     self.mongooseService,
                     self.redisService,
+                    self.taskService,
                     model=m,model_type=v)
                 p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 self.MiniServiceStore.add(p)
-            
-        
+             
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:
             raise BuildFailureError
@@ -120,7 +122,6 @@ class ProfileService(BaseMiniServiceManager):
         except :
             self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
             return False
-
     
     ########################################################       ################################3
 
@@ -175,8 +176,8 @@ class ProfileService(BaseMiniServiceManager):
         await profile.save()
         return profile
     
-
     ########################################################       ################################
+
     async def addError(self,profile_id: str | None,error_code: int | None,error_name: str | None,error_description: str | None,error_type: Literal['warn', 'critical', 'message'] | None):
         error= ErrorProfileModel(
             profile_id=profile_id,
@@ -190,7 +191,6 @@ class ProfileService(BaseMiniServiceManager):
     async def deleteError(self,profile_id:str):
         await self.mongooseService.delete_all(ErrorProfileModel,{'profile_id':profile_id})
     ########################################################       ################################
-
 
     def _read_encrypted_creds(self,profile_id:str):
         return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)
