@@ -1,0 +1,6 @@
+class CeleryDSignal:
+    def celeryd_after_setup():
+        ...
+    
+    def celeryd_init():
+        ...
