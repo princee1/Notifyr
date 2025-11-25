@@ -1,8 +1,7 @@
-from datetime import datetime
 from typing import Annotated, Literal, Type
 from beanie import Document
-from fastapi import Depends, HTTPException, Request, Response,status
-from pydantic import BaseModel, ConfigDict
+from fastapi import Depends,Request, Response,status
+from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.classes.condition import MongoCondition, simple_number_validation
 from app.container import InjectInMethod
@@ -11,18 +10,17 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import R, BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
 from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.manager.broker_manager import Broker
-from app.services.database_service import MongooseService
-from app.services.email_service import EmailSenderService
+from app.services.celery_service import CeleryService, QueueMiniService
+from app.services.database_service import MongooseService, RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
-from app.services.task_service import CeleryService, QueueMiniService, TaskService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
 
@@ -42,17 +40,17 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     profileType:str
 
     @InjectInMethod()
-    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,taskService:TaskService,celeryService:CeleryService):
+    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService):
         super().__init__()
         self.profileService = profileService
         self.vaultService = vaultService
         self.mongooseService = mongooseService
-        self.taskService = taskService
         self.celeryService= celeryService
+        self.redisService = redisService
 
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
-    @PingService([HCVaultService,MongooseService,TaskService])
+    @PingService([HCVaultService,MongooseService,CeleryService])
     @UseServiceLock(HCVaultService,MongooseService,lockType='reader',check_status=False)
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler)
     @UsePermission(AdminPermission)
@@ -70,19 +68,19 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         result = await self.profileService.add_profile(profileModel)
         broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
 
-        profileMiniService = ProfileMiniService(None,None,None,result)
-        channelService = QueueMiniService(profileMiniService,self.celeryService)
+        profileMiniService = ProfileMiniService(None,None,self.redisService,result,self.model)
+        channelService = QueueMiniService(profileMiniService)
         channelService.create()
 
         return result
 
-    @PingService([HCVaultService,CeleryService,TaskService])
+    @PingService([HCVaultService,CeleryService])
     @UseHandler(VaultHandler,MiniServiceHandler,CostHandler)
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
-    @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UsePermission(AdminPermission)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
-    @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
     async def delete_profile(self,profile:str,channel:Annotated[QueueMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -106,8 +104,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseHandler(PydanticHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'),)
-    @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @HTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def update_profile(self,profile:str,channel:Annotated[QueueMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -123,11 +121,11 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return await self.profileService.update_meta_profile(profileModel)
     
-    @PingService([HCVaultService,TaskService,CeleryService])
+    @PingService([HCVaultService,CeleryService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-    @UseServiceLock(ProfileService,TaskService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler,PydanticHandler)
-    @UsePipe(MiniServiceInjectorPipe(TaskService,'channel'))
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])

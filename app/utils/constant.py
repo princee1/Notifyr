@@ -54,6 +54,7 @@ class HTTPHeaderConstant:
     X_INSTANCE_ID= "X-Instance-Id"
     X_PROCESS_PID = "X-Process-PID"
     X_PARENT_PROCESS_PID="X-Parent-Process-PID"
+    X_REQUEST_ID='X-Request-ID'
 
 
 class CookieConstant:

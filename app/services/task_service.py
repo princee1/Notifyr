@@ -5,7 +5,6 @@ from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service
 from app.errors.service_error import BuildWarningError
 from app.interface.timers import SchedulerInterface
 from app.services.config_service import ConfigService
-from app.utils.constant import HTTPHeaderConstant
 
 @Service()
 class TaskService(BaseService,SchedulerInterface):

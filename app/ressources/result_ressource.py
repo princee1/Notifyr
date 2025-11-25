@@ -4,21 +4,21 @@ from app.container import Get, InjectInMethod
 from app.decorators.handlers import CeleryTaskHandler, ServiceAvailabilityHandler, WebSocketHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
-from app.services.task_service import TaskService, CeleryService
+from app.services.celery_service import CeleryService
+from app.services.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.security_service import JWTAuthService
 from app.depends.dependencies import get_auth_permission
 from app.classes.auth_permission import AuthPermission, MustHave, Role
-from app.services.task_service import TaskService,QueueMiniService
 
 
 REDIS_EXPIRATION = 360000
-REDIS_RESULT_PREFIX = 'redis'
+RESULT_PREFIX = 'result'
 
 CELERY_PREFIX= 'celery'
-
 BACKGROUND_PREFIX  = 'background'
+APS_SCHEDULER='aps'
 
 @UseRoles([Role.REDIS_RESULT])
 @UsePermission(JWTRouteHTTPPermission)
@@ -83,9 +83,13 @@ class BackgroundTaskRessource(BaseHTTPRessource):
     def get_result(self,request:Request,task_id:str,authPermission=Depends(get_auth_permission)):
         ...
     
+@HTTPRessource(prefix=APS_SCHEDULER)
+class APSSchedulerRessource(BaseHTTPRessource):
+    ...
 
-@HTTPRessource(prefix=REDIS_RESULT_PREFIX, routers=[CeleryRessource,BackgroundTaskRessource])
-class RedisResultBackendRessource(BaseHTTPRessource):
+
+@HTTPRessource(prefix=RESULT_PREFIX, routers=[CeleryRessource,BackgroundTaskRessource])
+class ResultBackendRessource(BaseHTTPRessource):
     
 
     @InjectInMethod()

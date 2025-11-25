@@ -17,9 +17,6 @@ import datetime as dt
 from humanize import naturaldelta
 
 
-
-
-
 CHANNEL_BUILD_STATE=0
 
 @MiniService()
@@ -49,7 +46,7 @@ class QueueMiniService(BaseMiniService):
         If queue_name is provided, it will purge that specific queue.
         If not, it will purge all queues.
         """
-        count = self.celeryService.celery_app.control.purge(queue=self.miniService_id)
+        count = celery_app.control.purge(queue=self.miniService_id)
         return {'message': 'Celery queue purged successfully.', 'count': count}
         
     def pause(self):
@@ -76,6 +73,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         BaseService.__init__(self)
         IntervalInterface.__init__(self,False)
         self.configService = configService
+        self.profileService = profileService
 
         self.redisService = redisService
         self.available_workers_count = -1
@@ -110,14 +108,14 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 
         option = celery_task.get('task_option',{})
         if c_type == 'now':
-            task_result = self._task_registry[t_name]['task'].apply_async(**option, args=celery_task['args'], kwargs=celery_task['kwargs'])
+            task_result = TASK_REGISTRY[t_name]['task'].apply_async(**option, args=celery_task['args'], kwargs=celery_task['kwargs'])
             eta = (dt.datetime.now() + dt.timedelta(seconds=option.get('countdown', 0)))
             time_until_first_run = (eta - dt.datetime.now()).total_seconds() if eta else None
             result.update(task_result.id,'task',naturaldelta(time_until_first_run) if time_until_first_run else None)
             return result
 
         schedule = celery_task['schedule']
-        entry = RedBeatSchedulerEntry(schedule_id, t_name, schedule, args=celery_task['args'], kwargs=celery_task['kwargs'], app=self._celery_app)
+        entry = RedBeatSchedulerEntry(schedule_id, t_name, schedule, args=celery_task['args'], kwargs=celery_task['kwargs'], app=celery_app)
         entry.save()
         if isinstance(entry.due_at,dt.datetime):
             time =entry.due_at.utcoffset().seconds
@@ -129,7 +127,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         return result
 
     def cancel_task(self, task_id, force=False):
-        result = AsyncResult(task_id, app=self._celery_app)
+        result = AsyncResult(task_id, app=celery_app)
 
         if result.state in ["PENDING", "RECEIVED"]:
             result.revoke(terminate=False)
@@ -141,7 +139,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     def delete_schedule(self, schedule_id: str):
         try:
             schedule_id = f'redbeat:{schedule_id}'
-            entry = RedBeatSchedulerEntry.from_key(schedule_id, app=self._celery_app)
+            entry = RedBeatSchedulerEntry.from_key(schedule_id, app=celery_app)
             entry.delete()
         except KeyError:
             raise CeleryTaskNotFoundError
@@ -150,7 +148,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         try:
             schedule_id = f'redbeat:{schedule_id}'
             entry = RedBeatSchedulerEntry.from_key(
-                schedule_id, app=self._celery_app)
+                schedule_id, app=celery_app)
             return {
                 'total_run_count': entry.total_run_count,
                 'due_at': entry.due_at,
@@ -162,7 +160,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 
     def seek_result(self, task_id: str):
         try:
-            result = AsyncResult(task_id, app=self._celery_app)
+            result = AsyncResult(task_id, app=celery_app)
             response = {
                 'task_id': result.id,
                 'status': result.status,
@@ -186,18 +184,15 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         
         for id,p in self.profileService.MiniServiceStore:
 
-            miniService = QueueMiniService(p,self.celeryService)
+            miniService = QueueMiniService(p)
             miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
 
             self.state_counter.count(miniService)
             self.MiniServiceStore.add(miniService)
-               
-        try:
+
             self._builded = True
             self._destroyed = False
-            BaseMiniServiceManager.build(self,self.state_counter)
-        except BuildError:
-            raise BuildSkipError
+            BaseMiniServiceManager.build(self,self.state_counter,build_state)
         
     @property
     def set_next_timeout(self):

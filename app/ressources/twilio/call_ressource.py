@@ -20,8 +20,8 @@ from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPMo
 from app.models.call_model import  CallCustomSchedulerModel, CallStatusModel, CallTemplateSchedulerModel, CallTwimlSchedulerModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum
 from app.services.assets_service import AssetService
+from app.services.celery_service import CeleryService
 from app.services.profile_service import ProfileService
-from app.services.task_service import  TaskService, CeleryService
 from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
@@ -117,7 +117,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.RELAY])
     @UsePermission(TaskCostPermission(),JWTAssetPermission('phone'))
-    @PingService([CeleryService,ProfileService,TwilioService,TaskService,CallService],is_manager=True)
+    @PingService([ProfileService,TwilioService,CallService,CeleryService,],is_manager=True)
     @UseServiceLock(AssetService,lockType='reader')
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
     @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler,CostHandler)
@@ -144,7 +144,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             await taskManager.offload_task(weight,0, index, self.callService.send_template_voice_call, result, content,None,twilio_ids,twilio.miniService_id)
         return taskManager.results
 
-    @PingService([CeleryService,ProfileService,TwilioService,TaskService,CallService],is_manager=True)
+    @PingService([ProfileService,TwilioService,CallService,CeleryService],is_manager=True)
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
@@ -173,7 +173,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             await taskManager.offload_task(weight, 0, content.index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids,twilio_profile=twilio.miniService_id)
         return taskManager.results
 
-    @PingService([CeleryService,ProfileService,TwilioService,TaskService,CallService],is_manager=True)
+    @PingService([ProfileService,TwilioService,CallService,CeleryService],is_manager=True)
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
@@ -207,8 +207,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         return taskManager.results
 
     @PingService([ProfileService,TwilioService,CallService],is_manager=True)
-    @UseServiceLock(AssetService,lockType='reader')
-    @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False,as_manager=True)
+    @UseServiceLock(AssetService,ProfileService,TwilioService,lockType='reader',check_status=False,as_manager=True)
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.MFA_OTP])
     @UseGuard(RegisteredContactsGuard)

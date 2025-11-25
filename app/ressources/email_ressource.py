@@ -17,7 +17,6 @@ from app.models.email_model import BaseEmailSchedulerModel, CustomEmailScheduler
 from app.services.assets_service import AssetService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService
-from app.services.task_service import  TaskService, CeleryService
 from app.services.config_service import ConfigService
 from app.manager import TaskManager
 from app.services.link_service import LinkService
@@ -154,8 +153,8 @@ class EmailRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10/minutes')
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
-    @PingService([ProfileService,EmailSenderService,TaskService,CeleryService],is_manager=True)
-    @UseServiceLock(ProfileService,EmailSenderService,CeleryService,lockType='reader',check_status=False,as_manager =True)
+    @PingService([ProfileService,EmailSenderService,CeleryService],is_manager=True)
+    @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.TaskCostPermission(),permissions.JWTSignatureAssetPermission())
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)

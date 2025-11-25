@@ -12,8 +12,6 @@ from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermiss
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ContactORMCache,ContactSummaryORMCache
 from app.models.contacts_model import AppRegisteredContactModel, ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
-from app.services.task_service import TaskService, CeleryService
-from app.services.config_service import ConfigService
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
 from app.services.database_service import TortoiseConnectionService
 from app.services.email_service import EmailSenderService
@@ -172,12 +170,11 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
 class ContactSecurityRessource(BaseHTTPRessource):
     
     @InjectInMethod()
-    def __init__(self,securityService:SecurityService,jwtService:JWTAuthService,contactsService:ContactsService,celeryService:CeleryService ):
+    def __init__(self,securityService:SecurityService,jwtService:JWTAuthService,contactsService:ContactsService):
         super().__init__()
         self.securityService = securityService
         self.jwtAuthService = jwtService
         self.contactService = contactsService
-        self.celeryService = celeryService
     
     @UseGuard(RegisteredContactsGuard)
     @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
@@ -195,7 +192,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 
     @UsePermission(JWTContactPermission('create'))
     @UseGuard(RegisteredContactsGuard)
-    @PingService([CeleryService,CallService,EmailSenderService])
+    @PingService([CallService,EmailSenderService])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
     async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
         # TODO Request from the user
@@ -231,11 +228,9 @@ class ContactSecurityRessource(BaseHTTPRessource):
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
 class ContactsCRUDRessource(BaseHTTPRessource):
     @InjectInMethod()
-    def __init__(self, contactsService: ContactsService, celeryService: CeleryService, bkgTaskService: TaskService, emailService: EmailSenderService, smsService: SMSService):
+    def __init__(self, contactsService: ContactsService, emailService: EmailSenderService, smsService: SMSService):
         super().__init__()
         self.contactsService = contactsService
-        self.celeryService = celeryService
-        self.bkgTaskService = bkgTaskService
 
     @UseLimiter(limit_value='2000/minutes')
     @BaseHTTPRessource.Post('/')

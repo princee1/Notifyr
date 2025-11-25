@@ -12,6 +12,7 @@ from app.definition._service import BaseMiniServiceManager
 from app.depends.class_dep import KeepAliveQuery, ObjectsSearch
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
+from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status, SubscriptionORM
 from app.models.email_model import BaseEmailSchedulerModel
@@ -19,13 +20,14 @@ from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
 from app.services.assets_service import AssetService, AssetType, AssetTypeNotAllowedError, RouteAssetType, DIRECTORY_SEPARATOR
+from app.services.celery_service import CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file_service import FileService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
-from app.services.task_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioAccountMiniService, TwilioService
+from app.task import task_name
 from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of, parseToBool
 from app.utils.validation import email_validator, phone_number_validator

@@ -80,10 +80,8 @@ class TaskManager:
     async def offload_task(self,weight:float,delay: float, index: int | None, callback: Callable, *args,_s:s|None=None, **kwargs):
         scheduler = self.scheduler if _s is None else _s
         weight = Compute_Weight(weight, scheduler._heaviness)
-
-        values:TaskExecutionResult = await self._offloadTask(self.meta['strategy'],weight,self.meta['algorithm'], scheduler, delay,self.meta['retry'] ,self.meta['x_request_id'], self.meta['background'], index, callback, *args, **kwargs)
+        values:TaskExecutionResult = await self._offload_task(weight,delay,index, callback, *args, **kwargs)
         self.task_result.append(asdict(values))
-
         self.weight +=weight
 
     async def add_task(self, delay:float|None,index,callback: Callable[P, Any], *args: P.args, **kwargs: P.kwargs):

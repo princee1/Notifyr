@@ -36,7 +36,8 @@ class MetaDataMiddleWare(MiddleWare):
         start_time = time.time()
         self.taskService.connection_count.inc()
         self.taskService.connection_total.inc()
-        request.state.request_id = str(uuid4())
+        request_id=  str(uuid4())
+        request.state.request_id =request_id
 
         try:
             response: Response = await call_next(request)
@@ -46,6 +47,7 @@ class MetaDataMiddleWare(MiddleWare):
             response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.instance_id
             response.headers[HTTPHeaderConstant.X_PROCESS_PID] =self.process_pid
             response.headers[HTTPHeaderConstant.X_PARENT_PROCESS_PID] = self.parent_pid
+            response.headers[HTTPHeaderConstant.X_REQUEST_ID] = request_id
 
             self.taskService.request_latency.observe(process_time)
             return response

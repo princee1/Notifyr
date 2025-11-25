@@ -68,6 +68,11 @@ celery_app.conf.result_backend_transport_options = {
 }
 celery_app.conf.task_store_errors_even_if_ignored = True
 celery_app.conf.task_ignore_result = True
+celery_app.conf.broker_transport_options = {
+    'priority_steps': list(range(3)),
+    'sep': ':',
+    'queue_order_strategy': 'priority',
+}
 
 if ConfigService._celery_env == CeleryMode.none:
 

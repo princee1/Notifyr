@@ -6,7 +6,8 @@ from app.decorators.handlers import FastAPIHandler, WebSocketHandler
 from app.decorators.permissions import BalancerPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPStatusCode, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
-from app.services.task_service import CeleryService, TaskService
+from app.services.celery_service import CeleryService
+from app.services.task_service import  TaskService
 from app.services.config_service import ConfigService
 from app.services.health_service import HealthService
 from app.services.security_service import JWTAuthService, SecurityService

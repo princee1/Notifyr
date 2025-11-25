@@ -3,13 +3,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.container import Get, InjectInMethod
 from  app.definition._ressource import BaseHTTPRessource,HTTPRessource, IncludeWebsocket, PingService, UseServiceLock, UseHandler, UsePermission, UseRoles
+from app.services.celery_service import CeleryService
 from app.services.setting_service import SettingService
-from app.services.task_service import CeleryService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
 from app.websockets.chat_ws import ChatWebSocket
-from app.decorators.handlers import ServiceAvailabilityHandler, WebSocketHandler
+from app.decorators.handlers import  WebSocketHandler
 from app.classes.auth_permission import WSPermission,Role
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.depends.dependencies import get_auth_permission

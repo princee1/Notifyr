@@ -6,26 +6,25 @@ from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
-from app.interface.timers import IntervalInterface, SchedulerInterface
+from app.interface.timers import  SchedulerInterface
 from app.ressources import *
 from app.services.assets_service import AssetService
 from app.services.aws_service import AmazonS3Service
 from app.services.database_service import  MemCachedService, MongooseService, RedisService, TortoiseConnectionService
 from app.services.cost_service import CostService
 from app.services.secret_service import HCVaultService
+from app.services.task_service import TaskService
 from app.utils.prettyprint import PrettyPrinter_
-from starlette.types import ASGIApp
-from app.services.config_service import ConfigService, MODE
+from app.services.config_service import ConfigService
 from fastapi import Request, Response, FastAPI
 from slowapi.middleware import SlowAPIMiddleware
-from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload, TypedDict
+from typing import Callable,Literal
 import uvicorn
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 import datetime as dt
 from app.definition._ressource import RESSOURCES, BaseHTTPRessource, ClassMetaData
 from app.interface.events import EventInterface
-from tortoise.contrib.fastapi import register_tortoise
 import traceback
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
@@ -38,7 +37,7 @@ from app.definition._service import PROCESS_SERVICE_REPORT
 from app.models.communication_model import *
 from app.models.webhook_model import *
 
-from app.classes.profiles import ProfilModelValues, BaseProfileModel
+from app.classes.profiles import ProfilModelValues
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 

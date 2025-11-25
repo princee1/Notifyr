@@ -6,8 +6,6 @@ from app.classes.celery import AlgorithmType,RunType
 from app.classes.env_selector import StrategyType
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
-from app.services.task_service import TaskService
-from app.services.config_service import ConfigService
 from app.services.twilio_service import TwilioService
 from app.classes.broker import SubjectType
 from app.classes.email import MimeType
