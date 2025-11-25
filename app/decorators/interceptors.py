@@ -7,7 +7,7 @@ from app.definition._cost import DataCost, SimpleTaskCost,Receipt
 from app.definition._utils_decorator import Interceptor, InterceptorDefaultException
 from app.depends.res_cache import ResponseCacheInterface
 from app.manager.broker_manager import Broker
-from app.manager.keep_alive_manager import KeepAliveQuery
+from app.manager.keep_alive_manager import KeepAliveManager
 from app.services.cost_service import CostService
 from app.services.database_service import MemCachedService, RedisService
 from app.services.reactive_service import ReactiveService
@@ -18,7 +18,7 @@ class KeepAliveResponseInterceptor(Interceptor):
     def intercept_before(self):
         ...
 
-    def intercept_after(self,result:Any|Response, keepAliveConn:KeepAliveQuery,request:Request):
+    def intercept_after(self,result:Any|Response, keepAliveConn:KeepAliveManager,request:Request):
         keepAliveConn.dispose()
 
 
@@ -67,7 +67,6 @@ class TaskCostInterceptor(Interceptor):
 
         self.retry_limit=retry_limit
         self.singular_static_cost = singular_static_cost
-
 
     async def intercept_before(self,*args,**kwargs):
         cost:SimpleTaskCost = kwargs.get('cost')

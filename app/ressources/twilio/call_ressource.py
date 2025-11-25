@@ -13,7 +13,7 @@ from app.decorators.permissions import TaskCostPermission, JWTAssetPermission, J
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, FilterAllowedSchemaPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._cost import SimpleTaskCost
 from app.manager.broker_manager import Broker
-from app.manager.keep_alive_manager import KeepAliveQuery
+from app.manager.keep_alive_manager import KeepAliveManager
 from app.manager.task_manager import TaskManager
 from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
@@ -101,7 +101,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseInterceptor(TaskCostInterceptor,KeepAliveResponseInterceptor)
     @UseHandler(CostHandler,AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
     @BaseHTTPRessource.Get('/otp/', cost_definition=CostConstant.phone_digit_otp)
-    async def enter_digit_otp(self, twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],otpModel: GatherDtmfOTPModel, request: Request, response: Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
+    async def enter_digit_otp(self, twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],otpModel: GatherDtmfOTPModel, request: Request, response: Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
 
         rx_id = keepAliveConn.create_subject('HTTP')
         keepAliveConn.register_lock()
@@ -216,7 +216,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePermission(TaskCostPermission())
     @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,CostHandler)
     @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], mount=False,cost_definition=CostConstant.phone_auth)
-    async def voice_authenticate(self, request: Request,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)],cost:Annotated[CallCost,Depends(CallCost)], keepAliveConn: Annotated[KeepAliveQuery, Depends(KeepAliveQuery)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
+    async def voice_authenticate(self, request: Request,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)],cost:Annotated[CallCost,Depends(CallCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
 
         if contact.phone != otpModel.to:
             raise HTTPException(status_code=400,detail='Contact phone number mismatch')

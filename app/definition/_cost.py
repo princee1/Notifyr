@@ -5,8 +5,8 @@ from app.classes.cost_definition import Receipt, ReceiptItem, SimpleTaskCostDefi
 from app.container import Get
 from app.depends.class_dep import TrackerInterface
 from app.depends.dependencies import get_request_id
+from app.manager.task_manager import TaskManager
 from app.services.cost_service import CostService
-from app.services.task_service import TaskManager
 from app.utils.helper import PointerIterator
 from app.classes.celery import SchedulerModel
 from datetime import datetime

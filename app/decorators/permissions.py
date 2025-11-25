@@ -2,6 +2,7 @@ from fastapi import HTTPException,status
 from app.classes.celery import SchedulerModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.definition._cost import Cost
+from app.manager.task_manager import TaskManager
 from app.models.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
@@ -13,8 +14,6 @@ from app.services.cost_service import CostService
 from app.services.database_service import RedisService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
-from app.services.task_service import TaskManager
-from app.utils.constant import RedisConstant
 from app.utils.helper import flatten_dict
 
  

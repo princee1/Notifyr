@@ -15,6 +15,7 @@ from app.interface.email import EmailSendInterface
 from app.manager.broker_manager import Broker
 from app.models.email_model import BaseEmailSchedulerModel, CustomEmailSchedulerModel, EmailTemplateSchedulerModel
 from app.services.assets_service import AssetService
+from app.services.celery_service import CeleryService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService
 from app.services.config_service import ConfigService

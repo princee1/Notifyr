@@ -1,5 +1,5 @@
 from time import perf_counter,time
-from typing import Annotated
+from typing import Annotated, Any
 from fastapi import Depends
 from app.container import Get
 from app.services.logger_service import LoggerService
@@ -10,7 +10,7 @@ from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSeq
 from app.depends.variables import *
 
 
-class KeepAliveQuery:
+class KeepAliveManager:
 
     def __init__(self, response: Response, x_request_id: Annotated[str, Depends(get_request_id)], keep_alive: Annotated[bool, Depends(keep_connection)], timeout: int = Query(0, description="Time in seconds to delay the response", ge=0, le=60*3)):
         self.timeout = timeout
@@ -159,4 +159,4 @@ class KeepAliveQuery:
 
     def __repr__(self):
         subj_id = None if self.rx_subject == None else self.rx_subject.subject_id
-        return f'KeepAliveQuery(timeout={self.timeout}, subject_id={subj_id}, request_id={self.x_request_id})'
+        return f'KeepAliveManager(timeout={self.timeout}, subject_id={subj_id}, request_id={self.x_request_id})'

@@ -2,8 +2,8 @@ from app.classes.auth_permission import FuncMetaData
 from app.classes.cost_definition import PhoneCostDefinition
 from app.definition._cost import TaskCost
 from app.depends.class_dep import TwilioTracker
+from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel, CallTemplateSchedulerModel, CallTwimlSchedulerModel
-from app.services.task_service import TaskManager
 
 
 class CallCost(TaskCost):

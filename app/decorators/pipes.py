@@ -9,7 +9,7 @@ from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.definition._service import BaseMiniServiceManager
-from app.depends.class_dep import KeepAliveQuery, ObjectsSearch
+from app.depends.class_dep import ObjectsSearch
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
 from app.manager.task_manager import TaskManager
@@ -18,7 +18,7 @@ from app.models.contacts_model import Status, SubscriptionORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
-from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
+from app.models.sms_model import SMSCustomSchedulerModel
 from app.services.assets_service import AssetService, AssetType, AssetTypeNotAllowedError, RouteAssetType, DIRECTORY_SEPARATOR
 from app.services.celery_service import CeleryService
 from app.services.config_service import ConfigService
