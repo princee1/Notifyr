@@ -11,7 +11,9 @@ from app.depends.variables import *
 import datetime as dt
 from app.container import Get
 from app.services.celery_service import CeleryService
+from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
+from app.services.task_service import TaskService
 
 P = ParamSpec("P")
 

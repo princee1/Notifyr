@@ -108,6 +108,7 @@ class CeleryOptionModel(BaseModel):
     priority:Literal[1,2,3] = 3
     _retry:Optional[bool]= PrivateAttr(default=False)
     _ignore_result:bool=PrivateAttr(default=True)
+    _queue:str = PrivateAttr(None)
 
 
     def model_dump(self, *, mode = 'python', include = None, exclude = None, context = None, by_alias = False, exclude_unset = False, exclude_defaults = False, exclude_none = False, round_trip = False, warnings = True, serialize_as_any = False):
@@ -116,6 +117,7 @@ class CeleryOptionModel(BaseModel):
         return {
             'retry':self._retry,
             'ignore_result':self._ignore_result,
+            'queue':self._queue,
             **vals
         }
     
@@ -127,7 +129,6 @@ class SchedulerModel(BaseModel):
     task_option:CeleryOptionModel
     scheduler_option: Optional[dict] = None
     content: Any | list[Any]
-    _priority:Literal[1,2,3] = PrivateAttr(3)
     _heaviness: TaskHeaviness = None
     _errors:dict[int,dict|str] = PrivateAttr({})
     _message:dict[int,str] = PrivateAttr({})

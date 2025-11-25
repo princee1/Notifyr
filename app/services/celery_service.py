@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 from aiorwlock import RWLock
 from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
@@ -8,23 +8,25 @@ from app.interface.timers import IntervalInterface
 from app.models.communication_model import BaseProfileModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
-from app.task import TASK_REGISTRY, celery_app, task_name
+from app.tasks import TASK_REGISTRY, celery_app, task_name
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.errors.service_error import BuildError, BuildFailureError, BuildOkError, BuildSkipError
 from app.utils.constant import SpecialKeyParameterConstant
 from app.utils.helper import generateId
 import datetime as dt
 from humanize import naturaldelta
+from uuid import uuid4
 
 
 CHANNEL_BUILD_STATE=0
 
 @MiniService()
-class QueueMiniService(BaseMiniService):
+class ChannelMiniService(BaseMiniService):
 
-    def __init__(self, depService:ProfileMiniService[BaseProfileModel]):
+    def __init__(self, depService:ProfileMiniService[BaseProfileModel],redisService:RedisService):
         self.depService = depService
         super().__init__(depService,None)
+        self.redisService = redisService
     
     async def async_pingService(self,infinite_wait:bool, **kwargs):
         route_params:dict[str,Any] = kwargs.get(SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER,{})
@@ -50,24 +52,25 @@ class QueueMiniService(BaseMiniService):
         return {'message': 'Celery queue purged successfully.', 'count': count}
         
     def pause(self):
-        ...
+        return celery_app.control.cancel_consumer(self.queue, reply=True)
 
     def resume(self):
-        ...
+        return self.create()
 
     def delete(self):
         ...
     
     def create(self):
-        ...
+        return celery_app.control.add_consumer(self.queue, reply=True)
 
+    @property
+    def queue(self):
+        return self.miniService_id
 
 @Service(
     links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
 )
 class CeleryService(BaseMiniServiceManager, IntervalInterface):
-    _celery_app = celery_app
-    _task_registry = TASK_REGISTRY
 
     def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService):
         BaseService.__init__(self)
@@ -81,8 +84,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 
         self.timeout_count = 0
         self.task_lock = RWLock()
-        self.MiniServiceStore = MiniServiceStore[QueueMiniService](self.__class__.__name__)
-
+        self.MiniServiceStore = MiniServiceStore[ChannelMiniService](self.__class__.__name__)
 
     def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None, *args, **kwargs):
         params = self.scheduler_to_celery_task(scheduler,index,*args,**kwargs)
@@ -101,7 +103,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         }
 
     def _trigger_task(self, celery_task: CeleryTask, schedule_name: str = None,index:int|None=None):
-        schedule_id = schedule_name if schedule_name is not None else generateId(25)
+        schedule_id = schedule_name if schedule_name is not None else str(uuid4())
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
         result = TaskExecutionResult(date= str(dt.datetime.now()),offloaded=True,handler='Celery',index=index,result=None,message=f'Task [{t_name}] received successfully',heaviness=str(celery_task['heaviness']))
@@ -184,7 +186,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         
         for id,p in self.profileService.MiniServiceStore:
 
-            miniService = QueueMiniService(p)
+            miniService = ChannelMiniService(p)
             miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
 
             self.state_counter.count(miniService)
@@ -202,7 +204,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 
     async def _check_workers_status(self):
         try:
-            response = celery_app.control.ping(timeout=self.set_next_timeout)
+            response = self.ping()
             available_workers_count = len(response)
             if available_workers_count == 0:
                 self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
@@ -230,11 +232,38 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     async def callback(self):
         await self._check_workers_status()
 
-    def shutdown(self):
-        ...
-    
-    def broadcast(self):
-        ...
+    def rate_limit(self,task_name:str,rate_limit,destination:list[str]=None):
+        return celery_app.control.rate_limit(task_name, rate_limit,
+           destination=destination,reply=True,timeout=5)
 
-    def stats(self):
-        ...
+    def revoke(self,tasks:list[str]):
+        return celery_app.control.revoke(tasks)
+
+    def inspect(self,mode:Literal['active_queue','registered','scheduled','active','stats','reserved'],destination:list[str]=None):
+        inspect = celery_app.control.inspect(destination)
+        match mode:
+            case 'active':
+                return inspect.active()
+            case 'active_queue':
+                return inspect.active_queues()
+            case 'registered':
+                return inspect.registered()
+            case 'scheduled':
+                return inspect.scheduled()
+            case 'stats':
+                return inspect.stats()
+            case 'reserved':
+                return inspect.reserved()
+
+            case _:
+                raise 
+
+    def ping(self,destination:list[str]=None):
+        return celery_app.control.ping(timeout=self.set_next_timeout,destination=destination)
+
+    def shutdown(self,destination:list[str]=None):
+        return self._broadcast('shutdown',destination=destination)
+    
+    def _broadcast(self,command:str,destination:list[str]=None,reply=True):
+        return celery_app.control.broadcast(command,destination=destination,reply=reply)
+    

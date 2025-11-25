@@ -1,4 +1,4 @@
-celery_app = app.task.celery_app
+celery_app = app.tasks.celery_app
 
 ###############################      CELERY                     #######################################
 celery-docker:

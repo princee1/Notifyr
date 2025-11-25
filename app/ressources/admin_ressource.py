@@ -16,7 +16,6 @@ from app.services.database_service import TortoiseConnectionService
 from app.services.profile_service import ProfileService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
-from app.services.task_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant, CostConstant
@@ -381,7 +380,6 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         self.configService = configService
         self.jwtAuthService = jwtAuthService
         self.securityService = securityService
-        self.celeryService: CeleryService = Get(CeleryService)
 
     @UseLimiter(limit_value='20/week')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)

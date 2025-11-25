@@ -20,14 +20,14 @@ from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
 from app.services.assets_service import AssetService, AssetType, AssetTypeNotAllowedError, RouteAssetType, DIRECTORY_SEPARATOR
-from app.services.celery_service import CeleryService
+from app.services.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file_service import FileService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.twilio_service import TwilioAccountMiniService, TwilioService
-from app.task import task_name
+from app.tasks import TASK_REGISTRY, task_name
 from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of, parseToBool
 from app.utils.validation import email_validator, phone_number_validator
@@ -105,15 +105,14 @@ class CeleryTaskPipe(Pipe):
         super().__init__(True)
         self.celeryService = Get(CeleryService)
     
-    def pipe(self,scheduler:SchedulerModel,taskManager:TaskManager):
+    def pipe(self,scheduler:SchedulerModel,taskManager:TaskManager,channel:ChannelMiniService):
         if scheduler.task_option:
             scheduler.task_option._ignore_result = not taskManager.meta.get('save_result',False)
             scheduler.task_option._retry = taskManager.meta.get('retry',False)
-            scheduler.task_option._queue = taskManager.meta.get('queue',None)
-            scheduler._priority = scheduler.task_option.priority
+            scheduler.task_option._queue = channel.queue
 
         scheduler.task_name = task_name(scheduler.task_name)
-        scheduler._heaviness = self.celeryService._task_registry[scheduler.task_name]['heaviness']
+        scheduler._heaviness = TASK_REGISTRY[scheduler.task_name]['heaviness']
         return {'scheduler':scheduler}
     
 class ContactsIdPipe(Pipe):

@@ -1,5 +1,5 @@
 src_dir = .
-celery_app = app.task.celery_app
+celery_app = app.tasks.celery_app
 app_name = default
 ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
 
@@ -48,7 +48,7 @@ celery:
 	celery -A ${celery_app} worker --pool=solo --loglevel=info 
 
 celery-docker:
-	celery -A ${celery_app} worker --pool=gevent --concurrency=100  --loglevel=info --max-tasks-per-child=2000 --max-memory-per-child=200000
+	celery -A ${celery_app} worker --pool=gevent --concurrency=1000  --loglevel=info --max-tasks-per-child=2000 --max-memory-per-child=200000
 
 flower:
 	celery -A ${celery_app} flower --port=5555
