@@ -11,7 +11,7 @@ from app.services.database_service import RedisService
 from app.tasks import TASK_REGISTRY, celery_app, task_name
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.errors.service_error import BuildError, BuildFailureError, BuildOkError, BuildSkipError
-from app.utils.constant import SpecialKeyParameterConstant
+from app.utils.constant import RedisConstant, SpecialKeyParameterConstant
 from app.utils.helper import generateId
 import datetime as dt
 from humanize import naturaldelta
@@ -48,7 +48,8 @@ class ChannelMiniService(BaseMiniService):
         If queue_name is provided, it will purge that specific queue.
         If not, it will purge all queues.
         """
-        count = celery_app.control.purge(queue=self.miniService_id)
+        self.pause()
+        count = celery_app.control.purge(queue=self.queue)
         return {'message': 'Celery queue purged successfully.', 'count': count}
         
     def pause(self):
@@ -57,15 +58,17 @@ class ChannelMiniService(BaseMiniService):
     def resume(self):
         return self.create()
 
-    def delete(self):
-        ...
+    async def delete(self):
+        self.purge()
+        prefix = f'{self.queue}:'
+        return await self.redisService.delete_all(RedisConstant.CELERY_DB,prefix)
     
     def create(self):
         return celery_app.control.add_consumer(self.queue, reply=True)
 
     @property
     def queue(self):
-        return self.miniService_id
+        return self.depService.queue_name
 
 @Service(
     links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
@@ -75,13 +78,11 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService):
         BaseService.__init__(self)
         IntervalInterface.__init__(self,False)
+
         self.configService = configService
         self.profileService = profileService
-
         self.redisService = redisService
-        self.available_workers_count = -1
-        self.worker_not_available_count = 0
-
+    
         self.timeout_count = 0
         self.task_lock = RWLock()
         self.MiniServiceStore = MiniServiceStore[ChannelMiniService](self.__class__.__name__)
@@ -203,28 +204,14 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         return 1 * (1.1 ** self.timeout_count)
 
     async def _check_workers_status(self):
-        try:
-            response = self.ping()
-            available_workers_count = len(response)
-            if available_workers_count == 0:
-                self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
-                async with self.task_lock.writer:
-                    self.available_workers_count = 0
-
-            async with self.task_lock.reader:
-                self.available_workers_count = available_workers_count
-            self.worker_not_available_count = self.configService.CELERY_WORKERS_COUNT - \
-                available_workers_count
-            self.timeout_count = 0
-        except Exception as e:
-            self.timeout_count += 1
-            async with self.task_lock.writer:
-                self.available_workers_count = 0
+        response = self.ping()
+        async with self.task_lock.writer:
+            self._workers = response.copy()
 
     @property
-    async def get_available_workers_count(self) -> int:
+    async def workers(self):
         async with self.task_lock.reader:
-            return self.available_workers_count
+            return self._workers
 
     async def async_pingService(self,infinite_wait:bool, **kwargs):
         ...
@@ -267,3 +254,5 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     def _broadcast(self,command:str,destination:list[str]=None,reply=True):
         return celery_app.control.broadcast(command,destination=destination,reply=reply)
     
+    async def delete_queue_type(self,):
+        ...

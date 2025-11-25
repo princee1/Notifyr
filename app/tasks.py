@@ -83,6 +83,7 @@ if ConfigService._celery_env == CeleryMode.none:
     celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
     celery_app.autodiscover_tasks(['app.ressources'], related_name='email_ressource')
     celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
+    celery_app.autodiscover_tasks(['app.signals'], related_name='middleware')
 
 import app.signals
 

@@ -121,6 +121,7 @@ class BaseProfileModel(Document):
     _collection:ClassVar[Optional[str]] = None
     _vault:ClassVar[Optional[str]]  = None
     _primary_key:ClassVar[str]  = 'alias'
+    _queue:ClassVar[str] = ...
     
     def __init_subclass__(cls, **kwargs):
         # Ensure secret keys are inherited but isolated

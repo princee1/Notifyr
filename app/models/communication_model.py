@@ -22,6 +22,7 @@ class CommunicationProfileModel(BaseProfileModel):
 
     _collection:ClassVar[Optional[str]] = MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
     _vault:ClassVar[str] = VaultConstant.COMMUNICATION_SECRETS
+    
     class Settings:
         is_root=True
         name=MongooseDBConstant.COMMUNICATION_PROFILE_COLLECTION
@@ -33,6 +34,7 @@ class CommunicationProfileModel(BaseProfileModel):
 
 class EmailProfileModel(CommunicationProfileModel):
     email_address: EmailStr
+    _queue:ClassVar[str] = 'email'
 
     class Settings:
         is_root=True
@@ -165,6 +167,8 @@ class TwilioProfileModel(CommunicationProfileModel):
     main:bool = False
 
     _secret_key: ClassVar[list[str]] = ["auth_token"]
+    _queue:ClassVar[str] = 'twilio'
+
     unique_indexes: ClassVar[list[str]] = ['account_sid']
     condition:ClassVar[Optional[MongoCondition]] = MongoCondition(
         force=True,

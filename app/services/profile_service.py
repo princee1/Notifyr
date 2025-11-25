@@ -29,6 +29,8 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
             self.model_type = model_type
             self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__name__}')
             super().__init__(None,str(model['_id']))
+            self.queue_name = f'{self.model_type._queue}:{self.miniService_id}'
+
         else:
             super().__init__(None,str(model.id))
         self.model:TModel = model
@@ -36,7 +38,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.redisService = redisService
-    
+        
     def build(self, build_state = ...):
         try:
             if self.model_type != None:

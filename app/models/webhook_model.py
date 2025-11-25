@@ -52,6 +52,8 @@ class WebhookProfileModel(BaseProfileModel):
 
     _collection:ClassVar[Optional[str]]= MongooseDBConstant.WEBHOOK_PROFILE_COLLECTION
     _vault:ClassVar[Optional[str]] = VaultConstant.WEBHOOK_SECRETS
+    _queue:ClassVar[str] = 'webhook'
+
 
     class Settings:
         is_root=True
