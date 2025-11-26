@@ -10,7 +10,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, UseHTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
@@ -58,7 +58,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @HTTPStatusCode(status.HTTP_201_CREATED)
+    @UseHTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request,'model')
@@ -99,7 +99,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
-    @HTTPStatusCode(status.HTTP_200_OK)
+    @UseHTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -122,7 +122,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseHandler(VaultHandler,PydanticHandler,CeleryHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @UsePermission(AdminPermission)
-    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @UseHTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
     async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -150,13 +150,16 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return await self.mongooseService.get(self.model,profile,True)
 
     @UseRoles([Role.PUBLIC])
-    @UseHandler(MiniServiceHandler)
+    @UseHandler(MiniServiceHandler,CeleryHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @UsePermission(ProfilePermission)
+    @UseHTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
     async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
+        await channel.refresh_worker_state()
+        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
+        
 
     
     @classmethod

@@ -3,6 +3,8 @@ from typing import Any, List, Optional, Self,Literal
 from redbeat.schedules import rrule
 from celery.schedules import solar
 from celery.schedules import crontab
+from celery.schedules import schedule
+
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 
@@ -27,6 +29,9 @@ class Scheduler(BaseModel):
 
     def build(self) -> Any:
         ...
+
+
+
 
 class DateTimeSchedulerModel(Scheduler):
     year: int
@@ -74,12 +79,18 @@ class TimedeltaSchedulerModel(Scheduler):
    
     @model_validator(mode='after')
     def check_after(self) -> bool:
-        self._object = self.build()
-        if self._object.total_seconds() <= 0:
+        _object = self.build('timedelta')
+        print(_object,_object.total_seconds())
+        if _object.total_seconds() <= 0:
             raise ValueError("Timedelta must be positive")
+        
+        self._object = self.build()
         return self
 
-    def build(self) -> timedelta:
+    def build(self,mode:Literal['datetime','timedelta']='datetime') -> datetime | timedelta:
+        if mode == 'datetime':
+            return datetime.now() + timedelta()
+        
         return timedelta(
             days=self.days,
             seconds=self.seconds,
@@ -89,6 +100,13 @@ class TimedeltaSchedulerModel(Scheduler):
             hours=self.hours,
             weeks=self.weeks,
         )     
+
+class IntervalSchedulerModel(Scheduler):
+    interval:TimedeltaSchedulerModel
+    relative:Optional[bool] =False
+
+    def build(self)->schedule:
+        return schedule(self.interval.build('timedelta'),self.relative)
 
 class RRuleSchedulerModel(Scheduler):
     freq: Literal["YEARLY", "MONTHLY", "WEEKLY", "DAILY", "HOURLY", "MINUTELY", "SECONDLY"]
@@ -168,6 +186,7 @@ class SolarSchedulerModel(Scheduler):
     longitude: float
     offset: Optional[TimedeltaSchedulerModel] = None
     timezone: Optional[str] = None
+    relative:Optional[bool] = False
     
     @model_validator(mode='after')
     def check_after(self):
@@ -179,8 +198,10 @@ class SolarSchedulerModel(Scheduler):
 
     def build(self) -> Any:
         if self.offset is None and self.timezone is None:
-            return solar(self.event, self.latitude, self.longitude)
-        return solar(self.event, self.latitude, self.longitude, offset=self.offset, timezone=self.timezone)
+            s= solar(self.event, self.latitude, self.longitude)
+        else:
+            s= solar(self.event, self.latitude, self.longitude, offset=self.offset.build('timedelta'), timezone=self.timezone)
+        return schedule(s,self.relative)
 
 class CrontabSchedulerModel(Scheduler):
     minute: Optional[str] = '*'

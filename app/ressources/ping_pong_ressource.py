@@ -4,7 +4,7 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import FastAPIHandler, WebSocketHandler
 from app.decorators.permissions import BalancerPermission, JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPStatusCode, UseHandler, UseLimiter, UsePermission, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, UseHTTPStatusCode, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
 from app.services.celery_service import CeleryService
 from app.services.task_service import  TaskService
@@ -49,7 +49,7 @@ class PingPongRessource(BaseHTTPRessource):
     @UsePermission(BalancerPermission)
     @UseHandler(FastAPIHandler)
     @UseHandler(WebSocketHandler)
-    @HTTPStatusCode(status.HTTP_200_OK)
+    @UseHTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.Get('/permission/{ws_path}/', response_model=NotifyrInfo, response_description='The Spec of the server')
     def issue_ping_permission(self, ws_path: str, request: Request, response: Response):
         self._check_ws_path(ws_path)

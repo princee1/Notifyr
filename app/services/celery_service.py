@@ -3,7 +3,7 @@ from typing import Any, Literal
 from aiorwlock import RWLock
 from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
-from app.classes.celery import CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType
+from app.classes.celery import CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType, due_entry_timedelta
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.interface.timers import IntervalInterface
 from app.models.communication_model import BaseProfileModel
@@ -105,30 +105,18 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         self.MiniServiceStore = MiniServiceStore[ChannelMiniService](self.__class__.__name__)
 
     def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None,weight:float=-1.0, *args, **kwargs):
-        celery_task = scheduler.model_dump(mode='python', exclude={'content','sender_type','filter_error','scheduler_option'})
-        celery_task: CeleryTask = CeleryTask(args=args, kwargs=kwargs,schedule=scheduler._scheduler, **celery_task)
-        schedule_id = scheduler.schedule_name if scheduler.schedule_name is not None else str(uuid4())
-        c_type = celery_task['task_type']
-        t_name = celery_task['task_name']
-        result = TaskExecutionResult(date= str(dt.datetime.now()),offloaded=True,handler='Celery',index=index,result=None,message=f'Task [{t_name}] received successfully',heaviness=str(celery_task['heaviness']))
-
-        option = celery_task.get('task_option',{})
-        if c_type == 'now':
-            task_result = TASK_REGISTRY[t_name]['task'].apply_async(**option, args=celery_task['args'], kwargs=celery_task['kwargs'])
-            eta = (dt.datetime.now() + dt.timedelta(seconds=option.get('countdown', 0)))
-            time_until_first_run = (eta - dt.datetime.now()).total_seconds() if eta else None
-            result.update(task_result.id,'task',naturaldelta(time_until_first_run) if time_until_first_run else None)
+        schedule_id = str(uuid4())
+        t_name = scheduler.task_name
+        result = TaskExecutionResult(expected_tbd=None,date= str(dt.datetime.now()),offloaded=True,handler='Celery',index=index,result=None,message=f'Task [{t_name}] received successfully',heaviness=str(scheduler._heaviness))
+        option = scheduler.task_option.model_dump()
+        
+        if scheduler.task_type == TaskType.NOW:
+            task_result = TASK_REGISTRY[t_name]['task'].apply_async(**option, args=args, kwargs=kwargs)
+            result.update(task_result.id,'task', option.get('countdown', 0))
             return result
-
-        schedule = celery_task['schedule']
-        entry = RedBeatSchedulerEntry(schedule_id, t_name, schedule, args=celery_task['args'], kwargs=celery_task['kwargs'], app=celery_app)
-        entry.save()
-        if isinstance(entry.due_at,dt.datetime):
-            time =entry.due_at.utcoffset().seconds
-        elif isinstance(entry.due_at,(float,int)):
-            time = entry.due_at
-        else:
-            time = None
+        
+        entry = RedBeatSchedulerEntry(schedule_id, t_name, scheduler._schedule, args=args, kwargs=kwargs, app=celery_app,options=option).save()
+        time = due_entry_timedelta(entry)
         result.update(schedule_id,'schedule',None if time == None else naturaldelta(time))
         return result
 

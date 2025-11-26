@@ -8,7 +8,7 @@ from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
-from app.definition._service import BaseMiniServiceManager
+from app.definition._service import BaseMiniService, BaseMiniServiceManager
 from app.depends.class_dep import ObjectsSearch
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
@@ -110,7 +110,7 @@ class CeleryTaskPipe(Pipe):
             scheduler.task_option._ignore_result = not taskManager.meta.get('save_result',False)
             scheduler.task_option._retry = taskManager.meta.get('retry',False)
             scheduler.task_option._queue = channel.queue
-
+        
         scheduler.task_name = task_name(scheduler.task_name)
         scheduler._heaviness = TASK_REGISTRY[scheduler.task_name]['heaviness']
         return {'scheduler':scheduler}
@@ -582,11 +582,12 @@ class MiniServiceInjectorPipe(Pipe):
 
     def pipe(self,profile:str):
         if self.strict_value != None and profile==  self.strict_value:
-            miniService = getattr(self.service,self.strict_value)
+            miniService:BaseMiniService = getattr(self.service,self.strict_value)
             if miniService == None:
                 raise MiniServiceStrictValueNotValidError
             return {
-                self.key:miniService
+                self.key:miniService,
+                'profile':miniService.miniService_id
             }
 
         return {

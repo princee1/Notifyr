@@ -22,7 +22,7 @@ class TaskConfig(TypedDict):
     delay: float
 
 class TaskMeta(TypedDict):
-    x_request_id:str
+    request_id:str
     background:bool
     algorithm:AlgorithmType
     strategy:StrategyType
@@ -46,7 +46,7 @@ class TaskManager:
         self.weight = 0.0
         self.scheduler: SchedulerModel = None
         self.task_result:list[TaskExecutionResult] = []
-        self.meta: TaskMeta = TaskMeta(x_request_id=request_id,background=background,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy)
+        self.meta: TaskMeta = TaskMeta(request_id=request_id,background=background,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy)
 
         self.celeryService = Get(CeleryService)
         self.configService = Get(ConfigService)
@@ -90,11 +90,13 @@ class TaskManager:
         task = callback if asyncio.iscoroutine(callback) else BackgroundTask(callback, *args, **kwargs)
         now = dt.datetime.now().isoformat()
         name = task.func.__qualname__ if isinstance(task, BackgroundTask) else task.__qualname__
-        new_delay = self.append_taskConfig(task,self.scheduler,delay)
+        new_delay = self.append_taskConfig(task,delay)
         return TaskExecutionResult(True,now,'BackgroundTask',naturaldelta(new_delay),index,str(self.scheduler._heaviness),None,task_id= self.meta['request_id'],message=f"[{name}] - Task added successfully" )
     
     async def select_task_env(self,task_weight:float)->EnvSelection:
-        p1 = await self.celeryService.get_available_workers_count
+        async with self.celeryService.statusLock.reader:
+            p1 = await len(self.celeryService._workers)
+
         if p1 < 0:
             p1 = 0
 
@@ -158,7 +160,7 @@ class TaskManager:
                         if runType == 'sequential':
                             data.append(result)
                         else:
-                            await self.redisService.store_bkg_result(result, self.meta['x_request_id'],ttl)
+                            await self.redisService.store_bkg_result(result, self.meta['request_id'],ttl)
                     
                     if runType =='parallel':
                         self.taskService.background_task_count.dec()
@@ -174,7 +176,7 @@ class TaskManager:
                         if runType == 'sequential':
                             data.append(result)
                         else:
-                            await self.redisService.store_bkg_result(result,self.meta['x_request_id'],ttl)
+                            await self.redisService.store_bkg_result(result,self.meta['request_id'],ttl)
                     
                     if runType=='parallel':
                         self.taskService.background_task_count.dec()                
@@ -197,7 +199,7 @@ class TaskManager:
                 asyncio.create_task(callback())
 
         if runType == 'sequential':
-            await self.redisService.store_bkg_result(data, self.meta['x_request_id'],ttl)
+            await self.redisService.store_bkg_result(data, self.meta['request_id'],ttl)
             self.taskService.background_task_count.dec(task_len)
        
     async def _offload_task(self,weight: float,delay: float,index:int,callback: Callable, *args, **kwargs)->TaskExecutionResult:
@@ -215,7 +217,7 @@ class TaskManager:
             return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
             
         if algorithm == 'route':
-            return await self._route_offload(delay,index,callback, *args, **kwargs)
+            return await self._route_offload(weight,delay,index,callback, *args, **kwargs)
         
         if algorithm == 'mix':
             return await self._mix_offload(weight,delay,index,callback, *args, **kwargs)
@@ -227,45 +229,41 @@ class TaskManager:
 
         if self.scheduler.task_type == TaskType.NOW:
             if (await self.select_task_env(weight)).startswith('route'):
-                return await self._route_offload(delay,index,callback, *args, **kwargs)
+                return await self._route_offload(weight,delay,index,callback,*args, **kwargs)
 
-        return self.celeryService.trigger_task_from_scheduler(self.scheduler,index, *args, **kwargs)
+        return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
 
-    async def _route_offload(self,delay: float,index,callback: Callable, *args, **kwargs)->TaskExecutionResult:
+    async def _route_offload(self,weight:float,delay: float,index,callback: Callable, *args, **kwargs)->TaskExecutionResult:
         if self.meta.get('background',True):
             return await self.add_task(delay, index,callback, *args, **kwargs)
         else:
-            return await self._run_task_in_route_handler(index,callback,*args,**kwargs)
+            now = dt.datetime.now().isoformat()
+            try:
+                if asyncio.iscoroutine(callback):
+                    result = await callback
+                elif asyncio.iscoroutinefunction(callback):
+                    result =  await callback(*args,**kwargs)
+                else:    
+                    result = callback(*args, **kwargs)
 
-    async def _mix_offload(self,weight,delay,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
+                return TaskExecutionResult(handler='Route Handler',offloaded=False,date=now,expected_tbd='now',index=index,result=result,heaviness=str(self.scheduler._heaviness))
+            except TaskRetryError as e:
+                if self.meta['is_retry']:
+                    if not isinstance(self.scheduler,s):
+                        self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
+                return TaskExecutionResult(handler='Route Handler',offloaded=True,date=now,index=index,error=True,result=None,heaviness=str(self.scheduler._heaviness))
+
+    async def _mix_offload(self,weight:float,delay,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
         env = await self.select_task_env(weight)
         if env == 'route':
-            return await self._route_offload(delay,True,index,callback, *args, **kwargs)
+            return await self._route_offload(weight,delay,index,callback, *args, **kwargs)
         elif env == 'worker':
             return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
         elif env == 'route-background':
-            return await self._route_offload(delay,False,index,callback, *args, **kwargs)
+            return await self._route_offload(weight,delay,index,callback, *args, **kwargs)
         else:
             raise ValueError(f"Unsupported environment: {env}")
 
-    async def _run_task_in_route_handler(self,index,callback,*args,**kwargs):
-        now = dt.datetime.now().isoformat()
-        try:
-            if asyncio.iscoroutine(callback):
-                result = await callback
-            elif asyncio.iscoroutinefunction(callback):
-                result =  await callback(*args,**kwargs)
-            else:    
-                result = callback(*args, **kwargs)
-
-            return TaskExecutionResult(handler='Route Handler',offloaded=False,date=now,expected_tbd='now',index=index,result=result,heaviness=str(self.scheduler._heaviness))
-        except TaskRetryError as e:
-            if self.meta['is_retry']:
-                if not isinstance(self.scheduler,s):
-                    self.celeryService # ERROR
-
-            return TaskExecutionResult(handler='Route Handler',offloaded=True,date=now,index=index,error=True,result=None,heaviness=str(self.scheduler._heaviness))
-
     async def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
         now = dt.datetime.now().isoformat()
-        return TaskExecutionResult(True,now,'APSScheduler',None,index,(self.scheduler._heaviness),...,False,self.meta['x_request_id'],'schedule','')
+        return TaskExecutionResult(True,now,'APSScheduler',None,index,(self.scheduler._heaviness),None,False,self.meta['request_id'],'schedule','')

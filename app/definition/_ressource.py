@@ -829,7 +829,7 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
 ################################################################                           #########################################################
 
 
-def HTTPStatusCode(code: int | str):
+def UseHTTPStatusCode(code: int | str):
     """
     The `HTTPStatusCode` function is a decorator that sets the HTTP status code for a response based on
     the provided code or code name.
@@ -852,7 +852,7 @@ def HTTPStatusCode(code: int | str):
         raise ValueError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, HTTPStatusCode, code)
+        cls = common_class_decorator(func, UseHTTPStatusCode, code)
         if cls != None:
             return cls
 

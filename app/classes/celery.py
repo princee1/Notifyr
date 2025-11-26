@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 from typing import Any,Iterable, Literal, Optional, Self, TypedDict, NotRequired
-from app.classes.scheduler import Scheduler, CrontabSchedulerModel, DateTimeSchedulerModel, RRuleSchedulerModel, SolarSchedulerModel, TimedeltaSchedulerModel
+from app.classes.scheduler import IntervalSchedulerModel, Scheduler, CrontabSchedulerModel, DateTimeSchedulerModel, RRuleSchedulerModel, SolarSchedulerModel, TimedeltaSchedulerModel
 from app.definition._error import BaseError
 from pydantic import BaseModel
 from datetime import timedelta,datetime
@@ -75,9 +75,10 @@ class TaskType(Enum):
     TIMEDELTA = 'timedelta'
     DATETIME = 'datetime'
     NOW = 'now'
+    INTERVAL = 'interval'
 
 
-TaskTypeLiteral = Literal['rrule','solar','crontab','now','timedelta','datetime']
+TaskTypeLiteral = Literal['rrule','solar','crontab','now','timedelta','datetime','interval']
 SenderType =Literal['raw','subs','contact']
 AlgorithmType = Literal['normal','mix','worker','route','aps']
 
@@ -88,6 +89,7 @@ SCHEDULER_MODEL_MAP: dict[TaskType, type[Scheduler]] = {
     TaskType.CRONTAB: CrontabSchedulerModel,
     TaskType.TIMEDELTA: TimedeltaSchedulerModel,
     TaskType.DATETIME: DateTimeSchedulerModel,
+    TaskType.INTERVAL: IntervalSchedulerModel
 }
 
 ###############################################################################################################
@@ -143,7 +145,6 @@ class CeleryOptionModel(BaseModel):
     
 class SchedulerModel(BaseModel):
     filter_error:bool=True
-    schedule_name:Optional[str] = None
     task_name:str
     task_type:TaskType
     task_option:CeleryOptionModel
@@ -152,7 +153,8 @@ class SchedulerModel(BaseModel):
     _heaviness: TaskHeaviness = None
     _errors:dict[int,dict|str] = PrivateAttr({})
     _message:dict[int,str] = PrivateAttr({})
-    _scheduler:Scheduler = PrivateAttr(None)
+    _schedule:Scheduler = PrivateAttr(None)
+
         
     @field_validator('content')
     def check_content(cls,content:Any):
@@ -166,8 +168,8 @@ class SchedulerModel(BaseModel):
         if self.task_type == TaskType.NOW:
             return self
         if not self.scheduler_option:
-            raise CelerySchedulerOptionError("Scheduler option must be provided for task types other than 'now'")
-        self._scheduler = SCHEDULER_MODEL_MAP[self.task_type].model_validate(self.scheduler_option)._object
+            raise ValueError("Scheduler option must be provided for task types other than 'now'")
+        self._schedule = SCHEDULER_MODEL_MAP[self.task_type].model_validate(self.scheduler_option)._object
         return self
 
 class CeleryTask(TypedDict):
@@ -215,3 +217,8 @@ def add_warning_messages(warning_code:int, scheduler:SchedulerModel,index=None):
     scheduler._message[warning_code]['index'] = index
 
 
+def due_entry_timedelta(entry):
+    if isinstance(entry.due_at,datetime):
+        return entry.due_at.utcoffset().seconds
+    elif isinstance(entry.due_at,(float,int)):
+        return entry.due_at
