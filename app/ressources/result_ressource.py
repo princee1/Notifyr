@@ -25,7 +25,7 @@ APS_SCHEDULER='aps'
 @UseHandler(ServiceAvailabilityHandler)
 @PingService([CeleryService])
 @HTTPRessource(prefix=CELERY_PREFIX)
-class CeleryRessource(BaseHTTPRessource):
+class CeleryResultRessource(BaseHTTPRessource):
     
     @InjectInMethod()
     def __init__(self,celeryService:CeleryService,configService:ConfigService,jwtService:JWTAuthService):
@@ -88,7 +88,7 @@ class APSSchedulerRessource(BaseHTTPRessource):
     ...
 
 
-@HTTPRessource(prefix=RESULT_PREFIX, routers=[CeleryRessource,BackgroundTaskRessource])
+@HTTPRessource(prefix=RESULT_PREFIX, routers=[CeleryResultRessource,BackgroundTaskRessource])
 class ResultBackendRessource(BaseHTTPRessource):
     
 

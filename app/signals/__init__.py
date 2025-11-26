@@ -1,3 +1,1 @@
-from .log import LoggingSignals
-from .task import TaskSignals
-from .workers import WorkersSignals
+from .workers import on_worker_ready

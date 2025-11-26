@@ -1,8 +1,9 @@
+from kombu import Queue
 from typing import Any, Literal
 from aiorwlock import RWLock
 from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
-from app.classes.celery import CeleryTask, CeleryTaskNotFoundError, SchedulerModel, TaskExecutionResult, TaskType
+from app.classes.celery import CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.interface.timers import IntervalInterface
 from app.models.communication_model import BaseProfileModel
@@ -11,7 +12,7 @@ from app.services.database_service import RedisService
 from app.tasks import TASK_REGISTRY, celery_app, task_name
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.errors.service_error import BuildError, BuildFailureError, BuildOkError, BuildSkipError
-from app.utils.constant import RedisConstant, SpecialKeyParameterConstant
+from app.utils.constant import CeleryConstant, RedisConstant, SpecialKeyParameterConstant
 from app.utils.helper import generateId
 import datetime as dt
 from humanize import naturaldelta
@@ -21,6 +22,7 @@ from app.utils.tools import RunInThreadPool
 
 
 CHANNEL_BUILD_STATE=0
+
 
 @MiniService()
 class ChannelMiniService(BaseMiniService):
@@ -45,31 +47,40 @@ class ChannelMiniService(BaseMiniService):
         raise BuildOkError
 
     @RunInThreadPool
-    async def purge(self):
+    async def refresh_worker_state(self):
+        await self.pause_worker()
+        reply = celery_app.control.broadcast(CeleryConstant.REFRESH_PROFILE_WORKER_STATE_COMMAND,arguments={'p':self.queue},reply=True)
+        return reply
+
+    @RunInThreadPool
+    async def purge_queue(self):
         """
         Purge the Celery queue.
         If queue_name is provided, it will purge that specific queue.
         If not, it will purge all queues.
         """
-        await self.pause()
-        count = celery_app.control.purge(queue=self.queue)
-        return {'message': 'Celery queue purged successfully.', 'count': count}
+        await self.pause_worker()
+        with celery_app.connection_or_acquire() as conn:
+            queue = Queue(self.queue, exchange=None, routing_key=self.queue)
+            val = queue(conn).purge()
+            print(val)
+            return val
     
     @RunInThreadPool
-    def pause(self):
-        return celery_app.control.cancel_consumer(self.queue, reply=True)
+    def pause_worker(self,destination:list[str]=None,timeout=1.5):
+        return celery_app.control.cancel_consumer(self.queue, reply=True,destination=destination,timeout=timeout)
 
     @RunInThreadPool
-    def resume(self):
-        return self.create()
-
-    async def delete(self):
-        await self.purge()
-        prefix = f'{self.queue}:'
-        return await self.redisService.delete_all(RedisConstant.CELERY_DB,prefix)
+    def resume_worker(self,destination:list[str]=None,timeout=1.5):
+        return celery_app.control.add_consumer(self.queue, reply=True,timeout=timeout,destination=destination)
 
     @RunInThreadPool
-    def create(self):
+    async def delete_queue(self):
+        await self.pause_worker()
+        return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
+
+    @RunInThreadPool
+    def create_queue(self):
         return celery_app.control.add_consumer(self.queue, reply=True)
 
     @property
@@ -93,24 +104,10 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         self.task_lock = RWLock()
         self.MiniServiceStore = MiniServiceStore[ChannelMiniService](self.__class__.__name__)
 
-    def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None, *args, **kwargs):
-        params = self.scheduler_to_celery_task(scheduler,index,*args,**kwargs)
-        return self._trigger_task(**params)
-
-    def trigger_task_from_task(self, celery_task: CeleryTask,index:int|None, schedule_name: str = None):
-        return self._trigger_task(celery_task, schedule_name,index)
-
-    def scheduler_to_celery_task(self,scheduler: SchedulerModel,index:int|None, *args, **kwargs):
+    def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None,weight:float=-1.0, *args, **kwargs):
         celery_task = scheduler.model_dump(mode='python', exclude={'content','sender_type','filter_error','scheduler_option'})
         celery_task: CeleryTask = CeleryTask(args=args, kwargs=kwargs,schedule=scheduler._scheduler, **celery_task)
-        return {
-            'celery_task':celery_task,
-            'index':index,
-            'schedule_name':scheduler.schedule_name
-        }
-
-    def _trigger_task(self, celery_task: CeleryTask, schedule_name: str = None,index:int|None=None):
-        schedule_id = schedule_name if schedule_name is not None else str(uuid4())
+        schedule_id = scheduler.schedule_name if scheduler.schedule_name is not None else str(uuid4())
         c_type = celery_task['task_type']
         t_name = celery_task['task_name']
         result = TaskExecutionResult(date= str(dt.datetime.now()),offloaded=True,handler='Celery',index=index,result=None,message=f'Task [{t_name}] received successfully',heaviness=str(celery_task['heaviness']))
@@ -193,16 +190,19 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         
         for id,p in self.profileService.MiniServiceStore:
 
-            miniService = ChannelMiniService(p)
+            miniService = ChannelMiniService(p,self.redisService)
             miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
 
             self.state_counter.count(miniService)
             self.MiniServiceStore.add(miniService)
 
-            self._builded = True
-            self._destroyed = False
+        self._builded = True
+        self._destroyed = False
+        try:
             BaseMiniServiceManager.build(self,self.state_counter,build_state)
-        
+        except BuildError:
+            raise BuildOkError
+    
     @property
     def set_next_timeout(self):
         if self.timeout_count >= 30:
@@ -210,7 +210,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         return 1 * (1.1 ** self.timeout_count)
 
     async def _check_workers_status(self):
-        response = await self.ping()
+        response = await self.ping(timeout=2)
         async with self.statusLock.writer:
             self._workers = response.copy()
 
@@ -230,11 +230,11 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
            destination=destination,reply=True,timeout=5)
 
     @RunInThreadPool
-    def revoke(self,tasks:list[str]):
+    def revoke(self,tasks:list[str],timeout=5):
         return celery_app.control.revoke(tasks)
 
     @RunInThreadPool
-    def inspect(self,mode:Literal['active_queue','registered','scheduled','active','stats','reserved'],destination:list[str]=None):
+    def inspect(self,mode:InspectMode,destination:list[str]=None,timeout=None):
         inspect = celery_app.control.inspect(destination)
         match mode:
             case 'active':
@@ -254,16 +254,18 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
                 raise 
 
     @RunInThreadPool
-    def ping(self,destination:list[str]=None):
-        return celery_app.control.ping(timeout=self.set_next_timeout,destination=destination)
+    def ping(self,destination:list[str]=None,timeout=2):
+        if timeout == None:
+            timeout = self.set_next_timeout
+        return celery_app.control.ping(timeout=timeout,destination=destination)
 
     @RunInThreadPool
-    def shutdown(self,destination:list[str]=None):
-        return self._broadcast('shutdown',destination=destination)
+    def shutdown(self,destination:list[str]=None,timeout=None):
+        return self._broadcast('shutdown',destination=destination,reply=True)
     
     @RunInThreadPool
-    def _broadcast(self,command:str,destination:list[str]=None,reply=True):
-        return celery_app.control.broadcast(command,destination=destination,reply=reply)
+    def _broadcast(self,command:str,destination:list[str]=None,reply=True,timeout=None):
+        return celery_app.control.broadcast(command,destination=destination,reply=reply,timeout=timeout)
     
     async def delete_queue_type(self,):
         ...

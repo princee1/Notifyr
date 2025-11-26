@@ -833,3 +833,6 @@ class CostHandler(Handler):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={'message': 'Cost processing error', 'error': str(e)}
             )
+
+class CeleryHandler(Handler):
+    ...

@@ -2,7 +2,7 @@
 from typing import Callable,get_args
 from fastapi import Query, Request, Response
 from app.classes.auth_permission import PolicyUpdateMode
-from app.classes.celery import AlgorithmType,RunType
+from app.classes.celery import AlgorithmType, InspectMode,RunType
 from app.classes.env_selector import StrategyType
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
@@ -106,3 +106,7 @@ force_update_query: Callable[[Request],bool]=get_query_params('force','false',Tr
 # ----------------------------------------------                                    ---------------------------------- #
 
 policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','merge',False,raise_except=True,checker=_wrap_checker('mode', lambda v: v in get_args(PolicyUpdateMode), choices=list(get_args(PolicyUpdateMode))))
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+celery_inspect_mode_query:Callable[[Request],str] = get_query_params('mode','stats',False,raise_except=True,checker=_wrap_checker('mode',lambda m:m in get_args(InspectMode),choices=list(get_args(InspectMode))))

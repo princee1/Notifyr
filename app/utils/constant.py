@@ -353,3 +353,5 @@ class CostConstant:
     phone_template='phone_template'
     _object = 'object'
     
+class CeleryConstant:
+    REFRESH_PROFILE_WORKER_STATE_COMMAND='refresh_profile'

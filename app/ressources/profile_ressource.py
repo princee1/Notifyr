@@ -5,7 +5,7 @@ from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.classes.condition import MongoCondition, simple_number_validation
 from app.container import InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, CeleryHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
@@ -21,6 +21,7 @@ from app.services.database_service import MongooseService, RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
+from app.services.task_service import TaskService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
 
@@ -40,19 +41,20 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     profileType:str
 
     @InjectInMethod()
-    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService):
+    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService,taskService:TaskService):
         super().__init__()
         self.profileService = profileService
         self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.celeryService= celeryService
         self.redisService = redisService
+        self.taskService = taskService
 
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
     @PingService([HCVaultService,MongooseService,CeleryService])
     @UseServiceLock(HCVaultService,MongooseService,lockType='reader',check_status=False)
-    @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler)
+    @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryHandler)
     @UsePermission(AdminPermission)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UsePipe(DocumentFriendlyPipe,before=False)
@@ -68,14 +70,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         result = await self.profileService.add_profile(profileModel)
         broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
 
-        profileMiniService = ProfileMiniService(None,None,self.redisService,result,self.model)
-        channelService = ChannelMiniService(profileMiniService)
-        channelService.create()
+        profileMiniService = ProfileMiniService(None,None,self.redisService,self.taskService,result)
+        await ChannelMiniService(profileMiniService,self.redisService).create_queue()
 
         return result
 
     @PingService([HCVaultService,CeleryService])
-    @UseHandler(VaultHandler,MiniServiceHandler,CostHandler)
+    @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryHandler)
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UsePermission(AdminPermission)
@@ -87,13 +88,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         
         profileModel = await self.mongooseService.get(self.model,profile,True)
         await self.profileService.delete_profile(profileModel)
-        await channel.delete()
-
+        await channel.delete_queue()
+        
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         return profileModel
     
     @PingService([CeleryService])
-    @UseHandler(PydanticHandler)
+    @UseHandler(PydanticHandler,CeleryHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
@@ -105,18 +106,20 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         profileModel = await self.mongooseService.get(self.model,profile,True)
         modelUpdate = await self.pipe_profil_model(request,'model_update')
 
-        modelUpdate = modelUpdate.model_dump()
-
         await self.profileService.update_profile(profileModel,modelUpdate)
-        await self.mongooseService.exists_unique(profileModel,True)
+
+        await self.mongooseService.primary_key_constraint(profileModel,True)
+        profileModel = await self.profileService.update_meta_profile(profileModel)
+
+        await channel.refresh_worker_state()
 
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
-        return await self.profileService.update_meta_profile(profileModel)
+        return profileModel
     
     @PingService([HCVaultService,CeleryService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
-    @UseHandler(VaultHandler,PydanticHandler)
+    @UseHandler(VaultHandler,PydanticHandler,CeleryHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
@@ -132,20 +135,25 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.profileService.update_credentials(profile,modelCreds,self.model._vault)
         await self.profileService.update_meta_profile(profileModel)
 
+        await channel.refresh_worker_state()
+
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return None
        
-    @UseRoles([Role.PUBLIC])        
+    @UseRoles([Role.PUBLIC])
+    @UseHandler(MiniServiceHandler)
     @UsePermission(ProfilePermission)
-    @UseServiceLock(ProfileService,lockType='reader',check_status=False,as_manager=True)
+    @UseServiceLock(ProfileService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
     async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.mongooseService.get(self.model,profile,True)
 
+    @UseRoles([Role.PUBLIC])
+    @UseHandler(MiniServiceHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @UsePermission(ProfilePermission)
-    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
     async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         ...

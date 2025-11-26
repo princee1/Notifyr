@@ -4,11 +4,13 @@ from celery import Celery
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService,CeleryEnv
 from app.container import Get, build_container,__DEPENDENCY
+from app.utils.constant import CeleryConstant
 from app.utils.prettyprint import PrettyPrinter_
 from flower import VERSION
 from celery import Task
 from app.services import *
 from celery.exceptions import SoftTimeLimitExceeded,MaxRetriesExceededError,TaskRevokedError,QueueNotFound
+from celery.worker.control import control_command
 
 
 ##############################################           ##################################################
@@ -90,16 +92,15 @@ if configService._celery_env == CeleryMode.worker:
 
 ##############################################           ##################################################
 
-def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None,time_limit:dict[str,int]=None,name:str=None):
+def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None,acks_late:bool=False):
     def decorator(task: Callable):
         kwargs = {}
         kwargs['bind'] =True
         kwargs['retry_policy'] = retry_policy
         kwargs['rate_limit'] = rate_limit
-        kwargs['time_limit'] = time_limit
+        #kwargs['acks_late'] = acks_late
 
-        _name = name if name is not None else task_name(task.__qualname__)
-        kwargs['name'] = _name
+        name = task_name(task.__qualname__)
         TASK_REGISTRY[name] = {
             'heaviness': heaviness,
             'task': celery_app.task(**kwargs)(task)
@@ -108,7 +109,20 @@ def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None
         return task
     return decorator
 
-##############################################           ##################################################
+################################################## 
+# 
+# 
+# 
+###################################################
+
+@control_command(args=[('p', str)],signature='[P=None]')
+def refresh_profile(worker,p:str=None):
+    if p==None:
+        return {'message':f'No Profile queue was given'}
+    hostname = [worker.hostname]
+    print('Mocking profile update')
+    worker.app.control.add_consumer(queue=p,reply=True,destination=hostname)
+    return {'message':'Sucessfully refresh the profile'}
 
 
 @RegisterTask(TaskHeaviness.LIGHT)

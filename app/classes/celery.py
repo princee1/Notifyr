@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 from typing import Any,Iterable, Literal, Optional, Self, TypedDict, NotRequired
 from app.classes.scheduler import Scheduler, CrontabSchedulerModel, DateTimeSchedulerModel, RRuleSchedulerModel, SolarSchedulerModel, TimedeltaSchedulerModel
 from app.definition._error import BaseError
@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from datetime import timedelta,datetime
 
 RunType = Literal[ 'parallel', 'sequential']
+InspectMode = Literal['active_queue','registered','scheduled','active','stats','reserved']
 
 ###############################################################################################################
 ###############################################################################################################
@@ -106,9 +107,28 @@ class CeleryOptionModel(BaseModel):
     countdown:Optional[int]= None
     expires:Optional[DateTimeSchedulerModel] = None
     priority:Literal[1,2,3] = 3
+    time_limit:Optional[int] = None
+    soft_time_limit:Optional[int] = None
+        
     _retry:Optional[bool]= PrivateAttr(default=False)
     _ignore_result:bool=PrivateAttr(default=True)
     _queue:str = PrivateAttr(None)
+
+    @model_validator(mode='after')
+    def check_time_limit(self: Self) -> Self:
+        # Validate time_limit
+        if self.time_limit is not None:
+            if not (5 < self.time_limit < 1000):
+                raise ValueError('time_limit must be between 6 and 999 seconds')
+        # Validate soft_time_limit
+        if self.soft_time_limit is not None:
+            if not (5 < self.soft_time_limit < 1000):
+                raise ValueError('soft_time_limit must be between 6 and 999 seconds')
+        # Validate relationship between soft_time_limit and time_limit
+        if self.soft_time_limit is not None and self.time_limit is not None:
+            if self.soft_time_limit > self.time_limit - 5:
+                raise ValueError('soft_time_limit must be at least 5 seconds less than time_limit')
+        return self
 
 
     def model_dump(self, *, mode = 'python', include = None, exclude = None, context = None, by_alias = False, exclude_unset = False, exclude_defaults = False, exclude_none = False, round_trip = False, warnings = True, serialize_as_any = False):

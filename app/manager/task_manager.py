@@ -212,7 +212,7 @@ class TaskManager:
             return await self._normal_offload(weight,delay,index,callback, *args, **kwargs)
 
         if algorithm == 'worker':
-            return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,*args, **kwargs)
+            return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
             
         if algorithm == 'route':
             return await self._route_offload(delay,index,callback, *args, **kwargs)
@@ -242,7 +242,7 @@ class TaskManager:
         if env == 'route':
             return await self._route_offload(delay,True,index,callback, *args, **kwargs)
         elif env == 'worker':
-            return self.celeryService.trigger_task_from_scheduler(index, *args, **kwargs)
+            return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
         elif env == 'route-background':
             return await self._route_offload(delay,False,index,callback, *args, **kwargs)
         else:

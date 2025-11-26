@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from app.classes.secrets import ChaCha20Poly1305SecretsWrapper, ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.db_error import MongoCollectionDoesNotExists
-from app.errors.service_error import BuildFailureError
+from app.errors.service_error import BuildFailureError, BuildOkError
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
@@ -34,11 +34,14 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
 
         else:
             super().__init__(None,str(model.id))
+            self.queue_name = f'{model._queue}:{self.miniService_id}'
+
         self.model:TModel = model
         self.credentials:ChaCha20Poly1305SecretsWrapper = ...
         self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.redisService = redisService
+        self.taskService = taskService
         
     def build(self, build_state = ...):
         try:
@@ -94,6 +97,9 @@ class ProfileService(BaseMiniServiceManager):
                     model=m,model_type=v)
                 p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 self.MiniServiceStore.add(p)
+        
+        if len(self.MiniServiceStore) == 0:
+            raise BuildOkError
              
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:
@@ -156,8 +162,9 @@ class ProfileService(BaseMiniServiceManager):
         self._delete_encrypted_creds(profile_id,profileModel._vault)
         return result
      
-    async def update_profile(self,profileModel:BaseProfileModel,body:dict):
-        for k,v in body.items():
+    async def update_profile(self,profileModel:BaseProfileModel,modelUpdate:BaseProfileModel):
+        modelUpdate = modelUpdate.model_dump()
+        for k,v in modelUpdate.items():
             if v is not None:
                 try:
                     getattr(profileModel,k)

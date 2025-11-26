@@ -42,7 +42,8 @@ BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
                                                  PropertiesRessource,
                                                  AnalyticsRessource,
                                                  ProfilRessource,
-                                                 CostRessource
+                                                 CostRessource,
+                                                 CeleryRessource
                                                  #PushNotificationRessource,
 ]
 if configService.ASSET_MODE == AssetMode.s3:
