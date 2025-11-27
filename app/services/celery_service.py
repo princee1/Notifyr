@@ -11,86 +11,21 @@ from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.tasks import TASK_REGISTRY, celery_app, task_name
 from app.services.profile_service import ProfileMiniService, ProfileService
-from app.errors.service_error import BuildError, BuildFailureError, BuildOkError, BuildSkipError
+from app.errors.service_error import BuildError, BuildFailureError, BuildOkError
 from app.utils.constant import CeleryConstant, RedisConstant, SpecialKeyParameterConstant
-from app.utils.helper import generateId
 import datetime as dt
-from humanize import naturaldelta
+from humanize import naturaldelta,naturaltime
 from uuid import uuid4
-
 from app.utils.tools import RunInThreadPool
-
+from app.classes.scheduler import schedule
 
 CHANNEL_BUILD_STATE=0
-
-
-@MiniService()
-class ChannelMiniService(BaseMiniService):
-
-    def __init__(self, depService:ProfileMiniService[BaseProfileModel],redisService:RedisService):
-        self.depService = depService
-        super().__init__(depService,None)
-        self.redisService = redisService
-    
-    async def async_pingService(self,infinite_wait:bool, **kwargs):
-        route_params:dict[str,Any] = kwargs.get(SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER,{})
-        scheduler:SchedulerModel = route_params.get('scheduler',None)
-        if not scheduler:
-            return
-        if scheduler.task_type == TaskType.NOW:
-            return
-        
-        # TODO if the celery queue is not available only let scheduler with now to pass, but retry is not available
-        ...
-
-    def build(self, build_state = ...):
-        raise BuildOkError
-
-    @RunInThreadPool
-    async def refresh_worker_state(self):
-        await self.pause_worker()
-        reply = celery_app.control.broadcast(CeleryConstant.REFRESH_PROFILE_WORKER_STATE_COMMAND,arguments={'p':self.queue},reply=True)
-        return reply
-
-    @RunInThreadPool
-    async def purge_queue(self):
-        """
-        Purge the Celery queue.
-        If queue_name is provided, it will purge that specific queue.
-        If not, it will purge all queues.
-        """
-        await self.pause_worker()
-        with celery_app.connection_or_acquire() as conn:
-            queue = Queue(self.queue, exchange=None, routing_key=self.queue)
-            val = queue(conn).purge()
-            print(val)
-            return val
-    
-    @RunInThreadPool
-    def pause_worker(self,destination:list[str]=None,timeout=1.5):
-        return celery_app.control.cancel_consumer(self.queue, reply=True,destination=destination,timeout=timeout)
-
-    @RunInThreadPool
-    def resume_worker(self,destination:list[str]=None,timeout=1.5):
-        return celery_app.control.add_consumer(self.queue, reply=True,timeout=timeout,destination=destination)
-
-    @RunInThreadPool
-    async def delete_queue(self):
-        await self.pause_worker()
-        return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
-
-    @RunInThreadPool
-    def create_queue(self):
-        return celery_app.control.add_consumer(self.queue, reply=True)
-
-    @property
-    def queue(self):
-        return self.depService.queue_name
 
 @Service(
     links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
 )
 class CeleryService(BaseMiniServiceManager, IntervalInterface):
+    _redbeat_scheduler_task_type = {TaskType.NOW,TaskType.DATETIME,TaskType.TIMEDELTA}
 
     def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService):
         BaseService.__init__(self)
@@ -110,14 +45,21 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         result = TaskExecutionResult(expected_tbd=None,date= str(dt.datetime.now()),offloaded=True,handler='Celery',index=index,result=None,message=f'Task [{t_name}] received successfully',heaviness=str(scheduler._heaviness))
         option = scheduler.task_option.model_dump()
         
-        if scheduler.task_type == TaskType.NOW:
+        if scheduler.task_type in self._redbeat_scheduler_task_type:
+            
+            if scheduler.task_type != TaskType.NOW:
+                option['eta'] = scheduler._schedule._beat_object
+                expected_tbd = naturaldelta(option['eta'])
+            else:
+                expected_tbd = naturaldelta(option.get('countdown', 0))
+            
             task_result = TASK_REGISTRY[t_name]['task'].apply_async(**option, args=args, kwargs=kwargs)
-            result.update(task_result.id,'task', option.get('countdown', 0))
-            return result
-        
-        entry = RedBeatSchedulerEntry(schedule_id, t_name, scheduler._schedule, args=args, kwargs=kwargs, app=celery_app,options=option).save()
-        time = due_entry_timedelta(entry)
-        result.update(schedule_id,'schedule',None if time == None else naturaldelta(time))
+            result.update(task_result.id,'task',expected_tbd)
+        else:
+            entry = RedBeatSchedulerEntry(schedule_id, t_name, scheduler._schedule._beat_object, args=args, kwargs=kwargs, app=celery_app,options=option).save()
+            time = due_entry_timedelta(entry)
+            result.update(schedule_id,'schedule',None if time == None else naturaldelta(time))
+
         return result
 
     def cancel_task(self, task_id, force=False):
@@ -178,7 +120,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         
         for id,p in self.profileService.MiniServiceStore:
 
-            miniService = ChannelMiniService(p,self.redisService)
+            miniService = ChannelMiniService(p,self.redisService,self)
             miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
 
             self.state_counter.count(miniService)
@@ -212,10 +154,6 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 
     async def callback(self):
         await self._check_workers_status()
-
-    def rate_limit(self,task_name:str,rate_limit,destination:list[str]=None):
-        return celery_app.control.rate_limit(task_name, rate_limit,
-           destination=destination,reply=True,timeout=5)
 
     @RunInThreadPool
     def revoke(self,tasks:list[str],timeout=5):
@@ -257,3 +195,68 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     
     async def delete_queue_type(self,):
         ...
+
+
+@MiniService()
+class ChannelMiniService(BaseMiniService):
+
+    def __init__(self, depService:ProfileMiniService[BaseProfileModel],redisService:RedisService,celeryService:CeleryService):
+        self.depService = depService
+        super().__init__(depService,None)
+        self.redisService = redisService
+        self.celeryService = celeryService
+    
+    async def async_pingService(self,infinite_wait:bool, **kwargs):
+        route_params:dict[str,Any] = kwargs.get(SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER,{})
+        scheduler:SchedulerModel = route_params.get('scheduler',None)
+        if not scheduler:
+            return
+        if scheduler.task_type == TaskType.NOW:
+            return
+        
+        # TODO if the celery queue is not available only let scheduler with now to pass, but retry is not available
+        ...
+
+    def build(self, build_state = ...):
+        raise BuildOkError
+
+    @RunInThreadPool
+    async def refresh_worker_state(self):
+        await self.pause_worker()
+        reply = celery_app.control.broadcast(CeleryConstant.REFRESH_PROFILE_WORKER_STATE_COMMAND,arguments={'p':self.queue},reply=True)
+        return reply
+
+    @RunInThreadPool
+    async def purge_queue(self):
+        """
+        Purge the Celery queue.
+        If queue_name is provided, it will purge that specific queue.
+        If not, it will purge all queues.
+        """
+        await self.pause_worker()
+        with celery_app.connection_or_acquire() as conn:
+            queue = Queue(self.queue, exchange=None, routing_key=self.queue)
+            val = queue(conn).purge()
+            print(val)
+            return val
+    
+    @RunInThreadPool
+    def pause_worker(self,destination:list[str]=None,timeout=1.5):
+        return celery_app.control.cancel_consumer(self.queue, reply=True,destination=destination,timeout=timeout)
+
+    @RunInThreadPool
+    def resume_worker(self,destination:list[str]=None,timeout=1.5):
+        return celery_app.control.add_consumer(self.queue, reply=True,timeout=timeout,destination=destination)
+
+    @RunInThreadPool
+    async def delete_queue(self):
+        await self.pause_worker()
+        return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
+
+    @RunInThreadPool
+    def create_queue(self):
+        return celery_app.control.add_consumer(self.queue, reply=True)
+
+    @property
+    def queue(self):
+        return self.depService.queue_name

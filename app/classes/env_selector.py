@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Literal
 
 
-EnvSelection = Literal['route', 'worker', 'route-background']
-ENVS=['route', 'worker', 'route-background']
+EnvSelection = Literal['route', 'worker', 'aps','routebkg']
+ENVS=['route', 'worker', 'aps','routebkg']
 
 
 class ProbabilisticEnvSelector(ABC):
@@ -32,7 +32,8 @@ class ProbabilisticEnvSelector(ABC):
         return {
             'route': route_score,
             'worker': worker_score,
-            'route-background': background_score
+            'routebkg': background_score,
+            'aps': ...
         }
 
 

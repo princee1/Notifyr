@@ -48,6 +48,14 @@ class BuildNotImplementedError(BuildError):
 
 #################################            #####################################
 
+class NotBuildedError(BuildError):
+    ...
+
+class DestroyedError(BuildError):
+    ...
+
+#################################            #####################################
+
 class ServiceNotAvailableError(BuildError):
     pass
 

@@ -169,7 +169,7 @@ class SchedulerModel(BaseModel):
             return self
         if not self.scheduler_option:
             raise ValueError("Scheduler option must be provided for task types other than 'now'")
-        self._schedule = SCHEDULER_MODEL_MAP[self.task_type].model_validate(self.scheduler_option)._object
+        self._schedule = SCHEDULER_MODEL_MAP[self.task_type].model_validate(self.scheduler_option)._beat_object
         return self
 
 class CeleryTask(TypedDict):

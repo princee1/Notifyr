@@ -3,7 +3,7 @@ from typing import Any, TypedDict
 from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
-from app.errors.service_error import BuildAbortError, BuildWarningError
+from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarningError
 from app.utils.constant import RedisConstant
 from app.utils.fileIO import JSONFile
 from app.definition import _service
@@ -178,7 +178,8 @@ class ConfigService(_service.BaseService):
         self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'),0)
         
         # NAMING CONFIG #
-        self.HOSTNAME:str = self.getenv('HOSTNAME',socket.getfqdn())
+        self.HOSTNAME:str = self.getenv('HOSTNAME',socket.getfqdn('notifyr'))
+        self.DOMAIN_NAME =  self.getenv('DOMAIN_NAME','notifyr')
         self.USERNAME:str = self.getenv('USERNAME','notifyr')
 
         # DIRECTORY CONFIG #
@@ -291,4 +292,14 @@ class ConfigService(_service.BaseService):
 
 @_service.Service()
 class ProcessWorkerService(_service.BaseService):
-    ...
+    
+    def __init__(self,configService:ConfigService,):
+        super().__init__()
+        self.configService = configService
+
+    
+    def build(self, build_state = ...):
+        print(socket.gethostname())
+        print(socket.getfqdn('worker'))
+        
+        raise BuildOkError

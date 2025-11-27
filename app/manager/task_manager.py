@@ -13,6 +13,7 @@ from app.container import Get
 from app.services.celery_service import CeleryService
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
+from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
 
 P = ParamSpec("P")
@@ -36,6 +37,9 @@ class TaskMeta(TypedDict):
 
 class TaskManager:
     
+    _schedule_env_selection:list[EnvSelection] = ['aps','worker']
+    _not_allowed_aps_task_type = set[TaskType] = {TaskType.RRULE,TaskType.SOLAR}
+
     def __init__(self,backgroundTasks:BackgroundTasks,response:Response,request:Request,request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save_results:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query)):
         self.return_results:bool = return_results
         self.backgroundTasks = backgroundTasks
@@ -52,6 +56,7 @@ class TaskManager:
         self.configService = Get(ConfigService)
         self.taskService = Get(TaskService)
         self.redisService = Get(RedisService)
+        self.monitoringService = Get(MonitoringService)
 
         self.register_backgroundTask()
 
@@ -93,7 +98,7 @@ class TaskManager:
         new_delay = self.append_taskConfig(task,delay)
         return TaskExecutionResult(True,now,'BackgroundTask',naturaldelta(new_delay),index,str(self.scheduler._heaviness),None,task_id= self.meta['request_id'],message=f"[{name}] - Task added successfully" )
     
-    async def select_task_env(self,task_weight:float)->EnvSelection:
+    async def select_task_env(self,task_weight:float,needed_envs:list[EnvSelection]=None)->EnvSelection:
         async with self.celeryService.statusLock.reader:
             p1 = await len(self.celeryService._workers)
 
@@ -148,7 +153,7 @@ class TaskManager:
                 await asyncio.sleep(delay)
 
             data=None if runType == 'parallel' else []
-            self.taskService.background_task_count.inc()
+            self.monitoringService.background_task_count.inc()
            
             async def callback():
 
@@ -163,7 +168,7 @@ class TaskManager:
                             await self.redisService.store_bkg_result(result, self.meta['request_id'],ttl)
                     
                     if runType =='parallel':
-                        self.taskService.background_task_count.dec()
+                        self.monitoringService.background_task_count.dec()
                         
                     return result
 
@@ -179,7 +184,7 @@ class TaskManager:
                             await self.redisService.store_bkg_result(result,self.meta['request_id'],ttl)
                     
                     if runType=='parallel':
-                        self.taskService.background_task_count.dec()                
+                        self.monitoringService.background_task_count.dec()                
                     return result
                 except TaskRetryError as e:
                     error = e.error
@@ -200,7 +205,7 @@ class TaskManager:
 
         if runType == 'sequential':
             await self.redisService.store_bkg_result(data, self.meta['request_id'],ttl)
-            self.taskService.background_task_count.dec(task_len)
+            self.monitoringService.background_task_count.dec(task_len)
        
     async def _offload_task(self,weight: float,delay: float,index:int,callback: Callable, *args, **kwargs)->TaskExecutionResult:
 
@@ -210,31 +215,35 @@ class TaskManager:
             algorithm = 'worker'
             add_warning_messages(UNSUPPORTED_TASKS, self.scheduler, index=index)
 
-        if algorithm == 'normal':
-            return await self._normal_offload(weight,delay,index,callback, *args, **kwargs)
-
-        if algorithm == 'worker':
-            return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
-            
-        if algorithm == 'route':
-            return await self._route_offload(weight,delay,index,callback, *args, **kwargs)
-        
-        if algorithm == 'mix':
-            return await self._mix_offload(weight,delay,index,callback, *args, **kwargs)
-        
-        if algorithm == 'aps':
-            return await self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+        match algorithm:
+            case  'normal':
+                return await self._normal_offload(weight,delay,index,callback, *args, **kwargs)
+            case 'worker':
+                return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
+            case 'route':
+                return await self._route_offload(None,weight,delay,index,callback, *args, **kwargs)
+            case 'mix':
+                return await self._mix_offload(weight,delay,index,callback, *args, **kwargs)
+            case 'aps':
+                return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+            case _:
+                now = dt.datetime.now().isoformat()
+                return TaskExecutionResult(False,now,'RouteHandler',None,index,None,None,True,self.meta['task_id'],None,message=f'Algorithm not supported {algorithm}')
 
     async def _normal_offload(self,weight:float, delay: float,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
-
         if self.scheduler.task_type == TaskType.NOW:
-            if (await self.select_task_env(weight)).startswith('route'):
-                return await self._route_offload(weight,delay,index,callback,*args, **kwargs)
+            return await self._route_offload(None,weight,delay,index,callback,*args,**kwargs)
+        elif ...:
+            return  self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
+        elif self.scheduler.task_type in self._not_allowed_aps_task_type:
+            now = dt.datetime.now().isoformat()
+            return TaskExecutionResult(False,now,'APSScheduler',None,index,None,None,True,self.meta['request_id'],None,f'TaskType not supported by APSScheduler: {self.scheduler.task_type}')
+        else:
+            return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
 
-        return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
-
-    async def _route_offload(self,weight:float,delay: float,index,callback: Callable, *args, **kwargs)->TaskExecutionResult:
-        if self.meta.get('background',True):
+    async def _route_offload(self,from_env:EnvSelection|None,weight:float,delay: float,index,callback: Callable, *args, **kwargs)->TaskExecutionResult:
+        background =  self.meta.get('background',True)
+        if background or (from_env and from_env == 'routebkg'):
             return await self.add_task(delay, index,callback, *args, **kwargs)
         else:
             now = dt.datetime.now().isoformat()
@@ -254,16 +263,38 @@ class TaskManager:
                 return TaskExecutionResult(handler='Route Handler',offloaded=True,date=now,index=index,error=True,result=None,heaviness=str(self.scheduler._heaviness))
 
     async def _mix_offload(self,weight:float,delay,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
-        env = await self.select_task_env(weight)
-        if env == 'route':
-            return await self._route_offload(weight,delay,index,callback, *args, **kwargs)
-        elif env == 'worker':
-            return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
-        elif env == 'route-background':
-            return await self._route_offload(weight,delay,index,callback, *args, **kwargs)
-        else:
-            raise ValueError(f"Unsupported environment: {env}")
+        match self.scheduler.task_type:
+            case TaskType.NOW:
+                env = await self.select_task_env(weight,None)
+                if env.startswith('route'):
+                    return await self._route_offload(env,weight,delay,index,callback,*args,**kwargs)
+                elif env == 'worker':
+                    return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
+                else:
+                    return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+            case (TaskType.DATETIME,TaskType.TIMEDELTA,TaskType.INTERVAL,TaskType.CRONTAB):
+                if (await self.select_task_env(weight,self._schedule_env_selection)) == 'worker':
+                    return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
+                else:
+                    return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+            case (TaskType.SOLAR,TaskType.RRULE):
+                return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
+            case _:
+                now = dt.datetime.now().isoformat()
+                return TaskExecutionResult(False,now,'RouteHandler',None,index,None,error=True,task_id=self.meta['request_id'],type=None,message=f'TaskType not supported by the server: {self.scheduler.task_type}')
 
-    async def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
+    def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
         now = dt.datetime.now().isoformat()
-        return TaskExecutionResult(True,now,'APSScheduler',None,index,(self.scheduler._heaviness),None,False,self.meta['request_id'],'schedule','')
+        match self.scheduler.task_type:
+            case TaskType.NOW:
+                job = self.taskService.now_schedule(delay,callback,args,kwargs,self.meta['request_id'])
+            case (TaskType.DATETIME,TaskType.TIMEDELTA):
+                job = self.taskService.date_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,self.meta['request_id'])
+            case TaskType.CRONTAB:
+                job = self.taskService.cron_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,self.meta['request_id'])
+            case TaskType.INTERVAL:
+                job = self.taskService.interval_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,self.meta['request_id'])
+            case _:
+                return TaskExecutionResult(False,now,'APSScheduler',None,index,None,None,True,self.meta['request_id'],'error',f'Schedule type not handled error: {self.scheduler.task_type}')
+
+        return TaskExecutionResult(True,now,'APSScheduler',None,index,str(self.scheduler._heaviness),None,False,self.meta['request_id'],'schedule','Task Added to the APSScheduler, delay or problem might occur')

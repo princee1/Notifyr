@@ -6,6 +6,12 @@ from celery.schedules import crontab
 from celery.schedules import schedule
 
 
+from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
+
+
+
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 
 
@@ -25,13 +31,13 @@ def validate_clock_value(day,hour,minute,month,second,microsecond):
         raise ValueError("microsecond must be between 0 and 999999")
 
 class Scheduler(BaseModel):
-    _object: Any = PrivateAttr(None)
+    _beat_object: Any = PrivateAttr(None)
+    _aps_object: Any = PrivateAttr(None)
+
 
     def build(self) -> Any:
         ...
-
-
-
+    
 
 class DateTimeSchedulerModel(Scheduler):
     year: int
@@ -51,9 +57,15 @@ class DateTimeSchedulerModel(Scheduler):
     
     @model_validator(mode='after')
     def check_after(self) -> bool:
-        self._object = self.build()
-        if self._object < datetime.now(self.tzinfo):
-            raise ValueError("Scheduled time must be in the future")
+        
+        datetime_obj = self.build()
+        if datetime_obj < datetime.now(self.tzinfo):
+            raise ValueError("Date time must be in the future")
+
+        
+        self._beat_object = self.build()
+        self._aps_object = DateTrigger(self.build())
+
         return self
 
     def build(self) -> datetime:
@@ -69,22 +81,32 @@ class DateTimeSchedulerModel(Scheduler):
         )
 
 class TimedeltaSchedulerModel(Scheduler):
-    days: int = 0
-    seconds: int = 0
-    microseconds: int = 0
-    milliseconds: int = 0
-    minutes: int = 0
-    hours: int = 0
-    weeks: int = 0 
-   
+    days: int = Field(0,ge=0)
+    seconds: int = Field(0,ge=0)
+    microseconds: int = Field(0,ge=0)
+    milliseconds: int = Field(0,ge=0)
+    minutes: int = Field(0,ge=0)
+    hours: int = Field(0,ge=0)
+    weeks: int = Field(0,ge=0)
+    tzinfo: str | None = None
+
+
+    jitter: Optional[int] = Field(None,ge=0,le=9999)
+    
     @model_validator(mode='after')
-    def check_after(self) -> bool:
+    def check_after(self) -> Self:
         _object = self.build('timedelta')
-        print(_object,_object.total_seconds())
         if _object.total_seconds() <= 0:
             raise ValueError("Timedelta must be positive")
+
+        self._beat_object = self.build(mode='datetime')
         
-        self._object = self.build()
+        self._aps_object = IntervalTrigger(
+            self.weeks,self.days,self.hours,self.minutes,self.seconds,
+            end_date=datetime.now() + _object + timedelta(seconds=30),
+            timezone=self.tzinfo,
+            jitter=self.jitter
+        )
         return self
 
     def build(self,mode:Literal['datetime','timedelta']='datetime') -> datetime | timedelta:
@@ -104,9 +126,23 @@ class TimedeltaSchedulerModel(Scheduler):
 class IntervalSchedulerModel(Scheduler):
     interval:TimedeltaSchedulerModel
     relative:Optional[bool] =False
+    start_date: Optional[DateTimeSchedulerModel] = None
 
-    def build(self)->schedule:
-        return schedule(self.interval.build('timedelta'),self.relative)
+    @model_validator(mode='after')
+    def check_after(self)->Self:
+        _obj = self.interval.build(mode='timedelta')
+
+        self._beat_object = schedule(_obj,self.relative)
+        self._aps_object = IntervalTrigger(
+            self.interval.weeks,self.interval.days,self.interval.hours,self.interval.minutes,
+            self.interval.seconds,end_date=None,jitter=self.interval.jitter,
+            start_date=self.start_date.build()
+        )
+
+        return self
+
+    def build(self):
+        ...
 
 class RRuleSchedulerModel(Scheduler):
     freq: Literal["YEARLY", "MONTHLY", "WEEKLY", "DAILY", "HOURLY", "MINUTELY", "SECONDLY"]
@@ -167,14 +203,14 @@ class RRuleSchedulerModel(Scheduler):
     @model_validator(mode='after')
     def check_after(self:Self) -> Self:
         try:
-            self._object = self.build()
+            self._beat_object = self.build()
         except Exception as e:
             raise ValueError("Invalid RRule configuration: " + str(e))
         return self
 
     def build(self) -> Any:
         return rrule(
-            self.freq, dtstart=self.dtstart.build() if self.dtstart else None, until=self.until.build() if self.until else None,
+            self.freq, dtstart=self.dtstart._beat_object if self.dtstart else None, until=self.until._beat_object if self.until else None,
             interval=self.interval, count=self.count,
             bymonth=self.bymonth, bymonthday=self.bymonthday, byweekday=self.byweekday,
             byhour=self.byhour, byminute=self.byminute, bysecond=self.bysecond
@@ -191,7 +227,7 @@ class SolarSchedulerModel(Scheduler):
     @model_validator(mode='after')
     def check_after(self):
         try:
-            self._object = self.build()
+            self._beat_object = self.build()
         except Exception as e:
             raise ValueError("Invalid Solar configuration: " + str(e))
         return self
@@ -212,10 +248,19 @@ class CrontabSchedulerModel(Scheduler):
     year: Optional[str] = None
     timezone: Optional[str] = None
 
+    start_date:Optional[DateTimeSchedulerModel] = None
+    end_date:Optional[DateTimeSchedulerModel] = None
+    jitter:Optional[None] = Field(None,ge=0,le=9999)
+
     @model_validator(mode='after')
     def check_after(self: Self) -> Self:
         try:
-            self._object = self.build()
+            self._beat_object = self.build()
+            self._aps_object = CronTrigger(day_of_week=self.day_of_week,minute=self.minute,
+                day_of_week = self.day_of_week,month=self.month_of_year,year=self.year,
+                start_date= None if self.start_date is None else self.start_date._beat_object,
+                end_date= None if self.end_date is None else self.end_date._beat_object
+            )
         except Exception as e:
             raise ValueError("Invalid Crontab configuration: " + str(e))
         return self

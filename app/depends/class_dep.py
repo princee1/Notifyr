@@ -37,7 +37,7 @@ class EmailTracker(TrackerInterface):
         email_id = '' if email_id is None else email_id
         timeval = int(time() * 1000000)
         randval = random.getrandbits(8)
-        return f"<{timeval}.{randval}.{email_id}@{self.configService.HOSTNAME}>"
+        return f"<{timeval}.{randval}.{email_id}@{self.configService.DOMAIN_NAME}>"
             
 
     def pipe_to(self,content:EmailTemplateModel|CustomEmailModel):

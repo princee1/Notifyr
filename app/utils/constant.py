@@ -167,6 +167,7 @@ class MongooseDBConstant:
     ARC_COLLECTION='arc'
     NODE_COLLECTION='node'
     SETTING_COLLECTION = 'setting'
+    TASKS_COLLECTION = 'tasks'
 
     DATABASE_NAME = 'notifyr'
 

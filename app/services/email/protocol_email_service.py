@@ -630,7 +630,7 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                 continue
 
             email_id_extracted = extract_email_id_from_msgid(
-                original_message.Message_ID, self.configService.HOSTNAME)
+original_message.Message_ID, self.configService.DOMAIN_NAME)
             if email_id_extracted == None:
                 continue
 
@@ -688,9 +688,9 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                     email_id = e.In_Reply_To
                 else:
                     email_id = e.Get_Our_Last_Message_References(
-                        self.configService.HOSTNAME)
+                        self.configService.DOMAIN_NAME)
                 email_id = extract_email_id_from_msgid(
-                    email_id, self.configService.HOSTNAME)
+                    email_id, self.configService.DOMAIN_NAME)
                 if email_id == None:
                     continue
 
@@ -698,7 +698,7 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                 if original_message.Email_ID == None:  # The full original message was appended
                     continue
                 email_id_extracted = extract_email_id_from_msgid(
-                    original_message.Message_ID, self.configService.HOSTNAME)
+                    original_message.Message_ID, self.configService.DOMAIN_NAME)
                 if email_id_extracted == None:
                     continue
                 if email_id_extracted != original_message.Email_ID:

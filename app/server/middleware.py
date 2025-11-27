@@ -5,6 +5,7 @@ from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare
 from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
+from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService, JWTAuthService
@@ -23,8 +24,8 @@ class MetaDataMiddleWare(MiddleWare):
     priority = MiddlewarePriority.METADATA
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
-        self.taskService:TaskService = Get(TaskService)
         self.configService:ConfigService = Get(ConfigService)
+        self.monitoringService = Get(MonitoringService)
 
         self.instance_id = str(self.configService.INSTANCE_ID)
         self.process_pid = PROCESS_PID
@@ -34,8 +35,8 @@ class MetaDataMiddleWare(MiddleWare):
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
-        self.taskService.connection_count.inc()
-        self.taskService.connection_total.inc()
+        self.monitoringService.connection_count.inc()
+        self.monitoringService.connection_total.inc()
         request_id=  str(uuid4())
         request.state.request_id =request_id
 
@@ -49,14 +50,14 @@ class MetaDataMiddleWare(MiddleWare):
             response.headers[HTTPHeaderConstant.X_PARENT_PROCESS_PID] = self.parent_pid
             response.headers[HTTPHeaderConstant.X_REQUEST_ID] = request_id
 
-            self.taskService.request_latency.observe(process_time)
+            self.monitoringService.request_latency.observe(process_time)
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
-            self.taskService.request_latency.observe(process_time)
+            self.monitoringService.request_latency.observe(process_time)
             return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)','X-Instance-Id':self.instance_id})
         finally:
-            self.taskService.connection_count.dec()
+            self.monitoringService.connection_count.dec()
 
 class LoadBalancerMiddleWare(MiddleWare):
     priority = MiddlewarePriority.LOAD_BALANCER
