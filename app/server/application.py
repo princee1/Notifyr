@@ -191,10 +191,18 @@ class Application(EventInterface):
         await redisService.close_connections()
 
     @register_hook('startup',)
-    def start_tickers(self):
+    async def start_leader_task_election(self):
         taskService:TaskService =  Get(TaskService)
-        taskService.start()
+        await taskService.start()
 
+    @register_hook('shutdown')
+    async def stop_lead_task_election(self):
+        taskService:TaskService =  Get(TaskService)
+        await taskService.stop()
+
+
+    @register_hook('startup',)
+    def start_tickers(self):
         vaultService: HCVaultService = Get(HCVaultService) 
         vaultService.start()
 
@@ -212,17 +220,13 @@ class Application(EventInterface):
     
     @register_hook('shutdown')
     def stop_tickers(self):
-
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
         amazons3Service = Get(AmazonS3Service)
         vaultService = Get(HCVaultService)
 
-        taskService:TaskService =  Get(TaskService)
-        
-
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,amazons3Service]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,amazons3Service]
 
         for s in services:
             s.shutdown()

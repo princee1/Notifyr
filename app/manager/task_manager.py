@@ -38,7 +38,7 @@ class TaskMeta(TypedDict):
 class TaskManager:
     
     _mask_schedule:list[EnvSelection] = [0,1,1,0]
-    _not_allowed_aps_task_type = set[TaskType] = {TaskType.RRULE,TaskType.SOLAR}
+    _not_allowed_aps_task_type: set[TaskType] = {TaskType.RRULE,TaskType.SOLAR}
 
     def __init__(self,backgroundTasks:BackgroundTasks,response:Response,request:Request,request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save_results:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query)):
         self.return_results:bool = return_results

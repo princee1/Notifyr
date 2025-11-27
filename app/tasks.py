@@ -3,6 +3,7 @@ from typing import Any, Callable
 from celery import Celery
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService,CeleryEnv
+from app.services import RedisService,RabbitMQService
 from app.container import Get, build_container,__DEPENDENCY
 from app.utils.constant import CeleryConstant
 from app.utils.prettyprint import PrettyPrinter_
@@ -46,6 +47,8 @@ TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 ##############################################           ##################################################
 
 configService: ConfigService = Get(ConfigService)
+redisService  = Get(RedisService)
+rabbitmqService = Get(RabbitMQService)
 
 ##############################################           ##################################################
 
@@ -71,15 +74,18 @@ celery_app.conf.result_backend_transport_options = {
 celery_app.conf.task_store_errors_even_if_ignored = True
 celery_app.conf.task_ignore_result = True
 
-celery_app.conf.broker_transport_options = {
-    'priority_steps': list(range(3)),
-    'sep': ':',
-    'queue_order_strategy': 'priority',
-}
 celery_app.conf.worker_soft_shutdown_timeout = 120.0
 celery_app.conf.worker_enable_soft_shutdown_on_idle = True
 celery_app.conf.task_create_missing_queues = False
 
+if configService.CELERY_BROKER == 'redis':
+    celery_app.conf.broker_transport_options = {
+        'priority_steps': list(range(3)),
+        'sep': ':',
+        'queue_order_strategy': 'priority',
+    }
+else:
+    celery_app.conf.task_queue_max_priority = 3 # Only rabbit mq
 
 if ConfigService._celery_env == CeleryMode.none:
     celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')

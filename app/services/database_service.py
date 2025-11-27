@@ -69,7 +69,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         delay = IntervalParams( 
             seconds=self.random_buffer_interval(self.auth_ttl) 
             )
-        self.interval_schedule(delay, self.creds_rotation)
+        self.interval_schedule(delay, self.creds_rotation,tuple(),{})
 
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
@@ -713,7 +713,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         await self.init_connection(True)
 
 
-#@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]) 
+@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]) 
 class RabbitMQService(TempCredentialsDatabaseService):
     
     def __init__(self, configService:ConfigService, fileService:FileService, vaultService:HCVaultService):

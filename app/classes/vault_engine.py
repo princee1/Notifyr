@@ -65,8 +65,7 @@ class KV1VaultEngine(VaultEngine):
         if wrap_response:
             params["wrap_ttl"] = wrap_ttl
         read_response = self.client.secrets.kv.v1.read_secret(**params)
-        print("KV Read:", read_response)
-
+        
         if wrap_token_only and wrap_response:
             if wrap_response and 'wrap_info' in read_response:
                 return {"wrap_token": read_response['wrap_info']['token']}

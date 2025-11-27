@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import random
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -16,7 +15,7 @@ from typing import Callable, Any, Literal, TypedDict
 import asyncio
 from app.definition._error import BaseError
 from app.definition._interface import Interface, IsInterface
-
+from apscheduler.executors.pool import ThreadPoolExecutor
 
 class IntervalError(BaseError):
     ...

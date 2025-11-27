@@ -58,7 +58,7 @@ class HCVaultService(BaseService,SchedulerInterface):
             seconds=VaultTTLSyncConstant.SECRET_ID_ROTATION*.75
         )
         self.last_rotated = None
-        self.interval_schedule(delay,self.refresh_token)
+        self.interval_schedule(delay,self.refresh_token,tuple(),{})
 
 
     @property

@@ -7,7 +7,6 @@ from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundErr
 from app.interface.timers import IntervalInterface, SchedulerInterface
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
-from app.services.task_service import TaskService
 from app.utils.helper import generateId
 import asyncio
 from reactivex import Subject
@@ -80,11 +79,10 @@ class ReactiveSubject():
 @Service()
 class ReactiveService(BaseService):
     
-    def __init__(self,configService:ConfigService,loggerService:LoggerService,taskService:TaskService):
+    def __init__(self,configService:ConfigService,loggerService:LoggerService):
         BaseService.__init__(self)
         self.configService = configService
         self.loggerService = loggerService
-        self.taskService = taskService
         self._subscriptions:dict[str,ReactiveSubject] = {}
         
     def create_subject(self,name:str,type_:ReactiveType,subject_id=None,sid_type:SubjectType='plain') -> ReactiveSubject:

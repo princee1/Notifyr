@@ -252,7 +252,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
         self.phone:dict[str,Asset] = {}
         self.sms:dict[str,Asset] = {}
 
-        self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events)
+        self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events,tuple(),{})
 
     async def clear_object_events(self,):
         objects_events = await self.redisService.hash_iter(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,iter=False)

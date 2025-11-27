@@ -257,7 +257,7 @@ class CrontabSchedulerModel(Scheduler):
         try:
             self._beat_object = self.build()
             self._aps_object = CronTrigger(day_of_week=self.day_of_week,minute=self.minute,
-                day_of_week = self.day_of_week,month=self.month_of_year,year=self.year,
+                month=self.month_of_year,year=self.year,
                 start_date= None if self.start_date is None else self.start_date._beat_object,
                 end_date= None if self.end_date is None else self.end_date._beat_object
             )

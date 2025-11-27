@@ -120,7 +120,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         
         for id,p in self.profileService.MiniServiceStore:
 
-            miniService = ChannelMiniService(p,self.redisService,self)
+            miniService = ChannelMiniService(p,self.configService,self.redisService,self)
             miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
 
             self.state_counter.count(miniService)
