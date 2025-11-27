@@ -15,6 +15,7 @@ from app.utils.constant import CostConstant, RedisConstant
 from app.utils.fileIO import JSONFile
 from app.classes.auth_permission import AuthPermission
 from app.utils.helper import flatten_dict
+from datetime import datetime
 
 @Service()
 class CostService(BaseService):
@@ -30,6 +31,10 @@ class CostService(BaseService):
         self.redisService = redisService
         self.fileService = fileService
         self.costs_definition={}
+    
+    @property
+    def receipts_key(self):
+        return f'notifyr:receipts@{datetime.now().year}-{datetime.now().month}'
     
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:

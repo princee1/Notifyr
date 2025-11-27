@@ -11,6 +11,7 @@ from app.manager.keep_alive_manager import KeepAliveManager
 from app.services.cost_service import CostService
 from app.services.database_service import MemCachedService, RedisService
 from app.services.reactive_service import ReactiveService
+from app.utils.constant import RedisConstant
 from app.utils.helper import APIFilterInject, SkipCode, copy_response
 
 class KeepAliveResponseInterceptor(Interceptor):
@@ -79,7 +80,8 @@ class TaskCostInterceptor(Interceptor):
         await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
         receipt = cost.generate_receipt()
         self.costService.inject_cost_info(response,receipt)
-        broker.push(...,...)
+        broker.push(RedisConstant.LIMITER_DB,self.costService.receipts_key,receipt)
+        
         
 
 class DataCostInterceptor(Interceptor):
@@ -128,4 +130,4 @@ class DataCostInterceptor(Interceptor):
         cost.balance_before = balance_before
         receipt = cost.generate_receipt()
         self.costService.inject_cost_info(response,receipt)
-        broker.push(...,...)
+        broker.push(RedisConstant.LIMITER_DB,self.costService.receipts_key,receipt)

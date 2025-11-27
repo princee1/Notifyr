@@ -28,7 +28,6 @@ class TaskService(BaseService,SchedulerInterface):
         
         self._leader = False
         self._leader_task: Optional[asyncio.Task] = None
-        self._renew_task: Optional[asyncio.Task] = None
         self._stop = False
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
@@ -77,7 +76,7 @@ class TaskService(BaseService,SchedulerInterface):
                         self._leader = False
                         await self._stop_scheduler()
                         continue
-                    # extend TTL using expire (or a Lua script for atomic check+expire)
+                    
                     await self.redis.expire(LEADER_LOCK_KEY, LEADER_LOCK_TTL)
 
                 # if not leader, keep retrying every couple seconds
