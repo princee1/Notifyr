@@ -1,6 +1,6 @@
 #from app.definition import _service
 from .assets_service import AssetService
-from .config_service import ConfigService,ProcessWorkerService
+from .config_service import ConfigService,UvicornWorkerService
 from .database_service import TortoiseConnectionService,RedisService,MongooseService,RabbitMQService
 from .email_service import EmailReaderService,EmailSenderService
 from .file_service import FileService,BaseFileRetrieverService,FTPService,GitCloneRepoService

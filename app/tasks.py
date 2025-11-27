@@ -79,6 +79,7 @@ celery_app.conf.worker_enable_soft_shutdown_on_idle = True
 celery_app.conf.task_create_missing_queues = False
 
 if configService.CELERY_BROKER == 'redis':
+    celery_app.conf.visibility_timeout = configService.CELERY_VISIBILITY_TIMEOUT
     celery_app.conf.broker_transport_options = {
         'priority_steps': list(range(3)),
         'sep': ':',

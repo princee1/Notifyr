@@ -8,7 +8,7 @@ from app.utils.constant import RedisConstant
 from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
-from app.utils.globals import DIRECTORY_SEPARATOR
+from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID
 from app.utils.helper import parseToBool
 import shutil
 import sys
@@ -67,6 +67,8 @@ class ServerConfig(TypedDict):
 CeleryEnv = Literal['flower', 'worker', 'beat', 'none','purge']
 
 _celery_env_ = CeleryMode.none
+
+
 @_service.Service()
 class ConfigService(_service.BaseService):
         
@@ -83,13 +85,13 @@ class ConfigService(_service.BaseService):
     def set_celery_env(env: CeleryEnv):
         ConfigService._celery_env = CeleryMode._member_map_[env]
 
+
     def __init__(self) -> None:
         super().__init__()
         if not load_dotenv(ENV, verbose=True):
             path = find_dotenv(ENV)
             load_dotenv(path)
         self.server_config = None
-        self.app_name = None
 
     def relative_path(self, path):
         return self.BASE_DIR + path
@@ -178,7 +180,6 @@ class ConfigService(_service.BaseService):
         self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'),0)
         
         # NAMING CONFIG #
-        self.HOSTNAME:str = self.getenv('HOSTNAME',socket.getfqdn('notifyr'))
         self.DOMAIN_NAME =  self.getenv('DOMAIN_NAME','notifyr')
         self.USERNAME:str = self.getenv('USERNAME','notifyr')
 
@@ -244,6 +245,7 @@ class ConfigService(_service.BaseService):
         self.CELERY_BACKEND_URL:Callable[...,str] =  self.getenv("CELERY_BACKEND_URL", f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
+        self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
         self.CELERY_WORKERS_COUNT = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_COUNT","1"), 1)
 
     def verify(self):
@@ -284,15 +286,13 @@ class ConfigService(_service.BaseService):
 
 
 @_service.Service()
-class ProcessWorkerService(_service.BaseService):
-    
-    def __init__(self,configService:ConfigService,):
+class UvicornWorkerService(_service.BaseService):
+
+    def __init__(self,configService:ConfigService):
         super().__init__()
         self.configService = configService
-
-    
+            
     def build(self, build_state = ...):
-        print(socket.gethostname())
-        print(socket.getfqdn('worker'))
-        
+
+        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/app/"        
         raise BuildOkError

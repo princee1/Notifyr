@@ -18,7 +18,7 @@ from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.helper import quote_safe_url, reverseDict, subset_model
 from app.utils.transformer import none_to_empty_str
-from .config_service import MODE, CeleryMode, ConfigService
+from .config_service import MODE, CeleryMode, ConfigService, UvicornWorkerService
 from .file_service import FileService
 from app.definition._service import DEFAULT_BUILD_STATE, STATUS_TO_ERROR_MAP, BuildFailureError, BaseService,AbstractServiceClass, LinkDep,Service,BuildWarningError, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -144,14 +144,16 @@ class RedisService(DatabaseService):
 
     GROUP = 'NOTIFYR-GROUP'
     
-    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:HCVaultService):
+    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:HCVaultService,uvicornWorkerService:UvicornWorkerService):
         super().__init__(configService,None)
         self.configService = configService
         self.reactiveService = reactiveService
         self.vaultService = vaultService
+        self.uvicornWorkerService = uvicornWorkerService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
-        self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
+
+        self.consumer_name = f'notifyr-consumer={self.uvicornWorkerService.INSTANCE_ID}'
 
 
     def dynamic_context(func:Callable):
@@ -712,7 +714,6 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         self.generate_creds()
         await self.init_connection(True)
 
-
 @Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]) 
 class RabbitMQService(TempCredentialsDatabaseService):
     
@@ -732,6 +733,9 @@ class RabbitMQService(TempCredentialsDatabaseService):
             connection = pika.BlockingConnection(params)
             connection.close()
 
-        except Exception:
+        except Exception as e:
+            print(e)
+            print(e.__class__)
+            print(e.args)
             self.configService.CELERY_BROKER = 'redis'
             raise BuildFailureError

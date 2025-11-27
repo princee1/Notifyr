@@ -304,7 +304,7 @@ class CeleryBrokerGuard(Guard):
         super().__init__()
         self.allowed_fallback = allowed_fallback
         self.configService = Get(ConfigService)
-        self.max_visibility_time = 0.8 * 1
+        self.max_visibility_time = self.configService.CELERY_VISIBILITY_TIMEOUT *.15
     
     def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
         if self.configService.CELERY_BROKER == 'redis':
@@ -317,6 +317,6 @@ class CeleryBrokerGuard(Guard):
             if scheduler.task_type == TaskType.NOW:
                 countdown = scheduler.task_option.countdown 
                 if countdown and countdown >= self.max_visibility_time:
-                    raise CelerySchedulerOptionError
+                    raise CelerySchedulerOptionError("countdown is more than 15 % of the visibility timeout")
 
         return True,None

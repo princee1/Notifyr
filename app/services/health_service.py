@@ -1,6 +1,6 @@
 from app.definition._service import Service,BaseService
 from app.definition._service import Service
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService, UvicornWorkerService
 import psutil
 from app.services.cost_service import CostService
 from app.utils.globals import PARENT_PID, PROCESS_PID
@@ -9,10 +9,11 @@ from app.utils.globals import PARENT_PID, PROCESS_PID
 @Service()
 class HealthService(BaseService):
     
-    def __init__(self,configService:ConfigService,rateLimiterService:CostService):
+    def __init__(self,configService:ConfigService,rateLimiterService:CostService,uvicornWorkerService:UvicornWorkerService):
         super().__init__()
         self.configService = configService
         self.rateLimiterService = rateLimiterService
+        self.uvicornWorkerService = uvicornWorkerService
 
     def build(self,build_state=-1):
         self.process = psutil.Process()
@@ -44,7 +45,7 @@ class HealthService(BaseService):
     @property
     def notifyr_app_info(self)->dict:
         return {
-            'InstanceId':self.configService.INSTANCE_ID,
+            'InstanceId':self.uvicornWorkerService.INSTANCE_ID,
             'ParentPid':PARENT_PID,
             'Pid':PROCESS_PID,
             'Spec':{
