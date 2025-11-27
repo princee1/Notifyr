@@ -51,7 +51,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
                 option['eta'] = scheduler._schedule._beat_object
                 expected_tbd = naturaldelta(option['eta'])
             else:
-                expected_tbd = naturaldelta(option.get('countdown', 0))
+                expected_tbd = naturaldelta(option.get('countdown', None))
             
             task_result = TASK_REGISTRY[t_name]['task'].apply_async(**option, args=args, kwargs=kwargs)
             result.update(task_result.id,'task',expected_tbd)
@@ -193,18 +193,16 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     def _broadcast(self,command:str,destination:list[str]=None,reply=True,timeout=None):
         return celery_app.control.broadcast(command,destination=destination,reply=reply,timeout=timeout)
     
-    async def delete_queue_type(self,):
-        ...
-
 
 @MiniService()
 class ChannelMiniService(BaseMiniService):
 
-    def __init__(self, depService:ProfileMiniService[BaseProfileModel],redisService:RedisService,celeryService:CeleryService):
+    def __init__(self, depService:ProfileMiniService[BaseProfileModel],configService:ConfigService,redisService:RedisService,celeryService:CeleryService):
         self.depService = depService
         super().__init__(depService,None)
         self.redisService = redisService
         self.celeryService = celeryService
+        self.configService = configService
     
     async def async_pingService(self,infinite_wait:bool, **kwargs):
         route_params:dict[str,Any] = kwargs.get(SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER,{})
@@ -251,8 +249,13 @@ class ChannelMiniService(BaseMiniService):
     @RunInThreadPool
     async def delete_queue(self):
         await self.pause_worker()
-        return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
-
+        if self.configService.CELERY_BROKER == 'redis':
+            return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
+        else:
+            with celery_app.connection_or_acquire() as conn:
+                queue = Queue(self.queue, exchange=None, routing_key=self.queue)
+                queue(conn).delete()
+            
     @RunInThreadPool
     def create_queue(self):
         return celery_app.control.add_consumer(self.queue, reply=True)

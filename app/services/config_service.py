@@ -1,5 +1,5 @@
 import os
-from typing import Any, TypedDict
+from typing import Any, Callable, TypedDict
 from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
@@ -209,15 +209,11 @@ class ConfigService(_service.BaseService):
         
         # S3 STORAGE CONFIG #
         self.S3_CRED_TYPE:Literal['MINIO','AWS'] = self.getenv('S3_CRED_TYPE','MINIO').upper()
-
         self.S3_ENDPOINT:str= self.getenv('S3_ENDPOINT','127.0.0.1:9000' if self.MODE == MODE.DEV_MODE else 'minio:9000')
-
         self.S3_REGION:str = self.getenv("S3_REGION",None)
-
         self.S3_TO_DISK:bool = ConfigService.parseToBool(self.getenv('S3_TO_DISK','false'), False)
 
         # MINIO CONFIG #
-
         self.MINIO_STS_ENABLE:bool = ConfigService.parseToBool(self.getenv('MINIO_STS_ENABLE','false'), False)
 
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
@@ -227,28 +223,25 @@ class ConfigService(_service.BaseService):
         self.VAULT_ADDR:str = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
 
         # MONGODB CONFIG #
-
         self.MONGO_HOST:str = self.getenv('MONGO_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'mongodb')
 
         # REDIS CONFIG #
+        self.REDIS_HOST:str = self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")
 
-        self.REDIS_URL:str = "redis://"+self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")
+        # RABBITMQ CONFIG #
+        self.RABBITMQ_HOST:Callable[...,str] = self.getenv("RABBITMQ_URL", "localhost" if self.MODE == MODE.DEV_MODE else "rabbitmq")
 
-        # REDIS CONFIG #
-        self.MEMCACHED_URL:str = self.getenv("MEMCHACHED_URL","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
-
-        # SLOW API CONFIG #
-
-        self.SLOW_API_REDIS_URL:str = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL", f'/{RedisConstant.LIMITER_DB}')
+        # MEMCACHED CONFIG #
+        self.MEMCACHED_HOST:str = self.getenv("MEMCHACHED_URL","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
 
         # POSTGRES DB CONFIG #
-
         self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
         # CELERY CONFIG #
+        self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','redis')
 
-        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL",self.REDIS_URL +  f'/{RedisConstant.CELERY_DB}')
-        self.CELERY_BACKEND_URL =  self.getenv("CELERY_BACKEND_URL", self.REDIS_URL +f'/{RedisConstant.CELERY_DB}')
+        self.CELERY_MESSAGE_BROKER_URL:Callable[...,str] = self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://guest:guest@{self.RABBITMQ_HOST}:5672")
+        self.CELERY_BACKEND_URL:Callable[...,str] =  self.getenv("CELERY_BACKEND_URL", f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_WORKERS_COUNT = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_COUNT","1"), 1)

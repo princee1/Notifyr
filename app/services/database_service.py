@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Self, Type, TypeVar, TypedDict
 from urllib.parse import urlencode
 from beanie import Document, PydanticObjectId, init_beanie
 import hvac
+import pika
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.callbacks import CALLBACKS_CONFIG
@@ -306,8 +307,7 @@ class RedisService(DatabaseService):
         return wrapper
 
     def build(self,build_state=-1):
-        host = self.configService.REDIS_URL
-        host = host.replace('redis://','')
+        host = self.configService.REDIS_HOST
         self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB)
         self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB)
         self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True)
@@ -445,8 +445,8 @@ class MemCachedService(DatabaseService,SchedulerInterface):
     
     def build(self, build_state = ...):
         try:
-            self.sync_client = SyncClient((self.configService.MEMCACHED_URL,self.DEFAULT_PORT),connect_timeout=6)
-            self.client = Client(self.configService.MEMCACHED_URL,pool_minsize=self.POOL_MINSIZE,pool_size=self.POOL_MAXSIZE)
+            self.sync_client = SyncClient((self.configService.MEMCACHED_HOST,self.DEFAULT_PORT),connect_timeout=6)
+            self.client = Client(self.configService.MEMCACHED_HOST,pool_minsize=self.POOL_MINSIZE,pool_size=self.POOL_MAXSIZE)
             version = self.sync_client.version().decode()
            
         except MemcacheClientError as e:
@@ -502,9 +502,7 @@ class MemCachedService(DatabaseService,SchedulerInterface):
 
 D = TypeVar('D',bound=Document)
 
-@Service(
-    links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
-)     
+@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)])     
 class MongooseService(TempCredentialsDatabaseService):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
     DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
@@ -665,9 +663,7 @@ class MongooseService(TempCredentialsDatabaseService):
     def destroy(self, destroy_state = ...):
         self.close_connection()
     
-@Service(
-    links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
-)
+@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
     DATABASE_NAME = 'notifyr'
 
@@ -716,3 +712,26 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         self.generate_creds()
         await self.init_connection(True)
 
+
+#@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]) 
+class RabbitMQService(TempCredentialsDatabaseService):
+    
+    def __init__(self, configService:ConfigService, fileService:FileService, vaultService:HCVaultService):
+        super().__init__(configService, fileService, vaultService, 60*60*24*365)
+    
+
+    def build(self, build_state = ...):
+        try:
+            params = pika.ConnectionParameters(
+                host=self.configService.RABBITMQ_HOST,
+                port=5672,
+                connection_attempts=1,      # don’t retry
+                socket_timeout=5,           # 5 second timeout
+                blocked_connection_timeout=5,
+            )
+            connection = pika.BlockingConnection(params)
+            connection.close()
+
+        except Exception:
+            self.configService.CELERY_BROKER = 'redis'
+            raise BuildFailureError

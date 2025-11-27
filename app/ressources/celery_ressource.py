@@ -3,7 +3,7 @@ from aiohttp_retry import List
 from fastapi import Depends, HTTPException, Request, Response,status
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, CeleryHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AsyncIOHandler, CeleryControlHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import MiniServiceInjectorPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
@@ -28,7 +28,7 @@ class CeleryRessource(BaseHTTPRessource):
     
     @UseLimiter('1/seconds')
     @UseRoles([Role.PUBLIC])
-    @UseHandler(CeleryHandler)
+    @UseHandler(CeleryControlHandler)
     @UseServiceLock(CeleryService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/ping/',methods=[HTTPMethod.GET])
     async def ping_workers(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -36,7 +36,7 @@ class CeleryRessource(BaseHTTPRessource):
     
     @UseLimiter('1/minutes')
     @UseRoles([Role.PUBLIC])
-    @UseHandler(CeleryHandler)
+    @UseHandler(CeleryControlHandler)
     @UseServiceLock(CeleryService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/inspect/',methods=[HTTPMethod.GET])
     async def inspect(self,request:Request,response:Response,mode:InspectMode = Depends(celery_inspect_mode_query),authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -44,7 +44,7 @@ class CeleryRessource(BaseHTTPRessource):
 
     @UseLimiter('10/minutes')
     @UsePermission(AdminPermission)
-    @UseHandler(MiniServiceHandler,CeleryHandler)
+    @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UseServiceLock(CeleryService,lockType='reader',check_status=False,as_manager=True)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @BaseHTTPRessource.HTTPRoute('/purge/{profile}/',methods=[HTTPMethod.DELETE])

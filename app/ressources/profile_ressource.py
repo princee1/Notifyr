@@ -5,7 +5,7 @@ from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.classes.condition import MongoCondition, simple_number_validation
 from app.container import InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, CeleryHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, CeleryControlHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
@@ -54,7 +54,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @PingService([HCVaultService,MongooseService,CeleryService])
     @UseServiceLock(HCVaultService,MongooseService,lockType='reader',check_status=False)
-    @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryHandler)
+    @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler)
     @UsePermission(AdminPermission)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UsePipe(DocumentFriendlyPipe,before=False)
@@ -76,7 +76,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return result
 
     @PingService([HCVaultService,CeleryService])
-    @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryHandler)
+    @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryControlHandler)
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
     @UsePermission(AdminPermission)
@@ -94,7 +94,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return profileModel
     
     @PingService([CeleryService])
-    @UseHandler(PydanticHandler,CeleryHandler)
+    @UseHandler(PydanticHandler,CeleryControlHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
@@ -119,7 +119,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @PingService([HCVaultService,CeleryService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
-    @UseHandler(VaultHandler,PydanticHandler,CeleryHandler)
+    @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @UsePermission(AdminPermission)
     @UseHTTPStatusCode(status.HTTP_204_NO_CONTENT)
@@ -150,7 +150,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return await self.mongooseService.get(self.model,profile,True)
 
     @UseRoles([Role.PUBLIC])
-    @UseHandler(MiniServiceHandler,CeleryHandler)
+    @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @UsePermission(ProfilePermission)
     @UseHTTPStatusCode(status.HTTP_204_NO_CONTENT)

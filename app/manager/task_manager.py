@@ -4,7 +4,7 @@ from typing import Any, Coroutine, Literal, ParamSpec, TypedDict
 from fastapi import Depends
 from humanize import naturaldelta
 from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, Compute_Weight, SchedulerModel, TaskExecutionResult, TaskRetryError, TaskType, add_warning_messages, s
-from app.classes.env_selector import EnvSelection, StrategyType, get_selector
+from app.classes.env_selector import DEFAULT_MASK, EnvSelection, StrategyType, compute_p_values, get_selector
 from app.depends.dependencies import get_request_id
 from starlette.background import BackgroundTask,BackgroundTasks
 from app.depends.variables import *
@@ -37,7 +37,7 @@ class TaskMeta(TypedDict):
 
 class TaskManager:
     
-    _schedule_env_selection:list[EnvSelection] = ['aps','worker']
+    _mask_schedule:list[EnvSelection] = [0,1,1,0]
     _not_allowed_aps_task_type = set[TaskType] = {TaskType.RRULE,TaskType.SOLAR}
 
     def __init__(self,backgroundTasks:BackgroundTasks,response:Response,request:Request,request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save_results:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query)):
@@ -98,19 +98,10 @@ class TaskManager:
         new_delay = self.append_taskConfig(task,delay)
         return TaskExecutionResult(True,now,'BackgroundTask',naturaldelta(new_delay),index,str(self.scheduler._heaviness),None,task_id= self.meta['request_id'],message=f"[{name}] - Task added successfully" )
     
-    async def select_task_env(self,task_weight:float,needed_envs:list[EnvSelection]=None)->EnvSelection:
-        async with self.celeryService.statusLock.reader:
-            p1 = await len(self.celeryService._workers)
-
-        if p1 < 0:
-            p1 = 0
-
-        workers_count = self.configService.CELERY_WORKERS_COUNT
-
-        p2  = p1 / workers_count if workers_count > 0 else 0
-        p3 = task_weight
-
-        return get_selector(self.meta['strategy']).select(p1, p2, p3)
+    async def select_task_env(self,task_weight:float,needed_envs:list[Literal[0,1]]=DEFAULT_MASK)->EnvSelection:
+        current_workers_count = len(self.celeryService._workers)
+        p1,p2,p3 = compute_p_values(current_workers_count,self.configService.CELERY_WORKERS_COUNT,task_weight)
+        return get_selector(self.meta['strategy'],celery_broker=self.configService.CELERY_BROKER).select(p1, p2, p3,needed_envs)
 
     def register_backgroundTask(self):
         async def callback():
@@ -265,7 +256,7 @@ class TaskManager:
     async def _mix_offload(self,weight:float,delay,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
         match self.scheduler.task_type:
             case TaskType.NOW:
-                env = await self.select_task_env(weight,None)
+                env = await self.select_task_env(weight)
                 if env.startswith('route'):
                     return await self._route_offload(env,weight,delay,index,callback,*args,**kwargs)
                 elif env == 'worker':
@@ -273,7 +264,7 @@ class TaskManager:
                 else:
                     return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
             case (TaskType.DATETIME,TaskType.TIMEDELTA,TaskType.INTERVAL,TaskType.CRONTAB):
-                if (await self.select_task_env(weight,self._schedule_env_selection)) == 'worker':
+                if (await self.select_task_env(weight,self._mask_schedule)) == 'worker':
                     return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
                 else:
                     return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)

@@ -23,6 +23,8 @@ class CeleryTaskNameNotExistsError(BaseError):
 class CelerySchedulerOptionError(BaseError):
     ...
 
+class CeleryRedisVisibilityTimeoutError(BaseError):
+    ...
 
 ###############################################################################################################
 ###############################################################################################################
@@ -106,7 +108,7 @@ class SubContentIndexBaseModel(BaseModel):
     index:int |None = None
 
 class CeleryOptionModel(BaseModel):
-    countdown:Optional[int]= None
+    countdown:Optional[int]= Field(None,ge=0,le=999999)
     expires:Optional[DateTimeSchedulerModel] = None
     priority:Literal[1,2,3] = 3
     time_limit:Optional[int] = None

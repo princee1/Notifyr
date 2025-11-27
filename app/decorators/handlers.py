@@ -17,7 +17,7 @@ from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
 from app.definition._service import MethodServiceNotExistsError, MethodServiceNotImplementedError, ServiceDoesNotExistError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceNotImplementedError, ServiceTemporaryNotAvailableError, StateProtocolMalFormattedError
 from fastapi import status, HTTPException
-from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
+from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
 from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDoesNotExistsError,MiniServiceCannotBeIdentifiedError
 
@@ -173,6 +173,11 @@ class CeleryTaskHandler(Handler):
         except CelerySchedulerOptionError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail={})
+
+        except CeleryRedisVisibilityTimeoutError as e:
+            raise HTTPException(
+                status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            )
 
         except QueueNotFound as e:
             raise HTTPException(
@@ -834,5 +839,5 @@ class CostHandler(Handler):
                 detail={'message': 'Cost processing error', 'error': str(e)}
             )
 
-class CeleryHandler(Handler):
+class CeleryControlHandler(Handler):
     ...

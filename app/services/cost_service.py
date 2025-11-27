@@ -41,7 +41,7 @@ class CostService(BaseService):
 
     def build(self,build_state=-1):
 
-        storage_uri = None if self.configService.MODE == MODE.DEV_MODE else self.configService.SLOW_API_REDIS_URL
+        storage_uri = None if self.configService.MODE == MODE.DEV_MODE else None # TODO redis url + f'/{RedisConstant.LIMITER_DB}'
         self.GlobalLimiter = Limiter(get_remote_address, storage_uri=storage_uri, headers_enabled=True)
         
         if self.configService.MODE == MODE.PROD_MODE:

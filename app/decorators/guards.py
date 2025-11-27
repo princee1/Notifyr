@@ -4,6 +4,7 @@ from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
+from app.manager.task_manager import TaskManager
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.link_model import LinkORM
 from app.models.otp_model import OTPModel
@@ -16,7 +17,7 @@ from app.services.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.twilio_service import TwilioService
-from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
+from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request, UploadFile,status
 
@@ -292,3 +293,30 @@ class GlobalsTemplateGuard(Guard):
             return False,self.error_message
 
         return True,''
+
+
+class CeleryBrokerGuard(Guard): 
+
+    _not_allowed_redis_eta = {TaskType.DATETIME,TaskType.TIMEDELTA}
+     
+    
+    def __init__(self,allowed_fallback:bool=False):
+        super().__init__()
+        self.allowed_fallback = allowed_fallback
+        self.configService = Get(ConfigService)
+        self.max_visibility_time = 0.8 * 1
+    
+    def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
+        if self.configService.CELERY_BROKER == 'redis':
+            if scheduler.task_type in self._not_allowed_redis_eta:
+                if self.allowed_fallback:
+                    taskManager.set_algorithm('aps')
+                else:
+                    raise CeleryRedisVisibilityTimeoutError
+            
+            if scheduler.task_type == TaskType.NOW:
+                countdown = scheduler.task_option.countdown 
+                if countdown and countdown >= self.max_visibility_time:
+                    raise CelerySchedulerOptionError
+
+        return True,None

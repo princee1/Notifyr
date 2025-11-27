@@ -8,6 +8,18 @@ services:
     command: memcached -m 64 -vv
     restart: unless-stopped
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"     # AMQP (used by Celery)
+      - "15672:15672"   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
   redis:
     image: redis:latest #Queue for the taks
     container_name: redis
@@ -290,6 +302,8 @@ volumes:
   
   minio-data: {}
   minio-secret: {}
+
+  rabbitmq_data:
 
 secrets:
   approle_role_id:
