@@ -96,7 +96,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.MFA_OTP])
     @PingService([ProfileService,TwilioService,CallService],is_manager=True)
     @UseServiceLock(AssetService,ProfileService,TwilioService,lockType='reader',check_status=False)
-    @UsePipe(TwilioPhoneNumberPipe('otp',True),)
+    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),TwilioPhoneNumberPipe('otp',True),)
     @UseInterceptor(TaskCostInterceptor,KeepAliveResponseInterceptor)
     @UseHandler(CostHandler,AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
     @BaseHTTPRessource.Get('/otp/', cost_definition=CostConstant.phone_digit_otp)
@@ -122,7 +122,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @UseInterceptor(TaskCostInterceptor)
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard,CeleryBrokerGuard)
-    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('default'))
+    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('default'))
     @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template:path}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_twiml)
     async def voice_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel,cost:Annotated[CallCost,Depends(CallCost)], request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
         
@@ -151,7 +151,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @PingService([ProfileService,TwilioService,CallService,CeleryService],is_manager=True)
     @UseServiceLock(ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
+    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']),TrackGuard,CeleryBrokerGuard)
     @BaseHTTPRessource.HTTPRoute('/twiml/', methods=[HTTPMethod.POST],  mount=False,cost_definition=CostConstant.phone_template)
     async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], channel:Annotated[ChannelMiniService,Depends(get_profile)],request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CallCost,Depends(CallCost)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
@@ -181,7 +181,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePermission(TaskCostPermission())
     @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
-    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
+    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']),TrackGuard,CeleryBrokerGuard)
     @BaseHTTPRessource.HTTPRoute('/custom/{profile}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_custom)
     async def voice_custom(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)], scheduler: CallCustomSchedulerModel, request: Request, response: Response,cost:Annotated[CallCost,Depends(CallCost)], broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(TaskManager)], authPermission=Depends(get_auth_permission)):

@@ -24,6 +24,7 @@ class TaskConfig(TypedDict):
 
 class TaskMeta(TypedDict):
     request_id:str
+    fallback:bool
     background:bool
     algorithm:AlgorithmType
     strategy:StrategyType
@@ -40,7 +41,7 @@ class TaskManager:
     _mask_schedule:list[EnvSelection] = [0,1,1,0]
     _not_allowed_aps_task_type: set[TaskType] = {TaskType.RRULE,TaskType.SOLAR}
 
-    def __init__(self,backgroundTasks:BackgroundTasks,response:Response,request:Request,request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save_results:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query)):
+    def __init__(self,backgroundTasks:BackgroundTasks,response:Response,request:Request,request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save_results:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query),fallback:bool=Depends(fallback_query)):
         self.return_results:bool = return_results
         self.backgroundTasks = backgroundTasks
         self.response = response
@@ -50,7 +51,7 @@ class TaskManager:
         self.weight = 0.0
         self.scheduler: SchedulerModel = None
         self.task_result:list[TaskExecutionResult] = []
-        self.meta: TaskMeta = TaskMeta(request_id=request_id,background=background,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy)
+        self.meta: TaskMeta = TaskMeta(request_id=request_id,background=background,runtype=runtype,save_result=save_results,ttl=ttl,tt=0,ttd=0,retry=retry,split=split,algorithm=algorithm,strategy=strategy,fallback=fallback)
 
         self.celeryService = Get(CeleryService)
         self.configService = Get(ConfigService)
@@ -206,20 +207,22 @@ class TaskManager:
             algorithm = 'worker'
             add_warning_messages(UNSUPPORTED_TASKS, self.scheduler, index=index)
 
-        match algorithm:
-            case  'normal':
-                return await self._normal_offload(weight,delay,index,callback, *args, **kwargs)
-            case 'worker':
-                return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
-            case 'route':
-                return await self._route_offload(None,weight,delay,index,callback, *args, **kwargs)
-            case 'mix':
-                return await self._mix_offload(weight,delay,index,callback, *args, **kwargs)
-            case 'aps':
-                return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
-            case _:
-                now = dt.datetime.now().isoformat()
-                return TaskExecutionResult(False,now,'RouteHandler',None,index,None,None,True,self.meta['task_id'],None,message=f'Algorithm not supported {algorithm}')
+        while True:
+            match algorithm:
+                case  'normal':
+                    return await self._normal_offload(weight,delay,index,callback, *args, **kwargs)
+                case 'worker':
+                    # fallback allowed to aps for task_type other than RRule and Solar if celery workers count < 1
+                    return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
+                case 'route':
+                    return await self._route_offload(None,weight,delay,index,callback, *args, **kwargs)
+                case 'mix':
+                    return await self._mix_offload(weight,delay,index,callback, *args, **kwargs)
+                case 'aps':
+                    return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+                case _:
+                    now = dt.datetime.now().isoformat()
+                    return TaskExecutionResult(False,now,'RouteHandler',None,index,None,None,True,self.meta['task_id'],None,message=f'Algorithm not supported {algorithm}')
 
     async def _normal_offload(self,weight:float, delay: float,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
         if self.scheduler.task_type == TaskType.NOW:

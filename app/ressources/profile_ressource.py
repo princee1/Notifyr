@@ -10,7 +10,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, UseHTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
@@ -52,13 +52,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
-    @PingService([HCVaultService,MongooseService,CeleryService])
-    @UseServiceLock(HCVaultService,MongooseService,lockType='reader',check_status=False)
+    @PingService([HCVaultService])
+    @UseServiceLock(HCVaultService,MongooseService,lockType='reader')
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler)
     @UsePermission(AdminPermission)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @UseHTTPStatusCode(status.HTTP_201_CREATED)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request,'model')
@@ -75,11 +75,11 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         return result
 
-    @PingService([HCVaultService,CeleryService])
+    @UsePermission(AdminPermission)
+    @PingService([HCVaultService])
     @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryControlHandler)
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
-    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
-    @UsePermission(AdminPermission)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @UsePipe(DocumentFriendlyPipe,before=False)
@@ -93,13 +93,12 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         return profileModel
     
-    @PingService([CeleryService])
     @UseHandler(PydanticHandler,CeleryControlHandler)
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
-    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
-    @UseHTTPStatusCode(status.HTTP_200_OK)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
+    @HTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -116,13 +115,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return profileModel
     
-    @PingService([HCVaultService,CeleryService])
+    @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @UsePermission(AdminPermission)
-    @UseHTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
     async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -143,7 +142,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @UseHandler(MiniServiceHandler)
     @UsePermission(ProfilePermission)
-    @UseServiceLock(ProfileService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
+    @UseServiceLock(ProfileService,lockType='reader',as_manager=True,motor_fallback=True)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
     async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -153,8 +152,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @UsePermission(ProfilePermission)
-    @UseHTTPStatusCode(status.HTTP_204_NO_CONTENT)
-    @UseServiceLock(ProfileService,CeleryService,lockType='reader',check_status=False,as_manager=True,motor_fallback=True)
+    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
     async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         await channel.refresh_worker_state()

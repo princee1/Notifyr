@@ -248,6 +248,11 @@ class ConfigService(_service.BaseService):
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
         self.CELERY_WORKERS_COUNT = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_COUNT","1"), 1)
 
+
+        # APS CONFIG #
+        self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
+        self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','redis')
+
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:
             raise BuildAbortError(f"S3_CRED_TYPE {self.S3_CRED_TYPE} is not valid please use MINIO or AWS")
@@ -257,6 +262,12 @@ class ConfigService(_service.BaseService):
         
         if not self.SECURITY_FLAG:
             raise BuildWarningError(f"SECURITY_FLAG {self.SECURITY_FLAG} is set to False, this is not recommended for production environments")
+        
+        if self.APS_JOBSTORE not in ['redis','mongodb','memory']:
+            self.APS_JOBSTORE = 'memory'
+        
+        if self.CELERY_BROKER not in ['redis','rabbitmq']:
+            raise BuildWarningError()
 
     def __getitem__(self, key):
         try:

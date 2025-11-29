@@ -21,7 +21,7 @@ from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant, CostConstant
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
-from app.definition._ressource import PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,UseHTTPStatusCode
+from app.definition._ressource import PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthType, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, ORMCacheHandler, PydanticHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
@@ -57,7 +57,7 @@ class PolicyRessource(BaseHTTPRessource):
     @UseServiceLock(ProfileService,lockType='reader',check_status=False)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UseGuard(PolicyGuard)
-    @UseHTTPStatusCode(status.HTTP_201_CREATED)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_policy(self,request:Request,response:Response, policyModel:PolicyModel, authPermission=Depends(get_auth_permission)):
         policy_model = policyModel.model_dump(mode='python')

@@ -320,3 +320,10 @@ class CeleryBrokerGuard(Guard):
                     raise CelerySchedulerOptionError("countdown is more than 15 % of the visibility timeout")
 
         return True,None
+    
+
+class TaskTypeEnvGuard(Guard):
+
+    def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
+        if taskManager.meta['algorithm'] == 'route' and scheduler.task_type != TaskType.NOW:
+            ...

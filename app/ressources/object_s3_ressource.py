@@ -14,7 +14,7 @@ from app.decorators.handlers import FileNamingHandler, S3Handler, ServiceAvailab
 from app.decorators.interceptors import ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseHTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
 from app.definition._utils_decorator import Guard
 from app.depends.class_dep import ObjectsSearch
@@ -46,7 +46,7 @@ class S3ObjectWebhookRessource(BaseHTTPRessource):
         self.assetService = assetService
         self.amazonS3Service = amazonS3Service
 
-    @UseHTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST,HTTPMethod.GET,HTTPMethod.DELETE])
     def webhooks(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)]):
         ...
@@ -137,7 +137,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseHandler(FileNamingHandler,S3Handler,VaultHandler)
     @PingService([AmazonS3Service])
     @UseGuard(GlobalsTemplateGuard)
-    @UseHTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],mount=False)
     async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):

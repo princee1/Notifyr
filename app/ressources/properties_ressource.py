@@ -6,7 +6,7 @@ from app.container import Get, InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, ServiceAvailabilityHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import GlobalPointerIteratorPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseHTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseServiceLock, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseServiceLock, UseRoles
 from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_auth_permission
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
@@ -48,7 +48,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='500/minutes')
     @UseServiceLock(AssetService,lockType= 'reader')
-    @UseHTTPStatusCode(status.HTTP_200_OK)
+    @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.PUBLIC])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET],)
@@ -72,7 +72,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10/hours')
     @UseServiceLock(AssetService, lockType='writer')
-    @UseHTTPStatusCode(status.HTTP_200_OK)
+    @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE],mount=to_mount_modify_obj)
@@ -97,7 +97,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10/hours')
     @UseServiceLock(AssetService,lockType= 'writer')
-    @UseHTTPStatusCode(status.HTTP_201_CREATED)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseRoles([Role.ADMIN])
     @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],mount=to_mount_modify_obj)

@@ -581,7 +581,7 @@ class MiniServiceInjectorPipe(Pipe):
         self.strict_value =strict_value
 
     def pipe(self,profile:str):
-        if self.strict_value != None and profile==  self.strict_value:
+        if self.strict_value != None and profile== self.strict_value:
             miniService:BaseMiniService = getattr(self.service,self.strict_value)
             if miniService == None:
                 raise MiniServiceStrictValueNotValidError

@@ -26,6 +26,8 @@ class CelerySchedulerOptionError(BaseError):
 class CeleryRedisVisibilityTimeoutError(BaseError):
     ...
 
+class CeleryNotAvailableError(BaseError):
+    ...
 ###############################################################################################################
 ###############################################################################################################
 

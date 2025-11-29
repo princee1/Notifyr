@@ -3,15 +3,15 @@ from typing import Any, Literal
 from aiorwlock import RWLock
 from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
-from app.classes.celery import CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType, due_entry_timedelta
+from app.classes.celery import CeleryNotAvailableError, CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType, add_warning_messages, due_entry_timedelta
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.interface.timers import IntervalInterface
 from app.models.communication_model import BaseProfileModel
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
+from app.services.database_service import RabbitMQService, RedisService
 from app.tasks import TASK_REGISTRY, celery_app, task_name
 from app.services.profile_service import ProfileMiniService, ProfileService
-from app.errors.service_error import BuildError, BuildFailureError, BuildOkError
+from app.errors.service_error import BuildError, BuildFailureError, BuildOkError, ServiceNotAvailableError
 from app.utils.constant import CeleryConstant, RedisConstant, SpecialKeyParameterConstant
 import datetime as dt
 from humanize import naturaldelta,naturaltime
@@ -27,18 +27,20 @@ CHANNEL_BUILD_STATE=0
 class CeleryService(BaseMiniServiceManager, IntervalInterface):
     _redbeat_scheduler_task_type = {TaskType.NOW,TaskType.DATETIME,TaskType.TIMEDELTA}
 
-    def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService):
+    def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService,rabbitmqService:RabbitMQService):
         BaseService.__init__(self)
         IntervalInterface.__init__(self,False)
 
         self.configService = configService
         self.profileService = profileService
         self.redisService = redisService
-    
+        self.rabbitmqService = rabbitmqService
+        self._workers = {}
+
         self.timeout_count = 0
         self.task_lock = RWLock()
         self.MiniServiceStore = MiniServiceStore[ChannelMiniService](self.__class__.__name__)
-
+    
     def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None,weight:float=-1.0, *args, **kwargs):
         schedule_id = str(uuid4())
         t_name = scheduler.task_name
@@ -110,9 +112,18 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
             raise CeleryTaskNotFoundError
     
     def verify_dependency(self):
-        if self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
-            raise BuildFailureError
+        if self.configService.CELERY_WORKERS_COUNT < 1:
+            raise BuildOkError('No workers expected')
+        
+        if self.configService.CELERY_BROKER not in ['rabbitmq','redis']:
+            raise BuildOkError('')
+        
+        if self.configService.CELERY_BROKER == 'redis' and self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
+            raise BuildOkError('')
 
+        if self.configService.CELERY_BROKER == 'rabbitmq' and self.rabbitmqService.service_status == ServiceStatus.NOT_AVAILABLE:
+            raise BuildOkError('')
+         
     def build(self,build_state=-1):
         
         self.state_counter = self.StatusCounter(len(self.profileService.MiniServiceStore))
@@ -120,7 +131,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         
         for id,p in self.profileService.MiniServiceStore:
 
-            miniService = ChannelMiniService(p,self.configService,self.redisService,self)
+            miniService = ChannelMiniService(p,self.configService,self.rabbitmqService,self.redisService,self)
             miniService._builder(BaseMiniService.QUIET_MINI_SERVICE, build_state, self.CONTAINER_LIFECYCLE_SCOPE)
 
             self.state_counter.count(miniService)
@@ -149,11 +160,25 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         async with self.task_lock.reader:
             return self._workers
 
-    async def async_pingService(self,infinite_wait:bool, **kwargs):
-        ...
+    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
+        if kwargs.get('__celery_availability__',False) and self.service_status != ServiceStatus.AVAILABLE:
+            raise ServiceNotAvailableError('Absolutely need celery to be available')
+
+        _scheduler:SchedulerModel = data.get('scheduler',None)
+        if _scheduler:
+            if _scheduler.task_type == TaskType.SOLAR and self.configService.CELERY_WORKERS_COUNT < 1:
+                raise CeleryNotAvailableError('task_type SOLAR is not possible to parse in other scheduler since no workers are available')
+
+            if _scheduler.task_type == TaskType.RRULE and self.configService.CELERY_WORKERS_COUNT < 1:
+                raise CeleryNotAvailableError('Use task_type INTERVAL to achieve a similar process since it is not possible to parse this type to other scheduler services')
+
+            if self.configService.CELERY_WORKERS_COUNT >= 1:
+                await super().pingService(infinite_wait,data,profile,as_manager,**kwargs)
+
 
     async def callback(self):
-        await self._check_workers_status()
+        if self.configService.CELERY_WORKERS_COUNT >= 1:
+            await self._check_workers_status()
 
     @RunInThreadPool
     def revoke(self,tasks:list[str],timeout=5):
@@ -197,26 +222,25 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 @MiniService()
 class ChannelMiniService(BaseMiniService):
 
-    def __init__(self, depService:ProfileMiniService[BaseProfileModel],configService:ConfigService,redisService:RedisService,celeryService:CeleryService):
+    def __init__(self, depService:ProfileMiniService[BaseProfileModel],configService:ConfigService,rabbitmqService:RabbitMQService,redisService:RedisService,celeryService:CeleryService):
         self.depService = depService
         super().__init__(depService,None)
         self.redisService = redisService
         self.celeryService = celeryService
         self.configService = configService
+        self.rabbitmqService = rabbitmqService
     
-    async def async_pingService(self,infinite_wait:bool, **kwargs):
-        route_params:dict[str,Any] = kwargs.get(SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER,{})
-        scheduler:SchedulerModel = route_params.get('scheduler',None)
-        if not scheduler:
-            return
-        if scheduler.task_type == TaskType.NOW:
-            return
-        
+    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
+        scheduler:SchedulerModel = data.get('scheduler',None)
+        taskManager = data.get('taskManager',None)
+        # add warning if queue is <<congestionné>> and later change algorithm
+        #add_warning_messages(None,scheduler,None)
         # TODO if the celery queue is not available only let scheduler with now to pass, but retry is not available
         ...
 
     def build(self, build_state = ...):
-        raise BuildOkError
+        if self.celeryService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildOkError
 
     @RunInThreadPool
     async def refresh_worker_state(self):

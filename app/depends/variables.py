@@ -40,6 +40,8 @@ summary_query:Callable = get_query_params('summary','false',True)
 
 background_query:Callable = get_query_params('background','true',True)
 
+fallback_query:Callable = get_query_params('fallback','false',True)
+
 split_query: Callable = get_query_params('split','false',True)
 
 runtype_query:Callable=get_query_params('runtype','sequential',False,checker=_wrap_checker('runtype', lambda v: v in get_args(RunType), choices=list(get_args(RunType))))

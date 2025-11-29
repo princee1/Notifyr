@@ -1,8 +1,9 @@
 import asyncio
 from random import randint
 from typing import Optional
-from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service
-from app.errors.service_error import NotBuildedError
+from app.classes.celery import SchedulerModel, TaskType
+from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service, ServiceStatus
+from app.errors.service_error import BuildFailureError, BuildOkError, NotBuildedError, ServiceNotAvailableError
 from app.interface.timers import SchedulerInterface,RedisJobStore,MemoryJobStore,MongoDBJobStore,AsyncIOExecutor,ThreadPoolExecutor
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.database_service import MongooseService, RedisService
@@ -17,6 +18,8 @@ SCHEDULER_JOBSTORE_PREFIX = "apscheduler:"
 
 @Service()
 class TaskService(BaseService,SchedulerInterface):
+    _schedule_type_supported = {TaskType.DATETIME,TaskType.INTERVAL,TaskType.TIMEDELTA,TaskType.CRONTAB}
+
 
     def __init__(self, configService: ConfigService,vaultService:HCVaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService):
         super().__init__()
@@ -29,6 +32,23 @@ class TaskService(BaseService,SchedulerInterface):
         self._leader = False
         self._leader_task: Optional[asyncio.Task] = None
         self._stop = False
+        self.fallback_to_memory = False
+
+    async def pingService(self, infinite_wait, data, profile = None, as_manager = False, **kwargs):
+        scheduler:SchedulerModel = kwargs.get('scheduler',None)
+        if scheduler:
+            if  self.configService.CELERY_WORKERS_COUNT < 1 and self.service_status != ServiceStatus.AVAILABLE and scheduler.task_type in self._schedule_type_supported:
+                raise ServiceNotAvailableError()   
+
+    def verify_dependency(self):
+        if not self.configService.APS_ACTIVATED:
+            raise BuildOkError
+
+        if self.configService.APS_JOBSTORE == 'mongodb' and  self.mongooseService.service_status != ServiceStatus.AVAILABLE:
+            self.fallback_to_memory = True
+        
+        if  self.configService.APS_JOBSTORE == 'redis' and self.redisService.service_status != ServiceStatus.AVAILABLE:
+            self.fallback_to_memory = True
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
         
@@ -40,17 +60,22 @@ class TaskService(BaseService,SchedulerInterface):
                 # some Redis jobstores accept prefix arg; see your plugin's API
                 jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}jobs",run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}run_times",),
             'memory':MemoryJobStore(),
-            'mongo':MongoDBJobStore(MongooseDBConstant.DATABASE_NAME,collection=MongooseDBConstant.TASKS_COLLECTION,client=self.mongooseService.sync_client)
+            'mongodb':MongoDBJobStore(MongooseDBConstant.DATABASE_NAME,collection=MongooseDBConstant.TASKS_COLLECTION,client=self.mongooseService.sync_client)
         }
-        SchedulerInterface.__init__(self,None,jobstores,'redis',executor='asyncio-executor',replace_existing=True,coalesce=True,thread_pool_count=50)
+        jobstore = self.configService.APS_JOBSTORE if not self.fallback_to_memory else 'memory'
+        SchedulerInterface.__init__(self,None,jobstores,jobstore,executor='asyncio-executor',replace_existing=True,coalesce=True,thread_pool_count=50)
 
     async def start(self):
+        if self.configService.APS_JOBSTORE == 'memory' or self.fallback_to_memory:
+            return 
         if not self._builded:
             raise NotBuildedError()
         self._stop = False
         self._leader_task = asyncio.create_task(self._leader_loop())
 
     async def stop(self):
+        if self.configService.APS_JOBSTORE == 'memory' or self.fallback_to_memory:
+            return 
         self._stop = True
         if self._leader_task:
             self._leader_task.cancel()

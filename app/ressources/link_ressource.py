@@ -7,7 +7,7 @@ from app.container import InjectInMethod
 from app.decorators.guards import AccessLinkGuard
 from app.decorators.handlers import ORMCacheHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseHTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import GetLink
 from app.depends.class_dep import  LinkQuery
@@ -59,7 +59,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
         self.linkService = linkService
 
     @UseRoles([Role.ADMIN])
-    @UseHTTPStatusCode(201)
+    @HTTPStatusCode(201)
     @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
     async def add_link(self, request: Request, linkModel: LinkModel, response: Response,authPermission=Depends(get_auth_permission)):
@@ -100,7 +100,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
         return {"data": link_data, "message": "Link archived successfully"}
 
     @UseRoles([Role.ADMIN])
-    @UseHTTPStatusCode(200)
+    @HTTPStatusCode(200)
     @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
     async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,response:Response,authPermission=Depends(get_auth_permission)):
@@ -119,7 +119,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
 
     @UseRoles([Role.ADMIN])
     @UseGuard(AccessLinkGuard.verify_link_guard)
-    @UseHTTPStatusCode(status.HTTP_200_OK)
+    @HTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.HTTPRoute('/verify', methods=[HTTPMethod.PATCH])
     async def verify(self, request: Request, link: Annotated[LinkORM, Depends(get_link)], response: Response, verify_type: Literal['well-known', 'domain'] = Depends(verify_url)):
         
@@ -136,7 +136,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
 
     @UseGuard(AccessLinkGuard(False))
     @UseRoles([Role.PUBLIC])
-    @UseHTTPStatusCode(200)
+    @HTTPStatusCode(200)
     @BaseHTTPRessource.HTTPRoute('/code/{link_id}/', methods=[HTTPMethod.GET,HTTPMethod.POST], mount=True)
     async def get_qrcode(self,response:Response, link_id: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_query: Annotated[LinkQuery, Depends(LinkQuery)], media_type: MediaType = Depends(media_type_query), authPermission=Depends(get_auth_permission)):
         path: str = None

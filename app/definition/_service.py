@@ -194,7 +194,7 @@ class BaseService():
         """
         self.method_not_available = set()
         
-    async def async_pingService(self,infinite_wait:bool,**kwargs):
+    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
         ...
     
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
@@ -489,12 +489,12 @@ class BaseMiniServiceManager(BaseService):
             raise BuildSkipError
         
     
-    async def async_pingService(self,infinite_wait:bool,**kwargs):
-        if not kwargs.get('__is_manager__',False):
+    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
+        if not as_manager:
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
-        p = mss.get(kwargs.get('__profile__',None))
-        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(p,infinite_wait,**kwargs)
+        p = mss.get(profile)
+        return await BaseService.CheckStatusBeforeHand(p.pingService)(p,infinite_wait,data,profile,as_manager,**kwargs)
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)
