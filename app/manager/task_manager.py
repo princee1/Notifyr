@@ -236,7 +236,7 @@ class TaskManager:
                 case 'route':
                     if  isinstance(self.scheduler, SchedulerModel) and self.scheduler.task_type != TaskType.NOW:
                         algorithm = 'worker'
-                        add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index)
+                        add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index,obj='celery worker')
                         continue
 
                     return await self._route_offload(None,weight,delay,index,callback, *args, **kwargs)
@@ -249,8 +249,10 @@ class TaskManager:
                         return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
                     elif self.configService.CELERY_WORKERS_EXPECTED >=1:
                         algorithm = 'worker'
+                        add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index,obj='celery worker')
                     elif self.scheduler.task_type == TaskType.NOW:
                         algorithm = 'route'
+                        add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index,obj='route')
                     else:
                         algorithm = 'error'
                         from_handler_error = 'APScheduler'

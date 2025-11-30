@@ -40,7 +40,7 @@ summary_query:Callable = get_query_params('summary','false',True)
 
 background_query:Callable = get_query_params('background','true',True)
 
-fallback_query:Callable = get_query_params('fallback','false',True)
+fallback_query:Callable = get_query_params('fallback','true',True)
 
 split_query: Callable = get_query_params('split','false',True)
 

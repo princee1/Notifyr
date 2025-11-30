@@ -319,7 +319,7 @@ class CeleryBrokerGuard(Guard):
                 if countdown and countdown >= self.max_visibility_time:
                     raise CelerySchedulerOptionError("countdown is more than 15 % of the visibility timeout")
 
-        return True,None
+        return True,''
     
 
 class TaskTypeEnvGuard(Guard):

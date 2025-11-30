@@ -53,8 +53,8 @@ rabbitmqService = Get(RabbitMQService)
 ##############################################           ##################################################
 
 celery_app = Celery('celery_app',
-                    backend=configService.CELERY_BACKEND_URL,
-                    broker=configService.CELERY_MESSAGE_BROKER_URL,
+                    backend=configService.CELERY_BACKEND_URL(...,...),
+                    broker=configService.CELERY_MESSAGE_BROKER_URL(rabbitmqService.db_user,rabbitmqService.db_password),
                     result_expires=configService.CELERY_RESULT_EXPIRES
                     )
 
@@ -76,7 +76,7 @@ celery_app.conf.task_ignore_result = True
 
 celery_app.conf.worker_soft_shutdown_timeout = 120.0
 celery_app.conf.worker_enable_soft_shutdown_on_idle = True
-celery_app.conf.task_create_missing_queues = False
+celery_app.conf.task_create_missing_queues = True
 
 if configService.CELERY_BROKER == 'redis':
     celery_app.conf.visibility_timeout = configService.CELERY_VISIBILITY_TIMEOUT
@@ -132,7 +132,7 @@ def refresh_profile(worker,p:str=None):
     return {'message':'Sucessfully refresh the profile'}
 
 
-@RegisterTask(TaskHeaviness.LIGHT)
+@RegisterTask(TaskHeaviness.MODERATE)
 def task_send_template_mail(self:Task,*args,**kwargs):
     print(self.request)
 
@@ -142,7 +142,7 @@ def task_send_template_mail(self:Task,*args,**kwargs):
     return emailMiniService.sendTemplateEmail(*args,**kwargs)
 
 
-@RegisterTask(TaskHeaviness.LIGHT)
+@RegisterTask(TaskHeaviness.MODERATE)
 def task_send_custom_mail(self:Task,*args,**kwargs):
     emailService: EmailSenderService = Get(EmailSenderService)
     email_profile = kwargs.get('email_profile',None)
@@ -180,7 +180,7 @@ def task_send_custom_voice_call(self:Task, *args,**kwargs):
 
 #============================================================================================================#
 
-@RegisterTask(TaskHeaviness.LIGHT)
+@RegisterTask(TaskHeaviness.VERY_LIGHT)
 def task_send_webhook(self:Task,*args,**kwargs):
     webhookService:WebhookService = Get(WebhookService)
     webhook_profile = kwargs.get('webhook_profile',None)

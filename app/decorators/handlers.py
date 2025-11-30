@@ -3,6 +3,7 @@ import asyncio
 import traceback
 from typing import Callable
 
+from amqp import AccessRefused
 from fastapi.exceptions import ResponseValidationError
 from h11 import LocalProtocolError
 import hvac
@@ -186,6 +187,7 @@ class CeleryTaskHandler(Handler):
             )
 
         except QueueNotFound as e:
+            print(e)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail={})
 
@@ -201,6 +203,11 @@ class CeleryTaskHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={})
 
+
+        except AccessRefused:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,details='Could not connect to the broker'
+            )
 
 class TwilioHandler(Handler):
 
