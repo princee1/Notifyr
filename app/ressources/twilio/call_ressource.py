@@ -27,6 +27,7 @@ from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService
+from app.services.task_service import TaskService
 from app.services.twilio_service import CallService, TwilioAccountMiniService, TwilioService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
@@ -116,7 +117,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.RELAY])
     @UsePermission(TaskCostPermission(),JWTAssetPermission('phone'))
-    @PingService([ProfileService,TwilioService,CallService,CeleryService,],is_manager=True)
+    @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(AssetService,ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
     @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler,CostHandler,MiniServiceHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
@@ -149,7 +150,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UsePermission(TaskCostPermission())
     @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
-    @PingService([ProfileService,TwilioService,CallService,CeleryService],is_manager=True)
+    @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UseGuard(CeleryTaskGuard(['task_send_twiml_voice_call']),TrackGuard,CeleryBrokerGuard)
@@ -175,7 +176,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
-    @PingService([ProfileService,TwilioService,CallService,CeleryService],is_manager=True)
+    @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False)
     @UseInterceptor(TaskCostInterceptor)
     @UsePermission(TaskCostPermission())

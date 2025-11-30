@@ -26,6 +26,7 @@ from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.database_service import RedisService
+from app.services.task_service import TaskService
 from app.services.twilio_service import SMSService, TwilioAccountMiniService, TwilioService
 from app.depends.dependencies import  get_auth_permission
 from app.depends.variables import profile_query
@@ -95,7 +96,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UseInterceptor(TaskCostInterceptor(),inject_meta=True)
     @UseServiceLock(ProfileService,TwilioService,CeleryService,as_manager=True,lockType='reader')
-    @PingService([ProfileService,TwilioService,SMSService,CeleryService],is_manager=True)
+    @PingService([ProfileService,TwilioService,SMSService,CeleryService,TaskService],is_manager=True)
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True),CeleryTaskGuard(task_names=['task_send_custom_sms']),CeleryBrokerGuard)
     @BaseHTTPRessource.HTTPRoute('/custom/{profile}/',methods=[HTTPMethod.POST],cost_definition=CostConstant.sms_message)
     async def sms_simple_message(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[SMSCost,Depends(SMSCost)],taskManager:Annotated[TaskManager,Depends(TaskManager)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission),):
@@ -117,7 +118,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         
     @UseLimiter(limit_value="5000/minutes")
     @UseRoles([Role.RELAY])
-    @PingService([ProfileService,TwilioService,SMSService,CeleryService], is_manager=True,)
+    @PingService([ProfileService,TwilioService,SMSService,CeleryService,TaskService], is_manager=True,)
     @UseHandler(MiniServiceHandler,CeleryTaskHandler,TemplateHandler,ContactsHandler,AsyncIOHandler,ProfileHandler,CostHandler)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),RegisterSchedulerPipe,TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UsePipe(OffloadedTaskResponsePipe(),before=False)

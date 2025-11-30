@@ -29,6 +29,7 @@ from fastapi import Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission
 from app.decorators import permissions, handlers,pipes,guards
 from app.depends.variables import email_verifier,wait_timeout_query
+from app.services.task_service import TaskService
 from app.utils.constant import CostConstant, StreamConstant
 from app.utils.globals import DIRECTORY_SEPARATOR
 
@@ -109,7 +110,7 @@ class EmailRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='1000/minutes')
     @UseRoles([Role.MFA_OTP])
     @UseInterceptor(TaskCostInterceptor(),inject_meta=True)
-    @PingService([ProfileService,EmailSenderService,CeleryService],is_manager=True)
+    @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,CeleryService,AssetService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetPermission('email'),permissions.JWTSignatureAssetPermission())
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.CostHandler,handlers.ContactsHandler(),handlers.ProfileHandler)
@@ -150,7 +151,7 @@ class EmailRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='10/minutes')
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
-    @PingService([ProfileService,EmailSenderService,CeleryService],is_manager=True)
+    @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.TaskCostPermission(),permissions.JWTSignatureAssetPermission())
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'))

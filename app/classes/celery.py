@@ -157,6 +157,7 @@ class SchedulerModel(BaseModel):
     _heaviness: TaskHeaviness = None
     _errors:dict[int,dict|str] = PrivateAttr({})
     _message:dict[int,str] = PrivateAttr({})
+    _warnings:list[dict[str,Any]] = PrivateAttr([])
     _schedule:Scheduler = PrivateAttr(None)
 
         

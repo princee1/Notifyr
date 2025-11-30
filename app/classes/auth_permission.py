@@ -28,7 +28,7 @@ class Role(Enum):
     CUSTOM ='CUSTOM'
     MFA_OTP ='MFA_OTP'
     CHAT = 'CHAT'
-    REDIS_RESULT = 'REDIS-RESULT'
+    RESULT = 'RESULT'
     REFRESH = 'REFRESH'
     CONTACTS = 'CONTACTS'
     TWILIO = 'TWILIO'

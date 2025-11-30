@@ -19,6 +19,7 @@ from app.definition._service import MethodServiceNotExistsError, MethodServiceNo
 from fastapi import status, HTTPException
 from app.classes.celery import CeleryNotAvailableError, CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
+from app.errors.aps_error import APSJobDoesNotExists
 from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDoesNotExistsError,MiniServiceCannotBeIdentifiedError
 
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
@@ -846,3 +847,18 @@ class CostHandler(Handler):
 
 class CeleryControlHandler(Handler):
     ...
+
+
+class APSSchedulerHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        
+        try:
+            return await function(*args,**kwargs)
+
+        except APSJobDoesNotExists as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=''
+            )
+            

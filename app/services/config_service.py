@@ -175,9 +175,6 @@ class ConfigService(_service.BaseService):
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
         self.PROD_URL = self.getenv('PROD_URL',None)
         self.DEV_URL:str = self.getenv('DEV_URL','http://localhost:8088')
-
-        # CONTAINER CONFIG #
-        self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'),0)
         
         # NAMING CONFIG #
         self.DOMAIN_NAME =  self.getenv('DOMAIN_NAME','notifyr')
@@ -239,15 +236,14 @@ class ConfigService(_service.BaseService):
         self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
         # CELERY CONFIG #
-        self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','redis')
+        self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','rabbitmq')
 
         self.CELERY_MESSAGE_BROKER_URL:Callable[...,str] = self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://guest:guest@{self.RABBITMQ_HOST}:5672")
         self.CELERY_BACKEND_URL:Callable[...,str] =  self.getenv("CELERY_BACKEND_URL", f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
-        self.CELERY_WORKERS_COUNT = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_COUNT","1"), 1)
-
+        self.CELERY_WORKERS_EXPECTED = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_EXPECTED","1"), 1)
 
         # APS CONFIG #
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)

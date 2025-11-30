@@ -5,6 +5,7 @@ from fastapi import Depends
 from humanize import naturaldelta
 from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, Compute_Weight, SchedulerModel, TaskExecutionResult, TaskRetryError, TaskType, add_warning_messages, s
 from app.classes.env_selector import DEFAULT_MASK, EnvSelection, StrategyType, compute_p_values, get_selector
+from app.definition._service import ServiceStatus
 from app.depends.dependencies import get_request_id
 from starlette.background import BackgroundTask,BackgroundTasks
 from app.depends.variables import *
@@ -101,7 +102,7 @@ class TaskManager:
     
     async def select_task_env(self,task_weight:float,needed_envs:list[Literal[0,1]]=DEFAULT_MASK)->EnvSelection:
         current_workers_count = len(self.celeryService._workers)
-        p1,p2,p3 = compute_p_values(current_workers_count,self.configService.CELERY_WORKERS_COUNT,task_weight)
+        p1,p2,p3 = compute_p_values(current_workers_count,self.configService.CELERY_WORKERS_EXPECTED,task_weight)
         return get_selector(self.meta['strategy'],celery_broker=self.configService.CELERY_BROKER).select(p1, p2, p3,needed_envs)
 
     def register_backgroundTask(self):
@@ -200,38 +201,56 @@ class TaskManager:
             self.monitoringService.background_task_count.dec(task_len)
        
     async def _offload_task(self,weight: float,delay: float,index:int,callback: Callable, *args, **kwargs)->TaskExecutionResult:
-
+        """
+        - RRule and Solar Task Type are rejected if theres no expected workers
+        - If theres no worker and no aps scheduler schedule type are rejected
+        """
         algorithm = self.meta['algorithm']
+        now = dt.datetime.now().isoformat()
 
         if algorithm == 'route' and isinstance(self.scheduler, SchedulerModel) and self.scheduler.task_type != TaskType.NOW:
             algorithm = 'worker'
             add_warning_messages(UNSUPPORTED_TASKS, self.scheduler, index=index)
 
+        from_handler_error = None
         while True:
             match algorithm:
                 case  'normal':
                     return await self._normal_offload(weight,delay,index,callback, *args, **kwargs)
                 case 'worker':
-                    # fallback allowed to aps for task_type other than RRule and Solar if celery workers count < 1
-                    return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
+                    if self.configService.CELERY_WORKERS_EXPECTED >= 1:
+                        return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
+                    elif self.taskService.service_status == ServiceStatus.AVAILABLE:
+                        algorithm = 'aps'
+                    elif self.scheduler.task_type == TaskType.NOW:
+                        algorithm = 'route'
+                    else:
+                        algorithm='error'
+                        from_handler_error = 'Celery'
                 case 'route':
                     return await self._route_offload(None,weight,delay,index,callback, *args, **kwargs)
                 case 'mix':
                     return await self._mix_offload(weight,delay,index,callback, *args, **kwargs)
                 case 'aps':
-                    return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+                    if self.configService.APS_ACTIVATED:
+                        return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+                    elif self.configService.CELERY_WORKERS_EXPECTED >=1:
+                        algorithm = 'worker'
+                    elif self.scheduler.task_type == TaskType.NOW:
+                        algorithm = 'route'
+                    else:
+                        algorithm = 'error'
+                        from_handler_error = 'APScheduler'
+                case "error":
+                    return TaskExecutionResult(False,now,from_handler_error,None,index,None,None,True,self.meta['request_id'],'schedule','Was not able to fallback to other task scheduler provider')
                 case _:
-                    now = dt.datetime.now().isoformat()
                     return TaskExecutionResult(False,now,'RouteHandler',None,index,None,None,True,self.meta['task_id'],None,message=f'Algorithm not supported {algorithm}')
 
     async def _normal_offload(self,weight:float, delay: float,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
         if self.scheduler.task_type == TaskType.NOW:
             return await self._route_offload(None,weight,delay,index,callback,*args,**kwargs)
-        elif ...:
+        elif self.configService.CELERY_WORKERS_EXPECTED >= 1:
             return  self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
-        elif self.scheduler.task_type in self._not_allowed_aps_task_type:
-            now = dt.datetime.now().isoformat()
-            return TaskExecutionResult(False,now,'APSScheduler',None,index,None,None,True,self.meta['request_id'],None,f'TaskType not supported by APSScheduler: {self.scheduler.task_type}')
         else:
             return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
 
@@ -259,7 +278,8 @@ class TaskManager:
     async def _mix_offload(self,weight:float,delay,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
         match self.scheduler.task_type:
             case TaskType.NOW:
-                env = await self.select_task_env(weight)
+                mask = [1,int(self.configService.CELERY_WORKERS_EXPECTED >= 1),int(self.taskService.service_status == ServiceStatus.AVAILABLE),1]
+                env = await self.select_task_env(weight,mask)
                 if env.startswith('route'):
                     return await self._route_offload(env,weight,delay,index,callback,*args,**kwargs)
                 elif env == 'worker':
@@ -279,16 +299,17 @@ class TaskManager:
 
     def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
         now = dt.datetime.now().isoformat()
+        job_id= f"{self.meta['request_id']}@{index}"
         match self.scheduler.task_type:
             case TaskType.NOW:
-                job = self.taskService.now_schedule(delay,callback,args,kwargs,self.meta['request_id'])
+                job = self.taskService.now_schedule(delay,callback,args,kwargs,job_id)
             case (TaskType.DATETIME,TaskType.TIMEDELTA):
-                job = self.taskService.date_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,self.meta['request_id'])
+                job = self.taskService.date_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,job_id)
             case TaskType.CRONTAB:
-                job = self.taskService.cron_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,self.meta['request_id'])
+                job = self.taskService.cron_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,job_id)
             case TaskType.INTERVAL:
-                job = self.taskService.interval_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,self.meta['request_id'])
+                job = self.taskService.interval_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,job_id)
             case _:
-                return TaskExecutionResult(False,now,'APSScheduler',None,index,None,None,True,self.meta['request_id'],'error',f'Schedule type not handled error: {self.scheduler.task_type}')
+                return TaskExecutionResult(False,now,'APSScheduler',None,index,None,None,True,job_id,'error',f'Schedule type not handled error: {self.scheduler.task_type}')
 
-        return TaskExecutionResult(True,now,'APSScheduler',None,index,str(self.scheduler._heaviness),None,False,self.meta['request_id'],'schedule','Task Added to the APSScheduler, delay or problem might occur')
+        return TaskExecutionResult(True,now,'APSScheduler',None,index,str(self.scheduler._heaviness),None,False,job_id,'schedule','Task Added to the APSScheduler, delay or problem might occur')

@@ -1,5 +1,6 @@
+from fastapi import Response
 from kombu import Queue
-from typing import Any, Literal
+from typing import Any, Callable, Literal, Self
 from aiorwlock import RWLock
 from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
@@ -25,7 +26,7 @@ CHANNEL_BUILD_STATE=0
     links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
 )
 class CeleryService(BaseMiniServiceManager, IntervalInterface):
-    _redbeat_scheduler_task_type = {TaskType.NOW,TaskType.DATETIME,TaskType.TIMEDELTA}
+    _non_redbeat_task_type = {TaskType.NOW,TaskType.DATETIME,TaskType.TIMEDELTA}
 
     def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService,rabbitmqService:RabbitMQService):
         BaseService.__init__(self)
@@ -47,7 +48,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         result = TaskExecutionResult(expected_tbd=None,date= str(dt.datetime.now()),offloaded=True,handler='Celery',index=index,result=None,message=f'Task [{t_name}] received successfully',heaviness=str(scheduler._heaviness))
         option = scheduler.task_option.model_dump()
         
-        if scheduler.task_type in self._redbeat_scheduler_task_type:
+        if scheduler.task_type in self._non_redbeat_task_type:
             
             if scheduler.task_type != TaskType.NOW:
                 option['eta'] = scheduler._schedule._beat_object
@@ -112,7 +113,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
             raise CeleryTaskNotFoundError
     
     def verify_dependency(self):
-        if self.configService.CELERY_WORKERS_COUNT < 1:
+        if self.configService.CELERY_WORKERS_EXPECTED < 1:
             raise BuildOkError('No workers expected')
         
         if self.configService.CELERY_BROKER not in ['rabbitmq','redis']:
@@ -166,18 +167,18 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 
         _scheduler:SchedulerModel = data.get('scheduler',None)
         if _scheduler:
-            if _scheduler.task_type == TaskType.SOLAR and self.configService.CELERY_WORKERS_COUNT < 1:
+            if _scheduler.task_type == TaskType.SOLAR and self.configService.CELERY_WORKERS_EXPECTED < 1:
                 raise CeleryNotAvailableError('task_type SOLAR is not possible to parse in other scheduler since no workers are available')
 
-            if _scheduler.task_type == TaskType.RRULE and self.configService.CELERY_WORKERS_COUNT < 1:
+            if _scheduler.task_type == TaskType.RRULE and self.configService.CELERY_WORKERS_EXPECTED < 1:
                 raise CeleryNotAvailableError('Use task_type INTERVAL to achieve a similar process since it is not possible to parse this type to other scheduler services')
 
-            if self.configService.CELERY_WORKERS_COUNT >= 1:
+            if self.configService.CELERY_WORKERS_EXPECTED >= 1:
                 await super().pingService(infinite_wait,data,profile,as_manager,**kwargs)
 
 
     async def callback(self):
-        if self.configService.CELERY_WORKERS_COUNT >= 1:
+        if self.configService.CELERY_WORKERS_EXPECTED >= 1:
             await self._check_workers_status()
 
     @RunInThreadPool
@@ -231,6 +232,13 @@ class ChannelMiniService(BaseMiniService):
         self.rabbitmqService = rabbitmqService
     
     async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
+        """
+        the worker can take care of the request
+        """
+
+        if kwargs.get('__channel_availability__',False) and self.service_status != ServiceStatus.AVAILABLE:
+            raise ServiceNotAvailableError()
+        
         scheduler:SchedulerModel = data.get('scheduler',None)
         taskManager = data.get('taskManager',None)
         # add warning if queue is <<congestionné>> and later change algorithm
@@ -241,13 +249,27 @@ class ChannelMiniService(BaseMiniService):
     def build(self, build_state = ...):
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             raise BuildOkError
+        
+    @staticmethod
+    def celery_guard(func:Callable):     
 
+        async def wrapper(self:Self,*args,response:Response=None,**kwargs):
+            if self.celeryService.service_status != ServiceStatus.AVAILABLE:
+                if response != None:
+                    ...
+                return
+            return await func(self,*args,**kwargs)
+        
+        return wrapper
+
+    @celery_guard
     @RunInThreadPool
     async def refresh_worker_state(self):
         await self.pause_worker()
         reply = celery_app.control.broadcast(CeleryConstant.REFRESH_PROFILE_WORKER_STATE_COMMAND,arguments={'p':self.queue},reply=True)
         return reply
 
+    @celery_guard
     @RunInThreadPool
     async def purge_queue(self):
         """
@@ -261,15 +283,18 @@ class ChannelMiniService(BaseMiniService):
             val = queue(conn).purge()
             print(val)
             return val
-    
+
+    @celery_guard
     @RunInThreadPool
     def pause_worker(self,destination:list[str]=None,timeout=1.5):
         return celery_app.control.cancel_consumer(self.queue, reply=True,destination=destination,timeout=timeout)
 
+    @celery_guard
     @RunInThreadPool
     def resume_worker(self,destination:list[str]=None,timeout=1.5):
         return celery_app.control.add_consumer(self.queue, reply=True,timeout=timeout,destination=destination)
 
+    @celery_guard
     @RunInThreadPool
     async def delete_queue(self):
         await self.pause_worker()
@@ -279,7 +304,8 @@ class ChannelMiniService(BaseMiniService):
             with celery_app.connection_or_acquire() as conn:
                 queue = Queue(self.queue, exchange=None, routing_key=self.queue)
                 queue(conn).delete()
-            
+
+    @celery_guard
     @RunInThreadPool
     def create_queue(self):
         return celery_app.control.add_consumer(self.queue, reply=True)

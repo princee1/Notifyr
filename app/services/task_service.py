@@ -3,12 +3,17 @@ from random import randint
 from typing import Optional
 from app.classes.celery import SchedulerModel, TaskType
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service, ServiceStatus
-from app.errors.service_error import BuildFailureError, BuildOkError, NotBuildedError, ServiceNotAvailableError
-from app.interface.timers import SchedulerInterface,RedisJobStore,MemoryJobStore,MongoDBJobStore,AsyncIOExecutor,ThreadPoolExecutor
+from app.errors.aps_error import APSJobDoesNotExists
+from app.errors.service_error import BuildOkError, NotBuildedError, ServiceNotAvailableError
+from app.interface.timers import SchedulerInterface,RedisJobStore,MemoryJobStore,MongoDBJobStore
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.database_service import MongooseService, RedisService
+from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, RedisConstant
+from app.utils.tools import RunInThreadPool
+from apscheduler.jobstores.base import JobLookupError
+
 
 # configuration
 LEADER_LOCK_KEY = "apscheduler:leader_lock"
@@ -21,13 +26,14 @@ class TaskService(BaseService,SchedulerInterface):
     _schedule_type_supported = {TaskType.DATETIME,TaskType.INTERVAL,TaskType.TIMEDELTA,TaskType.CRONTAB}
 
 
-    def __init__(self, configService: ConfigService,vaultService:HCVaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService):
+    def __init__(self, configService: ConfigService,vaultService:HCVaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService):
         super().__init__()
         self.configService = configService
         self.uvicornWorkerService = processWorkerService
         self.vaultService = vaultService
         self.redisService = redisService
         self.mongooseService = mongooseService
+        self.loggerService = loggerService
         
         self._leader = False
         self._leader_task: Optional[asyncio.Task] = None
@@ -35,9 +41,12 @@ class TaskService(BaseService,SchedulerInterface):
         self.fallback_to_memory = False
 
     async def pingService(self, infinite_wait, data, profile = None, as_manager = False, **kwargs):
+        if kwargs.get('__task_aps_availability__',False) and self.service_status != ServiceStatus.AVAILABLE:
+            raise ServiceNotAvailableError()   
+
         scheduler:SchedulerModel = kwargs.get('scheduler',None)
         if scheduler:
-            if  self.configService.CELERY_WORKERS_COUNT < 1 and self.service_status != ServiceStatus.AVAILABLE and scheduler.task_type in self._schedule_type_supported:
+            if  self.configService.CELERY_WORKERS_EXPECTED < 1 and self.service_status != ServiceStatus.AVAILABLE and scheduler.task_type in self._schedule_type_supported:
                 raise ServiceNotAvailableError()   
 
     def verify_dependency(self):
@@ -124,3 +133,23 @@ class TaskService(BaseService,SchedulerInterface):
     async def _stop_scheduler(self):
         self.shutdown(wait=False)
         print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Stopped scheduler (lost leadership).")
+
+    @RunInThreadPool
+    def get_jobs(self,job_id:str= None):
+        if job_id != None:
+            job = self._scheduler.get_job(job_id,self.jobstore)
+            if job == None:
+                raise APSJobDoesNotExists(job_id)
+            return [job]
+        else:
+            return self._scheduler.get_jobs(self.jobstore)
+
+    @RunInThreadPool
+    def cancel_job(self,job_id:str=None):
+        if job_id == None:
+            self._scheduler.remove_all_jobs(self.jobstore)
+        else:
+            try:
+                self._scheduler.remove_job(job_id,self.jobstore)
+            except JobLookupError as e:
+                raise APSJobDoesNotExists(job_id,*e.args)
