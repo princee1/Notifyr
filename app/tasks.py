@@ -1,15 +1,14 @@
+import functools
 import sys
 from typing import Any, Callable
 from celery import Celery
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
-from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService,CeleryEnv
-from app.services import RedisService,RabbitMQService
+from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService
 from app.container import Get, build_container,__DEPENDENCY
-from app.utils.constant import CeleryConstant
+from app.services import *
 from app.utils.prettyprint import PrettyPrinter_
 from flower import VERSION
 from celery import Task
-from app.services import *
 from celery.exceptions import SoftTimeLimitExceeded,MaxRetriesExceededError,TaskRevokedError,QueueNotFound
 from celery.worker.control import control_command
 
@@ -19,12 +18,11 @@ from celery.worker.control import control_command
 if sys.argv[0] == CELERY_EXE_PATH:
     PrettyPrinter_.message(f'Building container for the celery {ConfigService._celery_env.value}')
     if ConfigService._celery_env != CeleryMode.worker:
-        build_container(False,dep=[ConfigService])
+        build_container(False,dep=[ConfigService,UvicornWorkerService,LoggerService,FileService,ReactiveService,HCVaultService,RedisService,RabbitMQService])
     else:
         dependency = __DEPENDENCY.copy()
         dependency.remove(AssetService)
         dependency.remove(HealthService)
-        dependency.remove(CostService)
         build_container(False,dep=dependency)
         
 ##############################################           ##################################################
@@ -62,7 +60,7 @@ celery_app = Celery('celery_app',
 
 # Enable RedBeat Scheduler
 celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
-celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL
+celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL(...,...)
 celery_app.conf.timezone = "UTC"
 
 celery_app.conf.result_backend_transport_options = {
@@ -109,6 +107,7 @@ def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None
 
         name = task_name(task.__qualname__)
 
+        @functools.wraps(task)
         def wrapper(self:Task,*args,**kwargs):
             return task(*args,**kwargs)
 

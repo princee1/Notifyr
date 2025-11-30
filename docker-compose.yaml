@@ -178,6 +178,10 @@ services:
     image: notifyr:celery
     command: ["make", "redbeat"]
     container_name: beat
+    volumes:
+      - vault-shared:/vault/shared
+      - vault-secrets:/vault/secrets
+
     labels:
       - com.docker.compose.service=beat
     build:
