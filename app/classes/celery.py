@@ -156,7 +156,7 @@ class SchedulerModel(BaseModel):
     content: Any | list[Any]
     _heaviness: TaskHeaviness = None
     _errors:dict[int,dict|str] = PrivateAttr({})
-    _message:dict[int,str] = PrivateAttr({})
+    _messages:list[dict[str,Any]] = PrivateAttr([])
     _warnings:list[dict[str,Any]] = PrivateAttr([])
     _schedule:Scheduler = PrivateAttr(None)
 
@@ -203,24 +203,37 @@ class TaskRetryError(BaseError):
         super().__init__(*args)
         self.error=error
 
-UNSUPPORTED_TASKS = 549
+FALLBACK_ENV_TASK = 549
+UNSUPPORTED_TASK_TYPE = 498
 
-WARNING_MESSAGE = {
-    UNSUPPORTED_TASKS:{
-    "name":"unsupported_task",
-    "message":   "This task is not supported in the current environment, we now used the celery worker to run this task"
-}}
 
-def add_warning_messages(warning_code:int, scheduler:SchedulerModel,index=None):
 
-    if warning_code not in WARNING_MESSAGE.keys():
+MESSAGES = {
+    FALLBACK_ENV_TASK:lambda i,e: {
+        "name":"fallback runtime env task_type",
+        "message": f"This task is not supported in the current runtime environment, we now used the '{e}' to run this task",
+        "index":i,
+        "code":FALLBACK_ENV_TASK,
+        "permanent":False
+    },
+    UNSUPPORTED_TASK_TYPE: lambda i,e : {
+        "name": "unsupported task",
+        "message": "The system could resolve the task_type, enable APS Scheduler or add Celery workers",
+        "index":i,
+        "code":UNSUPPORTED_TASK_TYPE,
+        "permanent": True,
+    }
+
+
+}
+
+def add_messages(warning_code:int, scheduler:SchedulerModel,index=None,obj:str=None):
+    if warning_code not in MESSAGES.keys():
         raise ValueError(f"Warning code {warning_code} is not defined")
-    if warning_code in scheduler._message:
-        return
+    scheduler._messages.append(MESSAGES[warning_code](index,obj))
 
-    scheduler._message[warning_code]= WARNING_MESSAGE[warning_code].copy()
-    scheduler._message[warning_code]['index'] = index
-
+def add_warnings(scheduler:SchedulerModel,warnings:Any):
+    scheduler._warnings.append(warnings)
 
 def due_entry_timedelta(entry):
     if isinstance(entry.due_at,datetime):

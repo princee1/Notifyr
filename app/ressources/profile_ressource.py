@@ -41,15 +41,14 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     profileType:str
 
     @InjectInMethod()
-    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService,taskService:TaskService):
+    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService):
         super().__init__()
         self.profileService = profileService
         self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.celeryService= celeryService
         self.redisService = redisService
-        self.taskService = taskService
-
+    
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
 
     @PingService([HCVaultService])

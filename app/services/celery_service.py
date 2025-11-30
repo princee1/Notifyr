@@ -4,7 +4,7 @@ from typing import Any, Callable, Literal, Self
 from aiorwlock import RWLock
 from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
-from app.classes.celery import CeleryNotAvailableError, CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType, add_warning_messages, due_entry_timedelta
+from app.classes.celery import CeleryNotAvailableError, CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType, add_warnings, due_entry_timedelta
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.interface.timers import IntervalInterface
 from app.models.communication_model import BaseProfileModel
@@ -241,9 +241,12 @@ class ChannelMiniService(BaseMiniService):
         
         scheduler:SchedulerModel = data.get('scheduler',None)
         taskManager = data.get('taskManager',None)
+        if self.configService.CELERY_BROKER == 'rabbitmq':
+            add_warnings(scheduler,{'test':'rabbitmq'})
+        else:
+            add_warnings(scheduler,{'test':'redis'})
         # add warning if queue is <<congestionné>> and later change algorithm
-        #add_warning_messages(None,scheduler,None)
-        # TODO if the celery queue is not available only let scheduler with now to pass, but retry is not available
+        #add_warning(scheduler,None)
         ...
 
     def build(self, build_state = ...):

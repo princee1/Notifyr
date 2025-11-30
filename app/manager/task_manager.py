@@ -3,7 +3,7 @@ from dataclasses import asdict
 from typing import Any, Coroutine, Literal, ParamSpec, TypedDict
 from fastapi import Depends
 from humanize import naturaldelta
-from app.classes.celery import UNSUPPORTED_TASKS, AlgorithmType, Compute_Weight, SchedulerModel, TaskExecutionResult, TaskRetryError, TaskType, add_warning_messages, s
+from app.classes.celery import FALLBACK_ENV_TASK, AlgorithmType, Compute_Weight, SchedulerModel, TaskExecutionResult, TaskRetryError, TaskType, add_messages, s
 from app.classes.env_selector import DEFAULT_MASK, EnvSelection, StrategyType, compute_p_values, get_selector
 from app.definition._service import ServiceStatus
 from app.depends.dependencies import get_request_id
@@ -125,7 +125,8 @@ class TaskManager:
             'weight': self.weight,
             'results': self.task_result,
             'errors':self.scheduler._errors if self.scheduler else {},
-            'message': self.scheduler._message if self.scheduler else {},
+            'messages': self.scheduler._messages if self.scheduler else [],
+            'warnings': self.scheduler._warnings if self.scheduler else []
         }
 
     @property
@@ -208,29 +209,41 @@ class TaskManager:
         algorithm = self.meta['algorithm']
         now = dt.datetime.now().isoformat()
 
-        if algorithm == 'route' and isinstance(self.scheduler, SchedulerModel) and self.scheduler.task_type != TaskType.NOW:
-            algorithm = 'worker'
-            add_warning_messages(UNSUPPORTED_TASKS, self.scheduler, index=index)
+       
 
         from_handler_error = None
         while True:
             match algorithm:
                 case  'normal':
                     return await self._normal_offload(weight,delay,index,callback, *args, **kwargs)
+                
                 case 'worker':
                     if self.configService.CELERY_WORKERS_EXPECTED >= 1:
                         return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
                     elif self.taskService.service_status == ServiceStatus.AVAILABLE:
                         algorithm = 'aps'
+                        add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index,obj='aps')
+
                     elif self.scheduler.task_type == TaskType.NOW:
                         algorithm = 'route'
+                        add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index,obj='route')
+
                     else:
+                        add_messages()
                         algorithm='error'
                         from_handler_error = 'Celery'
+
                 case 'route':
+                    if  isinstance(self.scheduler, SchedulerModel) and self.scheduler.task_type != TaskType.NOW:
+                        algorithm = 'worker'
+                        add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index)
+                        continue
+
                     return await self._route_offload(None,weight,delay,index,callback, *args, **kwargs)
+                
                 case 'mix':
                     return await self._mix_offload(weight,delay,index,callback, *args, **kwargs)
+                
                 case 'aps':
                     if self.configService.APS_ACTIVATED:
                         return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
@@ -242,6 +255,7 @@ class TaskManager:
                         algorithm = 'error'
                         from_handler_error = 'APScheduler'
                 case "error":
+                    add_messages()
                     return TaskExecutionResult(False,now,from_handler_error,None,index,None,None,True,self.meta['request_id'],'schedule','Was not able to fallback to other task scheduler provider')
                 case _:
                     return TaskExecutionResult(False,now,'RouteHandler',None,index,None,None,True,self.meta['task_id'],None,message=f'Algorithm not supported {algorithm}')
