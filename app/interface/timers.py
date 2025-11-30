@@ -16,6 +16,7 @@ import asyncio
 from app.definition._error import BaseError
 from app.definition._interface import Interface, IsInterface
 from apscheduler.executors.pool import ThreadPoolExecutor
+from functools import partial
 
 class IntervalError(BaseError):
     ...
@@ -48,6 +49,12 @@ class CronParams(TypedDict):
 class DateParams(TypedDict):
     run_date: Any | None = None
     timezone: Any | None = None
+
+
+async def run_sync(func, *args, **kwargs):
+    loop = asyncio.get_event_loop()
+    bound = partial(func, *args, **kwargs)
+    return await loop.run_in_executor(None, bound)
 
 @IsInterface
 class SchedulerInterface(Interface):
@@ -88,24 +95,19 @@ class SchedulerInterface(Interface):
         trigger = DateTrigger(date)
         return self._schedule(action, args, kwargs, trigger,id,name,jobstore,executor)
     
-    def _schedule(self, action, args, kwargs, trigger,id=None,name=None,jobstore=None,executor=None,run_date=None):
+    def _schedule(self, action, args, kwargs, trigger,id=None,name=None,jobstore=None,executor=None):
         
         jobstore,executor = self.update_verify_store(jobstore,executor,True)
 
         if asyncio.iscoroutinefunction(action):
             return self._scheduler.add_job(action, trigger, args=args, id = id,kwargs=kwargs,misfire_grace_time=self.misfire_grace_time,jobstore=jobstore,coalesce=self.coalesce,executor=self.executor)
         else:
-            return self._scheduler.add_job(self._run_sync, trigger, args=(action, *args),id = id, name=name,kwargs=kwargs,misfire_grace_time=self.misfire_grace_time,jobstore=jobstore,coalesce=self.coalesce)
+            return self._scheduler.add_job(run_sync, trigger, args=(action, *args),id = id, name=name,kwargs=kwargs,misfire_grace_time=self.misfire_grace_time,jobstore=jobstore,coalesce=self.coalesce)
 
     def start(self):
         if self._scheduler.running:
             return
         self._scheduler.start()
-
-    async def _run_sync(self, func: Callable[..., Any], *args, **kwargs):
-        """Run a synchronous function asynchronously."""
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, func, *args, **kwargs)
 
     def shutdown(self,wait=True):
         """Shut down the scheduler."""

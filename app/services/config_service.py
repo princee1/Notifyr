@@ -247,7 +247,7 @@ class ConfigService(_service.BaseService):
 
         # APS CONFIG #
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
-        self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','memory')
+        self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','redis')
 
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:

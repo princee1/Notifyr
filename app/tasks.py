@@ -108,9 +108,14 @@ def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None
         #kwargs['acks_late'] = acks_late
 
         name = task_name(task.__qualname__)
+
+        def wrapper(self:Task,*args,**kwargs):
+            return task(*args,**kwargs)
+
         TASK_REGISTRY[name] = {
             'heaviness': heaviness,
-            'task': celery_app.task(**kwargs)(task)
+            'task': celery_app.task(**kwargs)(wrapper),
+            'raw_task':task,
         }
 
         return task
@@ -133,9 +138,7 @@ def refresh_profile(worker,p:str=None):
 
 
 @RegisterTask(TaskHeaviness.MODERATE)
-def task_send_template_mail(self:Task,*args,**kwargs):
-    print(self.request)
-
+def task_send_template_mail(*args,**kwargs):
     emailService: EmailSenderService = Get(EmailSenderService),
     email_profile = kwargs.get('email_profile',None)
     emailMiniService=emailService.MiniServiceStore.get(email_profile)
@@ -143,7 +146,7 @@ def task_send_template_mail(self:Task,*args,**kwargs):
 
 
 @RegisterTask(TaskHeaviness.MODERATE)
-def task_send_custom_mail(self:Task,*args,**kwargs):
+def task_send_custom_mail(*args,**kwargs):
     emailService: EmailSenderService = Get(EmailSenderService)
     email_profile = kwargs.get('email_profile',None)
     emailMiniService=emailService.MiniServiceStore.get(email_profile)
@@ -152,36 +155,36 @@ def task_send_custom_mail(self:Task,*args,**kwargs):
 #============================================================================================================#
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_sms(self:Task,*args,**kwargs):
+def task_send_custom_sms(*args,**kwargs):
     smsService:SMSService = Get(SMSService)
     return smsService.send_custom_sms(*args,**kwargs)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_sms(self:Task,*args,**kwargs):
+def task_send_template_sms(*args,**kwargs):
     smsService:SMSService = Get(SMSService)
     return smsService.send_template_sms(*args,**kwargs)
 
 #============================================================================================================#
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_voice_call(self:Task,*args,**kwargs):
+def task_send_template_voice_call(*args,**kwargs):
     callService:CallService = Get(CallService)
     return callService.send_template_voice_call(*args,**kwargs)
 
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_twiml_voice_call(self:Task,*args,**kwargs):
+def task_send_twiml_voice_call(*args,**kwargs):
     callService:CallService = Get(CallService)
     return callService.send_twiml_voice_call(*args,**kwargs)
     
 @RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_voice_call(self:Task, *args,**kwargs):
+def task_send_custom_voice_call(*args,**kwargs):
     callService:CallService = Get(CallService)
     return callService.send_custom_voice_call(*args,**kwargs)
 
 #============================================================================================================#
 
 @RegisterTask(TaskHeaviness.VERY_LIGHT)
-def task_send_webhook(self:Task,*args,**kwargs):
+def task_send_webhook(*args,**kwargs):
     webhookService:WebhookService = Get(WebhookService)
     webhook_profile = kwargs.get('webhook_profile',None)
     webhookMiniService=webhookService.MiniServiceStore.get(webhook_profile)

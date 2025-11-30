@@ -11,7 +11,7 @@ from starlette.background import BackgroundTask,BackgroundTasks
 from app.depends.variables import *
 import datetime as dt
 from app.container import Get
-from app.services.celery_service import CeleryService
+from app.services.celery_service import CeleryService,TASK_REGISTRY
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.monitoring_service import MonitoringService
@@ -314,16 +314,20 @@ class TaskManager:
     def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
         now = dt.datetime.now().isoformat()
         job_id= f"{self.meta['request_id']}@{index}"
+        task = TASK_REGISTRY[self.scheduler.task_name]['raw_task']
+        delay += 0 if self.scheduler.task_option.countdown == None else self.scheduler.task_option.countdown
         match self.scheduler.task_type:
             case TaskType.NOW:
-                job = self.taskService.now_schedule(delay,callback,args,kwargs,job_id)
+                job = self.taskService.now_schedule(delay,task,args,kwargs,job_id)
             case (TaskType.DATETIME,TaskType.TIMEDELTA):
-                job = self.taskService.date_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,job_id)
+                job = self.taskService.date_schedule(self.scheduler._schedule._aps_object,task,args,kwargs,job_id)
             case TaskType.CRONTAB:
-                job = self.taskService.cron_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,job_id)
+                job = self.taskService.cron_schedule(self.scheduler._schedule._aps_object,task,args,kwargs,job_id)
             case TaskType.INTERVAL:
-                job = self.taskService.interval_schedule(self.scheduler._schedule._aps_object,callback,args,kwargs,job_id)
+                job = self.taskService.interval_schedule(self.scheduler._schedule._aps_object,task,args,kwargs,job_id)
             case _:
                 return TaskExecutionResult(False,now,'APSScheduler',None,index,None,None,True,job_id,'error',f'Schedule type not handled error: {self.scheduler.task_type}')
 
-        return TaskExecutionResult(True,now,'APSScheduler',None,index,str(self.scheduler._heaviness),None,False,job_id,'schedule','Task Added to the APSScheduler, delay or problem might occur')
+        next_run_at:dt.datetime =  job.next_run_time
+        delta= (next_run_at.timestamp() +delay) - dt.datetime.now().timestamp()
+        return TaskExecutionResult(True,now,'APSScheduler',naturaldelta(delta),index,str(self.scheduler._heaviness),None,False,job_id,'schedule','Task Added to the APSScheduler, delay or problem might occur')
