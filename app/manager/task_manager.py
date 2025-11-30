@@ -16,6 +16,7 @@ from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
+from app.utils.tools import RunInThreadPool
 
 P = ParamSpec("P")
 
@@ -184,7 +185,7 @@ class TaskManager:
                     error = e.error
                     if is_retry:
                         if not isinstance(self.scheduler,s) and isinstance(task,BackgroundTask):
-                            self.celeryService.trigger_task_from_scheduler(self.scheduler,i,*task.args,**task.kwargs)
+                            await self.celeryService.trigger_task_from_scheduler(self.scheduler,i,*task.args,**task.kwargs)
                             return
                         return await parse_error(error,True)
                         
@@ -208,10 +209,8 @@ class TaskManager:
         """
         algorithm = self.meta['algorithm']
         now = dt.datetime.now().isoformat()
-
-       
-
         from_handler_error = None
+        
         while True:
             match algorithm:
                 case  'normal':
@@ -219,15 +218,13 @@ class TaskManager:
                 
                 case 'worker':
                     if self.configService.CELERY_WORKERS_EXPECTED >= 1:
-                        return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
+                        return await self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
                     elif self.taskService.service_status == ServiceStatus.AVAILABLE:
                         algorithm = 'aps'
                         add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index,obj='aps')
-
                     elif self.scheduler.task_type == TaskType.NOW:
                         algorithm = 'route'
                         add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index,obj='route')
-
                     else:
                         add_messages()
                         algorithm='error'
@@ -246,7 +243,7 @@ class TaskManager:
                 
                 case 'aps':
                     if self.configService.APS_ACTIVATED:
-                        return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+                        return await self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
                     elif self.configService.CELERY_WORKERS_EXPECTED >=1:
                         algorithm = 'worker'
                         add_messages(FALLBACK_ENV_TASK, self.scheduler, index=index,obj='celery worker')
@@ -266,9 +263,9 @@ class TaskManager:
         if self.scheduler.task_type == TaskType.NOW:
             return await self._route_offload(None,weight,delay,index,callback,*args,**kwargs)
         elif self.configService.CELERY_WORKERS_EXPECTED >= 1:
-            return  self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
+            return  await self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
         else:
-            return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+            return await self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
 
     async def _route_offload(self,from_env:EnvSelection|None,weight:float,delay: float,index,callback: Callable, *args, **kwargs)->TaskExecutionResult:
         background =  self.meta.get('background',True)
@@ -288,7 +285,7 @@ class TaskManager:
             except TaskRetryError as e:
                 if self.meta['is_retry']:
                     if not isinstance(self.scheduler,s):
-                        self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
+                        await self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight,*args, **kwargs)
                 return TaskExecutionResult(handler='Route Handler',offloaded=True,date=now,index=index,error=True,result=None,heaviness=str(self.scheduler._heaviness))
 
     async def _mix_offload(self,weight:float,delay,index:int, callback: Callable, *args, **kwargs)->TaskExecutionResult:
@@ -299,20 +296,21 @@ class TaskManager:
                 if env.startswith('route'):
                     return await self._route_offload(env,weight,delay,index,callback,*args,**kwargs)
                 elif env == 'worker':
-                    return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
+                    return await self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
                 else:
-                    return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+                    return await self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
             case (TaskType.DATETIME,TaskType.TIMEDELTA,TaskType.INTERVAL,TaskType.CRONTAB):
                 if (await self.select_task_env(weight,self._mask_schedule)) == 'worker':
-                    return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
+                    return await self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
                 else:
-                    return self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
+                    return await self._schedule_aps_task(weight,delay,index,callback,*args,**kwargs)
             case (TaskType.SOLAR,TaskType.RRULE):
-                return self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
+                return await self.celeryService.trigger_task_from_scheduler(self.scheduler,index,weight, *args, **kwargs)
             case _:
                 now = dt.datetime.now().isoformat()
                 return TaskExecutionResult(False,now,'RouteHandler',None,index,None,error=True,task_id=self.meta['request_id'],type=None,message=f'TaskType not supported by the server: {self.scheduler.task_type}')
-
+            
+    @RunInThreadPool
     def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
         now = dt.datetime.now().isoformat()
         job_id= f"{self.meta['request_id']}@{index}"

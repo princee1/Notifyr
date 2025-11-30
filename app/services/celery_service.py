@@ -42,6 +42,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         self.task_lock = RWLock()
         self.MiniServiceStore = MiniServiceStore[ChannelMiniService](self.__class__.__name__)
     
+    @RunInThreadPool
     def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None,weight:float=-1.0, *args, **kwargs):
         schedule_id = str(uuid4())
         t_name = scheduler.task_name
