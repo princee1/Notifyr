@@ -15,7 +15,6 @@ from typing import Callable
 import time
 from app.utils.constant import HTTPHeaderConstant
 from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
-from app.utils.globals import PARENT_PID, PROCESS_PID
     
 
 configService = Get(ConfigService)
@@ -42,7 +41,6 @@ class MetaDataMiddleWare(MiddleWare):
             
             response.headers[HTTPHeaderConstant.X_PROCESS_TIME] = f"{process_time * 1000:.1f} (ms)"
             response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.uvicornWorkerService.INSTANCE_ID
-            response.headers[HTTPHeaderConstant.X_PARENT_PROCESS_PID] = PARENT_PID
             response.headers[HTTPHeaderConstant.X_REQUEST_ID] = request_id
 
             self.monitoringService.request_latency.observe(process_time)
