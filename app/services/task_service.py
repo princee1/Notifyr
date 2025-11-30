@@ -50,6 +50,7 @@ class TaskService(BaseService,SchedulerInterface):
                 raise ServiceNotAvailableError()   
 
     def verify_dependency(self):
+        self._builded = True
         if not self.configService.APS_ACTIVATED:
             raise BuildOkError
 

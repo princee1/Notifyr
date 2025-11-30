@@ -14,7 +14,7 @@ from app.services.config_service import ConfigService
 from app.services.task_service import TaskService
 from app.depends.variables import celery_inspect_mode_query
 
-@PingService([CeleryService],__celery_availability__=True)
+@PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,ProfileHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('celery-control')

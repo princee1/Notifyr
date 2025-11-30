@@ -946,7 +946,7 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
             await BaseService.CheckStatusBeforeHand(cls.pingService)(cls,infinite_wait,route_params,route_params.get('profile',None),is_manager,**k)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait)
+        cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait,is_manager=is_manager,wait_timeout=wait_timeout)
         if cls != None:
             return cls
 

@@ -24,7 +24,7 @@ APS_SCHEDULER='aps'
 @UseRoles([Role.RESULT])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
-@PingService([CeleryService],__celery_availability__=True)
+@PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
 @HTTPRessource(prefix=CELERY_PREFIX)
 class CeleryResultRessource(BaseHTTPRessource):
     
@@ -86,7 +86,7 @@ class BackgroundTaskRessource(BaseHTTPRessource):
 
 
 @UseRoles([Role.RESULT])
-@PingService([TaskService],__task_aps_availability__=True)
+@PingService([{"cls":TaskService,"kwargs":{"__task_aps_availability__":True}}])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler)
 @HTTPRessource(prefix=APS_SCHEDULER)

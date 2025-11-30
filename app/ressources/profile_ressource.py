@@ -4,7 +4,7 @@ from fastapi import Depends,Request, Response,status
 from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.classes.condition import MongoCondition, simple_number_validation
-from app.container import InjectInMethod
+from app.container import Get, InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, CeleryControlHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
@@ -17,7 +17,8 @@ from app.depends.funcs_dep import get_profile
 from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.manager.broker_manager import Broker
 from app.services.celery_service import CeleryService, ChannelMiniService
-from app.services.database_service import MongooseService, RedisService
+from app.services.config_service import ConfigService
+from app.services.database_service import MongooseService, RabbitMQService, RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService
@@ -41,15 +42,18 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     profileType:str
 
     @InjectInMethod()
-    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService):
+    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService,taskService:TaskService):
         super().__init__()
         self.profileService = profileService
         self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.celeryService= celeryService
         self.redisService = redisService
+        self.taskService = taskService
     
         self.pms_callback = ProfileMiniService.async_create_profile.__name__
+        self.configService = Get(ConfigService)
+        self.rabbitmqService = Get(RabbitMQService)
 
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,MongooseService,lockType='reader')
@@ -70,7 +74,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
 
         profileMiniService = ProfileMiniService(None,None,self.redisService,self.taskService,result)
-        await ChannelMiniService(profileMiniService,self.redisService).create_queue()
+        await ChannelMiniService(profileMiniService,self.configService,self.rabbitmqService,self.redisService,self.celeryService).create_queue()
 
         return result
 

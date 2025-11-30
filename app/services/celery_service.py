@@ -113,6 +113,8 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
             raise CeleryTaskNotFoundError
     
     def verify_dependency(self):
+        self._builded = True
+        
         if self.configService.CELERY_WORKERS_EXPECTED < 1:
             raise BuildOkError('No workers expected')
         
@@ -250,6 +252,7 @@ class ChannelMiniService(BaseMiniService):
         ...
 
     def build(self, build_state = ...):
+        self._builded = True
         if self.celeryService.service_status != ServiceStatus.AVAILABLE:
             raise BuildOkError
         

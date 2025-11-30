@@ -720,12 +720,26 @@ class RabbitMQService(TempCredentialsDatabaseService):
     def __init__(self, configService:ConfigService, fileService:FileService, vaultService:HCVaultService):
         super().__init__(configService, fileService, vaultService, 60*60*24*365)
     
+    @property
+    def db_password(self):
+        return 'password'
+
+    @property
+    def db_user(self):
+        return 'user'
 
     def build(self, build_state = ...):
         try:
+
+            credentials = pika.PlainCredentials(
+                username=self.db_user,
+                password=self.db_password
+            )
+
             params = pika.ConnectionParameters(
                 host=self.configService.RABBITMQ_HOST,
                 port=5672,
+                credentials=credentials,
                 connection_attempts=1,      # don’t retry
                 socket_timeout=5,           # 5 second timeout
                 blocked_connection_timeout=5,
@@ -739,3 +753,4 @@ class RabbitMQService(TempCredentialsDatabaseService):
             print(e.args)
             self.configService.CELERY_BROKER = 'redis'
             raise BuildFailureError
+    
