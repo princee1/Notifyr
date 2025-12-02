@@ -18,7 +18,7 @@ COPY --from=builder /usr/bin/pwgen /usr/bin/pwgen
 COPY --from=builder /usr/bin/jq /usr/bin/jq
 
 # Copy assets
-COPY ./assets/ ./assets/
+COPY ./objects/ ./objects/
 
 # Create policy folder
 RUN mkdir ./policy/

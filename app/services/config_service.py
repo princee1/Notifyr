@@ -137,11 +137,12 @@ class ConfigService(_service.BaseService):
             pass
         return default
 
-    def normalize_assets_path(self,path:str,action:Literal['add','remove']='add')-> str:
+    def normalize_assets_path(self,path:str,action:Literal['add','remove']='add',root=False)-> str:
+        base = self.ASSETS_DIR if not root else f"{self.OBJECTS_DIR}{self.ASSETS_DIR}"
         if action == 'add':
-            return f"{self.ASSETS_DIR}{path}"
+            return f"{base}{path}"
         elif action == 'remove':
-            return path.removeprefix(self.ASSETS_DIR)
+            return path.removeprefix(base)
         return path
 
     def build(self,build_state=-1):
@@ -181,8 +182,10 @@ class ConfigService(_service.BaseService):
         self.USERNAME:str = self.getenv('USERNAME','notifyr')
 
         # DIRECTORY CONFIG #
+
         self.BASE_DIR:str = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
+        self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')
 
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)

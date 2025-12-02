@@ -110,8 +110,8 @@ class Reader:
             if self.func != None:
                 self.func(self.values[relpath])
     
-    def path(self,val):
-        return f"{self.configService.ASSETS_DIR}{val}"
+    def path(self,val,root=True):
+        return f"{self.configService.OBJECTS_DIR if root else ""}{self.configService.ASSETS_DIR}{val}"
 
     
     def safeReader(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
@@ -341,7 +341,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     def sanitize_paths(self,assets:dict[str,Asset]):
         temp: dict[str,Asset]={}
         for key, asset in assets.items():
-            key = self.configService.normalize_assets_path(key,'remove')
+            key = self.configService.normalize_assets_path(key,'remove',True)
             key = key.replace(DIRECTORY_SEPARATOR,ASSET_SEPARATOR)
             temp[key]=asset
         return temp
@@ -509,6 +509,6 @@ class AssetService(_service.BaseService,SchedulerInterface):
             if self.download_cache.cache(obj.object_name,obj.etag):
                 continue
 
-            disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add')
+            disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add',True)
             self.amazonS3Service.write_into_disk(obj.object_name,disk_rel_path)
             

@@ -29,7 +29,9 @@ mc version enable notifyr/assets
 mc quota set notifyr/assets  --size "$ASSETS_STORAGE_LIMIT"
 
 if [ "$S3_MODE" = "dev" ]; then
-  mc cp --recursive /app/assets/ notifyr/assets/
+  mc cp --recursive /app/objects/assets/ notifyr/assets/
+  mc cp --recursive /app/objects/static/ notifyr/static/
+
 fi
 
 mc admin policy create notifyr app-access /app/policy/app-access.json
