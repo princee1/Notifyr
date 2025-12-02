@@ -4,7 +4,7 @@ from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarningError
-from app.utils.constant import RedisConstant
+from app.utils.constant import RabbitMQConstant, RedisConstant
 from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
@@ -238,7 +238,7 @@ class ConfigService(_service.BaseService):
         # CELERY CONFIG #
         self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','rabbitmq')
 
-        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672")
+        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672/{RabbitMQConstant.CELERY_VIRTUAL_HOST}")
         self.CELERY_BACKEND_URL:Callable[[str,str],str] = lambda u,p: self.getenv("CELERY_BACKEND_URL", f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
@@ -278,28 +278,28 @@ class ConfigService(_service.BaseService):
 
     def destroy(self,destroy_state=-1):
         return super().destroy()
-
-    def set_server_config(self, config):
-        self.server_config = ServerConfig(host=config.host, port=config.port,
-                                          reload=config.reload, workers=config.workers, log_level=config.log_level,
-                                          team=config.team)
-    
-    @property
-    def pool(self):
-        if self.server_config['team'] == 'solo':
-            return self.server_config['workers'] > 1
-        else:
-            return True
-
-
+        
 @_service.Service()
 class UvicornWorkerService(_service.BaseService):
 
     def __init__(self,configService:ConfigService):
         super().__init__()
         self.configService = configService
-            
-    def build(self, build_state = ...):
+    
+    def set_server_config(self, config):
+        self.server_config = ServerConfig(host=config.host, port=config.port,
+                                          reload=config.reload, workers=config.workers, log_level=config.log_level,
+                                          team=config.team)
 
-        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/app/"        
+    @property
+    def pool(self):
+        if self.server_config['team'] == 'solo':
+            return self.server_config['workers'] > 1
+        else:
+            return True
+     
+    def build(self, build_state = ...):
+        name = 'app' if self.configService._celery_env == CeleryMode.none else self.configService._celery_env.name
+
+        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/{name}/"        
         raise BuildOkError

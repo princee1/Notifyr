@@ -48,11 +48,12 @@ configService: ConfigService = Get(ConfigService)
 redisService  = Get(RedisService)
 rabbitmqService = Get(RabbitMQService)
 
+brokerService = redisService if configService.CELERY_BROKER == 'redis' else rabbitmqService
 ##############################################           ##################################################
 
 celery_app = Celery('celery_app',
-                    backend=configService.CELERY_BACKEND_URL(...,...),
-                    broker=configService.CELERY_MESSAGE_BROKER_URL(rabbitmqService.db_user,rabbitmqService.db_password),
+                    backend=configService.CELERY_BACKEND_URL(redisService.db_user,redisService.db_password),
+                    broker=configService.CELERY_MESSAGE_BROKER_URL(brokerService.db_user,brokerService.db_password),
                     result_expires=configService.CELERY_RESULT_EXPIRES
                     )
 
@@ -60,7 +61,7 @@ celery_app = Celery('celery_app',
 
 # Enable RedBeat Scheduler
 celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
-celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL(...,...)
+celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL(redisService.db_user,redisService.db_password)
 celery_app.conf.timezone = "UTC"
 
 celery_app.conf.result_backend_transport_options = {

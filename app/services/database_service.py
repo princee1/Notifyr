@@ -15,7 +15,7 @@ from app.definition._interface import Interface, IsInterface
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import MongooseDBConstant, RabbitMQConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.helper import quote_safe_url, reverseDict, subset_model
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService, UvicornWorkerService
@@ -140,15 +140,14 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         return  time.time() - self.last_rotated < self.auth_ttl    
 
 @Service()
-class RedisService(DatabaseService):
+class RedisService(TempCredentialsDatabaseService):
 
     GROUP = 'NOTIFYR-GROUP'
     
     def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:HCVaultService,uvicornWorkerService:UvicornWorkerService):
-        super().__init__(configService,None)
+        super().__init__(configService,None,vaultService,60*60*24*365,)
         self.configService = configService
         self.reactiveService = reactiveService
-        self.vaultService = vaultService
         self.uvicornWorkerService = uvicornWorkerService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
@@ -310,14 +309,17 @@ class RedisService(DatabaseService):
 
     def build(self,build_state=-1):
         host = self.configService.REDIS_HOST
-        self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB)
-        self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB)
-        self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True)
+        self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE)
+
+        self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB,username=self.db_user,password=self.db_password)
+        self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
+        self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user,password=self.db_password)
 
         if self.configService.celery_env == CeleryMode.none:
-            self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
+            self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         else :
-            self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
+            self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
+        
 
         self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
             RedisConstant.CELERY_DB:self.redis_celery,
@@ -720,6 +722,10 @@ class RabbitMQService(TempCredentialsDatabaseService):
     def __init__(self, configService:ConfigService, fileService:FileService, vaultService:HCVaultService):
         super().__init__(configService, fileService, vaultService, 60*60*24*365)
     
+    async def creds_rotation(self):
+        ...
+
+
     @property
     def db_password(self):
         return 'password'
@@ -739,6 +745,7 @@ class RabbitMQService(TempCredentialsDatabaseService):
             params = pika.ConnectionParameters(
                 host=self.configService.RABBITMQ_HOST,
                 port=5672,
+                virtual_host=RabbitMQConstant.CELERY_VIRTUAL_HOST,
                 credentials=credentials,
                 connection_attempts=1,      # don’t retry
                 socket_timeout=5,           # 5 second timeout

@@ -2,6 +2,10 @@
 echo "📂 Running setup.sql..."
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/setup.sql
 
+echo "📂 Running admin.sql..."
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/admin.sql
+
+
 echo "📂 Running security.sql..."
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/security.sql
 

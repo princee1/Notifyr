@@ -255,9 +255,10 @@ class VaultConstant:
     CHAT_KEY='chat-key'
     S3_REST_KEY='s3-rest-key'
 
-    NotifyrDynamicSecretsRole= Literal['postgres','mongo']
+    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis']
     MONGO_ROLE='mongo'
     POSTGRES_ROLE='postgres'
+    REDIS_ROLE='redis'
 
     NotifyrMinioRole = Literal['static-minio','sts-minio']
 
@@ -267,6 +268,7 @@ class VaultConstant:
     NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
     NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
     NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio-s3'
+    NOTIFYR_RABBITMQ_MOUNT_POINT='notifyr-rabbitmq'
 
 
     @staticmethod
@@ -356,3 +358,6 @@ class CostConstant:
     
 class CeleryConstant:
     REFRESH_PROFILE_WORKER_STATE_COMMAND='refresh_profile'
+
+class RabbitMQConstant:
+    CELERY_VIRTUAL_HOST='celery'

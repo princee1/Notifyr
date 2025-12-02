@@ -20,11 +20,14 @@ FROM hashicorp/vault:latest
 
 USER root
 
-ARG S3_CRED_TYPE="MINIO"
-
-ENV S3_CRED_TYPE=${S3_CRED_TYPE}
-
-RUN apk add --no-cache bash curl jq tini ca-certificates pwgen
+RUN apk add --no-cache \
+    bash \
+    curl \
+    jq \
+    tini \
+    ca-certificates \
+    pwgen \
+ && rm -rf /var/cache/apk/* /tmp/*
 
 # Create Vault config directories
 RUN mkdir -p /vault/config /vault/data /vault/logs /vault/shared /vault/api-key /vault/secrets /home/vaultuser /vault/cron/
@@ -74,16 +77,15 @@ path "notifyr-secrets/tokens" {
   capabilities = ["read","list"]
 }
 
-
 path "notifyr-secrets/setting" {
   capabilities = ["read","list","update","create"]
 }
 
-path "notifyr-secrets/api-key"{
+path "notifyr-secrets/internal-api"{
   capabilities = ["read","list"]
 }
 
-path "notifyr-secrets/api-key/*"{
+path "notifyr-secrets/internal-api/*"{
   capabilities = ["read"]
 }
 
@@ -95,6 +97,14 @@ path "notifyr-secrets/communication/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
+path "notifyr-secrets/ai-provider" {
+  capabilities =["read","list"]
+}
+
+path "notifyr-secrets/ai-provider/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
 path "notifyr-secrets/webhook" {
   capabilities =["read","list"]
 }
@@ -102,7 +112,6 @@ path "notifyr-secrets/webhook" {
 path "notifyr-secrets/webhook/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
-
 
 path "notifyr-secrets/messages" {
   capabilities = ["read","list"]
@@ -152,9 +161,15 @@ path "notifyr-transit/keys/*" {
   capabilities = ["read"]
 }
 
+# ---- RABBITMQ ENGINE ----
+
+path = "notifyr-rabbitmq/roles/celery-role"{
+  capabilities = ["read"]
+}
+
 # ---- DATABASE ENGINE ----
 
-path "notifyr-database/creds/*" {
+path "notifyr-database/creds/app*" {
   capabilities = ["read"]
 }
 
@@ -184,6 +199,10 @@ path "auth/approle/role/notifyr-app-role/secret-id" {
   capabilities = ["update","create","read"]
 }
 
+path "auth/approle/role/notifyr-dmz-role/secret-id" {
+  capabilities = ["update","create","read"]
+}
+
 path "transit/keys/*/rotate" {
   capabilities = ["update"]
 }
@@ -198,29 +217,19 @@ path "notifyr-config/*"{
 
 EOF
 
-RUN cat <<EOF > /vault/policies/db-config.hcl 
+RUN cat <<EOF > /vault/policies/dmz-policy.hcl
+  path "notifyr-minio-s3/creds/*"{
+    capabilities = ["read"]
+  }
 
-path "notifyr-database/config/*" {
-  capabilities = ["update","create"]
-}
-
-path "notifyr-database/rotate-root/*" {
-  capabilities=["update"]
-}
-
-path "notifyr-minio-s3/*"{
-  capabilities = ["read","update","create"]
-}
-
-path "notifyr-secrets/api-key/S3-WEBHOOK" {
-  capabilities=["read","update","create"]
-}
-
+  path "notifyr-minio-s3/sts/*"{
+    capabilities=["update","read"]
+  }
 EOF
 
-##############################################################################################################
-##############################################################################################################
 
+##############################################################################################################
+##############################################################################################################
 
 # Add non-root user
 RUN adduser -D -u 1500 -g vaultuser vaultuser \
@@ -246,28 +255,18 @@ COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
 COPY --chown=vaultuser:vaultuser ./settings_db.json ./vault/config/settings_db.json
 
 RUN mkdir /etc/vault && mkdir etc/vault/plugins
-
-COPY --chown=vaultuser:vaultuser ./settings_db.json /etc/vault/
-
 COPY --from=builder /build/vault-plugin-secrets-minio/vault-plugin-secrets-minio /etc/vault/plugins/
 
 RUN chown root:vaultuser /etc/vault/plugins/ && chmod 755 /etc/vault/plugins
 RUN chown root:vaultuser /etc/vault/plugins/vault-plugin-secrets-minio && chmod 755 /etc/vault/plugins/vault-plugin-secrets-minio
 
-# Initialize Vault (can run as root for setup)
-RUN /usr/local/bin/vault-init.sh ${CRED_TYPE}
+RUN chown -R vaultuser:vaultuser /vault/data
+RUN chmod 700 /vault/data
 
 COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator/*.sh /usr/local/bin/
 
-
 RUN chmod +x /usr/local/bin/vault-entrypoint.sh
 RUN chmod 770 /usr/local/bin/*-rotator.sh 
 
-# Switch to non-root user
-USER vaultuser
-
-ENTRYPOINT ["/sbin/tini", "--"]
-
-# Entrypoint
-CMD ["/usr/local/bin/vault-entrypoint.sh"]
+ENTRYPOINT [ "/usr/local/bin/vault-init.sh"]

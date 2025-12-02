@@ -9,6 +9,8 @@
 
 -- DROP SCHEMA IF EXISTS cron CASCADE;
 
+CREATE ROLE vault_ntrfyr_admin_role NOLOGIN;
+
 CREATE SCHEMA security;
 
 CREATE SCHEMA contacts;
@@ -106,6 +108,7 @@ CREATE DOMAIN public.DeviceType AS VARCHAR(50) CHECK (
     )
 );
 
+-- APP ROLE
 
 CREATE ROLE vault_ntrfyr_app_role;
 

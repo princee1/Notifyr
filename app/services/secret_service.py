@@ -3,10 +3,10 @@ import time
 from typing import Literal, TypedDict
 import requests
 from app.classes.secrets import ChaCha20SecretsWrapper
-from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, MinioS3VaultEngine, TransitVaultEngine
+from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, MinioS3VaultEngine, RabbitMQVaultEngine, TransitVaultEngine
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, GUNICORN_BUILD_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
-from app.services.config_service import MODE, ConfigService
+from app.services.config_service import MODE, ConfigService, UvicornWorkerService
 import hvac
 from app.services.file_service import FileService
 from app.utils.constant import VaultConstant, VaultTTLSyncConstant
@@ -48,9 +48,10 @@ class HCVaultService(BaseService,SchedulerInterface):
     _secret_id_crontab='0 0 * * *'
     _ping_available_state = {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}
     
-    def __init__(self,configService:ConfigService,fileService:FileService):
+    def __init__(self,configService:ConfigService,fileService:FileService,uvicornWorkerService:UvicornWorkerService):
         super().__init__()
         self.configService = configService
+        self.uvicornWorkerService = uvicornWorkerService
         self.fileService = fileService
         SchedulerInterface.__init__(self)
         self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
@@ -90,6 +91,9 @@ class HCVaultService(BaseService,SchedulerInterface):
             
     def _create_client(self,build_state:int):
         self.client = hvac.Client(self.configService.VAULT_ADDR)
+        self.client.session.headers.update({
+            "X-Vault-Node-Name": self.uvicornWorkerService.INSTANCE_ID,
+        })
         _raise = build_state==DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE
 
         if build_state == DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE:
@@ -108,6 +112,7 @@ class HCVaultService(BaseService,SchedulerInterface):
         self.transit_engine = TransitVaultEngine(self.client,VaultConstant.NOTIFYR_TRANSIT_MOUNT_POINT)
         self.database_engine = DatabaseVaultEngine(self.client,VaultConstant.NOTIFYR_DB_MOUNT_POINT)
         self.minio_engine = MinioS3VaultEngine(self.client,VaultConstant.NOTIFYR_MINIO_MOUNT_POINT)
+        self.rabbitmq_engine = RabbitMQVaultEngine(self.client,VaultConstant.NOTIFYR_RABBITMQ_MOUNT_POINT)
 
         return True
 

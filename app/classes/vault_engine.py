@@ -230,6 +230,7 @@ class DatabaseVaultEngine(VaultEngine):
 
     def generate_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole)->VaultDatabaseCredentials:
         role+=ROLE_PREFIX
+        role='app-'+role
         credentials = self.client.secrets.database.generate_credentials(
             name=role,
             mount_point=self.mount_point
@@ -254,3 +255,8 @@ class AwsEngine(VaultEngine):
     """ AWS Vault Engine for generating dynamic AWS credentials.
     """
 
+
+class RabbitMQVaultEngine(VaultEngine):
+
+    def generate_credentials(self,role='celery-ntfr-role'):
+        return self.client.adapter.post(f"/v1/{self.mount_point}/creds/{role}")

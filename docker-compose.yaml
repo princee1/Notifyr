@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
 
   rabbitmq:
-    image: rabbitmq:3.13-alpine
+    image: rabbitmq:3.13-management
     container_name: rabbitmq
     ports:
       - "5672:5672"     # AMQP (used by Celery)
@@ -20,13 +20,17 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
 
   redis:
-    image: redis:latest #Queue for the taks
+    image: redis:latest
     container_name: redis
     restart: always
+    entrypoint: ["/entrypoint.sh"]
+    environment:
+      - REDIS_ADMIN_PASSWORD=${REDIS_ADMIN_PASSWORD:-vaultpass}
     ports:
       - 6379:6379
     volumes:
       - redis-data:/data
+      - ./scripts/redis-entrypoint.sh:/entrypoint.sh
 
   reacherhq:
     image: reacherhq/backend
@@ -87,41 +91,56 @@ services:
     depends_on:
       - redis
     
-  vault:
+  vault-init:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.vault
-      args:
-        - S3_CRED_TYPE=${S3_CRED_TYPE:-MINIO} #MINIO (minio plugin)  || AWS (aws engine)
-    container_name: vault
+    container_name: vault-init
     labels:
       - com.docker.compose.service=vault
-    image: hashicorp/vault:latest
+    image: notifyr:vault
     cap_add: ["IPC_LOCK"]
     ports:
       - "8200:8200"
     environment:
       VAULT_ADDR: "http://0.0.0.0:8200"
-      VAULT_CONTAINER_READY: "false"
+
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+
       AWS_VAULT_USER: set_user_in_container_start
       AWS_VAULT_PASSWORD: set_password_in_container_start
+
       S3_HOST: ${S3_HOST}
       POSTGRES_HOST: ${POSTGRES_HOST}
       MONGO_HOST: ${MONGO_HOST}
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      REDIS_HOST: ${REDIS_HOST}
     volumes:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
-      - vault-secrets:/vault/secrets
       - vault-audit:/vault/logs
       - minio-secret:/minio/secrets:ro
-
     depends_on:
       - mongodb
- 
+    
+  vault:
+    image: notifyr:vault
+    user: vaultuser
+    entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
+    ports:
+      - "8200:8200"
+    volumes:
+      - vault-data:/vault/data
+      - vault-shared:/vault/shared
+      - vault-audit:/vault/logs
+
   app:
     image: notifyr:fastapi
     #container_name: ntfyr-app

@@ -5,10 +5,7 @@ VAULT_CONFIG=/vault/config/vault.hcl
 VAULT_SECRETS_DIR=/vault/secrets
 VAULT_SHARED_DIR=/vault/shared
 
-PG_HOST=${POSTGRES_HOST:-postgres}
-M_HOST=${MONGO_HOST:-mongodb}
-STHREE_HOST=${S3_HOST:-minio}
-C_TYPE=${S3_CRED_TYPE:-MINIO}
+
 
 wait_for_server() {
   # Wait for listener
@@ -47,101 +44,6 @@ unseal_vault(){
   fi
 }
 
-
-create_aws_engine(){
-  local S3_VAULT_USER=${AWS_VAULT_USER:-"notifyr-s3-user"}
-  local S3_VAULT_PASSWORD=${AWS_VAULT_PASSWORD:-"notifyr-s3-password"}
-
-  vault write notifyr-minio-s3/config/root \
-      access_key="$S3_VAULT_USER" \
-      secret_key="$S3_VAULT_PASSWORD" \
-      endpoint="https://$STHREE_HOST" \
-      iam_endpoint="https://$STHREE_HOST" \
-      sts_endpoint="https://$STHREE_HOST" \
-      region=us-east-1 \
-      sts_region="us-east-1"
-
-    vault write notifyr-minio-s3/roles/assets-role \
-      credential_type=iam_user \
-      policy_arns="assets-access" \
-      ttl=15m \
-      max_ttl=1h\
-
-    vault write notifyr-minio-s3/config/lease \
-      lease=15m \
-      lease_max=1h
-
-}
-
-
-create_minio_plugin_engin(){
-
-  local MINIO_VAULT_PASSWORD=$(cat /minio/secrets/config.json | jq -r .credential.secretKey)
-  local MINIO_VAULT_USER=$(cat /minio/secrets/config.json | jq  -r .credential.accessKey)
-
-  vault write notifyr-minio-s3/config/root \
-      endpoint="$STHREE_HOST:9000" \
-      accessKeyId="$MINIO_VAULT_USER" \
-      secretAccessKey="$MINIO_VAULT_PASSWORD" \
-      sts_region="us-east-1" \
-      ssl=false
-
-  vault write notifyr-minio-s3/roles/static-minio-ntfr-role \
-      policy_name=assets-access \
-      user_name_prefix="vault-static-temp" \
-      credential_type=static \
-      default_ttl=12h \
-      max_ttl=16h
-
-  vault write notifyr-minio-s3/roles/sts-minio-ntfr-role \
-      policy_name=assets-access \
-      credential_type=sts \
-      default_ttl=12h \
-      max_ttl=16h \
-      max_sts_ttl=12h
-
-}
-
-
-create_database_config(){
-
-  ONE_SHOT_DB_TOKEN=$(cat "$VAULT_SECRETS_DIR/one_shot_db_token.txt")
-
-  export VAULT_ADDR="http://127.0.0.1:8200"
-
-  vault login -no-print "$ONE_SHOT_DB_TOKEN"
-
-  vault write notifyr-database/config/postgres \
-    plugin_name="postgresql-database-plugin" \
-    allowed_roles="postgres-ntfr-role" \
-    connection_url="postgresql://{{username}}:{{password}}@$PG_HOST:5432/notifyr" \
-    max_open_connections=20 \
-    max_idle_connections=10 \
-    username="$POSTGRES_USER" \
-    password="$POSTGRES_PASSWORD"
-
-  vault write -f notifyr-database/rotate-root/postgres
-  
-  vault write notifyr-database/config/mongodb \
-    plugin_name="mongodb-database-plugin" \
-    allowed_roles="mongo-ntfr-role" \
-    connection_url="mongodb://{{username}}:{{password}}@$M_HOST:27017/admin" \
-    username="$MONGO_INITDB_ROOT_USERNAME" \
-    password="$MONGO_INITDB_ROOT_PASSWORD"
-
-  vault write -f notifyr-database/rotate-root/mongodb
-
-  if [ "$C_TYPE" == "AWS" ]; then
-    create_aws_engine
-  else
-    create_minio_plugin_engin
-  fi
-  
-  vault token revoke -self
-
-  export VAULT_ADDR="http://0.0.0.0:8200"
-}
-
 # Start Vault in background
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!
@@ -151,13 +53,6 @@ wait_for_server
 unseal_vault
 
 wait_active_server
-
-if grep -q "secret" "$VAULT_SHARED_DIR/seed-time.txt"; then
-  create_database_config
-else
-  echo "database config already setup"
-fi
-
 
 echo "++++++++++++++++++++++++++++++++++++++++++++++       +++++++++++++++++++++++++++++++++++++++++"
 echo "                                    Server active!"
