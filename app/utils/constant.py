@@ -248,7 +248,6 @@ class VaultConstant:
     SETTINGS_SECRETS='setting'
 
 
-
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
     SECRETS_MESSAGE_KEY = 'messages-key'
     PROFILES_KEY = 'profiles-key'
@@ -260,7 +259,7 @@ class VaultConstant:
     POSTGRES_ROLE='postgres'
     REDIS_ROLE='redis'
 
-    NotifyrMinioRole = Literal['static-minio','sts-minio']
+    NotifyrMinioRole = Literal['static','sts']
 
 
     NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
@@ -306,7 +305,7 @@ class VaultTTLSyncConstant:
 class MinioConstant:
     STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
     ASSETS_BUCKET = 'assets'
-    STATIC_TEMPLATE = 'static'
+    STATIC_BUCKET = 'static'
     ENCRYPTED_KEY = 'encrypted'
     MINIO_EVENT='s3_object_events'
 

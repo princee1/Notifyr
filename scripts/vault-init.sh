@@ -243,19 +243,33 @@ setup_database_config(){
           +del +unlink"]' \
     revocation_statements='["ACL DELUSER {{name}}"]'
 
-  vault write notifyr-minio-s3/roles/static-minio-ntfr-role \
-      policy_name=assets-access \
+  vault write notifyr-minio-s3/roles/app-static-minio-ntfr-role \
+      policy_name=app-access \
       user_name_prefix="vault-static-temp" \
       credential_type=static \
       default_ttl=12h \
       max_ttl=16h
 
-  vault write notifyr-minio-s3/roles/sts-minio-ntfr-role \
-      policy_name=assets-access \
+  vault write notifyr-minio-s3/roles/app-sts-minio-ntfr-role \
+      policy_name=app-access \
       credential_type=sts \
       default_ttl=12h \
       max_ttl=16h \
       max_sts_ttl=12h
+
+  vault write notifyr-minio-s3/roles/dmz-static-minio-ntfr-role \
+      policy_name=dmz-access \
+      user_name_prefix="dmz-static-temp" \
+      credential_type=static \
+      default_ttl=1h \
+      max_ttl=2h
+
+  vault write notifyr-minio-s3/roles/dmz-sts-minio-ntfr-role \
+      policy_name=dmz-access \
+      credential_type=sts \
+      default_ttl=1h \
+      max_ttl=2h \
+      max_sts_ttl=2h
 
   vault write rabbitmq/config/lease \
     ttl=31536000 \
@@ -332,13 +346,13 @@ create_database_config(){
       plugin_name="redis-database-plugin" \
       host="$R_HOST" \
       port=6379 \
-      username="vaultadmin" \
+      username="vaultadmin:redis" \
       password="$REDIS_ADMIN_PASSWORD" \
       allowed_roles="admin-redis-static-role, app-redis-ntfr-role"
 
   vault write notifyr-database/static-roles/admin-redis-static-role \
     db_name="redis" \
-    username="vaultadmin" \
+    username="vaultadmin:redis" \
     rotation_period=168h \
     rotation_statements='["ACL SETUSER {{name}} >{{password}}", "ACL SAVE"]'
 
@@ -346,7 +360,7 @@ create_database_config(){
 
   vault write notifyr-minio-s3/config/root \
       endpoint="$STHREE_HOST:9000" \
-      accessKeyId="$MINIO_VAULT_USER" \
+      accessKeyId="vaultadmin:minio" \
       secretAccessKey="$MINIO_VAULT_PASSWORD" \
       sts_region="us-east-1" \
       ssl=false

@@ -14,8 +14,8 @@ services:
     ports:
       - "5672:5672"     # AMQP (used by Celery)
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-notifyr-user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-notifyrpass123}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
@@ -26,17 +26,12 @@ services:
     entrypoint: ["/entrypoint.sh"]
     environment:
       - REDIS_ADMIN_PASSWORD=${REDIS_ADMIN_PASSWORD:-vaultpass}
+      - DEFAULT_USER=on
     ports:
       - 6379:6379
     volumes:
       - redis-data:/data
       - ./scripts/redis-entrypoint.sh:/entrypoint.sh
-
-  reacherhq:
-    image: reacherhq/backend
-    container_name: reacherhq
-    ports:
-      - "8040:8040"
 
   mongodb:
     image: mongo:8.0-noble
@@ -83,8 +78,8 @@ services:
       - "9001:9001"
     volumes:
       - minio-data:/data
-      - minio-secret:/minio/secrets
     environment:
+      - MINIO_VAULT_PASSWORD=${MINIO_VAULT_PASSWORD:-changeme}
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
       - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
     
@@ -111,6 +106,8 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
 
+      MINIO_VAULT_PASSWORD: ${MINIO_VAULT_PASSWORD}
+
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
 
@@ -126,7 +123,6 @@ services:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
       - vault-audit:/vault/logs
-      - minio-secret:/minio/secrets:ro
     depends_on:
       - mongodb
     
@@ -153,7 +149,6 @@ services:
     volumes:
       - ./costs.json:/run/secrets/costs:ro
       - vault-shared:/vault/shared:ro
-      - vault-secrets:/vault/secrets:ro
     build:
       context: ./
       dockerfile: Dockerfile
@@ -183,7 +178,6 @@ services:
     command: ["./spawn_celery_worker.sh", "1", "false"]
     volumes:
       - vault-shared:/vault/shared
-      - vault-secrets:/vault/secrets
     restart: always
     environment:
       - MODE=prod
@@ -199,8 +193,6 @@ services:
     container_name: beat
     volumes:
       - vault-shared:/vault/shared
-      - vault-secrets:/vault/secrets
-
     labels:
       - com.docker.compose.service=beat
     build:
@@ -304,7 +296,6 @@ services:
 volumes:
   vault-data: {}
   vault-shared: {} # holds secret_id
-  vault-secrets: {} # holds root_token/unseal_key (optional, only for admin access)
   vault-audit: {}
 
   mongo-data:
@@ -323,7 +314,6 @@ volumes:
     driver: local
   
   minio-data: {}
-  minio-secret: {}
 
   rabbitmq_data:
 

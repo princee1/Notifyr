@@ -122,7 +122,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @PingService([HCVaultService])
     @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
     @UseGuard(is_minio_external_guard)
-    @BaseHTTPRessource.HTTPRoute('/generate-url/',methods=[HTTPMethod.GET,HTTPMethod.PUT])
+    @BaseHTTPRessource.HTTPRoute('/generate-url/',methods=[HTTPMethod.GET,HTTPMethod.PUT],mount=False)
     def generate_url(self,request:Request,expiry:int=Query(3600,ge=6*60,le=HOUR*2),version:str=Query(None)): # type: ignore
         method = request.method
         url = self.amazonS3Service.generate_presigned_url(method=method,expiry=expiry,version_id=version)

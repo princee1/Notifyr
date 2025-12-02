@@ -24,13 +24,10 @@ COPY ./assets/ ./assets/
 RUN mkdir ./policy/
 
 # Create empty policy files
-RUN touch ./policy/template-access.json ./policy/vault-admin.json
-
-# Directory for secrets
-RUN mkdir /minio /minio/secrets
+RUN touch ./policy/app-access.json ./policy/vault-admin.json ./policy/dmz-access.json
 
 
-RUN cat <<EOF > ./policy/assets-access.json
+RUN cat <<EOF > ./policy/app-access.json
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -46,7 +43,30 @@ RUN cat <<EOF > ./policy/assets-access.json
       ],
       "Resource": [
         "arn:aws:s3:::assets",
-        "arn:aws:s3:::assets/*"
+        "arn:aws:s3:::assets/*",
+        "arn:aws:s3:::static",
+        "arn:aws:s3:::static/*"
+      ]
+    }
+  ]
+}
+EOF
+
+RUN cat <<EOF > ./policy/dmz-access.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:HeadBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::static",
+        "arn:aws:s3:::static/*"
       ]
     }
   ]

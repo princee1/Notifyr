@@ -163,7 +163,7 @@ path "notifyr-transit/keys/*" {
 
 # ---- RABBITMQ ENGINE ----
 
-path = "notifyr-rabbitmq/roles/celery-role"{
+path = "notifyr-rabbitmq/roles/celery-ntfr-role"{
   capabilities = ["read"]
 }
 
@@ -179,11 +179,11 @@ path "notifyr-database/roles" {
 
 # ---- MINIO ENGINE ----
 
-path "notifyr-minio-s3/creds/*"{
+path "notifyr-minio-s3/creds/app*"{
   capabilities = ["read"]
 }
 
-path "notifyr-minio-s3/sts/*"{
+path "notifyr-minio-s3/sts/app*"{
   capabilities=["update","read"]
 }
 
@@ -218,11 +218,11 @@ path "notifyr-config/*"{
 EOF
 
 RUN cat <<EOF > /vault/policies/dmz-policy.hcl
-  path "notifyr-minio-s3/creds/*"{
+  path "notifyr-minio-s3/creds/dmz*"{
     capabilities = ["read"]
   }
 
-  path "notifyr-minio-s3/sts/*"{
+  path "notifyr-minio-s3/sts/dmz*"{
     capabilities=["update","read"]
   }
 EOF
