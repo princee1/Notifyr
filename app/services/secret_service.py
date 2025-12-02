@@ -5,6 +5,7 @@ import requests
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, MinioS3VaultEngine, RabbitMQVaultEngine, TransitVaultEngine
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, GUNICORN_BUILD_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
+from app.errors.service_error import BuildOkError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.config_service import MODE, ConfigService, UvicornWorkerService
 import hvac
@@ -53,14 +54,12 @@ class HCVaultService(BaseService,SchedulerInterface):
         self.configService = configService
         self.uvicornWorkerService = uvicornWorkerService
         self.fileService = fileService
-        SchedulerInterface.__init__(self)
+        SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
         self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
-        delay = IntervalParams(
+        self.delay = IntervalParams(
             seconds=VaultTTLSyncConstant.SECRET_ID_ROTATION*.75
         )
         self.last_rotated = None
-        self.interval_schedule(delay,self.refresh_token,tuple(),{})
-
 
     @property
     def is_loggedin(self):
@@ -71,7 +70,8 @@ class HCVaultService(BaseService,SchedulerInterface):
             raise ServiceTemporaryNotAvailableError(service=self.name)
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
-        
+        # if self.configService.VAULT_ACTIVATED:
+        #     raise BuildOkError
         if self.configService.MODE == MODE.DEV_MODE:
             self._dev_token_login()
             self.read_tokens()
@@ -84,6 +84,7 @@ class HCVaultService(BaseService,SchedulerInterface):
             self.vault_approle_login(build_state)
             print(self.client.token)
             self.read_tokens()
+            self.interval_schedule(self.delay,self.refresh_token,tuple(),{},f'{self.name}-refresh_token')
 
     def compute_next_tick_time(self):
         tick_delay = time_until_next_tick(self._secret_id_crontab)

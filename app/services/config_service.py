@@ -220,7 +220,7 @@ class ConfigService(_service.BaseService):
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
         # HASHI CORP VAULT CONFIG #
-
+        self.VAULT_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('VAULT_ACTIVATED','true'), True)
         self.VAULT_ADDR:str = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
 
         # MONGODB CONFIG #

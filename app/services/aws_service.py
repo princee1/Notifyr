@@ -53,6 +53,7 @@ class AmazonS3Service(TempCredentialsDatabaseService):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
             self.client_init()
+            super().build()
         except ServerError as e:
             raise BuildFailureError(f'Failed to build AmazonS3Service due to server error: {str(e)}') from e
         except InvalidResponseError as e:

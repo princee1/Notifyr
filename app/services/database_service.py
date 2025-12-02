@@ -56,7 +56,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
 
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
         DatabaseService.__init__(self,configService,fileService)
-        SchedulerInterface.__init__(self,)
+        SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
         self.vaultService = vaultService
         self.creds:VaultDatabaseCredentials = {}
         self.max_retry = max_retry
@@ -66,10 +66,11 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         self.last_rotated = None
         self.auth_ttl = ttl
 
+    def build(self, build_state = ...):
         delay = IntervalParams( 
             seconds=self.random_buffer_interval(self.auth_ttl) 
             )
-        self.interval_schedule(delay, self.creds_rotation,tuple(),{})
+        self.interval_schedule(delay, self.creds_rotation,tuple(),{},f"{self.name}-creds_rotation")
 
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
@@ -320,6 +321,7 @@ class RedisService(TempCredentialsDatabaseService):
         else :
             self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         
+        super().build()
 
         self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
             RedisConstant.CELERY_DB:self.redis_celery,
@@ -601,6 +603,7 @@ class MongooseService(TempCredentialsDatabaseService):
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
             self.db_connection()
+            super().build()
         except ConnectionFailure as e:
             if build_state == DEFAULT_BUILD_STATE:
                 raise BuildFailureError(f"MongoDB connection error: {e}")
@@ -684,6 +687,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 host=self.configService.POSTGRES_HOST,
                 port=5432
             )
+            super().build()
         except Exception as e:
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
 
@@ -753,6 +757,7 @@ class RabbitMQService(TempCredentialsDatabaseService):
             )
             connection = pika.BlockingConnection(params)
             connection.close()
+            super().build()
 
         except Exception as e:
             print(e)

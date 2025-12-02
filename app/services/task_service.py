@@ -61,6 +61,8 @@ class TaskService(BaseService,SchedulerInterface):
             self.fallback_to_memory = True
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
+        if self._builded:
+            self.shutdown(False)
         
         self.redis = self.redisService.db['celery']
         jobstores = {
