@@ -2,7 +2,7 @@ import functools
 from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, Header, Query, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role, filter_asset_permission
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
@@ -345,6 +345,7 @@ async def get_combined_policies(client:ClientORM):
     roles= set()
     allowed_assets = set()
     allowed_profiles = set()
+    allowed_blogs = set()
     allowed_routes = {}
     
     for p in policies:
@@ -352,6 +353,7 @@ async def get_combined_policies(client:ClientORM):
         roles.update(p.roles)
         allowed_assets.update(p.allowed_assets)
         allowed_profiles.update(p.allowed_profiles)
+        allowed_blogs.update(p.allowed_blogs)
 
         for k,r in p.allowed_routes.items():
             
@@ -371,10 +373,12 @@ async def get_combined_policies(client:ClientORM):
     allowed_assets = filter_paths(list(allowed_assets),'/')
     allowed_profiles = list(allowed_profiles)
     roles = list(roles)
+    allowed_blogs=list(allowed_blogs)
 
     return AuthPermission(
         roles=roles,
         allowed_routes=allowed_routes,
         allowed_profiles=allowed_profiles,
-        allowed_assets=allowed_assets
+        allowed_assets=allowed_assets,
+        allowed_blogs=allowed_blogs
     )

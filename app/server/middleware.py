@@ -1,6 +1,6 @@
 from uuid import uuid4
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, ClientType, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
@@ -107,19 +107,21 @@ class JWTAuthMiddleware(MiddleWare):
 
             #TODO check group id
             if not client.authenticated:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client is not authenticated")
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
 
             if client.client_type != ClientType.Admin: 
 
                 if await BlacklistORMCache.Cache([group_id,client_id],client):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
+                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
 
             request.state.client = client
 
             policies = await AuthPermissionCache.Cache([group_id,client_id],client)
             authPermission= AuthPermission(**{**authPermission,**policies})
 
+            filter_asset_permission(authPermission)
             parse_authPermission_enum(authPermission)
+            
             request.state.authPermission = authPermission
 
         except HTTPException as e:

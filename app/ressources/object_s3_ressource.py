@@ -12,7 +12,7 @@ from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard
 from app.decorators.handlers import FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, VaultHandler
 from app.decorators.interceptors import ResponseCacheInterceptor
-from app.decorators.permissions import AdminPermission, JWTAssetPermission, JWTRouteHTTPPermission
+from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
@@ -119,21 +119,6 @@ class S3ObjectRessource(BaseHTTPRessource):
             await self.amazonS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
     @UsePermission(AdminPermission)
-    @PingService([HCVaultService])
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
-    @UseGuard(is_minio_external_guard)
-    @BaseHTTPRessource.HTTPRoute('/generate-url/',methods=[HTTPMethod.GET,HTTPMethod.PUT],mount=False)
-    def generate_url(self,request:Request,expiry:int=Query(3600,ge=6*60,le=HOUR*2),version:str=Query(None)): # type: ignore
-        method = request.method
-        url = self.amazonS3Service.generate_presigned_url(method=method,expiry=expiry,version_id=version)
-        return {
-            'presigned_url':url,
-            'expiry':expiry,
-            'method':method
-        }
-    
-
-    @UsePermission(AdminPermission)
     @UseHandler(FileNamingHandler,S3Handler,VaultHandler)
     @PingService([AmazonS3Service])
     @UseGuard(GlobalsTemplateGuard)
@@ -174,7 +159,7 @@ class S3ObjectRessource(BaseHTTPRessource):
         }
 
 
-    @UsePermission(JWTAssetPermission(accept_none_template=True))
+    @UsePermission(JWTAssetObjectPermission(accept_none_template=True))
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler)
     @PingService([AmazonS3Service,HCVaultService])
     @UsePipe(ValidFreeInputTemplatePipe)
@@ -228,7 +213,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @PingService([AmazonS3Service,HCVaultService])
     @UseRoles(roles=[Role.PUBLIC])
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler,TemplateHandler)
-    @UsePermission(JWTAssetPermission)
+    @UsePermission(JWTAssetObjectPermission)
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
     @UseServiceLock(HCVaultService,AmazonS3Service,AssetService,lockType='reader',check_status=False)
@@ -321,4 +306,22 @@ class S3ObjectRessource(BaseHTTPRessource):
         return self.amazonS3Service.copy_object(template,destination_template,objectsSearch.version_id,move)
 
     
+    ##################################################################################################################
+
+    ##################################################################################################################
+
+    @UsePermission(AdminPermission)
+    @PingService([HCVaultService])
+    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseGuard(is_minio_external_guard)
+    @BaseHTTPRessource.HTTPRoute('/generate-url/',methods=[HTTPMethod.GET,HTTPMethod.PUT],mount=False)
+    def generate_url(self,request:Request,expiry:int=Query(3600,ge=6*60,le=HOUR*2),version:str=Query(None)): # type: ignore
+        method = request.method
+        url = self.amazonS3Service.generate_presigned_url(method=method,expiry=expiry,version_id=version)
+        return {
+            'presigned_url':url,
+            'expiry':expiry,
+            'method':method
+        }
     
+

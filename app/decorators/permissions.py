@@ -74,7 +74,7 @@ class JWTRouteHTTPPermission(Permission):
         return True
     
 
-class JWTAssetPermission(Permission):
+class JWTAssetObjectPermission(Permission):
 
     def __init__(self,template_type:RouteAssetType=None,extension:str=None,model_keys:list[str]=[],options=[],accept_none_template:bool=False):
         #TODO Look for the scheduler object and the template
@@ -91,7 +91,6 @@ class JWTAssetPermission(Permission):
         if authPermission['client_type'] == ClientType.Admin:
             return True
         
-        filter_asset_permission(authPermission)
         template_type = self.template_type if template_type == None else template_type
 
         if template == '':
@@ -119,8 +118,18 @@ class JWTAssetPermission(Permission):
                                 
         return True
 
+class JWTStaticObjectPermission(Permission):
+        
+    def permission(self,authPermission:AuthPermission,blog:str):
+        if authPermission['client_type'] == ClientType.Admin:
+            return True
+        
+        if blog not in authPermission['allowed_blogs']:
+            return False
+        
+        return True
 
-class JWTSignatureAssetPermission(JWTAssetPermission):
+class JWTSignatureAssetPermission(JWTAssetObjectPermission):
 
     def __init__(self):
         super().__init__('email')
@@ -159,7 +168,6 @@ class JWTContactPermission(Permission):
         
         return True
     
-
 class JWTRefreshTokenPermission(Permission):
 
     def __init__(self,accept_inactive=False):
@@ -190,7 +198,7 @@ class JWTRefreshTokenPermission(Permission):
         
         return True
 
-class ClientTypePermission(Permission):
+class AbstractClientTypePermission(Permission):
 
     def __init__(self,client_type:ClientType,ensure=False):
         super().__init__()
@@ -208,19 +216,20 @@ class ClientTypePermission(Permission):
         if not authPermission['client_type'] == self.client_type.value:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client type is not {self.client_type.value}")
 
-        return True     
-class AdminPermission(ClientTypePermission):
+        return True
+   
+class AdminPermission(AbstractClientTypePermission):
     # only because theres 3 type of client otherwise there would be only the ClientTypePermission class
 
      def __init__(self, ensure=False):
         super().__init__(ClientType.Admin, ensure)
 
-class TwilioPermission(ClientTypePermission):
+class TwilioPermission(AbstractClientTypePermission):
 
     def __init__(self,ensure=False):
         super().__init__(ClientType.Twilio, ensure)
 
-class UserPermission(ClientTypePermission):
+class UserPermission(AbstractClientTypePermission):
 
     def __init__(self,ensure=False,accept_none_auth=False):
         super().__init__(ClientType.User, ensure)

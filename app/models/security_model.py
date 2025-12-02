@@ -111,6 +111,8 @@ class PolicyORM(models.Model):
     allowed_profiles = ArrayField('TEXT',default=list)  # TEXT[] as list
     allowed_routes = fields.JSONField(default=dict)    # JSONB as dict
     allowed_assets = ArrayField('TEXT',default=list)   # TEXT[] as list
+    allowed_blogs = ArrayField('TEXT',default=list)   # TEXT[] as list
+
     roles = ArrayField('Role',default=lambda: ["PUBLIC"])  # role[] as list
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
@@ -126,6 +128,7 @@ class PolicyORM(models.Model):
             'allowed_profiles':self.allowed_profiles,
             'allowed_routes':self.allowed_routes,
             'allowed_assets':self.allowed_assets,
+            'allowed_blog':self.allowed_blogs,
             'roles':self.roles,
             'created_at':self.created_at.isoformat(),
             'updated_at':self.updated_at.isoformat()
