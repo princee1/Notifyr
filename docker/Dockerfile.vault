@@ -4,11 +4,13 @@ RUN apt-get update && apt-get install -y git make && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-ARG COMMIT_SHA=75862a1065ff489a4601791ad22062e22ee7a1d1
+# ARG COMMIT_SHA=75862a1065ff489a4601791ad22062e22ee7a1d1
 
 # RUN git clone https://github.com/ram-parameswaran/vault-plugin-secrets-minio.git
 
-RUN git clone https://github.com/jayxiong1/vault-plugin-secrets-minio.git
+# RUN git clone https://github.com/jayxiong1/vault-plugin-secrets-minio.git
+
+RUN git clone https://github.com/princee1/vault-plugin-secrets-minio.git
 
 WORKDIR /build/vault-plugin-secrets-minio/
 
@@ -211,7 +213,7 @@ path "notifyr-database/rotate-root/*" {
   capabilities=["update"]
 }
 
-path "notifyr-minio/config/upgrade-service-account"{
+path "notifyr-minio/config/rotate-root/"{
   capabilities = ["update"]
 }
 

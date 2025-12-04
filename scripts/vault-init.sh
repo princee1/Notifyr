@@ -10,7 +10,6 @@ NOTIFYR_APP_ROLE="notifyr-app-role"
 NOTIFYR_DMZ_APP_ROLE="notifyr-dmz-role"
 
 
-
 export VAULT_ADDR="http://127.0.0.1:8200"
 
 #################################               ##############################################
@@ -45,16 +44,21 @@ wait_active_server(){
 
 
 init_vault(){
-  INIT_OUT=$(vault operator init -format=json -key-shares=1 -key-threshold=1)
+  INIT_OUT=$(vault operator init -format=json -key-shares=2 -key-threshold=1)
+
+  echo "$INIT_OUT"
 
   UNSEAL_KEY=$(echo "$INIT_OUT" | jq -r '.unseal_keys_b64[0]')
+  UNSEAL_KEY_SHARE2=$(echo "$INIT_OUT" | jq -r '.unseal_keys_b64[1]')
+
   ROOT_TOKEN=$(echo "$INIT_OUT" | jq -r '.root_token')
 
   # The root_token and the unseal key will stay in the container as secrets
-  echo -n "$UNSEAL_KEY" > "$VAULT_SECRETS_DIR/unseal_key.b64" 
-  echo -n "$ROOT_TOKEN" > "$VAULT_SECRETS_DIR/root_token.txt"
+  echo -n "$UNSEAL_KEY" > "$VAULT_SECRETS_DIR/unseal_key.b64"
+  echo -n "$UNSEAL_KEY_SHARE_2" > "$VAULT_SECRETS_DIR/unseal_key_2.b64" 
 
   vault operator unseal "$UNSEAL_KEY"
+  UNSEAL_KEY=""
 }
 
 setup_engine(){
@@ -390,8 +394,6 @@ echo "***************************                     *********************"
 wait_active_server
 echo "***************************                     *********************"
 
-ROOT_TOKEN=$(cat "$VAULT_SECRETS_DIR/root_token.txt")
-
 export VAULT_TOKEN="$ROOT_TOKEN"
 
 echo "***************************                     *********************"
@@ -415,10 +417,11 @@ setup_database_config
 echo "***************************                     *********************"
 
 unset VAULT_TOKEN
+vault logout "$ROOT_TOKEN"
+ROOT_TOKEN=""
 
-kill "$VAULT_PID"
+
 wait "$VAULT_PID" || true
-
 echo "Vault Initialization finished"
 
 #################################               ##############################################
