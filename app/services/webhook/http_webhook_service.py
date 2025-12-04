@@ -68,7 +68,7 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         config:SignatureConfig = cred.get('signature_config',None)
         if not config:
             return 
-        sig_header = config.get('header_name') or 'X-Signature'
+        sig_header = config.get('header_name') or 'X-Webhook-Signature'
         secrets = config.get('secret')
         algo = config.get("algo")
         headers[sig_header] = self.hmac_signature(secrets, body_bytes,algo)

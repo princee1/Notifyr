@@ -266,7 +266,7 @@ class VaultConstant:
     NOTIFYR_TRANSIT_MOUNT_POINT = 'notifyr-transit'
     NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
     NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
-    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio-s3'
+    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio'
     NOTIFYR_RABBITMQ_MOUNT_POINT='notifyr-rabbitmq'
 
 

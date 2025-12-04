@@ -20,7 +20,7 @@ MINIO_PID=$!
 sleep 9
 echo "Minio is UP!"
 
-VAULT_SECRET_ACCESS_KEY=vaultadmin:minio
+VAULT_ACCESS_KEY=vaultadmin:minio
 VAULT_SECRET_KEY=${MINIO_VAULT_PASSWORD}
 
 accessKey=$(jq -r '.credential.accessKey' "$CONFIG_DIR/config.json")
@@ -31,15 +31,15 @@ mc alias set notifyr http://localhost:9000 "$accessKey" "$secretKey" >/dev/null
 # ===============================
 # Add vaultadmin:minio ONLY IF NOT EXISTS
 # ===============================
-echo "Checking if user '$VAULT_SECRET_ACCESS_KEY' exists..."
+echo "Checking if user '$VAULT_ACCESS_KEY' exists..."
 
-if mc admin user info notifyr "$VAULT_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-    echo "User '$VAULT_SECRET_ACCESS_KEY' already exists. Skipping creation."
+if mc admin user info notifyr "$VAULT_ACCESS_KEY" >/dev/null 2>&1; then
+    echo "User '$VAULT_ACCESS_KEY' already exists. Skipping creation."
 else
-    echo "User '$VAULT_SECRET_ACCESS_KEY' does NOT exist. Creating..."
-    mc admin user add notifyr "$VAULT_SECRET_ACCESS_KEY" "$VAULT_SECRET_KEY"
-    mc admin policy attach notifyr consoleAdmin --user "$VAULT_SECRET_ACCESS_KEY"
-    mc admin policy attach notifyr vault-admin --user "$VAULT_SECRET_ACCESS_KEY"
+    echo "User '$VAULT_ACCESS_KEY' does NOT exist. Creating..."
+    mc admin user add notifyr "$VAULT_ACCESS_KEY" "$VAULT_SECRET_KEY"
+    mc admin policy attach notifyr consoleAdmin --user "$VAULT_ACCESS_KEY"
+    mc admin policy attach notifyr vault-admin --user "$VAULT_ACCESS_KEY"
 fi
 
 # ===============================

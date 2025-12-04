@@ -179,11 +179,11 @@ path "notifyr-database/roles" {
 
 # ---- MINIO ENGINE ----
 
-path "notifyr-minio-s3/creds/app*"{
+path "notifyr-minio/creds/app*"{
   capabilities = ["read"]
 }
 
-path "notifyr-minio-s3/sts/app*"{
+path "notifyr-minio/sts/app*"{
   capabilities=["update","read"]
 }
 
@@ -211,6 +211,10 @@ path "notifyr-database/rotate-root/*" {
   capabilities=["update"]
 }
 
+path "notifyr-minio/config/upgrade-service-account"{
+  capabilities = ["update"]
+}
+
 path "notifyr-config/*"{
   capabilities=["update","read","create","list","delete"]
 }
@@ -218,11 +222,11 @@ path "notifyr-config/*"{
 EOF
 
 RUN cat <<EOF > /vault/policies/dmz-policy.hcl
-  path "notifyr-minio-s3/creds/dmz*"{
+  path "notifyr-minio/creds/dmz*"{
     capabilities = ["read"]
   }
 
-  path "notifyr-minio-s3/sts/dmz*"{
+  path "notifyr-minio/sts/dmz*"{
     capabilities=["update","read"]
   }
 EOF

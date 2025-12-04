@@ -63,7 +63,7 @@ setup_engine(){
   vault secrets enable -path=notifyr-transit -seal-wrap transit 
   vault secrets enable -path=notifyr-database -seal-wrap database
   vault secrets enable -path=notifyr-rabbitmq -seal-wrap rabbitmq
-  vault secrets enable -path=notifyr-minio-s3 -seal-wrap aws
+  vault secrets enable -path=notifyr-aws -seal-wrap aws
 
   vault secrets enable -path=setup-config kv
 
@@ -74,7 +74,7 @@ setup_engine(){
   vault plugin register -sha256="$CHECKSUM" -command="vault-plugin-secrets-minio" secret vault-plugin-secrets-minio
 
   vault secrets enable \
-    -path=notifyr-minio-s3 \
+    -path=notifyr-minio \
     -plugin-name=vault-plugin-secrets-minio \
     -description="Instance of the Minio plugin" \
     plugin
@@ -233,8 +233,8 @@ setup_database_config(){
 
   vault write notifyr-database/roles/app-redis-ntfr-role \
     db_name="redis" \
-    default_ttl=31536000 \
-    max_ttl=31536000 \
+    default_ttl="365d" \
+    max_ttl="365d" \
     creation_statements='[
         "ACL SETUSER {{name}} on >{{password}} \
           ~* \
@@ -243,28 +243,28 @@ setup_database_config(){
           +del +unlink"]' \
     revocation_statements='["ACL DELUSER {{name}}"]'
 
-  vault write notifyr-minio-s3/roles/app-static-minio-ntfr-role \
+  vault write notifyr-minio/roles/app-static-minio-ntfr-role \
       policy_name=app-access \
       user_name_prefix="vault-static-temp" \
       credential_type=static \
       default_ttl=12h \
       max_ttl=16h
 
-  vault write notifyr-minio-s3/roles/app-sts-minio-ntfr-role \
+  vault write notifyr-minio/roles/app-sts-minio-ntfr-role \
       policy_name=app-access \
       credential_type=sts \
       default_ttl=12h \
       max_ttl=16h \
       max_sts_ttl=12h
 
-  vault write notifyr-minio-s3/roles/dmz-static-minio-ntfr-role \
+  vault write notifyr-minio/roles/dmz-static-minio-ntfr-role \
       policy_name=dmz-access \
       user_name_prefix="dmz-static-temp" \
       credential_type=static \
       default_ttl=1h \
       max_ttl=2h
 
-  vault write notifyr-minio-s3/roles/dmz-sts-minio-ntfr-role \
+  vault write notifyr-minio/roles/dmz-sts-minio-ntfr-role \
       policy_name=dmz-access \
       credential_type=sts \
       default_ttl=1h \
@@ -286,25 +286,25 @@ setup_database_config(){
 }
 
 create_aws_engine(){
-  local S3_VAULT_USER=${AWS_VAULT_USER:-"notifyr-s3-user"}
-  local S3_VAULT_PASSWORD=${AWS_VAULT_PASSWORD:-"notifyr-s3-password"}
+  local AWS_USER=${AWS_VAULT_USER:-"notifyr-s3-user"}
+  local AWS_PASSWORD=${AWS_VAULT_PASSWORD:-"notifyr-s3-password"}
 
-  vault write notifyr-minio-s3/config/root \
-      access_key="$S3_VAULT_USER" \
-      secret_key="$S3_VAULT_PASSWORD" \
-      endpoint="https://$STHREE_HOST" \
-      iam_endpoint="https://$STHREE_HOST" \
-      sts_endpoint="https://$STHREE_HOST" \
+  vault write notifyr-aws/config/root \
+      access_key="$AWS_USER" \
+      secret_key="$AWS_PASSWORD" \
+      endpoint="https://$AWS_HOST" \
+      iam_endpoint="https://$AWS_HOST" \
+      sts_endpoint="https://$AWS_HOST" \
       region=us-east-1 \
       sts_region="us-east-1"
 
-    vault write notifyr-minio-s3/roles/assets-role \
+    vault write notifyr-aws/roles/assets-role \
       credential_type=iam_user \
       policy_arns="assets-access" \
       ttl=15m \
       max_ttl=1h\
 
-    vault write notifyr-minio-s3/config/lease \
+    vault write notifyr-aws/config/lease \
       lease=15m \
       lease_max=1h
 }
@@ -358,7 +358,7 @@ create_database_config(){
 
   vault write -f notifyr/static-roles/admin-admin-static-role/rotate
 
-  vault write notifyr-minio-s3/config/root \
+  vault write notifyr-minio/config/root \
       endpoint="$STHREE_HOST:9000" \
       accessKeyId="vaultadmin:minio" \
       secretAccessKey="$MINIO_VAULT_PASSWORD" \
