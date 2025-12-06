@@ -587,7 +587,12 @@ ROOT_TOKEN=""
 kill "$VAULT_PID" || true
 wait "$VAULT_PID" || true
 echo "Vault Initialization finished"
-
 echo -n "Vault Init Done at $(date +%s)" > "$VAULT_SHARED_DIR/vault.lock"
 
+
+chown root:vaultuser /vault/data/*
+chmod 660 /vault/data/*
+
+chmod 744 "$VAULT_SHARED_DIR/vault.lock"
+echo "Exiting..."
 ################################# ##############################################

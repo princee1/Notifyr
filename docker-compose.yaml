@@ -134,11 +134,11 @@ services:
   vault:
     image: notifyr:vault
     user: vaultuser
+    container_name: vault
     entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
     secrets:
       - source: unseal_tokens
         target: /run/secrets/unseal_key.json
-      
       - source: rotate_token
         target: /run/secrets/rotate-token.txt
 
@@ -272,7 +272,7 @@ secrets:
     file: ./.notifyr/secrets/unseal_key.json
 
   costs:
-    file: ./.user/costs.json
+    file: ./.notifyr/costs.json
 
 networks:
   notifyr-net:
