@@ -5,7 +5,7 @@ from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MemCachedHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, JWTStaticObjectPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseHandler, UseInterceptor, UseLimiter, UsePermission, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, UseHandler, UseInterceptor, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
 from app.services.aws_service import AmazonS3Service
 from app.services.config_service import ConfigService
@@ -18,16 +18,19 @@ class SocialBlogRessource(BaseHTTPRessource):
     ...
 
     @UseLimiter('1/sec')
-    @BaseHTTPRessource.HTTPRoute('/like/{blog}/',methods=[HTTPMethod.GET])
+    @UseInterceptor(ResponseCacheInterceptor('invalid-only'))
+    @BaseHTTPRessource.HTTPRoute('/like/{blog}/',methods=[HTTPMethod.POST])
     async def like_blog(self,blog:str,request:Request,response:Response):
         ...
     
     @UseLimiter('1/sec')
-    @BaseHTTPRessource.HTTPRoute('/comment/{comment}/{blog}/',methods=[HTTPMethod.GET])
+    @UseInterceptor(ResponseCacheInterceptor('invalid-only'))
+    @BaseHTTPRessource.HTTPRoute('/comment/{comment}/{blog}/',methods=[HTTPMethod.POST])
     async def comment_blog(self,blog:str,comment:str,request:Request,response:Response):
         ...
     
     @UseLimiter('1/sec')
+    @UseHandler(MemCachedHandler)
     @UseInterceptor(ResponseCacheInterceptor('cache'))
     @BaseHTTPRessource.HTTPRoute('/{blog}/',methods=[HTTPMethod.GET])
     async def get_blog(self,blog:str,request:Request,response:Response):
@@ -36,6 +39,7 @@ class SocialBlogRessource(BaseHTTPRessource):
 
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,TortoiseHandler,MemCachedHandler)
+@IncludeRessource(SocialBlogRessource)
 @HTTPRessource('blogs')
 class BlogsRessource(BaseHTTPRessource):
 

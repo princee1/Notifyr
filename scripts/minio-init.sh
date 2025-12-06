@@ -35,8 +35,9 @@ if [ "$S3_MODE" = "dev" ]; then
 fi
 
 mc admin policy create notifyr app-access /app/policy/app-access.json
-mc admin policy create notifyr vault-admin /app/policy/vault-admin.json
 mc admin policy create notifyr dmz-access /app/policy/dmz-access.json
+
+#mc admin policy create notifyr vault-admin /app/policy/vault-admin.json
 
 mc alias remove notifyr
 

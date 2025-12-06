@@ -1,13 +1,13 @@
 #!/bin/sh
 
-SECRET_DIR="./notifyr/secrets"
-CONFIG_FILE="$SECRET_DIR/config.json"
+SECRET_DIR="./.notifyr/secrets"
+CONFIG_FILE="$SECRET_DIR/minio-root.json"
 
 mkdir -p "$SECRET_DIR"
 
 # If credentials already exist, do NOT regenerate them
 if [ -f "$CONFIG_FILE" ]; then
-    echo "config.json already exists — keeping existing root credentials."
+    echo "minio-root.json already exists — keeping existing root credentials."
     exit 0
 fi
 

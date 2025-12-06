@@ -2,7 +2,7 @@
 set -e
 
 VAULT_CONFIG=/vault/config/vault.hcl
-VAULT_SECRETS_DIR=/vault/secrets
+VAULT_SECRETS_DIR=/run/secrets
 VAULT_SHARED_DIR=/vault/shared
 
 export VAULT_CONTAINER_READY="false"
@@ -23,8 +23,14 @@ for i in {1..30}; do
 IS_SEALED=$(vault status -format=json | jq -r '.sealed')
 if [ "$IS_SEALED" = "true" ]; then
 
-  UNSEAL_KEY=$(cat "$VAULT_SECRETS_DIR/unseal_key.b64")
-  vault operator unseal "$UNSEAL_KEY"
+  UNSEAL_KEY_1=$(cat "$VAULT_SECRETS_DIR/unseal_key.json" | jq -r '.uk1')
+  UNSEAL_KEY_2=$(cat "$VAULT_SECRETS_DIR/unseal_key.json" | jq -r '.uk2')
+
+  vault operator unseal "$UNSEAL_KEY_1"
+  vault operator unseal "$UNSEAL_KEY_2"
+
+  UNSEAL_KEY_1=""
+  UNSEAL_KEY_2=""
 fi
 
 for i in {1..30}; do

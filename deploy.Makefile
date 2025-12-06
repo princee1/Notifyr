@@ -35,3 +35,6 @@ reset-cost-hard:
 		echo "SET $$key -> $$val"; \
 		$(DOCKER) exec -i $(REDIS_CONTAINER) redis-cli -n $(REDIS_DB) SET "$$key" "$$val"; \
 	done
+
+up:
+	docker ps vault-init:/tmp/secrets/* ./notifyr/secrets/

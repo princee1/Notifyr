@@ -224,8 +224,8 @@ DEFAULT_SETTING = {
 
 class VaultConstant:
 
-    SECRET_ID_FILE= 'secret-id.txt' 
-    ROLE_ID_FILE = 'role_id.txt' # in the secrets shared by the vault
+    SECRET_ID_FILE= 'app-secret-id.txt' 
+    ROLE_ID_FILE = 'app-role_id.txt' # in the secrets shared by the vault
     SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
     
 

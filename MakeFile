@@ -43,7 +43,6 @@ run_prod:
 
 ###############################      CELERY                     #######################################
 
-
 celery:
 	celery -A ${celery_app} worker --pool=solo --loglevel=info 
 

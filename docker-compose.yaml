@@ -13,6 +13,7 @@ services:
     container_name: rabbitmq
     ports:
       - "5672:5672"     # AMQP (used by Celery)
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-notifyr-user}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-notifyrpass123}
@@ -66,6 +67,9 @@ services:
     image: minio/minio:latest
     container_name: minio
     restart: unless-stopped
+    secrets: 
+      - source: minio_root
+        target: /run/secrets/config.json
     build:
       args:
         - ASSETS_STORAGE_LIMIT=${ASSETS_STORAGE_LIMIT:-500MB}
@@ -82,7 +86,6 @@ services:
       - MINIO_VAULT_PASSWORD=${MINIO_VAULT_PASSWORD:-changeme}
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
       - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
-    
     depends_on:
       - redis
     
@@ -102,6 +105,8 @@ services:
 
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+      REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD}
 
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
@@ -130,6 +135,13 @@ services:
     image: notifyr:vault
     user: vaultuser
     entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
+    secrets:
+      - source: unseal_tokens
+        target: /run/secrets/unseal_key.json
+      
+      - source: rotate_token
+        target: /run/secrets/rotate-token.txt
+
     ports:
       - "8200:8200"
     volumes:
@@ -144,6 +156,10 @@ services:
       - "com.docker.compose.service=app"
     command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
     #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
+
+    secrets:
+      - source: app_role_id
+        target: ./.notifyr/secrets/app-role_id.txt
     ports:
       - 8088:8088
     volumes:
@@ -176,8 +192,12 @@ services:
   worker:
     image: notifyr:celery
     command: ["./spawn_celery_worker.sh", "1", "false"]
+    secrets:
+      - source: app_role_id
+        target: ./.notifyr/secrets/app-role_id.txt
     volumes:
       - vault-shared:/vault/shared
+      - ./costs.json:/run/secrets/costs:ro
     restart: always
     environment:
       - MODE=prod
@@ -191,6 +211,9 @@ services:
     image: notifyr:celery
     command: ["make", "redbeat"]
     container_name: beat
+    secrets:
+      - source: app_role_id
+        target: ./.notifyr/secrets/app-role_id.txt
     volumes:
       - vault-shared:/vault/shared
     labels:
@@ -205,93 +228,6 @@ services:
       - .env
     depends_on:
       - redis
-
-  flower:
-    image: notifyr:flower
-    command: ["make", "flower"]
-    #container_name: ntfyr-flower
-    # labels:
-    #   - com.docker.compose.servie=flower
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.celery
-    restart: always
-    env_file:
-      - .env
-    depends_on:
-      - redis
-    ports:
-      - "5555:5555"
-
-  neo4j:
-    image: neo4j:5.15
-    container_name: ntfyr-neo4j
-    restart: unless-stopped
-    ports:
-      - "7687:7687"
-      - "7474:7474"
-    environment:
-      - NEO4J_AUTH=${NEO4J_AUTH}
-      - NEO4J_dbms_memory_heap_initial__size=512m
-      - NEO4J_dbms_memory_heap_max__size=1G
-      - NEO4J_dbms_memory_pagecache_size=512m
-      - NEO4J_dbms_default__database=${NEO4J_DATABASE}
-
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-      - neo4j_conf:/conf
-
-  prometheus:
-    image: prom/prometheus
-    container_name: prometheus
-    restart: always
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-
-  pgbouncer:
-    image: edoburu/pgbouncer
-    #container_name: ntfyr-pgbouncer
-    restart: always
-    ports:
-      - "6432:6432" # PgBouncer listens on port 6432
-    volumes:
-      - ./docker/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
-      - ./docker/userlist.txt:/etc/pgbouncer/userlist.txt
-    environment:
-      - DB_HOST=ntfyr-postgres
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER}
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-    depends_on:
-      - postgres
-
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: pgadmin
-    restart: always
-    hostname: pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: test@test.com
-      PGADMIN_DEFAULT_PASSWORD: test
-    ports:
-      - "7070:7070"
-    depends_on:
-      - postgres
-
-  redis-commander:
-    container_name: redis-commander
-    hostname: redis-commander
-    image: rediscommander/redis-commander:latest
-    restart: always
-    depends_on:
-      - redis
-    environment:
-      - REDIS_HOSTS=local:redis:6379
-    ports:
-      - 6060:6060
       
 volumes:
   vault-data: {}
@@ -304,12 +240,6 @@ volumes:
   postgres-data:
     driver: local
 
-  assets-data:
-    driver: local
-
-  neo4j_data:
-  neo4j_logs:
-  neo4j_conf:
   redis-data:
     driver: local
   
@@ -318,13 +248,27 @@ volumes:
   rabbitmq_data:
 
 secrets:
-  approle_role_id:
-    file: ./bootstrap/role_id.txt # created after first container init
+  app_role_id:
+    file: ./.notifyr/secrets/app-role_id.txt
 
-  minio_root_user:
-    file: ./secrets/minio_root_user.txt
-  minio_root_password:
-    file: ./secrets/minio_root_password.txt
+  minio_root:
+    file: ./.notifyr/secrets/minio-root.json
+
+  dashboard_api_key:
+    file: ./.notifyr/secrets/dashboard-api-key.txt
+  
+  dmz_api_key:
+    file: ./.notifyr/secrets/dmz-api-key.txt
+  
+  dmz_role_id:
+    file: ./.notifyr/secrets/dmz-role_id.txt
+  
+  rotate_token:
+    file: ./.notifyr/secrets/rotate-token.txt
+  
+  unseal_tokens:
+    file: ./.notifyr/secrets/unseal_key.json
+
 
 networks:
   notifyr-net:

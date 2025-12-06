@@ -3,7 +3,7 @@ FROM debian:stable-slim AS builder
 RUN apt-get update && apt-get install -y pwgen curl && rm -rf /var/lib/apt/lists/*
 
 RUN curl -L -o /usr/bin/jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 \
-    && chmod +x /usr/bin/jq
+  && chmod +x /usr/bin/jq
 
 FROM minio/minio:latest
 
@@ -21,7 +21,7 @@ COPY --from=builder /usr/bin/jq /usr/bin/jq
 COPY ./objects/ ./objects/
 
 # Create policy folder
-RUN mkdir ./policy/
+RUN mkdir ./policy/ || die "policy already exists"
 
 # Create empty policy files
 RUN touch ./policy/app-access.json ./policy/vault-admin.json ./policy/dmz-access.json
@@ -74,23 +74,24 @@ RUN cat <<EOF > ./policy/dmz-access.json
 EOF
 
 RUN cat <<EOF > ./policy/vault-admin.json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutBucketNotification",
-        "s3:GetBucketNotification",
-        "admin:user:svcacct",
-        "admin:user:list",
-        "admin:policy:list",
-        "admin:SetConfig",
-        "admin:GetConfig",
-        "admin:ServerUpdate"
-      ],
-      "Resource": ["*"]
-    }
+{ "Version": "2012-10-17",
+ "Statement": [
+ {
+ "Effect": "Allow",
+ "Action": [
+ "s3:ListAllMyBuckets",
+"s3:GetBucketLocation",
+"admin:ListUsers",
+"admin:GetUser",
+"admin:ListServiceAccounts",
+ "admin:AddServiceAccount",
+"admin:UpdateServiceAccount",
+"admin:RemoveServiceAccount",
+ "admin:ListPolicies",
+"admin:GetPolicy"
+ ],
+ "Resource": ["arn:aws:s3:::*"]
+ }
   ]
 }
 EOF
@@ -100,9 +101,6 @@ RUN ./minio-init.sh ${ASSETS_STORAGE_LIMIT} ${STATIC_STORAGE_LIMIT} ${S3_MODE}
 
 COPY --chmod=700 ./scripts/minio-entrypoint.sh .
 
-# Make secrets readable
-RUN chmod 664 /minio/secrets/*
+#USER minio
 
-# Default user
-# USER minio
 ENTRYPOINT ["./minio-entrypoint.sh"]

@@ -12,7 +12,7 @@ export MINIO_NOTIFY_REDIS_QUEUE_LIMIT_NOTIFYR="${NOTIFY_REDIS_QUEUE_LIMIT:-1000}
 export MINIO_NOTIFY_REDIS_FORMAT="namespace"
 export MINIO_NOTIFY_REDIS_STREAM="on"
 
-CONFIG_DIR=/minio/secrets
+CONFIG_DIR=/run/secrets
 
 minio server /data --config-dir $CONFIG_DIR --console-address ":9001" &
 MINIO_PID=$!
@@ -39,7 +39,7 @@ else
     echo "User '$VAULT_ACCESS_KEY' does NOT exist. Creating..."
     mc admin user add notifyr "$VAULT_ACCESS_KEY" "$VAULT_SECRET_KEY"
     mc admin policy attach notifyr consoleAdmin --user "$VAULT_ACCESS_KEY"
-    mc admin policy attach notifyr vault-admin --user "$VAULT_ACCESS_KEY"
+    #mc admin policy attach notifyr vault-admin --user "$VAULT_ACCESS_KEY"
 fi
 
 # ===============================

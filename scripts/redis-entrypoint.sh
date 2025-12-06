@@ -1,27 +1,40 @@
 #!/bin/sh
 set -e
 
-ACL_FILE="/data/users.acl"
+ACL_FILE="/etc/redis/users.acl"
+mkdir -p "$(dirname "$ACL_FILE")"
+
 USER_NAME="vaultadmin:redis"
 USER_PASS="${REDIS_ADMIN_PASSWORD:-changeme}"
 
 if [ ! -f "$ACL_FILE" ]; then
     echo "Initializing Redis ACL file at $ACL_FILE..."
     
-    touch "$ACL_FILE"
-
+    # --- ACL user definitions ONLY go here ---
+    
     if [ "$DEFAULT_USER" = "on" ]; then
-        echo "user default on nopass ~* &* +@all" >> "$ACL_FILE"
+        # user default on nopass ~* &* +@all
+        echo "user default on nopass ~* &* +@all" > "$ACL_FILE" 
         echo "default user mode: on"
     else
-        echo "user default off" >> "$ACL_FILE"
+        # user default off
+        echo "user default off" > "$ACL_FILE" 
         echo "default user mode: off"
     fi
 
+    # Create the custom user
     echo "user $USER_NAME on >$USER_PASS ~* &* +@all" >> "$ACL_FILE"
     echo "ACL file created."
 else
     echo "ACL file already exists at $ACL_FILE. Skipping creation."
 fi
 
-exec docker-entrypoint.sh redis-server --aclfile "$ACL_FILE" "$@"
+# --- IMPORTANT CHANGE: Configuration directives moved to the EXEC line ---
+# We now load the module and set AOF/appendfsync as command-line arguments.
+# We also use the --aclfile argument to load your user definitions.
+
+exec docker-entrypoint.sh redis-server \
+    --aclfile "$ACL_FILE" \
+    --appendonly yes \
+    --appendfsync everysec \
+    "$@"

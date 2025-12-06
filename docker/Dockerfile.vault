@@ -68,7 +68,6 @@ EOF
 RUN mkdir -p /vault/policies
 
 RUN cat <<EOF > /vault/policies/app-policy.hcl
-
 # ---- SECRETS ENGINE ----
 
 path "notifyr-secrets/" {
@@ -83,16 +82,16 @@ path "notifyr-secrets/setting" {
   capabilities = ["read","list","update","create"]
 }
 
-path "notifyr-secrets/internal-api"{
+path "notifyr-secrets/internal-api" {
   capabilities = ["read","list"]
 }
 
-path "notifyr-secrets/internal-api/*"{
+path "notifyr-secrets/internal-api/*" {
   capabilities = ["read"]
 }
 
 path "notifyr-secrets/communication" {
-  capabilities =["read","list"]
+  capabilities = ["read","list"]
 }
 
 path "notifyr-secrets/communication/*" {
@@ -100,7 +99,7 @@ path "notifyr-secrets/communication/*" {
 }
 
 path "notifyr-secrets/ai-provider" {
-  capabilities =["read","list"]
+  capabilities = ["read","list"]
 }
 
 path "notifyr-secrets/ai-provider/*" {
@@ -108,7 +107,7 @@ path "notifyr-secrets/ai-provider/*" {
 }
 
 path "notifyr-secrets/webhook" {
-  capabilities =["read","list"]
+  capabilities = ["read","list"]
 }
 
 path "notifyr-secrets/webhook/*" {
@@ -142,6 +141,7 @@ path "notifyr-generation/metadata/generation-id" {
 path "transit/" {
   capabilities = ["list"]
 }
+
 # Encrypt and decrypt data
 path "notifyr-transit/encrypt/*" {
   capabilities = ["update"]
@@ -165,7 +165,7 @@ path "notifyr-transit/keys/*" {
 
 # ---- RABBITMQ ENGINE ----
 
-path = "notifyr-rabbitmq/roles/celery-ntfr-role"{
+path "notifyr-rabbitmq/roles/celery-ntfr-role" {
   capabilities = ["read"]
 }
 
@@ -181,12 +181,12 @@ path "notifyr-database/roles" {
 
 # ---- MINIO ENGINE ----
 
-path "notifyr-minio/creds/app*"{
+path "notifyr-minio/creds/app*" {
   capabilities = ["read"]
 }
 
-path "notifyr-minio/sts/app*"{
-  capabilities=["update","read"]
+path "notifyr-minio/sts/app*" {
+  capabilities = ["update","read"]
 }
 
 EOF
@@ -213,23 +213,23 @@ path "notifyr-database/rotate-root/*" {
   capabilities=["update"]
 }
 
-path "notifyr-minio/config/rotate-root/"{
+path "notifyr-minio/config/rotate-root/" {
   capabilities = ["update"]
 }
 
-path "notifyr-config/*"{
-  capabilities=["update","read","create","list","delete"]
+path "notifyr-config/*" {
+  capabilities = ["update","read","create","list","delete"]
 }
 
 EOF
 
 RUN cat <<EOF > /vault/policies/dmz-policy.hcl
-  path "notifyr-minio/creds/dmz*"{
+  path "notifyr-minio/creds/dmz*" {
     capabilities = ["read"]
   }
 
-  path "notifyr-minio/sts/dmz*"{
-    capabilities=["update","read"]
+  path "notifyr-minio/sts/dmz*" {
+    capabilities = ["update","read"]
   }
 EOF
 
@@ -256,9 +256,6 @@ RUN cat <<EOF > /vault/cron/crontab
 0 0 1 * * /usr/local/bin/vault-db-admin-rotator.sh >> /vault/logs/vault-db-admin-rotator.log 2>&1
 EOF
 
-# Copy scripts with correct permissions
-COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
-COPY --chown=vaultuser:vaultuser ./settings_db.json ./vault/config/settings_db.json
 
 RUN mkdir /etc/vault && mkdir etc/vault/plugins
 COPY --from=builder /build/vault-plugin-secrets-minio/vault-plugin-secrets-minio /etc/vault/plugins/
@@ -269,10 +266,15 @@ RUN chown root:vaultuser /etc/vault/plugins/vault-plugin-secrets-minio && chmod 
 RUN chown -R vaultuser:vaultuser /vault/data
 RUN chmod 700 /vault/data
 
-COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator/*.sh /usr/local/bin/
+RUN chmod 770 /usr/local/bin/*-rotator.sh 
+
+COPY --chown=vaultuser:vaultuser ./settings_db.json ./vault/config/settings_db.json
+
+# Copy scripts with correct permissions
+COPY --chmod=700 ./scripts/vault-init.sh /usr/local/bin/vault-init.sh
+COPY --chown=vaultuser:vaultuser ./scripts/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/vault-entrypoint.sh
-RUN chmod 770 /usr/local/bin/*-rotator.sh 
 
 ENTRYPOINT [ "/usr/local/bin/vault-init.sh"]
