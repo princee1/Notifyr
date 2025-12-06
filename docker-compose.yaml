@@ -151,15 +151,15 @@ services:
 
   app:
     image: notifyr:fastapi
-    #container_name: ntfyr-app
     labels:
       - "com.docker.compose.service=app"
     command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
     #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
-
     secrets:
       - source: app_role_id
         target: ./.notifyr/secrets/app-role_id.txt
+      - source: costs
+        target: /run/secrets/costs.json
     ports:
       - 8088:8088
     volumes:
@@ -195,6 +195,8 @@ services:
     secrets:
       - source: app_role_id
         target: ./.notifyr/secrets/app-role_id.txt
+      - source: costs
+        target: /run/secrets/costs.json
     volumes:
       - vault-shared:/vault/shared
       - ./costs.json:/run/secrets/costs:ro
@@ -269,6 +271,8 @@ secrets:
   unseal_tokens:
     file: ./.notifyr/secrets/unseal_key.json
 
+  costs:
+    file: ./.user/costs.json
 
 networks:
   notifyr-net:

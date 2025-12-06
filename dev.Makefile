@@ -68,11 +68,5 @@ tunnel_lb:
 
 ###############################     DOCKER            #######################################
 
-docker-worker:
-	docker-compose up -d --no-deps --scale worker=3 worker
-
 docker-prune:
 	docker builder prune --all -f
-
-docker-vault-sidecar:
-	docker-compose run --rm sidecar

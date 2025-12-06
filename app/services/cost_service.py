@@ -19,7 +19,7 @@ from datetime import datetime
 
 @Service()
 class CostService(BaseService):
-    COST_PATH = "/run/secrets/costs"
+    COST_PATH = "/run/secrets/costs.json"
     COST_PATH_OBJ= Path(COST_PATH)
     DICT_SEP='/'
 
