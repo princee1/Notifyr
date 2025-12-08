@@ -42,7 +42,7 @@ wait_active_server(){
 
 init_vault(){
   # Check if Vault is already initialized
-  if [ -f "/run/secrets/root-init.json" ]; then
+  if [ -f "/run/secrets/vault-root.json" ]; then
     echo "Vault appears already initialized. Unsealing..."
     # TODO
     return
@@ -60,7 +60,7 @@ init_vault(){
     vault operator unseal "$uk2"
 
     # Try to retrieve root token if initialization already happened
-    ROOT_TOKEN=$(jq -r '.root_token' "$VAULT_SECRETS_DIR/root-init.json" 2>/dev/null || true)
+    ROOT_TOKEN=$(jq -r '.root_token' "$VAULT_SECRETS_DIR/vault-root.json" 2>/dev/null || true)
     if [ -n "$ROOT_TOKEN" ]; then
       echo "Root Token retrieved from file."
     fi
@@ -70,7 +70,7 @@ init_vault(){
   echo "Initializing Vault..."
   INIT_OUT=$(vault operator init -format=json -key-shares=3 -key-threshold=2)
   mkdir -p "$VAULT_SECRETS_DIR"
-  echo "$INIT_OUT" > "$VAULT_SECRETS_DIR/root-init.json" # Save output
+  echo "$INIT_OUT" > "$VAULT_SECRETS_DIR/vault-root.json" # Save output
 
   local uk1=$(echo "$INIT_OUT" | jq -r '.unseal_keys_b64[0]')
   local uk2=$(echo "$INIT_OUT" | jq -r '.unseal_keys_b64[1]')
@@ -577,7 +577,6 @@ create_database_config
 echo "*************************** CREATE AWS ENGINE *********************"
 # create_aws_engine
 
-
 echo "*************************** FINISHING UP VAULT CONFIG *********************"
 
 unset VAULT_TOKEN
@@ -590,8 +589,8 @@ echo "Vault Initialization finished"
 echo -n "Vault Init Done at $(date +%s)" > "$VAULT_SHARED_DIR/vault.lock"
 
 
-chown root:vaultuser /vault/data/*
-chmod 660 /vault/data/*
+chown vaultuser:vaultuser -R /vault/data/*
+chmod 600 -R /vault/data/*
 
 chmod 744 "$VAULT_SHARED_DIR/vault.lock"
 echo "Exiting..."

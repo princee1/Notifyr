@@ -1,7 +1,6 @@
 src_dir = .
 celery_app = app.tasks.celery_app
 app_name = default
-ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
 
 ################################     VIRTUAL ENVIRONNEMENT            ###################################
 install	:
@@ -59,14 +58,3 @@ purge:
 	celery -A ${celery_app} purge
 
 ###############################     NGROK                      #######################################
-
-tunnel:
-	ngrok http --url ${ngrok_url} 8088
-
-tunnel_lb:
-	ngrok http --url ${ngrok_url} 8080
-
-###############################     DOCKER            #######################################
-
-docker-prune:
-	docker builder prune --all -f

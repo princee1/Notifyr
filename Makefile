@@ -4,6 +4,9 @@ COSTS_FILE ?= costs.json
 JQ ?= jq
 DOCKER ?= docker
 
+ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
+
+
 .PHONY: topup topup-cost reset-cost
 
 # convenience alias
@@ -36,5 +39,16 @@ reset-cost-hard:
 		$(DOCKER) exec -i $(REDIS_CONTAINER) redis-cli -n $(REDIS_DB) SET "$$key" "$$val"; \
 	done
 
-up:
-	docker ps vault-init:/tmp/secrets/* ./notifyr/secrets/
+setup:
+	./scripts/minio-creds.sh
+	d
+	docker cp vault-init:/tmp/secrets/* ./.notifyr/
+
+tunnel:
+	ngrok http --url ${ngrok_url} 8080
+
+
+clear:
+	docker builder prune --all -f
+
+
