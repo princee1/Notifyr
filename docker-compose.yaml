@@ -271,6 +271,7 @@ services:
     environment:
       - REDIS_ADMIN_PASSWORD=${REDIS_ADMIN_PASSWORD:-vaultpass}
       - DEFAULT_USER=on
+      - SKIP_FIX_PERMS=1
     volumes:
       - redis-data:/data
       - ./scripts/redis-entrypoint.sh:/entrypoint.sh
@@ -321,19 +322,19 @@ volumes:
 
 secrets:
   app_role_id:
-    file: ./.notifyr/secrets/app-role_id.txt
+    file: ./.secrets/app-role_id.txt
   minio_root:
-    file: ./.notifyr/secrets/minio-root.json
+    file: ./.secrets/minio-root.json
   dashboard_api_key:
-    file: ./.notifyr/secrets/dashboard-api-key.txt
+    file: ./.secrets/dashboard-api-key.txt
   dmz_api_key:
-    file: ./.notifyr/secrets/dmz-api-key.txt
+    file: ./.secrets/dmz-api-key.txt
   dmz_role_id:
-    file: ./.notifyr/secrets/dmz-role_id.txt
+    file: ./.secrets/dmz-role_id.txt
   rotate_token:
-    file: ./.notifyr/secrets/rotate-token.txt
+    file: ./.secrets/rotate-token.txt
   unseal_tokens:
-    file: ./.notifyr/secrets/unseal_key.json
+    file: ./.secrets/unseal_key.json
   costs:
     file: ./.notifyr/costs.json
 

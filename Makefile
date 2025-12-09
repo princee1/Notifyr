@@ -42,16 +42,16 @@ reset-cost-hard:
 notifyr:
 	./scripts/minio-creds.sh
 	docker compose -f 'docker-compose.yaml' up --build vault-init
-	docker cp vault-init:/tmp/secrets/  ./.notifyr/
+	docker cp vault-init:/tmp/secrets/  ./.secrets/
 	docker rm vault-init
 	docker compose -f 'docker-compose.yaml' up -d vault
-	sleep 10 && echo "Waiting for initialization..."
+	sleep 10
 	clear
 	docker compose -f 'docker-compose.yaml' up -d --no-deps --scale app=$$(cat ./.notifyr/deploy.json | jq -r '.scaling.app') app
 	docker compose -f 'docker-compose.yaml' up -d --no-deps beat
 	docker compose -f 'docker-compose.yaml' up -d --no-deps --scale worker=$$(cat ./.notifyr/deploy.json | jq -r '.scaling.worker') worker
 # 	docker compose -f 'docker-compose.yaml' up -d --no-deps --scale balancer=$(cat ./.notifyr/deploy.json | jq -r '.scaling.worker') balancer
-	docker compose -f 'docker-compose.yaml' up -d traeffik
+	docker compose -f 'docker-compose.yaml' up -d traefik
 # 	docker compose up -d dashboard
 # 	docker compose up -d dmz
 	clear
@@ -60,10 +60,11 @@ notifyr:
 tunnel:
 	ngrok http --url ${ngrok_url} 8080
 
-clear:
-	docker stop $$(docker compose -p notifyr ps)
+prune:
+	rm -f -R ./.secrets
+	docker stop $$(docker compose -p notifyr ps -q)
 	docker container prune -f
-	rm -f -R ./.notifyr/secrets
+	docker image rm minio/minio:latest
 	docker volume rm $$(docker volume ls -q)
 
 purge:

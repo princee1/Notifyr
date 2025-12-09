@@ -181,3 +181,4 @@ assets/.minio.sys/
 ROADMAP.md
 TODO
 .notifyr/secrets/
+.secrets/

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SECRET_DIR="./.notifyr/secrets"
+SECRET_DIR="./.secrets"
 CONFIG_FILE="$SECRET_DIR/minio-root.json"
 
 mkdir -p "$SECRET_DIR"

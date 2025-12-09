@@ -1,13 +1,14 @@
 #!/bin/sh
 set -e
 
-ACL_FILE="/etc/redis/users.acl"
+ACL_FILE="/data/etc/.users/users.acl"
 mkdir -p "$(dirname "$ACL_FILE")"
 
 USER_NAME="vaultadmin:redis"
 USER_PASS="${REDIS_ADMIN_PASSWORD:-changeme}"
 
 if [ ! -f "$ACL_FILE" ]; then
+    chown -R redis:redis $ACL_FILE
     echo "Initializing Redis ACL file at $ACL_FILE..."
     
     # --- ACL user definitions ONLY go here ---
