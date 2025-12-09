@@ -7,7 +7,6 @@ VAULT_SHARED_DIR=/vault/shared
 
 export VAULT_CONTAINER_READY="false"
 
-
 # Start Vault in background
 vault server -config="${VAULT_CONFIG}" &
 VAULT_PID=$!

@@ -32,9 +32,8 @@ services:
       - source: dashboard_api_key
         target: /run/secrets/dashboard_api_key
 
-  dmz_container:
+  dmz:
     image: notifyr:dmz
-    container_name: dmz
     # labels:
     #   - "traefik.enable=true"
     #   - "traefik.http.routers.dmz.rule=Host(`dmz.localhost`)"
@@ -83,7 +82,7 @@ services:
     secrets:
       # PRESERVED: Custom target paths
       - source: app_role_id
-        target: ./.notifyr/secrets/app-role_id.txt
+        target: /run/secrets/app-role_id.txt
       - source: costs
         target: /run/secrets/costs.json
     volumes:
@@ -110,9 +109,8 @@ services:
     image: notifyr:celery
     command: ["./spawn_celery_worker.sh", "1", "false"]
     secrets:
-      # PRESERVED: Custom target paths
       - source: app_role_id
-        target: ./.notifyr/secrets/app-role_id.txt
+        target: /run/secrets/app-role_id.txt
       - source: costs
         target: /run/secrets/costs.json
     volumes:
@@ -136,7 +134,7 @@ services:
     secrets:
       # PRESERVED: Custom target path
       - source: app_role_id
-        target: ./.notifyr/secrets/app-role_id.txt
+        target: /run/secrets/app-role_id.txt
     volumes:
       - vault-shared:/vault/shared
     labels:
@@ -164,6 +162,8 @@ services:
     restart: unless-stopped
     container_name: vault
     entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
+    environment:
+      VAULT_ADDR: "http://vault:8200"
     secrets:
       # PRESERVED: Custom target paths
       - source: unseal_tokens
@@ -200,17 +200,17 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
       AWS_VAULT_USER: set_user_in_container_start
       AWS_VAULT_PASSWORD: set_password_in_container_start
-      S3_HOST: ${S3_HOST}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      MONGO_HOST: ${MONGO_HOST}
-      RABBITMQ_HOST: ${RABBITMQ_HOST}
-      REDIS_HOST: ${REDIS_HOST}
     volumes:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
       - vault-audit:/vault/logs
     depends_on:
       - mongodb
+      - rabbitmq
+      - minio
+      - redis
+      - memcached
+      - postgres
     networks:
       - data_net
       - vault_net
@@ -221,9 +221,8 @@ services:
   minio:
     image: minio/minio:latest
     container_name: minio
-    restart: unless-stopped
+    restart: always
     secrets: 
-      # PRESERVED: Custom target path
       - source: minio_root
         target: /run/secrets/config.json
     build:
@@ -255,6 +254,7 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: rabbitmq
+    restart: always
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-notifyr-user}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-notifyrpass123}
@@ -306,9 +306,6 @@ services:
     networks:
       - data_net
 
-# ==========================================
-# VOLUMES & SECRETS
-# ==========================================
 volumes:
   vault-data: {}
   vault-shared: {}

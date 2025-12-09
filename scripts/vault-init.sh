@@ -590,7 +590,7 @@ echo -n "Vault Init Done at $(date +%s)" > "$VAULT_SHARED_DIR/vault.lock"
 
 
 chown vaultuser:vaultuser -R /vault/data/*
-chmod 600 -R /vault/data/*
+chmod 700 -R /vault/data/*
 
 chmod 744 "$VAULT_SHARED_DIR/vault.lock"
 echo "Exiting..."

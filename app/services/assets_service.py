@@ -111,7 +111,7 @@ class Reader:
                 self.func(self.values[relpath])
     
     def path(self,val,root=True):
-        return f"{self.configService.OBJECTS_DIR if root else ""}{self.configService.ASSETS_DIR}{val}"
+        return f"{self.configService.OBJECTS_DIR if root else ''}{self.configService.ASSETS_DIR}{val}"
 
     
     def safeReader(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
