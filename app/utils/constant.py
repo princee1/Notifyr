@@ -232,11 +232,11 @@ class VaultConstant:
     
     @staticmethod
     def VAULT_SECRET_DIR(file:str)->str:
-        return f'../../vault/secrets/{file}'
+        return f'/run/secrets/{file}'
 
     @staticmethod
     def VAULT_SHARED_DIR(file:str)->str:
-        return f'../../vault/shared/{file}'
+        return f'/vault/shared/{file}'
 
 
     NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting']

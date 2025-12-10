@@ -132,7 +132,6 @@ services:
     command: ["make", "redbeat"]
     container_name: beat
     secrets:
-      # PRESERVED: Custom target path
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
     volumes:
@@ -165,12 +164,13 @@ services:
     environment:
       VAULT_ADDR: "http://vault:8200"
     secrets:
-      # PRESERVED: Custom target paths
       - source: unseal_tokens
         target: /run/secrets/unseal_key.json
       - source: rotate_token
         target: /run/secrets/rotate-token.txt
     volumes:
+      - type: tmpfs
+        target: /run/secrets
       - vault-data:/vault/data
       - vault-shared:/vault/shared
       - vault-audit:/vault/logs
@@ -258,6 +258,7 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-notifyr-user}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-notifyrpass123}
+      RABBITMQ_DEFAULT_VHOST: celery
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:

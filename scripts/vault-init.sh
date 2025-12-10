@@ -2,7 +2,7 @@
 set -e
 
 VAULT_CONFIG=/vault/config/vault.hcl
-VAULT_SECRETS_DIR=/tmp/secrets
+VAULT_SECRETS_DIR=/tmp/.secrets
 VAULT_SHARED_DIR=/vault/shared
 
 NOTIFYR_APP_ROLE="notifyr-app-role"
@@ -463,17 +463,17 @@ create_database_config(){
         plugin_name="redis-database-plugin" \
         host="$R_HOST" \
         port=6379 \
-        username="vaultadmin:redis" \
+        username="vaultadmin-redis" \
         password="$REDIS_ADMIN_PASSWORD" \
         allowed_roles="admin-redis-static-role, app-redis-ntfr-role"
 
     vault write notifyr-database/static-roles/admin-redis-static-role \
       db_name="redis" \
-      username="vaultadmin:redis" \
+      username="vaultadmin-redis" \
       rotation_period=168h \
       rotation_statements='["ACL SETUSER {{name}} >{{password}}", "ACL SAVE"]'
 
-    vault write -f notifyr-database/static-roles/admin-redis-static-role/rotate || true
+    #vault write -f notifyr-database/static-roles/admin-redis-static-role/rotate || true
     setup_config_kv2 "redis_connection" "set"
   fi
 
@@ -482,7 +482,7 @@ create_database_config(){
     echo "Configuring Minio connection..."
     vault write notifyr-minio/config/root \
         endpoint="$STHREE_HOST:9000" \
-        accessKeyId="vaultadmin:minio" \
+        accessKeyId="vaultadmin-minio" \
         secretAccessKey="$MINIO_VAULT_PASSWORD" \
         sts_region="us-east-1" \
         ssl=false

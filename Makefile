@@ -39,11 +39,13 @@ reset-cost-hard:
 		$(DOCKER) exec -i $(REDIS_CONTAINER) redis-cli -n $(REDIS_DB) SET "$$key" "$$val"; \
 	done
 
-notifyr:
+deploy:
 	./scripts/minio-creds.sh
 	docker compose -f 'docker-compose.yaml' up --build vault-init
-	docker cp vault-init:/tmp/secrets/  ./.secrets/
+	docker cp vault-init:/tmp/.secrets/  ./
 	docker rm vault-init
+	sleep 1
+	clear
 	docker compose -f 'docker-compose.yaml' up -d vault
 	sleep 10
 	clear
@@ -55,7 +57,6 @@ notifyr:
 # 	docker compose up -d dashboard
 # 	docker compose up -d dmz
 	clear
-	echo "Setup done"
 
 tunnel:
 	ngrok http --url ${ngrok_url} 8080
