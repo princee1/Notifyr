@@ -30,7 +30,7 @@ define COMPOSE_RUN
 	@echo "--- 🛠️  $(1): Running $(2) $3..."
 	$(DOCKER_COMPOSE_BASE) $(2) $3
 	@echo "--- ✅  $(1): Completed."
-	@sleep 1
+	@sleep 1 
 endef
 
 # Helper to run a service with scaling logic
@@ -61,6 +61,7 @@ deploy-server:
 
 # 	# Deploy Infrastructure Services (Traefik/Gateway)
 	$(call COMPOSE_RUN, Traefik, up -d, traefik)
+# 	$(call COMPOSE_RUN, Ofelia Scheduler ,up -d --build, ofelia)
 
 	@echo "================================================="
 	@echo "✅ Server Services Deployment Complete"
@@ -99,10 +100,11 @@ deploy-data:
 
 # 	# 5. Run Initial Credit Setup
 	$(call COMPOSE_RUN, Credit Builder, build, credit)
-	$(call COMPOSE_RUN, Credit Setup, run --rm, credit reset-hard)
+	@clear && echo "Waiting 30 sec for the vault to be unsealed..." & sleep 30
+	$(call COMPOSE_RUN, Credit Setup, run --rm, credit /credits-utils.sh reset-hard)
+	$(call COMPOSE_RUN, Credit Always On, up -d, credit)
 	@echo "--- ✅ Initial Credit Setup (Hard Reset) complete."
 	@sleep 3 && clear
-
 	@echo "================================================="
 	@echo "✅ Data & Secrets Setup Complete"
 	@echo "================================================="
@@ -168,7 +170,6 @@ refresh-cost:
 	
 	$(call COMPOSE_RUN, Traefik Down, down, traeffik)
 
-# 	$(call COMPOSE_RUN, Ofelia Update, up -d --build, ofelia)
 	$(call COMPOSE_RUN, App Update, up -d --build, app)
 	$(call COMPOSE_RUN, Worker Update, up -d --build, worker)
 	@sleep 5 && clear

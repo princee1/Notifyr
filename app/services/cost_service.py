@@ -19,7 +19,7 @@ from app.classes.auth_permission import AuthPermission
 from app.utils.helper import flatten_dict
 from datetime import datetime
 
-REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"credit/{credit_key}"
+REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"credit:{credit_key}"
 
 @Service()
 class CostService(BaseService):

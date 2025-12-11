@@ -1,13 +1,14 @@
-FROM redis:latest AS redis-builder
+FROM redis:alpine AS redis-builder
 
 FROM alpine:3.20 AS builder
-RUN apk add --no-cache curl jq
+RUN apk add --no-cache jq
 
-FROM alpine:3.20
-COPY --from=builder /usr/bin/curl /usr/bin/curl
+FROM alpine/curl:latest
+
+RUN apk add --no-cache jq coreutils
 COPY --from=builder /usr/bin/jq /usr/bin/jq
 COPY --from=redis-builder /usr/local/bin/redis-cli /usr/local/bin/redis-cli
 
 COPY ./scripts/credits-utils.sh /credits-utils.sh
 
-ENTRYPOINT ["/credits-utils.sh"]
+ENTRYPOINT [""]

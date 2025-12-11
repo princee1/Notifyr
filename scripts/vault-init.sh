@@ -387,7 +387,7 @@ setup_database_config(){
       db_name="redis" \
       default_ttl="10m" \
       max_ttl="20m" \
-      creation_statements='["~credit/*", "+GET", "+SET", "+INCRBY"]'
+      creation_statements='["~credit:*", "+GET", "+SET", "+INCRBY"]'
     setup_config_kv2 "redis_roles" "set"
   fi
   

@@ -8,11 +8,11 @@ services:
   ofelia:
     image: mcuadros/ofelia:latest
     container_name: ofelia
+    network_mode: none
     command: daemon --config=/etc/ofelia/config.toml
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./ofelia.toml:/etc/ofelia/config.toml:ro
-      - ./.notifyr/costs.json:/etc/ofelia/costs.json:ro
     restart: unless-stopped
   # ==========================================
   # EDGE LAYER
@@ -82,6 +82,8 @@ services:
   credit:
     image: notifyr:credit
     container_name: credit
+    command: ["tail", "-f" ,"/dev/null"]
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./docker/Dockerfile.credit

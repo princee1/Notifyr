@@ -1,0 +1,4 @@
+[job-exec "monthly_credit_topup"]
+schedule = "0 0 1 * *"
+container = "credit"
+command= "/credits-utils.sh topup"

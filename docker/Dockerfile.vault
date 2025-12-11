@@ -68,6 +68,39 @@ EOF
 RUN mkdir -p /vault/policies
 
 RUN cat <<EOF > /vault/policies/app-policy.hcl
+
+path "auth/token/revoke/notifyr-database/*" {
+  capabilities = ["update"]
+}
+
+path "auth/token/renew/notifyr-database/*" {
+  capabilities = ["update"]
+}
+
+path "auth/token/revoke/notifyr-minio/*" {
+  capabilities = ["update"]
+}
+
+path "auth/token/renew/notifyr-minio/*" {
+  capabilities = ["update"]
+}
+
+path "auth/token/revoke/notifyr-rabbitmq/*" {
+  capabilities = ["update"]
+}
+
+path "auth/token/renew/notifyr-rabbitmq/*" {
+  capabilities = ["update"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}
+
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+
 # ---- SECRETS ENGINE ----
 
 path "notifyr-secrets/" {
@@ -224,6 +257,10 @@ path "notifyr-config/*" {
 EOF
 
 RUN cat <<EOF > /vault/policies/dmz-policy.hcl
+  path "auth/token/renew-self" {
+    capabilities = ["update"]
+  }
+
   path "notifyr-minio/creds/dmz*" {
     capabilities = ["read"]
   }
@@ -234,7 +271,19 @@ RUN cat <<EOF > /vault/policies/dmz-policy.hcl
 EOF
 
 RUN cat <<EOF > /vault/policies/credit-policy.hcl
-  path "notifyr-database/creds/credit-ntfr-role" {
+  path "auth/token/renew-self" {
+    capabilities = ["update"]
+  }
+
+  path "auth/token/revoke/notifyr-database/creds/credit-redis-ntfr-role/*" {
+    capabilities = ["update"]
+  }
+
+  path "auth/token/renew/notifyr-database/creds/credit-redis-ntfr-role/*" {
+    capabilities = ["update"]
+  }
+  
+  path "notifyr-database/creds/credit-redis-ntfr-role" {
     capabilities = ["read"]
   }
 EOF
