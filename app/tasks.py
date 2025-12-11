@@ -23,6 +23,9 @@ if sys.argv[0] == CELERY_EXE_PATH:
         dependency = __DEPENDENCY.copy()
         dependency.remove(AssetService)
         dependency.remove(HealthService)
+        dependency.remove(ContactsService)
+        dependency.remove(SecurityService)
+        dependency.remove(LinkService)
         build_container(False,dep=dependency)
         
 ##############################################           ##################################################

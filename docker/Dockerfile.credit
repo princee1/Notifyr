@@ -1,0 +1,9 @@
+    FROM alpine:3.20
+
+    RUN apk add --no-cache curl jq
+
+    COPY --from=redis:alpine /usr/bin/redis-cli /usr/bin/redis-cli
+
+    COPY --chmod=700 ./scripts/credits-utils.sh /credits-utils.sh
+
+    ENTRYPOINT [ "/credits-utils.sh" ]

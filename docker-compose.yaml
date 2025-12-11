@@ -77,6 +77,26 @@ services:
       - app_net
 
   # ==========================================
+  # CREDIT LAYER
+  # ==========================================
+  credit:
+    image: notifyr:credit
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.credit
+    networks:
+      - data_net
+      - vault_net
+    environment:
+      - VAULT_ADDR=http://vault:8200
+      - REDIS_HOST=${REDIS_HOST:redis}
+    secrets:
+      - source: costs
+        target: /run/secrets/costs.json
+      - source: credit_token
+        target: /run/secrets/credit_token.txt
+
+  # ==========================================
   # APP LAYER
   # ==========================================
   app:
@@ -357,6 +377,8 @@ secrets:
     file: ./.notifyr/costs.json
   api_key:
     file: ./.secrets/api_key.txt
+  credit_token:
+    file: ./.secrets/credit_token.txt
 
 networks:
   data_net:

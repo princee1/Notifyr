@@ -16,7 +16,6 @@ from app.utils.prettyprint import printJSON
 from .config_service import AssetMode, CeleryMode, ConfigService, UvicornWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
-from .security_service import SecurityService
 from .file_service import FileService, FTPService
 from app.definition import _service
 from enum import Enum

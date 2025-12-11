@@ -1,43 +1,7 @@
 REDIS_CONTAINER ?= redis
-REDIS_DB ?= 1
-COSTS_FILE ?= ./.notifyr/costs.json
 JQ ?= jq
 DOCKER ?= docker
-
 ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
-
-
-.PHONY: topup topup-cost reset-cost
-
-# convenience alias
-topup: topup-cost
-
-topup-cost:
-	@echo "Topping up phone,sms,email credits into $(REDIS_CONTAINER) DB $(REDIS_DB) from $(COSTS_FILE)"
-	@for pair in $$($(JQ) -r '.credits | to_entries[] | select(.key=="phone" or .key=="sms" or .key=="email") | "\(.key)=\(.value)"' $(COSTS_FILE)); do \
-		key=$${pair%%=*}; \
-		val=$${pair#*=}; \
-		echo "+ $$val -> $$key"; \
-		$(DOCKER) exec -i $(REDIS_CONTAINER) redis-cli -n $(REDIS_DB) INCRBY "$$key" "$$val"; \
-	done
-
-reset-cost:
-	@echo "Resetting credits in $(REDIS_CONTAINER) DB $(REDIS_DB) from $(COSTS_FILE)"
-	@for pair in $$($(JQ) -r '.credits | to_entries[] | select(.key=="phone" or .key=="sms" or .key=="email")  | "\(.key)=\(.value)"' $(COSTS_FILE)); do \
-		key=$${pair%%=*}; \
-		val=$${pair#*=}; \
-		echo "SET $$key -> $$val"; \
-		$(DOCKER) exec -i $(REDIS_CONTAINER) redis-cli -n $(REDIS_DB) SET "$$key" "$$val"; \
-	done
-
-reset-cost-hard:
-	@echo "Resetting credits in $(REDIS_CONTAINER) DB $(REDIS_DB) from $(COSTS_FILE)"
-	@for pair in $$($(JQ) -r '.credits | to_entries[] | "\(.key)=\(.value)"' $(COSTS_FILE)); do \
-		key=$${pair%%=*}; \
-		val=$${pair#*=}; \
-		echo "SET $$key -> $$val"; \
-		$(DOCKER) exec -i $(REDIS_CONTAINER) redis-cli -n $(REDIS_DB) SET "$$key" "$$val"; \
-	done
 
 
 deploy-server:
@@ -69,7 +33,12 @@ deploy-data:
 	sleep 1 && clear
 	docker compose -f 'docker-compose.yaml' up -d vault
 	sleep 3 && clear
-	@echo "Deployed docker services related to the data"
+	docker compose -f 'docker-compose.yaml' build credit
+	sleep 3 && clear
+	docker compose -f 'docker-compose.yaml' run credit reset-hard
+	docker rm credit
+	sleep 3 && clear
+	@echo "Deployed docker services related to the data and cost setup"
 
 deploy: deploy-data deploy-server
 	@echo "==================================="
@@ -104,6 +73,9 @@ refresh-cost:
 	docker compose -f 'docker-compose.yaml' up -d --build app
 	docker compose -f 'docker-compose.yaml' up -d --build worker
 	clear && sleep 5
+	docker compose -f 'docker-compose.yaml' run credit topup
+	docker rm credit
+	clear && sleep 3
 	docker compose -f 'docker-compose.yaml' up -d traeffik
 	clear
 	@echo "Successfully Refreshed the cost file"

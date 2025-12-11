@@ -248,11 +248,11 @@ set_credit_topup_token() {
   
   local CREDIT_TOKEN=$(vault token create -policy=credit-policy -ttl=0 -orphan -format=json | jq -r .auth.client_token)
 
-  echo -n "$CREDIT_TOKEN" > "$VAULT_SECRETS_DIR/credit_topup.txt"
+  echo -n "$CREDIT_TOKEN" > "$VAULT_SECRETS_DIR/credit_token.txt"
 
-  chown root:vaultuser "$VAULT_SECRETS_DIR/credit_topup.txt"  
+  chown root:vaultuser "$VAULT_SECRETS_DIR/credit_token.txt"  
 
-  chmod 644 "$VAULT_SECRETS_DIR/credit_topup.txt"
+  chmod 644 "$VAULT_SECRETS_DIR/credit_token.txt"
 
   setup_config_kv2 "credit_token" "set"
 
@@ -383,7 +383,7 @@ setup_database_config(){
       max_ttl="5h" \
       creation_statements='["+@all"]'
 
-    vault write notifyr-database/roles/credit-ntfr-role \
+    vault write notifyr-database/roles/credit-redis-ntfr-role \
       db_name="redis" \
       default_ttl="10m" \
       max_ttl="20m" \
@@ -491,7 +491,7 @@ create_database_config(){
         port=6379 \
         username="vaultadmin-redis" \
         password="$REDIS_ADMIN_PASSWORD" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-redis-ntfr-role"
     
     vault write -f notifyr-database/rotate-root/redis
     setup_config_kv2 "redis_connection" "set"
