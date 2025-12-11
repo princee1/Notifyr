@@ -126,23 +126,29 @@ tunnel:
 	ngrok http --url ${ngrok_url} 8080
 
 prune:
-	@echo "================================================="
-	@echo "🧹 Cleaning up notifyr environment (Hard Prune)"
-	@echo "================================================="
-	@echo "--- 🗑️  Removing local secrets directory: $(SECRETS_DIR)"
-	@rm -f -R $(SECRETS_DIR)
-	@echo "--- 🛑 Stopping all notifyr project containers..."
-	-$(DOCKER) stop $$($(DOCKER_COMPOSE_BASE) ps -q) || true
-	@echo "--- 🗑️  Pruning stopped containers..."
-	$(DOCKER) container prune -f
-	@echo "--- 🗑️  Removing minio image..."
-	-$(DOCKER) image rm minio/minio:latest || true
-	@echo "--- 🗑️  Removing all anonymous volumes..."
-	-$(DOCKER) volume rm $$(docker volume ls -q) || true
-	@sleep 3
-	@echo "================================================="
-	@echo "✅ notifyr environment completely pruned."
-	@echo "================================================="
+	@read -p "Are you sure you want to hard prune the notifyr environment? [y/N] " answer; \
+	if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
+		echo "================================================="; \
+		echo "🧹 Cleaning up notifyr environment (Hard Prune)"; \
+		echo "================================================="; \
+		echo "--- 🗑️  Removing local secrets directory: $(SECRETS_DIR)"; \
+		rm -f -R $(SECRETS_DIR); \
+		echo "--- 🛑 Stopping all notifyr project containers..."; \
+		-$(DOCKER) stop $$($(DOCKER_COMPOSE_BASE) ps -q) || true; \
+		echo "--- 🗑️  Pruning stopped containers..."; \
+		$(DOCKER) container prune -f; \
+		echo "--- 🗑️  Removing minio image..."; \
+		-$(DOCKER) image rm minio/minio:latest || true; \
+		echo "--- 🗑️  Removing all anonymous volumes..."; \
+		-$(DOCKER) volume rm $$(docker volume ls -q) || true; \
+		sleep 3; \
+		echo "================================================="; \
+		echo "✅ notifyr environment completely pruned."; \
+		echo "================================================="; \
+	else \
+		echo "❌ Prune aborted."; \
+	fi
+
 
 purge:
 	@echo "🧹 Pruning Docker builder cache (all)"
