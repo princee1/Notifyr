@@ -81,6 +81,7 @@ services:
   # ==========================================
   credit:
     image: notifyr:credit
+    container_name: credit
     build:
       context: .
       dockerfile: ./docker/Dockerfile.credit
@@ -89,7 +90,7 @@ services:
       - vault_net
     environment:
       - VAULT_ADDR=http://vault:8200
-      - REDIS_HOST=${REDIS_HOST:redis}
+      - REDIS_HOST=${REDIS_HOST:-redis}
     secrets:
       - source: costs
         target: /run/secrets/costs.json
@@ -111,7 +112,10 @@ services:
       - "traefik.docker.network=app_net"
       # Tell Traefik what port the service is listening on internally
       - "traefik.http.services.app-router.loadbalancer.server.port=8088"
+
+
     command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
+    restart: unless-stopped
     secrets:
       # PRESERVED: Custom target paths
       - source: app_role_id

@@ -1,104 +1,224 @@
+# ==============================================================================
+# 1. Configuration Variables
+# ==============================================================================
+
+# Essential Utilities/Containers
 REDIS_CONTAINER ?= redis
-JQ ?= jq
-DOCKER ?= docker
+JQ              ?= jq
+DOCKER          ?= docker
+
+# Docker Compose Configuration
+# Use a variable for the docker-compose file path to avoid repetition
+DOCKER_COMPOSE_FILE ?= docker-compose.yaml
+DOCKER_COMPOSE_BASE = $(DOCKER) compose -f '$(DOCKER_COMPOSE_FILE)'
+DOCKER_COMPOSE_MONITOR = $(DOCKER) compose -f 'monitor.docker-compose.yaml'
+
+# Deployment Paths
+DEPLOY_CONFIG   = ./.notifyr/deploy.json
+SECRETS_DIR     = ./.secrets
+
+# Other Services
 ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
 
 
+# ==============================================================================
+# 2. Helper Functions (DRY Principle)
+# ==============================================================================
+
+# Helper to run docker compose command and log the action
+define COMPOSE_RUN
+	@echo "--- 🛠️  $(1): Running $(2) $3..."
+	$(DOCKER_COMPOSE_BASE) $(2) $3
+	@echo "--- ✅  $(1): Completed."
+	@sleep 1
+endef
+
+# Helper to run a service with scaling logic
+define COMPOSE_SCALE
+	@echo "--- 🛠️  Scaling and deploying $(1)..."
+	$(DOCKER_COMPOSE_BASE) up -d --build --no-deps --scale $(1)=$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.$(1)') $(1)
+	@echo "--- ✅  $(1): Deployed and scaled."
+	@sleep 3
+endef
+
+
+# ==============================================================================
+# 3. Core Deployment Targets
+# ==============================================================================
+
+.PHONY: deploy deploy-data deploy-server tunnel prune purge refresh-apikey refresh-cost monitor-on monitor-off
+
+# Target to deploy all server components
 deploy-server:
-	docker compose -f 'docker-compose.yaml' up -d --build --no-deps --scale app=$$(cat ./.notifyr/deploy.json | jq -r '.scaling.app') app
-	sleep 3 && clear
-	@echo "Deployed app"
-	docker compose -f 'docker-compose.yaml' up -d --build --no-deps beat
-	sleep 3 && clear
-	@echo "Deployed beat"
-	docker compose -f 'docker-compose.yaml' up -d --no-deps --scale worker=$$(cat ./.notifyr/deploy.json | jq -r '.scaling.worker') worker
-	sleep 3 && clear
-	@echo "Deployed worker"
-# 	docker compose -f 'docker-compose.yaml' up -d --no-deps --scale balancer=$(cat ./.notifyr/deploy.json | jq -r '.scaling.worker') balancer
-	docker compose -f 'docker-compose.yaml' up -d traefik
-# 	docker compose up -d dashboard
-# 	docker compose up -d dmz
-	clear
-	@echo "Deployed docker server services"
+	@echo "================================================="
+	@echo "🚀 Starting Server Services Deployment"
+	@echo "================================================="
 
+# 	# Deploy and Scale Core Application Services
+	$(call COMPOSE_SCALE, app)
+	$(call COMPOSE_RUN, Beat Service, up -d --build --no-deps, beat)
+	$(call COMPOSE_SCALE, worker)
+
+# 	# Deploy Infrastructure Services (Traefik/Gateway)
+	$(call COMPOSE_RUN, Traefik, up -d, traefik)
+
+	@echo "================================================="
+	@echo "✅ Server Services Deployment Complete"
+	@echo "================================================="
+
+
+# Target to deploy all data components and run setup jobs
 deploy-data:
-	./scripts/minio-creds.sh
-	sleep 3 && clear
-	./scripts/api_key-creds.sh
-	sleep 3 && clear
-	docker compose -f 'docker-compose.yaml' up --build vault-init
-	sleep 1 && clear
-	docker cp vault-init:/tmp/.secrets/  ./
-	docker rm vault-init
-	sleep 1 && clear
-	docker compose -f 'docker-compose.yaml' up -d vault
-	sleep 3 && clear
-	docker compose -f 'docker-compose.yaml' build credit
-	sleep 3 && clear
-	docker compose -f 'docker-compose.yaml' run credit reset-hard
-	docker rm credit
-	sleep 3 && clear
-	@echo "Deployed docker services related to the data and cost setup"
+	@echo "================================================="
+	@echo "💾 Starting Data & Secrets Setup"
+	@echo "================================================="
 
+# 	# 1. Create Initial Secrets
+	@echo "--- 🔑 Initializing Minio Credentials..."
+	./scripts/minio-creds.sh
+	@echo "--- ✅ Minio Credentials ready."
+
+	@echo "--- 🔑 Initializing API Key Credentials..."
+	./scripts/api_key-creds.sh
+	@echo "--- ✅ API Key Credentials ready."
+	@sleep 3 && clear
+
+# 	# 2. Vault Initialization
+	$(call COMPOSE_RUN, Vault Init, up --build, vault-init)
+	
+# 	# 3. Extract Secrets and Cleanup Init Container
+	@echo "--- 📦 Copying secrets from vault-init container..."
+	$(DOCKER) cp vault-init:/tmp/$(SECRETS_DIR) $(shell dirname $(SECRETS_DIR))/
+	$(DOCKER) rm vault-init
+	@echo "--- ✅ Secrets copied and vault-init removed."
+	@sleep 1 && clear
+
+# 	# 4. Deploy Persistent Vault
+	$(call COMPOSE_RUN, Vault Persistent, up -d, vault)
+	@sleep 3 && clear
+
+# 	# 5. Run Initial Credit Setup
+	$(call COMPOSE_RUN, Credit Builder, build, credit)
+	$(call COMPOSE_RUN, Credit Setup, run --rm, credit reset-hard)
+	@echo "--- ✅ Initial Credit Setup (Hard Reset) complete."
+	@sleep 3 && clear
+
+	@echo "================================================="
+	@echo "✅ Data & Secrets Setup Complete"
+	@echo "================================================="
+
+
+# Main deployment target
 deploy: deploy-data deploy-server
-	@echo "==================================="
-	@echo "Deployment complete (Data & Server)"
-	@echo "==================================="	
+	@echo "\n================================================="
+	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
+	@echo "================================================="
+
+
+# ==============================================================================
+# 4. Maintenance & Utility Targets
+# ==============================================================================
 
 tunnel:
+	@echo "🌐 Starting ngrok tunnel to ${ngrok_url}"
 	ngrok http --url ${ngrok_url} 8080
 
 prune:
-	rm -f -R ./.secrets
-	docker stop $$(docker compose -p notifyr ps -q) || true
-	docker container prune -f
-	docker image rm minio/minio:latest || true
-	docker volume rm $$(docker volume ls -q) || true
-	sleep 3 && clear
-	@echo "Successfully completely prune the notifyr environnement"
+	@echo "================================================="
+	@echo "🧹 Cleaning up notifyr environment (Hard Prune)"
+	@echo "================================================="
+	@echo "--- 🗑️  Removing local secrets directory: $(SECRETS_DIR)"
+	@rm -f -R $(SECRETS_DIR)
+	@echo "--- 🛑 Stopping all notifyr project containers..."
+	-$(DOCKER) stop $$($(DOCKER_COMPOSE_BASE) ps -q) || true
+	@echo "--- 🗑️  Pruning stopped containers..."
+	$(DOCKER) container prune -f
+	@echo "--- 🗑️  Removing minio image..."
+	-$(DOCKER) image rm minio/minio:latest || true
+	@echo "--- 🗑️  Removing all anonymous volumes..."
+	-$(DOCKER) volume rm $$(docker volume ls -q) || true
+	@sleep 3
+	@echo "================================================="
+	@echo "✅ notifyr environment completely pruned."
+	@echo "================================================="
 
 purge:
-	docker builder prune --all -f
+	@echo "🧹 Pruning Docker builder cache (all)"
+	$(DOCKER) builder prune --all -f
+	@echo "✅ Docker build cache purged."
+
 
 refresh-apikey:
+	@echo "================================================="
+	@echo "🔄 Refreshing API Key and Redeploying App"
+	@echo "================================================="
+	@echo "--- 🔑 Creating new API Key..."
 	./scripts/api_key-creds.sh -f
-	docker compose -f 'docker-compose.yaml' up -d --no-deps --build app
-	clear
-	@echo "Successfully Refreshed the api_key"
+	@echo "--- 🚀 Redeploying 'app' service with new build..."
+	$(call COMPOSE_RUN, App Update, up -d --no-deps --build, app)
+	@echo "================================================="
+	@echo "✅ API Key Refreshed."
+	@echo "================================================="
 
 
 refresh-cost:
-	docker compose -f 'docker-compose.yaml' down traeffik
-	docker compose -f 'docker-compose.yaml' up -d --build ofelia
-	docker compose -f 'docker-compose.yaml' up -d --build app
-	docker compose -f 'docker-compose.yaml' up -d --build worker
-	clear && sleep 5
-	docker compose -f 'docker-compose.yaml' run credit topup
-	docker rm credit
-	clear && sleep 3
-	docker compose -f 'docker-compose.yaml' up -d traeffik
-	clear
-	@echo "Successfully Refreshed the cost file"
+	@echo "================================================="
+	@echo "💰 Refreshing Cost File and Top-up"
+	@echo "================================================="
+	
+	$(call COMPOSE_RUN, Traefik Down, down, traeffik)
+
+# 	$(call COMPOSE_RUN, Ofelia Update, up -d --build, ofelia)
+	$(call COMPOSE_RUN, App Update, up -d --build, app)
+	$(call COMPOSE_RUN, Worker Update, up -d --build, worker)
+	@sleep 5 && clear
+
+	$(call COMPOSE_RUN, Credit Topup, run --rm, credit topup)
+
+	$(call COMPOSE_RUN, Traefik Up, up -d, traeffik)
+
+	@echo "================================================="
+	@echo "✅ Cost File Refreshed and Credits Topped Up."
+	@echo "================================================="
+
+
+# ==============================================================================
+# 5. Monitoring Targets
+# ==============================================================================
 
 monitor-on:
-	docker compose down -d traeffik
-	docker compose down -d dashboard
-	docker compose down -d dmz
-	sleep 3
-	docker compose -f 'monitor.docker-compose.yaml' up -d
-	clear
-	@echo "Mode monitor is on"
+	@echo "================================================="
+	@echo "👁️  SWITCHING TO MONITORING MODE: ON"
+	@echo "================================================="
+	
+# 	# 1. Stop web-facing/DMZ services from base compose
+	$(call COMPOSE_RUN, Base Services Down, down, traeffik dashboard dmz)
+	
+	@sleep 3 && clear
+	
+# 	# 2. Start monitoring stack
+	@echo "--- 🚀 Starting monitoring stack from 'monitor.docker-compose.yaml'..."
+	$(DOCKER_COMPOSE_MONITOR) up -d
+	@echo "--- ✅ Monitoring stack deployed."
+	
+	@echo "================================================="
+	@echo "✅ Mode Monitor is ON."
+	@echo "================================================="
+
 
 monitor-off:
-	docker compose -f 'monitor.docker-compose.yaml' down
-	clear
-	docker compose -f 'docker-compose.yaml' up -d traeffik
-	docker compose -f 'docker-compose.yaml' up -d dashboard
-	docker compose -f 'docker-compose.yaml' up -d dmz
-	clear
-	@echo "Mode monitor is off"
+	@echo "================================================="
+	@echo "👁️  SWITCHING TO MONITORING MODE: OFF"
+	@echo "================================================="
+	
+# 	# 1. Stop monitoring stack
+	@echo "--- 🛑 Stopping monitoring stack..."
+	$(DOCKER_COMPOSE_MONITOR) down
+	@echo "--- ✅ Monitoring stack stopped."
 
-
-
-
-
+# 	# 2. Restart web-facing/DMZ services on base compose
+	$(call COMPOSE_RUN, Base Services Up, up -d, traeffik dashboard dmz)
+	
+	@echo "================================================="
+	@echo "✅ Mode Monitor is OFF."
+	@echo "================================================="
