@@ -41,9 +41,15 @@ reset-cost-hard:
 
 
 deploy-server:
-	docker compose -f 'docker-compose.yaml' up -d --no-deps --scale app=$$(cat ./.notifyr/deploy.json | jq -r '.scaling.app') app
-	docker compose -f 'docker-compose.yaml' up -d --no-deps beat
+	docker compose -f 'docker-compose.yaml' up -d --build --no-deps --scale app=$$(cat ./.notifyr/deploy.json | jq -r '.scaling.app') app
+	sleep 3 && clear
+	@echo "Deployed app"
+	docker compose -f 'docker-compose.yaml' up -d --build --no-deps beat
+	sleep 3 && clear
+	@echo "Deployed beat"
 	docker compose -f 'docker-compose.yaml' up -d --no-deps --scale worker=$$(cat ./.notifyr/deploy.json | jq -r '.scaling.worker') worker
+	sleep 3 && clear
+	@echo "Deployed worker"
 # 	docker compose -f 'docker-compose.yaml' up -d --no-deps --scale balancer=$(cat ./.notifyr/deploy.json | jq -r '.scaling.worker') balancer
 	docker compose -f 'docker-compose.yaml' up -d traefik
 # 	docker compose up -d dashboard
@@ -53,21 +59,16 @@ deploy-server:
 
 deploy-data:
 	./scripts/minio-creds.sh
-	sleep 3
-	clear
+	sleep 3 && clear
 	./scripts/api_key-creds.sh
-	sleep 3
-	clear
+	sleep 3 && clear
 	docker compose -f 'docker-compose.yaml' up --build vault-init
-	sleep 1
-	clear
+	sleep 1 && clear
 	docker cp vault-init:/tmp/.secrets/  ./
 	docker rm vault-init
-	sleep 1
-	clear
+	sleep 1 && clear
 	docker compose -f 'docker-compose.yaml' up -d vault
-	sleep 3
-	clear
+	sleep 3 && clear
 	@echo "Deployed docker services related to the data"
 
 deploy: deploy-data deploy-server
@@ -80,9 +81,12 @@ tunnel:
 
 prune:
 	rm -f -R ./.secrets
-	docker stop $$(docker compose -p notifyr ps -q)
+	docker stop $$(docker compose -p notifyr ps -q) || true
 	docker container prune -f
-	docker volume rm $$(docker volume ls -q)
+	docker image rm minio/minio:latest || true
+	docker volume rm $$(docker volume ls -q) || true
+	sleep 3 && clear
+	@echo "Successfully completely prune the notifyr environnement"
 
 purge:
 	docker builder prune --all -f
@@ -90,30 +94,39 @@ purge:
 refresh-apikey:
 	./scripts/api_key-creds.sh -f
 	docker compose -f 'docker-compose.yaml' up -d --no-deps --build app
+	clear
+	@echo "Successfully Refreshed the api_key"
+
 
 refresh-cost:
 	docker compose -f 'docker-compose.yaml' down traeffik
 	docker compose -f 'docker-compose.yaml' up -d --build ofelia
 	docker compose -f 'docker-compose.yaml' up -d --build app
 	docker compose -f 'docker-compose.yaml' up -d --build worker
-	clear
-	sleep 5
+	clear && sleep 5
 	docker compose -f 'docker-compose.yaml' up -d traeffik
 	clear
+	@echo "Successfully Refreshed the cost file"
 
 monitor-on:
 	docker compose down -d traeffik
 	docker compose down -d dashboard
 	docker compose down -d dmz
-	sleep 4
-	docker compose -f 'monitor.docker-compose.yaml' up
+	sleep 3
+	docker compose -f 'monitor.docker-compose.yaml' up -d
+	clear
+	@echo "Mode monitor is on"
 
 monitor-off:
-	docker compose -f 'docker-compose.yaml' up traeffik
+	docker compose -f 'monitor.docker-compose.yaml' down
+	clear
+	docker compose -f 'docker-compose.yaml' up -d traeffik
 	docker compose -f 'docker-compose.yaml' up -d dashboard
 	docker compose -f 'docker-compose.yaml' up -d dmz
-	sleep 4
-	docker compose -f 'monitor.docker-compose.yaml' down
+	clear
+	@echo "Mode monitor is off"
+
+
 
 
 

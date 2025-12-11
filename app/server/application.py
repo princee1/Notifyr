@@ -273,6 +273,21 @@ class Application(EventInterface):
         
         mongooseService.close_connection()
 
+    @register_hook('shutdown')
+    def revoke_dynamic_lease(self):
+        mongooseService: MongooseService = Get(MongooseService)
+        tortoiseConnService = Get(TortoiseConnectionService)
+        awsS3Service = Get(AmazonS3Service)
+        redisService = Get(RedisService)
+        vaultService = Get(HCVaultService)
+
+        mongooseService.revoke_lease()
+        tortoiseConnService.revoke_lease()
+        awsS3Service.revoke_lease()
+        redisService.revoke_lease()
+
+        vaultService.revoke_auth_token()
+
 
     @property
     def shutdown_hooks(self):

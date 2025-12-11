@@ -258,5 +258,6 @@ class AwsEngine(VaultEngine):
 
 class RabbitMQVaultEngine(VaultEngine):
 
-    def generate_credentials(self,role='celery-ntfr-role'):
-        return self.client.adapter.post(f"/v1/{self.mount_point}/creds/{role}")
+    def generate_credentials(self,role='celery-ntfr-role')->VaultDatabaseCredentials:
+        data= self.client.secrets.rabbitmq.generate_credentials(name=role,mount_point=self.mount_point)
+        return VaultDatabaseCredentials(**data)

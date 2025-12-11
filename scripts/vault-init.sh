@@ -375,7 +375,7 @@ setup_database_config(){
       db_name="redis" \
       default_ttl="365d" \
       max_ttl="365d" \
-      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection"]'
+      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING"]'
 
     vault write notifyr-database/roles/admin-redis-ntfr-role \
       db_name="redis" \
@@ -491,7 +491,7 @@ create_database_config(){
         port=6379 \
         username="vaultadmin-redis" \
         password="$REDIS_ADMIN_PASSWORD" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-ntfr-role"
     
     vault write -f notifyr-database/rotate-root/redis
     setup_config_kv2 "redis_connection" "set"

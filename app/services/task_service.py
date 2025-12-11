@@ -50,7 +50,7 @@ class TaskService(BaseService,SchedulerInterface):
                 raise ServiceNotAvailableError()   
 
     def verify_dependency(self):
-        self._builded = True
+        #self._builded = True
         if not self.configService.APS_ACTIVATED:
             raise BuildOkError
 
@@ -127,6 +127,7 @@ class TaskService(BaseService,SchedulerInterface):
         res = await self.redis.set(
             LEADER_LOCK_KEY, self.uvicornWorkerService.INSTANCE_ID, nx=True, ex=LEADER_LOCK_TTL
         )
+        
         return bool(res)
 
     async def _start_scheduler(self):

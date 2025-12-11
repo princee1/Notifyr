@@ -203,14 +203,26 @@ class HCVaultService(BaseService,SchedulerInterface):
             self.client = hvac.Client(self.configService.VAULT_ADDR,token=dev_root_token)
         except Exception as e:
             raise BuildAbortError(f"Failed to create Vault client: {e}")
+        
+##############################################                          ##################################333
 
     def renew_auth_token(self):
         return self.client.auth.token.renew_self()
 
-##############################################                          ##################################333
+    def revoke_auth_token(self):
+        try:
+            return self.client.auth.token.revoke_self()
+        except:
+            ...
 
     def renew_lease(self,lease_id,increment):
         ...
+
+    def revoke_lease(self,lease_id:str):
+        try:
+            return self.client.sys.revoke_leases(lease_id=lease_id)
+        except:
+            ...
 
 ##############################################                          ##################################333
 

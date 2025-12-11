@@ -67,9 +67,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         self.auth_ttl = ttl
 
     def build(self, build_state = ...):
-        delay = IntervalParams( 
-            seconds=self.random_buffer_interval(self.auth_ttl) 
-            )
+        delay = IntervalParams( seconds=self.random_buffer_interval(self.auth_ttl) )
         self.interval_schedule(delay, self.creds_rotation,tuple(),{},f"{self.name}-creds_rotation")
 
     def verify_dependency(self):
@@ -95,6 +93,13 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
     @property
     def db_password(self):
         return self.creds.get('data',dict()).get('password',None)
+
+    @property
+    def lease_id(self):
+        return self.creds.get('lease_id',None)
+    
+    def revoke_lease(self):
+        return self.vaultService.revoke_lease(self.lease_id)
 
     async def _check_vault_status(self):
         temp_service = None 
@@ -146,7 +151,7 @@ class RedisService(TempCredentialsDatabaseService):
     GROUP = 'NOTIFYR-GROUP'
     
     def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:HCVaultService,uvicornWorkerService:UvicornWorkerService):
-        super().__init__(configService,None,vaultService,60*60*24*365,)
+        super().__init__(configService,None,vaultService,60*60*24*29,)
         self.configService = configService
         self.reactiveService = reactiveService
         self.uvicornWorkerService = uvicornWorkerService
@@ -311,6 +316,7 @@ class RedisService(TempCredentialsDatabaseService):
     def build(self,build_state=-1):
         host = self.configService.REDIS_HOST
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE)
+        print(self.creds)
 
         self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB,username=self.db_user,password=self.db_password)
         self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
@@ -335,14 +341,17 @@ class RedisService(TempCredentialsDatabaseService):
         }
 
         try:
-            temp_redis = SyncRedis(host=host)
+            temp_redis = SyncRedis(host=host,password=self.db_password,username=self.db_user)
             pong = temp_redis.ping()
             if not pong:
                 raise ConnectionError("Redis ping failed")
             temp_redis.close()
         except Exception as e:
+            print(e)
+            print(e.args)
+            print(e.__class__)
             raise BuildFailureError(e.args)
- 
+
     @check_db
     async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
@@ -724,37 +733,24 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
 class RabbitMQService(TempCredentialsDatabaseService):
     
     def __init__(self, configService:ConfigService, fileService:FileService, vaultService:HCVaultService):
-        super().__init__(configService, fileService, vaultService, 60*60*24*365)
+        super().__init__(configService, fileService, vaultService, 60*60*24*29)
     
-    async def creds_rotation(self):
-        ...
-
-
-    @property
-    def db_password(self):
-        return 'password'
-
-    @property
-    def db_user(self):
-        return 'user'
-
     def build(self, build_state = ...):
+        
+        self.creds=self.vaultService.rabbitmq_engine.generate_credentials()
+        credentials = pika.PlainCredentials(username=self.db_user,password=self.db_password)
+
+        params = pika.ConnectionParameters(
+            host=self.configService.RABBITMQ_HOST,
+            port=5672,
+            virtual_host=RabbitMQConstant.CELERY_VIRTUAL_HOST,
+            credentials=credentials,
+            connection_attempts=1,      # don’t retry
+            socket_timeout=5,           # 5 second timeout
+            blocked_connection_timeout=5,
+        )
+
         try:
-
-            credentials = pika.PlainCredentials(
-                username=self.db_user,
-                password=self.db_password
-            )
-
-            params = pika.ConnectionParameters(
-                host=self.configService.RABBITMQ_HOST,
-                port=5672,
-                virtual_host=RabbitMQConstant.CELERY_VIRTUAL_HOST,
-                credentials=credentials,
-                connection_attempts=1,      # don’t retry
-                socket_timeout=5,           # 5 second timeout
-                blocked_connection_timeout=5,
-            )
             connection = pika.BlockingConnection(params)
             connection.close()
             super().build()
