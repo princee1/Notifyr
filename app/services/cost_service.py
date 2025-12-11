@@ -1,5 +1,7 @@
+import functools
 from pathlib import Path
 import traceback
+from typing import Callable, Self
 
 from fastapi import Response
 from redis import WatchError
@@ -16,6 +18,8 @@ from app.utils.fileIO import JSONFile
 from app.classes.auth_permission import AuthPermission
 from app.utils.helper import flatten_dict
 from datetime import datetime
+
+REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"credit/{credit_key}"
 
 @Service()
 class CostService(BaseService):
@@ -35,6 +39,15 @@ class CostService(BaseService):
     @property
     def receipts_key(self):
         return f'notifyr:receipts@{datetime.now().year}-{datetime.now().month}'
+    
+    @staticmethod
+    def redis_credit_key_builder(func:Callable):
+
+        @functools.wraps(func)
+        async def wrapper(self:Self,credit_key:str,*args,**kwargs):
+            credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
+            return await func(self,credit_key*args,**kwargs)
+        return wrapper
     
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:
@@ -61,6 +74,7 @@ class CostService(BaseService):
         else:
             self.service_status = ServiceStatus.AVAILABLE
     
+    @redis_credit_key_builder
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.redis_limiter.get(credit_key)
         if current_balance == None:
@@ -74,11 +88,13 @@ class CostService(BaseService):
         if current_balance < purchase_cost:
             raise InsufficientCreditsError
 
+    @redis_credit_key_builder
     async def refund_credits(self,credit_key:str,refund_cost:int):
         if refund_cost > 0:
             await self.redisService.increment(RedisConstant.LIMITER_DB,credit_key,refund_cost)
 
-    async def deduct_credits(self,credit_key,purchase_cost:int,retry_limit=5):
+    @redis_credit_key_builder
+    async def deduct_credits(self,credit_key:str,purchase_cost:int,retry_limit=5):
         retry=0
         while retry < retry_limit:
             async with self.redisService.redis_limiter.pipeline(transaction=False) as pipe:
@@ -112,8 +128,9 @@ class CostService(BaseService):
         
         raise CreditDeductionFailedError
     
-    async def get_credit_balance(self,credit_name:str):
-        credit = await self.redisService.retrieve(RedisConstant.LIMITER_DB,credit_name)
+    @redis_credit_key_builder
+    async def get_credit_balance(self,credit_key:str):
+        credit = await self.redisService.retrieve(RedisConstant.LIMITER_DB,credit_key)
         if credit != None:
             credit = int(credit)
         return credit

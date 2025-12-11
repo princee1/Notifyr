@@ -1,17 +1,27 @@
 #!/bin/sh
 
+# Configuration variables
 SECRET_DIR="./.secrets"
 CONFIG_FILE="$SECRET_DIR/minio-root.json"
 
 mkdir -p "$SECRET_DIR"
 
-# If credentials already exist, do NOT regenerate them
-if [ -f "$CONFIG_FILE" ]; then
-    echo "minio-root.json already exists — keeping existing root credentials."
-    exit 0
+FORCE=0
+if [ "$1" = "-f" ] || [ "$1" = "--force" ]; then
+    FORCE=1
 fi
 
-# Generate ONCE — stable for the lifetime of this environment
+if [ -f "$CONFIG_FILE" ]; then
+    if [ "$FORCE" -eq 1 ]; then
+        echo "🚨 **Force flag detected.** Overwriting existing MinIO credentials file: $CONFIG_FILE"
+        # Continue the script execution to regenerate credentials
+    else
+        echo "⚠️ **MinIO credentials file already exists:** $CONFIG_FILE"
+        echo "To overwrite it, run the script with the '-f' or '--force' flag."
+        exit 0
+    fi
+fi
+
 VAULT_SECRET_ACCESS_KEY="minio-root-admin:$(pwgen -s 10 1)"
 VAULT_SECRET_KEY="$(pwgen -s 40 1)"
 
@@ -24,4 +34,5 @@ cat > "$CONFIG_FILE" <<EOF
 }
 EOF
 
-echo "Generated new MinIO root credentials in $CONFIG_FILE"
+chmod 600 "$CONFIG_FILE"
+echo "✅ **Generated new MinIO root credentials in $CONFIG_FILE**"

@@ -3,7 +3,9 @@ from typing import Any, Dict, Literal
 
 from app.classes.rsa import RSA
 from app.definition._interface import Interface, IsInterface
+from app.errors.service_error import BuildWarningError
 from app.services.setting_service import SettingService
+from app.utils.fileIO import FDFlag
 from app.utils.tools import Time
 from .config_service import ConfigService
 from dataclasses import dataclass
@@ -274,34 +276,29 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         self.settingService= settingService
         self.vaultService = vaultService
 
-    def verify_server_access(self, token: str, sent_ip_addr) -> bool:
-        token = self._decode_value(token, self.vaultService.API_ENCRYPT_TOKEN)
-        token = token.split("|")
+        self.API_KEY:str = ...
 
-        if len(token) != 3:
-            return False
-        ip_addr = token[0]
+    def verify_server_access(self, token: str) -> bool:
+        if not self.API_KEY:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Could not retrieve the api key')
 
-        if ip_addr != sent_ip_addr:
-            return False
-
-        if time.time() - float(token[1]) > self.settingService.API_EXPIRATION:
-            return False
-
-        if token[2] != self.configService.API_KEY:
-            return False
-
-        return True
+        if token != self.API_KEY:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Api Key provided does not match the one given")
 
     def generate_custom_api_key(self, ip_address: str):
+        raise NotImplementedError
         time.sleep(random()/100)
         data = ip_address + SEPARATOR +  \
             str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
         return self._encode_value(data, self.vaultService.API_ENCRYPT_TOKEN)
 
     def build(self,build_state=-1):
-        ...
+        api_key = self.fileService.readFile('/run/secrets/api_key.txt',flag=FDFlag.READ)
 
+        if api_key == None:
+            raise BuildWarningError()
+        self.API_KEY = api_key
+        
     def hash_value_with_salt(self, value, key, salt):
         value_with_salt = value.encode() + salt
         hmac_obj = hmac.new(key.encode(), value_with_salt, hashlib.sha256)
@@ -332,5 +329,10 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
         return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
 
-        
+    @property
+    def DASHBOARD_KEY(self):
+        ...
     
+    @property
+    def DMZ_KEY(self):
+        ...

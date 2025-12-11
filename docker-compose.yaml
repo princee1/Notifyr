@@ -1,6 +1,19 @@
 version: "3.8"
 
 services:
+
+  # ==========================================
+  # SCHEDULER
+  # ==========================================
+  ofelia:
+    image: mcuadros/ofelia:latest
+    container_name: ofelia
+    command: daemon --config=/etc/ofelia/config.toml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./ofelia.toml:/etc/ofelia/config.toml:ro
+      - ./.notifyr/costs.json:/etc/ofelia/costs.json:ro
+    restart: unless-stopped
   # ==========================================
   # EDGE LAYER
   # ==========================================
@@ -83,6 +96,8 @@ services:
       # PRESERVED: Custom target paths
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
+      - source: app_role_id
+        target: /run/secrets/api_key.txt
       - source: costs
         target: /run/secrets/costs.json
     volumes:
@@ -160,6 +175,8 @@ services:
     user: vaultuser
     restart: unless-stopped
     container_name: vault
+    ports:
+      - 8200:8200
     entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
     environment:
       VAULT_ADDR: "http://vault:8200"
@@ -338,6 +355,8 @@ secrets:
     file: ./.secrets/unseal_key.json
   costs:
     file: ./.notifyr/costs.json
+  api_key:
+    file: ./.secrets/api_key.txt
 
 networks:
   data_net:

@@ -233,6 +233,11 @@ RUN cat <<EOF > /vault/policies/dmz-policy.hcl
   }
 EOF
 
+RUN cat <<EOF > /vault/policies/credit-policy.hcl
+  path "notifyr-database/creds/credit-ntfr-role" {
+    capabilities = ["read"]
+  }
+EOF
 
 ##############################################################################################################
 ##############################################################################################################

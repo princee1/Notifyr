@@ -21,7 +21,7 @@ COPY --from=builder /usr/bin/jq /usr/bin/jq
 COPY ./objects/ ./objects/
 
 # Create policy folder
-RUN mkdir ./policy/ || die "policy already exists"
+RUN mkdir -p ./policy/
 
 # Create empty policy files
 RUN touch ./policy/app-access.json ./policy/vault-admin.json ./policy/dmz-access.json

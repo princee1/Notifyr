@@ -238,15 +238,35 @@ set_approle(){
   setup_config_kv2 "approle" "set"
 }
 
+set_credit_topup_token() {
+  if setup_config_kv2 "credit_token" "check"; then
+    return
+  fi
+  echo "Setting up Credit Vault Token..."
+
+  vault policy write credit-policy /vault/policies/credit-policy.hcl
+  
+  local CREDIT_TOKEN=$(vault token create -policy=credit-policy -ttl=0 -orphan -format=json | jq -r .auth.client_token)
+
+  echo -n "$CREDIT_TOKEN" > "$VAULT_SECRETS_DIR/credit_topup.txt"
+
+  chown root:vaultuser "$VAULT_SECRETS_DIR/credit_topup.txt"  
+
+  chmod 644 "$VAULT_SECRETS_DIR/credit_topup.txt"
+
+  setup_config_kv2 "credit_token" "set"
+
+}
+
 set_rotate_approle() {
   if setup_config_kv2 "rotate_approle" "check"; then
     return
   fi
   echo "Setting up Rotate App Role Token..."
 
-  vault policy write rotator /vault/policies/rotate-approle.hcl
+  vault policy write rotator-policy /vault/policies/rotate-approle.hcl
 
-  TOKEN=$(vault token create -policy=rotator -period=48h -format=json | jq -r .auth.client_token)
+  TOKEN=$(vault token create -policy=rotator-policy -ttl=0 -orphan -format=json | jq -r .auth.client_token)
 
   echo -n "$TOKEN" > "$VAULT_SECRETS_DIR/rotate-token.txt"
 
@@ -355,16 +375,22 @@ setup_database_config(){
       db_name="redis" \
       default_ttl="365d" \
       max_ttl="365d" \
-      creation_statements='[
-          "ACL SETUSER {{name}} on >{{password}} \
-            ~* \
-            +@string +@hash +@list +@set +@sortedset +@stream +@pubsub \
-            -@admin -@dangerous -@keys -@connection \
-            +del +unlink"]' \
-      revocation_statements='["ACL DELUSER {{name}}"]'
+      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection"]'
+
+    vault write notifyr-database/roles/admin-redis-ntfr-role \
+      db_name="redis" \
+      default_ttl="3h" \
+      max_ttl="5h" \
+      creation_statements='["+@all"]'
+
+    vault write notifyr-database/roles/credit-ntfr-role \
+      db_name="redis" \
+      default_ttl="10m" \
+      max_ttl="20m" \
+      creation_statements='["~credit/*", "+GET", "+SET", "+INCRBY"]'
     setup_config_kv2 "redis_roles" "set"
   fi
-
+  
   # --- MINIO ROLES ---
   if ! setup_config_kv2 "minio_roles" "check"; then
     echo "Configuring Minio roles..."
@@ -402,8 +428,8 @@ setup_database_config(){
   if ! setup_config_kv2 "rabbitmq_roles" "check"; then
     echo "Configuring RabbitMQ roles and lease..."
     vault write notifyr-rabbitmq/config/lease \
-      ttl=31536000 \
-      max_ttl=31536000 \
+      ttl=30d \
+      max_ttl=30d \
 
     vault write notifyr-rabbitmq/roles/celery-ntfr-role \
       vhosts='{
@@ -465,15 +491,9 @@ create_database_config(){
         port=6379 \
         username="vaultadmin-redis" \
         password="$REDIS_ADMIN_PASSWORD" \
-        allowed_roles="admin-redis-static-role, app-redis-ntfr-role"
-
-    vault write notifyr-database/static-roles/admin-redis-static-role \
-      db_name="redis" \
-      username="vaultadmin-redis" \
-      rotation_period=168h \
-      rotation_statements='["ACL SETUSER {{name}} >{{password}}", "ACL SAVE"]'
-
-    #vault write -f notifyr-database/static-roles/admin-redis-static-role/rotate || true
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role"
+    
+    vault write -f notifyr-database/rotate-root/redis
     setup_config_kv2 "redis_connection" "set"
   fi
 
@@ -496,7 +516,6 @@ create_database_config(){
       connection_uri="http://$RMQ_HOST:15672" \
       username="$RABBITMQ_DEFAULT_USER" \
       password="$RABBITMQ_DEFAULT_PASS" \
-      password_policy="rabbitmq_policy" \
       verify_connection=true
     setup_config_kv2 "rabbitmq_connection" "set"
   fi
@@ -565,6 +584,9 @@ set_approle
 echo "*************************** SET ROTATE APPROLE *********************"
 set_rotate_approle
 
+echo "*************************** SET CREDIT TOPUP TOKEN *********************"
+set_credit_topup_token
+
 echo "*************************** CREATE DEFAULT TOKEN/KEYS *********************"
 create_default_token
 
@@ -580,7 +602,7 @@ echo "*************************** CREATE AWS ENGINE *********************"
 echo "*************************** FINISHING UP VAULT CONFIG *********************"
 
 unset VAULT_TOKEN
-vault logout "$ROOT_TOKEN" 2>/dev/null || true
+vault token revoke "$ROOT_TOKEN" 2>/dev/null || true
 ROOT_TOKEN=""
 
 kill "$VAULT_PID" || true
