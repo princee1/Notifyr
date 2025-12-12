@@ -239,7 +239,8 @@ class HCVaultService(BaseService,SchedulerInterface):
 
     @property
     def ON_TOP_SECRET_KEY(self):
-        return self.tokens.get('ON_TOP_SECRET_KEY',None)
+        token = self.tokens.get('ON_TOP_SECRET_KEY',None)
+        return token[:32] if token else None
     
     @property
     def API_ENCRYPT_TOKEN(self):

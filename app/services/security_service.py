@@ -1,12 +1,14 @@
 
+from cachetools import cached,TTLCache
 from typing import Any, Dict, Literal
 
 from app.classes.rsa import RSA
+from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._interface import Interface, IsInterface
 from app.errors.service_error import BuildWarningError
 from app.services.setting_service import SettingService
 from app.utils.fileIO import FDFlag
-from app.utils.tools import Time
+from app.utils.tools import Cache, Time
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
@@ -36,17 +38,23 @@ def generate_salt(length=64):
 @IsInterface
 class EncryptDecryptInterface(Interface):
 
+    def __init__(self,nonce:str):
+        self.nonce = nonce.encode()
+
     def _encode_value(self, value: str, key: bytes | str) -> str:
-        print(key)
+        key = key.encode()
         value = base64.b64encode(value.encode()).decode()
-        cipher_suite = Fernet(key)
-        return cipher_suite.encrypt(value.encode()).decode()
+        cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
+        return cipher.cipher_data.decode()
 
     @Time
     def _decode_value(self, value: str, key: bytes | str) -> str:
-        cipher_suite = Fernet(key)
-        value = cipher_suite.decrypt(value.encode())
+        key = key.encode()
+        cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
+        cipher.cipher_data = value
+        value = cipher.to_plain()
         return base64.b64decode(value).decode()
+    
 
     @property
     def salt(self):
@@ -57,9 +65,11 @@ class EncryptDecryptInterface(Interface):
 class JWTAuthService(BaseService, EncryptDecryptInterface):
     GENERATION_ID_LEN = 32
     gen_id_path='generation-id'
+    NONCE="1234567891234578"
 
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
+        EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
         self.fileService = fileService
         self.settingService = settingService
@@ -138,6 +148,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY)
         return token
 
+    @cached(TTLCache(50,60*60*3))
     def _decode_token(self, token: str, secret_key: str = None) -> dict:
         try:
             if secret_key == None:
@@ -268,9 +279,11 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
 @Service()
 class SecurityService(BaseService, EncryptDecryptInterface):
+    NONCE="1234567891234578"
 
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
+        EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
         self.fileService = fileService
         self.settingService= settingService

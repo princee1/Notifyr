@@ -288,7 +288,7 @@ create_default_token(){
   ARGS=""
   for token in $TOKENS
   do
-    TEMP=$(pwgen -s 128 1)
+    TEMP=$(pwgen -s 75 1)
     ARGS="$ARGS $token=$TEMP"
   done
 

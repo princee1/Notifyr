@@ -57,8 +57,8 @@ deploy-server:
 # 	# Deploy and Scale Core Application Services
 	$(call COMPOSE_SCALE,app)
 	$(call COMPOSE_RUN, Beat Service, up -d, beat)
-# 	$(call COMPOSE_RUN, Beat Service, up -d, balancer)
 	$(call COMPOSE_SCALE,worker)
+# 	$(call COMPOSE_RUN, Beat Service, up -d, balancer)
 
 # 	# Deploy Infrastructure Services (Traefik/Gateway)
 	$(call COMPOSE_RUN, Traefik, up -d, traefik)
