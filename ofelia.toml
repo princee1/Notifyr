@@ -2,3 +2,15 @@
 schedule = "0 0 1 * *"
 container = "credit"
 command= "/credits-utils.sh topup"
+
+[job-local "beat.twoweekly-restart"]
+schedule = "0 0 0 */14 * *"
+command = """ docker ps -q --filter "label=com.docker.compose.service=beat" | xargs -r docker exec {} /bin/sh -c 'kill 1'""" 
+
+[job-local "worker.twoweekly-restart"]
+schedule = "0 0 0 */14 * *"
+command = """ docker ps -q --filter "label=com.docker.compose.service=worker" | xargs -r docker exec {} /bin/sh -c 'kill 1'""" 
+
+[job-local "app.twoweekly-restart"]
+schedule = "0 0 0 */14 * *"
+command = """ docker ps -q --filter "label=com.docker.compose.service=app" | xargs -r docker exec {} /bin/sh -c 'kill 1'""" 

@@ -375,13 +375,13 @@ setup_database_config(){
       db_name="redis" \
       default_ttl="365d" \
       max_ttl="365d" \
-      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING"]'
+      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT"]'
 
     vault write notifyr-database/roles/admin-redis-ntfr-role \
       db_name="redis" \
       default_ttl="3h" \
       max_ttl="5h" \
-      creation_statements='["+@all"]'
+      creation_statements='["~*","+@all"]'
 
     vault write notifyr-database/roles/credit-redis-ntfr-role \
       db_name="redis" \
@@ -433,7 +433,7 @@ setup_database_config(){
 
     vault write notifyr-rabbitmq/roles/celery-ntfr-role \
       vhosts='{
-          "/celery": {
+          "celery": {
               "configure": ".*",
               "write": ".*",
               "read": ".*"
@@ -601,8 +601,8 @@ echo "*************************** CREATE AWS ENGINE *********************"
 
 echo "*************************** FINISHING UP VAULT CONFIG *********************"
 
+vault token revoke $ROOT_TOKEN || true
 unset VAULT_TOKEN
-vault token revoke "$ROOT_TOKEN" 2>/dev/null || true
 ROOT_TOKEN=""
 
 kill "$VAULT_PID" || true

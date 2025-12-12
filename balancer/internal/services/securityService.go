@@ -1,7 +1,6 @@
 package service
 
 import (
-	"balancer/internal/utils"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -9,8 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"time"
-
-	"github.com/gofiber/fiber/v2"
 )
 
 const TOKEN_NAME = "X-Ping-Pong-Token"
@@ -21,19 +18,6 @@ type SecurityService struct {
 
 func (security *SecurityService) SignRequest() {
 
-}
-
-func (security *SecurityService) VerifyAccessAuth(c *fiber.Ctx) error {
-
-	return c.Next()
-	accessAuth:=c.Get(utils.X_ACCESS_AUTH,"")
-	if accessAuth == ""{
-		return c.SendStatus(401)
-	}
-	if !security.ConfigService.VerifyAccessAuth(accessAuth) {
-		return c.SendStatus(403)
-	}
-	return c.Next()
 }
 
 func (security *SecurityService) getPongWsPermission(url url.URL, name string, app *NotifyrApp) (string, error) {

@@ -65,13 +65,16 @@ services:
   # ==========================================
   balancer:
     image: notifyr:balancer
+    restart: unless-stopped
     build:
       context: .
       dockerfile: docker/Dockerfile.balancer
+    volumes:
+      - ./.notifyr/deploy.json:/var/deploy.json:ro
     environment:
       - ADDR=0.0.0.0:8080
-    env_file:
-      - ./balancer/.env
+      - DEPLOY_FILE_PATH=/var/deploy.json
+      - NOTIFYR_PORT=8088
     networks:
       - lb_net
       - app_net
@@ -115,7 +118,6 @@ services:
       # Tell Traefik what port the service is listening on internally
       - "traefik.http.services.app-router.loadbalancer.server.port=8088"
 
-
     command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
     restart: unless-stopped
     secrets:
@@ -135,9 +137,6 @@ services:
       - MODE=prod
     env_file:
       - .env
-    depends_on:
-      - redis
-      - mongodb
     networks:
       - app_net
       - data_net
@@ -156,14 +155,11 @@ services:
         target: /run/secrets/costs.json
     volumes:
       - vault-shared:/vault/shared
-      - ./costs.json:/run/secrets/costs:ro
     restart: always
     environment:
       - MODE=prod
     env_file:
       - .env
-    depends_on:
-      - redis
     networks:
       - data_net
       - vault_net
@@ -182,13 +178,11 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
-    restart: always
+    restart: unless-stopped
     environment:
       - MODE=prod
     env_file:
       - .env
-    depends_on:
-      - redis
     networks:
       - data_net
       - vault_net
@@ -201,8 +195,6 @@ services:
     user: vaultuser
     restart: unless-stopped
     container_name: vault
-    ports:
-      - 8200:8200
     entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
     environment:
       VAULT_ADDR: "http://vault:8200"
@@ -295,7 +287,7 @@ services:
       - data_net
 
   rabbitmq:
-    image: rabbitmq:3.13-management
+    image: rabbitmq:3.13-management-alpine
     container_name: rabbitmq
     restart: always
     environment:

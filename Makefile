@@ -55,13 +55,14 @@ deploy-server:
 	@echo "================================================="
 
 # 	# Deploy and Scale Core Application Services
-	$(call COMPOSE_SCALE, app)
-	$(call COMPOSE_RUN, Beat Service, up -d --build --no-deps, beat)
-	$(call COMPOSE_SCALE, worker)
+	$(call COMPOSE_SCALE,app)
+	$(call COMPOSE_RUN, Beat Service, up -d, beat)
+# 	$(call COMPOSE_RUN, Beat Service, up -d, balancer)
+	$(call COMPOSE_SCALE,worker)
 
 # 	# Deploy Infrastructure Services (Traefik/Gateway)
 	$(call COMPOSE_RUN, Traefik, up -d, traefik)
-# 	$(call COMPOSE_RUN, Ofelia Scheduler ,up -d --build, ofelia)
+	$(call COMPOSE_RUN, Ofelia Scheduler ,up -d --build, ofelia)
 
 	@echo "================================================="
 	@echo "✅ Server Services Deployment Complete"
@@ -134,13 +135,13 @@ prune:
 		echo "--- 🗑️  Removing local secrets directory: $(SECRETS_DIR)"; \
 		rm -f -R $(SECRETS_DIR); \
 		echo "--- 🛑 Stopping all notifyr project containers..."; \
-		-$(DOCKER) stop $$($(DOCKER_COMPOSE_BASE) ps -q) || true; \
+		$(DOCKER) stop $$($(DOCKER_COMPOSE_BASE) ps -q) || true; \
 		echo "--- 🗑️  Pruning stopped containers..."; \
 		$(DOCKER) container prune -f; \
 		echo "--- 🗑️  Removing minio image..."; \
-		-$(DOCKER) image rm minio/minio:latest || true; \
+		$(DOCKER) image rm minio/minio:latest || true; \
 		echo "--- 🗑️  Removing all anonymous volumes..."; \
-		-$(DOCKER) volume rm $$(docker volume ls -q) || true; \
+		$(DOCKER) volume rm $$(docker volume ls -q) || true; \
 		sleep 3; \
 		echo "================================================="; \
 		echo "✅ notifyr environment completely pruned."; \
@@ -177,7 +178,7 @@ refresh-cost:
 	$(call COMPOSE_RUN, Traefik Down, down, traeffik)
 
 	$(call COMPOSE_RUN, App Update, up -d --build, app)
-	$(call COMPOSE_RUN, Worker Update, up -d --build, worker)
+	$(call COMPOSE_RUN, Worker Update, up -d --build,worker)
 	@sleep 5 && clear
 
 	$(call COMPOSE_RUN, Credit Topup, run --rm, credit topup)
@@ -186,6 +187,18 @@ refresh-cost:
 
 	@echo "================================================="
 	@echo "✅ Cost File Refreshed and Credits Topped Up."
+	@echo "================================================="
+
+
+update:
+	@echo "================================================="
+	@echo "💰 Removing old Notifyr container"
+	@echo "================================================="
+	$(call COMPOSE_SCALE,app)
+	$(call COMPOSE_RUN, Beat Service, up -d --build --no-deps, beat)
+	$(call COMPOSE_SCALE,worker)
+	@echo "================================================="
+	@echo "✅ New container deployed with updated code"
 	@echo "================================================="
 
 

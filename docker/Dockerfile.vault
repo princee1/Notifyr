@@ -198,7 +198,7 @@ path "notifyr-transit/keys/*" {
 
 # ---- RABBITMQ ENGINE ----
 
-path "notifyr-rabbitmq/roles/celery-ntfr-role" {
+path "notifyr-rabbitmq/creds/celery-ntfr-role" {
   capabilities = ["read"]
 }
 

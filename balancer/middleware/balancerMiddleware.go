@@ -29,14 +29,6 @@ func (metadata *MetaDataMiddleware) Middleware(c *fiber.Ctx) error {
 	return err
 }
 
-type AccessMiddleware struct {
-	SecurityService *service.SecurityService
-}
-
-func (access *AccessMiddleware) Middleware(c *fiber.Ctx) error {
-	return access.SecurityService.VerifyAccessAuth(c)
-}
-
 type ActiveMiddleware struct {
 	HealthService *service.HealthService
 }

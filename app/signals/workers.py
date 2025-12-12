@@ -21,8 +21,9 @@ def on_worker_ready(sender, **kwargs):
 
     print(f"Worker {hostname} synced {len(profileService.MiniServiceStore)} dynamic queues.")
 
+
 @worker_shutdown.connect
-def on_worker_shutdown():
+def on_worker_shutdown(sender=None, signal=None, **kwargs):
     mongooseService: MongooseService = Get(MongooseService)
     tortoiseConnService = Get(TortoiseConnectionService)
     awsS3Service = Get(AmazonS3Service)

@@ -316,7 +316,6 @@ class RedisService(TempCredentialsDatabaseService):
     def build(self,build_state=-1):
         host = self.configService.REDIS_HOST
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE)
-        print(self.creds)
 
         self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB,username=self.db_user,password=self.db_password)
         self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
