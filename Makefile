@@ -48,7 +48,7 @@ endef
 
 .PHONY: deploy deploy-data deploy-server tunnel prune purge refresh-apikey refresh-cost monitor-on monitor-off
 
-app:
+notifyr-app:
 	$(call COMPOSE_SCALE,app)
 
 build:

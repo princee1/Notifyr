@@ -1,4 +1,4 @@
-from fastapi import HTTPException,status
+from fastapi import HTTPException, Request,status
 from app.classes.celery import SchedulerModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.definition._cost import Cost
@@ -12,8 +12,10 @@ from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.cost_service import CostService
 from app.services.database_service import RedisService
+from app.services.secret_service import HCVaultService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
+from app.utils.constant import HTTPHeaderConstant
 from app.utils.helper import flatten_dict
 
  
@@ -250,7 +252,17 @@ async def same_client_authPermission(authPermission:AuthPermission, client:Clien
 
 class BalancerPermission(Permission):
     
-    def permission(self):
+    @InjectInMethod()
+    def __init__(self,securityService:SecurityService):
+        super().__init__()
+        self.securityService = securityService
+
+    def permission(self,request:Request):
+        if request.headers[HTTPHeaderConstant.X_BALANCER_EXCHANGE_TOKEN] != self.securityService.BALANCER_EXCHANGE_TOKEN:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='Balancer Not authorized'
+            )
         return True
 
 

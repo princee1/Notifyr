@@ -7,13 +7,31 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"time"
 )
 
 const TOKEN_NAME = "X-Ping-Pong-Token"
+const EXCHANGE_TOKEN_FILE = "/run/secrets/balancer-exchange-token.txt"
+const BALANCER_TOKEN_HEADER = "X-Balancer-Exchange-Token"
 
 type SecurityService struct {
 	ConfigService *ConfigService
+	balancerExchangeToken string
+}
+
+
+func (security *SecurityService) LoadExchangeToken() {
+
+	content,err:=os.ReadFile(security.ConfigService.exchangeTokenFilePath)
+	if err != nil{
+		log.Printf("Error while reading the exchange token file: %v",err)
+		os.Exit(-1)
+	}
+	token := string(content)
+	token = strings.TrimSpace(token)
+	security.balancerExchangeToken = token
 }
 
 func (security *SecurityService) SignRequest() {
@@ -23,8 +41,8 @@ func (security *SecurityService) SignRequest() {
 func (security *SecurityService) getPongWsPermission(url url.URL, name string, app *NotifyrApp) (string, error) {
 	// Construct the permission URL
 	permissionURL := fmt.Sprintf("%s/%s", url.String(), PERMISSION_ROUTE)
-
 	ticker := time.NewTicker(RETRY_FREQ)
+	client := &http.Client{}
 	defer ticker.Stop()
 	var resp *http.Response
 	var err error
@@ -32,8 +50,15 @@ func (security *SecurityService) getPongWsPermission(url url.URL, name string, a
 
 	for {
 		<-ticker.C
+		
+		req,err:= http.NewRequest("GET",permissionURL,nil)
+		if err != nil {
+			fmt.Println("Error creating request:", err)
+			os.Exit(-1)
+		}
+		req.Header.Set(BALANCER_TOKEN_HEADER,security.balancerExchangeToken)
 
-		resp, err = http.Get(permissionURL)
+		resp, err = client.Do(req)	
 		if err != nil {
 			retry++
 			if retry == int(MAX_RETRY) {

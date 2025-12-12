@@ -55,6 +55,7 @@ class HTTPHeaderConstant:
     X_PROCESS_PID = "X-Process-PID"
     X_PARENT_PROCESS_PID="X-Parent-Process-PID"
     X_REQUEST_ID='X-Request-ID'
+    X_BALANCER_EXCHANGE_TOKEN='X-Balancer-Exchange-Token'
 
 
 class CookieConstant:
@@ -239,13 +240,14 @@ class VaultConstant:
         return f'/vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal-api']
     TOKENS_SECRETS = 'tokens'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
     COMMUNICATION_SECRETS = 'communication'
     WEBHOOK_SECRETS = 'webhook'
     SETTINGS_SECRETS='setting'
+    INTERNAL_API_SECRETS='internal-api'
 
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']

@@ -132,6 +132,7 @@ type ConfigService struct {
 	NOTIFYR_PORT int64
 	set          bool
 	addr         string
+	exchangeTokenFilePath string
 }
 
 func (config *ConfigService) IsSet() bool {
@@ -173,6 +174,14 @@ func (config *ConfigService) LoadEnv() {
 		log.Printf("No file deploy filepath was given: %v", err)
 		os.Exit(-1)
 	}
+
+	exchange_token_file, exist := os.LookupEnv("EXCHANGE_TOKEN_FILE_PATH")
+	if  !exist {
+		log.Printf("No exchange token filepath was given: %v", err)
+		os.Exit(-1)
+	}
+
+	config.exchangeTokenFilePath = exchange_token_file
 
 	config.URLS = urls
 	config.set = true

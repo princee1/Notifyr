@@ -7,6 +7,7 @@ from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._interface import Interface, IsInterface
 from app.errors.service_error import BuildWarningError
 from app.services.setting_service import SettingService
+from app.utils.constant import VaultConstant
 from app.utils.fileIO import FDFlag
 from app.utils.tools import Cache, Time
 from .config_service import ConfigService
@@ -310,7 +311,16 @@ class SecurityService(BaseService, EncryptDecryptInterface):
 
         if api_key == None:
             raise BuildWarningError()
+        
         self.API_KEY = api_key
+        try:
+            self.DMZ_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DMZ')['API_KEY']
+            self.BALANCER_EXCHANGE_TOKEN=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'BALANCER')['API_KEY']
+            self.DASHBOARD_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DASHBOARD')['API_KEY']
+        except Exception as e:
+            print(e)
+            raise BuildWarningError()
+
         
     def hash_value_with_salt(self, value, key, salt):
         value_with_salt = value.encode() + salt
@@ -341,11 +351,3 @@ class SecurityService(BaseService, EncryptDecryptInterface):
     def generate_rsa_from_encrypted_keys(self,private_key=None,public_key=None):
         rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
         return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
-
-    @property
-    def DASHBOARD_KEY(self):
-        ...
-    
-    @property
-    def DMZ_KEY(self):
-        ...

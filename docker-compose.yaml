@@ -18,19 +18,19 @@ services:
   # EDGE LAYER
   # ==========================================
   traefik:
-    image: traefik:v2.10
+    image: traefik:v2
     container_name: traefik
     command:
       - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--api.dashboard=true"
       - "--api.insecure=true"
+      - --log.level=INFO
+      - --providers.docker.exposedbydefault=false
+      - "--entrypoints.web.address=:80"
     ports:
       - "127.0.0.54:80:80"
       - "8080:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - edge_net
       - app_net
@@ -46,7 +46,7 @@ services:
       - edge_net
     secrets:
       - source: dashboard_api_key
-        target: /run/secrets/dashboard_api_key
+        target: /run/secrets/dashboard_api_key.txt
 
   dmz:
     image: notifyr:dmz
@@ -59,9 +59,9 @@ services:
       - vault_net
     secrets:
       - source: dmz_api_key
-        target: /run/secrets/dmz_api_key
+        target: /run/secrets/dmz_api_key.txt
       - source: dmz_role_id
-        target: /run/secrets/dmz_role_id
+        target: /run/secrets/dmz_role_id.txt
   
   # ==========================================
   # LOAD BALANCER LAYER
@@ -72,6 +72,9 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.balancer
+    secrets:
+      - source: balancer_exchange_token
+        target: /run/secrets/balancer-exchange-token.txt
     volumes:
       - ./.notifyr/deploy.json:/var/deploy.json:ro
     environment:
@@ -113,9 +116,8 @@ services:
     labels:
       - "com.docker.compose.service=app"
       - "traefik.enable=true"
-      - "traefik.http.routers.app-router.rule=Host(`api.notifyr.io`)"
-      - "traefik.http.routers.app-router.entrypoint=web"
-      - "traefik.docker.network=app_net"
+      - "traefik.http.routers.app.rule=Host(`api.notifyr.io`)"
+      - "traefik.http.routers.app.entrypoints=web"      
       - "traefik.http.services.app.loadbalancer.server.port=8088"
 
     command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
@@ -365,6 +367,8 @@ secrets:
     file: ./.secrets/dashboard-api-key.txt
   dmz_api_key:
     file: ./.secrets/dmz-api-key.txt
+  balancer_exchange_token:
+    file: ./.secrets/balancer-exchange-token.txt
   dmz_role_id:
     file: ./.secrets/dmz-role_id.txt
   rotate_token:

@@ -288,20 +288,23 @@ create_default_token(){
   ARGS=""
   for token in $TOKENS
   do
-    TEMP=$(pwgen -s 75 1)
+    TEMP=$(pwgen -s 60 1)
     ARGS="$ARGS $token=$TEMP"
   done
 
   vault kv put notifyr-secrets/tokens $ARGS
 
-  local dmz_api_key="dmz:$(pwgen -s 100 1)"
-  local dashboard_api_key="dashboard:$(pwgen -s 100 1)"
+  local dmz_api_key="dmz:$(pwgen -s 70 1)"
+  local dashboard_api_key="dashboard:$(pwgen -s 70 1)"
+  local balancer_exchange_token="balancer_exchange:$(pwgen -s 80 1)"
 
   vault kv put notifyr-secrets/internal-api/DMZ API_KEY="$dmz_api_key"
+  vault kv put notifyr-secrets/internal-api/BALANCER API_KEY="$balancer_exchange_token"
   vault kv put notifyr-secrets/internal-api/DASHBOARD API_KEY="$dashboard_api_key"
 
   echo -n "$dmz_api_key" > "$VAULT_SECRETS_DIR/dmz-api-key.txt"
   echo -n "$dashboard_api_key" > "$VAULT_SECRETS_DIR/dashboard-api-key.txt"
+  echo -n "$balancer_exchange_token" > "$VAULT_SECRETS_DIR/balancer-exchange-token.txt"
 
   vault kv put notifyr-secrets/setting @/vault/config/settings_db.json
 
