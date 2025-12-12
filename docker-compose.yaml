@@ -24,8 +24,11 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
     ports:
-      - "8080:80"
+      - "127.0.0.54:80:80"
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -38,7 +41,7 @@ services:
     container_name: dashboard
     # labels:
     #   - "traefik.enable=true"
-    #   - "traefik.http.routers.dashboard.rule=Host(`dashboard.localhost`)"
+    #   - "traefik.http.routers.dashboard.rule=Host(`dashboard.notifyr.io`)"
     networks:
       - edge_net
     secrets:
@@ -49,7 +52,7 @@ services:
     image: notifyr:dmz
     # labels:
     #   - "traefik.enable=true"
-    #   - "traefik.http.routers.dmz.rule=Host(`dmz.localhost`)"
+    #   - "traefik.http.routers.dmz.rule=Host(`notifyr.io`)"
     networks:
       - edge_net
       - data_net
@@ -77,7 +80,7 @@ services:
       - NOTIFYR_PORT=8088
     networks:
       - lb_net
-      - app_net
+      - app_net #NOTE will change later when balancer are working
 
   # ==========================================
   # CREDIT LAYER
@@ -110,13 +113,10 @@ services:
     labels:
       - "com.docker.compose.service=app"
       - "traefik.enable=true"
-      # Set up a router for the FastAPI app service
-      - "traefik.http.routers.app-router.rule=Host(`api.mydomain.com`)"
+      - "traefik.http.routers.app-router.rule=Host(`api.notifyr.io`)"
       - "traefik.http.routers.app-router.entrypoint=web"
-      # CRITICAL: Tell Traefik to use the app_net to talk to this service
       - "traefik.docker.network=app_net"
-      # Tell Traefik what port the service is listening on internally
-      - "traefik.http.services.app-router.loadbalancer.server.port=8088"
+      - "traefik.http.services.app.loadbalancer.server.port=8088"
 
     command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
     restart: unless-stopped

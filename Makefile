@@ -36,7 +36,7 @@ endef
 # Helper to run a service with scaling logic
 define COMPOSE_SCALE
 	@echo "--- 🛠️  Scaling and deploying $(1)..."
-	$(DOCKER_COMPOSE_BASE) up -d --build --no-deps --scale $(1)=$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.$(1)') $(1)
+	$(DOCKER_COMPOSE_BASE) up -d --scale $(1)=$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.$(1)') $(1)
 	@echo "--- ✅  $(1): Deployed and scaled."
 	@sleep 3
 endef
@@ -47,6 +47,18 @@ endef
 # ==============================================================================
 
 .PHONY: deploy deploy-data deploy-server tunnel prune purge refresh-apikey refresh-cost monitor-on monitor-off
+
+app:
+	$(call COMPOSE_SCALE,app)
+
+build:
+	@echo "================================================="
+	@echo "🛠️  Building Docker services in $(DOCKER_COMPOSE_FILE)..."
+	@echo "================================================="
+	$(DOCKER_COMPOSE_BASE) build
+	@echo "================================================="
+	@echo "🎉  All images built successfully!"
+	@echo "================================================="
 
 # Target to deploy all server components
 deploy-server:
@@ -62,7 +74,7 @@ deploy-server:
 
 # 	# Deploy Infrastructure Services (Traefik/Gateway)
 	$(call COMPOSE_RUN, Traefik, up -d, traefik)
-	$(call COMPOSE_RUN, Ofelia Scheduler ,up -d --build, ofelia)
+	$(call COMPOSE_RUN, Ofelia Scheduler ,up -d, ofelia)
 
 	@echo "================================================="
 	@echo "✅ Server Services Deployment Complete"
@@ -86,7 +98,9 @@ deploy-data:
 	@sleep 3 && clear
 
 # 	# 2. Vault Initialization
-	$(call COMPOSE_RUN, Vault Init, up --build, vault-init)
+	$(call COMPOSE_RUN, Minio, up --build -d, minio)
+	@sleep 4 && clear
+	$(call COMPOSE_RUN, Vault Init, up, vault-init)
 	
 # 	# 3. Extract Secrets and Cleanup Init Container
 	@echo "--- 📦 Copying secrets from vault-init container..."
@@ -100,7 +114,6 @@ deploy-data:
 	@sleep 3 && clear
 
 # 	# 5. Run Initial Credit Setup
-	$(call COMPOSE_RUN, Credit Builder, build, credit)
 	@clear && echo "Waiting 30 sec for the vault to be unsealed..." & sleep 30
 	$(call COMPOSE_RUN, Credit Setup, run --rm, credit /credits-utils.sh reset-hard)
 	$(call COMPOSE_RUN, Credit Always On, up -d, credit)
@@ -124,7 +137,8 @@ deploy: deploy-data deploy-server
 
 tunnel:
 	@echo "🌐 Starting ngrok tunnel to ${ngrok_url}"
-	ngrok http --url ${ngrok_url} 8080
+	@sleep 5
+	ngrok http --url=${ngrok_url} http://api.notifyr.io:80
 
 prune:
 	@read -p "Are you sure you want to hard prune the notifyr environment? [y/N] " answer; \
@@ -164,7 +178,7 @@ refresh-apikey:
 	@echo "--- 🔑 Creating new API Key..."
 	./scripts/api_key-creds.sh -f
 	@echo "--- 🚀 Redeploying 'app' service with new build..."
-	$(call COMPOSE_RUN, App Update, up -d --no-deps --build, app)
+	$(call COMPOSE_RUN, App Update, up -d, app)
 	@echo "================================================="
 	@echo "✅ API Key Refreshed."
 	@echo "================================================="
@@ -194,6 +208,7 @@ update:
 	@echo "================================================="
 	@echo "💰 Removing old Notifyr container"
 	@echo "================================================="
+	$(call COMPOSE_RUN, build, app)
 	$(call COMPOSE_SCALE,app)
 	$(call COMPOSE_RUN, Beat Service, up -d --build --no-deps, beat)
 	$(call COMPOSE_SCALE,worker)
