@@ -3,6 +3,11 @@ schedule = "0 0 1 * *"
 container = "credit"
 command= "/credits-utils.sh topup"
 
+[job-exec "weekly_squash"]
+schedule = "0 23 * * 1"
+container = "credit"
+command= "/credits-utils.sh squash"
+
 [job-local "beat.twoweekly-restart"]
 schedule = "0 0 0 */14 * *"
 command = "/container-restart.sh beat" 

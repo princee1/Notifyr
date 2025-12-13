@@ -18,7 +18,11 @@ echo "Restarting containers for service: $SERVICE"
 
 # Get container IDs matching the service label
 CONTAINERS=$(curl -s --unix-socket /var/run/docker.sock \
-  "http://localhost/containers/json?filters={\"label\":[\"com.docker.compose.service=$SERVICE\"]}" | jq -r '.[].Id')
+  --get \
+  --data-urlencode "filters={\"label\":[\"com.docker.compose.service=$SERVICE\"]}" \
+  http://localhost/containers/json | jq -r '.[].Id')
+
+echo "$CONTAINERS"
 
 if [[ -z "$CONTAINERS" ]]; then
     echo "No running containers found for service '$SERVICE'."

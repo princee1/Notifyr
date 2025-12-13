@@ -333,6 +333,8 @@ class CostConstant:
     PHONE_CREDIT='phone'
     PROFILE_CREDIT='profile'
     CLIENT_CREDIT='client'
+
+    Credit =Literal['email','sms','phone','profile','client']
     
 
     COST_KEY='cost'

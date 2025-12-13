@@ -16,6 +16,10 @@ REDIS_DB="1"
 LEASE_ID=""
 GLOBAL_VAULT_TOKEN=""
 
+YEAR=$(date +%Y)
+MONTH=$(date +%-m)
+
+
 if ! command -v jq &> /dev/null; then
     echo "Error: 'jq' is required but not installed." >&2
     exit 1
@@ -97,13 +101,25 @@ get_redis_creds() {
 }
 
 # --- Function to Execute Redis Command ---
-redis_exec() {
+transact_and_receipt() {
     if [ -z "$REDIS_PASS" ]; then
         echo "Error: Redis password not set. Cannot connect." >&2
         exit 1
     fi
     local command="$1"
-    redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT" $command
+    local key="notifyr/credit:$2"
+    local val="$3"
+
+    local balance_before="$(redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB" GET "$key")" || echo -n "0"
+    
+    balance_before=$(echo "$balance_before" | tr -d ' ')
+    local balance_after=$((balance_before + val))
+    local receipt=""" {"request_id":"notifyr-credit:$(pwgen -s 25 1)","definition": "Topup","credit": "$key","created_at":"$(date)","total":$val,"purchase_total": 0,"refund_total": $val ,"balance_before":"$balance_before", "balance_after":"$balance_after"} """
+
+    local receipt_key="notifyr/credit:receipts@$2[$YEAR-$MONTH]"
+
+    redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB" "$command $key $val"
+    redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB" LPUSH "$receipt_key" "$receipt"
 }
 
 
@@ -115,7 +131,7 @@ topup_cost() {
     
     while IFS="=" read -r key val; do
         echo "+ $val -> $key"
-        redis_exec "INCRBY credit:$key $val"
+        transact_and_receipt "INCRBY" "$key" "$val"
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
 }
 
@@ -124,10 +140,10 @@ reset_cost() {
     echo "🔄 Resetting phone, sms, email credits in Redis DB $REDIS_DB from $COSTS_FILE"
     
     JQ_FILTER='.credits | to_entries[] | select(.key=="phone" or .key=="sms" or .key=="email") | "\(.key)=\(.value)"'
-    
+
     while IFS="=" read -r key val; do
         echo "SET $key -> $val"
-        redis_exec "SET credit:$key $val"
+        transact_and_receipt "SET" "$key" "$val"
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
 }
 
@@ -136,11 +152,23 @@ reset_cost_hard() {
     echo "🔥 HARD Resetting ALL credits in Redis DB $REDIS_DB from $COSTS_FILE"
     
     JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
-    
+
     while IFS="=" read -r key val; do
         echo "SET $key -> $val"
-        redis_exec "SET credit:$key $val"
+        transact_and_receipt "SET" "$key" "$val"
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
+}
+
+squash(){
+    echo "🔥 Squash all receipts into a summary for ALL credits in Redis DB $REDIS_DB from $COSTS_FILE"
+
+    JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
+
+    while IFS="=" read -r key val; do
+        local receipt_key="notifyr/credit:receipts@$key[$YEAR-$MONTH]"
+        redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB" --eval /receipt-squash.lua "$receipt_key" 
+    done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
+    
 }
 
 
@@ -163,6 +191,9 @@ case "$COMMAND" in
         ;;
     reset-hard)
         reset_cost_hard
+        ;;
+    squash)
+        squash
         ;;
     *)
         echo "Error: Invalid command '$COMMAND'." >&2

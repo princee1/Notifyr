@@ -9,6 +9,8 @@ from app.services.database_service import RedisService, TortoiseConnectionServic
 from app.services.reactive_service import ReactiveService
 from fastapi import Depends, Request, Response
 
+from app.utils.constant import CostConstant
+
 
 @PingService([CostService])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler)
@@ -17,10 +19,11 @@ from fastapi import Depends, Request, Response
 class CostRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self,costService:CostService,reactiveService:ReactiveService):
+    def __init__(self,costService:CostService,reactiveService:ReactiveService,redisService:RedisService):
         super().__init__(None,None)
         self.costService = costService
         self.reactiveService = reactiveService
+        self.redisService = redisService
 
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
@@ -51,10 +54,22 @@ class CostRessource(BaseHTTPRessource):
 
 
     @UseRoles([Role.ADMIN])
-    @UseHandler(TortoiseHandler,CostHandler)
-    @PingService([TortoiseConnectionService])
-    @UseServiceLock(TortoiseConnectionService)
-    @BaseHTTPRessource.HTTPRoute('/history/', methods=[HTTPMethod.GET],)
-    def history(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    @UseHandler(CostHandler)
+    @PingService([CostService,RedisService])
+    @BaseHTTPRessource.HTTPRoute('/history/{credit}', methods=[HTTPMethod.GET],)
+    def history(self,credit:CostConstant.Credit, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
+        credit_key = self.costService.receipts_key(credit)
+        
+        return {"history": [], "detail": "not implemented"}
+    
+
+    @UseRoles([Role.ADMIN])
+    @UseHandler(CostHandler)
+    @PingService([CostService,RedisService])
+    @BaseHTTPRessource.HTTPRoute('/summary/{credit}', methods=[HTTPMethod.GET],)
+    def history(self,credit:CostConstant.Credit, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+        """Placeholder for summary endpoint. Implement retrieval from DB/audit store when available."""
+        credit_key = f"notifyr/credit:receipt@{credit}/summary"
+
         return {"history": [], "detail": "not implemented"}

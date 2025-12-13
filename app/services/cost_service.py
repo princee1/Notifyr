@@ -19,7 +19,7 @@ from app.classes.auth_permission import AuthPermission
 from app.utils.helper import flatten_dict
 from datetime import datetime
 
-REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"credit:{credit_key}"
+REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"notifyr/credit:{credit_key}"
 
 @Service()
 class CostService(BaseService):
@@ -36,9 +36,8 @@ class CostService(BaseService):
         self.fileService = fileService
         self.costs_definition={}
     
-    @property
-    def receipts_key(self):
-        return f'notifyr:receipts@{datetime.now().year}-{datetime.now().month}'
+    def receipts_key(self,key):
+        return f'notifyr/credit:receipts@{key}[{datetime.now().year}-{datetime.now().month}]'
     
     @staticmethod
     def redis_credit_key_builder(func:Callable):

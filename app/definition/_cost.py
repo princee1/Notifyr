@@ -6,7 +6,7 @@ from app.container import Get
 from app.depends.class_dep import TrackerInterface
 from app.depends.dependencies import get_request_id
 from app.manager.task_manager import TaskManager
-from app.services.cost_service import CostService
+from app.services.cost_service import REDIS_CREDIT_KEY_BUILDER, CostService
 from app.utils.helper import PointerIterator
 from app.classes.celery import SchedulerModel
 from datetime import datetime
@@ -53,7 +53,7 @@ class Cost:
     def generate_receipt(self)-> Receipt:
         return {
             "request_id": self.request_id,
-            "credit":self.credit_key,
+            "credit":REDIS_CREDIT_KEY_BUILDER(self.credit_key),
             "definition": self.definition_name,
             "created_at": self.created_at.isoformat(),
             "p-items": [

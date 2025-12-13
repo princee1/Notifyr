@@ -15,8 +15,8 @@ echo "MinIO is up!"
 
 mc alias set notifyr http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
 
-mc admin policy create notifyr app-access /app/policy/app-access.json
-mc admin policy create notifyr dmz-access /app/policy/dmz-access.json
+mc admin policy create notifyr app-access /app/policy/app-access.json || true
+mc admin policy create notifyr dmz-access /app/policy/dmz-access.json || true
 
 #mc admin policy create notifyr vault-admin /app/policy/vault-admin.json
 

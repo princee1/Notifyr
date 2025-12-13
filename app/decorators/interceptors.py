@@ -80,7 +80,7 @@ class TaskCostInterceptor(Interceptor):
         await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
         receipt = cost.generate_receipt()
         self.costService.inject_cost_info(response,receipt)
-        broker.push(RedisConstant.LIMITER_DB,self.costService.receipts_key,receipt)
+        broker.push(RedisConstant.LIMITER_DB,self.costService.receipts_key(cost.credit_key),receipt)
         
         
 
@@ -130,4 +130,4 @@ class DataCostInterceptor(Interceptor):
         cost.balance_before = balance_before
         receipt = cost.generate_receipt()
         self.costService.inject_cost_info(response,receipt)
-        broker.push(RedisConstant.LIMITER_DB,self.costService.receipts_key,receipt)
+        broker.push(RedisConstant.LIMITER_DB,self.costService.receipts_key(self.credit),receipt)
