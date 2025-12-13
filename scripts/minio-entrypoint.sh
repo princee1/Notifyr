@@ -26,6 +26,17 @@ VAULT_SECRET_KEY=${MINIO_VAULT_PASSWORD}
 accessKey=$(jq -r '.credential.accessKey' "$CONFIG_DIR/config.json")
 secretKey=$(jq -r '.credential.secretKey' "$CONFIG_DIR/config.json")
 
+create_bucket() {
+    BUCKET="$1"
+    QUOTA="$2"
+
+    if ! mc stat "$BUCKET" >/dev/null 2>&1; then
+        mc mb "$BUCKET"
+        mc version enable "$BUCKET"
+        mc quota set "$BUCKET" --size "$QUOTA"
+    fi
+}
+
 mc alias set notifyr http://localhost:9000 "$accessKey" "$secretKey" >/dev/null
 
 # ===============================
@@ -40,6 +51,14 @@ else
     mc admin user add notifyr "$VAULT_ACCESS_KEY" "$VAULT_SECRET_KEY"
     mc admin policy attach notifyr consoleAdmin --user "$VAULT_ACCESS_KEY"
     #mc admin policy attach notifyr vault-admin --user "$VAULT_ACCESS_KEY"
+fi
+
+create_bucket notifyr/static "$STATIC_STORAGE_LIMIT"
+create_bucket notifyr/assets "$ASSETS_STORAGE_LIMIT"
+
+if [ "$S3_MODE" = "dev" ]; then
+    mc cp --recursive /app/objects/assets/ notifyr/assets/
+    mc cp --recursive /app/objects/static/ notifyr/static/
 fi
 
 # ===============================

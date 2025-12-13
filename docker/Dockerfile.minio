@@ -11,6 +11,10 @@ ARG ASSETS_STORAGE_LIMIT=500MB
 ARG STATIC_STORAGE_LIMIT=500MB
 ARG S3_MODE=dev
 
+ENV ASSETS_STORAGE_LIMIT=${ASSETS_STORAGE_LIMIT}
+ENV STATIC_STORAGE_LIMIT=${STATIC_STORAGE_LIMIT}
+ENV S3_MODE=dev
+
 WORKDIR /app
 
 # Copy pwgen for generating secrets
@@ -97,7 +101,7 @@ RUN cat <<EOF > ./policy/vault-admin.json
 EOF
 
 COPY --chmod=700 ./scripts/minio-init.sh .
-RUN ./minio-init.sh ${ASSETS_STORAGE_LIMIT} ${STATIC_STORAGE_LIMIT} ${S3_MODE}
+RUN ./minio-init.sh
 
 COPY --chmod=700 ./scripts/minio-entrypoint.sh .
 
