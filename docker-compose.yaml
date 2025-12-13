@@ -7,6 +7,9 @@ services:
   # ==========================================
   ofelia:
     image: mcuadros/ofelia:latest
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.ofelia
     container_name: ofelia
     network_mode: none
     command: daemon --config=/etc/ofelia/config.toml

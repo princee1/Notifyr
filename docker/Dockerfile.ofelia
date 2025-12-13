@@ -1,0 +1,7 @@
+FROM mcuadros/ofelia:latest
+
+RUN apk add --no-cache jq curl
+
+COPY ./scripts/container-restart.sh /container-restart.sh
+
+RUN chmod +x /container-restart.sh
