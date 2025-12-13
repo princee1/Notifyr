@@ -89,11 +89,11 @@ deploy-data:
 
 # 	# 1. Create Initial Secrets
 	@echo "--- 🔑 Initializing Minio Credentials..."
-	./scripts/minio-creds.sh
+	./scripts/generate-creds.sh minio
 	@echo "--- ✅ Minio Credentials ready."
 
 	@echo "--- 🔑 Initializing API Key Credentials..."
-	./scripts/api_key-creds.sh
+	./scripts/generate-creds.sh api-key
 	@echo "--- ✅ API Key Credentials ready."
 	@sleep 3 && clear
 
@@ -176,7 +176,7 @@ refresh-apikey:
 	@echo "🔄 Refreshing API Key and Redeploying App"
 	@echo "================================================="
 	@echo "--- 🔑 Creating new API Key..."
-	./scripts/api_key-creds.sh -f
+	./scripts/generate-creds.sh api-key --force
 	@echo "--- 🚀 Redeploying 'app' service with new build..."
 	$(call COMPOSE_RUN, App Update, up -d, app)
 	@echo "================================================="
