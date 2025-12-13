@@ -5,7 +5,7 @@ from typing import Callable, Self
 
 from fastapi import Response
 from redis import WatchError
-from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition,Receipt
+from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition,Bill
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
@@ -36,8 +36,12 @@ class CostService(BaseService):
         self.fileService = fileService
         self.costs_definition={}
     
-    def receipts_key(self,key):
-        return f'notifyr/credit:receipts@{key}[{datetime.now().year}-{datetime.now().month}]'
+    def bill_key(self,credit:CostConstant.Credit):
+        now = datetime.now()
+        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@bill[{now.year}-{now.month}]'
+
+    def receipts_key(self,credit:CostConstant.Credit):
+        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@receipts'
     
     @staticmethod
     def redis_credit_key_builder(func:Callable):
@@ -195,12 +199,12 @@ class CostService(BaseService):
         if self.currency != 'NOTIFYR-CREDITS':
             raise BuildFailureError
 
-    def inject_cost_info(self,response:Response,receipt:Receipt):
+    def inject_cost_info(self,response:Response,bill:Bill):
         
-        credit = receipt['credit']
-        current_balance = receipt['balance_after']
-        total = receipt['total']
-        definition_name = receipt.get('definition',None)
+        credit = bill['credit']
+        current_balance = bill['balance_after']
+        total = bill['total']
+        definition_name = bill.get('definition',None)
 
         response.headers.append('X-Credit-Name',credit)
         response.headers.append('X-Current-Balance',str(current_balance))

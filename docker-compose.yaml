@@ -103,6 +103,7 @@ services:
       - data_net
       - vault_net
     environment:
+      - ALLOWED_HARD_RESET=off
       - VAULT_ADDR=http://vault:8200
       - REDIS_HOST=${REDIS_HOST:-redis}
     secrets:
@@ -201,6 +202,8 @@ services:
     restart: unless-stopped
     container_name: vault
     entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
+    ports:
+      - "8200:8200"
     environment:
       VAULT_ADDR: "http://vault:8200"
     secrets:
@@ -262,6 +265,7 @@ services:
     image: minio/minio:latest
     container_name: minio
     restart: always
+    entrypoint: ["./minio-entrypoint.sh"]
     secrets: 
       - source: minio_root
         target: /run/secrets/config.json
@@ -316,6 +320,8 @@ services:
     volumes:
       - redis-data:/data
       - ./scripts/redis-entrypoint.sh:/entrypoint.sh
+      - ./scripts/credits-transc.lua:/functions/credits-transc.lua
+      - ./scripts/bill-squash.lua:/functions/bill-squash.lua    
     networks:
       - data_net
 

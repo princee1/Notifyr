@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class ReceiptItem:
+class BillItem:
     description: str
     amount: int
     quantity: int = 1
@@ -17,12 +17,12 @@ class ReceiptItem:
     def __post_init__(self) -> None:
         self.subtotal = self.amount * self.quantity
 
-class Receipt(TypedDict):
+class Bill(TypedDict):
     request_id: str
     credit: Any
     definition: Optional[str]
     created_at: str
-    items: List[ReceiptItem]
+    items: List[BillItem]
     purchase_total: int
     refund_total: int
     total: int

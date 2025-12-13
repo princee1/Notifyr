@@ -56,10 +56,10 @@ class CostRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UseHandler(CostHandler)
     @PingService([CostService,RedisService])
-    @BaseHTTPRessource.HTTPRoute('/history/{credit}', methods=[HTTPMethod.GET],)
-    def history(self,credit:CostConstant.Credit, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/bills/{credit}', methods=[HTTPMethod.GET],)
+    async def get_bills(self,credit:CostConstant.Credit, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
-        credit_key = self.costService.receipts_key(credit)
+        bill_key = self.costService.bill_key(credit)
         
         return {"history": [], "detail": "not implemented"}
     
@@ -67,9 +67,9 @@ class CostRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UseHandler(CostHandler)
     @PingService([CostService,RedisService])
-    @BaseHTTPRessource.HTTPRoute('/summary/{credit}', methods=[HTTPMethod.GET],)
-    def history(self,credit:CostConstant.Credit, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/receipts/{credit}', methods=[HTTPMethod.GET],)
+    async def get_receipts(self,credit:CostConstant.Credit, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for summary endpoint. Implement retrieval from DB/audit store when available."""
-        credit_key = f"notifyr/credit:receipt@{credit}/summary"
+        receipt_key =  self.costService.receipts_key(credit)
 
         return {"history": [], "detail": "not implemented"}

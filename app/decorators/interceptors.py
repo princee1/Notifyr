@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from typing_extensions import Literal
 from fastapi import BackgroundTasks, Request, Response,status
 from app.container import Get
-from app.definition._cost import DataCost, SimpleTaskCost,Receipt
+from app.definition._cost import DataCost, SimpleTaskCost,Bill
 from app.definition._utils_decorator import Interceptor, InterceptorDefaultException
 from app.depends.res_cache import ResponseCacheInterface
 from app.manager.broker_manager import Broker
@@ -78,9 +78,9 @@ class TaskCostInterceptor(Interceptor):
 
     async def intercept_after(self, result:Any,cost:SimpleTaskCost,broker:Broker,response:Response):
         await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
-        receipt = cost.generate_receipt()
-        self.costService.inject_cost_info(response,receipt)
-        broker.push(RedisConstant.LIMITER_DB,self.costService.receipts_key(cost.credit_key),receipt)
+        bill = cost.generate_bill()
+        self.costService.inject_cost_info(response,bill)
+        broker.push(RedisConstant.LIMITER_DB,self.costService.bill_key(cost.credit_key),bill)
         
         
 
@@ -128,6 +128,6 @@ class DataCostInterceptor(Interceptor):
                 await self.costService.refund_credits(self.credit,cost.refund_cost)
 
         cost.balance_before = balance_before
-        receipt = cost.generate_receipt()
-        self.costService.inject_cost_info(response,receipt)
-        broker.push(RedisConstant.LIMITER_DB,self.costService.receipts_key(self.credit),receipt)
+        bill = cost.generate_bill()
+        self.costService.inject_cost_info(response,bill)
+        broker.push(RedisConstant.LIMITER_DB,self.costService.bill_key(self.credit),bill)

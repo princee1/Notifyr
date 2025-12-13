@@ -101,26 +101,38 @@ get_redis_creds() {
 }
 
 # --- Function to Execute Redis Command ---
-transact_and_receipt() {
+transaction() {
     if [ -z "$REDIS_PASS" ]; then
         echo "Error: Redis password not set. Cannot connect." >&2
         exit 1
     fi
-    local command="$1"
-    local key="notifyr/credit:$2"
+
+    local command="$1"          
+    local key_suffix="$2"
     local val="$3"
-
-    local balance_before="$(redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB" GET "$key")" || echo -n "0"
     
-    balance_before=$(echo "$balance_before" | tr -d ' ')
-    local balance_after=$((balance_before + val))
-    local receipt=""" {"request_id":"notifyr-credit:$(pwgen -s 25 1)","definition": "Topup","credit": "$key","created_at":"$(date)","total":$val,"purchase_total": 0,"refund_total": $val ,"balance_before":"$balance_before", "balance_after":"$balance_after"} """
+    local credit_key="notifyr/credit:$key_suffix"
+    local bill_key="notifyr/credit:$key_suffix@bill[$YEAR-$MONTH]"
 
-    local receipt_key="notifyr/credit:receipts@$2[$YEAR-$MONTH]"
-
-    redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB" "$command $key $val"
-    redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB" LPUSH "$receipt_key" "$receipt"
+    local redis_url="redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB"
+    
+    if [ [ "$command" = "incr" ] || [ "$command" = "set" ] ] ; then
+        redis-cli -u $redis_url FCALL notifyr.credit_transaction 2 \
+            $credit_key \
+            $bill_key \
+            $command \
+            $val \
+            "[NCS]:$(pwgen -s 25 1)" \
+            "$(date -Is)"
+        return
+    elif [ "$command" = "squash" ]; then
+        redis-cli -u $redis_url FCALL notifyr.bill_squash 1 $credit_key
+        return
+    else
+        echo "utils subcommand does no exists... $command"
+    fi        
 }
+
 
 
 # 1. topup: INCRBY for 'phone', 'sms', 'email'
@@ -128,10 +140,9 @@ topup_cost() {
     echo "🚀 Topping up phone, sms, email credits in Redis DB $REDIS_DB from $COSTS_FILE"
     
     JQ_FILTER='.credits | to_entries[] | select(.key=="phone" or .key=="sms" or .key=="email") | "\(.key)=\(.value)"'
-    
     while IFS="=" read -r key val; do
         echo "+ $val -> $key"
-        transact_and_receipt "INCRBY" "$key" "$val"
+        transaction "incr" "$key" "$val"
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
 }
 
@@ -143,38 +154,40 @@ reset_cost() {
 
     while IFS="=" read -r key val; do
         echo "SET $key -> $val"
-        transact_and_receipt "SET" "$key" "$val"
+        transaction "set" "$key" "$val"
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
 }
 
 # 3. reset-hard: SET for ALL keys in .credits
 reset_cost_hard() {
     echo "🔥 HARD Resetting ALL credits in Redis DB $REDIS_DB from $COSTS_FILE"
-    
-    JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
 
+    local allowed=${ALLOWED_HARD_RESET:-off}
+
+    if [ "$allowed" != "on" ]; then
+        echo "Resetting at this stage is not permitted... "
+        return
+    fi
+
+    JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
     while IFS="=" read -r key val; do
         echo "SET $key -> $val"
-        transact_and_receipt "SET" "$key" "$val"
+        transaction "set" "$key" "$val"
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
 }
 
+#4. squash: LTRIM the bill and LPUSH into a receipts for ALL keys in .credits
 squash(){
     echo "🔥 Squash all receipts into a summary for ALL credits in Redis DB $REDIS_DB from $COSTS_FILE"
-
     JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
-
     while IFS="=" read -r key val; do
-        local receipt_key="notifyr/credit:receipts@$key[$YEAR-$MONTH]"
-        redis-cli -u "redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB" --eval /receipt-squash.lua "$receipt_key" 
+        transaction squash "$key" "$val"
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
-    
 }
-
 
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <command>" >&2
-    echo "  Commands: topup, reset, reset-hard" >&2
+    echo "  Commands: topup, reset, reset-hard, squash" >&2
     exit 1
 fi
 

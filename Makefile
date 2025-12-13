@@ -115,7 +115,7 @@ deploy-data:
 
 # 	# 5. Run Initial Credit Setup
 	@clear && echo "Waiting 30 sec for the vault to be unsealed..." & sleep 30
-	$(call COMPOSE_RUN, Credit Setup, run --rm, credit /credits-utils.sh reset-hard)
+	$(call COMPOSE_RUN, Credit Setup, run -e ALLOWED_HARD_RESET=on --rm , credit /credits-utils.sh reset-hard)
 	$(call COMPOSE_RUN, Credit Always On, up -d, credit)
 	@echo "--- ✅ Initial Credit Setup (Hard Reset) complete."
 	@sleep 3 && clear
