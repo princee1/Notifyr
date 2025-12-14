@@ -435,6 +435,11 @@ class RedisService(TempCredentialsDatabaseService):
     @check_db
     async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
         return await redis.lpush(name,*element)
+
+    @check_db
+    async def range(self,database:int|str,name:str,start:int,stop:int,redis:Redis=None):
+        return await redis.lrange(name,start,stop)
+
     
 @Service()
 class MemCachedService(DatabaseService,SchedulerInterface):

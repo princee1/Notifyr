@@ -762,8 +762,92 @@ class FileNamingHandler(Handler):
                 detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
             )
 
+import redis
+from fastapi import HTTPException, status
+
 class RedisHandler(Handler):
-    ...
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except redis.exceptions.AuthenticationError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Redis authentication failed"
+            )
+
+        except redis.exceptions.AuthorizationError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Redis authorization failed"
+            )
+
+        except redis.exceptions.ConnectionError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis service unavailable"
+            )
+
+        except redis.exceptions.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Redis request timed out"
+            )
+
+        except redis.exceptions.BusyLoadingError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis is loading data"
+            )
+
+        except redis.exceptions.ReadOnlyError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis is in read-only mode"
+            )
+
+        except redis.exceptions.OutOfMemoryError:
+            raise HTTPException(
+                status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+                detail="Redis out of memory"
+            )
+
+        except redis.exceptions.ClusterDownError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis cluster is down"
+            )
+
+        except (redis.exceptions.AskError, redis.exceptions.MovedError):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis cluster redirection error"
+            )
+
+        except redis.exceptions.NoScriptError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Redis Lua script not found"
+            )
+
+        except redis.exceptions.DataError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid data sent to Redis"
+            )
+
+        except redis.exceptions.ResponseError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+
+        except redis.exceptions.LockError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Redis lock error"
+            )
 
 class MemCachedHandler(Handler):
 

@@ -123,7 +123,7 @@ transaction() {
                 "$bill_key" \
                 "$command" \
                 "$val" \
-                "[NCS]:$(pwgen -s 25 1)" \
+                "[NotifyrCreditSystem]:$(pwgen -s 12 1)" \
                 "$(date -Is)"
             ;;
         squash)

@@ -2,14 +2,16 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, CostHandler, RedisHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseHandler, UsePermission, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseHandler, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._utils_decorator import Pipe
 from app.depends.dependencies import get_auth_permission
 from app.services.cost_service import CostService
 from app.services.database_service import RedisService, TortoiseConnectionService
 from app.services.reactive_service import ReactiveService
-from fastapi import Depends, Request, Response
+from fastapi import Depends, Query, Request, Response
+import json
 
-from app.utils.constant import CostConstant
+from app.utils.constant import CostConstant, RedisConstant
 
 
 @PingService([CostService])
@@ -17,6 +19,14 @@ from app.utils.constant import CostConstant
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('costs')
 class CostRessource(BaseHTTPRessource):
+
+
+    class NCSHistoryPipe(Pipe):
+        def __init__(self,):
+            super().__init__(False)
+
+        def pipe(self,result:list[str]):
+            return [json.loads(r) for r in result]
 
     @InjectInMethod()
     def __init__(self,costService:CostService,reactiveService:ReactiveService,redisService:RedisService):
@@ -54,22 +64,24 @@ class CostRessource(BaseHTTPRessource):
 
 
     @UseRoles([Role.ADMIN])
-    @UseHandler(CostHandler)
+    @UseHandler(CostHandler,RedisHandler)
     @PingService([CostService,RedisService])
+    @UsePipe(NCSHistoryPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}', methods=[HTTPMethod.GET],)
-    async def get_bills(self,credit:CostConstant.Credit, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
         bill_key = self.costService.bill_key(credit)
-        
-        return {"history": [], "detail": "not implemented"}
+        return await self.redisService.range(RedisConstant.LIMITER_DB,bill_key,start,stop) or []
+    
     
 
     @UseRoles([Role.ADMIN])
-    @UseHandler(CostHandler)
+    @UseHandler(CostHandler,RedisHandler)
+    @UsePipe(NCSHistoryPipe,before=False)
     @PingService([CostService,RedisService])
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}', methods=[HTTPMethod.GET],)
-    async def get_receipts(self,credit:CostConstant.Credit, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for summary endpoint. Implement retrieval from DB/audit store when available."""
         receipt_key =  self.costService.receipts_key(credit)
-
-        return {"history": [], "detail": "not implemented"}
+        return await self.redisService.range(RedisConstant.LIMITER_DB,receipt_key,start,stop) or []
+        
