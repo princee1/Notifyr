@@ -202,8 +202,6 @@ services:
     restart: unless-stopped
     container_name: vault
     entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
-    ports:
-      - "8200:8200"
     environment:
       VAULT_ADDR: "http://vault:8200"
     secrets:
