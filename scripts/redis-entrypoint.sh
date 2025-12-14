@@ -41,7 +41,9 @@ if [ "$TO_LOAD_FUNC" = "true" ]; then
     su -s /bin/sh redis -c "redis-server --aclfile '$ACL_FILE' --appendonly yes --bind 127.0.0.1 --protected-mode yes" &    
     _REDIS_PID=$!
     
-    sleep 10
+    until redis-cli -u "$URL" PING > /dev/null 2>&1; do
+        sleep 0.5
+    done
 
     echo "[AUDIT] Loading Redis functions..."
     redis-cli -u "$URL" FUNCTION LOAD REPLACE "$(cat /functions/ncs-lib.lua)"
