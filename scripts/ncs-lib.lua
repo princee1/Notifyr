@@ -34,8 +34,8 @@ redis.register_function('credit_transaction', function(keys, args)
         definition = (op == "set" and "Set balance" or "Topup"),
         -- credit = credit_key,
         created_at = created_at,
-        purchase_total = 0
-        refund_total = value
+        purchase_total = 0,
+        refund_total = value,
         total = -value,
         balance_before = before,
         balance_after = after
