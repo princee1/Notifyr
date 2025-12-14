@@ -115,7 +115,7 @@ deploy-data:
 
 # 	# 5. Run Initial NCS Setup
 	@clear && echo "Waiting 30 sec for the vault to be unsealed..." & sleep 30
-	$(call COMPOSE_RUN, NCS Setup, run -e ALLOWED_HARD_RESET=on --rm , ncs /ncs-utils.sh reset-hard)
+	$(call COMPOSE_RUN, NCS Setup, run -e ALLOWED_INIT=on --rm , ncs /ncs-utils.sh initialize)
 	$(call COMPOSE_RUN, NCS Always On, up -d, ncs)
 	@echo "--- ✅ Initial NCS Setup (Hard Reset) complete."
 	@sleep 3 && clear

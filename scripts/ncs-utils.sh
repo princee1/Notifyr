@@ -162,11 +162,11 @@ reset_cost() {
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
 }
 
-# 3. reset-hard: SET for ALL keys in .credits
-reset_cost_hard() {
+# 3. initialize: SET for ALL keys in .credits
+init() {
     echo "🔥 HARD Resetting ALL credits in Redis DB $REDIS_DB from $COSTS_FILE"
 
-    local allowed=${ALLOWED_HARD_RESET:-off}
+    local allowed=${ALLOWED_INIT:-off}
 
     if [ "$allowed" != "on" ]; then
         echo "Resetting at this stage is not permitted... "
@@ -191,7 +191,7 @@ squash(){
 
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <command>" >&2
-    echo "  Commands: topup, reset, reset-hard, squash" >&2
+    echo "  Commands: topup, reset, initialize, squash" >&2
     exit 1
 fi
 
@@ -206,15 +206,15 @@ case "$COMMAND" in
     reset)
         reset_cost
         ;;
-    reset-hard)
-        reset_cost_hard
+    initialize)
+        init
         ;;
     squash)
         squash
         ;;
     *)
         echo "Error: Invalid command '$COMMAND'." >&2
-        echo "  Commands: topup, reset, reset-hard" >&2
+        echo "  Commands: topup, reset, initialize, squash" >&2
         # No need to exit 1 here, the trap will still run
         ;;
 esac

@@ -103,7 +103,7 @@ services:
       - data_net
       - vault_net
     environment:
-      - ALLOWED_HARD_RESET=off
+      - ALLOWED_INIT=off
       - VAULT_ADDR=http://vault:8200
       - REDIS_HOST=${REDIS_HOST:-redis}
     secrets:
