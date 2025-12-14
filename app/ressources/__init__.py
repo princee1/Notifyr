@@ -27,7 +27,7 @@ from .cost_ressource import CostRessource
 from .celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
 
-#from .push_notification_ressource import PushNotificationRessource
+#from .notification_ressource import NotificationRessource
 
 BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
                                                  EmailRessource,
