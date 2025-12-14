@@ -6,7 +6,7 @@ mkdir -p "$(dirname "$ACL_FILE")"
 
 USER_NAME="vaultadmin-redis"
 USER_PASS="${REDIS_ADMIN_PASSWORD:-changeme}"
-
+URL="redis://$USER_NAME:$USER_PASS@localhost:6379"
 
 TO_LOAD_FUNC="false"
 
@@ -38,25 +38,18 @@ fi
 
 if [ "$TO_LOAD_FUNC" = "true" ]; then
     echo "[AUDIT] Starting temporary Redis server..."
-    docker-entrypoint.sh redis-server \
-        --aclfile "$ACL_FILE" \
-        --appendonly yes \
-        --appendfsync everysec \
-        "$@" &
 
+    redis-server --aclfile "$ACL_FILE" --appendonly yes &    
     _REDIS_PID=$!
     
-    until redis-cli -a "$USER_PASS" -u "$USER_NAME" ping > /dev/null 2>&1; do
-        sleep 1
-    done
+    sleep 4
 
     echo "[AUDIT] Loading Redis functions..."
-    redis-cli -a "$USER_PASS" -u "$USER_NAME" FUNCTION LOAD REPLACE "$(cat /functions/credits-transc.lua)"
-    redis-cli -a "$USER_PASS" -u "$USER_NAME" FUNCTION LOAD REPLACE "$(cat /functions/bill-squash.lua)"
+    redis-cli -u "$URL" FUNCTION LOAD REPLACE "$(cat /functions/ncs.lua)"
     echo "[AUDIT] Functions loaded successfully."
 
     echo "[AUDIT] Shutting down temporary Redis server..."
-    kill "$_REDIS_PID"
+    redis-cli -u "$URL" SHUTDOWN SAVE
     wait "$_REDIS_PID"
     echo "[AUDIT] Redis server stopped."
 

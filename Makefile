@@ -113,11 +113,11 @@ deploy-data:
 	$(call COMPOSE_RUN, Vault Persistent, up -d, vault)
 	@sleep 3 && clear
 
-# 	# 5. Run Initial Credit Setup
+# 	# 5. Run Initial NCS Setup
 	@clear && echo "Waiting 30 sec for the vault to be unsealed..." & sleep 30
-	$(call COMPOSE_RUN, Credit Setup, run -e ALLOWED_HARD_RESET=on --rm , credit /credits-utils.sh reset-hard)
-	$(call COMPOSE_RUN, Credit Always On, up -d, credit)
-	@echo "--- ✅ Initial Credit Setup (Hard Reset) complete."
+	$(call COMPOSE_RUN, NCS Setup, run -e ALLOWED_HARD_RESET=on --rm , ncs /ncs-utils.sh reset-hard)
+	$(call COMPOSE_RUN, NCS Always On, up -d, ncs)
+	@echo "--- ✅ Initial NCS Setup (Hard Reset) complete."
 	@sleep 3 && clear
 	@echo "================================================="
 	@echo "✅ Data & Secrets Setup Complete"
@@ -195,12 +195,12 @@ refresh-cost:
 	$(call COMPOSE_RUN, Worker Update, up -d --build,worker)
 	@sleep 5 && clear
 
-	$(call COMPOSE_RUN, Credit Topup, run --rm, credit topup)
+	$(call COMPOSE_RUN, NCS Topup, run --rm, ncs /ncs-utils.sh topup)
 
 	$(call COMPOSE_RUN, Traefik Up, up -d, traeffik)
 
 	@echo "================================================="
-	@echo "✅ Cost File Refreshed and Credits Topped Up."
+	@echo "✅ Cost File Refreshed and NCSs Topped Up."
 	@echo "================================================="
 
 

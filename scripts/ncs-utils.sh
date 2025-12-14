@@ -107,31 +107,35 @@ transaction() {
         exit 1
     fi
 
-    local command="$1"          
+    local command="$1"
     local key_suffix="$2"
     local val="$3"
-    
+
     local credit_key="notifyr/credit:$key_suffix"
     local bill_key="notifyr/credit:$key_suffix@bill[$YEAR-$MONTH]"
 
     local redis_url="redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB"
-    
-    if [ [ "$command" = "incr" ] || [ "$command" = "set" ] ] ; then
-        redis-cli -u $redis_url FCALL notifyr.credit_transaction 2 \
-            $credit_key \
-            $bill_key \
-            $command \
-            $val \
-            "[NCS]:$(pwgen -s 25 1)" \
-            "$(date -Is)"
-        return
-    elif [ "$command" = "squash" ]; then
-        redis-cli -u $redis_url FCALL notifyr.bill_squash 1 $credit_key
-        return
-    else
-        echo "utils subcommand does no exists... $command"
-    fi        
+
+    case "$command" in
+        incr|set)
+            redis-cli -u "$redis_url" FCALL notifyr.credit_transaction 2 \
+                "$credit_key" \
+                "$bill_key" \
+                "$command" \
+                "$val" \
+                "[NCS]:$(pwgen -s 25 1)" \
+                "$(date -Is)"
+            ;;
+        squash)
+            redis-cli -u "$redis_url" FCALL notifyr.bill_squash 1 "$credit_key"
+            ;;
+        *)
+            echo "utils subcommand does not exist... $command" >&2
+            return 1
+            ;;
+    esac
 }
+
 
 
 

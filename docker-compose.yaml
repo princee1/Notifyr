@@ -91,14 +91,14 @@ services:
   # ==========================================
   # CREDIT LAYER
   # ==========================================
-  credit:
-    image: notifyr:credit
-    container_name: credit
+  ncs:
+    image: notifyr:ncs
+    container_name: notifyr-credit-system
     command: ["tail", "-f" ,"/dev/null"]
     restart: unless-stopped
     build:
       context: .
-      dockerfile: ./docker/Dockerfile.credit
+      dockerfile: ./docker/Dockerfile.ncs
     networks:
       - data_net
       - vault_net
@@ -320,8 +320,7 @@ services:
     volumes:
       - redis-data:/data
       - ./scripts/redis-entrypoint.sh:/entrypoint.sh
-      - ./scripts/credits-transc.lua:/functions/credits-transc.lua
-      - ./scripts/bill-squash.lua:/functions/bill-squash.lua    
+      - ./scripts/ncs-lib.lua:/functions/ncs-lib.lua
     networks:
       - data_net
 

@@ -10,7 +10,6 @@ COPY --from=builder /usr/bin/jq /usr/bin/jq
 COPY --from=builder /usr/bin/pwgen /usr/bin/pwgen
 COPY --from=redis-builder /usr/local/bin/redis-cli /usr/local/bin/redis-cli
 
-COPY ./scripts/credits-utils.sh /credits-utils.sh
-COPY ./scripts/receipt-squash.lua /receipt-squash.lua
+COPY ./scripts/ncs-utils.sh /ncs-utils.sh
 
 ENTRYPOINT [""]

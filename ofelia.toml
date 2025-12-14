@@ -1,12 +1,12 @@
 [job-exec "monthly_credit_topup"]
 schedule = "0 0 1 * *"
-container = "credit"
-command= "/credits-utils.sh topup"
+container = "notifyr-credit-system"
+command= "/ncs-utils.sh topup"
 
 [job-exec "weekly_squash"]
 schedule = "0 23 * * 1"
-container = "credit"
-command= "/credits-utils.sh squash"
+container = "notifyr-credit-system"
+command= "/ncs-utils.sh squash"
 
 [job-local "beat.twoweekly-restart"]
 schedule = "0 0 0 */14 * *"

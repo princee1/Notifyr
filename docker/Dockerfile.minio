@@ -104,7 +104,3 @@ COPY --chmod=700 ./scripts/minio-init.sh .
 RUN ./minio-init.sh
 
 COPY --chmod=700 ./scripts/minio-entrypoint.sh .
-
-#USER minio
-
-ENTRYPOINT ["./minio-entrypoint.sh"]
