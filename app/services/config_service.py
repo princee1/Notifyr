@@ -4,7 +4,7 @@ from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarningError
-from app.utils.constant import RedisConstant
+from app.utils.constant import RabbitMQConstant, RedisConstant
 from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
@@ -137,11 +137,12 @@ class ConfigService(_service.BaseService):
             pass
         return default
 
-    def normalize_assets_path(self,path:str,action:Literal['add','remove']='add')-> str:
+    def normalize_assets_path(self,path:str,action:Literal['add','remove']='add',root=False)-> str:
+        base = self.ASSETS_DIR if not root else f"{self.OBJECTS_DIR}{self.ASSETS_DIR}"
         if action == 'add':
-            return f"{self.ASSETS_DIR}{path}"
+            return f"{base}{path}"
         elif action == 'remove':
-            return path.removeprefix(self.ASSETS_DIR)
+            return path.removeprefix(base)
         return path
 
     def build(self,build_state=-1):
@@ -181,8 +182,10 @@ class ConfigService(_service.BaseService):
         self.USERNAME:str = self.getenv('USERNAME','notifyr')
 
         # DIRECTORY CONFIG #
+
         self.BASE_DIR:str = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
+        self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')
 
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
@@ -217,7 +220,7 @@ class ConfigService(_service.BaseService):
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
         # HASHI CORP VAULT CONFIG #
-
+        self.VAULT_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('VAULT_ACTIVATED','true'), True)
         self.VAULT_ADDR:str = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
 
         # MONGODB CONFIG #
@@ -238,7 +241,7 @@ class ConfigService(_service.BaseService):
         # CELERY CONFIG #
         self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','rabbitmq')
 
-        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672")
+        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672/{RabbitMQConstant.CELERY_VIRTUAL_HOST}")
         self.CELERY_BACKEND_URL:Callable[[str,str],str] = lambda u,p: self.getenv("CELERY_BACKEND_URL", f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
@@ -278,28 +281,28 @@ class ConfigService(_service.BaseService):
 
     def destroy(self,destroy_state=-1):
         return super().destroy()
-
-    def set_server_config(self, config):
-        self.server_config = ServerConfig(host=config.host, port=config.port,
-                                          reload=config.reload, workers=config.workers, log_level=config.log_level,
-                                          team=config.team)
-    
-    @property
-    def pool(self):
-        if self.server_config['team'] == 'solo':
-            return self.server_config['workers'] > 1
-        else:
-            return True
-
-
+        
 @_service.Service()
 class UvicornWorkerService(_service.BaseService):
 
     def __init__(self,configService:ConfigService):
         super().__init__()
         self.configService = configService
-            
-    def build(self, build_state = ...):
+    
+    def set_server_config(self, config):
+        self.server_config = ServerConfig(host=config.host, port=config.port,
+                                          reload=config.reload, workers=config.workers, log_level=config.log_level,
+                                          team=config.team)
 
-        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/app/"        
+    @property
+    def pool(self):
+        if self.server_config['team'] == 'solo':
+            return self.server_config['workers'] > 1
+        else:
+            return True
+     
+    def build(self, build_state = ...):
+        name = 'app' if self.configService._celery_env == CeleryMode.none else self.configService._celery_env.name
+
+        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/{name}/"        
         raise BuildOkError

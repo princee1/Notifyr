@@ -16,5 +16,8 @@ $RESP=(curl --header "X-Vault-Token: $X_VAULT_TOKEN" \
     --request POST \
     "http://localhost:8200/v1/notifyr-database/rotate-root/postgres")
 
+$RESP=(curl --header "X-Vault-Token: $X_VAULT_TOKEN" \
+    --request POST \
+    "http://localhost:8200/v1/notifyr-database/rotate-root/redis")
 
 echo "++++++++++++++++++++++++++++++++++  ++++++++++++++++++++++++++++++++++++++"

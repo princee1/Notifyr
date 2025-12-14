@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -10,6 +11,17 @@ import (
 
 	"github.com/joho/godotenv"
 )
+
+type Scaling struct {
+	App int8 `json:"app"`
+	Worker int8 `json:"worker"`
+	Balancer int8 `json:"balancer"`
+} 
+
+type DeployConfig struct {
+	Scaling Scaling `json:"scaling"`
+	Version string `json:"version"`	
+}
 
 var LOCAL_HOST = []string{"localhost", "127.0.0.1"}
 
@@ -58,7 +70,7 @@ func loadServer(envKey string, portStart int64, app_count int64, increment int64
 				_port_start = portStart
 			}
 			port := int(_port_start) + (i * int(increment))
-			s = fmt.Sprintf("%v://%v:%v", base_url.Scheme,base_url.Hostname(), port)
+			s = fmt.Sprintf("%v://%v:%v", base_url.Scheme, base_url.Hostname(), port)
 			servers = append(servers, s)
 		}
 
@@ -92,14 +104,35 @@ func loadServer(envKey string, portStart int64, app_count int64, increment int64
 	return servers
 }
 
+func generate_server_url(filepath string,port int) ([]string, error) {
+	content,err :=os.ReadFile(filepath)
+	if err!=nil {
+		return nil,err
+	}
+	var deploy DeployConfig
+	err = json.Unmarshal(content, &deploy)
+
+	if err != nil{
+		return nil,err
+	}
+	servers:= []string {}
+
+	var i int8
+	for i = 0; i < deploy.Scaling.App; i++ {
+		server := fmt.Sprintf("notifyr-app-%v",i+1)
+		url := fmt.Sprintf("http://%v:%v",server, port)
+		servers = append(servers,url)
+	} 
+	
+	return servers,nil
+}
+
 type ConfigService struct {
-	URLS           []string
-	api_key        string
-	PORT_START     int64
-	set            bool
-	addr           string
-	port_increment uint
-	app_count      int64
+	URLS         []string
+	NOTIFYR_PORT int64
+	set          bool
+	addr         string
+	exchangeTokenFilePath string
 }
 
 func (config *ConfigService) IsSet() bool {
@@ -115,14 +148,10 @@ func (config *ConfigService) Addr() string {
 }
 
 func (config *ConfigService) LoadEnv() {
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Printf("Error loading .env file: %v", err)
-	}
-
-	api_key, exists := os.LookupEnv("API_KEY")
-	if exists {
-		config.api_key = api_key
 	}
 
 	addr, exist := os.LookupEnv("ADDR")
@@ -132,20 +161,28 @@ func (config *ConfigService) LoadEnv() {
 		config.addr = "127.0.0.1:88"
 	}
 
-	config.PORT_START = parseInt("PORT_START", 8080)
+	deploy_file_path ,exist := os.LookupEnv("DEPLOY_FILE_PATH")
+	if ! exist {
+		log.Printf("No file deploy filepath was given: %v", err)
+		os.Exit(-1)
+	}
 
-	config.port_increment = uint(parseInt("PORT_INCREMENT", 1))
+	config.NOTIFYR_PORT = parseInt("NOTIFYR_PORT", 8080)
 
-	config.app_count = parseInt("APP_COUNT", -1)
+	urls, err := generate_server_url(deploy_file_path,int(config.NOTIFYR_PORT))
+	if err != nil {
+		log.Printf("No file deploy filepath was given: %v", err)
+		os.Exit(-1)
+	}
 
-	config.URLS = loadServer("NOTIFYR_URLS", config.PORT_START, config.app_count, int64(config.port_increment))
+	exchange_token_file, exist := os.LookupEnv("EXCHANGE_TOKEN_FILE_PATH")
+	if  !exist {
+		log.Printf("No exchange token filepath was given: %v", err)
+		os.Exit(-1)
+	}
+
+	config.exchangeTokenFilePath = exchange_token_file
+
+	config.URLS = urls
 	config.set = true
-}
-
-func (config *ConfigService) GetAppCount() int64 {
-	return config.app_count
-}
-
-func (config *ConfigService) VerifyAccessAuth(token string) bool {
-	return token == config.api_key
 }

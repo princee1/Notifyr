@@ -55,6 +55,7 @@ class HTTPHeaderConstant:
     X_PROCESS_PID = "X-Process-PID"
     X_PARENT_PROCESS_PID="X-Parent-Process-PID"
     X_REQUEST_ID='X-Request-ID'
+    X_BALANCER_EXCHANGE_TOKEN='X-Balancer-Exchange-Token'
 
 
 class CookieConstant:
@@ -224,29 +225,29 @@ DEFAULT_SETTING = {
 
 class VaultConstant:
 
-    SECRET_ID_FILE= 'secret-id.txt' 
-    ROLE_ID_FILE = 'role_id.txt' # in the secrets shared by the vault
+    SECRET_ID_FILE= 'app-secret-id.txt' 
+    ROLE_ID_FILE = 'app-role_id.txt' # in the secrets shared by the vault
     SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
     
 
     
     @staticmethod
     def VAULT_SECRET_DIR(file:str)->str:
-        return f'../../vault/secrets/{file}'
+        return f'/run/secrets/{file}'
 
     @staticmethod
     def VAULT_SHARED_DIR(file:str)->str:
-        return f'../../vault/shared/{file}'
+        return f'/vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal-api']
     TOKENS_SECRETS = 'tokens'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
     COMMUNICATION_SECRETS = 'communication'
     WEBHOOK_SECRETS = 'webhook'
     SETTINGS_SECRETS='setting'
-
+    INTERNAL_API_SECRETS='internal-api'
 
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
@@ -255,18 +256,20 @@ class VaultConstant:
     CHAT_KEY='chat-key'
     S3_REST_KEY='s3-rest-key'
 
-    NotifyrDynamicSecretsRole= Literal['postgres','mongo']
+    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis']
     MONGO_ROLE='mongo'
     POSTGRES_ROLE='postgres'
+    REDIS_ROLE='redis'
 
-    NotifyrMinioRole = Literal['static-minio','sts-minio']
+    NotifyrMinioRole = Literal['static','sts']
 
 
     NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
     NOTIFYR_TRANSIT_MOUNT_POINT = 'notifyr-transit'
     NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
     NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
-    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio-s3'
+    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio'
+    NOTIFYR_RABBITMQ_MOUNT_POINT='notifyr-rabbitmq'
 
 
     @staticmethod
@@ -304,7 +307,7 @@ class VaultTTLSyncConstant:
 class MinioConstant:
     STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
     ASSETS_BUCKET = 'assets'
-    STATIC_TEMPLATE = 'static'
+    STATIC_BUCKET = 'static'
     ENCRYPTED_KEY = 'encrypted'
     MINIO_EVENT='s3_object_events'
 
@@ -330,6 +333,8 @@ class CostConstant:
     PHONE_CREDIT='phone'
     PROFILE_CREDIT='profile'
     CLIENT_CREDIT='client'
+
+    Credit =Literal['email','sms','phone','profile','client']
     
 
     COST_KEY='cost'
@@ -356,3 +361,6 @@ class CostConstant:
     
 class CeleryConstant:
     REFRESH_PROFILE_WORKER_STATE_COMMAND='refresh_profile'
+
+class RabbitMQConstant:
+    CELERY_VIRTUAL_HOST='celery'

@@ -44,7 +44,8 @@ RSA_SIGNATURE_ALGORITHMS = ["pss", "pkcs1v15"]
 ECDSA_MARSHALING_ALGORITHMS = ["asn1", "jws"]
 RSA_PSS_SALT_LENGTHS = ["auto", "hash"]  # or an integer within allowed range
 
-ROLE_PREFIX= '-ntfr-role'
+ROLE_SUFFIX= '-ntfr-role'
+ROLE_PREFIX='app-'
 
 class VaultError(BaseError):
     ...
@@ -229,7 +230,7 @@ class TransitVaultEngine(VaultEngine):
 class DatabaseVaultEngine(VaultEngine):
 
     def generate_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole)->VaultDatabaseCredentials:
-        role+=ROLE_PREFIX
+        role=f"{ROLE_PREFIX}{role}{ROLE_SUFFIX}"        
         credentials = self.client.secrets.database.generate_credentials(
             name=role,
             mount_point=self.mount_point
@@ -237,15 +238,15 @@ class DatabaseVaultEngine(VaultEngine):
         return VaultDatabaseCredentials(**credentials)
     
 class MinioS3VaultEngine(VaultEngine):
+    
+    MINIO_ROLE_SUFFIX='-minio'
 
-
-    def generate_static_credentials(self,role_name='static-minio'):
-        role_name += ROLE_PREFIX
-        
+    def generate_static_credentials(self,role_name='static'):
+        role_name=f"{ROLE_PREFIX}{role_name}{self.MINIO_ROLE_SUFFIX}{ROLE_SUFFIX}"        
         return self.client.adapter.get(f"/v1/{self.mount_point}/creds/{role_name}")
     
-    def generate_sts_credentials(self,role_name:str='sts-minio',ttl_seconds=3600):
-        role_name += ROLE_PREFIX
+    def generate_sts_credentials(self,role_name:str='sts',ttl_seconds=3600):
+        role_name=f"{ROLE_PREFIX}{role_name}{self.MINIO_ROLE_SUFFIX}{ROLE_SUFFIX}"        
         ttl = {"ttl": f"{ttl_seconds}s"} if ttl_seconds and ttl_seconds >=120 else {}
 
         return self.client.adapter.post(f"/v1/{self.mount_point}/sts/{role_name}", json=ttl )
@@ -254,3 +255,9 @@ class AwsEngine(VaultEngine):
     """ AWS Vault Engine for generating dynamic AWS credentials.
     """
 
+
+class RabbitMQVaultEngine(VaultEngine):
+
+    def generate_credentials(self,role='celery-ntfr-role')->VaultDatabaseCredentials:
+        data= self.client.secrets.rabbitmq.generate_credentials(name=role,mount_point=self.mount_point)
+        return VaultDatabaseCredentials(**data)

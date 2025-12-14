@@ -1,0 +1,21 @@
+[job-exec "monthly_credit_topup"]
+schedule = "0 0 1 * *"
+container = "credit-system"
+command= "/ncs-utils.sh topup"
+
+[job-exec "weekly_squash"]
+schedule = "0 23 * * 1"
+container = "credit-system"
+command= "/ncs-utils.sh squash"
+
+[job-local "beat.twoweekly-restart"]
+schedule = "0 0 0 */14 * *"
+command = "/container-restart.sh beat" 
+
+[job-local "worker.twoweekly-restart"]
+schedule = "0 0 0 */14 * *"
+command = "/container-restart.sh worker" 
+
+[job-local "app.twoweekly-restart"]
+schedule = "0 0 0 */14 * *"
+command = "/container-restart.sh app" 

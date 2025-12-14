@@ -93,7 +93,7 @@ class EmailRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value="10/minutes")
     @UseRoles([Role.PUBLIC])
-    @UsePermission(permissions.JWTAssetPermission('email','html',accept_none_template=True))
+    @UsePermission(permissions.JWTAssetObjectPermission('email','html',accept_none_template=True))
     @UsePipe(pipes.FilterAllowedSchemaPipe,before=False)
     @UseServiceLock(AssetService,lockType='reader')
     @UsePipe(pipes.TemplateParamsPipe('email','html',True))
@@ -112,7 +112,7 @@ class EmailRessource(BaseHTTPRessource):
     @UseInterceptor(TaskCostInterceptor(),inject_meta=True)
     @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,CeleryService,AssetService,lockType='reader',check_status=False,as_manager =True)
-    @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetPermission('email'),permissions.JWTSignatureAssetPermission())
+    @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetObjectPermission('email'),permissions.JWTSignatureAssetPermission())
     @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.CostHandler,handlers.ContactsHandler(),handlers.ProfileHandler)
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard(),guards.CeleryBrokerGuard)

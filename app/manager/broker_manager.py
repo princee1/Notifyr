@@ -2,7 +2,7 @@ from typing import Any, Literal
 from fastapi import BackgroundTasks
 from app.container import Get
 from app.definition._service import BaseMiniServiceManager, MiniStateProtocol, ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.database_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.constant import SubConstant
@@ -18,6 +18,7 @@ class Broker:
         self.reactiveService:ReactiveService = Get(ReactiveService)
         self.redisService:RedisService = Get(RedisService)
         self.configService:ConfigService = Get(ConfigService)
+        self.uvicornWorkerService:UvicornWorkerService = Get(UvicornWorkerService)
         
         self.backgroundTasks = backgroundTasks
         self.request = request
@@ -26,7 +27,7 @@ class Broker:
     @Mock()
     def publish(self,channel:str,sid_type:SubjectType,subject_id:str, value:Any,state:Literal['next','complete']='next'):
 
-        if self.configService.pool:
+        if self.uvicornWorkerService.pool:
             subject = self.reactiveService[subject_id]
             if isinstance(value,Exception):
                 self.backgroundTasks.add_task(subject.on_error,value) 

@@ -10,12 +10,12 @@ COPY ./requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+ENV PATH="/home/notifyr/.local/bin:${PATH}"
+
+RUN uvicorn --version
+
 COPY ./gunicorn_main.py .
 
 COPY ./main.py .
 
 COPY ./app/ ./app/
-
-ENV PATH="/home/notifyr/.local/bin:${PATH}"
-
-RUN uvicorn --version

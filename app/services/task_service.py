@@ -17,7 +17,7 @@ from apscheduler.jobstores.base import JobLookupError
 
 # configuration
 LEADER_LOCK_KEY = "apscheduler:leader_lock"
-LEADER_LOCK_TTL = 10
+LEADER_LOCK_TTL = 300
 LEADER_RENEW_INTERVAL = 3.0 
 SCHEDULER_JOBSTORE_PREFIX = "apscheduler:"
 
@@ -50,7 +50,7 @@ class TaskService(BaseService,SchedulerInterface):
                 raise ServiceNotAvailableError()   
 
     def verify_dependency(self):
-        self._builded = True
+        #self._builded = True
         if not self.configService.APS_ACTIVATED:
             raise BuildOkError
 
@@ -61,6 +61,8 @@ class TaskService(BaseService,SchedulerInterface):
             self.fallback_to_memory = True
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
+        if self._builded:
+            self.shutdown(False)
         
         self.redis = self.redisService.db['celery']
         jobstores = {
@@ -104,15 +106,20 @@ class TaskService(BaseService,SchedulerInterface):
                         # became leader
                         self._leader = True
                         await self._start_scheduler()
+                    else:
+                        await self.redis.expire(LEADER_LOCK_KEY, LEADER_LOCK_TTL)
+                        
                 else:
                     val = await self.redis.get(LEADER_LOCK_KEY)
-                    if val is None or (val.decode() != self.uvicornWorkerService.INSTANCE_ID):
-                        # someone else took lock
-                        self._leader = False
-                        await self._stop_scheduler()
+                    if val is None:
+                        print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Somehow the no one has the lock... Attempting right away")
                         continue
-                    
-                    await self.redis.expire(LEADER_LOCK_KEY, LEADER_LOCK_TTL)
+                    if val.decode() != self.uvicornWorkerService.INSTANCE_ID:
+                        # someone else took lock
+                        await self._stop_scheduler()
+                        self._leader = False
+                    else:
+                        await self.redis.expire(LEADER_LOCK_KEY, LEADER_LOCK_TTL)
 
                 # if not leader, keep retrying every couple seconds
                 await asyncio.sleep(LEADER_LOCK_TTL * 1.20 + (randint(5,15)))
@@ -125,6 +132,7 @@ class TaskService(BaseService,SchedulerInterface):
         res = await self.redis.set(
             LEADER_LOCK_KEY, self.uvicornWorkerService.INSTANCE_ID, nx=True, ex=LEADER_LOCK_TTL
         )
+        
         return bool(res)
 
     async def _start_scheduler(self):

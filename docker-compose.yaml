@@ -1,140 +1,141 @@
+version: "3.8"
+
 services:
 
-  memcached:
-    image: memcached:latest
-    container_name: memcached
+  # ==========================================
+  # SCHEDULER
+  # ==========================================
+  ofelia:
+    image: mcuadros/ofelia:latest
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.ofelia
+    container_name: ofelia
+    network_mode: none
+    command: daemon --config=/etc/ofelia/config.toml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./ofelia.toml:/etc/ofelia/config.toml:ro
+    restart: unless-stopped
+  # ==========================================
+  # EDGE LAYER
+  # ==========================================
+  traefik:
+    image: traefik:v2
+    container_name: traefik
+    command:
+      - "--providers.docker=true"
+      - "--api.insecure=true"
+      - --log.level=INFO
+      - --providers.docker.exposedbydefault=false
+      - "--entrypoints.web.address=:80"
     ports:
-      - "11211:11211"
-    command: memcached -m 64 -vv
+      - "127.0.0.54:80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - edge_net
+      - app_net
     restart: unless-stopped
 
-  rabbitmq:
-    image: rabbitmq:3.13-alpine
-    container_name: rabbitmq
-    ports:
-      - "5672:5672"     # AMQP (used by Celery)
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+  dashboard:
+    image: notifyr:dashboard
+    container_name: dashboard
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.dashboard.rule=Host(`dashboard.notifyr.io`)"
+    networks:
+      - edge_net
+    secrets:
+      - source: dashboard_api_key
+        target: /run/secrets/dashboard_api_key.txt
 
-  redis:
-    image: redis:latest #Queue for the taks
-    container_name: redis
-    restart: always
-    ports:
-      - 6379:6379
-    volumes:
-      - redis-data:/data
-
-  reacherhq:
-    image: reacherhq/backend
-    container_name: reacherhq
-    ports:
-      - "8040:8040"
-
-  mongodb:
-    image: mongo:8.0-noble
-    container_name: mongodb
-    restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      MONGO_INITDB_DATABASE: notifyr
-      
-  postgres:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.postgres
-    image: postgres:15
-    container_name: postgres
-    restart: always
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: notifyr
-    
-  minio:
-    image: minio/minio:latest
-    container_name: minio
+  dmz:
+    image: notifyr:dmz
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.dmz.rule=Host(`notifyr.io`)"
+    networks:
+      - edge_net
+      - data_net
+      - vault_net
+    secrets:
+      - source: dmz_api_key
+        target: /run/secrets/dmz_api_key.txt
+      - source: dmz_role_id
+        target: /run/secrets/dmz_role_id.txt
+  
+  # ==========================================
+  # LOAD BALANCER LAYER
+  # ==========================================
+  balancer:
+    image: notifyr:balancer
     restart: unless-stopped
     build:
-      args:
-        - ASSETS_STORAGE_LIMIT=${ASSETS_STORAGE_LIMIT:-500MB}
-        - STATIC_STORAGE_LIMIT=${STATIC_STORAGE_LIMIT:-500MB}
-        - S3_MODE=dev
       context: .
-      dockerfile: docker/Dockerfile.minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+      dockerfile: docker/Dockerfile.balancer
+    secrets:
+      - source: balancer_exchange_token
+        target: /run/secrets/balancer-exchange-token.txt
     volumes:
-      - minio-data:/data
-      - minio-secret:/minio/secrets
+      - ./.notifyr/deploy.json:/var/deploy.json:ro
     environment:
-      - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
-      - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
-    
-    depends_on:
-      - redis
-    
-  vault:
+      - ADDR=0.0.0.0:8080
+      - DEPLOY_FILE_PATH=/var/deploy.json
+      - NOTIFYR_PORT=8088
+    networks:
+      - lb_net
+      - app_net #NOTE will change later when balancer are working
+
+  # ==========================================
+  # CREDIT LAYER
+  # ==========================================
+  ncs:
+    image: notifyr:ncs
+    container_name: credit-system
+    command: ["tail", "-f" ,"/dev/null"]
+    restart: unless-stopped
     build:
       context: .
-      dockerfile: ./docker/Dockerfile.vault
-      args:
-        - S3_CRED_TYPE=${S3_CRED_TYPE:-MINIO} #MINIO (minio plugin)  || AWS (aws engine)
-    container_name: vault
-    labels:
-      - com.docker.compose.service=vault
-    image: hashicorp/vault:latest
-    cap_add: ["IPC_LOCK"]
-    ports:
-      - "8200:8200"
+      dockerfile: ./docker/Dockerfile.ncs
+    networks:
+      - data_net
+      - vault_net
     environment:
-      VAULT_ADDR: "http://0.0.0.0:8200"
-      VAULT_CONTAINER_READY: "false"
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      AWS_VAULT_USER: set_user_in_container_start
-      AWS_VAULT_PASSWORD: set_password_in_container_start
-      S3_HOST: ${S3_HOST}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      MONGO_HOST: ${MONGO_HOST}
-    volumes:
-      - vault-data:/vault/data
-      - vault-shared:/vault/shared
-      - vault-secrets:/vault/secrets
-      - vault-audit:/vault/logs
-      - minio-secret:/minio/secrets:ro
+      - ALLOWED_INIT=off
+      - VAULT_ADDR=http://vault:8200
+      - REDIS_HOST=${REDIS_HOST:-redis}
+    secrets:
+      - source: costs
+        target: /run/secrets/costs.json
+      - source: credit_token
+        target: /run/secrets/credit_token.txt
 
-    depends_on:
-      - mongodb
- 
+  # ==========================================
+  # APP LAYER
+  # ==========================================
   app:
     image: notifyr:fastapi
-    #container_name: ntfyr-app
     labels:
       - "com.docker.compose.service=app"
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`api.notifyr.io`)"
+      - "traefik.http.routers.app.entrypoints=web"      
+      - "traefik.http.services.app.loadbalancer.server.port=8088"
+
     command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
-    #command: ['uvicorn', 'main:app', '--workers' ,'${WORKERS_COUNT}','--host','0.0.0.0','--port' ,'8088']
-    ports:
-      - 8088:8088
+    restart: unless-stopped
+    secrets:
+      # PRESERVED: Custom target paths
+      - source: app_role_id
+        target: /run/secrets/app-role_id.txt
+      - source: app_role_id
+        target: /run/secrets/api_key.txt
+      - source: costs
+        target: /run/secrets/costs.json
     volumes:
-      - ./costs.json:/run/secrets/costs:ro
       - vault-shared:/vault/shared:ro
-      - vault-secrets:/vault/secrets:ro
     build:
       context: ./
       dockerfile: Dockerfile
@@ -142,181 +143,280 @@ services:
       - MODE=prod
     env_file:
       - .env
-    depends_on:
-      - redis
-      - mongodb
+    networks:
+      - app_net
+      - data_net
+      - vault_net
 
-  balancer:
-    image: notifyr:balancer
-    #container_name: ntfyr-balancer
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.balancer
-    environment:
-      - ADDR=0.0.0.0:8088
-    env_file:
-      - ./balancer/.env
-    ports:
-      - 8080:8080
-
+  # ==========================================
+  # WORKER LAYER
+  # ==========================================
   worker:
     image: notifyr:celery
     command: ["./spawn_celery_worker.sh", "1", "false"]
+    secrets:
+      - source: app_role_id
+        target: /run/secrets/app-role_id.txt
+      - source: costs
+        target: /run/secrets/costs.json
     volumes:
       - vault-shared:/vault/shared
-      - vault-secrets:/vault/secrets
     restart: always
     environment:
       - MODE=prod
     env_file:
       - .env
-    depends_on:
-      - redis
-      # - beat
+    networks:
+      - data_net
+      - vault_net
 
   beat:
     image: notifyr:celery
     command: ["make", "redbeat"]
     container_name: beat
+    secrets:
+      - source: app_role_id
+        target: /run/secrets/app-role_id.txt
     volumes:
       - vault-shared:/vault/shared
-      - vault-secrets:/vault/secrets
-
     labels:
       - com.docker.compose.service=beat
     build:
       context: .
       dockerfile: docker/Dockerfile.celery
-    restart: always
+    restart: unless-stopped
     environment:
       - MODE=prod
     env_file:
       - .env
-    depends_on:
-      - redis
+    networks:
+      - data_net
+      - vault_net
 
-  flower:
-    image: notifyr:flower
-    command: ["make", "flower"]
-    #container_name: ntfyr-flower
-    # labels:
-    #   - com.docker.compose.servie=flower
+  # ==========================================
+  # SECURITY LAYER
+  # ==========================================
+  vault:
+    image: notifyr:vault
+    user: vaultuser
+    restart: unless-stopped
+    container_name: vault
+    entrypoint: ["/sbin/tini", "--","/usr/local/bin/vault-entrypoint.sh"]
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+    secrets:
+      - source: unseal_tokens
+        target: /run/secrets/unseal_key.json
+      - source: rotate_token
+        target: /run/secrets/rotate-token.txt
+    volumes:
+      - type: tmpfs
+        target: /run/secrets
+      - vault-data:/vault/data
+      - vault-shared:/vault/shared
+      - vault-audit:/vault/logs
+    networks:
+      - data_net
+      - vault_net
+
+  vault-init:
     build:
       context: .
-      dockerfile: docker/Dockerfile.celery
+      dockerfile: ./docker/Dockerfile.vault
+    container_name: vault-init
+    labels:
+      - com.docker.compose.service=vault
+    image: notifyr:vault
+    cap_add: ["IPC_LOCK"]
+    restart: on-failure
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MINIO_VAULT_PASSWORD: ${MINIO_VAULT_PASSWORD}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      AWS_VAULT_USER: set_user_in_container_start
+      AWS_VAULT_PASSWORD: set_password_in_container_start
+    volumes:
+      - vault-data:/vault/data
+      - vault-shared:/vault/shared
+      - vault-audit:/vault/logs
+    depends_on:
+      - mongodb
+      - rabbitmq
+      - minio
+      - redis
+      - memcached
+      - postgres
+    networks:
+      - data_net
+      - vault_net
+
+  # ==========================================
+  # DATA LAYER
+  # ==========================================
+  minio:
+    image: minio/minio:latest
+    container_name: minio
     restart: always
-    env_file:
-      - .env
+    entrypoint: ["./minio-entrypoint.sh"]
+    secrets: 
+      - source: minio_root
+        target: /run/secrets/config.json
+    build:
+      args:
+        - ASSETS_STORAGE_LIMIT=${ASSETS_STORAGE_LIMIT:-500MB}
+        - STATIC_STORAGE_LIMIT=${STATIC_STORAGE_LIMIT:-500MB}
+        - S3_MODE=dev
+      context: .
+      dockerfile: docker/Dockerfile.minio
+    volumes:
+      - minio-data:/data
+    environment:
+      - MINIO_VAULT_PASSWORD=${MINIO_VAULT_PASSWORD:-changeme}
+      - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
+      - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
     depends_on:
       - redis
-    ports:
-      - "5555:5555"
+    networks:
+      - data_net
 
-  neo4j:
-    image: neo4j:5.15
-    container_name: ntfyr-neo4j
+  memcached:
+    image: memcached:latest
+    container_name: memcached
+    command: memcached -m 64 -vv
     restart: unless-stopped
-    ports:
-      - "7687:7687"
-      - "7474:7474"
-    environment:
-      - NEO4J_AUTH=${NEO4J_AUTH}
-      - NEO4J_dbms_memory_heap_initial__size=512m
-      - NEO4J_dbms_memory_heap_max__size=1G
-      - NEO4J_dbms_memory_pagecache_size=512m
-      - NEO4J_dbms_default__database=${NEO4J_DATABASE}
+    networks:
+      - data_net
 
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-notifyr-user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-notifyrpass123}
+      RABBITMQ_DEFAULT_VHOST: celery
     volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-      - neo4j_conf:/conf
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - data_net
 
-  prometheus:
-    image: prom/prometheus
-    container_name: prometheus
+  redis:
+    image: redis:latest
+    container_name: redis
     restart: always
-    ports:
-      - "9090:9090"
+    entrypoint: ["/entrypoint.sh"]
+    environment:
+      - REDIS_ADMIN_PASSWORD=${REDIS_ADMIN_PASSWORD:-vaultpass}
+      - DEFAULT_USER=on
+      - SKIP_FIX_PERMS=1
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - redis-data:/data
+      - ./scripts/redis-entrypoint.sh:/entrypoint.sh
+      - ./scripts/ncs-lib.lua:/functions/ncs-lib.lua
+    networks:
+      - data_net
 
-  pgbouncer:
-    image: edoburu/pgbouncer
-    #container_name: ntfyr-pgbouncer
+  mongodb:
+    image: mongo:8.0-noble
+    container_name: mongodb
     restart: always
-    ports:
-      - "6432:6432" # PgBouncer listens on port 6432
     volumes:
-      - ./docker/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
-      - ./docker/userlist.txt:/etc/pgbouncer/userlist.txt
+      - mongo-data:/data/db
     environment:
-      - DB_HOST=ntfyr-postgres
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER}
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-    depends_on:
-      - postgres
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: notifyr
+    networks:
+      - data_net
 
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: pgadmin
+  postgres:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.postgres
+    image: postgres:15
+    container_name: postgres
     restart: always
-    hostname: pgadmin
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     environment:
-      PGADMIN_DEFAULT_EMAIL: test@test.com
-      PGADMIN_DEFAULT_PASSWORD: test
-    ports:
-      - "7070:7070"
-    depends_on:
-      - postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: notifyr
+    networks:
+      - data_net
 
-  redis-commander:
-    container_name: redis-commander
-    hostname: redis-commander
-    image: rediscommander/redis-commander:latest
-    restart: always
-    depends_on:
-      - redis
-    environment:
-      - REDIS_HOSTS=local:redis:6379
-    ports:
-      - 6060:6060
-      
 volumes:
   vault-data: {}
-  vault-shared: {} # holds secret_id
-  vault-secrets: {} # holds root_token/unseal_key (optional, only for admin access)
+  vault-shared: {}
   vault-audit: {}
-
   mongo-data:
     driver: local
-
   postgres-data:
     driver: local
-
-  assets-data:
-    driver: local
-
-  neo4j_data:
-  neo4j_logs:
-  neo4j_conf:
   redis-data:
     driver: local
-  
   minio-data: {}
-  minio-secret: {}
-
   rabbitmq_data:
 
 secrets:
-  approle_role_id:
-    file: ./bootstrap/role_id.txt # created after first container init
-
-  minio_root_user:
-    file: ./secrets/minio_root_user.txt
-  minio_root_password:
-    file: ./secrets/minio_root_password.txt
+  app_role_id:
+    file: ./.secrets/app-role_id.txt
+  minio_root:
+    file: ./.secrets/minio-root.json
+  dashboard_api_key:
+    file: ./.secrets/dashboard-api-key.txt
+  dmz_api_key:
+    file: ./.secrets/dmz-api-key.txt
+  balancer_exchange_token:
+    file: ./.secrets/balancer-exchange-token.txt
+  dmz_role_id:
+    file: ./.secrets/dmz-role_id.txt
+  rotate_token:
+    file: ./.secrets/rotate-token.txt
+  unseal_tokens:
+    file: ./.secrets/unseal_key.json
+  costs:
+    file: ./.notifyr/costs.json
+  api_key:
+    file: ./.secrets/api_key.txt
+  credit_token:
+    file: ./.secrets/credit_token.txt
 
 networks:
-  notifyr-net:
+  data_net:
+    internal: true
+    driver: bridge
+
+  vault_net:
+    driver: bridge
+
+  celery_net:
+    internal: true
+    driver: bridge
+
+  app_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.0.0/16
+          ip_range: 172.25.10.0/24
+          gateway: 172.25.0.1
+
+  lb_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.26.0.0/16
+          ip_range: 172.26.5.0/24
+          gateway: 172.26.0.1
+
+  edge_net:
     driver: bridge

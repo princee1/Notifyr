@@ -1,12 +1,12 @@
 from typing import Self, Type, List, Dict, Any, Optional, TypedDict
 from fastapi import Depends, Request
 from app.classes.auth_permission import FuncMetaData
-from app.classes.cost_definition import Receipt, ReceiptItem, SimpleTaskCostDefinition, TaskCostDefinition
+from app.classes.cost_definition import Bill, BillItem, SimpleTaskCostDefinition, TaskCostDefinition
 from app.container import Get
 from app.depends.class_dep import TrackerInterface
 from app.depends.dependencies import get_request_id
 from app.manager.task_manager import TaskManager
-from app.services.cost_service import CostService
+from app.services.cost_service import REDIS_CREDIT_KEY_BUILDER, CostService
 from app.utils.helper import PointerIterator
 from app.classes.celery import SchedulerModel
 from datetime import datetime
@@ -27,14 +27,14 @@ class Cost:
 
         self.balance_before: Optional[int] = None
         self.created_at: datetime = datetime.now()
-        self.purchase_items: List[ReceiptItem] = []
-        self.refund_items:List[ReceiptItem] = []
+        self.purchase_items: List[BillItem] = []
+        self.refund_items:List[BillItem] = []
 
         self.credit_key=...
         self.definition_name=None
         
     def purchase(self,description:str,amount:int,quantity=1):
-        item = ReceiptItem(description,amount,quantity)
+        item = BillItem(description,amount,quantity)
         self.purchase_items.append(item)
         self.purchase_cost += item.amount * item.quantity
 
@@ -46,14 +46,14 @@ class Cost:
         self.refund_cost = 0
     
     def refund(self,description:str,amount:int,quantity=1):
-        item = ReceiptItem(description,amount,quantity)
+        item = BillItem(description,amount,quantity)
         self.refund_items.append(item)
         self.refund_cost += item.subtotal
 
-    def generate_receipt(self)-> Receipt:
+    def generate_bill(self)-> Bill:
         return {
             "request_id": self.request_id,
-            "credit":self.credit_key,
+            #"credit":REDIS_CREDIT_KEY_BUILDER(self.credit_key),
             "definition": self.definition_name,
             "created_at": self.created_at.isoformat(),
             "p-items": [

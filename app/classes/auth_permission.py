@@ -23,6 +23,7 @@ EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
+    STATIC = 'STATIC'
     ADMIN = 'ADMIN'
     RELAY = 'RELAY'
     CUSTOM ='CUSTOM'
@@ -96,6 +97,7 @@ class AuthPermission(TypedDict):
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str] | AssetsPermission
     allowed_profiles:List[str]=[]
+    allowed_blogs: List[str] = []
     challenge: str
     scope:str
     salt:str
@@ -133,6 +135,7 @@ class PolicyModel(BaseModel):
     allowed_profiles:List[str]=[]
     allowed_routes: Dict[str, RoutePermissionModel] = {}
     allowed_assets: List[str] =[]
+    allowed_blog: List[str] = []
     roles: Optional[List[Role]] = [Role.PUBLIC]
 
     @field_validator('allowed_assets')

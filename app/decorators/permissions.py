@@ -1,4 +1,4 @@
-from fastapi import HTTPException,status
+from fastapi import HTTPException, Request,status
 from app.classes.celery import SchedulerModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.definition._cost import Cost
@@ -12,8 +12,10 @@ from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.cost_service import CostService
 from app.services.database_service import RedisService
+from app.services.secret_service import HCVaultService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
+from app.utils.constant import HTTPHeaderConstant
 from app.utils.helper import flatten_dict
 
  
@@ -74,7 +76,7 @@ class JWTRouteHTTPPermission(Permission):
         return True
     
 
-class JWTAssetPermission(Permission):
+class JWTAssetObjectPermission(Permission):
 
     def __init__(self,template_type:RouteAssetType=None,extension:str=None,model_keys:list[str]=[],options=[],accept_none_template:bool=False):
         #TODO Look for the scheduler object and the template
@@ -91,7 +93,6 @@ class JWTAssetPermission(Permission):
         if authPermission['client_type'] == ClientType.Admin:
             return True
         
-        filter_asset_permission(authPermission)
         template_type = self.template_type if template_type == None else template_type
 
         if template == '':
@@ -119,8 +120,18 @@ class JWTAssetPermission(Permission):
                                 
         return True
 
+class JWTStaticObjectPermission(Permission):
+        
+    def permission(self,authPermission:AuthPermission,blog:str):
+        if authPermission['client_type'] == ClientType.Admin:
+            return True
+        
+        if blog not in authPermission['allowed_blogs']:
+            return False
+        
+        return True
 
-class JWTSignatureAssetPermission(JWTAssetPermission):
+class JWTSignatureAssetPermission(JWTAssetObjectPermission):
 
     def __init__(self):
         super().__init__('email')
@@ -159,7 +170,6 @@ class JWTContactPermission(Permission):
         
         return True
     
-
 class JWTRefreshTokenPermission(Permission):
 
     def __init__(self,accept_inactive=False):
@@ -190,7 +200,7 @@ class JWTRefreshTokenPermission(Permission):
         
         return True
 
-class ClientTypePermission(Permission):
+class AbstractClientTypePermission(Permission):
 
     def __init__(self,client_type:ClientType,ensure=False):
         super().__init__()
@@ -208,19 +218,20 @@ class ClientTypePermission(Permission):
         if not authPermission['client_type'] == self.client_type.value:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client type is not {self.client_type.value}")
 
-        return True     
-class AdminPermission(ClientTypePermission):
+        return True
+   
+class AdminPermission(AbstractClientTypePermission):
     # only because theres 3 type of client otherwise there would be only the ClientTypePermission class
 
      def __init__(self, ensure=False):
         super().__init__(ClientType.Admin, ensure)
 
-class TwilioPermission(ClientTypePermission):
+class TwilioPermission(AbstractClientTypePermission):
 
     def __init__(self,ensure=False):
         super().__init__(ClientType.Twilio, ensure)
 
-class UserPermission(ClientTypePermission):
+class UserPermission(AbstractClientTypePermission):
 
     def __init__(self,ensure=False,accept_none_auth=False):
         super().__init__(ClientType.User, ensure)
@@ -241,7 +252,17 @@ async def same_client_authPermission(authPermission:AuthPermission, client:Clien
 
 class BalancerPermission(Permission):
     
-    def permission(self):
+    @InjectInMethod()
+    def __init__(self,securityService:SecurityService):
+        super().__init__()
+        self.securityService = securityService
+
+    def permission(self,request:Request):
+        if request.headers[HTTPHeaderConstant.X_BALANCER_EXCHANGE_TOKEN] != self.securityService.BALANCER_EXCHANGE_TOKEN:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='Balancer Not authorized'
+            )
         return True
 
 

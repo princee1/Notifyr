@@ -1,0 +1,17 @@
+{
+    "deployment_name": "Notifyr - Community Edition",
+    "tier":"Base",
+    "environment": "production",
+    "deployment_type": "docker-compose",
+    "version": "1.2.0",
+    "description": "Configuration for the high-availability, microservice architecture.",
+    "scaling": {
+        "app": 2,
+        "worker": 1,
+        "balancer": 1
+    },
+    "resource_limits": {
+        "cpu_limit": "500m",
+        "memory_limit": "512Mi"
+    }
+}

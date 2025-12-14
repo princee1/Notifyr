@@ -85,4 +85,5 @@ def generate_cache_type(_type:Type[C],prefix:str,sep="/",key_builder:Callable[..
     return ResCache
 
 
-MinioResponseCache=generate_cache_type(ObjectS3ResponseModel,'object',key_builder=key_setter)
+MinioResponseCache = generate_cache_type(ObjectS3ResponseModel,'object',key_builder=key_setter)
+BlogResponseCache = generate_cache_type(dict,'blog',)

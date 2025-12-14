@@ -184,6 +184,7 @@
         "contact": 1000,
         "client": 5,
         "profile": 10,
-        "link": 2
+        "link": 2,
+        "blog":20
     }
 }

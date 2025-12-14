@@ -66,7 +66,6 @@ def register_hook(state:Literal['shutdown','startup'],active=True):
 
 class Application(EventInterface):
 
-    # TODO if it important add other on_start_up and on_shutdown hooks
     def __init__(self,port:int=None,log_level:str=None,host:str=None):
         self.log_level = log_level
         self.host = host
@@ -76,7 +75,9 @@ class Application(EventInterface):
         self.configService: ConfigService = Get(ConfigService)
         self.costService: CostService = Get(CostService)
         
-        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
+        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,
+                           root_path=ROOT_PATH,version=VERSION,
+                           on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks,)
         self.app.state.limiter = self.costService.GlobalLimiter
 
         self.add_exception_handlers()
@@ -271,6 +272,21 @@ class Application(EventInterface):
             return 
         
         mongooseService.close_connection()
+
+    @register_hook('shutdown')
+    def revoke_dynamic_lease(self):
+        mongooseService: MongooseService = Get(MongooseService)
+        tortoiseConnService = Get(TortoiseConnectionService)
+        awsS3Service = Get(AmazonS3Service)
+        redisService = Get(RedisService)
+        vaultService = Get(HCVaultService)
+
+        mongooseService.revoke_lease()
+        tortoiseConnService.revoke_lease()
+        awsS3Service.revoke_lease()
+        redisService.revoke_lease()
+
+        vaultService.revoke_auth_token()
 
 
     @property
