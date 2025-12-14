@@ -19,7 +19,7 @@ class BillItem:
 
 class Bill(TypedDict):
     request_id: str
-    credit: Any
+    # credit: Any
     definition: Optional[str]
     created_at: str
     items: List[BillItem]

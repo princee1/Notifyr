@@ -49,7 +49,7 @@ class CostService(BaseService):
         @functools.wraps(func)
         async def wrapper(self:Self,credit_key:str,*args,**kwargs):
             credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
-            return await func(self,credit_key*args,**kwargs)
+            return await func(self,credit_key,*args,**kwargs)
         return wrapper
     
     def verify_dependency(self):

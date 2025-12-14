@@ -93,7 +93,7 @@ services:
   # ==========================================
   ncs:
     image: notifyr:ncs
-    container_name: notifyr-credit-system
+    container_name: credit-system
     command: ["tail", "-f" ,"/dev/null"]
     restart: unless-stopped
     build:

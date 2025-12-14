@@ -53,7 +53,7 @@ class Cost:
     def generate_bill(self)-> Bill:
         return {
             "request_id": self.request_id,
-            "credit":REDIS_CREDIT_KEY_BUILDER(self.credit_key),
+            #"credit":REDIS_CREDIT_KEY_BUILDER(self.credit_key),
             "definition": self.definition_name,
             "created_at": self.created_at.isoformat(),
             "p-items": [

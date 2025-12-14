@@ -137,7 +137,6 @@ deploy: deploy-data deploy-server
 
 tunnel:
 	@echo "🌐 Starting ngrok tunnel to ${ngrok_url}"
-	@sleep 5
 	ngrok http --url=${ngrok_url} http://api.notifyr.io:80
 
 prune:
@@ -208,7 +207,7 @@ update:
 	@echo "================================================="
 	@echo "💰 Removing old Notifyr container"
 	@echo "================================================="
-	$(call COMPOSE_RUN, build, app)
+	$(call COMPOSE_RUN, App Service, build, app)
 	$(call COMPOSE_SCALE,app)
 	$(call COMPOSE_RUN, Beat Service, up -d --build --no-deps, beat)
 	$(call COMPOSE_SCALE,worker)

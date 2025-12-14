@@ -32,9 +32,11 @@ redis.register_function('credit_transaction', function(keys, args)
     redis.call("LPUSH", bill_key, cjson.encode({
         request_id = request_id,
         definition = (op == "set" and "Set balance" or "Topup"),
-        credit = credit_key,
+        -- credit = credit_key,
         created_at = created_at,
-        amount = value,
+        purchase_total = 0
+        refund_total = value
+        total = -value,
         balance_before = before,
         balance_after = after
     }))
@@ -46,10 +48,23 @@ end)
 redis.register_function('bill_squash', function(keys, args)
 
     local bill_key = keys[1]
+    local credit_key = keys[2]
     local bills = redis.call("LRANGE", bill_key, 0, -1)
 
     if #bills == 0 then
-        return nil
+        local before = tonumber(redis.call("GET", credit_key) or "0")
+
+        local squashed = {
+            total_amount =0,
+            count = 0,
+            balance_before = before,
+            balance_after = before,
+            from = nil,
+            to = nil
+        }
+
+        redis.call("LPUSH", receipts, cjson.encode(squashed))
+        return squashed
     end
 
     local total = 0

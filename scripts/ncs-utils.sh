@@ -118,7 +118,7 @@ transaction() {
 
     case "$command" in
         incr|set)
-            redis-cli -u "$redis_url" FCALL notifyr.credit_transaction 2 \
+            redis-cli -u "$redis_url" FCALL credit_transaction 2 \
                 "$credit_key" \
                 "$bill_key" \
                 "$command" \
@@ -127,7 +127,7 @@ transaction() {
                 "$(date -Is)"
             ;;
         squash)
-            redis-cli -u "$redis_url" FCALL notifyr.bill_squash 1 "$credit_key"
+            redis-cli -u "$redis_url" FCALL bill_squash 2 "$bill_key" "$credit_key"
             ;;
         *)
             echo "utils subcommand does not exist... $command" >&2
