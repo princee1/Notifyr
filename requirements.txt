@@ -27,8 +27,6 @@ fastapi-cache2==0.2.2
 flower==2.0.1
 geopy==2.4.1
 git_clone==1.0.6
-# google_api_python_client==2.156.0
-# google_auth_oauthlib==1.2.1
 h11==0.14.0
 htmlmin==0.1.12
 httplib2==0.22.0
@@ -39,7 +37,6 @@ Jinja2==3.1.6
 langcodes==3.5.0
 lxml==5.3.1
 motor==3.7.1
-# msal==1.31.1
 minio==7.2.18
 ordered_set==4.1.0
 phonenumbers==8.13.43
@@ -61,7 +58,6 @@ qrcode==8.2
 reactivex==4.1.0
 redis==4.6.0
 Requests==2.32.5
-# rich==14.2.0
 slowapi==0.1.9
 starlette==0.50.0
 str2bool==1.1

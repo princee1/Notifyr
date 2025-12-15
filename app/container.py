@@ -1,5 +1,4 @@
 import asyncio
-from threading import Thread
 from aiorwlock import RWLock
 import injector
 from inspect import signature, getmro

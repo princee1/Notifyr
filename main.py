@@ -1,10 +1,10 @@
 from argparse import ArgumentParser
-from enum import Enum
 from app.utils.constant import RunModeConstant
 from app.utils.prettyprint import PrettyPrinter_
 import shutil
 import sys
 import warnings
+import gc
 
 warnings.filterwarnings("ignore",category=UserWarning,)
 
@@ -46,28 +46,27 @@ else:
 
 ########################################################################
 
-from app.container import build_container, Get
+from app.container import build_container
 build_container()
-
+gc.collect()
 ########################################################################
 
 from app.server.app_initialization import bootstrap_fastapi_server,initialize_config_service
 from app.services import ConfigService
 configService:ConfigService = initialize_config_service(args)
 
+gc.collect()
 ########################################################################
 
 
 # Main entry point
-
 PrettyPrinter_.show(1, print_stack=False)
 PrettyPrinter_.info('Starting applications...')
 PrettyPrinter_.space_line()
 
 if __name__ == '__main__':
     bootstrap_fastapi_server(args.port,args.log_level,args.host).start()
-    
 else:
-    app = bootstrap_fastapi_server().app
+    app = bootstrap_fastapi_server()
 
 ########################################################################

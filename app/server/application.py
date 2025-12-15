@@ -28,8 +28,8 @@ from app.interface.events import EventInterface
 import traceback
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
-from fastapi_cache.backends.inmemory import InMemoryBackend
-from fastapi_cache.backends.memcached import MemcachedBackend
+# from fastapi_cache.backends.inmemory import InMemoryBackend
+# from fastapi_cache.backends.memcached import MemcachedBackend
 
 from .app_meta import *
 from .middleware import MIDDLEWARE
