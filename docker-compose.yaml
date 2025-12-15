@@ -40,7 +40,7 @@ services:
     restart: unless-stopped
 
   dashboard:
-    image: notifyr:dashboard
+    image: notifyr/dashboard:community
     container_name: dashboard
     # labels:
     #   - "traefik.enable=true"
@@ -52,7 +52,7 @@ services:
         target: /run/secrets/dashboard_api_key.txt
 
   dmz:
-    image: notifyr:dmz
+    image: notifyr/dmz:community
     # labels:
     #   - "traefik.enable=true"
     #   - "traefik.http.routers.dmz.rule=Host(`notifyr.io`)"
@@ -70,7 +70,7 @@ services:
   # LOAD BALANCER LAYER
   # ==========================================
   balancer:
-    image: notifyr:balancer
+    image: notifyr/balancer:community
     restart: unless-stopped
     build:
       context: .
@@ -92,7 +92,7 @@ services:
   # CREDIT LAYER
   # ==========================================
   ncs:
-    image: notifyr:ncs
+    image: notifyr/ncs:community
     container_name: credit-system
     command: ["tail", "-f" ,"/dev/null"]
     restart: unless-stopped
@@ -116,7 +116,7 @@ services:
   # APP LAYER
   # ==========================================
   app:
-    image: notifyr:fastapi
+    image: notifyr/fastapi:community
     labels:
       - "com.docker.compose.service=app"
       - "traefik.enable=true"
@@ -152,7 +152,7 @@ services:
   # WORKER LAYER
   # ==========================================
   worker:
-    image: notifyr:celery
+    image: notifyr/celery:community
     command: ["./spawn_celery_worker.sh", "1", "false"]
     secrets:
       - source: app_role_id
@@ -171,7 +171,7 @@ services:
       - vault_net
 
   beat:
-    image: notifyr:celery
+    image: notifyr/celery:community
     command: ["make", "redbeat"]
     container_name: beat
     secrets:
@@ -197,7 +197,7 @@ services:
   # SECURITY LAYER
   # ==========================================
   vault:
-    image: notifyr:vault
+    image: notifyr/hashicorp-vault:community
     user: vaultuser
     restart: unless-stopped
     container_name: vault
@@ -226,7 +226,7 @@ services:
     container_name: vault-init
     labels:
       - com.docker.compose.service=vault
-    image: notifyr:vault
+    image: notifyr/hashicorp-vault:community
     cap_add: ["IPC_LOCK"]
     restart: on-failure
     environment:

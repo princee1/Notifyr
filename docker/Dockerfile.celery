@@ -19,7 +19,7 @@ https_pem:
 
 EOF
 
-FROM notifyr:fastapi
+FROM notifyr/fastapi:community
 
 RUN pip install gevent
 
