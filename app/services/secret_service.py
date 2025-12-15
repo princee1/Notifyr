@@ -82,7 +82,6 @@ class HCVaultService(BaseService,SchedulerInterface):
                 self.compute_next_tick_time()
 
             self.vault_approle_login(build_state)
-            print(self.client.token)
             self.read_tokens()
             self.interval_schedule(self.delay,self.refresh_token,tuple(),{},f'{self.name}-refresh_token')
 
