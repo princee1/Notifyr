@@ -14,6 +14,8 @@ from aiorwlock import RWLock
 from app.errors.service_error import *
 from typing import Generic, TypeVar
 
+from app.utils.tools import Mock, RunInThreadPool
+
 MiniServiceMeta: list[tuple[Type,Any]] = []
 LiaisonDependency: Dict[str,dict] = {}
 AbstractDependency: Dict[str, dict] = {}
@@ -160,6 +162,17 @@ class BaseService():
             raise MethodServiceNotAvailableError
 
     @staticmethod
+    def DynamicTaskContext(pref:Literal['async','sync']):
+        
+        def decorator(func:Callable):
+            if asyncio.iscoroutinefunction(func):
+                return func
+            
+            return RunInThreadPool(func) if pref == 'async' else func
+    
+        return decorator
+
+    @staticmethod
     def CheckStatusBeforeHand(func:Callable):
         
         @functools.wraps(func)
@@ -216,6 +229,7 @@ class BaseService():
     def __str__(self) -> str:
         return f"Service: {self.__class__.__name__} Hash: {self.__hash__()}"
 
+    @Mock()
     def report(self,state:Literal['destroy','build','variable']='build',variables:dict[str,Any]=None,reason:str=None, state_value:int=None):
         
         if self.name not in PROCESS_SERVICE_REPORT:

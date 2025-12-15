@@ -4,8 +4,10 @@ from typing import Optional
 from app.classes.celery import SchedulerModel, TaskType
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service, ServiceStatus
 from app.errors.aps_error import APSJobDoesNotExists
+from apscheduler.jobstores.redis import RedisJobStore
+from apscheduler.jobstores.mongodb import MongoDBJobStore
 from app.errors.service_error import BuildOkError, NotBuildedError, ServiceNotAvailableError
-from app.interface.timers import SchedulerInterface,RedisJobStore,MemoryJobStore,MongoDBJobStore
+from app.interface.timers import SchedulerInterface,MemoryJobStore
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.database_service import MongooseService, RedisService
 from app.services.logger_service import LoggerService

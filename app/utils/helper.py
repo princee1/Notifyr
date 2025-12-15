@@ -11,7 +11,6 @@ import urllib.parse
 from aiohttp_retry import Union
 from cachetools import Cache
 from fastapi import Response
-from namespace import Namespace
 from pydantic import BaseModel, ConfigDict, create_model
 from pydantic_core import PydanticUndefined
 from str2bool import str2bool

@@ -2,16 +2,17 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 from app.classes.auth_permission import Role
 from app.container import InjectInMethod
-from app.decorators.handlers import MiniServiceHandler, ServiceAvailabilityHandler, TwilioHandler
+from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler, TwilioHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.decorators.pipes import parse_phone_number
-from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.decorators.pipes import MiniServiceInjectorPipe, parse_phone_number
+from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.depends.dependencies import get_auth_permission
+from app.depends.funcs_dep import get_profile
 from app.depends.variables import parse_to_phone_format,carrier_info,callee_info
 from app.ressources.twilio.sms_ressource import SMSRessource
 from app.ressources.twilio.call_ressource import CallRessource
 from app.ressources.twilio.fax_ressource import FaxRessource
-from app.services.twilio_service import TwilioService, CallService
+from app.services.twilio_service import TwilioAccountMiniService, TwilioService, CallService
 from app.ressources.twilio.conversation_ressource import ConversationRessource
 
 
@@ -29,9 +30,12 @@ class TwilioRessource(BaseHTTPRessource):
     @PingService([TwilioService])
     @UseLimiter(limit_value= '1000/day')
     @UseRoles([Role.PUBLIC])
-    @BaseHTTPRessource.HTTPRoute('/balance/',methods=[HTTPMethod.GET])
-    def check_balance(self,request:Request,authPermission=Depends(get_auth_permission)):
-        ...
+    @UseHandler(AsyncIOHandler,ProfileHandler)
+    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'))
+    @UseServiceLock(TwilioService,as_manager=True)
+    @BaseHTTPRessource.HTTPRoute('/balance/{profile}/',methods=[HTTPMethod.GET])
+    async def check_balance(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],request:Request,authPermission=Depends(get_auth_permission)):
+        return await twilio.fetch_balance()
     
     @PingService([TwilioService])
     @UsePipe(parse_phone_number)
@@ -42,7 +46,7 @@ class TwilioRessource(BaseHTTPRessource):
         if not carrier and not callee:
             raise HTTPException(status_code=400,detail="At least one of carrier or callee must be true")
         
-        status_code, body = await self.twilioService.async_phone_lookup(phone_number,True,True)
+        status_code, body = await self.twilioService.phone_lookup(phone_number,True,True)
         if status_code != 200:
             raise HTTPException(status_code=status_code, detail=body)
         

@@ -17,6 +17,7 @@ from .database_service import MongooseService, RedisService
 from app.models.communication_model import  BaseProfileModel, ProfilModelValues
 from app.classes.profiles import ErrorProfileModel
 from typing import Generic, TypeVar
+from app.utils.tools import RunInThreadPool
 
 TModel = TypeVar("TModel",bound=BaseProfileModel)
 
@@ -67,7 +68,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
     async def async_create_profile(self):
         print('Template Profile Model:', TModel)
         self.model = await self.mongooseService.get(self.model.__class__,self.miniService_id)
-        self._read_encrypted_creds()
+        await RunInThreadPool(self._read_encrypted_creds)()
         
 
 
@@ -159,7 +160,7 @@ class ProfileService(BaseMiniServiceManager):
     async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False):
         profile_id = str(profileModel.id)
         result = await profileModel.delete()
-        self._delete_encrypted_creds(profile_id,profileModel._vault)
+        await self._delete_encrypted_creds(profile_id,profileModel._vault)
         return result
      
     async def update_profile(self,profileModel:BaseProfileModel,modelUpdate:BaseProfileModel):
@@ -171,12 +172,7 @@ class ProfileService(BaseMiniServiceManager):
                     setattr(profileModel,k,v)
                 except:
                     continue
-        
-    def update_credentials(self,profiles_id:str,creds:dict,vault_path:str):
-        current_creds:dict = self._read_encrypted_creds(profiles_id)
-        current_creds.update(creds)
-        self._put_encrypted_creds(profiles_id,current_creds,vault_path)
-
+   
     async def update_meta_profile(self,profile:BaseProfileModel):
         profile.last_modified =  datetime.utcnow().isoformat()
         profile.version+=1
@@ -199,9 +195,16 @@ class ProfileService(BaseMiniServiceManager):
         await self.mongooseService.delete_all(ErrorProfileModel,{'profile_id':profile_id})
     ########################################################       ################################
 
-    def _read_encrypted_creds(self,profile_id:str):
-        return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)
+    async def update_credentials(self,profiles_id:str,creds:dict,vault_path:str):
+        current_creds:dict = await self._read_encrypted_creds(profiles_id)
+        current_creds.update(creds)
+        await self._put_encrypted_creds(profiles_id,current_creds,vault_path)
 
+    @RunInThreadPool
+    def _read_encrypted_creds(self,profile_id:str):
+        return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)    
+
+    @RunInThreadPool
     def _put_encrypted_creds(self,profiles_id:str,data:dict,vault_path:str):
         data = flatten_dict(data,dict_sep='/',_key_builder=lambda x:x+'/')
         for k,v in data.items():
@@ -212,6 +215,7 @@ class ProfileService(BaseMiniServiceManager):
         
         return self.vaultService.secrets_engine.put(vault_path,data,profiles_id)
 
+    @RunInThreadPool
     def _delete_encrypted_creds(self,profiles_id:str,vault_path):
         return self.vaultService.secrets_engine.delete(vault_path,profiles_id)
     
