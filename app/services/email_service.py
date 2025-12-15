@@ -4,7 +4,7 @@ from app.definition import _service
 from app.models.communication_model import IMAPProfileModel, SMTPProfileModel
 from app.services.config_service import ConfigService
 from app.services.database_service import MongooseService, RedisService
-from app.services.email.api_email_service import EmailAPIService
+#efrom app.services.email.api_email_service import EmailAPIService
 from app.services.email.protocol_email_service import IMAPEmailMiniService, SMTPEmailMiniService
 from app.services.logger_service import LoggerService
 from app.services.profile_service import ProfileMiniService, ProfileService

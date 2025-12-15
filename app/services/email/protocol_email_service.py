@@ -1,30 +1,24 @@
 
-import asyncio
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import functools
-from random import randint
 import re
 import smtplib as smtp
 import imaplib as imap
-import poplib as pop
 import socket
-import traceback
-from typing import Callable, Iterable, Literal, Self, Type, TypedDict
+from typing import Callable, Literal, Self
 
 from bs4 import BeautifulSoup
 
 from app.classes.profiles import ProfileState,ProfileModelException
 from app.errors.service_error import BuildFailureError, BuildWarningError
-from app.interface.timers import IntervalInterface
 from app.models.communication_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
 from app.services.database_service import MongooseService, RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService
-from app.services.secret_service import HCVaultService
 from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
-from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
+#from app.classes.mail_oauth_access import OAuth, MailOAuthFactory
 from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, IMAPSearchFilter as Search, SMTPErrorCode, get_email_provider_name, get_error_description
 from app.utils.tools import Time,Mock
 
@@ -37,7 +31,6 @@ from ..config_service import CeleryMode, ConfigService
 import ssl
 
 from app.models.email_model import EmailStatus, EmailTrackingORM, TrackingEmailEventORM, map_smtp_error_to_status
-from app.utils.validation import email_validator
 
 from app.utils.constant import StreamConstant
 from email import message_from_bytes
@@ -56,7 +49,7 @@ class BaseEmailService(_service.BaseMiniService, ProfileEventInterface):
         ProfileEventInterface.__init__(self, redisService)
 
         self.hostPort: int
-        self.mailOAuth: OAuth = ...
+        #self.mailOAuth: OAuth = ...
         self.state = None
         self.connMethod = ...
         self.last_connectionTime: float = ...
@@ -194,6 +187,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
         ...
 
     def oauth_connect(self):
+        return
         params = {
             'client_id': self.configService.OAUTH_CLIENT_ID,
             'client_secret': self.configService.OAUTH_CLIENT_SECRET,

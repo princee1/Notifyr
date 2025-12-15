@@ -1,6 +1,5 @@
 import json
 from random import randint
-import traceback
 from minio.datatypes import Object
 from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
@@ -17,7 +16,7 @@ from app.utils.tools import RunInThreadPool
 from .config_service import AssetMode, CeleryMode, ConfigService, UvicornWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
-from .file_service import FileService, FTPService
+from .file_service import FileService
 from app.definition import _service
 from enum import Enum
 import os

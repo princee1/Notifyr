@@ -1,4 +1,4 @@
-import rich
+# import rich
 import os
 import colorama
 from colorama import Fore, Back, Style

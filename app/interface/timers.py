@@ -5,12 +5,7 @@ from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
-from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.jobstores.redis import RedisJobStore
 from apscheduler.jobstores.memory import MemoryJobStore
-from apscheduler.jobstores.mongodb import MongoDBJobStore
-from apscheduler.triggers.combining import AndTrigger
 from typing import Callable, Any, Literal, TypedDict
 import asyncio
 from app.definition._error import BaseError

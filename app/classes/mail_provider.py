@@ -3,8 +3,6 @@ import smtplib as smtp
 import imaplib as imap
 from enum import Enum
 from typing import Callable, Iterable, Literal, Optional, Self, overload
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 
 

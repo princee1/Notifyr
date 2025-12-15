@@ -13,7 +13,6 @@ from app.utils.constant import HTTPHeaderConstant
 from app.depends.dependencies import get_bearer_token
 from app.utils.helper import APIFilterInject
 
-import wrapt
 from pydantic import BaseModel
 from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict,Literal, get_args
 from app.utils.prettyprint import PrettyPrinter_

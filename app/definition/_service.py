@@ -14,7 +14,7 @@ from aiorwlock import RWLock
 from app.errors.service_error import *
 from typing import Generic, TypeVar
 
-from app.utils.tools import RunInThreadPool
+from app.utils.tools import Mock, RunInThreadPool
 
 MiniServiceMeta: list[tuple[Type,Any]] = []
 LiaisonDependency: Dict[str,dict] = {}
@@ -229,6 +229,7 @@ class BaseService():
     def __str__(self) -> str:
         return f"Service: {self.__class__.__name__} Hash: {self.__hash__()}"
 
+    @Mock()
     def report(self,state:Literal['destroy','build','variable']='build',variables:dict[str,Any]=None,reason:str=None, state_value:int=None):
         
         if self.name not in PROCESS_SERVICE_REPORT:
