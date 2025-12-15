@@ -13,6 +13,7 @@ from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant, RedisConstant
 from app.utils.prettyprint import printJSON
+from app.utils.tools import RunInThreadPool
 from .config_service import AssetMode, CeleryMode, ConfigService, UvicornWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
@@ -300,6 +301,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
                 raise _service.BuildFailureError('Amazon S3 Service not available')
 
     def read_asset_from_s3(self):
+        self._read_globals_s3()
 
         self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value))
@@ -488,11 +490,12 @@ class AssetService(_service.BaseService,SchedulerInterface):
         except AttributeError:
             raise AssetTypeNotFoundError
         return {key:value.schema for key,value in schemas.items() }
-            
-    def save_globals(self):
+
+    @RunInThreadPool      
+    async def save_globals(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
             data = self.globals.export()
-            self.amazonS3Service.upload_object('globals.json',data)
+            await self.amazonS3Service.upload_object('globals.json',data)
         else:
             self.globals.save()
     
