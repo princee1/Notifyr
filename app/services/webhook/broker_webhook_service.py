@@ -1,6 +1,6 @@
 import json
 from typing import Any
-from aiokafka import AIOKafkaProducer, abc
+from aiokafka import AIOKafkaProducer
 import aiobotocore as aiobotocore_session
 import boto3
 from confluent_kafka import Producer as SyncKafkaProducer

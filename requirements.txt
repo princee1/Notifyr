@@ -25,7 +25,6 @@ emoji==2.14.0
 fastapi==0.121.3
 fastapi-cache2==0.2.2
 flower==2.0.1
-geopy==2.4.1
 git_clone==1.0.6
 h11==0.14.0
 htmlmin==0.1.12
@@ -34,7 +33,6 @@ humanize==4.14.0
 hvac==2.4.0
 injector==0.21.0
 Jinja2==3.1.6
-langcodes==3.5.0
 lxml==5.3.1
 motor==3.7.1
 minio==7.2.18
@@ -47,7 +45,6 @@ psutil==7.0.0
 psycopg2_binary==2.9.10
 pydantic==2.10.6
 pydantic_core==2.27.2
-pyfiglet==0.7
 PyJWT==2.10.1
 PyJWT==2.10.1
 pymemcache==4.0.0

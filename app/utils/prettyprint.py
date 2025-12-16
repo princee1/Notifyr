@@ -1,173 +1,202 @@
-# import rich
 import os
 import colorama
 from colorama import Fore, Back, Style
-from colorama.ansi import clear_line, clear_screen, set_title
+from colorama.ansi import clear_line, set_title 
 import emoji
-from typing import Any, Callable, List, Literal
+from typing import Any, Callable, List, Literal, Optional, Dict
 import pprint
-import pyfiglet
 import time
-import sys
 from functools import wraps
 import datetime as dt
 
-
+# --- Type Aliases ---
 EmojiPosition = Literal['left', 'right', 'both', 'none']
+
 # Initialize colorama
 colorama.init(autoreset=True)
 
 pprinter = pprint.PrettyPrinter()
 
 ########################################################################
+custom_ascii_art = r"""
+███╗   ██╗ ██████╗ ████████╗██╗███████╗██╗   ██╗██████╗ 
+████╗  ██║██╔═══██╗╚══██╔══╝██║██╔════╝╚██╗ ██╔╝██╔══██╗
+██╔██╗ ██║██║   ██║   ██║   ██║█████╗    ╚████╔╝ ██████╔╝
+██║╚██╗██║██║   ██║   ██║   ██║██╔══╝      ╚██╔╝  ██╔══██╗
+██║ ╚████║╚██████╔╝   ██║   ██║██║          ██║   ██║  ██║
+╚═╝  ╚═══╝ ╚═════╝    ╚═╝   ╚═╝╚═╝          ╚═╝   ╚═╝  ╚═╝
 
-text = '<<<  N o t i f y r  App>>>'
-justify = 'left'
+ █████╗ ██████╗ ██████╗ 
+██╔══██╗██╔══██╗██╔══██╗
+███████║██████╔╝██████╔╝
+██╔══██║██╔═══╝ ██╔═══╝ 
+██║  ██║██║     ██║     
+╚═╝  ╚═╝╚═╝     ╚═╝     
 
-figlet = pyfiglet.Figlet(font='standard')
-ascii_art = figlet.renderText(text)
+<<< N o t i f y r   A p p >>>
+"""
 
-if justify == 'center':
-    ascii_art = '\n'.join(line.center(80) for line in ascii_art.splitlines())
-elif justify == 'right':
-    ascii_art = '\n'.join(line.rjust(80) for line in ascii_art.splitlines())
+justify = 'center'
+ascii_art = custom_ascii_art
+
+def justify_ascii_art(art: str, justify: str, width: int = 80) -> str:
+    lines = art.splitlines()
+    if justify == 'center':
+        return '\n'.join(line.center(width) for line in lines)
+    elif justify == 'right':
+        return '\n'.join(line.rjust(width) for line in lines)
+    return art # 'left' or 'none'
+
+ascii_art = justify_ascii_art(ascii_art, justify, width=80)
 
 
-def show(t=10, title='Communication - Service', t1=0, color=Fore.WHITE):
+def show(t: float = 10, title: str = 'Communication - Service', t1: float = 0, color: str = Fore.WHITE):
+    """
+    Displays the ASCII art title for a specified duration.
+    """
     time.sleep(t1)
     clearscreen()
     settitle(title)
-    base_print(ascii_art, color=color, emoji_code='')
+    base_print(ascii_art, color=color, emoji_code='', position='none') # position='none' is more appropriate for a banner
     time.sleep(t)
 
 
 class SkipInputException(Exception):
+    """Exception raised when an input is skipped."""
     ...
 
 ########################################################################
+# --- Utility Functions ---
+
+def settitle(title: str):
+    """Set the console window title."""
+    set_title(title)
 
 
-def settitle(tilte: str):
-    set_title(tilte)
-
-
-def clearline(): clear_line()
+def clearline(): 
+    """Clear the current line in the console."""
+    clear_line()
 
 
 def clearscreen():
+    """Clear the entire console screen."""
+    # Note: clear_screen() from colorama is often less reliable than os.system
     if os.name == 'nt':
-        os.system('cls')  # clear_screen()
+        os.system('cls')  
     else:
         os.system('clear')
 
 
-def base_message(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", position: EmojiPosition = 'both'):
+def base_message(message: str, color: str = Fore.WHITE, background: str = Back.RESET, emoji_code: str = ":speech_balloon:", position: EmojiPosition = 'both') -> str:
     """
-    Base function to return a personalized message with color and emoji.
+    Base function to return a personalized message string with color and emoji.
     """
-    is_emojized = emoji_code.startswith(':')
-    _emoji = emoji.emojize(emoji_code) if is_emojized else emoji_code
+    # Check if we are using an emojize shortcut (e.g., :smile:) or a direct character (e.g., \u2705)
+    is_emojized = emoji_code.startswith(':') and emoji_code.endswith(':')
+    _emoji = emoji.emojize(emoji_code, language='en') if is_emojized else emoji_code
+    
+    # Construct the message parts
+    left_emoji = _emoji + "  " if (position == "left" or position == "both") and _emoji else ""
+    right_emoji = "  " + _emoji if (position == "right" or position == "both") and _emoji else ""
 
-    return color + background + (_emoji + "  " if (position == "left" or position == "both") else "") + message + ("  "+_emoji if (position == "right" or position == "both") else "") + Style.RESET_ALL
+    return color + background + left_emoji + message + right_emoji + Style.RESET_ALL
 
 
-def base_print(message, color=Fore.WHITE, background=Back.RESET, emoji_code=":speech_balloon:", position: EmojiPosition = 'both'):
+def base_print(message: str, color: str = Fore.WHITE, background: str = Back.RESET, emoji_code: str = ":speech_balloon:", position: EmojiPosition = 'both'):
     """
     Base function to print a personalized message with color and emoji.
     """
     print(base_message(message, color, background, emoji_code, position))
 
+# --- Standard Print Functions ---
 
-def print_info(message, position: EmojiPosition = 'both'):
-    """
-    Print an info message.
-    """
-    base_print(message, color=Fore.BLUE,
-               emoji_code=":information:", position=position)
+def print_info(message: str, position: EmojiPosition = 'both'):
+    """Print an info message."""
+    base_print(message, color=Fore.BLUE, emoji_code=":information:", position=position)
 
 
-def print_message(message, position: EmojiPosition = 'both'):
-    base_print(message, color=Fore.WHITE,
-               emoji_code='\U0001F4AC', position=position)
+def print_message(message: str, position: EmojiPosition = 'both'):
+    """Print a general message."""
+    # Using the unicode character directly for consistency, or standard shortcut
+    base_print(message, color=Fore.WHITE, emoji_code='\U0001F4AC', position=position)
 
 
-def print_error(message, position: EmojiPosition = 'both'):
-    """
-    Print an error message.
-    """
-    base_print(message, color=Fore.RED, emoji_code="\u274C",
-               position=position)
+def print_error(message: str, position: EmojiPosition = 'both'):
+    """Print an error message."""
+    base_print(message, color=Fore.RED, emoji_code="\u274C", position=position)
 
 
-def print_warning(message, position: EmojiPosition = 'both'):
-    """
-    Print a warning message.
-    """
-    base_print(message, color=Fore.YELLOW,
-               emoji_code=":warning:", position=position)
+def print_warning(message: str, position: EmojiPosition = 'both'):
+    """Print a warning message."""
+    base_print(message, color=Fore.YELLOW, emoji_code=":warning:", position=position)
 
 
-def print_success(message, position: EmojiPosition = 'both'):
-    """
-    Print a success message.
-    """
-    base_print(message, color=Fore.GREEN, emoji_code="\u2705",
-               position=position)
+def print_success(message: str, position: EmojiPosition = 'both'):
+    """Print a success message."""
+    base_print(message, color=Fore.GREEN, emoji_code="\u2705", position=position)
 
 ########################################################################
+# --- Data Printing Functions ---
 
-
-def printJSON(content: dict | Any, indent=1, width=80, depth=None, compact=False,):
+def printJSON(content: Dict[str, Any] | Any, indent: int = 1, width: int = 80, depth: Optional[int] = None, compact: bool = False):
     """Pretty-print a Python object to a stream [default is sys.stdout]."""
-    pprint.pprint(content, indent=indent, width=width,
-                  depth=depth, compact=compact)
+    pprint.pprint(content, indent=indent, width=width, depth=depth, compact=compact)
 
 
+# Functions that were placeholders, kept as is
 def printBytes(): pass
-
-
 def printBytesArray(): pass
-
-
 def printDataClass(): pass
-
-
 def printTuple(): pass
 
 
 ########################################################################
+# --- PrettyPrinter Class ---
 
-def get_toggle_kwargs(key: str, kwargs: dict,):
-    if key not in kwargs:
-        return True
-    else:
-        return kwargs[key]
+def get_toggle_kwargs(key: str, kwargs: Dict[str, Any], default_value: bool = True) -> bool:
+    """Helper to safely extract a boolean toggle from kwargs."""
+    return kwargs.get(key, default_value)
 
 
 class PrettyPrinter:
-
+    
     @staticmethod
     def cache(func: Callable) -> Callable:
-
+        """Decorator to cache print calls into the buffer."""
         @wraps(func)
         def wrapper(*args, **kwargs):
+            # args[0] is 'self' instance
+            self: PrettyPrinter = args[0]
             saveable = get_toggle_kwargs('saveable', kwargs)
 
+            # Ensure 'show' is in kwargs for the cache logic (default True)
             if 'show' not in kwargs:
                 kwargs['show'] = True
 
-            self: PrettyPrinter = args[0]
             if saveable:
+                # Store a copy of the arguments/kwargs to be used later
                 kwargs_prime = kwargs.copy()
-                kwargs_prime['saveable'] = False
-                kwargs_prime['show'] = True
+                kwargs_prime['saveable'] = False # Prevent recursive caching
+                kwargs_prime['show'] = True # Always show when re-printing the stack
+                
+                # Filter out the 'self' argument from args for simpler replay
+                func_args_for_buffer = args[1:] 
+                
                 self.buffer.append(
-                    {'func': func, 'args': args, 'kwargs': kwargs_prime,'now':dt.datetime.now()})
+                    {'func': func, 
+                     'args': args, # store original args including self
+                     'kwargs': kwargs_prime, 
+                     'now': dt.datetime.now()
+                    }
+                )
+            
             return func(*args, **kwargs)
         return wrapper
 
     @staticmethod
     def if_show(func: Callable) -> Callable:
+        """Decorator to skip execution if 'show' is False in kwargs."""
+        @wraps(func)
         def wrapper(*args, **kwargs):
             show = get_toggle_kwargs('show', kwargs)
             if show:
@@ -177,14 +206,18 @@ class PrettyPrinter:
         return wrapper
 
     def __init__(self):
-        self.buffer: list[Callable] = []
-        self.quiet= False
+        """Initialize the buffer and quiet state."""
+        # The buffer stores Dicts, not just Callables, so the type hint is updated
+        self.buffer: List[Dict[str, Any]] = [] 
+        self.quiet: bool = False
 
+    # --- Print Methods (Decorated) ---
     @if_show
     @cache
     def warning(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
         if not self.quiet:
             print_warning(message, position)
+            
     @if_show
     @cache
     def error(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
@@ -211,12 +244,13 @@ class PrettyPrinter:
 
     @if_show
     @cache
-    def custom_message(self, message:str, color:str=Fore.WHITE, background:str=Back.RESET, emoji_code=":speech_balloon:", show=True, saveable=True, position: EmojiPosition = 'both'):
+    def custom_message(self, message:str, color:str=Fore.WHITE, background:str=Back.RESET, emoji_code:str=":speech_balloon:", show:bool=True, saveable:bool=True, position: EmojiPosition = 'both'):
         if not self.quiet:
             base_print(message, color, background, emoji_code, position)
+            
     @if_show
     @cache
-    def json(self, content:Any, indent=1, width=80, depth=None, compact=False, show:bool=True, saveable:bool=True,):
+    def json(self, content:Any, indent:int=1, width:int=80, depth:Optional[int]=None, compact:bool=False, show:bool=True, saveable:bool=True,):
         if not self.quiet:
             printJSON(content, indent, width, depth, compact)
 
@@ -226,78 +260,80 @@ class PrettyPrinter:
         if not self.quiet:
             print()
 
+    # --- Control Methods ---
     def clearScreen(self):
+        """Wrapper for clearscreen utility function."""
         clearscreen()
 
     def clearline(self):
-        clearline()
+        """Wrapper for clearline utility function."""
+        clear_line()
 
-    def show(self, pause_after=1, title='Communication - Service', pause_before=0, color=Fore.WHITE, clear_screen_after=False, print_stack=True, clear_stack=False, space_line=False):
+    def show(self, pause_after: float = 1, title: str = 'Communication - Service', pause_before: float = 0, color: str = Fore.WHITE, clear_screen_after: bool = False, print_stack: bool = True, clear_stack: bool = False, space_line: bool = False):
         """
         Display the ASCII art title and optionally print the stack buffer.
-
-        This function clears the screen, sets a title, displays ASCII art, and can print
-        the contents of the stack buffer. It also provides options for pausing, clearing
-        the stack, and adding space lines.
-
-        Parameters:
-        `pause_after` (float): Time to pause after displaying content (default: 1 second)
-        `title` (str): The title to set for the console window (default: 'Communication - Service')
-        `pause_before` (float): Time to pause before displaying content (default: 0 seconds)
-        `color` (str): The color to use for the ASCII art (default: Fore.WHITE)
-        `clear_screen_afte`r (bool): Whether to clear the screen after displaying (default: False)
-        `print_stack` (bool): Whether to print the contents of the stack buffer (default: True)
-        `clear_stack `(bool): Whether to clear the stack buffer after printing (default: False)
-        `space_line` (bool): Whether to add a space line after printing (default: False)
-
-        Returns:
-        None
         """
         time.sleep(pause_before)
         self.clearScreen()
         settitle(title)
-        base_print(ascii_art, color=color, emoji_code='')
-        if clear_stack:
-            self.clear_buffer()
+        # Use position='none' for the banner title
+        base_print(ascii_art, color=color, emoji_code='', position='none') 
+        
         if print_stack:
             self.print_stack_buffer()
+        
+        if clear_stack:
+            self.clear_buffer()
+            
         if space_line:
-            self.space_line()
+            self.space_line(saveable=False, show=True) # Not added to the cache
+
         time.sleep(pause_after)
+        
         if clear_screen_after:
             self.clearScreen()
 
     def print_stack_buffer(self):
+        """Replay all saved print calls in the buffer."""
         for item in self.buffer:
+            # Replay the function call with original args (including self) and modified kwargs
             item['func'](*item['args'], **item['kwargs'])
 
     def clear_buffer(self):
+        """Clear the cache buffer."""
         self.buffer = []
 
     def setLayout(self):
+        """Placeholder for layout function."""
         ...
 
     def wait(self, timeout: float, press_to_continue: bool = True):
+        """Wait for a timeout or a user input."""
         time.sleep(timeout)
         if press_to_continue:
-            self.warning('Press to continue', saveable=False, position='both')
+            # Pass saveable=False so this wait message isn't cached/reprinted
+            self.warning('Press Enter to continue...', saveable=False, position='both')
             try:
-                input('')
+                # Use standard input for non-cached interaction
+                input('') 
             except (KeyboardInterrupt, EOFError):
                 self.info(message='Exiting gracefully')
                 exit(0)
         clear_line()
 
-    def input(self, message: str, color=Fore.WHITE, emoji_code: str = '', position: EmojiPosition = 'none') -> None | str:
+    def input(self, message: str, color: str = Fore.WHITE, emoji_code: str = '', position: EmojiPosition = 'none') -> Optional[str]:
+        """Custom input function with color and emoji support."""
         try:
-            message = base_message(
-                message, color, emoji_code=emoji_code, position=position,)
-            return input(message)
+            # Generate the colored/emojized prompt string
+            prompt_message = base_message(message, color, emoji_code=emoji_code, position=position)
+            return input(prompt_message)
 
         except KeyboardInterrupt:
+            # Handle Ctrl+C
             return None
 
         except EOFError:
+            # Handle Ctrl+D (or equivalent)
             raise SkipInputException
 
 
@@ -305,12 +341,21 @@ PrettyPrinter_: PrettyPrinter = PrettyPrinter()
 
 
 def TemporaryPrint(func: Callable):
-
+    """
+    Decorator to wrap a function call with a screen-clear, 
+    show the banner, run the function, and then show the banner 
+    again with the restored stack.
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        PrettyPrinter_.show(print_stack=False)
+        # 1. Show banner without printing the cached stack
+        PrettyPrinter_.show(print_stack=False) 
+        
+        # 2. Execute the wrapped function
         result = func(*args, **kwargs)
-        PrettyPrinter_.show(print_stack=True)
+        
+        # 3. Show banner *with* the cached stack
+        PrettyPrinter_.show(print_stack=True) 
         return result
     return wrapper
 
