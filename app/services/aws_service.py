@@ -18,11 +18,10 @@ from app.utils.constant import MinioConstant, VaultTTLSyncConstant
 from app.utils.tools import RunInThreadPool
 from .config_service import  ConfigService
 from .file_service import BaseFileRetrieverService, FileService
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Dict
 from app.services.database_service import RedisService, TempCredentialsDatabaseService
-from aiobotocore import client
+#from aiobotocore import client
 
 class AmazonS3ServiceError(BaseError):
     pass

@@ -1,6 +1,5 @@
 from typing import TypedDict
 import psycopg2
-import asyncpg
 from pymongo import InsertOne, MongoClient
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.definition._error import BaseError
@@ -96,6 +95,7 @@ class PostgresWebhookMiniService(DBWebhookInterface):
             raise BuildWarningError("DatabaseError: Database rejected the connection:", e)
 
     async def start(self):
+        import asyncpg
         self.pool = await asyncpg.create_pool(dsn=self.url)
 
     async def close(self):
