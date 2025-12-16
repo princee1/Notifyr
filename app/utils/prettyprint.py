@@ -169,10 +169,7 @@ class PrettyPrinter:
                 kwargs_prime = kwargs.copy()
                 kwargs_prime['saveable'] = False # Prevent recursive caching
                 kwargs_prime['show'] = True # Always show when re-printing the stack
-                
-                # Filter out the 'self' argument from args for simpler replay
-                func_args_for_buffer = args[1:] 
-                
+                 
                 self.buffer.append(
                     {'func': func, 
                      'args': args, # store original args including self
@@ -205,31 +202,31 @@ class PrettyPrinter:
     # --- Print Methods (Decorated) ---
     @if_show
     @cache
-    def warning(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
+    def warning(self, message: str, show: bool = True, saveable: bool = False, position: EmojiPosition = 'both'):
         if not self.quiet:
             print_warning(message, position)
             
     @if_show
     @cache
-    def error(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
+    def error(self, message: str, show: bool = True, saveable: bool = False, position: EmojiPosition = 'both'):
         if not self.quiet:
             print_error(message, position)
 
     @if_show
     @cache
-    def message(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
+    def message(self, message: str, show: bool = True, saveable: bool = False, position: EmojiPosition = 'both'):
         if not self.quiet:
             print_message(message, position)
 
     @if_show
     @cache
-    def info(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
+    def info(self, message: str, show: bool = True, saveable: bool = False, position: EmojiPosition = 'both'):
         if not self.quiet:
             print_info(message, position)
 
     @if_show
     @cache
-    def success(self, message: str, show: bool = True, saveable: bool = True, position: EmojiPosition = 'both'):
+    def success(self, message: str, show: bool = True, saveable: bool = False, position: EmojiPosition = 'both'):
         if not self.quiet:
             print_success(message, position)
 
@@ -247,7 +244,7 @@ class PrettyPrinter:
 
     @if_show
     @cache
-    def space_line(self, show: bool = True, saveable: bool = True):
+    def space_line(self, show: bool = True, saveable: bool = False):
         if not self.quiet:
             print()
 
@@ -260,7 +257,7 @@ class PrettyPrinter:
         """Wrapper for clearline utility function."""
         clear_line()
 
-    def show(self, pause_after: float = 1, title: str = 'Communication - Service', pause_before: float = 0, color: str = Fore.WHITE, clear_screen_after: bool = False, print_stack: bool = True, clear_stack: bool = False, space_line: bool = False):
+    def show(self, pause_after: float = 1, title: str = 'Communication - Service', pause_before: float = 0, color: str = Fore.WHITE, clear_screen_after: bool = False, print_stack: bool = False, clear_stack: bool = True, space_line: bool = False):
         """
         Display the ASCII art title and optionally print the stack buffer.
         """
@@ -346,7 +343,7 @@ def TemporaryPrint(func: Callable):
         result = func(*args, **kwargs)
         
         # 3. Show banner *with* the cached stack
-        PrettyPrinter_.show(print_stack=True) 
+        PrettyPrinter_.show(print_stack=False) 
         return result
     return wrapper
 
