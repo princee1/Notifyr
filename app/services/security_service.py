@@ -1,10 +1,15 @@
 
+from cachetools import cached,TTLCache
 from typing import Any, Dict, Literal
 
 from app.classes.rsa import RSA
+from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._interface import Interface, IsInterface
+from app.errors.service_error import BuildWarningError
 from app.services.setting_service import SettingService
-from app.utils.tools import Time
+from app.utils.constant import VaultConstant
+from app.utils.fileIO import FDFlag
+from app.utils.tools import Cache, RunInThreadPool, Time
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
@@ -34,17 +39,23 @@ def generate_salt(length=64):
 @IsInterface
 class EncryptDecryptInterface(Interface):
 
+    def __init__(self,nonce:str):
+        self.nonce = nonce.encode()
+
     def _encode_value(self, value: str, key: bytes | str) -> str:
-        print(key)
+        key = key.encode()
         value = base64.b64encode(value.encode()).decode()
-        cipher_suite = Fernet(key)
-        return cipher_suite.encrypt(value.encode()).decode()
+        cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
+        return cipher.cipher_data.decode()
 
     @Time
     def _decode_value(self, value: str, key: bytes | str) -> str:
-        cipher_suite = Fernet(key)
-        value = cipher_suite.decrypt(value.encode())
+        key = key.encode()
+        cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
+        cipher.cipher_data = value
+        value = cipher.to_plain()
         return base64.b64decode(value).decode()
+    
 
     @property
     def salt(self):
@@ -55,9 +66,11 @@ class EncryptDecryptInterface(Interface):
 class JWTAuthService(BaseService, EncryptDecryptInterface):
     GENERATION_ID_LEN = 32
     gen_id_path='generation-id'
+    NONCE="1234567891234578"
 
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
+        EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
         self.fileService = fileService
         self.settingService = settingService
@@ -136,6 +149,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY)
         return token
 
+    @cached(TTLCache(50,60*60*3))
     def _decode_token(self, token: str, secret_key: str = None) -> dict:
         try:
             if secret_key == None:
@@ -236,13 +250,15 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         data=self.vaultService.generation_engine.read('',self.gen_id_path)
         self.generation_id_data = data
 
+    @RunInThreadPool
     def revoke_all_tokens(self) -> None:
         new_generation_id = generateId(self.GENERATION_ID_LEN)
         self.vaultService.generation_engine.put('',{
             'GENERATION_ID':new_generation_id,
         },path=self.gen_id_path)
         self.read_generation_id()
-        
+    
+    @RunInThreadPool
     def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool,version_to_delete:list[int]=[]):
         self.vaultService.generation_engine.rollback('',self.gen_id_path,version,destroy,delete,version_to_delete)
         self.read_generation_id()
@@ -266,42 +282,48 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
 @Service()
 class SecurityService(BaseService, EncryptDecryptInterface):
+    NONCE="1234567891234578"
 
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
         super().__init__()
+        EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
         self.fileService = fileService
         self.settingService= settingService
         self.vaultService = vaultService
 
-    def verify_server_access(self, token: str, sent_ip_addr) -> bool:
-        token = self._decode_value(token, self.vaultService.API_ENCRYPT_TOKEN)
-        token = token.split("|")
+        self.API_KEY:str = ...
 
-        if len(token) != 3:
-            return False
-        ip_addr = token[0]
+    def verify_server_access(self, token: str) -> bool:
+        if not self.API_KEY:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Could not retrieve the api key')
 
-        if ip_addr != sent_ip_addr:
-            return False
-
-        if time.time() - float(token[1]) > self.settingService.API_EXPIRATION:
-            return False
-
-        if token[2] != self.configService.API_KEY:
-            return False
-
-        return True
+        if token != self.API_KEY:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Api Key provided does not match the one given")
 
     def generate_custom_api_key(self, ip_address: str):
+        raise NotImplementedError
         time.sleep(random()/100)
         data = ip_address + SEPARATOR +  \
             str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
         return self._encode_value(data, self.vaultService.API_ENCRYPT_TOKEN)
 
     def build(self,build_state=-1):
-        ...
+        api_key = self.fileService.readFile('/run/secrets/api_key.txt',flag=FDFlag.READ)
 
+        if api_key == None:
+            raise BuildWarningError()
+        
+        self.API_KEY = api_key
+        try:
+            self.DMZ_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DMZ')['API_KEY']
+            self.BALANCER_EXCHANGE_TOKEN=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'BALANCER')['API_KEY']
+            self.DASHBOARD_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DASHBOARD')['API_KEY']
+        except Exception as e:
+            print(e)
+            raise BuildWarningError()
+
+        
     def hash_value_with_salt(self, value, key, salt):
         value_with_salt = value.encode() + salt
         hmac_obj = hmac.new(key.encode(), value_with_salt, hashlib.sha256)
@@ -331,6 +353,3 @@ class SecurityService(BaseService, EncryptDecryptInterface):
     def generate_rsa_from_encrypted_keys(self,private_key=None,public_key=None):
         rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
         return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
-
-        
-    

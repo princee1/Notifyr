@@ -14,6 +14,8 @@ from aiorwlock import RWLock
 from app.errors.service_error import *
 from typing import Generic, TypeVar
 
+from app.utils.tools import Mock, RunInThreadPool
+
 MiniServiceMeta: list[tuple[Type,Any]] = []
 LiaisonDependency: Dict[str,dict] = {}
 AbstractDependency: Dict[str, dict] = {}
@@ -160,6 +162,17 @@ class BaseService():
             raise MethodServiceNotAvailableError
 
     @staticmethod
+    def DynamicTaskContext(pref:Literal['async','sync']):
+        
+        def decorator(func:Callable):
+            if asyncio.iscoroutinefunction(func):
+                return func
+            
+            return RunInThreadPool(func) if pref == 'async' else func
+    
+        return decorator
+
+    @staticmethod
     def CheckStatusBeforeHand(func:Callable):
         
         @functools.wraps(func)
@@ -194,7 +207,7 @@ class BaseService():
         """
         self.method_not_available = set()
         
-    async def async_pingService(self,infinite_wait:bool,**kwargs):
+    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
         ...
     
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
@@ -216,6 +229,7 @@ class BaseService():
     def __str__(self) -> str:
         return f"Service: {self.__class__.__name__} Hash: {self.__hash__()}"
 
+    @Mock()
     def report(self,state:Literal['destroy','build','variable']='build',variables:dict[str,Any]=None,reason:str=None, state_value:int=None):
         
         if self.name not in PROCESS_SERVICE_REPORT:
@@ -489,12 +503,12 @@ class BaseMiniServiceManager(BaseService):
             raise BuildSkipError
         
     
-    async def async_pingService(self,infinite_wait:bool,**kwargs):
-        if not kwargs.get('__is_manager__',False):
+    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
+        if not as_manager:
             return
         mss:MiniServiceStore[BaseMiniService] = self.MiniServiceStore
-        p = mss.get(kwargs.get('__profile__',None))
-        return await BaseService.CheckStatusBeforeHand(p.async_pingService)(p,infinite_wait,**kwargs)
+        p = mss.get(profile)
+        return await BaseService.CheckStatusBeforeHand(p.pingService)(p,infinite_wait,data,profile,as_manager,**kwargs)
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)

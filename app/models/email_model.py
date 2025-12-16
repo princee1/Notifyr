@@ -158,6 +158,13 @@ class BaseEmailSchedulerModel(SchedulerModel):
     signature:Optional[EmailSignatureModel] = None
     _signature:Tuple[str,str] = PrivateAttr(None)
 
+    @field_validator('signature')
+    def update_signature(cls,signature:EmailSignatureModel|None):
+        if signature != None:
+            signature.template = "signature/" + signature.template
+        
+        return signature
+
 class EmailTemplateSchedulerModel(BaseEmailSchedulerModel):
     content: EmailTemplateModel | list[EmailTemplateModel]
 

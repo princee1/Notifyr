@@ -1,22 +1,21 @@
-from dataclasses import dataclass
 from random import randint
-from typing import Annotated, Any, List, Optional
+from typing import Annotated
 from fastapi import Depends, Query, Request, HTTPException, Response, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard, PolicyGuard
 from app.decorators.interceptors import DataCostInterceptor
 from app.definition._service import StateProtocol
-from app.depends.class_dep import Broker
 from app.depends.funcs_dep import GetPolicy, get_blacklist, get_group, get_client
 from app.depends.orm_cache import WILDCARD, AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache, PolicyORMCache
 from app.interface.issue_auth import IssueAuthInterface
+from app.manager.broker_manager import Broker
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.database_service import TortoiseConnectionService
 from app.services.profile_service import ProfileService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
-from app.services.task_service import CeleryService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant, CostConstant
@@ -25,14 +24,12 @@ from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthType, PolicyModel, PolicyUpdateMode, Role, Scope
-from pydantic import BaseModel,  field_validator
 from app.decorators.handlers import AsyncIOHandler, CostHandler, ORMCacheHandler, PydanticHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe, ObjectRelationalFriendlyPipe
-from app.utils.helper import filter_paths, parseToBool
+from app.utils.helper import  parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
-from slowapi.util import get_remote_address
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
-from datetime import datetime, timedelta
+from datetime import timedelta
 from tortoise.transactions import in_transaction
 from app.depends.variables import policy_update_mode_query
 from tortoise.expressions import Q
@@ -40,14 +37,7 @@ from tortoise.expressions import Q
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
 
-class UnRevokeGenerationIDModel(BaseModel):
-    version:int|None = None
-    destroy:bool = False
-    delete:bool = False
-    version_to_delete:list[int] = []
 
-
-get_policy = GetPolicy(False)
 
 @PingService([TortoiseConnectionService],infinite_wait=True)
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
@@ -56,7 +46,8 @@ get_policy = GetPolicy(False)
 @UseHandler(ServiceAvailabilityHandler,TortoiseHandler,AsyncIOHandler)
 @HTTPRessource('policy')
 class PolicyRessource(BaseHTTPRessource):
-
+    get_policy = GetPolicy(False)
+    
     @InjectInMethod()
     def __init__(self,adminService:AdminService):
         super().__init__()
@@ -378,6 +369,13 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 @HTTPRessource(ADMIN_PREFIX, routers=[ClientRessource,PolicyRessource])
 class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
+    class UnRevokeGenerationIDModel(BaseModel):
+        version:int|None = None
+        destroy:bool = False
+        delete:bool = False
+        version_to_delete:list[int] = []
+
+
     @InjectInMethod()
     def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService):
         BaseHTTPRessource.__init__(self)
@@ -385,7 +383,6 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         self.configService = configService
         self.jwtAuthService = jwtAuthService
         self.securityService = securityService
-        self.celeryService: CeleryService = Get(CeleryService)
 
     @UseLimiter(limit_value='20/week')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
@@ -434,7 +431,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseServiceLock(JWTAuthService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
-        self.jwtAuthService.revoke_all_tokens()
+        await self.jwtAuthService.revoke_all_tokens()
 
         broker.propagate_state(StateProtocol(
             service=self.jwtAuthService.name,
@@ -460,7 +457,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
     async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):   
         unRevokeModel = unRevokeModel.model_dump()
-        self.jwtAuthService.unrevoke_all_tokens(**unRevokeModel)
+        await self.jwtAuthService.unrevoke_all_tokens(**unRevokeModel)
         
         broker.propagate_state(StateProtocol(
             service=self.jwtAuthService.name,

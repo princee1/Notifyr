@@ -1,30 +1,24 @@
 
-import asyncio
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import functools
-from random import randint
 import re
 import smtplib as smtp
 import imaplib as imap
-import poplib as pop
 import socket
-import traceback
-from typing import Callable, Iterable, Literal, Self, Type, TypedDict
+from typing import Callable, Literal, Self
 
 from bs4 import BeautifulSoup
 
 from app.classes.profiles import ProfileState,ProfileModelException
 from app.errors.service_error import BuildFailureError, BuildWarningError
-from app.interface.timers import IntervalInterface
 from app.models.communication_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
 from app.services.database_service import MongooseService, RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService
-from app.services.secret_service import HCVaultService
 from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
-from app.classes.mail_oauth_access import OAuth, MailOAuthFactory, OAuthFlow
+#from app.classes.mail_oauth_access import OAuth, MailOAuthFactory
 from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, IMAPSearchFilter as Search, SMTPErrorCode, get_email_provider_name, get_error_description
 from app.utils.tools import Time,Mock
 
@@ -37,26 +31,25 @@ from ..config_service import CeleryMode, ConfigService
 import ssl
 
 from app.models.email_model import EmailStatus, EmailTrackingORM, TrackingEmailEventORM, map_smtp_error_to_status
-from app.utils.validation import email_validator
 
 from app.utils.constant import StreamConstant
 from email import message_from_bytes
-from app.interface.redis_event import RedisEventInterface
+from app.interface.profile_event import ProfileEventInterface
 from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface
 
 
 
-class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
+class BaseEmailService(_service.BaseMiniService, ProfileEventInterface):
 
     def __init__(self, configService: ConfigService, loggerService: LoggerService, redisService: RedisService,profileMiniService:ProfileMiniService[ProtocolProfileModel]):
         self.depService = profileMiniService
         super().__init__(depService=profileMiniService,id=None)
         self.configService: ConfigService = configService
         self.loggerService: LoggerService = loggerService
-        RedisEventInterface.__init__(self, redisService)
+        ProfileEventInterface.__init__(self, redisService)
 
         self.hostPort: int
-        self.mailOAuth: OAuth = ...
+        #self.mailOAuth: OAuth = ...
         self.state = None
         self.connMethod = ...
         self.last_connectionTime: float = ...
@@ -66,80 +59,38 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
 
         self.auth_method:Literal['password','oauth'] = ...
         self.type_: Literal['IMAP', 'SMTP'] = None
-
+    
     @staticmethod
-    def task_lifecycle(pref: Literal['async', 'sync'] = None, async_callback: Callable = None, sync_callback: Callable = None,build:bool =False):
+    def Lifecycle(pref: Literal['async', 'sync'] = None,build:bool =False):
 
-        def callback(func: Callable):
+        if ConfigService._celery_env != CeleryMode.none:
+            pref = 'sync'
+        elif pref == None:
+            pref = 'async'
+        else:
+            ...
+        
+        def decorator(func:Callable):
 
+            @_service.BaseMiniService.DynamicTaskContext(pref)
             @functools.wraps(func)
-            async def async_wrapper(*args, **kwargs):
-                
-                self: BaseEmailService = args[0]
-                try:
-                    connector = self.connect(build)
-                    if connector == None:
-                        return
+            def wrapper(*args,**kwargs):
+                self: Self = args[0]
+                connector = self.connect(build)
+                if connector == None:
+                    return
 
-                    if not self.authenticate(connector,build):
-                        return
-                
-                    kwargs['connector'] = connector
+                if not self.authenticate(connector,build):
+                    return
+            
+                kwargs['connector'] = connector
+                result = func(*args, **kwargs)
+                self.logout(connector,build)
+                return result
 
-                    if asyncio.iscoroutinefunction(func):
-                        result = await func(*args, **kwargs)
-                    else:
-                        result = func(*args, **kwargs)
-                    if callable(async_callback):
-                        await async_callback(self, *result[1], **result[2])
-                        result = result[0]
-                    else:
-                        if isinstance(result, (list, tuple)):
-                            result = result[0]
-                    self.logout(connector,build)
-                    return result
-                except ProfileModelException as e:
-                    await async_callback(self,e.topic,e.error)
-                    return e.error
+            return wrapper
 
-            @functools.wraps(func)
-            def sync_wrapper(*args, **kwargs):
-                self: BaseEmailService = args[0]
-                try:
-                    connector = self.connect(build)
-                    if connector == None:
-                        return
-
-                    if not self.authenticate(connector,build):
-                        return
-                    kwargs['connector'] = connector
-                    result = func(*args, **kwargs)
-
-                    if callable(sync_callback):
-                        sync_callback(self, *result[1], **result[2])
-                        result = result[0]
-                    else:
-                        if isinstance(result, tuple):
-                            result = result[0]
-
-                    self.logout(connector,build)
-                    return result
-                except ProfileModelException as e:
-                    sync_callback(self,e.topic,e.error)
-                    return e.error
-
-            if ConfigService._celery_env == CeleryMode.worker:
-                return sync_wrapper
-
-            if pref == 'async':
-                return async_wrapper
-
-            if pref == 'sync':
-                return sync_wrapper
-
-            return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
-
-        return callback
+        return decorator
 
     def init_protocol_config(self):
         config: type[SMTPConfig |IMAPConfig] = SMTPConfig if self.type_ == 'SMTP' else IMAPConfig
@@ -197,13 +148,7 @@ class BaseEmailService(_service.BaseMiniService, RedisEventInterface):
     def logout(self): 
         ...
 
-    def resetConnection(self): 
-        ...
-
-    def help(self):
-        ...
-
-    @task_lifecycle('sync',build=True)
+    @Lifecycle('sync',build=True)
     def verify_connection(self,connector = None):
         ...
 
@@ -242,6 +187,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
         ...
 
     def oauth_connect(self):
+        return
         params = {
             'client_id': self.configService.OAUTH_CLIENT_ID,
             'client_secret': self.configService.OAUTH_CLIENT_SECRET,
@@ -318,20 +264,22 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
         self.verify_connection()
 
     @Mock()
-    @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
+    @ProfileEventInterface.EventWrapper
+    @BaseEmailService.Lifecycle('async')
     def sendTemplateEmail(self, data, meta, images,contact_id=None,profile:str=None, connector: smtp.SMTP = None,):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(data, meta, images)
         return self._send_message(email, contact_ids=contact_id, connector=connector)
 
     @Mock()
-    @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
+    @ProfileEventInterface.EventWrapper
+    @BaseEmailService.Lifecycle('async')
     def sendCustomEmail(self, content, meta, images, attachment,contact_id=None,profile:str=None, connector: smtp.SMTP = None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
         return self._send_message(email, contact_ids=contact_id, connector=connector)
 
-    @BaseEmailService.task_lifecycle('async', *RedisEventInterface.redis_event_callback)
+    @BaseEmailService.Lifecycle('async')
     def reply_to_an_email(self, content, meta, images, attachment, reply_to, references, connector: smtp.SMTP = None, contact_ids:list[str]=None):
         meta = EmailMetadata(**meta)
         email = EmailBuilder(content, meta, images, attachment)
@@ -341,22 +289,18 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
         return self._send_message(email,contact_ids=contact_ids, connector=connector)
 
-    def _send_message(self, email: EmailBuilder, connector: smtp.SMTP, contact_ids:list[ str] = [],use_ses=False):
+    def _send_message(self, email: EmailBuilder, connector: smtp.SMTP, contact_ids:list[ str] = []):
         replies = []
         events = []
         for i,(emailID, message) in enumerate(email.create_for_recipient()):
 
             try:
-                if not use_ses:
-                    event_id = str(uuid_v1_mc())
-                    now = datetime.now(timezone.utc).isoformat()
-                    reply_ = None
-                    reply_ = connector.sendmail(email.emailMetadata.From, email.To[i], message, rcpt_options=[
-                                                'NOTIFY=SUCCESS,FAILURE,DELAY'])
-                    email_status = EmailStatus.SENT.value
-                    description = "Email successfully sent."
-                else:
-                    ...
+                event_id = str(uuid_v1_mc())
+                now = datetime.now(timezone.utc).isoformat()
+                reply_ = None
+                reply_ = connector.sendmail(email.emailMetadata.From, email.To[i], message, rcpt_options=['NOTIFY=SUCCESS,FAILURE,DELAY'])
+                email_status = EmailStatus.SENT.value
+                description = "Email successfully sent."
 
             except smtp.SMTPRecipientsRefused as e:
                 email_status = EmailStatus.BLOCKED.value
@@ -387,7 +331,6 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
 
             finally:
                 if get_value_in_list(email.emailMetadata._X_Email_ID,i):
-
                     event = TrackingEmailEventORM.JSON(
                         description=description,
                         event_id=event_id,
@@ -396,16 +339,14 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
                         current_event=email_status,
                         date_event_received=now,
                         # VERIFY if To is a list then put it in the for loop
-                        esp_provider=get_email_provider_name(
-                            email.emailMetadata.To[i])
-                    )
+                        esp_provider=get_email_provider_name(email.emailMetadata.To[i]))
                     events.append(event)
 
                 replies.append( {"emailID": emailID,"status": reply_})
 
-        return replies, (StreamConstant.EMAIL_EVENT_STREAM, [event]), {}
+        return replies, (StreamConstant.EMAIL_EVENT_STREAM, events), {}
 
-    @BaseEmailService.task_lifecycle()
+    @BaseEmailService.Lifecycle()
     def verify_same_domain_email(self, email: str, connector: smtp.SMTP):
         domain = email.split['@'][1]
         our_domain = self.email_address.split['@'][1]
@@ -437,7 +378,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
         def no_select(self) -> bool:
             return "\\Noselect" in self.flags
 
-        @BaseEmailService.task_lifecycle()
         def rename(self, new_name: str, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Rename the mailbox."""
             status, response = connector.rename(self.name, new_name)
@@ -447,7 +387,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
             self.name = new_name
             return (response,)
 
-        @BaseEmailService.task_lifecycle()
         def delete(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Delete the mailbox."""
             status, response = connector.delete(self.name)
@@ -455,7 +394,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                 raise imap.IMAP4.error(f"Failed to delete mailbox {self.name}")
             return (response,)
 
-        @BaseEmailService.task_lifecycle()
         def create_subfolder(self, subfolder_name: str, connector: imap.IMAP4 | imap.IMAP4_SSL):
             """Create a subfolder under the current mailbox."""
             full_name = f"{self.name}/{subfolder_name}"
@@ -465,7 +403,6 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                     f"Failed to create subfolder {subfolder_name} under {self.name}")
             return ((full_name, response),)
 
-        @BaseEmailService.task_lifecycle()
         def status(self, connector: imap.IMAP4 | imap.IMAP4_SSL):
             ...
 
@@ -486,13 +423,8 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
         def wrapper(self: Self, inbox: str, *args, **kwargs):
             callback(self, inbox, kwargs)
             return func(self, *args, **kwargs)
-
-        @functools.wraps(func)
-        async def async_wrapper(self: Self, inbox: str, *args, **kwargs):
-            callback(self, inbox, kwargs)
-            return await func(self, *args, **kwargs)
-
-        return wrapper if not asyncio.iscoroutinefunction(func) else async_wrapper
+        
+        return wrapper
 
     def __init__(self,profileMiniService:ProfileMiniService[IMAPProfileModel], configService: ConfigService, loggerService: LoggerService, reactiveService: ReactiveService, redisService: RedisService) -> None:
         self.depService = profileMiniService
@@ -614,23 +546,24 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
         self.verify_connection()
 
     #@EmailReadInterface.register_job('Parse DNS Email',(60,180),'INBOX', None)
-    @BaseEmailService.task_lifecycle()
+    @ProfileEventInterface.EventWrapper
+    @BaseEmailService.Lifecycle('async')
     @select_inbox
-    async def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
+    def parse_dns_email(self, max_count, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
         criteria.add(Search.UNSEEN()).add(Search.FROM('mailer-daemon@googlemail.com')).add(
             Search.SUBJECT("Delivery Status Notification"))
 
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
+        events = []
 
         for ids, email in zip(message_ids, emails):
             original_message = email.Message_RFC882
             if original_message.Email_ID == None:
                 continue
 
-            email_id_extracted = extract_email_id_from_msgid(
-                original_message.Message_ID, self.configService.HOSTNAME)
+            email_id_extracted = extract_email_id_from_msgid(original_message.Message_ID, self.configService.DOMAIN_NAME)
             if email_id_extracted == None:
                 continue
 
@@ -661,21 +594,22 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                 date_event_received=datetime.now(timezone.utc).isoformat(),
                 esp_provider=get_email_provider_name(original_message.From)
             )
-
-            await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
+            events.append(event)
             # self.delete_email(ids,connector)
-        return None
+        return None, (StreamConstant.EMAIL_EVENT_STREAM,events),{}
 
     # @EmailReadInterface.register_job('Parse Replied Email',(60,180),'INBOX', None,True)
     # @EmailReadInterface.register_job('Parse Forwarded Email',(60,180),'INBOX', None,False)
-    @BaseEmailService.task_lifecycle()
+    @ProfileEventInterface.EventWrapper
+    @BaseEmailService.Lifecycle('async')
     @select_inbox
-    async def forwarded_email(self, max_count: int | None, is_re: bool, connector: imap.IMAP4 | imap.IMAP4_SSL):
+    def forwarded_email(self, max_count: int | None, is_re: bool, connector: imap.IMAP4 | imap.IMAP4_SSL):
         criteria = IMAPCriteriaBuilder()
         criteria.add(Search.UNSEEN()).add(
             Search.SUBJECT('Re:'if is_re else 'Fwd:'))
         message_ids = self.search_email(*criteria, connector=connector)
         emails = self.read_email(message_ids, connector, max_count=max_count,)
+        events = []
 
         verb = 'replied' if is_re else 'forwarded'
         for ids, e in zip(message_ids, emails):
@@ -688,9 +622,9 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                     email_id = e.In_Reply_To
                 else:
                     email_id = e.Get_Our_Last_Message_References(
-                        self.configService.HOSTNAME)
+                        self.configService.DOMAIN_NAME)
                 email_id = extract_email_id_from_msgid(
-                    email_id, self.configService.HOSTNAME)
+                    email_id, self.configService.DOMAIN_NAME)
                 if email_id == None:
                     continue
 
@@ -698,7 +632,7 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                 if original_message.Email_ID == None:  # The full original message was appended
                     continue
                 email_id_extracted = extract_email_id_from_msgid(
-                    original_message.Message_ID, self.configService.HOSTNAME)
+                    original_message.Message_ID, self.configService.DOMAIN_NAME)
                 if email_id_extracted == None:
                     continue
                 if email_id_extracted != original_message.Email_ID:
@@ -716,10 +650,8 @@ class IMAPEmailMiniService(BaseEmailService,EmailReadInterface):
                 date_event_received=datetime.now(timezone.utc).isoformat(),
                 esp_provider=get_email_provider_name(From)
             )
-
-            await self.redisService.stream_data(StreamConstant.EMAIL_EVENT_STREAM, event)
-
-        return None
+            events.append(event)
+        return None,(StreamConstant.EMAIL_EVENT_STREAM, event),{}
 
     @property
     def mailboxes(self):

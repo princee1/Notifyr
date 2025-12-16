@@ -1,9 +1,5 @@
 import json
 from typing import Any
-from aiokafka import AIOKafkaProducer, abc
-import aiobotocore as aiobotocore_session
-import boto3
-from confluent_kafka import Producer as SyncKafkaProducer
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, MiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import AuthConfig, KafkaWebhookModel, RedisWebhookModel, SQSWebhookModel
@@ -33,6 +29,9 @@ class KafkaWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         return self.depService.model
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
+        from aiokafka import AIOKafkaProducer
+        from confluent_kafka import Producer as SyncKafkaProducer
+
 
         bootstrap_servers  = self.model.bootstrap_servers
         creds = self.depService.credentials.to_plain()
@@ -109,6 +108,10 @@ class SQSWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         return self.depService.model
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
+        import aiobotocore as aiobotocore_session
+        import boto3
+
+
         self._session = aiobotocore_session.get_session()
         creds = self.depService.credentials.to_plain()
         self.client = self._session.create_client(

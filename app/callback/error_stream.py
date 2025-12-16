@@ -1,4 +1,6 @@
 from app.classes.profiles import ProfileErrorProtocol
+from app.services.celery_service import CeleryService
+from app.services.task_service import TaskService
 from app.utils.constant import StreamConstant,SubConstant
 from app.classes.profiles import ErrorProfileModel
 from app.container import Get
@@ -9,6 +11,8 @@ async def ProfileErrorStream(entries:list[tuple[str,ProfileErrorProtocol]]):
     mongooseService:MongooseService = Get(MongooseService)
     redisService:RedisService = Get(RedisService)
     profileService:ProfileService = Get(ProfileService)
+    taskService:TaskService = Get(TaskService)
+    celeryService:CeleryService = Get(CeleryService)
 
     data=set()
     ids_list = []

@@ -19,7 +19,7 @@ class TwilioInterface(Interface):
     async def verify_twilio_token(self, request: Request):
         ...
 
-    async def async_phone_lookup(self, phone_number: str,carrier=True,caller_name=False) -> tuple[int, dict]:
+    async def phone_lookup(self, phone_number: str,carrier=True,caller_name=False) -> tuple[int, dict]:
         ...
 
     def _parse_phone_and_query(self, phone_number, carrier, caller_name):

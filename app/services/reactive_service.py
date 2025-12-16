@@ -77,16 +77,14 @@ class ReactiveSubject():
                 lock.release()
 
 @Service()
-class ReactiveService(BaseService,SchedulerInterface):
+class ReactiveService(BaseService):
     
     def __init__(self,configService:ConfigService,loggerService:LoggerService):
         BaseService.__init__(self)
-        SchedulerInterface.__init__(self,None) # Fire reactive even if the process ends
         self.configService = configService
         self.loggerService = loggerService
         self._subscriptions:dict[str,ReactiveSubject] = {}
         
-
     def create_subject(self,name:str,type_:ReactiveType,subject_id=None,sid_type:SubjectType='plain') -> ReactiveSubject:
         if sid_type == 'plain':
             subject_id = generateId(20)
@@ -102,8 +100,7 @@ class ReactiveService(BaseService,SchedulerInterface):
         rx_subject = self[subject_id]
         rx_subject.on_completed()
         del self._subscriptions[subject_id]
-
-        
+  
     def subscribe(self,rxId:str,on_next:Callable[[Any],None],on_error:Callable=None,on_completed:Callable=None):
         rxSub= self._subscriptions.get(rxId,None)
         if rxSub is None:

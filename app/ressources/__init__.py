@@ -1,19 +1,18 @@
 from typing import Type
+from app.services.celery_service import CeleryService
 from app.services.config_service import AssetMode, ConfigService
-from app.services.task_service import CeleryService,TaskService,OffloadTaskService
 from app.container import Register, Get
+from app.services.workflow_service import WorkflowService
 
 Register(CeleryService)
-Register(TaskService)
-Register(OffloadTaskService)
-
+Register(WorkflowService)
 
 configService = Get(ConfigService)
 
 from .support_ressource import SupportRessource
 from .email_ressource import EmailRessource
 from .admin_ressource import AdminRessource
-from .redis_backend_ressource import RedisResultBackendRessource
+from .result_ressource import ResultBackendRessource
 from .contacts_ressources import ContactsRessource
 from .auth_ressource import AuthRessource
 from .twilio_ressource import TwilioRessource
@@ -25,6 +24,7 @@ from .analytics_ressource import AnalyticsRessource
 from .profile_ressource import ProfilRessource
 from .object_s3_ressource import S3ObjectRessource
 from .cost_ressource import CostRessource
+from .celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
 
 #from .push_notification_ressource import PushNotificationRessource
@@ -32,7 +32,7 @@ from app.definition._ressource import BaseHTTPRessource
 BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
                                                  EmailRessource,
                                                  AdminRessource,
-                                                 RedisResultBackendRessource,
+                                                 ResultBackendRessource,
                                                  ContactsRessource,
                                                  AuthRessource,
                                                  TwilioRessource,
@@ -42,7 +42,8 @@ BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
                                                  PropertiesRessource,
                                                  AnalyticsRessource,
                                                  ProfilRessource,
-                                                 CostRessource
+                                                 CostRessource,
+                                                 CeleryRessource
                                                  #PushNotificationRessource,
 ]
 if configService.ASSET_MODE == AssetMode.s3:

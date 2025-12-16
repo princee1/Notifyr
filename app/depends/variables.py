@@ -1,17 +1,12 @@
 
 from typing import Callable,get_args
-
-from aiohttp_retry import Any
 from fastapi import Query, Request, Response
 from app.classes.auth_permission import PolicyUpdateMode
-from app.classes.celery import AlgorithmType, CeleryTask
+from app.classes.celery import AlgorithmType, InspectMode,RunType
 from app.classes.env_selector import StrategyType
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
-from app.services.task_service import CeleryService, RunType, TaskService
-from app.services.config_service import ConfigService
 from app.services.twilio_service import TwilioService
-
 from app.classes.broker import SubjectType
 from app.classes.email import MimeType
 from app.utils.constant import VariableConstant
@@ -33,16 +28,9 @@ def _wrap_checker(name: str, predicate: Callable[[object], bool], choices: list 
     return _checker
 
 
-
-SECURITY_FLAG=GetAttr(ConfigService,'SECURITY_FLAG')
-
 verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_token')
 
 parse_to_phone_format: Callable = GetDependsFunc(TwilioService, 'parse_to_phone_format')
-
-populate_response_with_request_id: Callable[[Request,Response],None] = GetDependsFunc(TaskService,'populate_response_with_request_id')
-
-trigger_task: Callable[[CeleryTask,int|None,str],dict[str,Any]] = GetDependsFunc(CeleryService,'trigger_task_from_task')
 
 # ----------------------------------------------                                    ---------------------------------- #
 
@@ -52,11 +40,13 @@ summary_query:Callable = get_query_params('summary','false',True)
 
 background_query:Callable = get_query_params('background','true',True)
 
+fallback_query:Callable = get_query_params('fallback','true',True)
+
 split_query: Callable = get_query_params('split','false',True)
 
 runtype_query:Callable=get_query_params('runtype','sequential',False,checker=_wrap_checker('runtype', lambda v: v in get_args(RunType), choices=list(get_args(RunType))))
 
-save_results_query:Callable=get_query_params('save','false',True)
+save_results_query:Callable=get_query_params('save','false',True,raise_except=True)
 
 get_task_results:Callable= get_query_params('get_task_results','true',True)
 
@@ -118,3 +108,7 @@ force_update_query: Callable[[Request],bool]=get_query_params('force','false',Tr
 # ----------------------------------------------                                    ---------------------------------- #
 
 policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','merge',False,raise_except=True,checker=_wrap_checker('mode', lambda v: v in get_args(PolicyUpdateMode), choices=list(get_args(PolicyUpdateMode))))
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+celery_inspect_mode_query:Callable[[Request],str] = get_query_params('mode','stats',False,raise_except=True,checker=_wrap_checker('mode',lambda m:m in get_args(InspectMode),choices=list(get_args(InspectMode))))

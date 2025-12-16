@@ -4,6 +4,7 @@ from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
+from app.manager.task_manager import TaskManager
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.link_model import LinkORM
 from app.models.otp_model import OTPModel
@@ -11,14 +12,12 @@ from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.assets_service import AssetService
 from app.services.profile_service import ProfileService
-from app.services.task_service import TaskService, CeleryService,task_name
+from app.services.task_service import TaskService
+from app.services.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.logger_service import LoggerService
-from app.services.security_service import JWTAuthService
 from app.services.twilio_service import TwilioService
-from app.utils.constant  import HTTPHeaderConstant
-from app.classes.celery import TaskHeaviness, TaskType,SchedulerModel
+from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request, UploadFile,status
 
@@ -26,7 +25,7 @@ class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
         super().__init__()
         self.task_names = [task_name(t) for t in  task_names]
-        self.task_types = [t.value for t in task_types]
+        self.task_types = task_types
     
     def guard(self,scheduler:SchedulerModel):        
         if self.task_names and scheduler.task_name not in self.task_names:
@@ -70,7 +69,7 @@ class TaskWorkerGuard(Guard):
         self.heaviness = heaviness
     
     async def guard(self,scheduler:SchedulerModel):
-        task_heaviness:TaskHeaviness = scheduler.heaviness
+        task_heaviness:TaskHeaviness = scheduler._heaviness
         ...
     #TODO Check before hand if the background task and the workers are available to do some job
     # NOTE Already have a pingService
@@ -196,7 +195,7 @@ class CarrierTypeGuard(Guard):
             phone_number = [[to for to in content.to] for content in scheduler.content]
         for _phone_number in phone_number:
             for pn in _phone_number:
-                status_code,data = await self.twilioService.async_phone_lookup(phone_number,True)
+                status_code,data = await self.twilioService.phone_lookup(phone_number,True)
                 if status_code != 200:
                     return False,f'Callee Information not found: {pn}'
                 
@@ -262,6 +261,7 @@ class TrackGuard(Guard):
     allowed=set(['now','once'])
 
     async def guard(self,scheduler:SchedulerModel,tracker:TrackerInterface):
+        return True,''
         if not tracker.will_track:
             return True,''
         if scheduler.task_type not in self.allowed:
@@ -293,3 +293,37 @@ class GlobalsTemplateGuard(Guard):
             return False,self.error_message
 
         return True,''
+
+
+class CeleryBrokerGuard(Guard): 
+
+    _not_allowed_redis_eta = {TaskType.DATETIME,TaskType.TIMEDELTA}
+     
+    
+    def __init__(self,allowed_fallback:bool=False):
+        super().__init__()
+        self.allowed_fallback = allowed_fallback
+        self.configService = Get(ConfigService)
+        self.max_visibility_time = self.configService.CELERY_VISIBILITY_TIMEOUT *.15
+    
+    def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
+        if self.configService.CELERY_BROKER == 'redis':
+            if scheduler.task_type in self._not_allowed_redis_eta:
+                if self.allowed_fallback:
+                    taskManager.set_algorithm('aps')
+                else:
+                    raise CeleryRedisVisibilityTimeoutError
+            
+            if scheduler.task_type == TaskType.NOW:
+                countdown = scheduler.task_option.countdown 
+                if countdown and countdown >= self.max_visibility_time:
+                    raise CelerySchedulerOptionError("countdown is more than 15 % of the visibility timeout")
+
+        return True,''
+    
+
+class TaskTypeEnvGuard(Guard):
+
+    def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
+        if taskManager.meta['algorithm'] == 'route' and scheduler.task_type != TaskType.NOW:
+            ...

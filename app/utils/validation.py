@@ -1,18 +1,20 @@
 import argparse
 from enum import Enum
-from typing import Any,Literal
+from typing import Literal
 import phonenumbers
 from validators import url as validate_url, ipv4 as IPv4Address, ValidationError, ipv6 as IPv6Address, email, mac_address
-from geopy.geocoders import Nominatim
-from bs4 import Tag
 from cerberus import Validator,SchemaError
 from datetime import datetime
-from functools import wraps
 import re
 import ipaddress
 from .transformer import transform
-from langcodes import Language
 
+
+VALID_LANGUAGE_CODES = {
+    "en", "fr", "es", "de", "it", "pt", "ru", "zh", "ja", "ko", "ar",
+    "hi", "bn", "pa", "mr", "te", "ta", "tr", "vi", "id", "th"
+    # add more codes as needed
+}
 
 def port_validator(value: str|int) -> int:
     try:
@@ -132,13 +134,24 @@ def mac_address_validator(mac):
         return False
 
 
-def location_validator(latitude, longitude):
-    raise NotImplementedError()
-    if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
-        return False
-    geolocator = Nominatim(user_agent="geoapiExercises")
-    location = geolocator.reverse((latitude, longitude), exactly_one=True)
-    return location is not None
+def location_validator(coord_str):
+    """
+    Validates a string in the format '(longitude,latitude)'.
+    Longitude: -180 to 180
+    Latitude: -90 to 90
+    Accepts integers or decimals.
+    """
+    pattern = re.compile(r"""
+        ^\(\s*                                   # opening parenthesis with optional spaces
+        (?P<long>[-+]?(?:180(?:\.0+)?|1[0-7]\d(?:\.\d+)?|[0-9]?\d(?:\.\d+)?))  # longitude
+        \s*,\s*                                  # comma with optional spaces
+        (?P<lat>[-+]?(?:90(?:\.0+)?|[0-8]?\d(?:\.\d+)?))                        # latitude
+        \s*\)$                                   # closing parenthesis with optional spaces
+    """, re.VERBOSE)
+
+    match = pattern.match(coord_str)
+    return bool(match)
+
 
 
 def digit_validator(val:int):
@@ -177,10 +190,14 @@ def PasswordValidator(min_length=8, max_length=128, require_digit=True, require_
 
     
 def language_code_validator(language):
-    try:
-        return Language.get(language).is_valid()
-    except:
+    """
+    Validate language codes (ISO 639-1) without using external libraries.
+    Returns True if valid, False otherwise.
+    """
+    if not isinstance(language, str):
         return False
+    language=language.strip()
+    return language.lower() in VALID_LANGUAGE_CODES
 
 #######################                      #################################
 class ValidatorType(Enum):

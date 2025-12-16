@@ -4,20 +4,18 @@ from typing import Any, Callable, Dict, List, Self, Type, TypeVar, TypedDict
 from urllib.parse import urlencode
 from beanie import Document, PydanticObjectId, init_beanie
 import hvac
+import pika
 from typing_extensions import Literal
 from random import random,randint
 from app.classes.callbacks import CALLBACKS_CONFIG
 from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.vault_engine import VaultDatabaseCredentials
-from app.definition._error import BaseError
-from app.definition._interface import Interface, IsInterface
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
-from app.utils.helper import quote_safe_url, reverseDict, subset_model
+from app.utils.constant import MongooseDBConstant, RabbitMQConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.transformer import none_to_empty_str
-from .config_service import MODE, CeleryMode, ConfigService
+from .config_service import MODE, CeleryMode, ConfigService, UvicornWorkerService
 from .file_service import FileService
 from app.definition._service import DEFAULT_BUILD_STATE, STATUS_TO_ERROR_MAP, BuildFailureError, BaseService,AbstractServiceClass, LinkDep,Service,BuildWarningError, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -55,7 +53,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
 
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
         DatabaseService.__init__(self,configService,fileService)
-        SchedulerInterface.__init__(self,)
+        SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
         self.vaultService = vaultService
         self.creds:VaultDatabaseCredentials = {}
         self.max_retry = max_retry
@@ -65,18 +63,17 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         self.last_rotated = None
         self.auth_ttl = ttl
 
-        delay = IntervalParams( 
-            seconds=self.random_buffer_interval(self.auth_ttl) 
-            )
-        self.interval_schedule(delay, self.creds_rotation)
+    def build(self, build_state = ...):
+        delay = IntervalParams( seconds=self.random_buffer_interval(self.auth_ttl) )
+        self.interval_schedule(delay, self.creds_rotation,tuple(),{},f"{self.name}-creds_rotation")
 
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError("Vault Service can’t issue creds")
 
-    async def async_pingService(self,infinite_wait:bool, **kwargs):
+    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
         self.check_auth()
-        await super().async_pingService(infinite_wait,**kwargs)
+        await super().pingService(infinite_wait,data,profile,as_manager,**kwargs)
              
     @staticmethod
     def random_buffer_interval(ttl):
@@ -93,6 +90,13 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
     @property
     def db_password(self):
         return self.creds.get('data',dict()).get('password',None)
+
+    @property
+    def lease_id(self):
+        return self.creds.get('lease_id',None)
+    
+    def revoke_lease(self):
+        return self.vaultService.revoke_lease(self.lease_id)
 
     async def _check_vault_status(self):
         temp_service = None 
@@ -138,26 +142,26 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         
         return  time.time() - self.last_rotated < self.auth_ttl    
 
-
-
 @Service()
-class RedisService(DatabaseService):
+class RedisService(TempCredentialsDatabaseService):
 
     GROUP = 'NOTIFYR-GROUP'
     
-    def __init__(self,configService:ConfigService,reactiveService:ReactiveService):
-        super().__init__(configService,None)
+    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:HCVaultService,uvicornWorkerService:UvicornWorkerService):
+        super().__init__(configService,None,vaultService,60*60*24*29,)
         self.configService = configService
         self.reactiveService = reactiveService
+        self.uvicornWorkerService = uvicornWorkerService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
-        self.consumer_name = f'notifyr-consumer={self.configService.INSTANCE_ID}'
+
+        self.consumer_name = f'notifyr-consumer={self.uvicornWorkerService.INSTANCE_ID}'
 
 
     def dynamic_context(func:Callable):
         
         async def async_wrapper(self:Self,topic:str,data:Any|dict):
-            await func(self,topic,data)
+            return await func(self,topic,data)
         
         def sync_wrapper(self:Self,topic:str,data:Any|dict):
             return func(self,topic,data)
@@ -307,16 +311,19 @@ class RedisService(DatabaseService):
         return wrapper
 
     def build(self,build_state=-1):
-        host = self.configService.REDIS_URL
-        host = host.replace('redis://','')
-        self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB)
-        self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB)
-        self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True)
+        host = self.configService.REDIS_HOST
+        self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE)
+
+        self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB,username=self.db_user,password=self.db_password)
+        self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
+        self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user,password=self.db_password)
 
         if self.configService.celery_env == CeleryMode.none:
-            self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
+            self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         else :
-            self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True)
+            self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
+        
+        super().build()
 
         self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
             RedisConstant.CELERY_DB:self.redis_celery,
@@ -330,14 +337,17 @@ class RedisService(DatabaseService):
         }
 
         try:
-            temp_redis = SyncRedis(host=host)
+            temp_redis = SyncRedis(host=host,password=self.db_password,username=self.db_user)
             pong = temp_redis.ping()
             if not pong:
                 raise ConnectionError("Redis ping failed")
             temp_redis.close()
         except Exception as e:
+            print(e)
+            print(e.args)
+            print(e.__class__)
             raise BuildFailureError(e.args)
- 
+
     @check_db
     async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
@@ -423,6 +433,10 @@ class RedisService(DatabaseService):
     async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
         return await redis.lpush(name,*element)
 
+    @check_db
+    async def range(self,database:int|str,name:str,start:int,stop:int,redis:Redis=None):
+        return await redis.lrange(name,start,stop)
+
     
 @Service()
 class MemCachedService(DatabaseService,SchedulerInterface):
@@ -447,8 +461,8 @@ class MemCachedService(DatabaseService,SchedulerInterface):
     
     def build(self, build_state = ...):
         try:
-            self.sync_client = SyncClient((self.configService.MEMCACHED_URL,self.DEFAULT_PORT),connect_timeout=6)
-            self.client = Client(self.configService.MEMCACHED_URL,pool_minsize=self.POOL_MINSIZE,pool_size=self.POOL_MAXSIZE)
+            self.sync_client = SyncClient((self.configService.MEMCACHED_HOST,self.DEFAULT_PORT),connect_timeout=6)
+            self.client = Client(self.configService.MEMCACHED_HOST,pool_minsize=self.POOL_MINSIZE,pool_size=self.POOL_MAXSIZE)
             version = self.sync_client.version().decode()
            
         except MemcacheClientError as e:
@@ -502,12 +516,9 @@ class MemCachedService(DatabaseService,SchedulerInterface):
         self.sync_client.close()
         self.client.close()
 
-
 D = TypeVar('D',bound=Document)
 
-@Service(
-    links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
-)     
+@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)])     
 class MongooseService(TempCredentialsDatabaseService):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
     DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
@@ -602,6 +613,7 @@ class MongooseService(TempCredentialsDatabaseService):
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
             self.db_connection()
+            super().build()
         except ConnectionFailure as e:
             if build_state == DEFAULT_BUILD_STATE:
                 raise BuildFailureError(f"MongoDB connection error: {e}")
@@ -668,9 +680,7 @@ class MongooseService(TempCredentialsDatabaseService):
     def destroy(self, destroy_state = ...):
         self.close_connection()
     
-@Service(
-    links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]
-)
+@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
     DATABASE_NAME = 'notifyr'
 
@@ -687,6 +697,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 host=self.configService.POSTGRES_HOST,
                 port=5432
             )
+            super().build()
         except Exception as e:
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
 
@@ -718,3 +729,37 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     async def _creds_rotator(self):
         self.generate_creds()
         await self.init_connection(True)
+
+@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]) 
+class RabbitMQService(TempCredentialsDatabaseService):
+    
+    def __init__(self, configService:ConfigService, fileService:FileService, vaultService:HCVaultService):
+        super().__init__(configService, fileService, vaultService, 60*60*24*29)
+    
+    def build(self, build_state = ...):
+        
+        self.creds=self.vaultService.rabbitmq_engine.generate_credentials()
+        credentials = pika.PlainCredentials(username=self.db_user,password=self.db_password)
+
+        params = pika.ConnectionParameters(
+            host=self.configService.RABBITMQ_HOST,
+            port=5672,
+            virtual_host=RabbitMQConstant.CELERY_VIRTUAL_HOST,
+            credentials=credentials,
+            connection_attempts=1,      # don’t retry
+            socket_timeout=5,           # 5 second timeout
+            blocked_connection_timeout=5,
+        )
+
+        try:
+            connection = pika.BlockingConnection(params)
+            connection.close()
+            super().build()
+
+        except Exception as e:
+            print(e)
+            print(e.__class__)
+            print(e.args)
+            self.configService.CELERY_BROKER = 'redis'
+            raise BuildFailureError
+    

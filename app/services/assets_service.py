@@ -1,6 +1,5 @@
 import json
 from random import randint
-import traceback
 from minio.datatypes import Object
 from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
@@ -13,11 +12,11 @@ from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant, RedisConstant
 from app.utils.prettyprint import printJSON
-from .config_service import AssetMode, CeleryMode, ConfigService, ProcessWorkerService
+from app.utils.tools import RunInThreadPool
+from .config_service import AssetMode, CeleryMode, ConfigService, UvicornWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
-from .security_service import SecurityService
-from .file_service import FileService, FTPService
+from .file_service import FileService
 from app.definition import _service
 from enum import Enum
 import os
@@ -110,8 +109,8 @@ class Reader:
             if self.func != None:
                 self.func(self.values[relpath])
     
-    def path(self,val):
-        return f"{self.configService.ASSETS_DIR}{val}"
+    def path(self,val,root=True):
+        return f"{self.configService.OBJECTS_DIR if root else ''}{self.configService.ASSETS_DIR}{val}"
 
     
     def safeReader(self, ext: Extension, flag: FDFlag, rootFlag: bool | str = True, encoding="utf-8"):
@@ -227,7 +226,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:HCVaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:ProcessWorkerService) -> None:
+    def __init__(self,hcVaultService:HCVaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
         super().__init__()
         SchedulerInterface.__init__(self,)
 
@@ -252,7 +251,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
         self.phone:dict[str,Asset] = {}
         self.sms:dict[str,Asset] = {}
 
-        self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events)
+        self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events,tuple(),{})
 
     async def clear_object_events(self,):
         objects_events = await self.redisService.hash_iter(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,iter=False)
@@ -301,6 +300,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
                 raise _service.BuildFailureError('Amazon S3 Service not available')
 
     def read_asset_from_s3(self):
+        self._read_globals_s3()
 
         self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value))
@@ -341,7 +341,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     def sanitize_paths(self,assets:dict[str,Asset]):
         temp: dict[str,Asset]={}
         for key, asset in assets.items():
-            key = self.configService.normalize_assets_path(key,'remove')
+            key = self.configService.normalize_assets_path(key,'remove',True)
             key = key.replace(DIRECTORY_SEPARATOR,ASSET_SEPARATOR)
             temp[key]=asset
         return temp
@@ -489,11 +489,12 @@ class AssetService(_service.BaseService,SchedulerInterface):
         except AttributeError:
             raise AssetTypeNotFoundError
         return {key:value.schema for key,value in schemas.items() }
-            
-    def save_globals(self):
+
+    @RunInThreadPool      
+    async def save_globals(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
             data = self.globals.export()
-            self.amazonS3Service.upload_object('globals.json',data)
+            await self.amazonS3Service.upload_object('globals.json',data)
         else:
             self.globals.save()
     
@@ -509,6 +510,6 @@ class AssetService(_service.BaseService,SchedulerInterface):
             if self.download_cache.cache(obj.object_name,obj.etag):
                 continue
 
-            disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add')
+            disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add',True)
             self.amazonS3Service.write_into_disk(obj.object_name,disk_rel_path)
             

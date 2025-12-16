@@ -1,14 +1,12 @@
 from typing import TypedDict
-from httplib2 import Credentials
 import psycopg2
-import asyncpg
 from pymongo import InsertOne, MongoClient
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, MiniService
 from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.interface.webhook_adapter import WebhookAdapterInterface
-from app.models.webhook_model import DBWebhookModel, MongoDBWebhookModel, PostgresWebhookModel
+from app.models.webhook_model import AuthConfig, DBWebhookModel, MongoDBWebhookModel, PostgresWebhookModel
 from app.services.config_service import ConfigService
 from app.services.database_service import RedisService
 from app.services.profile_service import ProfileMiniService
@@ -42,7 +40,7 @@ class DBWebhookInterface(BaseMiniService,WebhookAdapterInterface):
         Produce a full DB URI (postgresql://… or mongodb://...).
         Works whether the DB is supplied as an URL or host/port.
         """
-        creds:Credentials = self.depService.credentials
+        creds:AuthConfig = self.depService.credentials.to_plain()
         if self.model.from_url:
             return creds['url']
 
@@ -97,6 +95,7 @@ class PostgresWebhookMiniService(DBWebhookInterface):
             raise BuildWarningError("DatabaseError: Database rejected the connection:", e)
 
     async def start(self):
+        import asyncpg
         self.pool = await asyncpg.create_pool(dsn=self.url)
 
     async def close(self):

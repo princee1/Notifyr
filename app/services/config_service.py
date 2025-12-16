@@ -1,14 +1,14 @@
 import os
-from typing import Any, TypedDict
+from typing import Any, Callable, TypedDict
 from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
-from app.errors.service_error import BuildAbortError, BuildWarningError
-from app.utils.constant import RedisConstant
+from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarningError
+from app.utils.constant import RabbitMQConstant, RedisConstant
 from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
-from app.utils.globals import DIRECTORY_SEPARATOR
+from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID
 from app.utils.helper import parseToBool
 import shutil
 import sys
@@ -67,6 +67,8 @@ class ServerConfig(TypedDict):
 CeleryEnv = Literal['flower', 'worker', 'beat', 'none','purge']
 
 _celery_env_ = CeleryMode.none
+
+
 @_service.Service()
 class ConfigService(_service.BaseService):
         
@@ -83,13 +85,13 @@ class ConfigService(_service.BaseService):
     def set_celery_env(env: CeleryEnv):
         ConfigService._celery_env = CeleryMode._member_map_[env]
 
+
     def __init__(self) -> None:
         super().__init__()
         if not load_dotenv(ENV, verbose=True):
             path = find_dotenv(ENV)
             load_dotenv(path)
         self.server_config = None
-        self.app_name = None
 
     def relative_path(self, path):
         return self.BASE_DIR + path
@@ -135,11 +137,12 @@ class ConfigService(_service.BaseService):
             pass
         return default
 
-    def normalize_assets_path(self,path:str,action:Literal['add','remove']='add')-> str:
+    def normalize_assets_path(self,path:str,action:Literal['add','remove']='add',root=False)-> str:
+        base = self.ASSETS_DIR if not root else f"{self.OBJECTS_DIR}{self.ASSETS_DIR}"
         if action == 'add':
-            return f"{self.ASSETS_DIR}{path}"
+            return f"{base}{path}"
         elif action == 'remove':
-            return path.removeprefix(self.ASSETS_DIR)
+            return path.removeprefix(base)
         return path
 
     def build(self,build_state=-1):
@@ -173,17 +176,16 @@ class ConfigService(_service.BaseService):
         self.MODE = MODE.toMode(self.getenv('MODE','dev').lower())
         self.PROD_URL = self.getenv('PROD_URL',None)
         self.DEV_URL:str = self.getenv('DEV_URL','http://localhost:8088')
-
-        # CONTAINER CONFIG #
-        self.INSTANCE_ID = ConfigService.parseToInt(self.getenv('INSTANCE_ID', '0'),0)
         
         # NAMING CONFIG #
-        self.HOSTNAME:str = self.getenv('HOSTNAME',socket.getfqdn())
+        self.DOMAIN_NAME =  self.getenv('DOMAIN_NAME','notifyr')
         self.USERNAME:str = self.getenv('USERNAME','notifyr')
 
         # DIRECTORY CONFIG #
+
         self.BASE_DIR:str = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
+        self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')
 
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
@@ -208,49 +210,47 @@ class ConfigService(_service.BaseService):
         
         # S3 STORAGE CONFIG #
         self.S3_CRED_TYPE:Literal['MINIO','AWS'] = self.getenv('S3_CRED_TYPE','MINIO').upper()
-
         self.S3_ENDPOINT:str= self.getenv('S3_ENDPOINT','127.0.0.1:9000' if self.MODE == MODE.DEV_MODE else 'minio:9000')
-
         self.S3_REGION:str = self.getenv("S3_REGION",None)
-
         self.S3_TO_DISK:bool = ConfigService.parseToBool(self.getenv('S3_TO_DISK','false'), False)
 
         # MINIO CONFIG #
-
         self.MINIO_STS_ENABLE:bool = ConfigService.parseToBool(self.getenv('MINIO_STS_ENABLE','false'), False)
 
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
         # HASHI CORP VAULT CONFIG #
-
+        self.VAULT_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('VAULT_ACTIVATED','true'), True)
         self.VAULT_ADDR:str = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
 
         # MONGODB CONFIG #
-
         self.MONGO_HOST:str = self.getenv('MONGO_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'mongodb')
 
         # REDIS CONFIG #
+        self.REDIS_HOST:str = self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")
 
-        self.REDIS_URL:str = "redis://"+self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")
+        # RABBITMQ CONFIG #
+        self.RABBITMQ_HOST:Callable[...,str] = self.getenv("RABBITMQ_URL", "localhost" if self.MODE == MODE.DEV_MODE else "rabbitmq")
 
-        # REDIS CONFIG #
-        self.MEMCACHED_URL:str = self.getenv("MEMCHACHED_URL","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
-
-        # SLOW API CONFIG #
-
-        self.SLOW_API_REDIS_URL:str = self.REDIS_URL + self.getenv("SLOW_API_STORAGE_URL", f'/{RedisConstant.LIMITER_DB}')
+        # MEMCACHED CONFIG #
+        self.MEMCACHED_HOST:str = self.getenv("MEMCHACHED_URL","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
 
         # POSTGRES DB CONFIG #
-
         self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
         # CELERY CONFIG #
+        self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','rabbitmq')
 
-        self.CELERY_MESSAGE_BROKER_URL = self.getenv("CELERY_MESSAGE_BROKER_URL",self.REDIS_URL +  f'/{RedisConstant.CELERY_DB}')
-        self.CELERY_BACKEND_URL =  self.getenv("CELERY_BACKEND_URL", self.REDIS_URL +f'/{RedisConstant.CELERY_DB}')
+        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672/{RabbitMQConstant.CELERY_VIRTUAL_HOST}")
+        self.CELERY_BACKEND_URL:Callable[[str,str],str] = lambda u,p: self.getenv("CELERY_BACKEND_URL", f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
-        self.CELERY_WORKERS_COUNT = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_COUNT","1"), 1)
+        self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
+        self.CELERY_WORKERS_EXPECTED = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_EXPECTED","1"), 1)
+
+        # APS CONFIG #
+        self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
+        self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','redis')
 
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:
@@ -261,6 +261,12 @@ class ConfigService(_service.BaseService):
         
         if not self.SECURITY_FLAG:
             raise BuildWarningError(f"SECURITY_FLAG {self.SECURITY_FLAG} is set to False, this is not recommended for production environments")
+        
+        if self.APS_JOBSTORE not in ['redis','mongodb','memory']:
+            self.APS_JOBSTORE = 'memory'
+        
+        if self.CELERY_BROKER not in ['redis','rabbitmq']:
+            raise BuildWarningError()
 
     def __getitem__(self, key):
         try:
@@ -275,20 +281,28 @@ class ConfigService(_service.BaseService):
 
     def destroy(self,destroy_state=-1):
         return super().destroy()
+        
+@_service.Service()
+class UvicornWorkerService(_service.BaseService):
 
+    def __init__(self,configService:ConfigService):
+        super().__init__()
+        self.configService = configService
+    
     def set_server_config(self, config):
         self.server_config = ServerConfig(host=config.host, port=config.port,
                                           reload=config.reload, workers=config.workers, log_level=config.log_level,
                                           team=config.team)
-    
+
     @property
     def pool(self):
         if self.server_config['team'] == 'solo':
             return self.server_config['workers'] > 1
         else:
             return True
+     
+    def build(self, build_state = ...):
+        name = 'app' if self.configService._celery_env == CeleryMode.none else self.configService._celery_env.name
 
-
-@_service.Service()
-class ProcessWorkerService(_service.BaseService):
-    ...
+        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/{name}/"        
+        raise BuildOkError

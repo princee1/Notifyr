@@ -78,14 +78,6 @@ CALLBACKS_CONFIG:Dict[str,CallbacksConfig] = {
         block=MS_1000*20,
         count=10000
     ),
-    StreamConstant.CELERY_RETRY_MECHANISM:CallbacksConfig(
-        sub=False,
-        stream=True,
-        wait=10,
-        block=10,
-        count=1000,
-    ),
-
     SubConstant.SERVICE_STATUS:CallbacksConfig(
         sub=True,
         stream=False

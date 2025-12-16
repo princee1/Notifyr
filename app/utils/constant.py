@@ -1,6 +1,6 @@
 from enum import Enum
 from typing_extensions import Literal
-import random
+
 ########################  ** Dependencies **   ########################################
 
 
@@ -54,6 +54,8 @@ class HTTPHeaderConstant:
     X_INSTANCE_ID= "X-Instance-Id"
     X_PROCESS_PID = "X-Process-PID"
     X_PARENT_PROCESS_PID="X-Parent-Process-PID"
+    X_REQUEST_ID='X-Request-ID'
+    X_BALANCER_EXCHANGE_TOKEN='X-Balancer-Exchange-Token'
 
 
 class CookieConstant:
@@ -166,6 +168,7 @@ class MongooseDBConstant:
     EDGE_COLLECTION='edge'
     NODE_COLLECTION='node'
     SETTING_COLLECTION = 'setting'
+    TASKS_COLLECTION = 'tasks'
 
     DATABASE_NAME = 'notifyr'
 
@@ -222,29 +225,29 @@ DEFAULT_SETTING = {
 
 class VaultConstant:
 
-    SECRET_ID_FILE= 'secret-id.txt' 
-    ROLE_ID_FILE = 'role_id.txt' # in the secrets shared by the vault
+    SECRET_ID_FILE= 'app-secret-id.txt' 
+    ROLE_ID_FILE = 'app-role_id.txt' # in the secrets shared by the vault
     SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
     
 
     
     @staticmethod
     def VAULT_SECRET_DIR(file:str)->str:
-        return f'../../vault/secrets/{file}'
+        return f'/run/secrets/{file}'
 
     @staticmethod
     def VAULT_SHARED_DIR(file:str)->str:
-        return f'../../vault/shared/{file}'
+        return f'/vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal-api']
     TOKENS_SECRETS = 'tokens'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
     COMMUNICATION_SECRETS = 'communication'
     WEBHOOK_SECRETS = 'webhook'
     SETTINGS_SECRETS='setting'
-
+    INTERNAL_API_SECRETS='internal-api'
 
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
@@ -253,18 +256,20 @@ class VaultConstant:
     CHAT_KEY='chat-key'
     S3_REST_KEY='s3-rest-key'
 
-    NotifyrDynamicSecretsRole= Literal['postgres','mongo']
+    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis']
     MONGO_ROLE='mongo'
     POSTGRES_ROLE='postgres'
+    REDIS_ROLE='redis'
 
-    NotifyrMinioRole = Literal['static-minio','sts-minio']
+    NotifyrMinioRole = Literal['static','sts']
 
 
     NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
     NOTIFYR_TRANSIT_MOUNT_POINT = 'notifyr-transit'
     NOTIFYR_DB_MOUNT_POINT = 'notifyr-database'
     NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
-    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio-s3'
+    NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio'
+    NOTIFYR_RABBITMQ_MOUNT_POINT='notifyr-rabbitmq'
 
 
     @staticmethod
@@ -302,7 +307,7 @@ class VaultTTLSyncConstant:
 class MinioConstant:
     STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
     ASSETS_BUCKET = 'assets'
-    STATIC_TEMPLATE = 'static'
+    STATIC_BUCKET = 'static'
     ENCRYPTED_KEY = 'encrypted'
     MINIO_EVENT='s3_object_events'
 
@@ -332,6 +337,8 @@ class CostConstant:
     CLIENT_CREDIT='client'
     AGENT_CREDIT='agent'
     WORKFLOW_CREDIT='workflow'
+
+    Credit =Literal['email','sms','phone','profile','client','agent','workflow']
     
 
     COST_KEY='cost'
@@ -364,3 +371,8 @@ class LLMProviderConstant:
     GEMINI='gemini'
     COHERE='cohere'
     GROQ='groq'
+class CeleryConstant:
+    REFRESH_PROFILE_WORKER_STATE_COMMAND='refresh_profile'
+
+class RabbitMQConstant:
+    CELERY_VIRTUAL_HOST='celery'

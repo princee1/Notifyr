@@ -1,15 +1,13 @@
 import functools
-from typing import Annotated, Any, Callable, Literal, TypedDict
-from fastapi import Depends, HTTPException, Header, Query, Response, status
+from typing import Annotated, Callable
+from fastapi import Depends, HTTPException, Header, Query, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role
-from app.container import Get, GetAttr
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role, filter_asset_permission
+from app.container import Get
 from app.definition._error import ServerFileError
 from app.models.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.link_model import LinkORM
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyMappingORM, PolicyORM
-from app.services.admin_service import AdminService
-from app.services.task_service import OffloadTaskService, RunType, TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
@@ -139,7 +137,7 @@ def Get_Contact(skip_permission:bool,raise_file:bool):
             case _:
                 if raise_file:
                     raise ServerFileError('app/static/error-400-page/index.html',status.HTTP_400_BAD_REQUEST)
-                else:  
+                else:
                     raise HTTPException(400, {"message": "idtype not not properly specified"})
 
         if user == None:
@@ -180,27 +178,6 @@ async def get_subs_content(content_id: str, content_idtype: str = Query('id'), a
     if content == None:
         raise HTTPException(
             404, {"message": "Subscription Content does not exists with those information"})
-
-
-async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
-    configService: ConfigService = Get(ConfigService)
-
-    if x_admin_token == None or x_admin_token != configService.ADMIN_KEY:
-        raise HTTPException(
-            status_code=403, detail="X-Admin-Token header invalid")
-
-
-async def verify_admin_signature(x_admin_signature: Annotated[str, Header()]):
-    adminService: AdminService = Get(AdminService)
-    securityService: SecurityService = Get(SecurityService)
-    configService: ConfigService = Get(ConfigService)
-
-    if x_admin_signature == None:
-        ...
-
-    if securityService.verify_admin_signature():
-        ...
-
 
 async def get_client(client_id: str = Depends(get_query_params('client_id')), cid: str = Depends(get_query_params('cid', 'id')), authPermission: AuthPermission = Depends(get_auth_permission)):
     try:
@@ -272,11 +249,11 @@ async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_
 def GetLink(raise_file_error:bool,raise_err:bool=True):
 
     async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
-        
+
         match lid:
             case 'id':
                 link = await LinkORM.filter(link_id=link_id).first()
-            
+
             case 'name':
                 link = await LinkORM.filter(link_name=link_id).first()
 
@@ -285,7 +262,7 @@ def GetLink(raise_file_error:bool,raise_err:bool=True):
 
             case _:
                 link = None
-        
+
         if link == None:
             if raise_file_error:
                 raise ServerFileError('app/static/error-404-page/index.html',status.HTTP_404_NOT_FOUND)
@@ -294,18 +271,10 @@ def GetLink(raise_file_error:bool,raise_err:bool=True):
                     raise HTTPException(status.HTTP_404_NOT_FOUND,"links not found")
                 else:
                     return None
-            
+
         return link
-    
+
     return get_link
-
-
-async def get_task(request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query)):
-    taskService: TaskService = Get(TaskService)
-    offload_task: Callable = GetAttr(OffloadTaskService, OffloadTaskService.offload_task.__name__)
-    if offload_task == None:
-        raise HTTPException(500, detail='Offload task is not available')
-    return taskService._register_tasks(request_id, background, runtype, offload_task, ttl, save, return_results,retry,split,algorithm,strategy)
 
 
 async def get_challenge(client:ClientORM):
@@ -341,12 +310,12 @@ def GetPolicy(skipPermission:bool):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e.args[0])
             )
-    
+
     return get_policy
 
 
 async def get_combined_policies(client:ClientORM):
-    
+
     client_id = str(client.client_id)
     group_id = None if client.group == None else str(client.group.group_id)
     policies:list[PolicyORM] = [pm.policy for pm in  await PolicyMappingORM.filter(client_id=client_id,group_id=group_id)]
@@ -354,6 +323,7 @@ async def get_combined_policies(client:ClientORM):
     roles= set()
     allowed_assets = set()
     allowed_profiles = set()
+    allowed_blogs = set()
     allowed_routes = {}
     allowed_agents = set()
 
@@ -363,9 +333,10 @@ async def get_combined_policies(client:ClientORM):
         allowed_assets.update(p.allowed_assets)
         allowed_profiles.update(p.allowed_profiles)
         allowed_agents.update(p.allowed_agents)
+        allowed_blogs.update(p.allowed_blogs)
 
         for k,r in p.allowed_routes.items():
-            
+
             if k not in allowed_routes:
                 allowed_routes[k] = r
             else:
@@ -376,13 +347,14 @@ async def get_combined_policies(client:ClientORM):
                 else:
                     if allowed_routes['scope'] == 'custom':
                         allowed_routes['custom_routes'] = list[set(allowed_routes['custom_routes']).union(r['scope'])]
-    
+
     print(allowed_assets)
 
     allowed_assets = filter_paths(list(allowed_assets),'/')
     allowed_profiles = list(allowed_profiles)
     allowed_agents = list(allowed_agents)
     roles = list(roles)
+    allowed_blogs=list(allowed_blogs)
 
     return AuthPermission(
         roles=roles,
@@ -390,4 +362,5 @@ async def get_combined_policies(client:ClientORM):
         allowed_profiles=allowed_profiles,
         allowed_assets=allowed_assets,
         allowed_agents=allowed_agents,
+        allowed_blogs=allowed_blogs
     )

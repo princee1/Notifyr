@@ -6,8 +6,9 @@ from app.decorators.handlers import FastAPIHandler, WebSocketHandler
 from app.decorators.permissions import BalancerPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPStatusCode, UseHandler, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
-from app.services.task_service import CeleryService, TaskService
-from app.services.config_service import ConfigService
+from app.services.celery_service import CeleryService
+from app.services.task_service import  TaskService
+from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.health_service import HealthService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.utils.globals import PARENT_PID, PROCESS_PID
@@ -34,7 +35,7 @@ PING_PONG_PREFIX = 'ping-pong'
 class PingPongRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self, securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService,taskService:TaskService,celeryService:CeleryService,healthService:HealthService):
+    def __init__(self, securityService: SecurityService, jwtAuthService: JWTAuthService, configService: ConfigService,taskService:TaskService,celeryService:CeleryService,healthService:HealthService,uvicornWorkerService:UvicornWorkerService):
         super().__init__()
 
         self.healthService = healthService
@@ -43,6 +44,7 @@ class PingPongRessource(BaseHTTPRessource):
         self.configService = configService
         self.taskService = taskService
         self.celeryService = celeryService
+        self.uvicornWorkerService = uvicornWorkerService
 
     #@UseLimiter(limit_value="1/day")
     @UsePermission(BalancerPermission)
@@ -69,7 +71,7 @@ class PingPongRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Get('/report')
     def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission)):
         return {
-            'instance_id':self.configService.INSTANCE_ID,
+            'instance_id':self.uvicornWorkerService.INSTANCE_ID,
             'parent_pid':PARENT_PID,
             'process_pid':PROCESS_PID,
             'report':PROCESS_SERVICE_REPORT

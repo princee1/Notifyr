@@ -3,6 +3,7 @@ import asyncio
 import traceback
 from typing import Callable
 
+from amqp import AccessRefused
 from fastapi.exceptions import ResponseValidationError
 from h11 import LocalProtocolError
 import hvac
@@ -17,8 +18,9 @@ from app.definition._error import BaseError, ServerFileError
 from app.definition._utils_decorator import Handler, HandlerDefaultException, NextHandlerException
 from app.definition._service import MethodServiceNotExistsError, MethodServiceNotImplementedError, ServiceDoesNotExistError, ServiceNotAvailableError, MethodServiceNotAvailableError, ServiceNotImplementedError, ServiceTemporaryNotAvailableError, StateProtocolMalFormattedError
 from fastapi import status, HTTPException
-from app.classes.celery import CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
+from app.classes.celery import CeleryNotAvailableError, CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, CeleryTaskNameNotExistsError, CeleryTaskNotFoundError
 from celery.exceptions import AlreadyRegistered, MaxRetriesExceededError, BackendStoreError, QueueNotFound, NotRegistered
+from app.errors.aps_error import APSJobDoesNotExists
 from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDoesNotExistsError,MiniServiceCannotBeIdentifiedError
 
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
@@ -174,7 +176,18 @@ class CeleryTaskHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail={})
 
+        except CeleryRedisVisibilityTimeoutError as e:
+            raise HTTPException(
+                status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            )
+        
+        except CeleryNotAvailableError as e:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED
+            )
+
         except QueueNotFound as e:
+            print(e)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail={})
 
@@ -190,6 +203,11 @@ class CeleryTaskHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={})
 
+
+        except AccessRefused:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,details='Could not connect to the broker'
+            )
 
 class TwilioHandler(Handler):
 
@@ -744,8 +762,92 @@ class FileNamingHandler(Handler):
                 detail=f"XML asset filenames must start with either of those values '{e.asset_confusion}'. Received: '{e.filename}'"
             )
 
+import redis
+from fastapi import HTTPException, status
+
 class RedisHandler(Handler):
-    ...
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except redis.exceptions.AuthenticationError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Redis authentication failed"
+            )
+
+        except redis.exceptions.AuthorizationError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Redis authorization failed"
+            )
+
+        except redis.exceptions.ConnectionError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis service unavailable"
+            )
+
+        except redis.exceptions.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Redis request timed out"
+            )
+
+        except redis.exceptions.BusyLoadingError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis is loading data"
+            )
+
+        except redis.exceptions.ReadOnlyError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis is in read-only mode"
+            )
+
+        except redis.exceptions.OutOfMemoryError:
+            raise HTTPException(
+                status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+                detail="Redis out of memory"
+            )
+
+        except redis.exceptions.ClusterDownError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis cluster is down"
+            )
+
+        except (redis.exceptions.AskError, redis.exceptions.MovedError):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis cluster redirection error"
+            )
+
+        except redis.exceptions.NoScriptError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Redis Lua script not found"
+            )
+
+        except redis.exceptions.DataError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid data sent to Redis"
+            )
+
+        except redis.exceptions.ResponseError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+
+        except redis.exceptions.LockError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Redis lock error"
+            )
 
 class MemCachedHandler(Handler):
 
@@ -833,3 +935,21 @@ class CostHandler(Handler):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={'message': 'Cost processing error', 'error': str(e)}
             )
+
+class CeleryControlHandler(Handler):
+    ...
+
+
+class APSSchedulerHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        
+        try:
+            return await function(*args,**kwargs)
+
+        except APSJobDoesNotExists as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=''
+            )
+            

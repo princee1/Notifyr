@@ -111,6 +111,7 @@ class BaseProfileModel(BaseDocument):
 
     _secrets_keys: ClassVar[list[str]] = []
     _vault:ClassVar[Optional[str]]  = None
+    _queue:ClassVar[str] = ...
     
     @field_validator("*", mode="before")
     def limit_all_strings(cls, v):

@@ -183,9 +183,10 @@
         "phone": 10000,
         "contact": 1000,
         "client": 5,
-        "profile": 15,
         "link": 2,
         "agent":10,
-        "workflow":10
+        "workflow":10,
+        "profile": 10,
+        "blog":20
     }
 }

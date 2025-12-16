@@ -124,7 +124,7 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
         if checker:
             mess = checker(value)
             if mess != None:
-                raise HTTPException(400,detail=f'Error in params: {mess}',headers=FastAPIConstant.OO_SCOPE_HEADER) # TODO raise a better error
+                raise HTTPException(400,detail=f'Error in params: {mess}',headers=FastAPIConstant.OO_SCOPE_HEADERS) # TODO raise a better error
         return value
     return depends
 

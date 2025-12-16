@@ -1,36 +1,33 @@
 from dataclasses import asdict
 from typing import Any, Callable, Coroutine, Literal, Optional, Type, get_args
-
-from aiohttp_retry import List
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from urllib3 import HTTPHeaderDict
 from app.classes.auth_permission import AuthPermission, TokensModel
 from app.classes.broker import exception_to_json
-from app.classes.celery import AlgorithmType, SchedulerModel,CelerySchedulerOptionError,SCHEDULER_VALID_KEYS, TaskType
+from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
-from app.definition._service import BaseMiniServiceManager
-from app.depends.class_dep import KeepAliveQuery, ObjectsSearch
+from app.definition._service import BaseMiniService, BaseMiniServiceManager
+from app.depends.class_dep import ObjectsSearch
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
+from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status, SubscriptionORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
-from app.models.sms_model import OnGoingSMSModel, SMSCustomSchedulerModel
+from app.models.sms_model import SMSCustomSchedulerModel
 from app.services.assets_service import AssetService, AssetType, AssetTypeNotAllowedError, RouteAssetType, DIRECTORY_SEPARATOR
+from app.services.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file_service import FileService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
-from app.services.task_service import CeleryService, TaskManager, task_name
 from app.services.twilio_service import TwilioAccountMiniService, TwilioService
+from app.tasks import TASK_REGISTRY, task_name
 from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of, parseToBool
 from app.utils.validation import email_validator, phone_number_validator
@@ -108,18 +105,14 @@ class CeleryTaskPipe(Pipe):
         super().__init__(True)
         self.celeryService = Get(CeleryService)
     
-    def pipe(self,scheduler:SchedulerModel):
+    def pipe(self,scheduler:SchedulerModel,taskManager:TaskManager,channel:ChannelMiniService):
+        if scheduler.task_option:
+            scheduler.task_option._ignore_result = not taskManager.meta.get('save_result',False)
+            scheduler.task_option._retry = taskManager.meta.get('retry',False)
+            scheduler.task_option._queue = channel.queue
+        
         scheduler.task_name = task_name(scheduler.task_name)
-        
-        if scheduler.task_type != 'now' and scheduler.task_type != 'once':
-            rules_keys = SCHEDULER_VALID_KEYS[scheduler.task_type]
-            s_keys = set(scheduler.task_option.keys())
-            if len(s_keys) == 0:
-                raise CelerySchedulerOptionError
-            if len(s_keys.difference(rules_keys)) != 0:
-                raise CelerySchedulerOptionError
-        
-        setattr(scheduler,'heaviness' , self.celeryService._task_registry[scheduler.task_name]['heaviness'])
+        scheduler._heaviness = TASK_REGISTRY[scheduler.task_name]['heaviness']
         return {'scheduler':scheduler}
     
 class ContactsIdPipe(Pipe):
@@ -292,7 +285,7 @@ class OffloadedTaskResponsePipe(Pipe):
         return result
 
     def _set_status_code(self, response: Response, scheduler: SchedulerModel, otpModel: OTPModel, background: bool):
-        if (scheduler and scheduler.task_type != TaskType.NOW.value) or (otpModel and background) or background:
+        if (scheduler and scheduler.task_type != TaskType.NOW) or (otpModel and background) or background:
             response.status_code = 201
         else:
             response.status_code = 200
@@ -588,12 +581,13 @@ class MiniServiceInjectorPipe(Pipe):
         self.strict_value =strict_value
 
     def pipe(self,profile:str):
-        if self.strict_value != None and profile==  self.strict_value:
-            miniService = getattr(self.service,self.strict_value)
+        if self.strict_value != None and profile== self.strict_value:
+            miniService:BaseMiniService = getattr(self.service,self.strict_value)
             if miniService == None:
                 raise MiniServiceStrictValueNotValidError
             return {
-                self.key:miniService
+                self.key:miniService,
+                'profile':miniService.miniService_id
             }
 
         return {

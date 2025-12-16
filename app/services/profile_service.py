@@ -6,16 +6,18 @@ from pydantic import ValidationError
 from app.classes.secrets import ChaCha20Poly1305SecretsWrapper, ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.db_error import MongoCollectionDoesNotExists
-from app.errors.service_error import BuildFailureError
+from app.errors.service_error import BuildFailureError, BuildOkError
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
+from app.services.task_service import TaskService
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from app.utils.helper import flatten_dict, subset_model
 from .database_service import MongooseService, RedisService
 from app.models.communication_model import  BaseProfileModel, ProfilModelValues
 from app.classes.profiles import ErrorProfileModel
 from typing import Generic, TypeVar
+from app.utils.tools import RunInThreadPool
 
 TModel = TypeVar("TModel",bound=BaseProfileModel)
 
@@ -24,19 +26,24 @@ TModel = TypeVar("TModel",bound=BaseProfileModel)
 )
 class ProfileMiniService(BaseMiniService,Generic[TModel]):
     
-    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,redisService:RedisService, model:TModel,model_type:Type[TModel]=None):
+    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,redisService:RedisService,taskService:TaskService, model:TModel,model_type:Type[TModel]=None):
         if model_type != None:
             self.model_type = model_type
             self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__name__}')
             super().__init__(None,str(model['_id']))
+            self.queue_name = f'{self.model_type._queue}:{self.miniService_id}'
+
         else:
             super().__init__(None,str(model.id))
+            self.queue_name = f'{model._queue}:{self.miniService_id}'
+
         self.model:TModel = model
         self.credentials:ChaCha20Poly1305SecretsWrapper = ...
         self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.redisService = redisService
-    
+        self.taskService = taskService
+        
     def build(self, build_state = ...):
         try:
             if self.model_type != None:
@@ -61,14 +68,14 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
     async def async_create_profile(self):
         print('Template Profile Model:', TModel)
         self.model = await self.mongooseService.get(self.model.__class__,self.miniService_id)
-        self._read_encrypted_creds()
+        await RunInThreadPool(self._read_encrypted_creds)()
         
 
 
 @Service()
 class ProfileService(BaseMiniServiceManager):
 
-    def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
+    def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService,taskService:TaskService):
         super().__init__()
         self.MiniServiceStore:MiniServiceStore[ProfileMiniService[BaseProfileModel]] = MiniServiceStore[ProfileMiniService[BaseProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
@@ -76,6 +83,7 @@ class ProfileService(BaseMiniServiceManager):
         self.redisService = redisService
         self.loggerService = loggerService
         self.vaultService = vaultService
+        self.taskService = taskService
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         self.MiniServiceStore.clear()
@@ -86,11 +94,14 @@ class ProfileService(BaseMiniServiceManager):
                     self.vaultService,
                     self.mongooseService,
                     self.redisService,
+                    self.taskService,
                     model=m,model_type=v)
                 p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 self.MiniServiceStore.add(p)
-            
         
+        if len(self.MiniServiceStore) == 0:
+            raise BuildOkError
+             
     def verify_dependency(self):
         if self.vaultService.service_status not in HCVaultService._ping_available_state:
             raise BuildFailureError
@@ -118,7 +129,6 @@ class ProfileService(BaseMiniServiceManager):
         except :
             self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
             return False
-
     
     ########################################################       ################################3
 
@@ -150,16 +160,27 @@ class ProfileService(BaseMiniServiceManager):
     async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False):
         profile_id = str(profileModel.id)
         result = await profileModel.delete()
-        self._delete_encrypted_creds(profile_id,profileModel._vault)
+        await self._delete_encrypted_creds(profile_id,profileModel._vault)
         return result
-        
-    def update_credentials(self,profiles_id:str,creds:dict,vault_path:str):
-        current_creds:dict = self._read_encrypted_creds(profiles_id)
-        current_creds.update(creds)
-        self._put_encrypted_creds(profiles_id,current_creds,vault_path)
+     
+    async def update_profile(self,profileModel:BaseProfileModel,modelUpdate:BaseProfileModel):
+        modelUpdate = modelUpdate.model_dump()
+        for k,v in modelUpdate.items():
+            if v is not None:
+                try:
+                    getattr(profileModel,k)
+                    setattr(profileModel,k,v)
+                except:
+                    continue
+   
+    async def update_meta_profile(self,profile:BaseProfileModel):
+        profile.last_modified =  datetime.utcnow().isoformat()
+        profile.version+=1
+        await profile.save()
+        return profile
     
-
     ########################################################       ################################
+
     async def addError(self,profile_id: str | None,error_code: int | None,error_name: str | None,error_description: str | None,error_type: Literal['warn', 'critical', 'message'] | None):
         error= ErrorProfileModel(
             profile_id=profile_id,
@@ -174,10 +195,16 @@ class ProfileService(BaseMiniServiceManager):
         await self.mongooseService.delete_all(ErrorProfileModel,{'profile_id':profile_id})
     ########################################################       ################################
 
+    async def update_credentials(self,profiles_id:str,creds:dict,vault_path:str):
+        current_creds:dict = await self._read_encrypted_creds(profiles_id)
+        current_creds.update(creds)
+        await self._put_encrypted_creds(profiles_id,current_creds,vault_path)
 
+    @RunInThreadPool
     def _read_encrypted_creds(self,profile_id:str):
-        return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)
+        return self.MiniServiceStore.get(profile_id)._read_encrypted_creds(True)    
 
+    @RunInThreadPool
     def _put_encrypted_creds(self,profiles_id:str,data:dict,vault_path:str):
         data = flatten_dict(data,dict_sep='/',_key_builder=lambda x:x+'/')
         for k,v in data.items():
@@ -188,6 +215,7 @@ class ProfileService(BaseMiniServiceManager):
         
         return self.vaultService.secrets_engine.put(vault_path,data,profiles_id)
 
+    @RunInThreadPool
     def _delete_encrypted_creds(self,profiles_id:str,vault_path):
         return self.vaultService.secrets_engine.delete(vault_path,profiles_id)
     

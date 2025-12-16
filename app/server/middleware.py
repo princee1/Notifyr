@@ -1,63 +1,56 @@
-import asyncio
+from uuid import uuid4
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, ClientType, Role, Scope, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
+from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod
-from fastapi import HTTPException, Request, Response, FastAPI,status
-from typing import Any, Awaitable, Callable, MutableMapping
+from fastapi import HTTPException, Request, Response,status
+from typing import Callable
 import time
-from app.utils.constant import ConfigAppConstant, HTTPHeaderConstant
-from app.depends.dependencies import get_api_key, get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
-from cryptography.fernet import InvalidToken
-from app.depends.variables import SECURITY_FLAG
-from app.utils.globals import PARENT_PID, PROCESS_PID
-from app.utils.helper import generateId
-from app.depends.funcs_dep import GetClient
-from starlette.background import BackgroundTask
+from app.utils.constant import HTTPHeaderConstant
+from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
+    
 
+configService = Get(ConfigService)
 
-        
 class MetaDataMiddleWare(MiddleWare):
     priority = MiddlewarePriority.METADATA
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
-        self.taskService:TaskService = Get(TaskService)
         self.configService:ConfigService = Get(ConfigService)
-
-        self.instance_id = str(self.configService.INSTANCE_ID)
-        self.process_pid = PROCESS_PID
-        self.parent_pid = PARENT_PID
-
+        self.monitoringService = Get(MonitoringService)
+        self.uvicornWorkerService= Get(UvicornWorkerService)
 
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
-        self.taskService.connection_count.inc()
-        self.taskService.connection_total.inc()
+        self.monitoringService.connection_count.inc()
+        self.monitoringService.connection_total.inc()
+        request_id=  str(uuid4())
+        request.state.request_id =request_id
 
         try:
             response: Response = await call_next(request)
             process_time = time.time() - start_time
             
             response.headers[HTTPHeaderConstant.X_PROCESS_TIME] = f"{process_time * 1000:.1f} (ms)"
-            response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.instance_id
-            response.headers[HTTPHeaderConstant.X_PROCESS_PID] =self.process_pid
-            response.headers[HTTPHeaderConstant.X_PARENT_PROCESS_PID] = self.parent_pid
+            response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.uvicornWorkerService.INSTANCE_ID
+            response.headers[HTTPHeaderConstant.X_REQUEST_ID] = request_id
 
-            self.taskService.request_latency.observe(process_time)
+            self.monitoringService.request_latency.observe(process_time)
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
-            self.taskService.request_latency.observe(process_time)
-            return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)','X-Instance-Id':self.instance_id})
+            self.monitoringService.request_latency.observe(process_time)
+            return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)',HTTPHeaderConstant.X_INSTANCE_ID:self.uvicornWorkerService.INSTANCE_ID})
         finally:
-            self.taskService.connection_count.dec()
+            self.monitoringService.connection_count.dec()
 
 class LoadBalancerMiddleWare(MiddleWare):
     priority = MiddlewarePriority.LOAD_BALANCER
@@ -72,25 +65,7 @@ class LoadBalancerMiddleWare(MiddleWare):
         response = await call_next(request)
         # TODO add headers like application id, notifyr-service id, Signature-Service, myb generation id 
         return response
-
-class SecurityMiddleWare(MiddleWare):
-    priority = MiddlewarePriority.SECURITY
-    def __init__(self,app, dispatch=None) -> None:
-        super().__init__(app, dispatch)
-        self.securityService = Get(SecurityService)
-        self.configService = Get(ConfigService)
-
-    @BypassOn()
-    async def dispatch(self, request: Request, call_next: Callable[..., Response]):
-        return  await call_next(request)
-            
-       
-class AnalyticsMiddleware(MiddleWare):
-    priority = MiddlewarePriority.ANALYTICS
-    
-    async def dispatch(self, request, call_next):
-        return await call_next(request)
-
+                 
 class JWTAuthMiddleware(MiddleWare):
     priority = MiddlewarePriority.AUTH
     def __init__(self, app, dispatch=None) -> None:
@@ -109,7 +84,7 @@ class JWTAuthMiddleware(MiddleWare):
 
         
 
-    @BypassOn(not SECURITY_FLAG)
+    @BypassOn(not configService.SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
@@ -132,73 +107,32 @@ class JWTAuthMiddleware(MiddleWare):
 
             #TODO check group id
             if not client.authenticated:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client is not authenticated")
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
 
             if client.client_type != ClientType.Admin: 
 
                 if await BlacklistORMCache.Cache([group_id,client_id],client):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
+                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
 
             request.state.client = client
 
             policies = await AuthPermissionCache.Cache([group_id,client_id],client)
             authPermission= AuthPermission(**{**authPermission,**policies})
 
+            filter_asset_permission(authPermission)
             parse_authPermission_enum(authPermission)
+            
             request.state.authPermission = authPermission
 
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
         return await call_next(request)
-    
-
-    
-class BackgroundTaskMiddleware(MiddleWare):
-    priority = MiddlewarePriority.BACKGROUND_TASK_SERVICE
-    def __init__(self, app, dispatch = None):
-        super().__init__(app, dispatch)
-        self.taskService:TaskService = Get(TaskService)
-    
-    @ExcludeOn(['/docs/*','/openapi.json'])
-    @ExcludeOn(['/'])
-    async def dispatch(self, request:Request, call_next):
-        request_id = generateId(25)
-        request.state.request_id = request_id
-        response:Response = await call_next(request)
-        rq_response_id = get_response_id(response) 
-        if rq_response_id in self.taskService.sharing_task:
-            if len(self.taskService.sharing_task[rq_response_id].taskConfig)>0:
-                async def callback():
-                    await asyncio.sleep(0.1)
-                    return await self.taskService(rq_response_id)
-                response.background= BackgroundTask(callback)
-        else: 
-            self.taskService._delete_tasks(request_id) #NOTE if theres no rq_response_id in the response this means we can safely remove the reference
-        return response   
-        
-class UserAppMiddleware(MiddleWare):
-    priority = MiddlewarePriority.USER_APP
-
-    def __init__(self, app, dispatch = None):
-        super().__init__(app, dispatch)
-        self.adminService = Get(AdminService)
-        self.jwtAuthService = Get(JWTAuthService)
-        self.configService = Get(ConfigService)
-        self.securityService = Get(SecurityService)
-
-    @ExcludeOn(['/docs/*','/openapi.json','/contacts/manage/*'])
-    @ApplyOn(['/auth/generate/admin/*'])
-    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
-    @ExcludeOn(['/'])
-    async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
-        return await super().dispatch(request, call_next)
-
-
+         
 class ChallengeMatchMiddleware(MiddleWare):
     priority = MiddlewarePriority.CHALLENGE
 
-    @BypassOn(not SECURITY_FLAG)
+    @BypassOn(not configService.SECURITY_FLAG)
     @ExcludeOn(['/docs/*','/openapi.json','/contacts/manage/*'])
     @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])

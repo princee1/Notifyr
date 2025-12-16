@@ -1,7 +1,7 @@
 #from app.definition import _service
 from .assets_service import AssetService
-from .config_service import ConfigService,ProcessWorkerService
-from .database_service import TortoiseConnectionService,RedisService,MongooseService
+from .config_service import ConfigService,UvicornWorkerService
+from .database_service import TortoiseConnectionService,RedisService,MongooseService,RabbitMQService
 from .email_service import EmailReaderService,EmailSenderService
 from .file_service import FileService,BaseFileRetrieverService,FTPService,GitCloneRepoService
 from .logger_service import LoggerService
@@ -21,3 +21,5 @@ from .secret_service import HCVaultService
 from .profile_service import ProfileService
 from .webhook_service import WebhookService
 from .llm_service import LLMService
+from .task_service import TaskService
+from .monitoring_service import MonitoringService

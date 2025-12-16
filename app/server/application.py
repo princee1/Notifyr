@@ -6,31 +6,30 @@ from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
-from app.interface.timers import IntervalInterface, SchedulerInterface
+from app.interface.timers import  SchedulerInterface
 from app.ressources import *
 from app.services.assets_service import AssetService
 from app.services.aws_service import AmazonS3Service
 from app.services.database_service import  MemCachedService, MongooseService, RedisService, TortoiseConnectionService
 from app.services.cost_service import CostService
 from app.services.secret_service import HCVaultService
+from app.services.task_service import TaskService
 from app.utils.prettyprint import PrettyPrinter_
-from starlette.types import ASGIApp
-from app.services.config_service import ConfigService, MODE
+from app.services.config_service import ConfigService
 from fastapi import Request, Response, FastAPI
 from slowapi.middleware import SlowAPIMiddleware
-from typing import Any, Awaitable, Callable, Dict, Literal, MutableMapping, overload, TypedDict
+from typing import Callable,Literal
 import uvicorn
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 import datetime as dt
 from app.definition._ressource import RESSOURCES, BaseHTTPRessource, ClassMetaData
 from app.interface.events import EventInterface
-from tortoise.contrib.fastapi import register_tortoise
 import traceback
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
-from fastapi_cache.backends.inmemory import InMemoryBackend
-from fastapi_cache.backends.memcached import MemcachedBackend
+# from fastapi_cache.backends.inmemory import InMemoryBackend
+# from fastapi_cache.backends.memcached import MemcachedBackend
 
 from .app_meta import *
 from .middleware import MIDDLEWARE
@@ -38,7 +37,7 @@ from app.definition._service import PROCESS_SERVICE_REPORT
 from app.models.communication_model import *
 from app.models.webhook_model import *
 
-from app.classes.profiles import ProfilModelValues, BaseProfileModel
+from app.classes.profiles import ProfilModelValues
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
@@ -67,7 +66,6 @@ def register_hook(state:Literal['shutdown','startup'],active=True):
 
 class Application(EventInterface):
 
-    # TODO if it important add other on_start_up and on_shutdown hooks
     def __init__(self,port:int=None,log_level:str=None,host:str=None):
         self.log_level = log_level
         self.host = host
@@ -77,7 +75,9 @@ class Application(EventInterface):
         self.configService: ConfigService = Get(ConfigService)
         self.costService: CostService = Get(CostService)
         
-        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks)
+        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,
+                           root_path=ROOT_PATH,version=VERSION,
+                           on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks,)
         self.app.state.limiter = self.costService.GlobalLimiter
 
         self.add_exception_handlers()
@@ -192,10 +192,18 @@ class Application(EventInterface):
         await redisService.close_connections()
 
     @register_hook('startup',)
-    def start_tickers(self):
+    async def start_leader_task_election(self):
         taskService:TaskService =  Get(TaskService)
-        taskService.start()
+        await taskService.start()
 
+    @register_hook('shutdown')
+    async def stop_lead_task_election(self):
+        taskService:TaskService =  Get(TaskService)
+        await taskService.stop()
+
+
+    @register_hook('startup',)
+    def start_tickers(self):
         vaultService: HCVaultService = Get(HCVaultService) 
         vaultService.start()
 
@@ -213,17 +221,13 @@ class Application(EventInterface):
     
     @register_hook('shutdown')
     def stop_tickers(self):
-
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
         amazons3Service = Get(AmazonS3Service)
         vaultService = Get(HCVaultService)
 
-        taskService:TaskService =  Get(TaskService)
-        
-
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,taskService,amazons3Service]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,amazons3Service]
 
         for s in services:
             s.shutdown()
@@ -268,6 +272,21 @@ class Application(EventInterface):
             return 
         
         mongooseService.close_connection()
+
+    @register_hook('shutdown')
+    def revoke_dynamic_lease(self):
+        mongooseService: MongooseService = Get(MongooseService)
+        tortoiseConnService = Get(TortoiseConnectionService)
+        awsS3Service = Get(AmazonS3Service)
+        redisService = Get(RedisService)
+        vaultService = Get(HCVaultService)
+
+        mongooseService.revoke_lease()
+        tortoiseConnService.revoke_lease()
+        awsS3Service.revoke_lease()
+        redisService.revoke_lease()
+
+        vaultService.revoke_auth_token()
 
 
     @property

@@ -1,9 +1,7 @@
-from dataclasses import dataclass
 from typing import Callable, List, Literal,Dict,NotRequired, Optional, Self
 from pydantic import BaseModel, field_validator, model_validator
 from typing_extensions import TypedDict
 from enum import Enum
-from time import time
 
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from .template import Extension
@@ -23,12 +21,13 @@ EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
+    STATIC = 'STATIC'
     ADMIN = 'ADMIN'
     RELAY = 'RELAY'
     CUSTOM ='CUSTOM'
     MFA_OTP ='MFA_OTP'
     CHAT = 'CHAT'
-    REDIS_RESULT = 'REDIS-RESULT'
+    RESULT = 'RESULT'
     REFRESH = 'REFRESH'
     CONTACTS = 'CONTACTS'
     TWILIO = 'TWILIO'
@@ -97,6 +96,7 @@ class AuthPermission(TypedDict):
     allowed_assets:List[str] | AssetsPermission
     allowed_profiles:List[str]=[]
     allowed_agents:List[str]=[]
+    allowed_blogs: List[str] = []
     challenge: str
     scope:str
     salt:str
@@ -135,6 +135,7 @@ class PolicyModel(BaseModel):
     allowed_agents:List[str] = []
     allowed_routes: Dict[str, RoutePermissionModel] = {}
     allowed_assets: List[str] =[]
+    allowed_blog: List[str] = []
     roles: Optional[List[Role]] = [Role.PUBLIC]
 
     @field_validator('allowed_assets')

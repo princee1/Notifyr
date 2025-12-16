@@ -24,9 +24,6 @@ from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
-from app.depends.variables import SECURITY_FLAG
-
-
 
 configService: ConfigService = Get(ConfigService)
 costService:CostService = Get(CostService)
@@ -566,7 +563,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
             @functools.wraps(function)
             async def callback(*args, **kwargs):
 
-                if not SECURITY_FLAG:
+                if not configService.SECURITY_FLAG:
                     return await function(*args, **kwargs)
 
                 if empty_decorator:
@@ -939,20 +936,17 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
 
     async def inner_callback(route_params:dict):
         for s in services:
-            k = {}
-            k[SpecialKeyParameterConstant.ROUTE_PARAMS_KWARGS_PARAMETER] = route_params
-            k[SpecialKeyParameterConstant.PROFILE_KWARGS_PARAMETER] =route_params.get('profile',None)
-            k[SpecialKeyParameterConstant.IS_MANAGER_KWARGS_PARAMETER] = is_manager
-
             if isinstance(s, dict):
-                k.update(s['kwargs'])
+                k= s['kwargs']
                 s = s['cls']
-
+            else:
+                k = {}
+            
             cls: BaseService = Get(s)
-            await BaseService.CheckStatusBeforeHand(cls.async_pingService)(cls,infinite_wait,**k)
+            await BaseService.CheckStatusBeforeHand(cls.pingService)(cls,infinite_wait,route_params,route_params.get('profile',None),is_manager,**k)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait)
+        cls = common_class_decorator( func, PingService, None, services=services, infinite_wait=infinite_wait,is_manager=is_manager,wait_timeout=wait_timeout)
         if cls != None:
             return cls
 
@@ -973,7 +967,7 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
     
     return decorator
 
-def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,check_status:bool=True,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,**add_kwargs):
+def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,**add_kwargs):
     if lockType not in ['reader', 'writer']:
         raise TypeError
     
@@ -981,7 +975,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
         miniLockType = lockType
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,check_status=check_status,as_manager=as_manager,miniLockType=miniLockType,**add_kwargs)
+        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,as_manager=as_manager,miniLockType=miniLockType,**add_kwargs)
         if cls != None:
             return cls
 
@@ -998,10 +992,8 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                     @functools.wraps(f)
                     async def delegator(*a,**k):
                         async with _service.statusLock.reader if lockType == 'reader' else _service.statusLock.writer:
-                            if check_status:
-                                _service.check_status('')
-
                             if as_manager and isinstance(_service,BaseMiniServiceManager):
+
                                 profile = kwargs.get('profile',None)
                                 if profile == None:
                                     raise ProfileNotSpecifiedError
@@ -1011,10 +1003,9 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
                                 s:BaseMiniService = _service.MiniServiceStore.get(profile)
 
                                 async with s.statusLock.reader if miniLockType == 'reader' else _service.statusLock.writer:
-                                    if check_status:
-                                        s.check_status('')
-                    
-                            return await Helper.return_result(f,a,k)
+                                    return await Helper.return_result(f,a,k)
+                            else:
+                                return await Helper.return_result(f,a,k)
                     return delegator
                 
                 inner_callback = target_function

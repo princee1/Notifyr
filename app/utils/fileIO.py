@@ -9,7 +9,6 @@ import json
 import pickle
 import glob
 from typing import Any, Literal, overload
-from .question import ask_question, FileInputHandler
 # BUG file name must be a non null string
 
 
@@ -21,9 +20,6 @@ class FDFlag(Enum):
     WRITE = "w"
     WRITE_BYTES = "wb"
 
-
-def inputFilePath(message:str,instruction ="(Press CTRL-C to quit)",isDirectory=False):
-    return ask_question([FileInputHandler(message,'location',isDir=isDirectory)])['location']
 
 def getFd(path: str, flag: FDFlag, enc: str = "utf-8"):
     try:
