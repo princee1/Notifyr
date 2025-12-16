@@ -428,7 +428,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseServiceLock(JWTAuthService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
-        self.jwtAuthService.revoke_all_tokens()
+        await self.jwtAuthService.revoke_all_tokens()
 
         broker.propagate_state(StateProtocol(
             service=self.jwtAuthService.name,
@@ -454,7 +454,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
     async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):   
         unRevokeModel = unRevokeModel.model_dump()
-        self.jwtAuthService.unrevoke_all_tokens(**unRevokeModel)
+        await self.jwtAuthService.unrevoke_all_tokens(**unRevokeModel)
         
         broker.propagate_state(StateProtocol(
             service=self.jwtAuthService.name,

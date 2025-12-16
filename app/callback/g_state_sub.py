@@ -5,7 +5,7 @@ from app.container import Get
 from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseMiniServiceManager, BaseService, LinkParams, MiniStateProtocol, ServiceStatus,StateProtocol, VariableProtocol, LiaisonDependency
 from app.interface.timers import SchedulerInterface
 from app.utils.constant import SubConstant
-
+from app.utils.tools import RunInThreadPool
 
 
 async def recursive(s:BaseService,message:StateProtocol,cache=None):
@@ -45,7 +45,7 @@ async def recursive(s:BaseService,message:StateProtocol,cache=None):
                 force_sync_verify = message.get('force_sync_verify',False)
 
             if to_destroy:
-                d._destroyer(LIFECYCLE_QUIET,destroy_state=destroy_state)
+                await RunInThreadPool(d._destroyer)(LIFECYCLE_QUIET,destroy_state=destroy_state)
             
             if to_build:
                 build = True
@@ -53,7 +53,7 @@ async def recursive(s:BaseService,message:StateProtocol,cache=None):
                     build = await d.async_verify_dependency()
                 
                 if build:
-                    d._builder(LIFECYCLE_QUIET,build_state=build_state,force_sync_verify=force_sync_verify)              
+                    await RunInThreadPool(d._builder)(LIFECYCLE_QUIET,build_state=build_state,force_sync_verify=force_sync_verify)          
 
         await recursive(d,message,cache)
 
@@ -78,7 +78,7 @@ async def SetServiceStatus(message:StateProtocol,service=None):
                 service.service_status = ServiceStatus(message['status'])
         
             if message.get('to_destroy',False):
-                service._destroyer(LIFECYCLE_QUIET,message.get('destroy_state',DEFAULT_DESTROY_STATE))
+                await RunInThreadPool(service._destroyer)(LIFECYCLE_QUIET,message.get('destroy_state',DEFAULT_DESTROY_STATE))
             
             if message.get('to_build',False):
                 build = True
@@ -86,7 +86,7 @@ async def SetServiceStatus(message:StateProtocol,service=None):
                     build = await service.async_verify_dependency()
                 
                 if build:
-                    service._builder(LIFECYCLE_QUIET,message.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=message.get('force_sync_verify',False))
+                    await RunInThreadPool(service._builder)(LIFECYCLE_QUIET,message.get('build_state',DEFAULT_BUILD_STATE),force_sync_verify=message.get('force_sync_verify',False))
                 else:
                     ...
                     

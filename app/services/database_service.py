@@ -10,13 +10,10 @@ from random import random,randint
 from app.classes.callbacks import CALLBACKS_CONFIG
 from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.vault_engine import VaultDatabaseCredentials
-from app.definition._error import BaseError
-from app.definition._interface import Interface, IsInterface
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, RabbitMQConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
-from app.utils.helper import quote_safe_url, reverseDict, subset_model
 from app.utils.transformer import none_to_empty_str
 from .config_service import MODE, CeleryMode, ConfigService, UvicornWorkerService
 from .file_service import FileService

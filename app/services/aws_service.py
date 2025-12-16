@@ -9,20 +9,19 @@ from app.classes.vault_engine import VaultDatabaseCredentials, VaultDatabaseCred
 from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, GUNICORN_BUILD_STATE, BaseMiniService, BaseService, LinkDep, MiniService, Service
 from app.errors.service_error import BuildFailureError
-from app.interface.timers import SchedulerInterface
-from app.interface.email import EmailInterface, EmailReadInterface, EmailSendInterface, Mode
+from app.interface.email import EmailReadInterface, EmailSendInterface, Mode
 from app.models.communication_model import AWSProfileModel
-from app.services.profile_service import ProfileMiniService, ProfileService
+from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MinioConstant, VaultConstant, VaultTTLSyncConstant
-from .config_service import AssetMode, ConfigService
+from app.utils.constant import MinioConstant, VaultTTLSyncConstant
+from app.utils.tools import RunInThreadPool
+from .config_service import  ConfigService
 from .file_service import BaseFileRetrieverService, FileService
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Dict
 from app.services.database_service import RedisService, TempCredentialsDatabaseService
-from fnmatch import fnmatch
+#from aiobotocore import client
 
 class AmazonS3ServiceError(BaseError):
     pass
@@ -98,11 +97,13 @@ class AmazonS3Service(TempCredentialsDatabaseService):
             auth=creds.get('auth', None), warnings=creds.get('warnings', None)
         )
 
-    def delete_object(self,object_name: str,version_id: str = None,buckets=MinioConstant.ASSETS_BUCKET):
-        _object = self.stat_objet(object_name,version_id,buckets=buckets)
+    @RunInThreadPool
+    async def delete_object(self,object_name: str,version_id: str = None,buckets=MinioConstant.ASSETS_BUCKET):
+        _object = await self.stat_objet(object_name,version_id,buckets=buckets)
         self.client.remove_object(buckets, object_name, version_id=version_id)
         return _object
 
+    @RunInThreadPool
     def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None,delete_version=False,objects=None,buckets=MinioConstant.ASSETS_BUCKET):
         if not objects:
             objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=delete_version,include_delete_marker=False)
@@ -127,9 +128,9 @@ class AmazonS3Service(TempCredentialsDatabaseService):
     def list_objects(self,prefix: str='',recursive: bool = True,match:str=None,include_version=True,include_delete_marker=True,buckets=MinioConstant.ASSETS_BUCKET):
         objects = self.client.list_objects(buckets, prefix=prefix, recursive=recursive,include_version=include_version)
         return [o for o in objects if (self.fileService.file_matching(o.object_name,match) and not o.is_dir and (include_delete_marker or not o.is_delete_marker))]
-        
-
-    def copy_object(self,source_object_name: str,dest_object_name: str,version_id: str = None,move=False,buckets=MinioConstant.ASSETS_BUCKET):
+    
+    @RunInThreadPool
+    async def copy_object(self,source_object_name: str,dest_object_name: str,version_id: str = None,move=False,buckets=MinioConstant.ASSETS_BUCKET):
         self.read_object(source_object_name,version_id,buckets).close()
         result = self.client.copy_object(
             buckets,
@@ -139,17 +140,19 @@ class AmazonS3Service(TempCredentialsDatabaseService):
         
         if move:
             self.client.remove_object(buckets, source_object_name, version_id=version_id)
-        meta = self.stat_objet(dest_object_name,check_existence=True,buckets=buckets)
+        meta = await self.stat_objet(dest_object_name,check_existence=True,buckets=buckets)
         return {
             'result':result,
             'meta':meta
         }
 
+    @RunInThreadPool
     def upload_object(self,object_name: str,data:bytes, content_type: str = 'application/octet-stream',metadata: Dict = None,buckets=MinioConstant.ASSETS_BUCKET):
         return self.client.put_object(
             buckets,object_name,data,len(data),content_type=content_type,metadata=metadata
         )
     
+    @RunInThreadPool
     def stat_objet(self,object_name,version_id,check_existence:bool=True,buckets=MinioConstant.ASSETS_BUCKET)->Object:
         if check_existence:
             self.read_object(object_name,version_id,buckets).close()
@@ -157,6 +160,7 @@ class AmazonS3Service(TempCredentialsDatabaseService):
             buckets,object_name,version_id=version_id
         )        
     
+    @RunInThreadPool
     def download_objects(self,prefix: str,recursive: bool = True,match:str=None,objects:list[Object]=None,buckets=MinioConstant.ASSETS_BUCKET):
         if objects == None:
             objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=False,include_delete_marker=False,buckets=buckets)
@@ -179,7 +183,7 @@ class AmazonS3Service(TempCredentialsDatabaseService):
                 disk_rel_path
             )
         
-
+    @RunInThreadPool
     def generate_presigned_url(self,object_name: str,expiry: int = 3600,method: str = 'GET',version_id: str = None,buckets=MinioConstant.ASSETS_BUCKET):
         url = self.client.presigned_get_object(
             buckets,

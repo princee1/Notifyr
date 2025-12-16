@@ -195,7 +195,7 @@ class CarrierTypeGuard(Guard):
             phone_number = [[to for to in content.to] for content in scheduler.content]
         for _phone_number in phone_number:
             for pn in _phone_number:
-                status_code,data = await self.twilioService.async_phone_lookup(phone_number,True)
+                status_code,data = await self.twilioService.phone_lookup(phone_number,True)
                 if status_code != 200:
                     return False,f'Callee Information not found: {pn}'
                 

@@ -9,7 +9,7 @@ from app.errors.service_error import BuildWarningError
 from app.services.setting_service import SettingService
 from app.utils.constant import VaultConstant
 from app.utils.fileIO import FDFlag
-from app.utils.tools import Cache, Time
+from app.utils.tools import Cache, RunInThreadPool, Time
 from .config_service import ConfigService
 from dataclasses import dataclass
 from .file_service import FileService
@@ -250,13 +250,15 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         data=self.vaultService.generation_engine.read('',self.gen_id_path)
         self.generation_id_data = data
 
+    @RunInThreadPool
     def revoke_all_tokens(self) -> None:
         new_generation_id = generateId(self.GENERATION_ID_LEN)
         self.vaultService.generation_engine.put('',{
             'GENERATION_ID':new_generation_id,
         },path=self.gen_id_path)
         self.read_generation_id()
-        
+    
+    @RunInThreadPool
     def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool,version_to_delete:list[int]=[]):
         self.vaultService.generation_engine.rollback('',self.gen_id_path,version,destroy,delete,version_to_delete)
         self.read_generation_id()

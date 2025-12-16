@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from msal import ConfidentialClientApplication
 from typing import Any, Optional, Type, TypeVar, TypedDict, overload
 from app.classes.mail_provider import AuthToken
