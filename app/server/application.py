@@ -28,6 +28,8 @@ from app.interface.events import EventInterface
 import traceback
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
+
+from app.utils.tools import RunInThreadPool
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 # from fastapi_cache.backends.memcached import MemcachedBackend
 
@@ -194,12 +196,12 @@ class Application(EventInterface):
     @register_hook('startup',)
     async def start_leader_task_election(self):
         taskService:TaskService =  Get(TaskService)
-        await taskService.start()
+        taskService.start()
 
     @register_hook('shutdown')
     async def stop_lead_task_election(self):
         taskService:TaskService =  Get(TaskService)
-        await taskService.stop()
+        taskService.shutdown()
 
 
     @register_hook('startup',)
@@ -274,19 +276,18 @@ class Application(EventInterface):
         mongooseService.close_connection()
 
     @register_hook('shutdown')
-    def revoke_dynamic_lease(self):
+    async def revoke_dynamic_lease(self):
         mongooseService: MongooseService = Get(MongooseService)
         tortoiseConnService = Get(TortoiseConnectionService)
         awsS3Service = Get(AmazonS3Service)
         redisService = Get(RedisService)
         vaultService = Get(HCVaultService)
 
-        mongooseService.revoke_lease()
-        tortoiseConnService.revoke_lease()
-        awsS3Service.revoke_lease()
-        redisService.revoke_lease()
-
-        vaultService.revoke_auth_token()
+        RunInThreadPool(mongooseService.revoke_lease)()
+        RunInThreadPool(tortoiseConnService.revoke_lease)()
+        RunInThreadPool(awsS3Service.revoke_lease)()
+        RunInThreadPool(redisService.revoke_lease)()
+        RunInThreadPool(vaultService.revoke_auth_token)()
 
 
     @property

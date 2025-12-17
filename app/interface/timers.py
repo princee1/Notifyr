@@ -12,6 +12,10 @@ from app.definition._error import BaseError
 from app.definition._interface import Interface, IsInterface
 from apscheduler.executors.pool import ThreadPoolExecutor
 from functools import partial, wraps
+from apscheduler.schedulers import (
+    SchedulerAlreadyRunningError,
+    SchedulerNotRunningError,
+)
 
 class IntervalError(BaseError):
     ...
@@ -104,6 +108,12 @@ class SchedulerInterface(Interface):
         else:
             return self._scheduler.add_job(run_sync(action), trigger, args=(action, *args),id = id, name=name,kwargs=kwargs,misfire_grace_time=self.misfire_grace_time,jobstore=jobstore,coalesce=self.coalesce)
 
+    def pause(self):
+        self._scheduler.pause()
+    
+    def resume(self):
+        self._scheduler.resume()
+
     def start(self):
         if self._scheduler.running:
             return
@@ -115,10 +125,10 @@ class SchedulerInterface(Interface):
             return
         self._scheduler.shutdown(wait)
     
-    def pause(self,job_id):
+    def pause_job(self,job_id):
         self._scheduler.pause_job(job_id)
     
-    def resume(self,job_id):
+    def resume_job(self,job_id):
         self._scheduler.resume_job(job_id)
 
     def update_verify_store(self,jobstore:str=None,executor:str=None,verify_only=False):

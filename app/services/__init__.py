@@ -1,4 +1,3 @@
-#from app.definition import _service
 from .assets_service import AssetService
 from .config_service import ConfigService,UvicornWorkerService
 from .database_service import TortoiseConnectionService,RedisService,MongooseService,RabbitMQService
@@ -12,7 +11,6 @@ from .contacts_service import ContactsService
 from .admin_service import AdminService
 from .reactive_service import ReactiveService
 from .link_service import LinkService
-from .llm_service import LLMService
 from .aws_service import AmazonS3Service,AmazonSESService,AmazonSNSService
 from .health_service import HealthService
 from .cost_service import CostService

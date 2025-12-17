@@ -10,7 +10,7 @@ from app.decorators.pipes import DocumentFriendlyPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
-from app.depends.class_dep import Broker
+from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
 from app.models.agents_model import AgentModel
 from app.services.database_service import MongooseService
