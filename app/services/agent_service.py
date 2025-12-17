@@ -3,6 +3,7 @@ from .database_service import MongooseService, TortoiseConnectionService
 from .config_service import ConfigService
 from app.definition._service import BaseMiniService, MiniService, MiniServiceStore, Service, BaseMiniServiceManager
 from .llm_provider_service import LLMProviderService
+from .remote_agent_service import RemoteAgenticMiniService
 
 
 @MiniService()
@@ -20,12 +21,13 @@ class AiAgentMiniService(BaseMiniService):
     """
 
 @Service()
-class AgentServwice(BaseMiniServiceManager):
+class AgentService(BaseMiniServiceManager):
 
-    def __init__(self, configService: ConfigService,mongooseService:MongooseService,profileService:ProfileService) -> None:
+    def __init__(self, configService: ConfigService,mongooseService:MongooseService,profileService:ProfileService,remoteAgentService:RemoteAgenticMiniService) -> None:
         super().__init__()
         self.configService = configService
         self.mongooseService = mongooseService
+        self.remoteAgentService = remoteAgentService
         self.profileService= profileService
         self.MiniServiceStore = MiniServiceStore[AiAgentMiniService](self.name)
 
