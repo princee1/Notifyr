@@ -10,11 +10,11 @@ from app.decorators.pipes import DocumentFriendlyPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
-from app.depends.class_dep import Broker
+from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
 from app.models.agents_model import AgentModel
 from app.services.database_service import MongooseService
-from app.services.llm_service import LLMService
+from app.services.agent_service import AgentService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
 
@@ -34,7 +34,7 @@ class AgentsRessource(BaseHTTPRessource):
 
 
     @InjectInMethod()
-    def __init__(self,llmService:LLMService,mongooseService:MongooseService): 
+    def __init__(self,llmService:AgentService,mongooseService:MongooseService): 
         self.llmService = llmService
         self.mongooseService = mongooseService
     
@@ -49,7 +49,7 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(agentModel,True)
         await agentModel.save()
 
-        broker.propagate_state(StateProtocol(name=LLMService,to_build=True,to_destroy=True))
+        broker.propagate_state(StateProtocol(name=AgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UseRoles([Role.PUBLIC])        
@@ -67,7 +67,7 @@ class AgentsRessource(BaseHTTPRessource):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
         await self.mongooseService.delete(agentModel)
 
-        broker.propagate_state(StateProtocol(name=LLMService,to_build=True,to_destroy=True))
+        broker.propagate_state(StateProtocol(name=AgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UsePermission(AdminPermission)
@@ -84,7 +84,7 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(agentModel,True)
         await agentModel.update_meta_profile()
 
-        broker.propagate_state(StateProtocol(name=LLMService,to_build=True,to_destroy=True))
+        broker.propagate_state(StateProtocol(name=AgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UsePipe(DocumentFriendlyPipe,before=False)

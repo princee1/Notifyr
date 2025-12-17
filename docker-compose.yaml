@@ -151,6 +151,18 @@ services:
   # ==========================================
   # WORKER LAYER
   # ==========================================
+  agentic:
+    image: notifyr/agentic:community 
+    secrets:
+      - source: app_role_id
+        target: /run/secrets/app-role_id.txt
+    volumes:
+      - vault-shared:/vault/shared
+    networks:
+      - data_net
+      - vault_net
+
+
   worker:
     image: notifyr/celery:community
     command: ["./spawn_celery_worker.sh", "1", "false"]
@@ -350,8 +362,29 @@ services:
       POSTGRES_DB: notifyr
     networks:
       - data_net
+  
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"  # HTTP API
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      # Disk storage
+      QDRANT__STORAGE__PATH: /qdrant/storage
+      QDRANT__STORAGE__USE_MMAP: "true"
+      QDRANT__STORAGE__PERSISTENT: "true"
+
+      QDRANT__HNSW__M: 4
+      QDRANT__HNSW__EF_CONSTRUCTION: 32
+      QDRANT__HNSW__EF: 32
+
+      QDRANT__CACHE__MAX_SIZE_MB: 128
 
 volumes:
+  qdrant_storage:
+    driver: local
   vault-data: {}
   vault-shared: {}
   vault-audit: {}

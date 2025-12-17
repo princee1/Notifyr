@@ -12,7 +12,7 @@ from .contacts_service import ContactsService
 from .admin_service import AdminService
 from .reactive_service import ReactiveService
 from .link_service import LinkService
-from .llm_service import LLMService
+from .agent_service import AgentService
 from .aws_service import AmazonS3Service,AmazonSESService,AmazonSNSService
 from .health_service import HealthService
 from .cost_service import CostService
@@ -20,6 +20,6 @@ from .setting_service import SettingService
 from .secret_service import HCVaultService
 from .profile_service import ProfileService
 from .webhook_service import WebhookService
-from .llm_service import LLMService
+from .agent_service import AgentService
 from .task_service import TaskService
 from .monitoring_service import MonitoringService
