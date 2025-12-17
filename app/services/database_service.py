@@ -1,7 +1,6 @@
 import functools
 import time
 from typing import Any, Callable, Dict, List, Self, Type, TypeVar, TypedDict
-from urllib.parse import urlencode
 from beanie import Document, PydanticObjectId, init_beanie
 import hvac
 import pika

@@ -51,6 +51,13 @@ endef
 notifyr-app:
 	$(call COMPOSE_SCALE,app)
 
+run-beat:
+	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.worker')" -gt 0 ]; then \
+		$(call COMPOSE_RUN,Beat Service,up -d,beat); \
+	else \
+		echo "--- ⏭️  Beat Service: Skipped (value <= 0)"; \
+	fi
+
 build:
 	@echo "================================================="
 	@echo "🛠️  Building Docker services in $(DOCKER_COMPOSE_FILE)..."
@@ -68,7 +75,7 @@ deploy-server:
 
 # 	# Deploy and Scale Core Application Services
 	$(call COMPOSE_SCALE,app)
-	$(call COMPOSE_RUN, Beat Service, up -d, beat)
+	@$(MAKE) run-beat
 	$(call COMPOSE_SCALE,worker)
 # 	$(call COMPOSE_RUN, Beat Service, up -d, balancer)
 
