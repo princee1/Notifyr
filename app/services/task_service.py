@@ -1,6 +1,9 @@
 import asyncio
-from random import randint
+from random import randint, random
 from typing import Optional
+
+from pymongo import MongoClient
+from redis import Redis
 from app.classes.celery import SchedulerModel, TaskType
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service, ServiceStatus
 from app.errors.aps_error import APSJobDoesNotExists
@@ -16,11 +19,18 @@ from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, RedisConstant
 from app.utils.tools import RunInThreadPool
 from apscheduler.jobstores.base import JobLookupError
+from apscheduler.schedulers import (
+    SchedulerAlreadyRunningError,
+    SchedulerNotRunningError,
+)
 
 
 # configuration
 LEADER_LOCK_KEY = "apscheduler:leader_lock"
-LEADER_LOCK_TTL = 300
+LEADER_LOCK_TTL = 600
+LEADER_LOCK_TTL_LOWER_BOUND = int(LEADER_LOCK_TTL * 0.50)
+LEADER_LOCK_TTL_UPPER_BOUND = int(LEADER_LOCK_TTL * 5.50)
+
 LEADER_RENEW_INTERVAL = 3.0 
 SCHEDULER_JOBSTORE_PREFIX = "apscheduler:"
 
@@ -67,84 +77,108 @@ class TaskService(BaseService,SchedulerInterface):
         if self._builded:
             self.shutdown(False)
         
-        self.redis = self.redisService.db['celery']
+        self.redis_client = self.redisService.db['celery']
+        self.mongo_client = self.mongooseService.sync_client
         jobstores = {
             "redis": RedisJobStore(
-                host=self.redis.connection_pool.connection_kwargs.get("host", "localhost"),
-                port=self.redis.connection_pool.connection_kwargs.get("port", 6379),db=RedisConstant.CELERY_DB,
-                # some Redis jobstores accept prefix arg; see your plugin's API
-                jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}jobs",run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}run_times",),
+                host=self.redis_client.connection_pool.connection_kwargs.get("host", "localhost"),
+                port=self.redis_client.connection_pool.connection_kwargs.get("port", 6379),
+                db=RedisConstant.CELERY_DB,
+                jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}jobs",
+                run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}run_times",
+                username=self.redisService.db_user,
+                password=self.redisService.db_password
+                ),
             'memory':MemoryJobStore(),
-            'mongodb':MongoDBJobStore(MongooseDBConstant.DATABASE_NAME,collection=MongooseDBConstant.TASKS_COLLECTION,client=self.mongooseService.sync_client)
+            'mongodb':MongoDBJobStore(
+                MongooseDBConstant.DATABASE_NAME,
+                collection=MongooseDBConstant.TASKS_COLLECTION,
+                client=self.mongo_client
+                )
         }
         jobstore = self.configService.APS_JOBSTORE if not self.fallback_to_memory else 'memory'
         SchedulerInterface.__init__(self,None,jobstores,jobstore,executor='asyncio-executor',replace_existing=True,coalesce=True,thread_pool_count=50)
 
-    async def start(self):
+    def start(self):
         if self.configService.APS_JOBSTORE == 'memory' or self.fallback_to_memory:
             return 
         if not self._builded:
             raise NotBuildedError()
         self._stop = False
+        SchedulerInterface.start(self)
+        self.pause()
         self._leader_task = asyncio.create_task(self._leader_loop())
 
-    async def stop(self):
+    def shutdown(self):
         if self.configService.APS_JOBSTORE == 'memory' or self.fallback_to_memory:
             return 
         self._stop = True
         if self._leader_task:
             self._leader_task.cancel()
-        await self._stop_scheduler()
-
+        SchedulerInterface.shutdown(self)
+    
+    async def resume(self):
+        if self.configService.APS_JOBSTORE != 'mongodb':
+            SchedulerInterface.resume(self)
+            return
+        async with self.mongooseService.statusLock.reader:
+            SchedulerInterface.resume(self)
+    
     async def _leader_loop(self):
         """
         Try to obtain the Redis lock. If we get it -> become leader and start scheduler.
         Keep renewing lock periodically. If we lose the lock -> stop scheduler and try again.
         """
+        await asyncio.sleep(random()*3)
         try:
             while not self._stop:
                 got = await self._try_acquire_lock()
                 if got:
                     if not self._leader:
                         # became leader
+                        await self.resume()
+                        print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Became leader and started scheduler.")
                         self._leader = True
-                        await self._start_scheduler()
                     else:
-                        await self.redis.expire(LEADER_LOCK_KEY, LEADER_LOCK_TTL)
-                        
+                        print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Renew the leadership lock")
+                        await self.redis_client.expire(LEADER_LOCK_KEY, LEADER_LOCK_TTL)
                 else:
-                    val = await self.redis.get(LEADER_LOCK_KEY)
+                    val = await self.redis_client.get(LEADER_LOCK_KEY)
                     if val is None:
                         print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Somehow the no one has the lock... Attempting right away")
                         continue
-                    if val.decode() != self.uvicornWorkerService.INSTANCE_ID:
+                    val = val.decode()
+                    if val != self.uvicornWorkerService.INSTANCE_ID:
                         # someone else took lock
-                        await self._stop_scheduler()
-                        self._leader = False
+                        if self._leader:
+                            self.pause()
+                            print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Stopped scheduler (lost leadership). Holder: {val}")
+                            self._leader = False
+                        else:
+                            ...
+                            #print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Could not get the leadership, Hold by {val}")
                     else:
-                        await self.redis.expire(LEADER_LOCK_KEY, LEADER_LOCK_TTL)
+                        #print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Extend the leadership lock")
+                        await self.redis_client.expire(LEADER_LOCK_KEY, LEADER_LOCK_TTL)
 
-                # if not leader, keep retrying every couple seconds
-                await asyncio.sleep(LEADER_LOCK_TTL * 1.20 + (randint(5,15)))
-        except asyncio.CancelledError:
+                await asyncio.sleep(LEADER_LOCK_TTL + (randint(LEADER_LOCK_TTL_LOWER_BOUND,LEADER_LOCK_TTL_UPPER_BOUND)))
+        except asyncio.CancelledError as e:
+            ...
+        except SchedulerNotRunningError as e:
+            print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Schdeuler Not running Error {e.args}")
+            return
+        except Exception as e:
+            print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Error: Class {e.__class__}, {e} {e.args}")
             return
 
     async def _try_acquire_lock(self) -> bool:
         # SET key value NX EX ttl
         # store instance_id as value so only renewer can extend
-        res = await self.redis.set(
+        res = await self.redis_client.set(
             LEADER_LOCK_KEY, self.uvicornWorkerService.INSTANCE_ID, nx=True, ex=LEADER_LOCK_TTL
         )
         
         return bool(res)
-
-    async def _start_scheduler(self):
-        SchedulerInterface.start(self)
-        print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Became leader and started scheduler.")
-
-    async def _stop_scheduler(self):
-        self.shutdown(wait=False)
-        print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Stopped scheduler (lost leadership).")
 
     @RunInThreadPool
     def get_jobs(self,job_id:str= None):
