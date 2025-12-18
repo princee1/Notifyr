@@ -46,6 +46,7 @@ if APP_MODE == ApplicationMode.agentic:
     from app.services.agent.remote_agent_service import RemoteAiAgentService
     from app.services.agent.agent_service import AgentService
     from app.services.database.memcached_service import MemCachedService
+    from app.services.database.qdrant_service import QdrantService
 
 
 
