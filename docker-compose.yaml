@@ -130,7 +130,7 @@ services:
       # PRESERVED: Custom target paths
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
-      - source: app_role_id
+      - source: api_key
         target: /run/secrets/api_key.txt
       - source: costs
         target: /run/secrets/costs.json
@@ -147,21 +147,30 @@ services:
       - app_net
       - data_net
       - vault_net
+      - agentic_net
 
   # ==========================================
   # WORKER LAYER
   # ==========================================
   agentic:
     image: notifyr/agentic:community 
+    container_name: agentic
+    build:
+      context: ./
+      dockerfile: Dockerfile.agentic
     secrets:
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
+      - source: costs
+        target: /run/secrets/costs.json
     volumes:
       - vault-shared:/vault/shared
+    environment:
+      - MODE=prod
     networks:
+      - agentic_net
       - data_net
       - vault_net
-
 
   worker:
     image: notifyr/celery:community
@@ -181,6 +190,7 @@ services:
     networks:
       - data_net
       - vault_net
+      - agentic_net
 
   beat:
     image: notifyr/celery:community
@@ -366,8 +376,8 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant
-    ports:
-      - "6333:6333"  # HTTP API
+    networks:
+      - data_net
     volumes:
       - qdrant_storage:/qdrant/storage
     environment:
@@ -430,9 +440,13 @@ networks:
     driver: bridge
 
   celery_net:
-    internal: true
+    internal: false
     driver: bridge
-
+  
+  agentic_net:
+    internal: false
+    driver: bridge
+    
   app_net:
     driver: bridge
     ipam:

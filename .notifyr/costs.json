@@ -1,7 +1,7 @@
 {
     "version": "1.0.0",
     "currency": "NOTIFYR-CREDITS",
-    "system": "credits",
+    "system": "Notifyr Credit System",
     "product": "demo",
     "promotions": {},
     "rules": {

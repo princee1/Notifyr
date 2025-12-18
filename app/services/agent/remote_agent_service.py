@@ -1,9 +1,8 @@
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
+from app.services.secret_service import HCVaultService
 from app.services.database.mongoose_service import MongooseService
-
-
 
 @MiniService()
 class RemoteAgenticMiniService(BaseMiniService):
@@ -12,14 +11,14 @@ class RemoteAgenticMiniService(BaseMiniService):
         super().__init__(None, id)
         self.configService = configService
 
-
 @Service()
 class RemoteAiAgentService(BaseMiniServiceManager):
     
-    def __init__(self,configService:ConfigService,mongooseService:MongooseService):
+    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:HCVaultService):
         super().__init__()
 
         self.configService = configService
+        self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.MiniServiceStore = MiniServiceStore[RemoteAgenticMiniService](self.name)
     
