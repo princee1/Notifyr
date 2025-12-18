@@ -1,7 +1,6 @@
 from datetime import datetime
-from typing import ClassVar, Self, TypedDict,Optional
+from typing import ClassVar, Self, TypedDict,Optional, Any, Callable
 import operator
-from aiohttp_retry import Any, Callable
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 

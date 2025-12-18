@@ -1,4 +1,3 @@
-
 import psycopg2
 from tortoise import Tortoise
 from app.definition._service import LinkDep, Service

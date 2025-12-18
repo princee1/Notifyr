@@ -1,6 +1,5 @@
-from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, Service
+from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service
 from app.services.config_service import ConfigService
-from httpx import AsyncClient
 from app.services.database.mongoose_service import MongooseService
 
 
@@ -20,3 +19,7 @@ class RemoteAiAgentService(BaseMiniServiceManager):
 
         self.configService = configService
         self.mongooseService = mongooseService
+        self.MiniServiceStore = MiniServiceStore[RemoteAgenticMiniService](self.name)
+    
+    def build(self, build_state=...):
+        ...

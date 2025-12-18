@@ -16,7 +16,6 @@ from app.services.assets_service import AssetService
 from app.services.object_service import ObjectS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import AssetMode, ConfigService
-from app.services.file_service import FTPService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SETTING_SERVICE_ASYNC_BUILD_STATE, DEFAULT_SETTING, SettingService
 from app.utils.constant import SettingDBConstant
@@ -38,11 +37,10 @@ to_mount_modify_obj =  configService.ASSET_MODE == AssetMode.s3 or configService
 class GlobalAssetVariableRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self, configService: ConfigService, assetService: AssetService, awsS3Service: ObjectS3Service, ftpService: FTPService):
+    def __init__(self, configService: ConfigService, assetService: AssetService, awsS3Service: ObjectS3Service):
         super().__init__(None, None)
         self.assetService = assetService
         self.awsS3Service = awsS3Service
-        self.ftpService = ftpService
         self.configService = configService
 
     @UseLimiter(limit_value='500/minutes')

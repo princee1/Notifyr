@@ -38,5 +38,6 @@ class AgentService(BaseMiniServiceManager):
     def build(self, build_state=...):
         self._api_keys = {}
         counter = self.StatusCounter(0)
+        return
         return super().build(counter, build_state)
     

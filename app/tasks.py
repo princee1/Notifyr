@@ -3,7 +3,7 @@ import sys
 from typing import Any, Callable
 from celery import Celery
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
-from app.services.config_service import CELERY_EXE_PATH,ConfigService
+from app.services.config_service import ConfigService
 from app.container import Get, build_container
 from app.services import *
 from app.utils.globals import APP_MODE, ApplicationMode

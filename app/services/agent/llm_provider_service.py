@@ -49,3 +49,6 @@ class LLMProviderService(BaseMiniServiceManager):
         super().__init__()
         self.profileService = profileService
         self.MiniServiceStore = MiniServiceStore[LLMProvider|BaseMiniService](self.name)
+
+    def build(self, build_state=...):
+        ...

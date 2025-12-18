@@ -80,6 +80,11 @@ deploy-server:
 	@echo "✅ Server Services Deployment Complete"
 	@echo "================================================="
 
+server-down:
+	$(call COMPOSE_RUN, Beat Service,down, beat)
+	$(call COMPOSE_RUN, App Service,down, app)
+	$(call COMPOSE_RUN, Worker Service,down, worker)
+
 
 # Target to deploy all data components and run setup jobs
 deploy-data:
