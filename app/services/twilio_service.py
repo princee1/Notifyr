@@ -20,8 +20,9 @@ from app.services.logger_service import LoggerService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import StreamConstant
+from app.utils.globals import APP_MODE, ApplicationMode
 from app.utils.tools import Mock, RunInThreadPool
-from .config_service import CeleryMode, ConfigService
+from .config_service import ConfigService, APP_MODE
 from app.utils.helper import b64_encode, get_value_in_list, phone_parser, uuid_v1_mc
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
@@ -77,7 +78,7 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
             self.mode = self.configService['TWILIO_MODE']
             self.testUrl = self.configService['TWILIO_TEST_URL']
             self.twilio_url = self.depService.model.twilio_url if self.mode == "prod" else self.testUrl
-            http_client = AsyncTwilioHttpClient() if self.configService.celery_env == CeleryMode.none else TwilioHttpClient()
+            http_client = AsyncTwilioHttpClient() if APP_MODE == ApplicationMode.server else TwilioHttpClient()
             self.client =  Client(self.account_sid,self.auth_token,http_client= http_client)
         
         except TwilioRestException as e:
@@ -244,7 +245,7 @@ class BaseTwilioCommunication(_service.BaseService,ProfileEventInterface):
         async def async_wrapper(*args,**kwargs):
             return await func(*args,**kwargs)
         
-        if ConfigService.celery_env == CeleryMode.none:
+        if APP_MODE == ApplicationMode.server:
             return async_wrapper
 
         return func
@@ -370,7 +371,7 @@ class SMSService(BaseTwilioCommunication):
     @ProfileEventInterface.EventWrapper
     @BaseTwilioCommunication.TwilioDynamicContext
     def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None):
-        if self.configService.celery_env == CeleryMode.none:
+        if APP_MODE == ApplicationMode.server:
             return self.__send_sms_async__(messageData, subject_id, twilio_tracking,twilioProfile)
         return self.__send_sms_sync__(messageData, subject_id, twilio_tracking,twilioProfile)
 
@@ -378,7 +379,7 @@ class SMSService(BaseTwilioCommunication):
     @ProfileEventInterface.EventWrapper
     @BaseTwilioCommunication.TwilioDynamicContext
     def send_template_sms(self, message: dict, subject_id=None, twilio_tracking:list[str] = [],twilioProfile:str=None):
-        if self.configService.celery_env == CeleryMode.none:
+        if APP_MODE == ApplicationMode.server:
             return self.__send_sms_async__(message, subject_id, twilio_tracking,twilioProfile)
         return self.__send_sms_sync__(message, subject_id, twilio_tracking,twilioProfile)
     
@@ -427,7 +428,7 @@ class CallService(BaseTwilioCommunication):
         voiceResponse = VoiceResponse()
         voiceResponse.say(body, voice, loop, lang)
         call['twiml'] = voiceResponse
-        if self.configService.celery_env == CeleryMode.none:
+        if APP_MODE == ApplicationMode.server:
             return self.__create_call_async__(call,subject_id,twilio_tracking,twilio_profile)
         return self.__create_call_sync__(call,subject_id,twilio_tracking,twilio_profile)
         
@@ -436,7 +437,7 @@ class CallService(BaseTwilioCommunication):
     @BaseTwilioCommunication.TwilioDynamicContext
     def send_twiml_voice_call(self, url: str, call_details: dict,subject_id=None,twilio_tracking:list[str]=None,twilio_profile:str=None):
         call_details['url'] = url
-        if self.configService.celery_env == CeleryMode.none:
+        if APP_MODE == ApplicationMode.server:
             return self.__create_call_async__(call_details,subject_id,twilio_tracking,twilio_profile)
         return self.__create_call_sync__(call_details,subject_id,twilio_tracking,twilio_profile)
 
@@ -445,7 +446,7 @@ class CallService(BaseTwilioCommunication):
     @BaseTwilioCommunication.TwilioDynamicContext
     def send_template_voice_call(self, result: str, call_details: dict,subject_id=None,twilio_tracking:list[str]=None,twilio_profile:str=None):
         call_details['twiml'] = result
-        if self.configService.celery_env == CeleryMode.none:
+        if APP_MODE == ApplicationMode.server:
             return self.__create_call_async__(call_details,subject_id,twilio_tracking,twilio_profile)
         return self.__create_call_sync__(call_details,subject_id,twilio_tracking,twilio_profile)
 

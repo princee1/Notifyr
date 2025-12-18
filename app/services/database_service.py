@@ -15,7 +15,7 @@ from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, RabbitMQConstant, RedisConstant, StreamConstant, SubConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.transformer import none_to_empty_str
-from .config_service import MODE, CeleryMode, ConfigService, UvicornWorkerService
+from .config_service import MODE, ApplicationMode, ConfigService, UvicornWorkerService
 from .file_service import FileService
 from app.definition._service import DEFAULT_BUILD_STATE, STATUS_TO_ERROR_MAP, BuildFailureError, BaseService,AbstractServiceClass, LinkDep,Service,BuildWarningError, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError, StateProtocol
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -166,7 +166,7 @@ class RedisService(TempCredentialsDatabaseService):
         def sync_wrapper(self:Self,topic:str,data:Any|dict):
             return func(self,topic,data)
         
-        return async_wrapper  if ConfigService._celery_env == CeleryMode.none else sync_wrapper
+        return async_wrapper  if APP_MODE == ApplicationMode.server else sync_wrapper
         
 
     @dynamic_context
@@ -318,7 +318,7 @@ class RedisService(TempCredentialsDatabaseService):
         self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
         self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user,password=self.db_password)
 
-        if self.configService.celery_env == CeleryMode.none:
+        if APP_MODE == ApplicationMode.server:
             self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         else :
             self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)

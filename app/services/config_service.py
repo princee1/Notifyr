@@ -5,17 +5,13 @@ from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarningError
 from app.utils.constant import RabbitMQConstant, RedisConstant
-from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
-from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID
+from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID,APP_MODE, ApplicationMode
 from app.utils.helper import parseToBool
-import shutil
-import sys
 
 
 ENV = ".env"
-CELERY_EXE_PATH = shutil.which("celery").replace(".EXE", "")
 
 class MODE(Enum):
     DEV_MODE = 'dev'
@@ -48,44 +44,20 @@ class AssetMode(Enum):
     ftp = 'ftp'
 
 
-class CeleryMode(Enum):
-    flower = 'flower'
-    worker = 'worker'
-    beat = 'beat'
-    none = 'none'
-    purge = 'purge'
-
 class ServerConfig(TypedDict):
     host: str
     port: int
     reload: bool
     team: Literal['team','solo']
     workers: int
-    log_level: Literal["critical", "error",
-                       "warning", "info", "debug", "trace"]
+    log_level: Literal["critical", "error","warning", "info", "debug", "trace"]
 
-CeleryEnv = Literal['flower', 'worker', 'beat', 'none','purge']
 
-_celery_env_ = CeleryMode.none
 
 
 @_service.Service()
 class ConfigService(_service.BaseService):
         
-    if sys.argv[0] == CELERY_EXE_PATH:
-        global _celery_env_
-        _celery_env_ = CeleryMode._member_map_[sys.argv[3]]
-
-    _celery_env = _celery_env_
-
-    @property
-    def celery_env(self) -> CeleryMode:
-        return self._celery_env
-
-    def set_celery_env(env: CeleryEnv):
-        ConfigService._celery_env = CeleryMode._member_map_[env]
-
-
     def __init__(self) -> None:
         super().__init__()
         if not load_dotenv(ENV, verbose=True):
@@ -302,7 +274,7 @@ class UvicornWorkerService(_service.BaseService):
             return True
      
     def build(self, build_state = ...):
-        name = 'app' if self.configService._celery_env == CeleryMode.none else self.configService._celery_env.name
+        name = 'app' if APP_MODE == ApplicationMode.server else APP_MODE.name
 
         self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/{name}/"        
         raise BuildOkError

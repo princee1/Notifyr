@@ -3,9 +3,10 @@ import sys
 from typing import Any, Callable
 from celery import Celery
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
-from app.services.config_service import CELERY_EXE_PATH, CeleryMode, ConfigService
-from app.container import Get, build_container,__DEPENDENCY
+from app.services.config_service import CELERY_EXE_PATH,ConfigService
+from app.container import Get, build_container
 from app.services import *
+from app.utils.globals import APP_MODE, ApplicationMode
 from app.utils.prettyprint import PrettyPrinter_
 from flower import VERSION
 from celery import Task
@@ -15,18 +16,9 @@ from celery.worker.control import control_command
 
 ##############################################           ##################################################
 
-if sys.argv[0] == CELERY_EXE_PATH:
-    PrettyPrinter_.message(f'Building container for the celery {ConfigService._celery_env.value}')
-    if ConfigService._celery_env != CeleryMode.worker:
-        build_container(False,dep=[ConfigService,UvicornWorkerService,LoggerService,FileService,ReactiveService,HCVaultService,RedisService,RabbitMQService])
-    else:
-        dependency = __DEPENDENCY.copy()
-        dependency.remove(AssetService)
-        dependency.remove(HealthService)
-        dependency.remove(ContactsService)
-        dependency.remove(SecurityService)
-        dependency.remove(LinkService)
-        build_container(False,dep=dependency)
+if  APP_MODE in [ApplicationMode.beat, ApplicationMode.worker]: 
+    PrettyPrinter_.message(f'Building container for the celery {APP_MODE.value}')
+    build_container()
         
 ##############################################           ##################################################
 
@@ -90,13 +82,13 @@ if configService.CELERY_BROKER == 'redis':
 else:
     celery_app.conf.task_queue_max_priority = 3 # Only rabbit mq
 
-if ConfigService._celery_env == CeleryMode.none:
+if APP_MODE == ApplicationMode.server:
     celery_app.autodiscover_tasks(['app.services'], related_name='celery_service')
     celery_app.autodiscover_tasks(['app.ressources'], related_name='email_ressource')
     celery_app.autodiscover_tasks(['app.server'], related_name='middleware')
     celery_app.autodiscover_tasks(['app.signals'], related_name='middleware')
 
-if configService._celery_env == CeleryMode.worker:
+if APP_MODE == ApplicationMode.worker:
     import app.signals
 
 ##############################################           ##################################################

@@ -13,7 +13,7 @@ from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant, RedisConstant
 from app.utils.prettyprint import printJSON
 from app.utils.tools import RunInThreadPool
-from .config_service import AssetMode, CeleryMode, ConfigService, UvicornWorkerService
+from .config_service import AssetMode, ApplicationMode, ConfigService, UvicornWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .file_service import FileService
@@ -327,7 +327,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     def read_asset_from_disk(self):
         self._read_globals_disk()
 
-        if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
+        if APP_MODE in [ApplicationMode.beat]:
             return 
         
         self.images.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,self.asset_cache)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)))
