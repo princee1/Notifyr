@@ -6,8 +6,8 @@
     "version": "1.2.0",
     "description": "Configuration for the high-availability, microservice architecture.",
     "scaling": {
-        "app": 3,
-        "worker": 2,
+        "app": 1,
+        "worker": 1,
         "balancer": 1
     },
     "resource_limits": {

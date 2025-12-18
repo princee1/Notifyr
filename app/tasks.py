@@ -8,7 +8,6 @@ from app.container import Get, build_container
 from app.services import *
 from app.utils.globals import APP_MODE, ApplicationMode
 from app.utils.prettyprint import PrettyPrinter_
-from flower import VERSION
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded,MaxRetriesExceededError,TaskRevokedError,QueueNotFound
 from celery.worker.control import control_command

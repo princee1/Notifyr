@@ -25,6 +25,7 @@ emoji==2.14.0
 fastapi==0.121.3
 fastapi-cache2==0.2.2
 flower==2.0.1
+grpcio==1.70.0
 git_clone==1.0.6
 h11==0.14.0
 htmlmin==0.1.12

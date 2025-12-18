@@ -1,6 +1,8 @@
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service
+from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
+
 
 
 @MiniService()
@@ -21,5 +23,9 @@ class RemoteAiAgentService(BaseMiniServiceManager):
         self.mongooseService = mongooseService
         self.MiniServiceStore = MiniServiceStore[RemoteAgenticMiniService](self.name)
     
+    def verify_dependency(self):
+        if not self.configService.getenv('AI_ENABLED',False):
+            raise BuildFailureError
+    
     def build(self, build_state=...):
-        ...
+        from grpc import aio
