@@ -1,7 +1,7 @@
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniServiceStore, Service, ServiceStatus
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import DiscordWebhookModel, HTTPWebhookModel, KafkaWebhookModel, MongoDBWebhookModel, N8nHTTPWebhookModel, PostgresWebhookModel, RedisWebhookModel, SQSWebhookModel, SlackHTTPWebhookModel, WebhookProfileModel, ZapierHTTPWebhookModel
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
 from app.services.reactive_service import ReactiveService
 from app.services.webhook.broker_webhook_service import KafkaWebhookMiniService, RedisWebhookMiniService, SQSWebhookMiniService

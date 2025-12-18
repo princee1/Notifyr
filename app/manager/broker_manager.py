@@ -3,7 +3,7 @@ from fastapi import BackgroundTasks
 from app.container import Get
 from app.definition._service import BaseMiniServiceManager, MiniStateProtocol, ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
 from app.services.config_service import ConfigService, UvicornWorkerService
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.constant import SubConstant
 from app.utils.helper import issubclass_of

@@ -7,7 +7,7 @@ from app.definition._error import BaseError
 from app.interface.timers import IntervalParams, SchedulerInterface
 from app.services.aws_service import AmazonS3Service
 import app.services.aws_service as aws_service
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant, RedisConstant
@@ -23,7 +23,7 @@ import os
 from threading import Thread
 from typing import Any, Callable, Literal, Dict, get_args
 from app.utils.helper import IntegrityCache, PointerIterator, flatten_dict, issubclass_of
-from app.utils.globals import ASSET_SEPARATOR, DIRECTORY_SEPARATOR
+from app.utils.globals import APP_MODE, ASSET_SEPARATOR, DIRECTORY_SEPARATOR
 
 
 class AssetNotFoundError(BaseError):

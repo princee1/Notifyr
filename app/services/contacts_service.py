@@ -8,7 +8,7 @@ from app.definition._service import BaseService, BuildFailureError, Service, Ser
 from app.errors.contact_error import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.models.contacts_model import *
 from app.services.config_service import ConfigService
-from app.services.database_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.link_service import LinkService
 from app.services.security_service import JWTAuthService, SecurityService
 from random import randint

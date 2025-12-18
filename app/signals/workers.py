@@ -2,7 +2,9 @@ from celery.signals import worker_init,worker_ready,worker_shutdown,worker_shutt
 from app.container import Get
 from app.services import ProfileService
 from app.services.aws_service import AmazonS3Service
-from app.services.database_service import MongooseService, RedisService, TortoiseConnectionService
+from app.services.database.mongoose_service import MongooseService
+from app.services.database.redis_service import RedisService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.secret_service import HCVaultService
 
 profileService = Get(ProfileService)

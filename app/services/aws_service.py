@@ -11,6 +11,8 @@ from app.definition._service import DEFAULT_BUILD_STATE, GUNICORN_BUILD_STATE, B
 from app.errors.service_error import BuildFailureError
 from app.interface.email import EmailReadInterface, EmailSendInterface, Mode
 from app.models.communication_model import AWSProfileModel
+from app.services.database.base_db_service import TempCredentialsDatabaseService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService
 from app.services.secret_service import HCVaultService
@@ -20,7 +22,6 @@ from .config_service import  ConfigService
 from .file_service import BaseFileRetrieverService, FileService
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Dict
-from app.services.database_service import RedisService, TempCredentialsDatabaseService
 #from aiobotocore import client
 
 class AmazonS3ServiceError(BaseError):

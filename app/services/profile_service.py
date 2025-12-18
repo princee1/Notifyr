@@ -8,12 +8,13 @@ from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMi
 from app.errors.db_error import MongoCollectionDoesNotExists
 from app.errors.service_error import BuildFailureError, BuildOkError
 from app.services.config_service import ConfigService
+from app.services.database.mongoose_service import MongooseService
+from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
 from app.services.task_service import TaskService
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from app.utils.helper import flatten_dict, subset_model
-from .database_service import MongooseService, RedisService
 from app.models.communication_model import  BaseProfileModel, ProfilModelValues
 from app.classes.profiles import ErrorProfileModel
 from typing import Generic, TypeVar

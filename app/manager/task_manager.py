@@ -13,7 +13,7 @@ import datetime as dt
 from app.container import Get
 from app.services.celery_service import CeleryService,TASK_REGISTRY
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
 from app.utils.tools import RunInThreadPool

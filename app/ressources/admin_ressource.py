@@ -12,7 +12,7 @@ from app.interface.issue_auth import IssueAuthInterface
 from app.manager.broker_manager import Broker
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
-from app.services.database_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.profile_service import ProfileService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService

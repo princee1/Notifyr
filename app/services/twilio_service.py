@@ -15,7 +15,8 @@ from app.models.otp_model import GatherDtmfOTPModel, GatherOTPBaseModel, GatherS
 from app.models.communication_model import TwilioProfileModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.assets_service import AssetService
-from app.services.database_service import MongooseService, RedisService
+from app.services.database.mongoose_service import MongooseService
+from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.secret_service import HCVaultService

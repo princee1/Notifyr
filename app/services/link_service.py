@@ -6,7 +6,8 @@ from app.classes.template import HTMLTemplate
 from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
 from app.models.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService, TortoiseConnectionService
+from app.services.database.redis_service import RedisService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.reactive_service import ReactiveService
 import qrcode as qr
 import io

@@ -13,9 +13,10 @@ from bs4 import BeautifulSoup
 from app.classes.profiles import ProfileState,ProfileModelException
 from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.models.communication_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
-from app.services.database_service import MongooseService, RedisService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService
+from app.utils.globals import APP_MODE
 from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 #from app.classes.mail_oauth_access import OAuth, MailOAuthFactory

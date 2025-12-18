@@ -16,12 +16,11 @@ from app.services.assets_service import AssetService
 from app.services.aws_service import AmazonS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import AssetMode, ConfigService
-from app.services.database_service import MongooseService
 from app.services.file_service import FTPService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SETTING_SERVICE_ASYNC_BUILD_STATE, DEFAULT_SETTING, SettingService
 from app.utils.constant import SettingDBConstant
-from app.utils.helper import APIFilterInject, PointerIterator
+from app.utils.helper import PointerIterator
 
 VARIABLES_ROUTE = 'global'
 PARAMS_KEY_SEPARATOR = "@"

@@ -11,7 +11,7 @@ from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.file_service import FileService
 from app.utils.constant import CostConstant, RedisConstant
 from app.utils.fileIO import JSONFile

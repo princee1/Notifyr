@@ -1,7 +1,7 @@
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, Service
 from app.services.config_service import ConfigService
-from app.services.database_service import MongooseService
 from httpx import AsyncClient
+from app.services.database.mongoose_service import MongooseService
 
 
 @MiniService()

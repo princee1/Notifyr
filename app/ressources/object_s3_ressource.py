@@ -24,7 +24,6 @@ from app.manager.broker_manager import Broker
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError
 from app.services import AmazonS3Service
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
 from app.services.file_service import FileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import SECONDS_IN_AN_HOUR as HOUR, MinioConstant, VaultConstant

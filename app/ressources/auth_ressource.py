@@ -19,7 +19,7 @@ from app.interface.issue_auth import IssueAuthInterface
 from app.models.security_model import ChallengeORM, ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
-from app.services.database_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 from app.services.setting_service import SettingService
 from app.services.twilio_service import TwilioService

@@ -9,7 +9,8 @@ from apscheduler.jobstores.mongodb import MongoDBJobStore
 from app.errors.service_error import BuildOkError, NotBuildedError, ServiceNotAvailableError
 from app.interface.timers import SchedulerInterface,MemoryJobStore
 from app.services.config_service import ConfigService, UvicornWorkerService
-from app.services.database_service import MongooseService, RedisService
+from app.services.database.mongoose_service import MongooseService
+from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MongooseDBConstant, RedisConstant

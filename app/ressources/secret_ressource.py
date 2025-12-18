@@ -1,5 +1,6 @@
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseServiceLock
-from app.services.database_service import MongooseService, TortoiseConnectionService
+from app.services.database.mongoose_service import MongooseService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.secret_service import HCVaultService
 from app.container import Get, InjectInMethod
 from app.services.security_service import JWTAuthService

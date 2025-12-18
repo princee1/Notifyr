@@ -9,7 +9,8 @@ from app.definition._service import BaseMiniService, BaseMiniServiceManager, Bas
 from app.interface.timers import IntervalInterface
 from app.models.communication_model import BaseProfileModel
 from app.services.config_service import ConfigService
-from app.services.database_service import RabbitMQService, RedisService
+from app.services.database.rabbitmq_service import RabbitMQService
+from app.services.database.redis_service import RedisService
 from app.tasks import TASK_REGISTRY, celery_app, task_name
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.errors.service_error import BuildError, BuildFailureError, BuildOkError, ServiceNotAvailableError

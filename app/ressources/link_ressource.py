@@ -16,7 +16,7 @@ from app.manager.broker_manager import Broker
 from app.models.email_model import EmailStatus, TrackingEmailEventORM
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.link_service import LinkService
 from fastapi import status
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse

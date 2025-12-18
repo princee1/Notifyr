@@ -2,7 +2,7 @@ from datetime import timedelta
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, MiniService, Service, ServiceStatus
 from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,AlreadyBlacklistedClientError
 from app.models.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
-from app.services.database_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 
 

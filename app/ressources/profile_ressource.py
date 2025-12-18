@@ -18,7 +18,9 @@ from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfi
 from app.manager.broker_manager import Broker
 from app.services.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
-from app.services.database_service import MongooseService, RabbitMQService, RedisService
+from app.services.database.mongoose_service import MongooseService
+from app.services.database.rabbitmq_service import RabbitMQService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.secret_service import HCVaultService

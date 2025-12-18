@@ -19,13 +19,13 @@ from app.manager.task_manager import TaskManager
 from app.models.otp_model import OTPModel
 from app.models.sms_model import  SMSCustomSchedulerModel, SMSStatusModel, SMSTemplateSchedulerModel
 from app.models.twilio_model import SMSEventORM
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService
 from app.services.assets_service import AssetService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.database_service import RedisService
 from app.services.task_service import TaskService
 from app.services.twilio_service import SMSService, TwilioAccountMiniService, TwilioService
 from app.depends.dependencies import  get_auth_permission

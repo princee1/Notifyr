@@ -1,6 +1,6 @@
 from app.definition._service import Service,BaseService
 from app.services.config_service import ConfigService
-from app.services.database_service import MongooseService
+from app.services.database.mongoose_service import MongooseService
 from app.services.logger_service import LoggerService
 
 @Service()

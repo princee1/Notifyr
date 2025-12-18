@@ -5,9 +5,9 @@ from app.decorators.handlers import APSSchedulerHandler, AsyncIOHandler, CeleryT
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.services.celery_service import CeleryService
+from app.services.database.redis_service import RedisService
 from app.services.task_service import TaskService
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
 from app.services.security_service import JWTAuthService
 from app.depends.dependencies import get_auth_permission
 from app.classes.auth_permission import AuthPermission, MustHave, Role

@@ -1,5 +1,5 @@
+from app.services.database.mongoose_service import MongooseService
 from app.services.profile_service import ProfileService
-from .database_service import MongooseService, TortoiseConnectionService
 from .config_service import ConfigService
 from app.definition._service import BaseMiniService, MiniService, MiniServiceStore, Service, BaseMiniServiceManager
 from .llm_provider_service import LLMProviderService

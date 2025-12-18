@@ -6,7 +6,7 @@ from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMeth
 from app.definition._utils_decorator import Pipe
 from app.depends.dependencies import get_auth_permission
 from app.services.cost_service import CostService
-from app.services.database_service import RedisService, TortoiseConnectionService
+from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService
 from fastapi import Depends, Query, Request, Response
 import json
