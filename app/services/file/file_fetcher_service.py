@@ -3,7 +3,7 @@ from app.definition._service import GUNICORN_BUILD_STATE, BaseService,Service,Ab
 from ftplib import FTP, FTP_TLS
 import git_clone as git
 from app.services.config_service import AssetMode, ConfigService
-from app.services.file.base_file_fetcher_service import BaseFileRetrieverService
+from app.services.file.base_fileretriever_service import BaseFileRetrieverService
 from app.services.file.file_service import FileService
 from app.utils.helper import PointerIterator
 

@@ -8,7 +8,7 @@ from app.errors.db_error import *
 from beanie import Document, PydanticObjectId, init_beanie
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
-from app.services.file_service import FileService
+from app.services.file.file_service import FileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import VaultTTLSyncConstant
 from motor.motor_asyncio import AsyncIOMotorClient

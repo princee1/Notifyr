@@ -5,7 +5,7 @@ from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
 from app.interface.timers import IntervalParams, SchedulerInterface
-from app.services.object_service import AmazonS3Service
+from app.services.object_service import ObjectS3Service
 import app.services.object_service as object_service
 from app.services.database.redis_service import RedisService
 from app.services.secret_service import HCVaultService
@@ -16,7 +16,7 @@ from app.utils.tools import RunInThreadPool
 from .config_service import AssetMode, ApplicationMode, ConfigService, UvicornWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
-from .file_service import FileService
+from .file.file_service import FileService
 from app.definition import _service
 from enum import Enum
 import os
@@ -182,7 +182,7 @@ class ThreadedReader(DiskReader):
 
 class S3ObjectReader(Reader):   
 
-    def __init__(self, configService: ConfigService, awsService: AmazonS3Service,vaultService:HCVaultService,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+    def __init__(self, configService: ConfigService, awsService: ObjectS3Service,vaultService:HCVaultService,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         super().__init__(configService,fileService,asset_cache, asset, additionalCode)
         self.awsService = awsService
         self.vaultService = vaultService
@@ -220,13 +220,13 @@ class S3ObjectReader(Reader):
 #############################################                ##################################################
 
 @_service.Service(
-    links=[_service.LinkDep(AmazonS3Service,to_destroy=True, to_build=True)]
+    links=[_service.LinkDep(ObjectS3Service,to_destroy=True, to_build=True)]
 )
 class AssetService(_service.BaseService,SchedulerInterface):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:HCVaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
+    def __init__(self,hcVaultService:HCVaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
         super().__init__()
         SchedulerInterface.__init__(self,)
 

@@ -3,7 +3,7 @@ from app.definition._service import LinkDep, Service
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
-from app.services.file_service import FileService
+from app.services.file.file_service import FileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import RabbitMQConstant
 

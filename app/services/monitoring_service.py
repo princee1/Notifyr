@@ -2,8 +2,7 @@ from app.definition._service import BaseService, Service
 from app.errors.service_error import BuildWarningError
 from app.services.config_service import ConfigService
 from prometheus_client import Counter, Gauge, Histogram
-
-from app.services.file_service import FileService
+from app.services.file.file_service import FileService
 
 
 @Service()

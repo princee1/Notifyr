@@ -9,7 +9,7 @@ from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatu
 from app.interface.timers import  SchedulerInterface
 from app.ressources import *
 from app.services.assets_service import AssetService
-from app.services.object_service import AmazonS3Service
+from app.services.object_service import ObjectS3Service
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
@@ -219,7 +219,7 @@ class Application(EventInterface):
         mongooseService = Get(MongooseService)
         mongooseService.start()
 
-        amazons3Service = Get(AmazonS3Service)
+        amazons3Service = Get(ObjectS3Service)
         amazons3Service.start()
     
     @register_hook('shutdown')
@@ -227,7 +227,7 @@ class Application(EventInterface):
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
-        amazons3Service = Get(AmazonS3Service)
+        amazons3Service = Get(ObjectS3Service)
         vaultService = Get(HCVaultService)
 
         services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,amazons3Service]
@@ -280,7 +280,7 @@ class Application(EventInterface):
     def revoke_dynamic_lease(self):
         mongooseService: MongooseService = Get(MongooseService)
         tortoiseConnService = Get(TortoiseConnectionService)
-        awsS3Service = Get(AmazonS3Service)
+        awsS3Service = Get(ObjectS3Service)
         redisService = Get(RedisService)
         vaultService = Get(HCVaultService)
 

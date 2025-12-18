@@ -7,7 +7,6 @@ from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.interface.timers import SchedulerInterface
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import DatabaseService
-from app.services.file_service import FileService
 from pymemcache import Client as SyncClient,MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
 from aiomcache import Client
 
@@ -20,8 +19,8 @@ class MemCachedService(DatabaseService,SchedulerInterface):
     POOL_MINSIZE=2
     POOL_MAXSIZE =5
 
-    def __init__(self, configService:ConfigService, fileService:FileService):
-        super().__init__(configService, fileService)
+    def __init__(self, configService:ConfigService):
+        super().__init__(configService, None)
     
     @staticmethod
     def KeyEncoder(func:Callable):

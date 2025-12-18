@@ -9,7 +9,7 @@ from app.errors.service_error import BuildOkError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.config_service import MODE, ConfigService, UvicornWorkerService
 import hvac
-from app.services.file_service import FileService
+from app.services.file.file_service import FileService
 from app.utils.constant import VaultConstant, VaultTTLSyncConstant
 from app.utils.fileIO import FDFlag
 from datetime import datetime

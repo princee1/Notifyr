@@ -10,7 +10,7 @@ from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, GUNICORN_BUILD_STATE, BaseMiniService, BaseService, LinkDep, MiniService, Service
 from app.errors.service_error import BuildFailureError
 from app.services.database.base_db_service import TempCredentialsDatabaseService
-from app.services.file.base_file_fetcher_service import BaseFileRetrieverService
+from app.services.file.base_fileretriever_service import BaseFileRetrieverService
 from app.services.file.file_service import FileService
 from app.services.secret_service import HCVaultService
 from app.utils.constant import MinioConstant, VaultTTLSyncConstant
@@ -27,7 +27,7 @@ MINIO_OBJECT_BUILD_STATE = 1001
 MINIO_OBJECT_DESTROY_STATE = 1001
 
 @Service(abstract_service_register=[BaseFileRetrieverService])
-class AmazonS3Service(TempCredentialsDatabaseService):
+class ObjectS3Service(TempCredentialsDatabaseService):
     
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
         TempCredentialsDatabaseService.__init__(self,configService,fileService,vaultService,VaultTTLSyncConstant.MINIO_TTL)

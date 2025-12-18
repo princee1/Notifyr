@@ -9,7 +9,7 @@ from app.definition._service import AbstractServiceClass, BaseService, ServiceSt
 from app.errors.service_error import BuildFailureError, ServiceTemporaryNotAvailableError
 from app.interface.timers import IntervalParams, SchedulerInterface
 from app.services.config_service import ConfigService
-from app.services.file_service import FileService
+from app.services.file.file_service import FileService
 from app.services.secret_service import HCVaultService
 
 

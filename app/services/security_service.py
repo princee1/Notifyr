@@ -11,8 +11,7 @@ from app.utils.constant import VaultConstant
 from app.utils.fileIO import FDFlag
 from app.utils.tools import Cache, RunInThreadPool, Time
 from .config_service import ConfigService
-from dataclasses import dataclass
-from .file_service import FileService
+from .file.file_service import FileService
 from app.definition._service import AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
 from cryptography.fernet import Fernet, InvalidToken

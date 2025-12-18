@@ -1,7 +1,7 @@
 from celery.signals import worker_init,worker_ready,worker_shutdown,worker_shutting_down
 from app.container import Get
 from app.services import ProfileService
-from app.services.object_service import AmazonS3Service
+from app.services.object_service import ObjectS3Service
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
@@ -28,7 +28,7 @@ def on_worker_ready(sender, **kwargs):
 def on_worker_shutdown(sender=None, signal=None, **kwargs):
     mongooseService: MongooseService = Get(MongooseService)
     tortoiseConnService = Get(TortoiseConnectionService)
-    awsS3Service = Get(AmazonS3Service)
+    awsS3Service = Get(ObjectS3Service)
     redisService = Get(RedisService)
     vaultService = Get(HCVaultService)
 

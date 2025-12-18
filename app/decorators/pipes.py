@@ -23,7 +23,7 @@ from app.services.assets_service import AssetService, AssetType, AssetTypeNotAll
 from app.services.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.file_service import FileService
+from app.services.file.file_service import FileService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.services.twilio_service import TwilioAccountMiniService, TwilioService

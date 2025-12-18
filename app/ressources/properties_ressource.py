@@ -13,7 +13,7 @@ from app.errors.properties_error import GlobalKeyDoesNotExistsError
 from app.manager.broker_manager import Broker
 from app.models.properties_model import GlobalVarModel, SettingsModel
 from app.services.assets_service import AssetService
-from app.services.object_service import AmazonS3Service
+from app.services.object_service import ObjectS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import AssetMode, ConfigService
 from app.services.file_service import FTPService
@@ -38,7 +38,7 @@ to_mount_modify_obj =  configService.ASSET_MODE == AssetMode.s3 or configService
 class GlobalAssetVariableRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self, configService: ConfigService, assetService: AssetService, awsS3Service: AmazonS3Service, ftpService: FTPService):
+    def __init__(self, configService: ConfigService, assetService: AssetService, awsS3Service: ObjectS3Service, ftpService: FTPService):
         super().__init__(None, None)
         self.assetService = assetService
         self.awsS3Service = awsS3Service
@@ -129,7 +129,7 @@ class GlobalAssetVariableRessource(BaseHTTPRessource):
         if self.configService.ASSET_MODE == AssetMode.local:
             broker.propagate_state(StateProtocol(service=AssetService, to_build=True))
         else:
-            broker.propagate_state(StateProtocol(service=AmazonS3Service, to_build=True))
+            broker.propagate_state(StateProtocol(service=ObjectS3Service, to_build=True))
 
 SETTINGS_ROUTE = 'settings'
 
