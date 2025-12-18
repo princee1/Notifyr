@@ -1,17 +1,11 @@
-from fnmatch import fnmatch
 from pathlib import PurePath
-import traceback
-from typing import Any, Literal
-from app.definition._error import BaseError
-from app.interface.timers import IntervalInterface
+from app.definition._service import BaseService,Service,AbstractServiceClass
+from typing import Literal
+from app.services.config_service import ConfigService
 from app.utils.globals import DIRECTORY_SEPARATOR
-from .config_service import AssetMode, ConfigService
-from app.definition._service import GUNICORN_BUILD_STATE, BaseService,Service,AbstractServiceClass
-from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent, getFd, JSONFile, writeContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
-from ftplib import FTP, FTP_TLS
-import git_clone as git
+from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
 from app.utils.helper import PointerIterator
-import htmlmin
+
 
 @Service()
 class FileService(BaseService,):
@@ -119,65 +113,11 @@ class FileService(BaseService,):
         return self.get_extension(path) != ''
 
     def html_minify(self,input:bytes|str):
+        import htmlmin
+
         input_type = type(input)
         if input_type == bytes:
             input = input.decode()
         
         return htmlmin.minify(input,False,True,True,).encode()
         
-
-@AbstractServiceClass()
-class BaseFileRetrieverService(BaseService,IntervalInterface):
-    
-    def __init__(self,configService:ConfigService,fileService:FileService,start_now:bool=False,interval:float=None):
-        BaseService.__init__(self)
-        IntervalInterface.__init__(self,start_now,interval)
-        self.configService = configService
-        self.fileService = fileService
-    
-@Service()
-class FTPService(BaseFileRetrieverService):
-    def __init__(self, configService: ConfigService, fileService: FileService) -> None:
-        super().__init__(configService,fileService)
-        self.ftpClient: FTP
-        pass
-
-    def build(self, build_state = ...):
-        if build_state != GUNICORN_BUILD_STATE:
-            return
-        
-        if self.configService.ASSET_MODE != AssetMode.ftp:
-            return
-        
-    def authenticate(self):
-        try:
-            self.ftpClient = FTP()
-            self.ftpClient.set_debuglevel()
-            result = self.ftpClient.login()
-        except:
-            pass
-
-    def destroy(self,destroy_state=-1):
-        try:
-            self.ftpClient.quit()
-        except:
-            self.ftpClient.close()
-    pass
-
-@Service()
-class GitCloneRepoService(BaseFileRetrieverService):
-    def __init__(self,configService:ConfigService,fileService:FileService) -> None:
-        super().__init__(configService,fileService)
-    
-    def build(self, build_state = ...):
-        if build_state != GUNICORN_BUILD_STATE:
-            return
-        
-        if self.configService.ASSET_MODE != AssetMode.github:
-            return
-        
-
-    def destroy(self,destroy_state=-1):
-        return super().destroy()
-    pass
-

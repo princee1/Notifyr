@@ -5,8 +5,8 @@ from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
 from app.interface.timers import IntervalParams, SchedulerInterface
-from app.services.aws_service import AmazonS3Service
-import app.services.aws_service as aws_service
+from app.services.object_service import AmazonS3Service
+import app.services.object_service as object_service
 from app.services.database.redis_service import RedisService
 from app.services.secret_service import HCVaultService
 from app.services.setting_service import SettingService
@@ -289,7 +289,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
                 else:
                     self.read_asset_from_disk()
             
-            case aws_service.MINIO_OBJECT_BUILD_STATE:
+            case object_service.MINIO_OBJECT_BUILD_STATE:
                 self.download_into_disk()
 
         self.service_status = _service.ServiceStatus.AVAILABLE

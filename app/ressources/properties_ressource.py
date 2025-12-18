@@ -13,7 +13,7 @@ from app.errors.properties_error import GlobalKeyDoesNotExistsError
 from app.manager.broker_manager import Broker
 from app.models.properties_model import GlobalVarModel, SettingsModel
 from app.services.assets_service import AssetService
-from app.services.aws_service import AmazonS3Service
+from app.services.object_service import AmazonS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import AssetMode, ConfigService
 from app.services.file_service import FTPService

@@ -13,7 +13,7 @@ from app.definition._service import StateProtocol
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
 from app.models.agents_model import AgentModel
-from app.services.agent_service import AgentService
+from app.services.agent.agent_service import AgentService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model

@@ -7,7 +7,7 @@ from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterc
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, JWTStaticObjectPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, UseHandler, UseInterceptor, UseLimiter, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
-from app.services.aws_service import AmazonS3Service
+from app.services.object_service import AmazonS3Service
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.definition._cost import DataCost

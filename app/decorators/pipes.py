@@ -33,7 +33,7 @@ from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, co
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
-from app.services.aws_service import Object,DeleteError,ObjectWriteResult
+from app.services.object_service import Object,DeleteError,ObjectWriteResult
 
 async def to_otp_path(template:str):
     template = "otp/" + template

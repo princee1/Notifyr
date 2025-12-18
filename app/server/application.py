@@ -9,7 +9,7 @@ from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatu
 from app.interface.timers import  SchedulerInterface
 from app.ressources import *
 from app.services.assets_service import AssetService
-from app.services.aws_service import AmazonS3Service
+from app.services.object_service import AmazonS3Service
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService

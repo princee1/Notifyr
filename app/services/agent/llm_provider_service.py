@@ -1,6 +1,6 @@
 from app.services.profile_service import ProfileService
 from app.interface.llm_provider import LLMProvider
-from .config_service import ConfigService
+from ..config_service import ConfigService
 from app.definition._service import BaseMiniService, MiniService, MiniServiceStore, Service, BaseMiniServiceManager
 from app.interface.llm_provider import LLMProvider
 from app.services.config_service import ConfigService
