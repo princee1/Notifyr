@@ -83,6 +83,9 @@ build:
 	@echo "================================================="
 	@echo "🛠️  Building Docker services in $(DOCKER_COMPOSE_FILE)..."
 	@echo "================================================="
+	docker compose build vault-init
+	docker compose build app
+	docker compose build beat
 	$(DOCKER_COMPOSE_BASE) build
 	@echo "================================================="
 	@echo "🎉  All images built successfully!"

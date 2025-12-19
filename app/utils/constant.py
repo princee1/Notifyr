@@ -392,6 +392,11 @@ class CeleryConstant:
     @staticmethod
     def REDIS_APS_ID_RESOLVER(scheduler_id:str,index:int):return f"{CeleryConstant.BACKEND_KEY_PREFIX}apsscheduler@{scheduler_id}:{index}"
 
+class APSchedulerConstant:
+
+    @staticmethod
+    def REDIS_APS_ID_RESOLVER(scheduler_id:str,index:int):return f"{scheduler_id}:{index}"
+
 
 class RabbitMQConstant:
     NOTIFYR_VIRTUAL_HOST='notifyr'

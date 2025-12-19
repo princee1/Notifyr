@@ -286,11 +286,11 @@ class Application(EventInterface):
         redisService = Get(RedisService)
         vaultService = Get(HCVaultService)
 
-        RunInThreadPool(mongooseService.revoke_lease)()
-        RunInThreadPool(tortoiseConnService.revoke_lease)()
-        RunInThreadPool(awsS3Service.revoke_lease)()
-        RunInThreadPool(redisService.revoke_lease)()
-        RunInThreadPool(vaultService.revoke_auth_token)()
+        await RunInThreadPool(mongooseService.revoke_lease)()
+        await RunInThreadPool(tortoiseConnService.revoke_lease)()
+        await RunInThreadPool(awsS3Service.revoke_lease)()
+        await RunInThreadPool(redisService.revoke_lease)()
+        await RunInThreadPool(vaultService.revoke_auth_token)()
 
 
     @property

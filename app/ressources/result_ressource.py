@@ -13,7 +13,7 @@ from app.depends.dependencies import get_auth_permission
 from app.classes.auth_permission import AuthPermission, MustHave, Role
 from apscheduler.job import Job
 
-from app.utils.constant import CeleryConstant, RedisConstant
+from app.utils.constant import APSchedulerConstant, CeleryConstant, RedisConstant
 
 
 REDIS_EXPIRATION = 360000
@@ -120,7 +120,7 @@ class APSSchedulerRessource(BaseHTTPRessource):
     @UsePipe(transform_job_to_dict,before=False)
     @BaseHTTPRessource.HTTPRoute('/{request_id}/{index}/',methods=[HTTPMethod.GET],)
     async def get_job(self,request_id:str,index:int,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        job_id = CeleryConstant.REDIS_APS_ID_RESOLVER(request_id,index)
+        job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(request_id,index)
         return await self.taskService.get_jobs(job_id)
 
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
@@ -142,21 +142,21 @@ class APSSchedulerRessource(BaseHTTPRessource):
     @UseHandler(APSSchedulerHandler)
     @BaseHTTPRessource.HTTPRoute('/{request_id}/{index}/',methods=[HTTPMethod.DELETE],)
     async def remove_job(self,request_id:str,index:int,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        job_id = CeleryConstant.REDIS_APS_ID_RESOLVER(request_id,index)
+        job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(request_id,index)
         return await self.taskService.cancel_job(job_id)
 
     @UsePermission(AdminPermission)
     @UseHandler(APSSchedulerHandler)
     @BaseHTTPRessource.HTTPRoute('/{request_id}/{index}/',methods=[HTTPMethod.PATCH],)
     async def pause_job(self,request_id:str,index:int,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        job_id = CeleryConstant.REDIS_APS_ID_RESOLVER(request_id,index)
+        job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(request_id,index)
         return await self.taskService.pause_job(job_id)
 
     @UsePermission(AdminPermission)
     @UseHandler(APSSchedulerHandler)
     @BaseHTTPRessource.HTTPRoute('/{request_id}/{index}/',methods=[HTTPMethod.PUT],)
     async def resume_job(self,request_id:str,index:int,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        job_id = CeleryConstant.REDIS_APS_ID_RESOLVER(request_id,index)
+        job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(request_id,index)
         return await self.taskService.resume_job(job_id)
             
 

@@ -14,7 +14,7 @@ from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, RedisConstant
+from app.utils.constant import MongooseDBConstant, RedisConstant, CeleryConstant
 from app.utils.tools import RunInThreadPool
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers import (
@@ -22,15 +22,17 @@ from apscheduler.schedulers import (
     SchedulerNotRunningError,
 )
 
+CeleryConstant.BACKEND_KEY_PREFIX
+
 
 # configuration
-LEADER_LOCK_KEY = "apscheduler:leader_lock"
+LEADER_LOCK_KEY = f"apscheduler@leader_lock"
 LEADER_LOCK_TTL = 600
 LEADER_LOCK_TTL_LOWER_BOUND = int(LEADER_LOCK_TTL * 0.50)
 LEADER_LOCK_TTL_UPPER_BOUND = int(LEADER_LOCK_TTL * 5.50)
 
 LEADER_RENEW_INTERVAL = 3.0 
-SCHEDULER_JOBSTORE_PREFIX = "apscheduler:"
+SCHEDULER_JOBSTORE_PREFIX = f"{CeleryConstant.BACKEND_KEY_PREFIX}apscheduler"
 
 @Service()
 class TaskService(BaseService,SchedulerInterface):
@@ -76,17 +78,18 @@ class TaskService(BaseService,SchedulerInterface):
         if self._builded:
             self.shutdown(False)
         
-        self.redis_client = self.redisService.db['celery']
+        redis_client = self.redisService.db['celery']
+        self.redis_client = self.redisService.db['events']
         self.mongo_client = self.mongooseService.sync_client
         jobstores = {
             "redis": RedisJobStore(
-                host=self.redis_client.connection_pool.connection_kwargs.get("host", "localhost"),
-                port=self.redis_client.connection_pool.connection_kwargs.get("port", 6379),
+                host=redis_client.connection_pool.connection_kwargs.get("host", "localhost"),
+                port=redis_client.connection_pool.connection_kwargs.get("port", 6379),
                 db=RedisConstant.CELERY_DB,
-                jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}jobs",
-                run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}run_times",
-                username=self.redisService.db_user,
-                password=self.redisService.db_password
+                jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}/jobs@",
+                run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}:run_times",
+                username=redis_client.connection_pool.connection_kwargs.get('username'),
+                password=redis_client.connection_pool.connection_kwargs.get('password')
                 ),
             'memory':MemoryJobStore(),
             'mongodb':MongoDBJobStore(

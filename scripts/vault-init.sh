@@ -353,10 +353,12 @@ setup_database_config(){
     echo "Configuring Mongo roles..."
     vault write notifyr-database/roles/app-mongo-ntfr-role \
       db_name="mongodb" \
-      creation_statements='{ "db": "admin", "roles": [
+      creation_statements='{ "db": "notifyr", "roles": [
       { "role": "readWrite", "db": "notifyr", "collection":"agent" },
       { "role": "readWrite", "db": "notifyr", "collection":"communication" },
       { "role": "readWrite", "db": "notifyr", "collection":"webhook" },
+      { "role": "readWrite", "db": "notifyr", "collection":"tasks" },
+      { "role": "readWrite", "db": "notifyr", "collection":"errorProfile" },
       { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
       { "role": "readWrite", "db": "notifyr", "collection":"chat" }]}' \
       default_ttl="12h" \
@@ -385,7 +387,7 @@ setup_database_config(){
       db_name="redis" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash"]'
+      creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash","+@sortedset","+@read"]'
 
     vault write notifyr-database/roles/admin-redis-celery-ntfr-role \
       db_name="redis" \

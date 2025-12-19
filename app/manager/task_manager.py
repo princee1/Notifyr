@@ -17,7 +17,7 @@ from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
 from app.utils.tools import RunInThreadPool
-from app.utils.constant import RedisConstant,CeleryConstant
+from app.utils.constant import APSchedulerConstant, RedisConstant,CeleryConstant
 
 P = ParamSpec("P")
 
@@ -315,10 +315,7 @@ class TaskManager:
     @RunInThreadPool
     def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
         now = dt.datetime.now().isoformat()
-        if self.configService.APS_JOBSTORE == 'redis':
-            job_id = CeleryConstant.REDIS_APS_ID_RESOLVER(self.meta['request_id'],index)
-        else:
-            job_id = f"{self.meta['request_id']}@{index}"
+        job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(self.meta['request_id'],index)
         task = TASK_REGISTRY[self.scheduler.task_name]['raw_task']
         delay += 0 if self.scheduler.task_option.countdown == None else self.scheduler.task_option.countdown
         match self.scheduler.task_type:
