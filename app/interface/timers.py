@@ -125,12 +125,12 @@ class SchedulerInterface(Interface):
             return
         self._scheduler.shutdown(wait)
     
-    def pause_job(self,job_id):
-        self._scheduler.pause_job(job_id)
+    def pause_job(self,job_id,jobstore):
+        return self._scheduler.pause_job(job_id,jobstore)
     
-    def resume_job(self,job_id):
-        self._scheduler.resume_job(job_id)
-
+    def resume_job(self,job_id,jobstore):
+        return self._scheduler.resume_job(job_id,jobstore)
+    
     def update_verify_store(self,jobstore:str=None,executor:str=None,verify_only=False):
         if jobstore:
             if jobstore not in self.jobstores:

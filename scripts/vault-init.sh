@@ -8,7 +8,6 @@ VAULT_SHARED_DIR=/vault/shared
 NOTIFYR_APP_ROLE="notifyr-app-role"
 NOTIFYR_DMZ_APP_ROLE="notifyr-dmz-role"
 
-export VAULT_ADDR="http://127.0.0.1:8200"
 SETUP_CONFIG_PATH="setup-config/data/initialization-status"
 
 ################################# ##############################################
@@ -16,7 +15,7 @@ SETUP_CONFIG_PATH="setup-config/data/initialization-status"
 wait_for_server() {
   # Wait for listener
   for i in {1..30}; do
-    if curl -sSf http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1; then
+    if curl -sSf "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
       break
     fi
     sleep 2
@@ -354,7 +353,7 @@ setup_database_config(){
     echo "Configuring Mongo roles..."
     vault write notifyr-database/roles/app-mongo-ntfr-role \
       db_name="mongodb" \
-      creation_statements='{ "db": "notifyr", "roles": [
+      creation_statements='{ "db": "admin", "roles": [
       { "role": "readWrite", "db": "notifyr", "collection":"agent" },
       { "role": "readWrite", "db": "notifyr", "collection":"communication" },
       { "role": "readWrite", "db": "notifyr", "collection":"webhook" },
@@ -367,7 +366,7 @@ setup_database_config(){
       db_name="mongodb" \
       default_ttl="30m" \
       max_ttl="1h" \
-      creation_statements='{ "db": "notifyr", "roles": [
+      creation_statements='{ "db": "admin", "roles": [
           { "role": "dbOwner", "db": "notifyr" }
       ]}'
     setup_config_kv2 "mongo_roles" "set"
@@ -376,23 +375,41 @@ setup_database_config(){
   # --- REDIS ROLES ---
   if ! setup_config_kv2 "redis_roles" "check"; then
     echo "Configuring Redis roles..."
-    vault write notifyr-database/roles/app-redis-ntfr-role \
+    vault write notifyr-database/roles/app-redis-celery-broker-ntfr-role \
       db_name="redis" \
-      default_ttl="365d" \
-      max_ttl="365d" \
-      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT"]'
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~notifyr/celery/broker/*","+PING","+SELECT","+LPUSH","+RPUSH","+BRPOP","+BLPOP","+LPOP","+LLEN","+DEL","+EXPIRE","+PEXPIRE","+SCAN","+EVAL","+@pubsub","+EXIST"]'
+
+    vault write notifyr-database/roles/app-redis-celery-backend-ntfr-role \
+      db_name="redis" \
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash","+EXIST"]'
+
+    vault write notifyr-database/roles/admin-redis-celery-ntfr-role \
+      db_name="redis" \
+      default_ttl="2h" \
+      max_ttl="5h" \
+      creation_statements='["~*","+@all"]'
+
+    vault write notifyr-database/roles/app-redis-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN"]'
 
     vault write notifyr-database/roles/admin-redis-ntfr-role \
-      db_name="redis" \
-      default_ttl="3h" \
+      db_name="redis-notifyr" \
+      default_ttl="2h" \
       max_ttl="5h" \
       creation_statements='["~*","+@all"]'
 
     vault write notifyr-database/roles/credit-redis-ntfr-role \
-      db_name="redis" \
+      db_name="redis-notifyr" \
       default_ttl="10m" \
       max_ttl="20m" \
-      creation_statements='["~notifyr/credit:*", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL"]'
+      creation_statements='["~notifyr/credit:*", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
     setup_config_kv2 "redis_roles" "set"
   fi
   
@@ -438,7 +455,7 @@ setup_database_config(){
 
     vault write notifyr-rabbitmq/roles/celery-ntfr-role \
       vhosts='{
-          "celery": {
+          "notifyr": {
               "configure": ".*",
               "write": ".*",
               "read": ".*"
@@ -450,20 +467,14 @@ setup_database_config(){
 
 create_database_config(){
   # This function sets up CONNECTION CONFIGURATIONS for all database engines
-
-  local PG_HOST=${POSTGRES_HOST:-postgres}
-  local M_HOST=${MONGO_HOST:-mongodb}
-  local STHREE_HOST=${S3_HOST:-minio}
-  local RMQ_HOST=${RABBITMQ_HOST:-rabbitmq}
-  local R_HOST=${REDIS_HOST:-redis}
-  
+ 
   # --- POSTGRES CONNECTION ---
   if ! setup_config_kv2 "postgres_connection" "check"; then
     echo "Configuring Postgres connection..."
     vault write notifyr-database/config/postgres \
       plugin_name="postgresql-database-plugin" \
       allowed_roles="admin-postgres-ntfr-role, app-postgres-ntfr-role" \
-      connection_url="postgresql://{{username}}:{{password}}@$PG_HOST:5432/notifyr" \
+      connection_url="postgresql://{{username}}:{{password}}@$POSTGRES_HOST:5432/notifyr" \
       max_open_connections=50 \
       max_idle_connections=20 \
       username="$POSTGRES_USER" \
@@ -479,7 +490,7 @@ create_database_config(){
     vault write notifyr-database/config/mongodb \
       plugin_name="mongodb-database-plugin" \
       allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role" \
-      connection_url="mongodb://{{username}}:{{password}}@$M_HOST:27017/admin" \
+      connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin" \
       username="$MONGO_INITDB_ROOT_USERNAME" \
       password="$MONGO_INITDB_ROOT_PASSWORD"
 
@@ -490,13 +501,23 @@ create_database_config(){
   # --- REDIS CONNECTION ---
   if ! setup_config_kv2 "redis_connection" "check"; then
     echo "Configuring Redis connection and static role..."
-    vault write notifyr-database/config/redis \
+    vault write notifyr-database/config/redis-notifyr \
         plugin_name="redis-database-plugin" \
-        host="$R_HOST" \
+        host="redis" \
         port=6379 \
         username="vaultadmin-redis" \
-        password="$REDIS_ADMIN_PASSWORD" \
+        password="$REDIS_NOTIFYR_PASSWORD" \
         allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-redis-ntfr-role"
+    vault write -f notifyr-database/rotate-root/redis-notifyr
+    
+
+    vault write notifyr-database/config/redis \
+        plugin_name="redis-database-plugin" \
+        host="$REDIS_HOST" \
+        port=6379 \
+        username="$REDIS_USER" \
+        password="$REDIS_PASSWORD" \
+        allowed_roles="app-redis-celery-backend-ntfr-role, app-redis-celery-broker-ntfr-role, admin-redis-celery-ntfr-role"
     
     vault write -f notifyr-database/rotate-root/redis
     setup_config_kv2 "redis_connection" "set"
@@ -506,7 +527,7 @@ create_database_config(){
   if ! setup_config_kv2 "minio_connection" "check"; then
     echo "Configuring Minio connection..."
     vault write notifyr-minio/config/root \
-        endpoint="$STHREE_HOST:9000" \
+        endpoint="$S3_ENDPOINT" \
         accessKeyId="vaultadmin-minio" \
         secretAccessKey="$MINIO_VAULT_PASSWORD" \
         sts_region="us-east-1" \
@@ -518,7 +539,7 @@ create_database_config(){
   if ! setup_config_kv2 "rabbitmq_connection" "check"; then
     echo "Configuring RabbitMQ connection..."
     vault write notifyr-rabbitmq/config/connection \
-      connection_uri="http://$RMQ_HOST:15672" \
+      connection_uri="http://$RABBITMQ_HOST:15672" \
       username="$RABBITMQ_DEFAULT_USER" \
       password="$RABBITMQ_DEFAULT_PASS" \
       verify_connection=true

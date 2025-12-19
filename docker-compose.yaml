@@ -30,7 +30,7 @@ services:
       - --providers.docker.exposedbydefault=false
       - "--entrypoints.web.address=:80"
     ports:
-      - "127.0.0.54:80:80"
+      - "${NOTIFYR_IP:-127.0.0.54}:80:80"
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -42,9 +42,9 @@ services:
   dashboard:
     image: notifyr/dashboard:community
     container_name: dashboard
-    # labels:
-    #   - "traefik.enable=true"
-    #   - "traefik.http.routers.dashboard.rule=Host(`dashboard.notifyr.io`)"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`dashboard.notifyr.io`)"
     networks:
       - edge_net
     secrets:
@@ -53,9 +53,9 @@ services:
 
   dmz:
     image: notifyr/dmz:community
-    # labels:
-    #   - "traefik.enable=true"
-    #   - "traefik.http.routers.dmz.rule=Host(`notifyr.io`)"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dmz.rule=Host(`notifyr.io`)"
     networks:
       - edge_net
       - data_net
@@ -83,10 +83,10 @@ services:
     environment:
       - ADDR=0.0.0.0:8080
       - DEPLOY_FILE_PATH=/var/deploy.json
-      - NOTIFYR_PORT=8088
+      - NOTIFYR_PORT=${NOTIFYR_PORT:-8088}
     networks:
       - lb_net
-      - app_net #NOTE will change later when balancer are working
+      - app_net
 
   # ==========================================
   # CREDIT LAYER
@@ -104,8 +104,7 @@ services:
       - vault_net
     environment:
       - ALLOWED_INIT=off
-      - VAULT_ADDR=http://vault:8200
-      - REDIS_HOST=${REDIS_HOST:-redis}
+      - VAULT_ADDR=http://vault:8200      
     secrets:
       - source: costs
         target: /run/secrets/costs.json
@@ -122,9 +121,9 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`api.notifyr.io`)"
       - "traefik.http.routers.app.entrypoints=web"      
-      - "traefik.http.services.app.loadbalancer.server.port=8088"
+      - "traefik.http.services.app.loadbalancer.server.port=${NOTIFYR_PORT:-8088}"
 
-    command: ["python", "main.py", "-H=0.0.0.0", "-p=8088", "-t=solo"]
+    command: ["python", "main.py", "-H=0.0.0.0", "-p=${NOTIFYR_PORT:-8088}", "-t=solo"]
     restart: unless-stopped
     secrets:
       # PRESERVED: Custom target paths
@@ -140,9 +139,24 @@ services:
       context: ./
       dockerfile: Dockerfile
     environment:
+      - MINIO_STS_ENABLE=${MINIO_STS_ENABLE:-false}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - MONGO_HOST=${MONGO_HOST}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - REDIS_HOST=${REDIS_HOST}
       - MODE=prod
-    env_file:
-      - .env
+      - TWILIO_MODE=prod
+      - TWILIO_TEST_URL=${TWILIO_TEST_URL}
+      - PROD_URL=${PROD_URL}
+      - GOOGLE_SAFE_SEARCH_API_KEY=${GOOGLE_SAFE_SEARCH_API_KEY}
+      - IPINFO_API_KEY=${IPINFO_API_KEY}
+      - USERNAME=${USERNAME}
+      - DOMAIN_NAME=${DOMAIN_NAME}
+      - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
+      - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
+      - APS_JOBSTORE=${APS_JOBSTORE}
+      - SECURITY_FLAG=${SECURITY_FLAG:-true}
     networks:
       - app_net
       - data_net
@@ -167,6 +181,8 @@ services:
       - vault-shared:/vault/shared
     environment:
       - MODE=prod
+      - MONGO_HOST=${MONGO_HOST}
+      - QDRANT_HOST=${QDRANT_HOST}
     networks:
       - agentic_net
       - data_net
@@ -184,9 +200,12 @@ services:
       - vault-shared:/vault/shared
     restart: always
     environment:
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - MONGO_HOST=${MONGO_HOST}
+      - REDIS_HOST=${REDIS_HOST}
+      - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
+      - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
       - MODE=prod
-    env_file:
-      - .env
     networks:
       - data_net
       - vault_net
@@ -208,9 +227,11 @@ services:
       dockerfile: docker/Dockerfile.celery
     restart: unless-stopped
     environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
+      - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
       - MODE=prod
-    env_file:
-      - .env
     networks:
       - data_net
       - vault_net
@@ -252,17 +273,33 @@ services:
     cap_add: ["IPC_LOCK"]
     restart: on-failure
     environment:
-      VAULT_ADDR: "http://vault:8200"
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD}
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      MINIO_VAULT_PASSWORD: ${MINIO_VAULT_PASSWORD}
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      ROTATE_ROOT: true
+      VAULT_ADDR: http://127.0.0.1:8200
+
+      POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}
+
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
+
+      MINIO_VAULT_PASSWORD: ${MINIO_VAULT_PASSWORD:?Minio admin vault password must be set}
+
+      REDIS_NOTIFYR_PASSWORD: ${REDIS_NOTIFYR_PASSWORD:-vaultpass}
+
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Rabbit mq user must be set}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Rabbit mq password must be set}
+
+      REDIS_USER: ${REDIS_USER:?Redis user must be set}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Redis password must be set}
+
       AWS_VAULT_USER: set_user_in_container_start
       AWS_VAULT_PASSWORD: set_password_in_container_start
+
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      MONGO_HOST: ${MONGO_HOST:-mongodb}
+      S3_ENDPOINT: ${S3_ENDPOINT:-minio:9000}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      REDIS_HOST: ${REDIS_HOST:-redis}
     volumes:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
@@ -299,9 +336,8 @@ services:
     volumes:
       - minio-data:/data
     environment:
-      - MINIO_VAULT_PASSWORD=${MINIO_VAULT_PASSWORD:-changeme}
-      - MINIO_STS_ENABLE=${MINIO_STS_ENABLE}
-      - NOTIFY_REDIS_ADDRESS=${REDIS_HOST:-redis}
+      - MINIO_VAULT_PASSWORD=${MINIO_VAULT_PASSWORD:?Minio admin password must set}
+      - MINIO_STS_ENABLE=${MINIO_STS_ENABLE:-false}
     depends_on:
       - redis
     networks:
@@ -320,9 +356,9 @@ services:
     container_name: rabbitmq
     restart: always
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-notifyr-user}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-notifyrpass123}
-      RABBITMQ_DEFAULT_VHOST: celery
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Rabbit mq default user must be set}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Rabbit mq default password must be set}
+      RABBITMQ_DEFAULT_VHOST: notifyr
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
@@ -334,7 +370,10 @@ services:
     restart: always
     entrypoint: ["/entrypoint.sh"]
     environment:
-      - REDIS_ADMIN_PASSWORD=${REDIS_ADMIN_PASSWORD:-vaultpass}
+      - CELERY_EXTERNAL=${CELERY_EXTERNAL:-false}
+      - REDIS_USER=${REDIS_USER:?Redis user must be set}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?Redis password must be set}
+      - REDIS_NOTIFYR_PASSWORD=${REDIS_NOTIFYR_PASSWORD:-vaultpass}
       - DEFAULT_USER=on
       - SKIP_FIX_PERMS=1
     volumes:
@@ -351,8 +390,8 @@ services:
     volumes:
       - mongo-data:/data/db
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
       MONGO_INITDB_DATABASE: notifyr
     networks:
       - data_net
@@ -367,8 +406,8 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}
       POSTGRES_DB: notifyr
     networks:
       - data_net
@@ -381,15 +420,12 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
     environment:
-      # Disk storage
       QDRANT__STORAGE__PATH: /qdrant/storage
       QDRANT__STORAGE__USE_MMAP: "true"
       QDRANT__STORAGE__PERSISTENT: "true"
-
       QDRANT__HNSW__M: 4
       QDRANT__HNSW__EF_CONSTRUCTION: 32
       QDRANT__HNSW__EF: 32
-
       QDRANT__CACHE__MAX_SIZE_MB: 128
 
 volumes:

@@ -1,9 +1,6 @@
 import asyncio
 from random import randint, random
 from typing import Optional
-
-from pymongo import MongoClient
-from redis import Redis
 from app.classes.celery import SchedulerModel, TaskType
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service, ServiceStatus
 from app.errors.aps_error import APSJobDoesNotExists
@@ -12,6 +9,7 @@ from apscheduler.jobstores.mongodb import MongoDBJobStore
 from app.errors.service_error import BuildOkError, NotBuildedError, ServiceNotAvailableError
 from app.interface.timers import SchedulerInterface,MemoryJobStore
 from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
@@ -39,7 +37,7 @@ class TaskService(BaseService,SchedulerInterface):
     _schedule_type_supported = {TaskType.DATETIME,TaskType.INTERVAL,TaskType.TIMEDELTA,TaskType.CRONTAB}
 
 
-    def __init__(self, configService: ConfigService,vaultService:HCVaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService):
+    def __init__(self, configService: ConfigService,vaultService:HCVaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService,costService:CostService):
         super().__init__()
         self.configService = configService
         self.uvicornWorkerService = processWorkerService
@@ -47,6 +45,7 @@ class TaskService(BaseService,SchedulerInterface):
         self.redisService = redisService
         self.mongooseService = mongooseService
         self.loggerService = loggerService
+        self.costService = costService
         
         self._leader = False
         self._leader_task: Optional[asyncio.Task] = None
@@ -193,9 +192,17 @@ class TaskService(BaseService,SchedulerInterface):
     @RunInThreadPool
     def cancel_job(self,job_id:str=None):
         if job_id == None:
-            self._scheduler.remove_all_jobs(self.jobstore)
+            return self._scheduler.remove_all_jobs(self.jobstore)
         else:
             try:
-                self._scheduler.remove_job(job_id,self.jobstore)
+                return self._scheduler.remove_job(job_id,self.jobstore)
             except JobLookupError as e:
                 raise APSJobDoesNotExists(job_id,*e.args)
+            
+    @RunInThreadPool
+    def pause_job(self, job_id):
+        return SchedulerInterface.pause_job(self,job_id,self.jobstore)
+
+    @RunInThreadPool
+    def resume_job(self,job_id):
+        return SchedulerInterface.resume_job(self,job_id,self.jobstore)

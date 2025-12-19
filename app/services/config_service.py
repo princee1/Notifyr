@@ -162,7 +162,6 @@ class ConfigService(_service.BaseService):
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
         self.ADMIN_KEY:str = self.getenv("ADMIN_KEY")
-        self.API_KEY:str = self.getenv("API_KEY")
         
         # SERVER CONFIG #
         self.HTTP_MODE:Literal['HTTP','HTTPS'] = self.getenv("HTTP_MODE",'HTTP')
@@ -170,12 +169,12 @@ class ConfigService(_service.BaseService):
         self.HTTPS_KEY:str = self.getenv("HTTPS_KEY", 'key.pem')
 
         # EMAIL OAUTH CONFIG #
-        self.OAUTH_METHOD_RETRIEVER:str = self.getenv('OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
-        self.OAUTH_JSON_KEY_FILE:str = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
-        self.OAUTH_TOKEN_DATA_FILE:str = self.getenv('OAUTH_DATA_FILE', 'mail_provider.tokens.json')
-        self.OAUTH_CLIENT_ID:str = self.getenv('OAUTH_CLIENT_ID')
-        self.OAUTH_CLIENT_SECRET:str = self.getenv('OAUTH_CLIENT_SECRET')
-        self.OAUTH_OUTLOOK_TENANT_ID:str = self.getenv('OAUTH_TENANT_ID')
+        # self.OAUTH_METHOD_RETRIEVER:str = self.getenv('OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
+        # self.OAUTH_JSON_KEY_FILE:str = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
+        # self.OAUTH_TOKEN_DATA_FILE:str = self.getenv('OAUTH_DATA_FILE', 'mail_provider.tokens.json')
+        # self.OAUTH_CLIENT_ID:str = self.getenv('OAUTH_CLIENT_ID')
+        # self.OAUTH_CLIENT_SECRET:str = self.getenv('OAUTH_CLIENT_SECRET')
+        # self.OAUTH_OUTLOOK_TENANT_ID:str = self.getenv('OAUTH_TENANT_ID')
 
         # ASSETS CONFIG #
         self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local' if self.MODE == MODE.DEV_MODE else 's3').lower())
@@ -192,8 +191,7 @@ class ConfigService(_service.BaseService):
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
         # HASHI CORP VAULT CONFIG #
-        self.VAULT_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('VAULT_ACTIVATED','true'), True)
-        self.VAULT_ADDR:str = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
+        self.VAULT_ADDR:str = 'http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200'
 
         # MONGODB CONFIG #
         self.MONGO_HOST:str = self.getenv('MONGO_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'mongodb')
@@ -202,10 +200,10 @@ class ConfigService(_service.BaseService):
         self.REDIS_HOST:str = self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")
 
         # RABBITMQ CONFIG #
-        self.RABBITMQ_HOST:Callable[...,str] = self.getenv("RABBITMQ_URL", "localhost" if self.MODE == MODE.DEV_MODE else "rabbitmq")
+        self.RABBITMQ_HOST:Callable[...,str] = self.getenv("RABBITMQ_HOST", "localhost" if self.MODE == MODE.DEV_MODE else "rabbitmq")
 
         # MEMCACHED CONFIG #
-        self.MEMCACHED_HOST:str = self.getenv("MEMCHACHED_URL","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
+        self.MEMCACHED_HOST:str = self.getenv("MEMCHACHED_HOST","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
 
         # POSTGRES DB CONFIG #
         self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
@@ -213,8 +211,8 @@ class ConfigService(_service.BaseService):
         # CELERY CONFIG #
         self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','rabbitmq')
 
-        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672/{RabbitMQConstant.CELERY_VIRTUAL_HOST}")
-        self.CELERY_BACKEND_URL:Callable[[str,str],str] = lambda u,p: self.getenv("CELERY_BACKEND_URL", f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
+        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{u}:{p}@{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672/{RabbitMQConstant.CELERY_VIRTUAL_HOST}")
+        self.CELERY_BACKEND_URL:Callable[[str,str],str] = lambda u,p: self.getenv("CELERY_BACKEND_URL", f"redis://{u}{p}{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)

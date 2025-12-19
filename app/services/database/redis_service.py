@@ -197,10 +197,14 @@ class RedisService(TempCredentialsDatabaseService):
         return wrapper
 
     def build(self,build_state=-1):
-        host = self.configService.REDIS_HOST
+        host = 'redis'
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE)
+        self.backend_creds = self.vaultService.database_engine.generate_credentials(VaultConstant.CELERY_BACKEND_ROLE)
+        
+        if self.configService.CELERY_BROKER == 'redis':
+            self.broker_creds = self.vaultService.database_engine.generate_credentials(VaultConstant.CELERY_BACKEND_ROLE)
 
-        self.redis_celery = Redis(host=host,db=RedisConstant.CELERY_DB,username=self.db_user,password=self.db_password)
+        self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.backend_creds['data']['username'],password=self.backend_creds['data']['password'])
         self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
         self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user,password=self.db_password)
 
@@ -234,6 +238,13 @@ class RedisService(TempCredentialsDatabaseService):
             print(e.__class__)
             raise BuildFailureError(e.args)
 
+    def revoke_lease(self):
+        if self.configService.CELERY_BROKER == 'redis':
+            self.vaultService.revoke_lease(self.broker_creds['lease_id'])
+
+        self.vaultService.revoke_lease(self.backend_creds['lease_id'])
+        return super().revoke_lease()
+
     @check_db
     async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
@@ -266,24 +277,32 @@ class RedisService(TempCredentialsDatabaseService):
         return result > 0
             
     @check_db
-    async def delete_all(self, database: int | str, prefix: str,simple_prefix=True, redis: Redis = None):
+    async def delete_all(self, database: int | str, prefix: str, simple_prefix=True,redis: Redis = None):
         if simple_prefix:
             prefix =f"{prefix}*"
-        keys = await redis.keys(prefix)
+        keys = await self.scan(database,prefix)
         if keys:
             return await redis.delete(*keys)
         return 0
     
     @check_db
+    async def scan(self,database:int|str,match,redis:Redis=None):
+        cursor = 0
+        keys = []
+        while True:
+            cursor, key = redis.scan(
+                cursor=cursor,
+                match=match,
+                count=500
+            )
+            keys.extend(key)
+            if cursor == 0:
+                break
+        return list(set(keys))
+    
+    @check_db
     async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):
         return await redis.append(key,data)
-    
-    async def store_bkg_result(self,data,key,expiry):
-        if not await self.retrieve(0,key):
-            response = await self.store(0,key,[data],expiry)
-        else:
-            response = await self.append(0,key,data,expiry)
-        return response
         
     async def close_connections(self,):
         for config in self.callbacks.values():
@@ -303,18 +322,24 @@ class RedisService(TempCredentialsDatabaseService):
     @check_db
     async def decrement(self,database:int|str,name:str,amount:int,redis:Redis=None):
         return await redis.decrby(name,amount)
-
-    @check_db
-    async def hash_iter(self,database:int|str,hash_name:str,iter=False,match:str=None,count=None,redis:Redis=None):
-        if iter:
-            return await redis.hscan_iter(hash_name,match,count)
-        else:
-            return await redis.hgetall(hash_name)
     
     @check_db
-    async def hash_del(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
+    async def hash_kdel(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
         return await redis.hdel(*keys)
-
+    
+    @check_db
+    async def hash_set(self,database:int|str,hash_name:str,key:str=None,value:Any=None,mapping:dict=None,redis:Redis=None):
+        redis.hset
+        return await redis.hset(hash_name,key,value,mapping)
+    
+    @check_db
+    async def expire(self,database:int|str,hash_name:str,ttl:int,nx=False,redis:Redis=None):
+        return await redis.expire(hash_name,ttl,nx=nx)
+    
+    @check_db
+    async def hash_get(self,database:int|str,hash_name,redis:Redis=None):
+        return await redis.hgetall(hash_name)
+       
     @check_db
     async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
         return await redis.lpush(name,*element)

@@ -1,5 +1,4 @@
 import functools
-import sys
 from typing import Any, Callable
 from celery import Celery
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
@@ -9,6 +8,7 @@ from app.services import *
 from app.utils.globals import APP_MODE, ApplicationMode
 from app.utils.prettyprint import PrettyPrinter_
 from celery import Task
+from app.utils.constant import CeleryConstant
 from celery.exceptions import SoftTimeLimitExceeded,MaxRetriesExceededError,TaskRevokedError,QueueNotFound
 from celery.worker.control import control_command
 
@@ -40,26 +40,31 @@ TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 
 configService: ConfigService = Get(ConfigService)
 redisService  = Get(RedisService)
+vaultService = Get(HCVaultService)
 rabbitmqService = Get(RabbitMQService)
 
-brokerService = redisService if configService.CELERY_BROKER == 'redis' else rabbitmqService
+backend_url = configService.CELERY_BACKEND_URL(redisService.backend_creds['data']['username'],redisService.backend_creds['data']['password'])
+
+if configService.CELERY_BROKER == 'redis':
+    broker_url = configService.CELERY_MESSAGE_BROKER_URL(redisService.broker_creds['data']['username'],redisService.broker_creds['data']['password'])
+else:
+    broker_url = configService.CELERY_BACKEND_URL(rabbitmqService.db_user,rabbitmqService.db_password)
+
 ##############################################           ##################################################
 
 celery_app = Celery('celery_app',
-                    backend=configService.CELERY_BACKEND_URL(redisService.db_user,redisService.db_password),
-                    broker=configService.CELERY_MESSAGE_BROKER_URL(brokerService.db_user,brokerService.db_password),
+                    backend=backend_url,
+                    broker=broker_url,
                     result_expires=configService.CELERY_RESULT_EXPIRES
                     )
 
-# celery_app.conf.update(task_serializer='pickle', accept_content=['pickle'])
-
 # Enable RedBeat Scheduler
 celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
-celery_app.conf.redbeat_redis_url = configService.CELERY_BACKEND_URL(redisService.db_user,redisService.db_password)
+celery_app.conf.redbeat_redis_url = backend_url
 celery_app.conf.timezone = "UTC"
 
 celery_app.conf.result_backend_transport_options = {
-    'global_keyprefix': 'notifyr_task_',
+    'global_keyprefix': CeleryConstant.REDIS_TASK_ID_RESOLVER(''),
     'retry_policy': {
        'timeout': 5.0
     }
@@ -74,9 +79,10 @@ celery_app.conf.task_create_missing_queues = True
 if configService.CELERY_BROKER == 'redis':
     celery_app.conf.visibility_timeout = configService.CELERY_VISIBILITY_TIMEOUT
     celery_app.conf.broker_transport_options = {
-        'priority_steps': list(range(3)),
+        'priority_steps': [1,2,3],
         'sep': ':',
         'queue_order_strategy': 'priority',
+        "global_keyprefix": CeleryConstant.BROKER_KEY_PREFIX
     }
 else:
     celery_app.conf.task_queue_max_priority = 3 # Only rabbit mq

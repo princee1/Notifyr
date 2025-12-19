@@ -9,8 +9,6 @@
 
 -- DROP SCHEMA IF EXISTS cron CASCADE;
 
-CREATE ROLE vault_ntrfyr_admin_role NOLOGIN;
-
 CREATE SCHEMA security;
 
 CREATE SCHEMA contacts;

@@ -4,6 +4,8 @@ from app.services import ProfileService
 from app.services import MongooseService
 from app.services import RedisService
 from app.services import HCVaultService
+from app.services import ConfigService
+from app.utils.constant import CeleryConstant
 
 profileService = Get(ProfileService)
 
@@ -13,11 +15,16 @@ def on_worker_init():
 
 @worker_ready.connect
 def on_worker_ready(sender, **kwargs):
+    configService = Get(ConfigService)
     app = sender.app
     hostname = sender.hostname
     
     for id,p in profileService.MiniServiceStore:
-        app.control.add_consumer(p.queue_name, destination=[hostname])
+        if configService.CELERY_BROKER =='redis':
+            queue_name:str = CeleryConstant.REDIS_QUEUE_NAME_RESOLVER(p.queue_name)
+        else:
+            queue_name=p.queue_name
+        app.control.add_consumer(queue_name, destination=[hostname])
 
     print(f"Worker {hostname} synced {len(profileService.MiniServiceStore)} dynamic queues.")
 

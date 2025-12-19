@@ -300,13 +300,6 @@ class SecurityService(BaseService, EncryptDecryptInterface):
         if token != self.API_KEY:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Api Key provided does not match the one given")
 
-    def generate_custom_api_key(self, ip_address: str):
-        raise NotImplementedError
-        time.sleep(random()/100)
-        data = ip_address + SEPARATOR +  \
-            str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
-        return self._encode_value(data, self.vaultService.API_ENCRYPT_TOKEN)
-
     def build(self,build_state=-1):
         api_key = self.fileService.readFile('/run/secrets/api_key.txt',flag=FDFlag.READ)
 

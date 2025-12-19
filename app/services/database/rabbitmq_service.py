@@ -1,6 +1,5 @@
-import pika
 from app.definition._service import LinkDep, Service
-from app.errors.service_error import BuildFailureError
+from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
@@ -14,8 +13,12 @@ class RabbitMQService(TempCredentialsDatabaseService):
     def __init__(self, configService:ConfigService, fileService:FileService, vaultService:HCVaultService):
         super().__init__(configService, fileService, vaultService, 60*60*24*29)
     
+    def verify_dependency(self):
+        if self.configService.CELERY_BROKER == 'redis':
+            raise BuildWarningError
+    
     def build(self, build_state = ...):
-        
+        import pika
         self.creds=self.vaultService.rabbitmq_engine.generate_credentials()
         credentials = pika.PlainCredentials(username=self.db_user,password=self.db_password)
 

@@ -70,8 +70,6 @@ class HCVaultService(BaseService,SchedulerInterface):
             raise ServiceTemporaryNotAvailableError(service=self.name)
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
-        # if self.configService.VAULT_ACTIVATED:
-        #     raise BuildOkError
         if self.configService.MODE == MODE.DEV_MODE:
             self._dev_token_login()
             self.read_tokens()

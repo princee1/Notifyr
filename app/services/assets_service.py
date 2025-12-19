@@ -254,9 +254,8 @@ class AssetService(_service.BaseService,SchedulerInterface):
         self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events,tuple(),{})
 
     async def clear_object_events(self,):
-        objects_events = await self.redisService.hash_iter(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,iter=False)
-        print(objects_events)
-        await self.redisService.hash_del(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,*objects_events.keys())
+        await self.redisService.delete(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT)
+        return
 
     def _read_globals_disk(self):
 

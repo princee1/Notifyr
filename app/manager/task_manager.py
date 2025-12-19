@@ -17,6 +17,7 @@ from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
 from app.utils.tools import RunInThreadPool
+from app.utils.constant import RedisConstant,CeleryConstant
 
 P = ParamSpec("P")
 
@@ -142,12 +143,13 @@ class TaskManager:
         is_retry = self.meta['retry']
 
         for i, t in enumerate(self.taskConfig):  # TODO add the index i to the results
+            i = f"{i}"
             task:BackgroundTask = t['task']
             delay = t['delay']
             if delay and delay>0:
                 await asyncio.sleep(delay)
 
-            data=None if runType == 'parallel' else []
+            data=None if runType == 'parallel' else {}
             self.monitoringService.background_task_count.inc()
            
             async def callback():
@@ -158,9 +160,9 @@ class TaskManager:
                         result['bypass']=True
                     if is_saving_result:
                         if runType == 'sequential':
-                            data.append(result)
+                            data[i]=result
                         else:
-                            await self.redisService.store_bkg_result(result, self.meta['request_id'],ttl)
+                            await self.store_bkg_result(result, self.meta['request_id'],ttl,i)
                     
                     if runType =='parallel':
                         self.monitoringService.background_task_count.dec()
@@ -174,9 +176,9 @@ class TaskManager:
                         result = await task
                     if is_saving_result:
                         if runType == 'sequential':
-                            data.append(result)
+                            data[i]=result
                         else:
-                            await self.redisService.store_bkg_result(result,self.meta['request_id'],ttl)
+                            await self.store_bkg_result(result,self.meta['request_id'],ttl,i)
                     
                     if runType=='parallel':
                         self.monitoringService.background_task_count.dec()                
@@ -199,7 +201,7 @@ class TaskManager:
                 asyncio.create_task(callback())
 
         if runType == 'sequential':
-            await self.redisService.store_bkg_result(data, self.meta['request_id'],ttl)
+            await self.store_bkg_result(data, self.meta['request_id'],ttl)
             self.monitoringService.background_task_count.dec(task_len)
        
     async def _offload_task(self,weight: float,delay: float,index:int,callback: Callable, *args, **kwargs)->TaskExecutionResult:
@@ -313,7 +315,10 @@ class TaskManager:
     @RunInThreadPool
     def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
         now = dt.datetime.now().isoformat()
-        job_id= f"{self.meta['request_id']}@{index}"
+        if self.configService.APS_JOBSTORE == 'redis':
+            job_id = CeleryConstant.REDIS_APS_ID_RESOLVER(self.meta['request_id'],index)
+        else:
+            job_id = f"{self.meta['request_id']}@{index}"
         task = TASK_REGISTRY[self.scheduler.task_name]['raw_task']
         delay += 0 if self.scheduler.task_option.countdown == None else self.scheduler.task_option.countdown
         match self.scheduler.task_type:
@@ -331,3 +336,12 @@ class TaskManager:
         next_run_at:dt.datetime =  job.next_run_time
         delta= (next_run_at.timestamp() +delay) - dt.datetime.now().timestamp()
         return TaskExecutionResult(True,now,'APSScheduler',naturaldelta(delta),index,str(self.scheduler._heaviness),None,False,job_id,'schedule','Task Added to the APSScheduler, delay or problem might occur')
+
+    async def store_bkg_result(self,data,name,expiry,index=None):
+        name=CeleryConstant.REDIS_BKG_TASK_ID_RESOLVER(name)
+        if index==None:
+            await self.redisService.hash_set(RedisConstant.CELERY_DB,name,mapping=data)
+        else:
+            await self.redisService.hash_set(RedisConstant.CELERY_DB,name,index,data)
+        
+        await self.redisService.expire(RedisConstant.CELERY_DB,name,expiry,nx=True)
