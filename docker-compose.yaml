@@ -145,7 +145,7 @@ services:
       - S3_ENDPOINT=${S3_ENDPOINT-minio:9000}
       - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
       - REDIS_HOST=${REDIS_HOST-redis}
-      - MODE=prod
+      - MODE={$MODE:-prod}
       - TWILIO_MODE=prod
       - TWILIO_TEST_URL=${TWILIO_TEST_URL}
       - PROD_URL=${PROD_URL}
@@ -180,7 +180,7 @@ services:
     volumes:
       - vault-shared:/vault/shared
     environment:
-      - MODE=prod
+      - MODE={$MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
     networks:
@@ -205,7 +205,7 @@ services:
       - REDIS_HOST=${REDIS_HOST-redis}
       - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
       - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
-      - MODE=prod
+      - MODE={$MODE:-prod}
     networks:
       - data_net
       - vault_net
@@ -231,7 +231,7 @@ services:
       - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
       - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
       - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
-      - MODE=prod
+      - MODE={$MODE:-prod}
     networks:
       - data_net
       - vault_net

@@ -167,7 +167,6 @@ class MongooseDBConstant:
     WORKFLOW_COLLECTION ='workflow'
     EDGE_COLLECTION='edge'
     NODE_COLLECTION='node'
-    SETTING_COLLECTION = 'setting'
     TASKS_COLLECTION = 'tasks'
 
     DATABASE_NAME = 'notifyr'
@@ -397,6 +396,13 @@ class APSchedulerConstant:
     @staticmethod
     def REDIS_APS_ID_RESOLVER(scheduler_id:str,index:int):return f"{scheduler_id}:{index}"
 
+
+class MonitorConstant:
+    CONNECTION_COUNT = 0
+    CONNECTION_TOTAL = 1
+    BACKGROUND_TASK_COUNT = 2
+    ROUTE_TASK_COUNT = 3
+    REQUEST_LATENCY = 4
 
 class RabbitMQConstant:
     NOTIFYR_VIRTUAL_HOST='notifyr'

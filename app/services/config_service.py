@@ -17,6 +17,7 @@ class MODE(Enum):
     DEV_MODE = 'dev'
     PROD_MODE = 'prod'
     TEST_MODE = 'test'
+    MONITOR_MODE = 'monitor'
 
     def toMode(val):
         match val:
@@ -26,16 +27,10 @@ class MODE(Enum):
                 return MODE.PROD_MODE
             case MODE.TEST_MODE.value:
                 return MODE.TEST_MODE
+            case MODE.MONITOR_MODE.value:
+                return MODE.MONITOR_MODE
             case _:
                 return MODE.DEV_MODE
-
-    def modeToAddr(mode):
-        match mode:
-            case MODE.DEV_MODE:
-                return "127.0.0.1"
-            case _:
-                return "127.0.0.1"
-
 
 class AssetMode(Enum):
     s3 = 's3'

@@ -17,7 +17,7 @@ from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
 from app.utils.tools import RunInThreadPool
-from app.utils.constant import APSchedulerConstant, RedisConstant,CeleryConstant
+from app.utils.constant import APSchedulerConstant, MonitorConstant, RedisConstant,CeleryConstant
 
 P = ParamSpec("P")
 
@@ -150,7 +150,8 @@ class TaskManager:
                 await asyncio.sleep(delay)
 
             data=None if runType == 'parallel' else {}
-            self.monitoringService.background_task_count.inc()
+            self.monitoringService.gauge_inc(MonitorConstant.BACKGROUND_TASK_COUNT)
+
            
             async def callback():
 
@@ -165,7 +166,8 @@ class TaskManager:
                             await self.store_bkg_result(result, self.meta['request_id'],ttl,i)
                     
                     if runType =='parallel':
-                        self.monitoringService.background_task_count.dec()
+                        self.monitoringService.gauge_dec(MonitorConstant.BACKGROUND_TASK_COUNT)
+
                         
                     return result
 
@@ -181,7 +183,7 @@ class TaskManager:
                             await self.store_bkg_result(result,self.meta['request_id'],ttl,i)
                     
                     if runType=='parallel':
-                        self.monitoringService.background_task_count.dec()                
+                        self.monitoringService.gauge_dec(MonitorConstant.BACKGROUND_TASK_COUNT)
                     return result
                 except TaskRetryError as e:
                     error = e.error
@@ -202,7 +204,7 @@ class TaskManager:
 
         if runType == 'sequential':
             await self.store_bkg_result(data, self.meta['request_id'],ttl)
-            self.monitoringService.background_task_count.dec(task_len)
+            self.monitoringService.gauge_dec(MonitorConstant.BACKGROUND_TASK_COUNT,task_len)
        
     async def _offload_task(self,weight: float,delay: float,index:int,callback: Callable, *args, **kwargs)->TaskExecutionResult:
         """

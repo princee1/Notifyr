@@ -18,6 +18,7 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     from app.services.workflow_service import WorkflowService
     from app.services.agent.remote_agent_service import RemoteAiAgentService
     from app.services.cost_service import CostService
+    from app.services.monitoring_service import MonitoringService
     from app.services.push_notification_service import PushNotificationService
 
 
@@ -35,7 +36,6 @@ if APP_MODE == ApplicationMode.server:
     from app.services.setting_service import SettingService
     from app.services.security_service import JWTAuthService,SecurityService
     from app.services.file.file_service import FileService
-    from app.services.monitoring_service import MonitoringService
     from app.services.contacts_service import ContactsService,SubscriptionService
 
 
