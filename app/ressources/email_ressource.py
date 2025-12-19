@@ -6,7 +6,7 @@ from app.classes.email import parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
 from app.cost.email_cost import EmailCost
-from app.decorators.interceptors import TaskCostInterceptor
+from app.decorators.interceptors import RegisterBackgroundTaskInterceptor, TaskCostInterceptor
 from app.definition._service import BaseMiniService
 from app.definition._utils_decorator import Pipe
 from app.depends.class_dep import  EmailTracker
@@ -109,7 +109,7 @@ class EmailRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='1000/minutes')
     @UseRoles([Role.MFA_OTP])
-    @UseInterceptor(TaskCostInterceptor(),inject_meta=True)
+    @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor(),inject_meta=True)
     @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,EmailSenderService,CeleryService,AssetService,lockType='reader',check_status=False,as_manager =True)
     @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetObjectPermission('email'),permissions.JWTSignatureAssetPermission())
@@ -156,7 +156,7 @@ class EmailRessource(BaseHTTPRessource):
     @UsePermission(permissions.TaskCostPermission(),permissions.JWTSignatureAssetPermission())
     @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'))
     @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
-    @UseInterceptor(TaskCostInterceptor(),inject_meta=True)
+    @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor(),inject_meta=True)
     @UsePipe(pipes.TemplateSignatureQueryPipe,TemplateSignatureValidationInjectionPipe,force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe,pipes.ContentIndexPipe,pipes.ContactToInfoPipe('email','meta.To'))
     @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard(),guards.CeleryBrokerGuard)
     @BaseHTTPRessource.HTTPRoute("/custom/{profile}/", responses=DEFAULT_RESPONSE,cost_definition=CostConstant.email_template)

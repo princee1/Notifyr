@@ -8,7 +8,7 @@ from app.classes.template import PhoneTemplate
 from app.cost.call_cost import CallCost
 from app.decorators.guards import CeleryBrokerGuard, CeleryTaskGuard, RegisteredContactsGuard, TrackGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, CostHandler, MiniServiceHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
-from app.decorators.interceptors import KeepAliveResponseInterceptor, TaskCostInterceptor
+from app.decorators.interceptors import KeepAliveResponseInterceptor, RegisterBackgroundTaskInterceptor, TaskCostInterceptor
 from app.decorators.permissions import TaskCostPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, FilterAllowedSchemaPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._cost import SimpleTaskCost
@@ -80,7 +80,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseServiceLock(AssetService,lockType='reader')
     @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
     @UseHandler(AsyncIOHandler,TemplateHandler,CostHandler)
-    @UseInterceptor(TaskCostInterceptor)
+    @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
     @UsePipe(OffloadedTaskResponsePipe(),before=False)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('otp',True), TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','','',False))
     @BaseHTTPRessource.Post('/otp/{template:path}',cost_definition=CostConstant.phone_otp)
@@ -121,7 +121,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseServiceLock(AssetService,ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
     @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler,CostHandler,MiniServiceHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
-    @UseInterceptor(TaskCostInterceptor)
+    @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
     @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard,CeleryBrokerGuard)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('default'))
     @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template:path}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_twiml)
@@ -146,7 +146,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])
-    @UseInterceptor(TaskCostInterceptor)
+    @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
     @UsePermission(TaskCostPermission())
     @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
@@ -178,7 +178,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.RELAY])
     @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False)
-    @UseInterceptor(TaskCostInterceptor)
+    @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
     @UsePermission(TaskCostPermission())
     @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)

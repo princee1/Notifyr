@@ -61,8 +61,15 @@ class TaskManager:
         self.taskService = Get(TaskService)
         self.redisService = Get(RedisService)
         self.monitoringService = Get(MonitoringService)
-
-        self.register_backgroundTask()
+    
+    @staticmethod
+    def parse_error(e:Exception,bypass=False,retry=None):
+        r = {'error_class':e.__class__,'args':str(e.args)}
+        if bypass:
+            r['bypass']=True
+        if retry:
+            r['retry'] = retry
+        return r
 
     def set_algorithm(self, algorithm: AlgorithmType):
         if algorithm not in get_args(AlgorithmType):
@@ -108,12 +115,22 @@ class TaskManager:
         return get_selector(self.meta['strategy'],celery_broker=self.configService.CELERY_BROKER).select(p1, p2, p3,needed_envs)
 
     def register_backgroundTask(self):
-        async def callback():
+        callbacks = []
+        for callback in self._create_background_tasks():
+            async def wrapper():
+                await asyncio.sleep(0.1)
+                await callback()
+            if self.meta['runtype'] == 'sequential':
+                self.backgroundTasks.add_task(wrapper)
+
+        if self.meta['runtype'] == 'sequential':
+            return
+        
+        async def gather_wrapper():
             await asyncio.sleep(0.1)
-            if len(self.taskConfig)==0: 
-                return
-            return await self._run_task_in_background()
-        self.backgroundTasks.add_task(callback)
+            await asyncio.gather(*callbacks,return_exceptions=True)
+
+        self.backgroundTasks.add_task(gather_wrapper)
 
     @property
     def results(self):
@@ -135,77 +152,36 @@ class TaskManager:
     def schedule_ttd(self):
         return self.meta['ttd'] - self.taskConfig[0]['delay']
         
-    async def _run_task_in_background(self):
-        task_len = len(self.taskConfig)
-        ttl=self.meta['ttl']
-        is_saving_result = self.meta['save_result']
-        runType = self.meta['runtype']
-        is_retry = self.meta['retry']
+    def _create_background_tasks(self):
+        delay = t['delay']
+        to_retry = self.meta['retry']
 
         for i, t in enumerate(self.taskConfig):  # TODO add the index i to the results
-            i = f"{i}"
             task:BackgroundTask = t['task']
-            delay = t['delay']
-            if delay and delay>0:
-                await asyncio.sleep(delay)
-
-            data=None if runType == 'parallel' else {}
-            self.monitoringService.gauge_inc(MonitorConstant.BACKGROUND_TASK_COUNT)
-
-           
+            
             async def callback():
-
-                async def parse_error(e:Exception,bypass=False):
-                    result = {'error_class':e.__class__,'args':str(e.args)}
-                    if bypass:
-                        result['bypass']=True
-                    if is_saving_result:
-                        if runType == 'sequential':
-                            data[i]=result
-                        else:
-                            await self.store_bkg_result(result, self.meta['request_id'],ttl,i)
-                    
-                    if runType =='parallel':
-                        self.monitoringService.gauge_dec(MonitorConstant.BACKGROUND_TASK_COUNT)
-
-                        
-                    return result
-
+                if delay and delay>0:
+                    await asyncio.sleep(delay)
+                self.monitoringService.gauge_inc(MonitorConstant.BACKGROUND_TASK_COUNT)
                 try:
-                    if not asyncio.iscoroutine(task):
-                        result = await task()
-                    else:
-                        result = await task
-                    if is_saving_result:
-                        if runType == 'sequential':
-                            data[i]=result
-                        else:
-                            await self.store_bkg_result(result,self.meta['request_id'],ttl,i)
-                    
-                    if runType=='parallel':
-                        self.monitoringService.gauge_dec(MonitorConstant.BACKGROUND_TASK_COUNT)
-                    return result
+                    result= await task() if not asyncio.iscoroutine(task) else await task                    
                 except TaskRetryError as e:
                     error = e.error
-                    if is_retry:
-                        if not isinstance(self.scheduler,s) and isinstance(task,BackgroundTask):
-                            await self.celeryService.trigger_task_from_scheduler(self.scheduler,i,*task.args,**task.kwargs)
-                            return
-                        return await parse_error(error,True)
-                        
-                    return await parse_error(error)
+                    bypass =True
+                    if to_retry and isinstance(self.scheduler,s) and isinstance(task,BackgroundTask):
+                        retry_result = await self.celeryService.trigger_task_from_scheduler(self.scheduler,i,*task.args,**task.kwargs)
+                        bypass = False
+                    result= self.parse_error(error,bypass,retry_result if not bypass else None)
                 except Exception as e:
-                    return await parse_error(e)
-    
-            if runType=='sequential': 
-                await callback()
-            else:
-                asyncio.create_task(callback())
+                    result = self.parse_error(e)
+                finally:
+                    if self.meta['save_result']:
+                        await self.store_bkg_result(result, self.meta['request_id'],self.meta['ttl'],f"{i}")
+                    self.monitoringService.gauge_dec(MonitorConstant.BACKGROUND_TASK_COUNT)
 
-        if runType == 'sequential':
-            await self.store_bkg_result(data, self.meta['request_id'],ttl)
-            self.monitoringService.gauge_dec(MonitorConstant.BACKGROUND_TASK_COUNT,task_len)
-       
+            yield callback
+        
+
     async def _offload_task(self,weight: float,delay: float,index:int,callback: Callable, *args, **kwargs)->TaskExecutionResult:
         """
         - RRule and Solar Task Type are rejected if theres no expected workers
