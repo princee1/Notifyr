@@ -394,4 +394,4 @@ class CeleryConstant:
 
 
 class RabbitMQConstant:
-    CELERY_VIRTUAL_HOST='celery'
+    NOTIFYR_VIRTUAL_HOST='notifyr'

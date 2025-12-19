@@ -140,11 +140,11 @@ services:
       dockerfile: Dockerfile
     environment:
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE:-false}
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - MONGO_HOST=${MONGO_HOST}
-      - S3_ENDPOINT=${S3_ENDPOINT}
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - REDIS_HOST=${REDIS_HOST}
+      - POSTGRES_HOST=${POSTGRES_HOST-postgres}
+      - MONGO_HOST=${MONGO_HOST-mongodb}
+      - S3_ENDPOINT=${S3_ENDPOINT-minio:9000}
+      - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
+      - REDIS_HOST=${REDIS_HOST-redis}
       - MODE=prod
       - TWILIO_MODE=prod
       - TWILIO_TEST_URL=${TWILIO_TEST_URL}
@@ -181,8 +181,8 @@ services:
       - vault-shared:/vault/shared
     environment:
       - MODE=prod
-      - MONGO_HOST=${MONGO_HOST}
-      - QDRANT_HOST=${QDRANT_HOST}
+      - MONGO_HOST=${MONGO_HOST-mongodb}
+      - QDRANT_HOST=${QDRANT_HOST-qdrant}
     networks:
       - agentic_net
       - data_net
@@ -200,9 +200,9 @@ services:
       - vault-shared:/vault/shared
     restart: always
     environment:
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - MONGO_HOST=${MONGO_HOST}
-      - REDIS_HOST=${REDIS_HOST}
+      - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
+      - MONGO_HOST=${MONGO_HOST-mongodb}
+      - REDIS_HOST=${REDIS_HOST-redis}
       - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
       - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
       - MODE=prod
@@ -227,8 +227,8 @@ services:
       dockerfile: docker/Dockerfile.celery
     restart: unless-stopped
     environment:
-      - REDIS_HOST=${REDIS_HOST}
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - REDIS_HOST=${REDIS_HOST-redis}
+      - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
       - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
       - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
       - MODE=prod

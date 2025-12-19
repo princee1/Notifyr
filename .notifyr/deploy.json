@@ -11,7 +11,7 @@
         "balancer": 1
     },
     "agentic": {
-        "active": true,
+        "active": false,
         "db": {
             "knowledge_graph": false,
             "vector": true

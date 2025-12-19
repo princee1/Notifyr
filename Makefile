@@ -50,6 +50,34 @@ endef
 
 notifyr-app:
 	$(call COMPOSE_SCALE,app)
+
+deploy-beat:
+	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.worker')" -gt 0 ]; then \
+		echo "--- 🛠️ Creating the beat server because at least one worker will be deployed"; \
+		docker compose up -d beat; \
+		echo "--- ✅ Beat service is deployed"; \
+	else \
+		echo "--- ⏭️ No workers is expected no need for the beat service"; \
+	fi
+
+
+deploy-agentic:
+	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.active')" = "true" ]; then \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.db.vector')" = "true" ]; then \
+			echo "--- 🛠️ Creating the vector database Qdrant"; \
+			docker compose up -d qdrant; \
+			echo "--- ✅ Qdrant service is deployed"; \
+		fi; \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.db.knowledge_graph')" = "true" ]; then \
+			echo "--- 🛠️ Knowledge not setup yet"; \
+		fi; \
+		sleep 10; \
+		echo "--- 🛠️ Creating the agentic service because the ai functionality is required"; \
+		docker compose up -d agentic; \
+		echo "--- ✅ agentic service is deployed"; \
+	else \
+		echo "--- ⏭️ Agentic Service: Skipped (value = False)"; \
+	fi
 	
 build:
 	@echo "================================================="
@@ -68,11 +96,7 @@ deploy-server:
 
 # 	# Deploy and Scale Core Application Services
 	$(call COMPOSE_SCALE,app)
-	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.worker')" -gt 0 ]; then \
-		$(call COMPOSE_RUN,Beat Service,up -d,beat); \
-	else \
-		echo "--- ⏭️  Beat Service: Skipped (value <= 0)"; \
-	fi
+	@$(MAKE) deploy-beat
 	$(call COMPOSE_SCALE,worker)
 # 	$(call COMPOSE_RUN, Beat Service, up -d, balancer)
 
@@ -127,21 +151,7 @@ deploy-data:
 	$(call COMPOSE_RUN, NCS Setup, run -e ALLOWED_INIT=on --rm , ncs /ncs-utils.sh initialize)
 	$(call COMPOSE_RUN, NCS Always On, up -d, ncs)
 	@echo "--- ✅ Initial NCS Setup (Hard Reset) complete."
-	@sleep 3 && clear
-
-	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.active')" = "true" ]; then \
-		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.db.vector')" = "true" ]; then \
-			$(call COMPOSE_RUN, Qdrant Service, up -d, qdrant); \
-		fi
-		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.db.knowledge_graph')" = "true" ]; then \
-			echo "Knowledge not setup yet"
- 			#echo "$(call COMPOSE_RUN, Knowledge Graph Service, up -d, qdrant);
-		fi
-		sleep 10
-		$(call COMPOSE_RUN, Agentic Service, up -d, agentic); \
-	else \
-		echo "--- ⏭️ Qdrant Service: Skipped (value = False)"; \
-	fi
+	@$(MAKE) deploy-agentic
 	@sleep 3 && clear
 	@echo "================================================="
 	@echo "✅ Data & Secrets Setup Complete"

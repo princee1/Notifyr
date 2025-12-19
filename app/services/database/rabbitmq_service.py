@@ -25,7 +25,7 @@ class RabbitMQService(TempCredentialsDatabaseService):
         params = pika.ConnectionParameters(
             host=self.configService.RABBITMQ_HOST,
             port=5672,
-            virtual_host=RabbitMQConstant.CELERY_VIRTUAL_HOST,
+            virtual_host=RabbitMQConstant.NOTIFYR_VIRTUAL_HOST,
             credentials=credentials,
             connection_attempts=1,      # don’t retry
             socket_timeout=5,           # 5 second timeout

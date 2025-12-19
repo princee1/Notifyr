@@ -379,13 +379,13 @@ setup_database_config(){
       db_name="redis" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~notifyr/celery/broker/*","+PING","+SELECT","+LPUSH","+RPUSH","+BRPOP","+BLPOP","+LPOP","+LLEN","+DEL","+EXPIRE","+PEXPIRE","+SCAN","+EVAL","+@pubsub","+EXIST"]'
+      creation_statements='["~notifyr/celery/broker/*","+PING","+SELECT","+LPUSH","+RPUSH","+BRPOP","+BLPOP","+LPOP","+LLEN","+DEL","+EXPIRE","+PEXPIRE","+SCAN","+EVAL","+@pubsub"]'
 
     vault write notifyr-database/roles/app-redis-celery-backend-ntfr-role \
       db_name="redis" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash","+EXIST"]'
+      creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash"]'
 
     vault write notifyr-database/roles/admin-redis-celery-ntfr-role \
       db_name="redis" \

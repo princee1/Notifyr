@@ -211,7 +211,7 @@ class ConfigService(_service.BaseService):
         # CELERY CONFIG #
         self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','rabbitmq')
 
-        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{u}:{p}@{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672/{RabbitMQConstant.CELERY_VIRTUAL_HOST}")
+        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{u}:{p}@{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}")
         self.CELERY_BACKEND_URL:Callable[[str,str],str] = lambda u,p: self.getenv("CELERY_BACKEND_URL", f"redis://{u}{p}{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)

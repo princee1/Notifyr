@@ -28,8 +28,9 @@ if [ ! -f "$ACL_FILE" ]; then
 
     # Create the custom user
     echo "user $USER_NAME on >$USER_PASS ~* &* +@all" >> "$ACL_FILE"
+
     if [ "$CELERY_EXTERNAL" = "false" ]; then
-        echo "user $REDIS_USER on >$REDIS_PASS ~* &* +@all" >> "$ACL_FILE"
+        echo "user $REDIS_USER on >$REDIS_PASSWORD ~* &* +@all" >> "$ACL_FILE"
         echo "created the a admin user for celery only"
     fi
 
