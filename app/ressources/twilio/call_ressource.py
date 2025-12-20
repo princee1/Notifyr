@@ -19,7 +19,6 @@ from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.call_model import  CallCustomSchedulerModel, CallStatusModel, CallTemplateSchedulerModel, CallTwimlSchedulerModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum
-from app.services.assets_service import AssetService
 from app.services.celery_service import CeleryService, ChannelMiniService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
@@ -37,8 +36,12 @@ from app.depends.class_dep import SubjectParams, TwilioTracker
 from app.utils.constant import CostConstant, StreamConstant
 from app.utils.helper import uuid_v1_mc
 from app.depends.variables import profile_query
+from app.utils.globals import CAPABILITIES
 
 CALL_ONGOING_PREFIX = 'ongoing'
+
+if CAPABILITIES['agent']:
+    from app.services.assets_service import AssetService
 
 
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
@@ -57,21 +60,6 @@ class OnGoingCallRessource(BaseHTTPRessource):
         self.redisService:RedisService = Get(RedisService)
 
         super().__init__()
-
-    @UseLimiter(limit_value="10/minutes")
-    @UseRoles([Role.PUBLIC])
-    @UsePermission(JWTAssetObjectPermission('sms','xml',accept_none_template=True))
-    @UsePipe(FilterAllowedSchemaPipe,before=False)
-    @UsePipe(TemplateParamsPipe('phone','xml',True))
-    @UseHandler(AsyncIOHandler,TemplateHandler)
-    @UseServiceLock(AssetService,lockType='reader')
-    @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS])
-    def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
-        
-        schemas = self.assetService.get_schema('phone')
-        if template in schemas:
-            return schemas[template]
-        return schemas
 
     @UseLimiter(limit_value='100/day')
     @UseRoles([Role.MFA_OTP])
@@ -113,36 +101,50 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
         return await keepAliveConn.wait_for(call_results, 'otp_result')
       
+    if CAPABILITIES['object']:
+        @UseLimiter(limit_value='100/day')
+        @UseRoles([Role.RELAY])
+        @UsePermission(TaskCostPermission(),JWTAssetObjectPermission('phone'))
+        @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
+        @UseServiceLock(AssetService,ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
+        @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler,CostHandler,MiniServiceHandler)
+        @UsePipe(OffloadedTaskResponsePipe(), before=False)
+        @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
+        @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard,CeleryBrokerGuard)
+        @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('default'))
+        @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template:path}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_twiml)
+        async def voice_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel,cost:Annotated[CallCost,Depends(CallCost)], request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
+            
+            for content in scheduler.content:
+                index= content.index
+                weight = len(content.to)
+                content = content.model_dump(exclude=('as_contact','index','will_track','sender_type'))
+                _, result = template.build(content, ...,False)
+                twilio_ids = []
 
-    @UseLimiter(limit_value='100/day')
-    @UseRoles([Role.RELAY])
-    @UsePermission(TaskCostPermission(),JWTAssetObjectPermission('phone'))
-    @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
-    @UseServiceLock(AssetService,ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler,CostHandler,MiniServiceHandler)
-    @UsePipe(OffloadedTaskResponsePipe(), before=False)
-    @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
-    @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard,CeleryBrokerGuard)
-    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('default'))
-    @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template:path}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_twiml)
-    async def voice_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel,cost:Annotated[CallCost,Depends(CallCost)], request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
-        
-        for content in scheduler.content:
-            index= content.index
-            weight = len(content.to)
-            content = content.model_dump(exclude=('as_contact','index','will_track','sender_type'))
-            _, result = template.build(content, ...,False)
-            twilio_ids = []
+                if tracker.will_track:
+                    for tid,event,tracking_event_data in tracker.pipe_call_track_event_data(content):
+                        broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
+                        broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
+                        twilio_ids.append(tid)
 
-            if tracker.will_track:
-                for tid,event,tracking_event_data in tracker.pipe_call_track_event_data(content):
-                    broker.stream(StreamConstant.TWILIO_TRACKING_CALL,tracking_event_data)
-                    broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
-                    twilio_ids.append(tid)
+                await taskManager.offload_task(weight,0, index, self.callService.send_template_voice_call, result, content,None,twilio_ids,twilio.miniService_id)
+            return taskManager.results
 
-            await taskManager.offload_task(weight,0, index, self.callService.send_template_voice_call, result, content,None,twilio_ids,twilio.miniService_id)
-        return taskManager.results
-
+        @UseLimiter(limit_value="10/minutes")
+        @UseRoles([Role.PUBLIC])
+        @UsePermission(JWTAssetObjectPermission('sms','xml',accept_none_template=True))
+        @UsePipe(FilterAllowedSchemaPipe,before=False)
+        @UsePipe(TemplateParamsPipe('phone','xml',True))
+        @UseHandler(AsyncIOHandler,TemplateHandler)
+        @UseServiceLock(AssetService,lockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS])
+        def get_template_schema(self,request:Request,response:Response,authPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
+            assetService = Get(AssetService)
+            schemas = assetService.get_schema('phone')
+            if template in schemas:
+                return schemas[template]
+            return schemas
 
     @UseLimiter(limit_value='50/day')
     @UseRoles([Role.RELAY])

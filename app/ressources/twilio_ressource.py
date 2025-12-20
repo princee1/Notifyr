@@ -1,20 +1,23 @@
 from typing import Annotated
+from aiohttp_retry import Callable
 from fastapi import Depends, HTTPException, Request
 from app.classes.auth_permission import Role
-from app.container import InjectInMethod
+from app.container import GetDependsFunc, InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler, TwilioHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import MiniServiceInjectorPipe, parse_phone_number
 from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
-from app.depends.variables import parse_to_phone_format,carrier_info,callee_info
+from app.depends.variables import carrier_info,callee_info
 from app.ressources.twilio.sms_ressource import SMSRessource
 from app.ressources.twilio.call_ressource import CallRessource
 from app.ressources.twilio.fax_ressource import FaxRessource
 from app.services.twilio_service import TwilioAccountMiniService, TwilioService, CallService
 from app.ressources.twilio.conversation_ressource import ConversationRessource
 
+
+parse_to_phone_format: Callable = GetDependsFunc(TwilioService, 'parse_to_phone_format')
 
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler,MiniServiceHandler)

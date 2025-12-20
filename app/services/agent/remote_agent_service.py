@@ -1,5 +1,5 @@
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service
-from app.errors.service_error import BuildFailureError
+from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.services.config_service import ConfigService
 from app.services.secret_service import HCVaultService
 from app.services.database.mongoose_service import MongooseService
@@ -25,9 +25,8 @@ class RemoteAiAgentService(BaseMiniServiceManager):
         self.MiniServiceStore = MiniServiceStore[RemoteAgenticMiniService](self.name)
     
     def verify_dependency(self):
-        if CAPABILITIES['webhook']:
-            ...
-            #raise BuildFailureError
+        if CAPABILITIES['agent']:
+            raise BuildWarningError
     
     def build(self, build_state=...):
         from grpc import aio

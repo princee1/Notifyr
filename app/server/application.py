@@ -8,8 +8,6 @@ from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
 from app.interface.timers import  SchedulerInterface
 from app.ressources import *
-from app.services.assets_service import AssetService
-from app.services.object_service import ObjectS3Service
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
@@ -42,7 +40,11 @@ from app.definition._service import PROCESS_SERVICE_REPORT
 from app.models.communication_model import *
 from app.models.webhook_model import *
 
+from app.utils.globals import CAPABILITIES
 from app.classes.profiles import ProfilModelValues
+
+if CAPABILITIES['object']:
+    from app.services.object_service import ObjectS3Service
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
@@ -188,7 +190,6 @@ class Application(EventInterface):
         # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
         # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
 
-        assetService:AssetService = Get(AssetService)
         
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):
@@ -206,7 +207,6 @@ class Application(EventInterface):
         taskService:TaskService =  Get(TaskService)
         taskService.shutdown()
 
-
     @register_hook('startup',)
     def start_tickers(self):
         vaultService: HCVaultService = Get(HCVaultService) 
@@ -221,23 +221,27 @@ class Application(EventInterface):
         mongooseService = Get(MongooseService)
         mongooseService.start()
 
-        amazons3Service = Get(ObjectS3Service)
-        amazons3Service.start()
+        if CAPABILITIES['object']:
+            amazons3Service = Get(ObjectS3Service)
+            amazons3Service.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
-        amazons3Service = Get(ObjectS3Service)
         vaultService = Get(HCVaultService)
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,amazons3Service]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService]
 
         for s in services:
             s.shutdown()
         
         celery_service.stop_interval()
+
+        if CAPABILITIES['object']:
+            amazons3Service = Get(ObjectS3Service)
+            amazons3Service.shutdown()
 
     @register_hook('startup')
     async def register_tortoise(self):

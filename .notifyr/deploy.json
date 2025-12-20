@@ -17,13 +17,15 @@
             "vector": true
         }
     },
-    "capabilities":{
-        "email":true,
-        "twilio":false,
-        "notification":false,
-        "message":false,
-        "ai":true,
-        "webhook":true
+    "capabilities": {
+        "object": true,
+        "email": true,
+        "twilio": false,
+        "notification": false,
+        "message": false,
+        "agent": true,
+        "webhook": true,
+        "workflow": true
     },
     "resource_limits": {
         "cpu_limit": "500m",

@@ -11,7 +11,7 @@ from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import copy_response
 from app.utils.constant import SpecialKeyParameterConstant
-from app.services import AssetService, CostService
+from app.services import CostService
 from app.container import Get, Need
 from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, BaseService
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -408,7 +408,6 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         super().__init_subclass__()
 
     def __init__(self, dependencies=None, router_default_response: dict = None) -> None:
-        self.assetService: AssetService = Get(AssetService)
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         prefix: str = self.__class__.meta['prefix']
         add_prefix: bool = self.__class__.meta['add_prefix']

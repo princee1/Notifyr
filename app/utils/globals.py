@@ -30,8 +30,10 @@ class ServerCapabilities(TypedDict):
     twilio:bool
     notification:bool
     message:bool
-    ai:bool
+    agent:bool
     webhook:bool
+    object:bool
+    workflow:bool
 
 APP_MODE:ApplicationMode = ApplicationMode.server
 

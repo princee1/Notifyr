@@ -12,7 +12,7 @@ from app.decorators.permissions import TaskCostPermission, JWTAssetObjectPermiss
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, FilterAllowedSchemaPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, TemplateParamsPipe, TemplateValidationInjectionPipe, TwilioPhoneNumberPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._cost import SimpleTaskCost
 from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseInterceptor, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
-from app.container import InjectInMethod
+from app.container import Get, InjectInMethod
 from app.depends.class_dep import  TwilioTracker
 from app.manager.broker_manager import Broker
 from app.manager.task_manager import TaskManager
@@ -22,7 +22,6 @@ from app.models.twilio_model import SMSEventORM
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService
-from app.services.assets_service import AssetService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
@@ -34,7 +33,10 @@ from app.depends.funcs_dep import get_profile, get_template,wait_timeout_query
 from app.utils.constant import CostConstant, StreamConstant
 from app.utils.helper import uuid_v1_mc
 from app.services.celery_service import CeleryService, ChannelMiniService
+from app.utils.globals import CAPABILITIES
 
+if CAPABILITIES['object']:
+    from app.services.assets_service import AssetService
 
 
 SMS_ONGOING_PREFIX = 'ongoing'
@@ -53,21 +55,51 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         self.configService:ConfigService = configService
         self.settingService = settingService
         self.twilioService = twilioService
+    
+    if CAPABILITIES['object']:
+        
+        @UseLimiter(limit_value="10/minutes")
+        @UseRoles([Role.PUBLIC])
+        @UsePermission(JWTAssetObjectPermission('sms','xml',accept_none_template=True))
+        @UsePipe(FilterAllowedSchemaPipe,before=False)
+        @UseServiceLock(AssetService,lockType='reader')
+        @UsePipe(TemplateParamsPipe('sms','xml',True))
+        @UseHandler(AsyncIOHandler,TemplateHandler)
+        @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS])
+        def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
+            assetService = Get(AssetService)
+            schemas = assetService.get_schema('sms')
+            if template and template in schemas:
+                return schemas[template]
+            return schemas
+        
+        @UseLimiter(limit_value="5000/minutes")
+        @UseRoles([Role.RELAY])
+        @PingService([ProfileService,TwilioService,SMSService,CeleryService,TaskService], is_manager=True,)
+        @UseHandler(MiniServiceHandler,CeleryTaskHandler,TemplateHandler,ContactsHandler,AsyncIOHandler,ProfileHandler,CostHandler)
+        @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),RegisterSchedulerPipe,TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
+        @UsePipe(OffloadedTaskResponsePipe(),before=False)
+        @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor(),inject_meta=True)
+        @UsePermission(TaskCostPermission(),JWTAssetObjectPermission('sms'))
+        @UseGuard(CarrierTypeGuard(False,accept_unknown=True),CeleryTaskGuard(['task_send_template_sms']),CeleryBrokerGuard)
+        @UseServiceLock(AssetService,ProfileService,TwilioService,CeleryService,as_manager=True,check_status=False,lockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template}',methods=[HTTPMethod.POST],cost_definition=CostConstant.sms_template)
+        async def sms_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,cost:Annotated[SMSCost,Depends(SMSCost)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
+            for content in scheduler.content:
+                weight = len(content.to)
+                _,result=template.build(content.data,self.settingService.ASSET_LANG)
+                message = {'body':result,'to':content.to,'from_':content.from_}
 
-    @UseLimiter(limit_value="10/minutes")
-    @UseRoles([Role.PUBLIC])
-    @UsePermission(JWTAssetObjectPermission('sms','xml',accept_none_template=True))
-    @UsePipe(FilterAllowedSchemaPipe,before=False)
-    @UseServiceLock(AssetService,lockType='reader')
-    @UsePipe(TemplateParamsPipe('sms','xml',True))
-    @UseHandler(AsyncIOHandler,TemplateHandler)
-    @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS])
-    def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
+                twilio_ids=[]
+                if tracker.will_track:
+                    for tid,event,tracking_event_data in tracker.pipe_sms_track_event_data(content):
+                        broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
+                        broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
 
-        schemas = self.assetService.get_schema('sms')
-        if template and template in schemas:
-            return schemas[template]
-        return schemas
+                        twilio_ids.append(tid)
+
+                await taskManager.offload_task(weight,0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids,twilio_profile=twilio.miniService_id)
+            return taskManager.results
 
 
     @UseLimiter(limit_value="10000/minutes")
@@ -116,35 +148,6 @@ class OnGoingSMSRessource(BaseHTTPRessource):
             await taskManager.offload_task(weight,0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids,twilio_profile=twilio.miniService_id)
         return taskManager.results
         
-    @UseLimiter(limit_value="5000/minutes")
-    @UseRoles([Role.RELAY])
-    @PingService([ProfileService,TwilioService,SMSService,CeleryService,TaskService], is_manager=True,)
-    @UseHandler(MiniServiceHandler,CeleryTaskHandler,TemplateHandler,ContactsHandler,AsyncIOHandler,ProfileHandler,CostHandler)
-    @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),RegisterSchedulerPipe,TemplateParamsPipe('sms','xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
-    @UsePipe(OffloadedTaskResponsePipe(),before=False)
-    @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor(),inject_meta=True)
-    @UsePermission(TaskCostPermission(),JWTAssetObjectPermission('sms'))
-    @UseGuard(CarrierTypeGuard(False,accept_unknown=True),CeleryTaskGuard(['task_send_template_sms']),CeleryBrokerGuard)
-    @UseServiceLock(AssetService,ProfileService,TwilioService,CeleryService,as_manager=True,check_status=False,lockType='reader')
-    @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template}',methods=[HTTPMethod.POST],cost_definition=CostConstant.sms_template)
-    async def sms_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,cost:Annotated[SMSCost,Depends(SMSCost)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
-        for content in scheduler.content:
-            weight = len(content.to)
-            _,result=template.build(content.data,self.settingService.ASSET_LANG)
-            message = {'body':result,'to':content.to,'from_':content.from_}
-
-            twilio_ids=[]
-            if tracker.will_track:
-                for tid,event,tracking_event_data in tracker.pipe_sms_track_event_data(content):
-                    broker.stream(StreamConstant.TWILIO_TRACKING_SMS,tracking_event_data)
-                    broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,event)
-
-                    twilio_ids.append(tid)
-
-            await taskManager.offload_task(weight,0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids,twilio_profile=twilio.miniService_id)
-        return taskManager.results
-
-
     async def sms_get_message(self,):
         ...
 

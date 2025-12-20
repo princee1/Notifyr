@@ -14,12 +14,11 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     from app.services.secret_service import HCVaultService
     from app.services.database.mongoose_service import MongooseService
     from app.services.profile_service import ProfileService
-    from app.services.webhook_service import WebhookService
     from app.services.cost_service import CostService
     from app.services.monitoring_service import MonitoringService
-    from app.services.push_notification_service import PushNotificationService
+    
     from app.services.workflow_service import WorkflowService
-
+    from app.services.webhook_service import WebhookService
     from app.services.agent.remote_agent_service import RemoteAiAgentService
 
     if CAPABILITIES['twilio']:
@@ -32,11 +31,15 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
         ...
     
     if CAPABILITIES['notification']:
-        ...
+        from app.services.push_notification_service import PushNotificationService
+
+    
 
 if APP_MODE == ApplicationMode.server:
-    from app.services.assets_service import AssetService
-    from app.services.object_service import ObjectS3Service
+    if CAPABILITIES['object']:
+        from app.services.assets_service import AssetService
+        from app.services.object_service import ObjectS3Service
+
     from app.services.chat_service import ChatService
     from app.services.database.memcached_service import  MemCachedService
     from app.services.database.tortoise_service import TortoiseConnectionService
@@ -55,15 +58,17 @@ if APP_MODE == ApplicationMode.agentic:
     from app.services.database.redis_service import RedisService
     from app.services.cost_service import CostService
     from app.services.monitoring_service import MonitoringService
-    from app.services.agent.llm_provider_service import LLMProviderService
-    from app.services.agent.remote_agent_service import RemoteAiAgentService
-    from app.services.agent.agent_service import AgentService
     from app.services.database.memcached_service import MemCachedService
-    from app.services.database.qdrant_service import QdrantService
+
+    if CAPABILITIES['agent']:
+        from app.services.agent.llm_provider_service import LLMProviderService
+        from app.services.agent.remote_agent_service import RemoteAiAgentService
+        from app.services.agent.agent_service import AgentService
+        from app.services.database.qdrant_service import QdrantService
 
 
 
-if APP_MODE == ApplicationMode.gunicorn:
+if APP_MODE == ApplicationMode.gunicorn and CAPABILITIES['object']:
     from app.services.file.file_service import FileService
     from app.services.file.file_fetcher_service import GitCloneRepoService,FTPService
     from app.services.secret_service import HCVaultService

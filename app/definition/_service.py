@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 import functools
 import traceback
-from typing import Any, Literal, Self, overload, Callable, Type, TypeVar, Dict
+from typing import Any, List, Literal, Self, overload, Callable, Type, TypeVar, Dict
 from app.utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from app.utils.constant import DependencyConstant
 from app.utils.helper import generateId, issubclass_of
@@ -24,6 +24,7 @@ BuildOnlyIfDependencies: Dict = {}
 PossibleDependencies: Dict[str, list[type]] = {}
 OptionalDependencies: Dict[str, list[type]] = {}
 ManagerDependency: Dict[str,bool] = {}
+EndService:List[Type]
 
 _CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []
