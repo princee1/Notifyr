@@ -6,7 +6,6 @@ from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, Challe
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
 from app.services.monitoring_service import MonitoringService
-from app.services.task_service import TaskService
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod

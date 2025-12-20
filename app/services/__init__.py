@@ -59,6 +59,7 @@ if APP_MODE == ApplicationMode.agentic:
     from app.services.cost_service import CostService
     from app.services.monitoring_service import MonitoringService
     from app.services.database.memcached_service import MemCachedService
+    from app.services.vault_service import VaultService
 
     if CAPABILITIES['agent']:
         from app.services.agent.llm_provider_service import LLMProviderService
