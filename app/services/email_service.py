@@ -58,6 +58,8 @@ class EmailService(_service.BaseMiniServiceManager):
 
 
 @_service.Service(
+    is_manager=True,
+    endService=True,
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
 class EmailSenderService(EmailService):
@@ -83,6 +85,8 @@ class EmailSenderService(EmailService):
 
 
 @_service.Service(
+    endService=True,
+    is_manager=True,
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
 class EmailReaderService(EmailService):

@@ -42,7 +42,7 @@ class OpenAIProviderMiniService(BaseMiniService,LLMProvider):
         self.client = OpenAI()
         
 
-@Service()
+@Service(is_manager=True)
 class LLMProviderService(BaseMiniServiceManager):
     
     def __init__(self,profileService:ProfileService,costService:CostService,loggerService:LoggerService,configService:ConfigService):

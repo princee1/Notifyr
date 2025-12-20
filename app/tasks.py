@@ -136,7 +136,7 @@ def refresh_profile(worker,p:str=None):
     worker.app.control.add_consumer(queue=p,reply=True,destination=hostname)
     return {'message':'Sucessfully refresh the profile'}
 
-
+@control_command(args=[('w', str)],signature='[W=None]')
 def refresh_workflow(worker,w:str=None):
     if w==None:
         return {'message':f'No workflow was given'}

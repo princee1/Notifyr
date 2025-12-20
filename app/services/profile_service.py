@@ -71,7 +71,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         
 
 
-@Service()
+@Service(is_manager=True)
 class ProfileService(BaseMiniServiceManager):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:VaultService):

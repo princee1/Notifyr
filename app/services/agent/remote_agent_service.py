@@ -13,7 +13,7 @@ class RemoteAgenticMiniService(BaseMiniService):
         super().__init__(None, id)
         self.configService = configService
 
-@Service()
+@Service(is_manager=True)
 class RemoteAiAgentService(BaseMiniServiceManager):
     
     def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService):

@@ -15,6 +15,7 @@ from app.utils.globals import CAPABILITIES
 
 
 @Service(
+    is_manager=True,
     links=[LinkDep(ProfileService,to_build=True,to_destroy=True)]
 )
 class WebhookService(BaseMiniServiceManager):

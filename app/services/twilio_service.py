@@ -140,6 +140,7 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
         }
 
 @_service.Service(
+    is_manager=True,
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
 class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
@@ -251,6 +252,7 @@ class BaseTwilioCommunication(_service.BaseService,ProfileEventInterface):
 
 
 @_service.Service(
+    endService=True,
     links=[_service.LinkDep(TwilioService,to_build=True,to_destroy=True,to_async_verify=True)]
 )
 class SMSService(BaseTwilioCommunication):
@@ -387,6 +389,7 @@ class SMSService(BaseTwilioCommunication):
         
 
 @_service.Service(
+    endService=True,
     links=[_service.LinkDep(TwilioService,to_build=True,to_destroy=True,to_async_verify=True)]
 )
 class CallService(BaseTwilioCommunication):

@@ -24,7 +24,7 @@ class AiAgentMiniService(BaseMiniService):
         - rest,graphql, rpc fetch api
     """
 
-@Service()
+@Service(is_manager=True)
 class AgentService(BaseMiniServiceManager):
 
     def __init__(self, configService: ConfigService,mongooseService:MongooseService,remoteAgentService:RemoteAiAgentService,llmProviderService:LLMProviderService,costService:CostService,qdrantService:QdrantService) -> None:

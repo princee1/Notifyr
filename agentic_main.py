@@ -1,11 +1,16 @@
-from app.utils.globals import APP_MODE
-from app.container import build_container,Get
+from app.utils.globals import APP_MODE,CAPABILITIES
 
-build_container()
+if CAPABILITIES['agent']:
+    from app.container import build_container,Get
 
-from app.callback import Callbacks_Stream,Callbacks_Sub
-from app.services.database.redis_service import RedisService
-from fastapi import FastAPI,Depends
-import app.routers
+    build_container()
+
+    from app.callback import Callbacks_Stream,Callbacks_Sub
+    from app.services.database.redis_service import RedisService
+    from fastapi import FastAPI,Depends
+    import app.routers
+
+else:
+    ...
 
 

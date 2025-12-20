@@ -26,6 +26,7 @@ CHANNEL_BUILD_STATE=0
 
 
 @Service(
+    is_manager=True,
     links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
 )
 class CeleryService(BaseMiniServiceManager, IntervalInterface):
