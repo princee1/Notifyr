@@ -46,7 +46,7 @@ class WebhookService(BaseMiniServiceManager):
         self.MiniServiceStore = MiniServiceStore[WebhookAdapterInterface|BaseMiniService](self.name)
 
     def verify_dependency(self):
-        if CAPABILITIES['webhook']:
+        if not CAPABILITIES['webhook']:
             raise BuildWarningError
 
     def build(self,build_state=DEFAULT_BUILD_STATE):

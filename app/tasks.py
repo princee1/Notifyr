@@ -48,7 +48,8 @@ backend_url = configService.CELERY_BACKEND_URL(redisService.backend_creds['data'
 if configService.CELERY_BROKER == 'redis':
     broker_url = configService.CELERY_MESSAGE_BROKER_URL(redisService.broker_creds['data']['username'],redisService.broker_creds['data']['password'])
 else:
-    broker_url = configService.CELERY_BACKEND_URL(rabbitmqService.db_user,rabbitmqService.db_password)
+    broker_url = configService.CELERY_MESSAGE_BROKER_URL(rabbitmqService.db_user,rabbitmqService.db_password)
+    print(broker_url)
 
 ##############################################           ##################################################
 
@@ -61,6 +62,7 @@ celery_app = Celery('celery_app',
 # Enable RedBeat Scheduler
 celery_app.conf.beat_scheduler = "redbeat.RedBeatScheduler"
 celery_app.conf.redbeat_redis_url = backend_url
+celery_app.conf.redbeat_key_prefix = f"{CeleryConstant.BACKEND_KEY_PREFIX}redbeat:"
 celery_app.conf.timezone = "UTC"
 
 celery_app.conf.result_backend_transport_options = {

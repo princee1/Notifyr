@@ -18,14 +18,14 @@
         }
     },
     "capabilities": {
-        "object": true,
-        "email": true,
+        "object": false,
+        "email": false,
         "twilio": false,
         "notification": false,
         "message": false,
-        "agent": true,
-        "webhook": true,
-        "workflow": true
+        "agent": false,
+        "webhook": false,
+        "workflow": false
     },
     "resource_limits": {
         "cpu_limit": "500m",

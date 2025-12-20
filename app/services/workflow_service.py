@@ -18,5 +18,5 @@ class WorkflowService(BaseService):
         return super().build(build_state)
 
     def verify_dependency(self):
-        if CAPABILITIES['workflow']:
+        if not CAPABILITIES['workflow']:
             raise BuildWarningError

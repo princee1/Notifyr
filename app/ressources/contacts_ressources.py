@@ -203,7 +203,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 
         @UsePermission(JWTContactPermission('create'))
         @UseGuard(RegisteredContactsGuard)
-        @PingService([TwilioService,EmailSenderService])
+        @PingService([TwilioService])
         @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
         async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
             # TODO Request from the user
@@ -234,7 +234,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
 class ContactsCRUDRessource(BaseHTTPRessource):
     @InjectInMethod()
-    def __init__(self, contactsService: ContactsService, emailService: EmailSenderService):
+    def __init__(self, contactsService: ContactsService):
         super().__init__()
         self.contactsService = contactsService
 

@@ -24,7 +24,7 @@ BuildOnlyIfDependencies: Dict = {}
 PossibleDependencies: Dict[str, list[type]] = {}
 OptionalDependencies: Dict[str, list[type]] = {}
 ManagerDependency: Dict[str,bool] = {}
-EndService:List[Type]
+EndService:List[Type] = []
 
 _CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []

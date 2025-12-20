@@ -225,6 +225,9 @@ services:
     secrets:
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
+      - source: deploy
+        target: /run/secrets/deploy.json
+
     volumes:
       - vault-shared:/vault/shared
     labels:

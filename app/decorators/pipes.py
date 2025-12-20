@@ -235,6 +235,37 @@ if CAPABILITIES['object']:
                 'content': result.get('content',"")
             }
 
+    class ValidFreeInputTemplatePipe(Pipe):
+
+        allowed_assets = tuple(AssetType._value2member_map_.keys())
+        allowed_extension = set(['.'+k for k in  Extension._value2member_map_.keys()])
+
+        def __init__(self, accept_empty=True,accept_dir=True,allowed_extension=None,allowed_assets=None):
+            super().__init__(True)
+            self.fileService = Get(FileService)
+            self.accept_empty=accept_empty
+            self.accept_dir = accept_dir
+            self._allowed_extension = self.allowed_extension if allowed_extension == None else allowed_extension
+            self._allowed_assets = self.allowed_assets if allowed_assets == None else allowed_assets
+
+
+        def pipe (self,template:str,objectsSearch:ObjectsSearch):
+            if template != '': # if the template input is not empty
+                if not template.startswith(self._allowed_assets):
+                    raise AssetTypeNotAllowedError
+                if not self.fileService.is_file(template,False,self._allowed_extension) and not self.accept_dir:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'Directory Not allowed')
+                
+                objectsSearch.is_file = self.fileService.soft_is_file(template)
+                if not objectsSearch.is_file and objectsSearch.version_id:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'There is no version on prefix')
+
+            else: # the template is empty
+                if not self.accept_empty:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'Object name cannot be empty')
+                objectsSearch.is_file = False
+        
+            return {}
 
 class CeleryTaskPipe(Pipe):
     
@@ -669,35 +700,4 @@ class MiniServiceInjectorPipe(Pipe):
             self.key: self.service.MiniServiceStore.get(profile)
             }
 
-class ValidFreeInputTemplatePipe(Pipe):
-
-    allowed_assets = tuple(AssetType._value2member_map_.keys())
-    allowed_extension = set(['.'+k for k in  Extension._value2member_map_.keys()])
-
-    def __init__(self, accept_empty=True,accept_dir=True,allowed_extension=None,allowed_assets=None):
-        super().__init__(True)
-        self.fileService = Get(FileService)
-        self.accept_empty=accept_empty
-        self.accept_dir = accept_dir
-        self._allowed_extension = self.allowed_extension if allowed_extension == None else allowed_extension
-        self._allowed_assets = self.allowed_assets if allowed_assets == None else allowed_assets
-
-
-    def pipe (self,template:str,objectsSearch:ObjectsSearch):
-        if template != '': # if the template input is not empty
-            if not template.startswith(self._allowed_assets):
-                raise AssetTypeNotAllowedError
-            if not self.fileService.is_file(template,False,self._allowed_extension) and not self.accept_dir:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Directory Not allowed')
-            
-            objectsSearch.is_file = self.fileService.soft_is_file(template)
-            if not objectsSearch.is_file and objectsSearch.version_id:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST,'There is no version on prefix')
-
-        else: # the template is empty
-            if not self.accept_empty:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Object name cannot be empty')
-            objectsSearch.is_file = False
-       
-        return {}
     

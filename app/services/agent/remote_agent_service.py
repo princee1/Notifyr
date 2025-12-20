@@ -25,7 +25,7 @@ class RemoteAiAgentService(BaseMiniServiceManager):
         self.MiniServiceStore = MiniServiceStore[RemoteAgenticMiniService](self.name)
     
     def verify_dependency(self):
-        if CAPABILITIES['agent']:
+        if not CAPABILITIES['agent']:
             raise BuildWarningError
     
     def build(self, build_state=...):
