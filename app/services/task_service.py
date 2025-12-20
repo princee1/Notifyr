@@ -13,7 +13,7 @@ from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.constant import MongooseDBConstant, RedisConstant, CeleryConstant
 from app.utils.tools import RunInThreadPool
 from apscheduler.jobstores.base import JobLookupError
@@ -39,7 +39,7 @@ class TaskService(BaseService,SchedulerInterface):
     _schedule_type_supported = {TaskType.DATETIME,TaskType.INTERVAL,TaskType.TIMEDELTA,TaskType.CRONTAB}
 
 
-    def __init__(self, configService: ConfigService,vaultService:HCVaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService,costService:CostService):
+    def __init__(self, configService: ConfigService,vaultService:VaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService,costService:CostService):
         super().__init__()
         self.configService = configService
         self.uvicornWorkerService = processWorkerService

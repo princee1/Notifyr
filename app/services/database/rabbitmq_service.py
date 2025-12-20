@@ -3,14 +3,14 @@ from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.constant import RabbitMQConstant
 
 
-@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)]) 
+@Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)]) 
 class RabbitMQService(TempCredentialsDatabaseService):
     
-    def __init__(self, configService:ConfigService, fileService:FileService, vaultService:HCVaultService):
+    def __init__(self, configService:ConfigService, fileService:FileService, vaultService:VaultService):
         super().__init__(configService, fileService, vaultService, 60*60*24*29)
     
     def verify_dependency(self):

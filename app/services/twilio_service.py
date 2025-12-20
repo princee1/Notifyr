@@ -17,7 +17,7 @@ from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, S
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.constant import StreamConstant
 from app.utils.globals import APP_MODE, ApplicationMode
 from app.utils.tools import Mock, RunInThreadPool
@@ -144,7 +144,7 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
 )
 class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
     
-    def __init__(self, configService: ConfigService,mongooseService:MongooseService,vaultService:HCVaultService,profileService:ProfileService) -> None:
+    def __init__(self, configService: ConfigService,mongooseService:MongooseService,vaultService:VaultService,profileService:ProfileService) -> None:
         super().__init__()
         self.configService = configService
         self.mongooseService = mongooseService

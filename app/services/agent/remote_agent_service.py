@@ -1,7 +1,7 @@
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service
 from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.services.config_service import ConfigService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.globals import CAPABILITIES
 
@@ -16,7 +16,7 @@ class RemoteAgenticMiniService(BaseMiniService):
 @Service()
 class RemoteAiAgentService(BaseMiniServiceManager):
     
-    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:HCVaultService):
+    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService):
         super().__init__()
 
         self.configService = configService

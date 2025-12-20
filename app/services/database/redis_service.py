@@ -14,7 +14,7 @@ from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.reactive_service import ReactiveService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.constant import RedisConstant, SubConstant, VaultConstant
 from app.utils.globals import APP_MODE, ApplicationMode
 from app.utils.transformer import none_to_empty_str
@@ -33,7 +33,7 @@ class RedisService(TempCredentialsDatabaseService):
 
     GROUP = 'NOTIFYR-GROUP'
     
-    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:HCVaultService,uvicornWorkerService:UvicornWorkerService):
+    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,uvicornWorkerService:UvicornWorkerService):
         super().__init__(configService,None,vaultService,60*60*24*29,)
         self.configService = configService
         self.reactiveService = reactiveService

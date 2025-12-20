@@ -9,7 +9,7 @@ from beanie import Document, PydanticObjectId, init_beanie
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.constant import VaultTTLSyncConstant
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -17,7 +17,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 D = TypeVar('D',bound=Document)
 
-@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)])     
+@Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])     
 class MongooseService(TempCredentialsDatabaseService):
     COLLECTION_REF = Literal["agent", "chat", "profile"]
     DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
@@ -26,7 +26,7 @@ class MongooseService(TempCredentialsDatabaseService):
         self,
         configService: ConfigService,
         fileService: FileService,
-        vaultService: HCVaultService,
+        vaultService: VaultService,
     ):
         super().__init__(configService, fileService,vaultService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
 

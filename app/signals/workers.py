@@ -3,7 +3,7 @@ from app.container import Get
 from app.services import ProfileService
 from app.services import MongooseService
 from app.services import RedisService
-from app.services import HCVaultService
+from app.services import VaultService
 from app.services import ConfigService
 from app.utils.constant import CeleryConstant
 
@@ -33,7 +33,7 @@ def on_worker_ready(sender, **kwargs):
 def on_worker_shutdown(sender=None, signal=None, **kwargs):
     mongooseService: MongooseService = Get(MongooseService)
     redisService = Get(RedisService)
-    vaultService = Get(HCVaultService)
+    vaultService = Get(VaultService)
 
     mongooseService.revoke_lease()
     redisService.revoke_lease()

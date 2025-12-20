@@ -24,7 +24,7 @@ from app.utils.helper import generateId, b64_encode, b64_decode
 import os
 import hmac
 import hashlib
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 
 
 SEPARATOR = "|"
@@ -67,7 +67,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
     gen_id_path='generation-id'
     NONCE="1234567891234578"
 
-    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:VaultService) -> None:
         super().__init__()
         EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
@@ -283,7 +283,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 class SecurityService(BaseService, EncryptDecryptInterface):
     NONCE="1234567891234578"
 
-    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:VaultService) -> None:
         super().__init__()
         EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService

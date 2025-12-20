@@ -8,7 +8,7 @@ from app.interface.timers import IntervalParams, SchedulerInterface
 from app.services.object_service import ObjectS3Service
 import app.services.object_service as object_service
 from app.services.database.redis_service import RedisService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant, RedisConstant
 from app.utils.prettyprint import printJSON
@@ -182,7 +182,7 @@ class ThreadedReader(DiskReader):
 
 class S3ObjectReader(Reader):   
 
-    def __init__(self, configService: ConfigService, awsService: ObjectS3Service,vaultService:HCVaultService,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+    def __init__(self, configService: ConfigService, awsService: ObjectS3Service,vaultService:VaultService,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         super().__init__(configService,fileService,asset_cache, asset, additionalCode)
         self.awsService = awsService
         self.vaultService = vaultService
@@ -226,7 +226,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:HCVaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
+    def __init__(self,hcVaultService:VaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
         super().__init__()
         SchedulerInterface.__init__(self,)
 

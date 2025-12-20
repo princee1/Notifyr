@@ -43,7 +43,7 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
 
 
 @Service()
-class HCVaultService(BaseService,SchedulerInterface):
+class VaultService(BaseService,SchedulerInterface):
 
     _valid_role= {VaultConstant.MONGO_ROLE,VaultConstant.POSTGRES_ROLE}
     _secret_id_crontab='0 0 * * *'

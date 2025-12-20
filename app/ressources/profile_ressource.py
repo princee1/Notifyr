@@ -23,7 +23,7 @@ from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.task_service import TaskService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
@@ -44,7 +44,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     profileType:str
 
     @InjectInMethod()
-    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService,taskService:TaskService):
+    def __init__(self,profileService:ProfileService,vaultService:VaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService,taskService:TaskService):
         super().__init__()
         self.profileService = profileService
         self.vaultService = vaultService
@@ -57,8 +57,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         self.configService = Get(ConfigService)
         self.rabbitmqService = Get(RabbitMQService)
 
-    @PingService([HCVaultService])
-    @UseServiceLock(HCVaultService,MongooseService,lockType='reader')
+    @PingService([VaultService])
+    @UseServiceLock(VaultService,MongooseService,lockType='reader')
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler)
     @UsePermission(AdminPermission)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
@@ -81,9 +81,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return result
 
     @UsePermission(AdminPermission)
-    @PingService([HCVaultService])
+    @PingService([VaultService])
     @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryControlHandler)
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
+    @UseServiceLock(VaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
@@ -120,8 +120,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return profileModel
     
-    @PingService([HCVaultService])
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @PingService([VaultService])
+    @UseServiceLock(VaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))

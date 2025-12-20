@@ -40,7 +40,7 @@ TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 
 configService: ConfigService = Get(ConfigService)
 redisService  = Get(RedisService)
-vaultService = Get(HCVaultService)
+vaultService = Get(VaultService)
 rabbitmqService = Get(RabbitMQService)
 
 backend_url = configService.CELERY_BACKEND_URL(redisService.backend_creds['data']['username'],redisService.backend_creds['data']['password'])

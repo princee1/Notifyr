@@ -15,7 +15,7 @@ from app.models.properties_model import GlobalVarModel, SettingsModel
 from app.services.object_service import ObjectS3Service
 from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
 from app.services.config_service import AssetMode, ConfigService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.setting_service import SETTING_SERVICE_ASYNC_BUILD_STATE, DEFAULT_SETTING, SettingService
 from app.utils.constant import SettingDBConstant
 from app.utils.helper import PointerIterator
@@ -51,10 +51,10 @@ class SettingsRessource(BaseHTTPRessource):
     async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
         return self.settingService.data
     
-    @PingService([HCVaultService],infinite_wait=True)
+    @PingService([VaultService],infinite_wait=True)
     @UseRoles([Role.ADMIN])
     @UseLimiter(limit_value='1/minutes')
-    @UseServiceLock(HCVaultService,SettingService,lockType='writer')
+    @UseServiceLock(VaultService,SettingService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
     async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission),default = Query(False)):
         if default:

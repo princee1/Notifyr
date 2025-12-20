@@ -11,7 +11,7 @@ from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from app.utils.helper import flatten_dict, subset_model
 from app.models.communication_model import  BaseProfileModel, ProfilModelValues
@@ -26,7 +26,7 @@ TModel = TypeVar("TModel",bound=BaseProfileModel)
 )
 class ProfileMiniService(BaseMiniService,Generic[TModel]):
     
-    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,redisService:RedisService, model:TModel,model_type:Type[TModel]=None):
+    def __init__(self,vaultService:VaultService,mongooseService:MongooseService,redisService:RedisService, model:TModel,model_type:Type[TModel]=None):
         if model_type != None:
             self.model_type = model_type
             self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__name__}')
@@ -74,7 +74,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
 @Service()
 class ProfileService(BaseMiniServiceManager):
 
-    def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:HCVaultService):
+    def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:VaultService):
         super().__init__()
         self.MiniServiceStore:MiniServiceStore[ProfileMiniService[BaseProfileModel]] = MiniServiceStore[ProfileMiniService[BaseProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
@@ -101,23 +101,23 @@ class ProfileService(BaseMiniServiceManager):
             raise BuildOkError
              
     def verify_dependency(self):
-        if self.vaultService.service_status not in HCVaultService._ping_available_state:
+        if self.vaultService.service_status not in VaultService._ping_available_state:
             raise BuildFailureError
         
-        if self.mongooseService.service_status not in HCVaultService._ping_available_state:
+        if self.mongooseService.service_status not in VaultService._ping_available_state:
             raise BuildFailureError
     
     async def async_verify_dependency(self):
         try:
             async with self.vaultService.statusLock.reader:
-                if self.vaultService.service_status not in HCVaultService._ping_available_state:
+                if self.vaultService.service_status not in VaultService._ping_available_state:
                     raise ValueError
                 
                 if not self.vaultService.is_loggedin:
                     raise ValueError
             
             async with self.mongooseService.statusLock.reader:
-                if self.mongooseService.service_status not in HCVaultService._ping_available_state:
+                if self.mongooseService.service_status not in VaultService._ping_available_state:
                     raise ValueError
                     
                 if not self.mongooseService.is_connected:

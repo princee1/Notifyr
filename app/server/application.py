@@ -13,7 +13,7 @@ from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.utils.prettyprint import PrettyPrinter_
@@ -209,7 +209,7 @@ class Application(EventInterface):
 
     @register_hook('startup',)
     def start_tickers(self):
-        vaultService: HCVaultService = Get(HCVaultService) 
+        vaultService: VaultService = Get(VaultService) 
         vaultService.start()
 
         celery_service: CeleryService = Get(CeleryService)
@@ -230,7 +230,7 @@ class Application(EventInterface):
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
-        vaultService = Get(HCVaultService)
+        vaultService = Get(VaultService)
 
         services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService]
 
@@ -288,7 +288,7 @@ class Application(EventInterface):
         tortoiseConnService = Get(TortoiseConnectionService)
         awsS3Service = Get(ObjectS3Service)
         redisService = Get(RedisService)
-        vaultService = Get(HCVaultService)
+        vaultService = Get(VaultService)
 
         await RunInThreadPool(mongooseService.revoke_lease)()
         await RunInThreadPool(tortoiseConnService.revoke_lease)()
