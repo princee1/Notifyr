@@ -40,13 +40,13 @@ class ObjectS3Service(TempCredentialsDatabaseService):
             self.client_init()
             super().build()
         except ServerError as e:
-            raise BuildFailureError(f'Failed to build AmazonS3Service due to server error: {str(e)}') from e
+            raise BuildFailureError(f'Failed to build objectS3Service due to server error: {str(e)}') from e
         except InvalidResponseError as e:
-            raise BuildFailureError(f'Failed to build AmazonS3Service due to invalid response: {str(e)}') from e
+            raise BuildFailureError(f'Failed to build objectS3Service due to invalid response: {str(e)}') from e
         except S3Error as e:
-            raise BuildFailureError(f'Failed to build AmazonS3Service: {str(e)}') from e
+            raise BuildFailureError(f'Failed to build objectS3Service: {str(e)}') from e
         except MinioAdminException as e:
-            raise BuildFailureError(f'Failed to build AmazonS3Service due to Minio Admin error: {str(e)}') from e
+            raise BuildFailureError(f'Failed to build objectS3Service due to Minio Admin error: {str(e)}') from e
         
         
     async def _creds_rotator(self):

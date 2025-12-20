@@ -41,10 +41,10 @@ class S3ObjectWebhookRessource(BaseHTTPRessource):
     
     
     @InjectInMethod()
-    def __init__(self,assetService:AssetService,amazonS3Service:ObjectS3Service):
+    def __init__(self,assetService:AssetService,objectS3Service:ObjectS3Service):
         super().__init__()
         self.assetService = assetService
-        self.amazonS3Service = amazonS3Service
+        self.objectS3Service = objectS3Service
 
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST,HTTPMethod.GET,HTTPMethod.DELETE])
@@ -84,10 +84,10 @@ class S3ObjectRessource(BaseHTTPRessource):
         return s3Service.external, '' if s3Service.external else 'Cannot generate presigned url for a non external s3 endpoint'
 
     @InjectInMethod()
-    def __init__(self, assetService: AssetService, amazonS3Service: ObjectS3Service, hcVaultService: VaultService,fileService:FileService):
+    def __init__(self, assetService: AssetService, objectS3Service: ObjectS3Service, hcVaultService: VaultService,fileService:FileService):
         super().__init__()
         self.assetService: AssetService = assetService
-        self.amazonS3Service: ObjectS3Service = amazonS3Service
+        self.objectS3Service: ObjectS3Service = objectS3Service
         self.hcVaultService: VaultService = hcVaultService
         self.fileService = fileService
 
@@ -116,7 +116,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
                 metadata = {MinioConstant.ENCRYPTED_KEY:True}
             
-            await self.amazonS3Service.upload_object(filename,file_bytes,metadata=metadata)
+            await self.objectS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
     @UsePermission(AdminPermission)
     @UseHandler(FileNamingHandler,S3Handler,VaultHandler)
@@ -168,10 +168,10 @@ class S3ObjectRessource(BaseHTTPRessource):
     async def download_stream(self,request:Request,template:str,objectSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission)): # type: ignore
 
         if objectSearch.is_file:
-            objects = await RunInThreadPool(self.amazonS3Service.read_object)(template,objectSearch.version_id)
+            objects = await RunInThreadPool(self.objectS3Service.read_object)(template,objectSearch.version_id)
             attachment_name = template
         else:
-            files = await self.amazonS3Service.download_objects(template,objectSearch.recursive,objectSearch.match)
+            files = await self.objectS3Service.download_objects(template,objectSearch.recursive,objectSearch.match)
             objects = BytesIO()
             with zipfile.ZipFile(objects, "w") as zip_file:
                 for filename, data in files.items():
@@ -196,7 +196,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     async def delete_object(self,template:str,response:Response,request:Request,broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],force:bool=Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
         
         if objectsSearch.version_id:
-            meta = await self.amazonS3Service.delete_object(template,version_id=objectsSearch.version_id) 
+            meta = await self.objectS3Service.delete_object(template,version_id=objectsSearch.version_id) 
             if meta.is_delete_marker: # NOTE the user deleted the marker object and rollback to the latest version
                 response.status_code = status.HTTP_201_CREATED 
             return {'meta':meta}
@@ -207,7 +207,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
             broker.wait(2)
             broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
-            return await self.amazonS3Service.delete_objects_prefix(template,objectsSearch.recursive,objectsSearch.match,force)
+            return await self.objectS3Service.delete_objects_prefix(template,objectsSearch.recursive,objectsSearch.match,force)
 
 
     @PingService([ObjectS3Service,VaultService])
@@ -228,7 +228,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             template:HTMLTemplate = asset_routes[template]
             content = template.content
         else:
-            objects = await RunInThreadPool(self.amazonS3Service.read_object)(template,objectsSearch.version_id) 
+            objects = await RunInThreadPool(self.objectS3Service.read_object)(template,objectsSearch.version_id) 
             content = objects.read().decode()
             objects.close()
 
@@ -262,7 +262,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/modify/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectS3ResponseModel,mount=False)
     async def modify_object(self,template:str,request:Request,broker:Annotated[Broker,Depends(Broker)],backgroundTask:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],content: str = Body(..., media_type="text/plain"),authPermission:AuthPermission=Depends(get_auth_permission)):
-        meta= await self.amazonS3Service.stat_objet(template,objectsSearch.version_id,True)
+        meta= await self.objectS3Service.stat_objet(template,objectsSearch.version_id,True)
         encrypted = meta.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if meta.metadata else False
         assetType = template.split('/')[0]
         extension = self.fileService.get_extension(template)
@@ -303,7 +303,7 @@ class S3ObjectRessource(BaseHTTPRessource):
         broker.wait(3)
         broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
 
-        return await self.amazonS3Service.copy_object(template,destination_template,objectsSearch.version_id,move)
+        return await self.objectS3Service.copy_object(template,destination_template,objectsSearch.version_id,move)
 
     
     ##################################################################################################################
@@ -317,7 +317,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/generate-url/',methods=[HTTPMethod.GET,HTTPMethod.PUT],mount=False)
     async def generate_url(self,request:Request,expiry:int=Query(3600,ge=6*60,le=HOUR*2),version:str=Query(None)): # type: ignore
         method = request.method
-        url = await self.amazonS3Service.generate_presigned_url(method=method,expiry=expiry,version_id=version)
+        url = await self.objectS3Service.generate_presigned_url(method=method,expiry=expiry,version_id=version)
         return {
             'presigned_url':url,
             'expiry':expiry,

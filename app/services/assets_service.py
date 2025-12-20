@@ -226,14 +226,14 @@ class AssetService(_service.BaseService,SchedulerInterface):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:VaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
+    def __init__(self,hcVaultService:VaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,objectS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
         super().__init__()
         SchedulerInterface.__init__(self,)
 
         self.fileService:FileService = fileService
         self.configService = configService
         self.processWorkerPeer = processWorkerPeer
-        self.amazonS3Service = amazonS3Service
+        self.objectS3Service = objectS3Service
         self.settingService = settingService
         self.hcVaultService = hcVaultService
         self.redisService = redisService
@@ -267,7 +267,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
         MLTemplate._globals.update(flatten_dict(self.globals.data))
     
     def _read_globals_s3(self):
-        data = self.amazonS3Service.read_object('globals.json')
+        data = self.objectS3Service.read_object('globals.json')
         data = json.loads(data.read())
         self.globals = JSONFile(self.ASSETS_GLOBALS_VARIABLES, data,False)
 
@@ -295,29 +295,29 @@ class AssetService(_service.BaseService,SchedulerInterface):
         
     def verify_dependency(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
-            if not self.amazonS3Service.service_status == _service.ServiceStatus.AVAILABLE:
+            if not self.objectS3Service.service_status == _service.ServiceStatus.AVAILABLE:
                 raise _service.BuildFailureError('Amazon S3 Service not available')
 
     def read_asset_from_s3(self):
         self._read_globals_s3()
 
-        self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
+        self.images.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value))
-        self.css.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
+        self.css.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.CSS,...,AssetType.EMAIL.value))
 
-        self.email.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
+        self.email.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
             Extension.HTML,...,AssetType.EMAIL.value))
-        self.pdf.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PDFTemplate)(
+        self.pdf.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PDFTemplate)(
             Extension.PDF,FDFlag.READ_BYTES,AssetType.PDF.value))
-        self.sms.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,SMSTemplate)(
+        self.sms.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,SMSTemplate)(
             Extension.XML,...,AssetType.SMS.value))
-        self.phone.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PhoneTemplate)(
+        self.phone.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PhoneTemplate)(
             Extension.XML,...,AssetType.PHONE.value))
 
     def read_bucket_metadata(self):
         self.buckets_size = 0
-        for obj in self.amazonS3Service.list_objects(recursive=True):
+        for obj in self.objectS3Service.list_objects(recursive=True):
             if obj.size:
                 self.buckets_size += obj.size
             if obj.object_name not in self.non_obj_template:
@@ -493,7 +493,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     async def save_globals(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
             data = self.globals.export()
-            await self.amazonS3Service.upload_object('globals.json',data)
+            await self.objectS3Service.upload_object('globals.json',data)
         else:
             self.globals.save()
     
@@ -510,5 +510,5 @@ class AssetService(_service.BaseService,SchedulerInterface):
                 continue
 
             disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add',True)
-            self.amazonS3Service.write_into_disk(obj.object_name,disk_rel_path)
+            self.objectS3Service.write_into_disk(obj.object_name,disk_rel_path)
             

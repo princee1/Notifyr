@@ -15,7 +15,7 @@ from app.definition._service import BaseMiniService, BaseService, LinkDep, MiniS
 
 
 
-class AmazonS3ServiceError(BaseError):
+class objectS3ServiceError(BaseError):
     pass
 
 class AmazonSESError(Exception):

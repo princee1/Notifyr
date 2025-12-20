@@ -222,8 +222,8 @@ class Application(EventInterface):
         mongooseService.start()
 
         if CAPABILITIES['object']:
-            amazons3Service = Get(ObjectS3Service)
-            amazons3Service.start()
+            objectS3Service = Get(ObjectS3Service)
+            objectS3Service.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
@@ -240,8 +240,8 @@ class Application(EventInterface):
         celery_service.stop_interval()
 
         if CAPABILITIES['object']:
-            amazons3Service = Get(ObjectS3Service)
-            amazons3Service.shutdown()
+            objectS3Service = Get(ObjectS3Service)
+            objectS3Service.shutdown()
 
     @register_hook('startup')
     async def register_tortoise(self):
