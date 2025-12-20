@@ -133,6 +133,9 @@ services:
         target: /run/secrets/api_key.txt
       - source: costs
         target: /run/secrets/costs.json
+      - source: deploy
+        target: /run/secrets/deploy.json
+
     volumes:
       - vault-shared:/vault/shared:ro
     build:
@@ -177,6 +180,8 @@ services:
         target: /run/secrets/app-role_id.txt
       - source: costs
         target: /run/secrets/costs.json
+      - source: deploy
+        target: /run/secrets/deploy.json
     volumes:
       - vault-shared:/vault/shared
     environment:
@@ -196,6 +201,8 @@ services:
         target: /run/secrets/app-role_id.txt
       - source: costs
         target: /run/secrets/costs.json
+      - source: deploy
+        target: /run/secrets/deploy.json
     volumes:
       - vault-shared:/vault/shared
     restart: always
@@ -253,8 +260,6 @@ services:
       - source: rotate_token
         target: /run/secrets/rotate-token.txt
     volumes:
-      - type: tmpfs
-        target: /run/secrets
       - vault-data:/vault/data
       - vault-shared:/vault/shared
       - vault-audit:/vault/logs
@@ -466,6 +471,9 @@ secrets:
     file: ./.secrets/api_key.txt
   credit_token:
     file: ./.secrets/credit_token.txt
+  deploy:
+    file: ./.notifyr/deploy.json
+  
 
 networks:
   data_net:

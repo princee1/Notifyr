@@ -5,7 +5,7 @@ from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import ConfigService
 from app.container import Get, build_container
 from app.services import *
-from app.utils.globals import APP_MODE, ApplicationMode
+from app.utils.globals import APP_MODE, ApplicationMode,CAPABILITIES
 from app.utils.prettyprint import PrettyPrinter_
 from celery import Task
 from app.utils.constant import CeleryConstant
@@ -136,50 +136,51 @@ def refresh_profile(worker,p:str=None):
     worker.app.control.add_consumer(queue=p,reply=True,destination=hostname)
     return {'message':'Sucessfully refresh the profile'}
 
+if CAPABILITIES['email']:
+    @RegisterTask(TaskHeaviness.MODERATE)
+    def task_send_template_mail(*args,**kwargs):
+        emailService: EmailSenderService = Get(EmailSenderService),
+        email_profile = kwargs.get('email_profile',None)
+        emailMiniService=emailService.MiniServiceStore.get(email_profile)
+        return emailMiniService.sendTemplateEmail(*args,**kwargs)
 
-@RegisterTask(TaskHeaviness.MODERATE)
-def task_send_template_mail(*args,**kwargs):
-    emailService: EmailSenderService = Get(EmailSenderService),
-    email_profile = kwargs.get('email_profile',None)
-    emailMiniService=emailService.MiniServiceStore.get(email_profile)
-    return emailMiniService.sendTemplateEmail(*args,**kwargs)
 
-
-@RegisterTask(TaskHeaviness.MODERATE)
-def task_send_custom_mail(*args,**kwargs):
-    emailService: EmailSenderService = Get(EmailSenderService)
-    email_profile = kwargs.get('email_profile',None)
-    emailMiniService=emailService.MiniServiceStore.get(email_profile)
-    return emailMiniService.sendCustomEmail(*args,**kwargs)
-
-#============================================================================================================#
-
-@RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_sms(*args,**kwargs):
-    smsService:SMSService = Get(SMSService)
-    return smsService.send_custom_sms(*args,**kwargs)
-
-@RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_sms(*args,**kwargs):
-    smsService:SMSService = Get(SMSService)
-    return smsService.send_template_sms(*args,**kwargs)
+    @RegisterTask(TaskHeaviness.MODERATE)
+    def task_send_custom_mail(*args,**kwargs):
+        emailService: EmailSenderService = Get(EmailSenderService)
+        email_profile = kwargs.get('email_profile',None)
+        emailMiniService=emailService.MiniServiceStore.get(email_profile)
+        return emailMiniService.sendCustomEmail(*args,**kwargs)
 
 #============================================================================================================#
 
-@RegisterTask(TaskHeaviness.LIGHT)
-def task_send_template_voice_call(*args,**kwargs):
-    callService:CallService = Get(CallService)
-    return callService.send_template_voice_call(*args,**kwargs)
+if CAPABILITIES['twilio']:
+    @RegisterTask(TaskHeaviness.LIGHT)
+    def task_send_custom_sms(*args,**kwargs):
+        smsService:SMSService = Get(SMSService)
+        return smsService.send_custom_sms(*args,**kwargs)
 
-@RegisterTask(TaskHeaviness.LIGHT)
-def task_send_twiml_voice_call(*args,**kwargs):
-    callService:CallService = Get(CallService)
-    return callService.send_twiml_voice_call(*args,**kwargs)
-    
-@RegisterTask(TaskHeaviness.LIGHT)
-def task_send_custom_voice_call(*args,**kwargs):
-    callService:CallService = Get(CallService)
-    return callService.send_custom_voice_call(*args,**kwargs)
+    @RegisterTask(TaskHeaviness.LIGHT)
+    def task_send_template_sms(*args,**kwargs):
+        smsService:SMSService = Get(SMSService)
+        return smsService.send_template_sms(*args,**kwargs)
+
+    #============================================================================================================#
+
+    @RegisterTask(TaskHeaviness.LIGHT)
+    def task_send_template_voice_call(*args,**kwargs):
+        callService:CallService = Get(CallService)
+        return callService.send_template_voice_call(*args,**kwargs)
+
+    @RegisterTask(TaskHeaviness.LIGHT)
+    def task_send_twiml_voice_call(*args,**kwargs):
+        callService:CallService = Get(CallService)
+        return callService.send_twiml_voice_call(*args,**kwargs)
+        
+    @RegisterTask(TaskHeaviness.LIGHT)
+    def task_send_custom_voice_call(*args,**kwargs):
+        callService:CallService = Get(CallService)
+        return callService.send_custom_voice_call(*args,**kwargs)
 
 #============================================================================================================#
 

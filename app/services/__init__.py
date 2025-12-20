@@ -1,4 +1,6 @@
-from app.utils.globals import APP_MODE,ApplicationMode
+from app.utils.globals import APP_MODE,ApplicationMode,CAPABILITIES
+
+
 from app.services.config_service import ConfigService,UvicornWorkerService
 from app.services.logger_service import LoggerService
 
@@ -11,16 +13,26 @@ if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.server or APP
 if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     from app.services.secret_service import HCVaultService
     from app.services.database.mongoose_service import MongooseService
-    from app.services.email_service import EmailReaderService,EmailSenderService
     from app.services.profile_service import ProfileService
-    from app.services.twilio_service import TwilioService,CallService,SMSService
     from app.services.webhook_service import WebhookService
-    from app.services.workflow_service import WorkflowService
-    from app.services.agent.remote_agent_service import RemoteAiAgentService
     from app.services.cost_service import CostService
     from app.services.monitoring_service import MonitoringService
     from app.services.push_notification_service import PushNotificationService
+    from app.services.workflow_service import WorkflowService
 
+    from app.services.agent.remote_agent_service import RemoteAiAgentService
+
+    if CAPABILITIES['twilio']:
+        from app.services.twilio_service import TwilioService,CallService,SMSService
+    
+    if CAPABILITIES['email']:
+        from app.services.email_service import EmailReaderService,EmailSenderService
+    
+    if CAPABILITIES['message']:
+        ...
+    
+    if CAPABILITIES['notification']:
+        ...
 
 if APP_MODE == ApplicationMode.server:
     from app.services.assets_service import AssetService

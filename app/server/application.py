@@ -17,8 +17,8 @@ from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.secret_service import HCVaultService
 from app.services.task_service import TaskService
-from app.utils.prettyprint import PrettyPrinter_
 from app.services.config_service import ConfigService
+from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Request, Response, FastAPI
 from slowapi.middleware import SlowAPIMiddleware
 from typing import Callable,Literal

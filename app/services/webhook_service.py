@@ -10,6 +10,7 @@ from app.services.webhook.http_webhook_service import HTTPWebhookMiniService
 from app.services.webhook.provider_webhook_service import DiscordWebhookMiniService, MakeWebhookMiniService, MakeWebhookMiniService, N8NWebhookMiniService, SlackIncomingWebhookMiniService, ZapierWebhookMiniService
 from .config_service import ConfigService
 from app.utils.helper import issubclass_of
+from app.utils.globals import CAPABILITIES
 
 
 @Service(
@@ -41,6 +42,10 @@ class WebhookService(BaseMiniServiceManager):
         self.redisService = redisService
 
         self.MiniServiceStore = MiniServiceStore[WebhookAdapterInterface|BaseMiniService](self.name)
+
+    def verify_dependency(self):
+        if CAPABILITIES['webhook']:
+            ...
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
         count = self.profilesService.MiniServiceStore.filter_count(lambda p: issubclass_of(WebhookProfileModel,p.model.__class__)  )

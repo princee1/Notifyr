@@ -17,6 +17,14 @@
             "vector": true
         }
     },
+    "capabilities":{
+        "email":true,
+        "twilio":false,
+        "notification":false,
+        "message":false,
+        "ai":true,
+        "webhook":true
+    },
     "resource_limits": {
         "cpu_limit": "500m",
         "memory_limit": "512Mi"

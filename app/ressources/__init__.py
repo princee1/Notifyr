@@ -1,21 +1,20 @@
 from typing import Type
 from app.services.celery_service import CeleryService
 from app.services.config_service import AssetMode, ConfigService
+from app.services import CostService
 from app.container import Register, Get
-from app.services.workflow_service import WorkflowService
+from app.utils.globals import CAPABILITIES
 
 Register(CeleryService)
-Register(WorkflowService)
 
 configService = Get(ConfigService)
+costService = Get(CostService)
 
 from .support_ressource import SupportRessource
-from .email_ressource import EmailRessource
 from .admin_ressource import AdminRessource
 from .result_ressource import ResultBackendRessource
 from .contacts_ressources import ContactsRessource
 from .auth_ressource import AuthRessource
-from .twilio_ressource import TwilioRessource
 from .app_ressource import AppRessource
 from .link_ressource import LinkRessource
 from .ping_pong_ressource import PingPongRessource
@@ -27,15 +26,14 @@ from .cost_ressource import CostRessource
 from .celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
 
+
 #from .push_notification_ressource import PushNotificationRessource
 
 BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
-                                                 EmailRessource,
                                                  AdminRessource,
                                                  ResultBackendRessource,
                                                  ContactsRessource,
                                                  AuthRessource,
-                                                 TwilioRessource,
                                                  AppRessource,
                                                  LinkRessource,
                                                  PingPongRessource,
@@ -46,5 +44,24 @@ BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
                                                  CeleryRessource
                                                  #PushNotificationRessource,
 ]
+
 if configService.ASSET_MODE == AssetMode.s3:
     BASE_RESSOURCES.append(S3ObjectRessource)
+
+
+if CAPABILITIES['twilio']:
+    from .twilio_ressource import TwilioRessource
+    BASE_RESSOURCES.append(TwilioRessource)
+
+if CAPABILITIES['email']:
+    from .email_ressource import EmailRessource
+    BASE_RESSOURCES.append(EmailRessource)
+
+if CAPABILITIES['ai']:
+    ...
+
+if CAPABILITIES['notification']:
+    ...
+
+if CAPABILITIES['message']:
+    ...

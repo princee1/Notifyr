@@ -16,7 +16,7 @@ from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, Cont
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.services.twilio_service import SMSService, CallService
+from app.services.twilio_service import TwilioService
 from app.depends.dependencies import get_auth_permission, get_contact_token
 from app.decorators.pipes import ContactStatusPipe, RelayPipe
 from app.depends.variables import summary_query
@@ -192,7 +192,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 
     @UsePermission(JWTContactPermission('create'))
     @UseGuard(RegisteredContactsGuard)
-    @PingService([CallService,EmailSenderService])
+    @PingService([TwilioService,EmailSenderService])
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
     async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
         # TODO Request from the user
@@ -228,7 +228,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
 class ContactsCRUDRessource(BaseHTTPRessource):
     @InjectInMethod()
-    def __init__(self, contactsService: ContactsService, emailService: EmailSenderService, smsService: SMSService):
+    def __init__(self, contactsService: ContactsService, emailService: EmailSenderService):
         super().__init__()
         self.contactsService = contactsService
 
