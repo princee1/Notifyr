@@ -4,6 +4,7 @@ from app.services.config_service import ConfigService
 from app.services.secret_service import HCVaultService
 from app.services.database.mongoose_service import MongooseService
 
+
 @MiniService()
 class RemoteAgenticMiniService(BaseMiniService):
     
@@ -23,8 +24,10 @@ class RemoteAiAgentService(BaseMiniServiceManager):
         self.MiniServiceStore = MiniServiceStore[RemoteAgenticMiniService](self.name)
     
     def verify_dependency(self):
-        if not self.configService.getenv('AI_ENABLED',False):
+        if not self.configService.getenv('AI_ENABLED',True):
             raise BuildFailureError
     
     def build(self, build_state=...):
         from grpc import aio
+        import grpc_tools
+

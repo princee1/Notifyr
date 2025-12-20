@@ -1,3 +1,4 @@
+from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.qdrant_service import QdrantService
@@ -5,6 +6,8 @@ from app.definition._service import BaseMiniService, MiniService, MiniServiceSto
 from .llm_provider_service import LLMProviderService
 from .remote_agent_service import RemoteAiAgentService
 from app.services import CostService
+from grpc import aio
+import grpc_tools
 
 
 @MiniService()
@@ -36,7 +39,8 @@ class AgentService(BaseMiniServiceManager):
         self.MiniServiceStore = MiniServiceStore[AiAgentMiniService](self.name)
 
     def verify_dependency(self):
-        ...
+        if not self.configService.getenv('AI_ENABLED',False):
+            raise BuildFailureError
 
     def build(self, build_state=...):
         self._api_keys = {}

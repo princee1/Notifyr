@@ -72,7 +72,7 @@ STATUS_TO_ERROR_MAP = {
     ServiceStatus.NOT_AVAILABLE: BuildFailureError,
     ServiceStatus.TEMPORARY_NOT_AVAILABLE: BuildWarningError,
     ServiceStatus.PARTIALLY_AVAILABLE: BuildOkError,
-    ServiceStatus.WORKS_ALMOST_ATT: BuildbSkipError,
+    ServiceStatus.WORKS_ALMOST_ATT: BuildSkipError,
     ServiceStatus.MAJOR_SYSTEM_FAILURE:BuildAbortError
 }
 

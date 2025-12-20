@@ -149,7 +149,6 @@ class TaskService(BaseService,SchedulerInterface):
                     if val is None:
                         print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Somehow the no one has the lock... Attempting right away")
                         continue
-                    val = val.decode()
                     if val != self.uvicornWorkerService.INSTANCE_ID:
                         # someone else took lock
                         if self._leader:
