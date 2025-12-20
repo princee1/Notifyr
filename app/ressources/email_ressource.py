@@ -35,7 +35,6 @@ from app.utils.globals import DIRECTORY_SEPARATOR,CAPABILITIES
 from app.services.assets_service import AssetService
 
 
-
 EMAIL_PREFIX = "email"
 
 TRACKING_META_CALLBACK = 0
@@ -67,7 +66,7 @@ class EmailRessource(BaseHTTPRessource):
         self.settingService = Get(SettingService)
 
         self.exclude_meta =('as_contact','index','will_track','sender_type')
-    
+   
     if CAPABILITIES['object']:
         @staticmethod
         async def force_signature(scheduler:BaseEmailSchedulerModel):
@@ -197,11 +196,13 @@ class EmailRessource(BaseHTTPRessource):
                 meta = customEmail_content.meta.model_dump(mode='python',exclude=self.exclude_meta)
                 await taskManager.offload_task(len(To),0,index,email.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments,email_profile=email.miniService_id)
             return taskManager.results
-        
-        
+
+    
+    @BaseHTTPRessource.HTTPRoute('/simple/{profile}/',methods=[HTTPMethod.POST])
     async def send_simpleEmail(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         ...
 
+    @BaseHTTPRessource.HTTPRoute('/otp/{profile}/',methods=[HTTPMethod.POST])
     async def send_otpEmail(self,):
         ...
         

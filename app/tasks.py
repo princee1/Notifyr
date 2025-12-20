@@ -148,6 +148,16 @@ def refresh_workflow(worker,w:str=None):
         worker.app.control.add_consumer(queue=p,reply=True,destination=hostname)
     return {'message':'Sucessfully refresh workflow'}
 
+
+#============================================================================================================#
+
+@RegisterTask(TaskHeaviness.HEAVY)
+def task_ghost_call(*args,**kwargs):
+    return "ghosts"
+
+
+#============================================================================================================#
+
 if CAPABILITIES['email']:
     if CAPABILITIES['object']:
         @RegisterTask(TaskHeaviness.MODERATE)
