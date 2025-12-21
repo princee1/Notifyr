@@ -174,7 +174,7 @@ services:
     container_name: agentic
     build:
       context: ./
-      dockerfile: Dockerfile.agentic
+      dockerfile: ./docker/Dockerfile.agentic
     secrets:
       - source: app_role_id
         target: /run/secrets/app-role_id.txt

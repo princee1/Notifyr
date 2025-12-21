@@ -45,17 +45,25 @@ class RemoteAgentService(BaseMiniServiceManager):
             raise BuildOkError
         
     def build(self, build_state=...):
-        auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')
-        print(auth_header)
-
+        self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
+        
     def register_channel(self):
         if self.service_status != ServiceStatus.AVAILABLE:
             raise ServiceNotAvailableError
         
-        clientInterceptor = AgentClientAsyncInterceptor('ok') if APP_MODE == ApplicationMode.server else AgentClientInterceptor
-        channel = grpc.insecure_channel(self.configService.AGENTIC_HOST)
-        grpc.intercept_channel(channel,clientInterceptor)
-        self.stub = agent_pb2_grpc.AgentStub(channel)
+        clientInterceptor = AgentClientAsyncInterceptor(self.auth_header) if APP_MODE == ApplicationMode.server else AgentClientInterceptor
+        self.channel = grpc.insecure_channel(self.configService.AGENTIC_HOST)
+        grpc.intercept_channel(self.channel,clientInterceptor)
+        self.stub = agent_pb2_grpc.AgentStub(self.channel)
+    
+    def disconnect_channel(self):
+        if self.service_status != ServiceStatus.AVAILABLE:
+            raise ServiceNotAvailableError
+        if self.channel:
+            self.channel.close()
+            self.channel = None
+            self.stub = None
+
 
 @MiniService()
 class RemoteAgentMiniService(BaseMiniService):

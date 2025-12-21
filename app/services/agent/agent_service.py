@@ -70,7 +70,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             yield reply
 
     def verify_auth(self,token:str)->bool:
-        if self.auth != token:
+        if self.auth_header != token:
             raise HTTPException(status_code=401,detail="Unauthorized")
 
     def __init__(self, configService: ConfigService,vaultService:VaultService, mongooseService:MongooseService,remoteAgentService:RemoteAgentService,llmProviderService:LLMProviderService,costService:CostService,qdrantService:QdrantService) -> None:
@@ -92,13 +92,12 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
     def build(self, build_state=...):
         self._api_keys = {}
         counter = self.StatusCounter(0)
-        auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')
-        print(auth_header)
+        self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
         return
         return super().build(counter, build_state)
     
     async def serve(self):
-        interceptor = AgentServerInterceptor('ok', {
+        interceptor = AgentServerInterceptor(self.auth_header, {
             '/agent.Agent/Prompt': HandlerType.ONE_ONE,
             '/agent.Agent/PromptStream': HandlerType.ONE_MANY,
             '/agent.Agent/StreamPrompt': HandlerType.MANY_ONE,

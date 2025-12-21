@@ -8,6 +8,7 @@ from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
 from app.interface.timers import  SchedulerInterface
 from app.ressources import *
+from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
@@ -127,9 +128,6 @@ class Application(EventInterface):
         else:
             uvicorn.run(self.app, host=self.host, port=self.port, loop="asyncio",log_level=self.log_level)
 
-    def stop_server(self):
-        pass
-
     def _mount_directories(self,ress_type:type[BaseHTTPRessource]):
         meta:ClassMetaData = ress_type.meta
         for mount in meta['mount']:
@@ -189,13 +187,17 @@ class Application(EventInterface):
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
         # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
         # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
-
+        remoteAgentService = Get(RemoteAgentService)
+        remoteAgentService.register_channel()
         
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
         await redisService.close_connections()
+
+        remoteAgentService = Get(RemoteAgentService)
+        remoteAgentService.disconnect_channel()
 
     @register_hook('startup',)
     async def start_leader_task_election(self):
@@ -295,7 +297,6 @@ class Application(EventInterface):
         await RunInThreadPool(awsS3Service.revoke_lease)()
         await RunInThreadPool(redisService.revoke_lease)()
         await RunInThreadPool(vaultService.revoke_auth_token)()
-
 
     @property
     def shutdown_hooks(self):
