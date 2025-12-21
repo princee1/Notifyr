@@ -185,6 +185,9 @@ class ConfigService(_service.BaseService):
 
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
+        # AGENTIC CONFIG #
+        self.AGENTIC_HOST = self.getenv('AGENTIC_HOST','localhost:50051' if self.MODE == MODE.DEV_MODE else 'agentic:50051')
+
         # HASHI CORP VAULT CONFIG #
         self.VAULT_ADDR:str = 'http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200'
 

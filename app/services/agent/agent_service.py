@@ -1,16 +1,19 @@
 import asyncio
+
+from fastapi import HTTPException
 from app.errors.service_error import BuildFailureError
+from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.qdrant_service import QdrantService
 from app.definition._service import BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager
+from app.services.vault_service import VaultService
 from .llm_provider_service import LLMProviderService
 from .remote_agent_service import RemoteAgentService
 from app.services import CostService
 from grpc import aio
 from concurrent import futures
 import grpc
-
 from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
 
 
@@ -29,9 +32,7 @@ class AiAgentMiniService(BaseMiniService):
         - rest,graphql, rpc fetch api
     """
 
-@Service(is_manager=True,
-         links=[LinkDep(RemoteAgentService)]
-         )
+@Service(is_manager=True,links=[LinkDep(RemoteAgentService)])
 class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
     async def Prompt(self, request, context):
@@ -67,8 +68,12 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             reply = agent_message.PromptAnswer()
             reply = reply.to_proto()
             yield reply
-        
-    def __init__(self, configService: ConfigService,mongooseService:MongooseService,remoteAgentService:RemoteAgentService,llmProviderService:LLMProviderService,costService:CostService,qdrantService:QdrantService) -> None:
+
+    def verify_auth(self,token:str)->bool:
+        if self.auth != token:
+            raise HTTPException(status_code=401,detail="Unauthorized")
+
+    def __init__(self, configService: ConfigService,vaultService:VaultService, mongooseService:MongooseService,remoteAgentService:RemoteAgentService,llmProviderService:LLMProviderService,costService:CostService,qdrantService:QdrantService) -> None:
         super().__init__()
         self.configService = configService
         self.mongooseService = mongooseService
@@ -76,6 +81,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         self.remoteAgentService = remoteAgentService
         self.costService = costService
         self.qdrantService = qdrantService
+        self.vaultService = vaultService
 
         self.MiniServiceStore = MiniServiceStore[AiAgentMiniService](self.name)
 
@@ -86,13 +92,21 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
     def build(self, build_state=...):
         self._api_keys = {}
         counter = self.StatusCounter(0)
+        auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')
+        print(auth_header)
         return
         return super().build(counter, build_state)
     
     async def serve(self):
-        self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10))
+        interceptor = AgentServerInterceptor('ok', {
+            '/agent.Agent/Prompt': HandlerType.ONE_ONE,
+            '/agent.Agent/PromptStream': HandlerType.ONE_MANY,
+            '/agent.Agent/StreamPrompt': HandlerType.MANY_ONE,
+            '/agent.Agent/S2SPrompt': HandlerType.MANY_MANY,
+        })
+        self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10),interceptors=(interceptor,))
         agent_pb2_grpc.add_AgentServicer_to_server(self,self.server)
-        self.server.add_insecure_port('agentic:50051')
+        self.server.add_insecure_port('0.0.0.0:50051')
         await self.server.start()
         await self.server.wait_for_termination()
     

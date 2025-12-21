@@ -1,8 +1,11 @@
 import asyncio
 import functools
 from typing import Callable, Generator, Self
+
+import grpc
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError, ServiceNotAvailableError
+from app.grpc.agent_interceptor import AgentClientAsyncInterceptor,AgentClientInterceptor
 from app.services.config_service import ConfigService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
@@ -42,12 +45,17 @@ class RemoteAgentService(BaseMiniServiceManager):
             raise BuildOkError
         
     def build(self, build_state=...):
-        ...
+        auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')
+        print(auth_header)
 
-    def register_stub(self,stub:agent_pb2_grpc.AgentStub):
+    def register_channel(self):
         if self.service_status != ServiceStatus.AVAILABLE:
             raise ServiceNotAvailableError
-        self.stub = stub
+        
+        clientInterceptor = AgentClientAsyncInterceptor('ok') if APP_MODE == ApplicationMode.server else AgentClientInterceptor
+        channel = grpc.insecure_channel(self.configService.AGENTIC_HOST)
+        grpc.intercept_channel(channel,clientInterceptor)
+        self.stub = agent_pb2_grpc.AgentStub(channel)
 
 @MiniService()
 class RemoteAgentMiniService(BaseMiniService):
