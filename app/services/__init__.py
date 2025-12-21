@@ -1,6 +1,5 @@
 from app.utils.globals import APP_MODE,ApplicationMode,CAPABILITIES
 
-
 from app.services.config_service import ConfigService,UvicornWorkerService
 from app.services.logger_service import LoggerService
 
@@ -19,7 +18,7 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     
     from app.services.workflow_service import WorkflowService
     from app.services.webhook_service import WebhookService
-    from app.services.agent.remote_agent_service import RemoteAiAgentService
+    from app.services.agent.remote_agent_service import RemoteAgentService
 
     if CAPABILITIES['twilio']:
         from app.services.twilio_service import TwilioService,CallService,SMSService
@@ -63,7 +62,7 @@ if APP_MODE == ApplicationMode.agentic:
 
     if CAPABILITIES['agent']:
         from app.services.agent.llm_provider_service import LLMProviderService
-        from app.services.agent.remote_agent_service import RemoteAiAgentService
+        from app.services.agent.remote_agent_service import RemoteAgentService
         from app.services.agent.agent_service import AgentService
         from app.services.database.qdrant_service import QdrantService
 

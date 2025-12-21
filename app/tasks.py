@@ -159,9 +159,11 @@ def task_ghost_call(*args,**kwargs):
 #============================================================================================================#
 
 if CAPABILITIES['email']:
+
     if CAPABILITIES['object']:
         @RegisterTask(TaskHeaviness.MODERATE)
         def task_send_template_mail(*args,**kwargs):
+            workflowService = Get(WorkflowService)
             emailService: EmailSenderService = Get(EmailSenderService),
             email_profile = kwargs.get('email_profile',None)
             emailMiniService=emailService.MiniServiceStore.get(email_profile)
@@ -169,6 +171,7 @@ if CAPABILITIES['email']:
 
         @RegisterTask(TaskHeaviness.MODERATE)
         def task_send_custom_mail(*args,**kwargs):
+            workflowService = Get(WorkflowService)
             emailService: EmailSenderService = Get(EmailSenderService)
             email_profile = kwargs.get('email_profile',None)
             emailMiniService=emailService.MiniServiceStore.get(email_profile)
@@ -182,12 +185,14 @@ if CAPABILITIES['email']:
 if CAPABILITIES['twilio']:
     @RegisterTask(TaskHeaviness.LIGHT)
     def task_send_custom_sms(*args,**kwargs):
+        workflowService = Get(WorkflowService)
         smsService:SMSService = Get(SMSService)
         return smsService.send_custom_sms(*args,**kwargs)
 
     if CAPABILITIES['object']:
         @RegisterTask(TaskHeaviness.LIGHT)
         def task_send_template_sms(*args,**kwargs):
+            workflowService = Get(WorkflowService)
             smsService:SMSService = Get(SMSService)
             return smsService.send_template_sms(*args,**kwargs)
 
@@ -195,16 +200,19 @@ if CAPABILITIES['twilio']:
     if CAPABILITIES['object']:
         @RegisterTask(TaskHeaviness.LIGHT)
         def task_send_template_voice_call(*args,**kwargs):
+            workflowService = Get(WorkflowService)
             callService:CallService = Get(CallService)
             return callService.send_template_voice_call(*args,**kwargs)
 
     @RegisterTask(TaskHeaviness.LIGHT)
     def task_send_twiml_voice_call(*args,**kwargs):
+        workflowService = Get(WorkflowService)
         callService:CallService = Get(CallService)
         return callService.send_twiml_voice_call(*args,**kwargs)
         
     @RegisterTask(TaskHeaviness.LIGHT)
     def task_send_custom_voice_call(*args,**kwargs):
+        workflowService = Get(WorkflowService)
         callService:CallService = Get(CallService)
         return callService.send_custom_voice_call(*args,**kwargs)
 
@@ -213,9 +221,28 @@ if CAPABILITIES['twilio']:
 if CAPABILITIES['webhook']:
     @RegisterTask(TaskHeaviness.VERY_LIGHT)
     def task_send_webhook(*args,**kwargs):
+        workflowService = Get(WorkflowService)
         webhookService:WebhookService = Get(WebhookService)
         webhook_profile = kwargs.get('webhook_profile',None)
         webhookMiniService=webhookService.MiniServiceStore.get(webhook_profile)
         return webhookMiniService.deliver(*args,**kwargs)
 
 ##############################################           ##################################################
+
+if CAPABILITIES['agent']:
+
+    @RegisterTask(TaskHeaviness.HEAVY)
+    def task_send_webhook(*args,**kwargs):
+        workflowService = Get(WorkflowService)
+        remoteAgentService = Get(RemoteAgentService)
+        remoteAgent = kwargs.get('agent',None)
+        remoteAgentMiniService=remoteAgentService.MiniServiceStore.get(remoteAgent)
+        return remoteAgentMiniService.Prompt(*args,**kwargs)
+
+
+if CAPABILITIES['notification']:
+    ...
+
+
+if CAPABILITIES['message']:
+    ...

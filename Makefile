@@ -86,6 +86,7 @@ build:
 	docker compose build vault-init
 	docker compose build app
 	docker compose build beat
+	docker compose build agentic
 	$(DOCKER_COMPOSE_BASE) build
 	@echo "================================================="
 	@echo "🎉  All images built successfully!"
