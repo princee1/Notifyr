@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
-
-import agent_pb2
+import app.grpc.agent_pb2 as agent_pb2
 
 
 def _is_missing_str(value: Optional[str]) -> bool:

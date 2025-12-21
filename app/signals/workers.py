@@ -6,6 +6,7 @@ from app.services import RedisService
 from app.services import VaultService
 from app.services import ConfigService
 from app.utils.constant import CeleryConstant
+from app.utils.globals import CAPABILITIES
 
 profileService = Get(ProfileService)
 

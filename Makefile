@@ -62,7 +62,7 @@ deploy-beat:
 
 
 deploy-agentic:
-	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.active')" = "true" ]; then \
+	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.capabilities.agentic')" = "true" ]; then \
 		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.db.vector')" = "true" ]; then \
 			echo "--- 🛠️ Creating the vector database Qdrant"; \
 			docker compose up -d qdrant; \

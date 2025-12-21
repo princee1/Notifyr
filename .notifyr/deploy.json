@@ -11,19 +11,16 @@
         "balancer": 1
     },
     "agentic": {
-        "active": false,
-        "db": {
-            "knowledge_graph": false,
-            "vector": true
-        }
+        "knowledge_graph": false,
+        "vector": true
     },
     "capabilities": {
         "object": false,
-        "email": false,
+        "email": true,
         "twilio": false,
         "notification": false,
         "message": false,
-        "agent": false,
+        "agentic": true,
         "webhook": false,
         "workflow": false
     },

@@ -49,8 +49,6 @@ if configService.CELERY_BROKER == 'redis':
     broker_url = configService.CELERY_MESSAGE_BROKER_URL(redisService.broker_creds['data']['username'],redisService.broker_creds['data']['password'])
 else:
     broker_url = configService.CELERY_MESSAGE_BROKER_URL(rabbitmqService.db_user,rabbitmqService.db_password)
-    print(broker_url)
-
 ##############################################           ##################################################
 
 celery_app = Celery('celery_app',
@@ -131,6 +129,7 @@ def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None
 
 @control_command(args=[('p', str)],signature='[P=None]')
 def refresh_profile(worker,p:str=None):
+    profileService = Get(ProfileService)
     if p==None:
         return {'message':f'No Profile queue was given'}
     hostname = [worker.hostname]
@@ -140,6 +139,7 @@ def refresh_profile(worker,p:str=None):
 
 @control_command(args=[('w', str)],signature='[W=None]')
 def refresh_workflow(worker,w:str=None):
+    workflowService = Get(WorkflowService)
     if w==None:
         return {'message':f'No workflow was given'}
     hostname = [worker.hostname]
@@ -149,12 +149,26 @@ def refresh_workflow(worker,w:str=None):
     return {'message':'Sucessfully refresh workflow'}
 
 
+@control_command(args=[('w', str)],signature='[W=None]')
+def refresh_agentic(worker,a:str=None):
+    remoteAgentService = Get(RemoteAgentService)
+    """queue are per profile provide, so each agent is binded to a llm profile provider, so needs to stop all queues related to the llm profile provider and/or refresh the remote agent service mini services"""
+    if a==None:
+        # TODO stop all agentic queues and refresh the remote agents service
+        return {'message':f'No workflow was given'}
+    hostname = [worker.hostname]
+
+    print('Mocking agentic update')
+    for p in []:
+        worker.app.control.add_consumer(queue=p,reply=True,destination=hostname)
+    return {'message':'Sucessfully refresh workflow'}
+
+
 #============================================================================================================#
 
 @RegisterTask(TaskHeaviness.HEAVY)
 def task_ghost_call(*args,**kwargs):
-    return "ghosts"
-
+    return "ghosts called"
 
 #============================================================================================================#
 
@@ -229,10 +243,10 @@ if CAPABILITIES['webhook']:
 
 ##############################################           ##################################################
 
-if CAPABILITIES['agent']:
+if CAPABILITIES['agentic']:
 
     @RegisterTask(TaskHeaviness.HEAVY)
-    def task_send_webhook(*args,**kwargs):
+    def task_prompt_agentic(*args,**kwargs):
         workflowService = Get(WorkflowService)
         remoteAgentService = Get(RemoteAgentService)
         remoteAgent = kwargs.get('agent',None)

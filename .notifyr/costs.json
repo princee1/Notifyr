@@ -187,6 +187,7 @@
         "agent":10,
         "workflow":10,
         "profile": 10,
-        "blog":20
+        "blog":20,
+        "tokens":100000000000
     }
 }

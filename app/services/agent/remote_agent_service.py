@@ -38,7 +38,7 @@ class RemoteAgentService(BaseMiniServiceManager):
         self.MiniServiceStore = MiniServiceStore[RemoteAgentMiniService](self.name)
     
     def verify_dependency(self):
-        if not CAPABILITIES['agent']:
+        if not CAPABILITIES['agentic']:
             raise BuildWarningError
         
         if APP_MODE == ApplicationMode.agentic:

@@ -67,7 +67,7 @@ if CAPABILITIES['email']:
     from .email_ressource import EmailRessource
     BASE_RESSOURCES.append(EmailRessource)
 
-if CAPABILITIES['agent']:
+if CAPABILITIES['agentic']:
     from app.ressources.rag_db_ressource import RagDBRessource
     from app.ressources.agent_ressource import AgentsRessource
     BASE_RESSOURCES.append(RagDBRessource)

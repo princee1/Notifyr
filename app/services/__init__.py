@@ -60,7 +60,7 @@ if APP_MODE == ApplicationMode.agentic:
     from app.services.database.memcached_service import MemCachedService
     from app.services.vault_service import VaultService
 
-    if CAPABILITIES['agent']:
+    if CAPABILITIES['agentic']:
         from app.services.agent.llm_provider_service import LLMProviderService
         from app.services.agent.remote_agent_service import RemoteAgentService
         from app.services.agent.agent_service import AgentService
