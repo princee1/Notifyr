@@ -35,18 +35,22 @@ class ServerCapabilities(TypedDict):
     object:bool
     workflow:bool
 
-APP_MODE:ApplicationMode = ApplicationMode.server
+class AgenticServerCapabilities(TypedDict):
+    knowledge_graph:bool
+    vector:bool
 
 if sys.argv[0] == CELERY_EXE_PATH:
     if sys.argv[3] == 'beat':
         APP_MODE = ApplicationMode.beat
     else:
         APP_MODE = ApplicationMode.worker
+elif 'agentic_main.py' in sys.argv[0]:
+    APP_MODE = ApplicationMode.agentic
 else:
-    ...
-
+    APP_MODE = ApplicationMode.server
 
 _deployment=JSONFile('/run/secrets/deploy.json',os_link=False,from_data=None)
 
 
 CAPABILITIES:ServerCapabilities = _deployment['capabilities']
+AGENTIC_CAPABILITIES:AgenticServerCapabilities = _deployment['agentic']

@@ -274,94 +274,97 @@ class SMSService(BaseTwilioCommunication):
             'message_service_sid': message.messaging_service_sid,
         }
 
-    def __send_sms_sync__(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None) -> MessageInstance:
-        twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
-        results = []
-        events= []
-        data = messageData.copy()
-        for i,to in enumerate(messageData['to']):
+    if APP_MODE == ApplicationMode.worker:
 
-            url = self.set_url(twilioProfile.logs_url,subject_id, get_value_in_list(twilio_tracking,i))
-            now = datetime.now(timezone.utc).isoformat()
-            data['to'] = to
+        def __send_sms__(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None) -> MessageInstance:
+            twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
+            results = []
+            events= []
+            data = messageData.copy()
+            for i,to in enumerate(messageData['to']):
 
-            try:
-                message = twilioProfile.client.messages.create(
-                    provide_feedback=True, send_as_mms=True, 
-                    status_callback=url,
-                    **data)
-                result = self.response_extractor(message)
-                description = f'Sent request to third-party API'
-                status = SMSStatusEnum.SENT.value
-            
-            except TwilioRestException as e:
-                result = None
-                description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
-                status = SMSStatusEnum.FAILED.value
+                url = self.set_url(twilioProfile.logs_url,subject_id, get_value_in_list(twilio_tracking,i))
+                now = datetime.now(timezone.utc).isoformat()
+                data['to'] = to
 
-            except Exception as e:
-                result = None
-                description = f'Failed to send the request'
-                status = SMSStatusEnum.FAILED.value
-            finally:
-                if get_value_in_list(twilio_tracking,i) and isinstance(result, MessageInstance):
-                    event = SMSEventORM.JSON(
-                        event_id=uuid_v1_mc(),
-                        sms_sid=result.sid,
-                        direction='O',
-                        current_event=status,
-                        description=description,
-                        date_event_received=now
-                    )
-                    events.append(event)
-                results.append(result)
+                try:
+                    message = twilioProfile.client.messages.create(
+                        provide_feedback=True, send_as_mms=True, 
+                        status_callback=url,
+                        **data)
+                    result = self.response_extractor(message)
+                    description = f'Sent request to third-party API'
+                    status = SMSStatusEnum.SENT.value
+                
+                except TwilioRestException as e:
+                    result = None
+                    description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
+                    status = SMSStatusEnum.FAILED.value
 
-            return (results,(StreamConstant.TWILIO_EVENT_STREAM_SMS,events),{})
+                except Exception as e:
+                    result = None
+                    description = f'Failed to send the request'
+                    status = SMSStatusEnum.FAILED.value
+                finally:
+                    if get_value_in_list(twilio_tracking,i) and isinstance(result, MessageInstance):
+                        event = SMSEventORM.JSON(
+                            event_id=uuid_v1_mc(),
+                            sms_sid=result.sid,
+                            direction='O',
+                            current_event=status,
+                            description=description,
+                            date_event_received=now
+                        )
+                        events.append(event)
+                    results.append(result)
+
+                return (results,(StreamConstant.TWILIO_EVENT_STREAM_SMS,events),{})
+    else:
         
-    async def __send_sms_async__(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None) -> MessageInstance:
-        twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
-        results = []
-        events= []
-        data = messageData.copy()
-        for i,to in enumerate(messageData['to']):
+        async def __send_sms__(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None) -> MessageInstance:
+            twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
+            results = []
+            events= []
+            data = messageData.copy()
+            for i,to in enumerate(messageData['to']):
 
-            url = self.set_url(twilioProfile.logs_url,subject_id, get_value_in_list(twilio_tracking,i))
-            now = datetime.now(timezone.utc).isoformat()
-            data['to'] = to
+                url = self.set_url(twilioProfile.logs_url,subject_id, get_value_in_list(twilio_tracking,i))
+                now = datetime.now(timezone.utc).isoformat()
+                data['to'] = to
 
-            try:
-                message = twilioProfile.client.messages.create_async(
-                    provide_feedback=True, send_as_mms=True, 
-                    status_callback=url,
-                    **data)
-                result = self.response_extractor(message)
-                description = f'Sent request to third-party API'
-                status = SMSStatusEnum.SENT.value
-            
-            except TwilioRestException as e:
-                result = None
-                description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
-                status = SMSStatusEnum.FAILED.value
+                try:
+                    message = twilioProfile.client.messages.create_async(
+                        provide_feedback=True, send_as_mms=True, 
+                        status_callback=url,
+                        **data)
+                    result = self.response_extractor(message)
+                    description = f'Sent request to third-party API'
+                    status = SMSStatusEnum.SENT.value
+                
+                except TwilioRestException as e:
+                    result = None
+                    description = f'Third Party Api could not process the request message: {e.msg} code:{e.code} '
+                    status = SMSStatusEnum.FAILED.value
 
-            except Exception as e:
-                result = None
-                description = f'Failed to send the request'
-                status = SMSStatusEnum.FAILED.value
-            finally:
-                if get_value_in_list(twilio_tracking,i) and isinstance(result, MessageInstance):
-                    event = SMSEventORM.JSON(
-                        event_id=uuid_v1_mc(),
-                        sms_sid=result.sid,
-                        direction='O',
-                        current_event=status,
-                        description=description,
-                        date_event_received=now
-                    )
-                    events.append(event)
-                results.append(result)
+                except Exception as e:
+                    result = None
+                    description = f'Failed to send the request'
+                    status = SMSStatusEnum.FAILED.value
+                finally:
+                    if get_value_in_list(twilio_tracking,i) and isinstance(result, MessageInstance):
+                        event = SMSEventORM.JSON(
+                            event_id=uuid_v1_mc(),
+                            sms_sid=result.sid,
+                            direction='O',
+                            current_event=status,
+                            description=description,
+                            date_event_received=now
+                        )
+                        events.append(event)
+                    results.append(result)
 
-            return (results,(StreamConstant.TWILIO_EVENT_STREAM_SMS,events),{})
-    
+                return (results,(StreamConstant.TWILIO_EVENT_STREAM_SMS,events),{})
+        
     @Mock()
     async def send_otp(self, otpModel: OTPModel, body: str, background: bool = False,twilioProfile:str=None):
         twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)
@@ -372,17 +375,13 @@ class SMSService(BaseTwilioCommunication):
     @ProfileEventInterface.EventWrapper
     @BaseTwilioCommunication.TwilioDynamicContext
     def send_custom_sms(self, messageData: dict, subject_id=None, twilio_tracking: list[str] = [],twilioProfile:str=None):
-        if APP_MODE == ApplicationMode.server:
-            return self.__send_sms_async__(messageData, subject_id, twilio_tracking,twilioProfile)
-        return self.__send_sms_sync__(messageData, subject_id, twilio_tracking,twilioProfile)
+        return self.__send_sms__(messageData, subject_id, twilio_tracking,twilioProfile)
 
     @Mock()
     @ProfileEventInterface.EventWrapper
     @BaseTwilioCommunication.TwilioDynamicContext
     def send_template_sms(self, message: dict, subject_id=None, twilio_tracking:list[str] = [],twilioProfile:str=None):
-        if APP_MODE == ApplicationMode.server:
-            return self.__send_sms_async__(message, subject_id, twilio_tracking,twilioProfile)
-        return self.__send_sms_sync__(message, subject_id, twilio_tracking,twilioProfile)
+        return self.__send_sms__(message, subject_id, twilio_tracking,twilioProfile)
     
     def get_message(self, to: str,twilioProfile:str):
         twilioProfile:TwilioAccountMiniService = self.twilioService.MiniServiceStore.get(twilioProfile)

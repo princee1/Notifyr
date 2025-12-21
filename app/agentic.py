@@ -40,7 +40,7 @@ def bootstrap_agent_app():
 
     grpcTask = GrpcTask()    
 
-    def auth_middleware(token: str = Depends(get_bearer_token)):
+    def auth_depends(token: str = Depends(get_bearer_token)):
         agentService.verify_auth(token)
 
     async def on_startup():
@@ -61,10 +61,9 @@ def bootstrap_agent_app():
         await agentService.stop()
         grpcTask.cancel_task()
 
-
     app = FastAPI(on_shutdown=[on_shutdown],
                   on_startup=[on_startup],
-                  dependencies=[Depends(auth_middleware)]
+                  dependencies=[Depends(auth_depends)]
                   )
 
     for r in Routers:

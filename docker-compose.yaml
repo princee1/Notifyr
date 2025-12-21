@@ -172,6 +172,7 @@ services:
   agentic:
     image: notifyr/agentic:community 
     container_name: agentic
+    entrypoint: ["python", "agentic_main.py"]
     build:
       context: ./
       dockerfile: ./docker/Dockerfile.agentic

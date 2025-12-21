@@ -21,6 +21,6 @@ def KnowledgeGraphDBRouter(depends:list=None):
         ...
     
 
-    router = APIRouter(prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
+    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
 
     return router

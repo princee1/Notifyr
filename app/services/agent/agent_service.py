@@ -85,12 +85,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
         self.MiniServiceStore = MiniServiceStore[AiAgentMiniService](self.name)
 
-    def verify_dependency(self):
-        if not self.configService.getenv('AI_ENABLED',False):
-            raise BuildFailureError
-
     def build(self, build_state=...):
-        self._api_keys = {}
         counter = self.StatusCounter(0)
         self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
         return

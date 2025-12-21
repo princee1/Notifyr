@@ -7,7 +7,7 @@
     "description": "Configuration for the high-availability, microservice architecture.",
     "scaling": {
         "app": 1,
-        "worker": 0,
+        "worker": 1,
         "balancer": 1
     },
     "agentic": {
