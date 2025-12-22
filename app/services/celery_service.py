@@ -9,6 +9,7 @@ from app.definition._service import BaseMiniService, BaseMiniServiceManager, Bas
 from app.interface.timers import IntervalInterface
 from app.models.communication_model import BaseProfileModel
 from app.services.config_service import ConfigService
+from app.services.cost_service import CostService
 from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
 from app.tasks import TASK_REGISTRY, celery_app, task_name
@@ -23,13 +24,15 @@ from app.classes.scheduler import schedule
 
 CHANNEL_BUILD_STATE=0
 
+
 @Service(
+    is_manager=True,
     links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
 )
 class CeleryService(BaseMiniServiceManager, IntervalInterface):
     _non_redbeat_task_type = {TaskType.NOW,TaskType.DATETIME,TaskType.TIMEDELTA}
 
-    def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService,rabbitmqService:RabbitMQService):
+    def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService,rabbitmqService:RabbitMQService,costService:CostService):
         BaseService.__init__(self)
         IntervalInterface.__init__(self,False)
 
@@ -37,6 +40,8 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         self.profileService = profileService
         self.redisService = redisService
         self.rabbitmqService = rabbitmqService
+        self.costService = costService
+
         self._workers = {}
 
         self.timeout_count = 0
@@ -45,13 +50,12 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     
     @RunInThreadPool
     def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None,weight:float=-1.0, *args, **kwargs):
-        schedule_id = str(uuid4())
+        
         t_name = scheduler.task_name
         result = TaskExecutionResult(expected_tbd=None,date= str(dt.datetime.now()),offloaded=True,handler='Celery',index=index,result=None,message=f'Task [{t_name}] received successfully',heaviness=str(scheduler._heaviness))
         option = scheduler.task_option.model_dump()
-        
+
         if scheduler.task_type in self._non_redbeat_task_type:
-            
             if scheduler.task_type != TaskType.NOW:
                 option['eta'] = scheduler._schedule._beat_object
                 expected_tbd = naturaldelta(option['eta'])
@@ -59,47 +63,21 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
                 expected_tbd = naturaldelta(option.get('countdown', None))
             
             task_result = TASK_REGISTRY[t_name]['task'].apply_async(**option, args=args, kwargs=kwargs)
-            result.update(task_result.id,'task',expected_tbd)
+            task_id = str(task_result.id).split('@')[1]
+            result.update(task_id,'task',expected_tbd)
         else:
-            entry = RedBeatSchedulerEntry(schedule_id, t_name, scheduler._schedule._beat_object, args=args, kwargs=kwargs, app=celery_app,options=option).save()
+            schedule_id = str(uuid4())
+            redbeat_id= CeleryConstant.REDIS_SCHEDULE_ID_RESOLVER(schedule_id,index)
+            entry = RedBeatSchedulerEntry(redbeat_id, t_name, scheduler._schedule._beat_object, args=args, kwargs=kwargs, app=celery_app,options=option).save()
             time = due_entry_timedelta(entry)
             result.update(schedule_id,'schedule',None if time == None else naturaldelta(time))
 
         return result
 
-    def cancel_task(self, task_id, force=False):
-        result = AsyncResult(task_id, app=celery_app)
 
-        if result.state in ["PENDING", "RECEIVED"]:
-            result.revoke(terminate=False)
-
-        elif result.state in ["STARTED"]:
-            if force:
-                result.revoke(terminate=True, signal="SIGTERM")
-
-    def delete_schedule(self, schedule_id: str):
-        try:
-            schedule_id = f'redbeat:{schedule_id}'
-            entry = RedBeatSchedulerEntry.from_key(schedule_id, app=celery_app)
-            entry.delete()
-        except KeyError:
-            raise CeleryTaskNotFoundError
-
-    def seek_schedule(self, schedule_id: str):
-        try:
-            schedule_id = f'redbeat:{schedule_id}'
-            entry = RedBeatSchedulerEntry.from_key(
-                schedule_id, app=celery_app)
-            return {
-                'total_run_count': entry.total_run_count,
-                'due_at': entry.due_at,
-                'schedule': entry.schedule,
-                'last_run_at': entry.last_run_at
-            }
-        except KeyError:
-            raise CeleryTaskNotFoundError
-
+    @RunInThreadPool
     def seek_result(self, task_id: str):
+        task_id = CeleryConstant.REDIS_TASK_ID_RESOLVER(task_id)
         try:
             result = AsyncResult(task_id, app=celery_app)
             response = {
@@ -113,6 +91,51 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
             return response
         except KeyError:
             raise CeleryTaskNotFoundError
+
+    @RunInThreadPool
+    def cancel_task(self, task_id, force=False):
+        task_id = CeleryConstant.REDIS_TASK_ID_RESOLVER(task_id)
+        result = AsyncResult(task_id, app=celery_app)
+
+        if result.state in ["PENDING", "RECEIVED"]:
+            result.revoke(terminate=False)
+
+        elif result.state in ["STARTED"]:
+            if force:
+                result.revoke(terminate=True, signal="SIGTERM")
+
+    @RunInThreadPool
+    def delete_schedule(self, schedule_id: str,index:int):
+        try:
+            schedule_id = CeleryConstant.REDIS_SCHEDULE_ID_RESOLVER(schedule_id,index)
+            entry = RedBeatSchedulerEntry.from_key(schedule_id, app=celery_app)
+            entry.delete()
+        except KeyError:
+            raise CeleryTaskNotFoundError
+        
+    @RunInThreadPool
+    def re_schedule(self, schedule_id: str,index:int):
+        try:
+            schedule_id = CeleryConstant.REDIS_SCHEDULE_ID_RESOLVER(schedule_id,index)
+            entry = RedBeatSchedulerEntry.from_key(schedule_id, app=celery_app)
+            entry.reschedule()
+        except KeyError:
+            raise CeleryTaskNotFoundError
+
+    @RunInThreadPool
+    def seek_schedule(self, schedule_id: str,index:int):
+        try:
+            schedule_id = CeleryConstant.REDIS_SCHEDULE_ID_RESOLVER(schedule_id,index)
+            entry = RedBeatSchedulerEntry.from_key(
+                schedule_id, app=celery_app)
+            return {
+                'total_run_count': entry.total_run_count,
+                'due_at': entry.due_at,
+                'schedule': entry.schedule,
+                'last_run_at': entry.last_run_at
+            }
+        except KeyError:
+            raise CeleryTaskNotFoundError
     
     def verify_dependency(self):
         self._builded = True
@@ -120,13 +143,13 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         if self.configService.CELERY_WORKERS_EXPECTED < 1:
             raise BuildOkError('No workers expected')
         
-        if self.configService.CELERY_BROKER not in ['rabbitmq','redis']:
+        if self.configService.BROKER_PROVIDER not in ['rabbitmq','redis']:
             raise BuildOkError('')
         
-        if self.configService.CELERY_BROKER == 'redis' and self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
+        if self.configService.BROKER_PROVIDER == 'redis' and self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
             raise BuildOkError('')
 
-        if self.configService.CELERY_BROKER == 'rabbitmq' and self.rabbitmqService.service_status == ServiceStatus.NOT_AVAILABLE:
+        if self.configService.BROKER_PROVIDER == 'rabbitmq' and self.rabbitmqService.service_status == ServiceStatus.NOT_AVAILABLE:
             raise BuildOkError('')
          
     def build(self,build_state=-1):
@@ -245,7 +268,7 @@ class ChannelMiniService(BaseMiniService):
         
         scheduler:SchedulerModel = data.get('scheduler',None)
         taskManager = data.get('taskManager',None)
-        if self.configService.CELERY_BROKER == 'rabbitmq':
+        if self.configService.BROKER_PROVIDER == 'rabbitmq':
             add_warnings(scheduler,{'test':'rabbitmq'})
         else:
             add_warnings(scheduler,{'test':'redis'})
@@ -306,7 +329,7 @@ class ChannelMiniService(BaseMiniService):
     @RunInThreadPool
     async def delete_queue(self):
         await self.pause_worker()
-        if self.configService.CELERY_BROKER == 'redis':
+        if self.configService.BROKER_PROVIDER == 'redis':
             return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
         else:
             with celery_app.connection_or_acquire() as conn:
@@ -320,4 +343,6 @@ class ChannelMiniService(BaseMiniService):
 
     @property
     def queue(self):
+        if self.configService.BROKER_PROVIDER == 'redis':
+            return CeleryConstant.REDIS_QUEUE_NAME_RESOLVER(self.depService.queue_name)
         return self.depService.queue_name

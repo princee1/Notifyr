@@ -79,8 +79,9 @@ google-crc32c==1.6.0
 google-resumable-media==2.7.2
 googleapis-common-protos==1.68.0
 greenlet==3.2.4
-grpcio==1.70.0
+grpcio==1.76.0
 grpcio-status==1.70.0
+grpcio-tools==1.76.0
 h11==0.16.0
 h2==3.2.0
 hpack==3.0.0
@@ -157,7 +158,7 @@ prometheus_client==0.21.1
 prompt-toolkit==3.0.43
 propcache==0.3.0
 proto-plus==1.26.0
-protobuf==5.29.3
+protobuf==6.33.2
 psutil==7.0.0
 psycopg2-binary==2.9.10
 pure_eval==0.2.3

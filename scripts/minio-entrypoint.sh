@@ -6,7 +6,7 @@ unset MINIO_ROOT_PASSWORD
 
 # === Redis event configuration ===
 export MINIO_NOTIFY_REDIS_ENABLE_NOTIFYR="${NOTIFY_REDIS_ENABLE:-on}"
-export MINIO_NOTIFY_REDIS_ADDRESS_NOTIFYR="${NOTIFY_REDIS_ADDRESS:-redis}:6379"
+export MINIO_NOTIFY_REDIS_ADDRESS_NOTIFYR="redis:6379"
 export MINIO_NOTIFY_REDIS_KEY_NOTIFYR="${NOTIFY_REDIS_KEY:-s3_object_events}"
 export MINIO_NOTIFY_REDIS_QUEUE_LIMIT_NOTIFYR="${NOTIFY_REDIS_QUEUE_LIMIT:-1000}"
 export MINIO_NOTIFY_REDIS_FORMAT="namespace"
@@ -17,7 +17,7 @@ CONFIG_DIR=/run/secrets
 minio server /data --config-dir $CONFIG_DIR --console-address ":9001" &
 MINIO_PID=$!
 
-sleep 9
+sleep 15
 echo "Minio is UP!"
 
 VAULT_ACCESS_KEY=vaultadmin-minio
@@ -48,6 +48,11 @@ if mc admin user info notifyr "$VAULT_ACCESS_KEY" >/dev/null 2>&1; then
     echo "User '$VAULT_ACCESS_KEY' already exists. Skipping creation."
 else
     echo "User '$VAULT_ACCESS_KEY' does NOT exist. Creating..."
+    mc admin policy create notifyr app-access /app/policy/app-access.json || true
+    mc admin policy create notifyr dmz-access /app/policy/dmz-access.json || true
+
+    #mc admin policy create notifyr vault-admin /app/policy/vault-admin.json
+
     mc admin user add notifyr "$VAULT_ACCESS_KEY" "$VAULT_SECRET_KEY"
     mc admin policy attach notifyr consoleAdmin --user "$VAULT_ACCESS_KEY"
     #mc admin policy attach notifyr vault-admin --user "$VAULT_ACCESS_KEY"

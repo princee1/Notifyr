@@ -100,7 +100,4 @@ RUN cat <<EOF > ./policy/vault-admin.json
 }
 EOF
 
-COPY --chmod=700 ./scripts/minio-init.sh .
-RUN ./minio-init.sh
-
 COPY --chmod=700 ./scripts/minio-entrypoint.sh .

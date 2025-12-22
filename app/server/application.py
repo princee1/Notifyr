@@ -8,17 +8,17 @@ from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
 from app.interface.timers import  SchedulerInterface
 from app.ressources import *
-from app.services.assets_service import AssetService
-from app.services.object_service import ObjectS3Service
+from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
+from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.task_service import TaskService
-from app.utils.prettyprint import PrettyPrinter_
 from app.services.config_service import ConfigService
+from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Request, Response, FastAPI
 from slowapi.middleware import SlowAPIMiddleware
 from typing import Callable,Literal
@@ -42,7 +42,11 @@ from app.definition._service import PROCESS_SERVICE_REPORT
 from app.models.communication_model import *
 from app.models.webhook_model import *
 
+from app.utils.globals import CAPABILITIES
 from app.classes.profiles import ProfilModelValues
+
+if CAPABILITIES['object']:
+    from app.services.object_service import ObjectS3Service
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 
@@ -125,9 +129,6 @@ class Application(EventInterface):
         else:
             uvicorn.run(self.app, host=self.host, port=self.port, loop="asyncio",log_level=self.log_level)
 
-    def stop_server(self):
-        pass
-
     def _mount_directories(self,ress_type:type[BaseHTTPRessource]):
         meta:ClassMetaData = ress_type.meta
         for mount in meta['mount']:
@@ -187,14 +188,17 @@ class Application(EventInterface):
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
         # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
         # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
-
-        assetService:AssetService = Get(AssetService)
+        remoteAgentService = Get(RemoteAgentService)
+        remoteAgentService.register_channel()
         
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
         await redisService.close_connections()
+
+        remoteAgentService = Get(RemoteAgentService)
+        await remoteAgentService.disconnect_channel()
 
     @register_hook('startup',)
     async def start_leader_task_election(self):
@@ -206,10 +210,9 @@ class Application(EventInterface):
         taskService:TaskService =  Get(TaskService)
         taskService.shutdown()
 
-
     @register_hook('startup',)
     def start_tickers(self):
-        vaultService: HCVaultService = Get(HCVaultService) 
+        vaultService: VaultService = Get(VaultService) 
         vaultService.start()
 
         celery_service: CeleryService = Get(CeleryService)
@@ -221,23 +224,27 @@ class Application(EventInterface):
         mongooseService = Get(MongooseService)
         mongooseService.start()
 
-        amazons3Service = Get(ObjectS3Service)
-        amazons3Service.start()
+        if CAPABILITIES['object']:
+            objectS3Service = Get(ObjectS3Service)
+            objectS3Service.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
         tortoiseConnService = Get(TortoiseConnectionService)
         celery_service: CeleryService = Get(CeleryService)
         mongooseService = Get(MongooseService)
-        amazons3Service = Get(ObjectS3Service)
-        vaultService = Get(HCVaultService)
+        vaultService = Get(VaultService)
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService,amazons3Service]
+        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService]
 
         for s in services:
             s.shutdown()
         
         celery_service.stop_interval()
+
+        if CAPABILITIES['object']:
+            objectS3Service = Get(ObjectS3Service)
+            objectS3Service.shutdown()
 
     @register_hook('startup')
     async def register_tortoise(self):
@@ -282,16 +289,20 @@ class Application(EventInterface):
     async def revoke_dynamic_lease(self):
         mongooseService: MongooseService = Get(MongooseService)
         tortoiseConnService = Get(TortoiseConnectionService)
-        awsS3Service = Get(ObjectS3Service)
         redisService = Get(RedisService)
-        vaultService = Get(HCVaultService)
+        vaultService = Get(VaultService)
+        rabbitmqService = Get(RabbitMQService)
 
-        RunInThreadPool(mongooseService.revoke_lease)()
-        RunInThreadPool(tortoiseConnService.revoke_lease)()
-        RunInThreadPool(awsS3Service.revoke_lease)()
-        RunInThreadPool(redisService.revoke_lease)()
-        RunInThreadPool(vaultService.revoke_auth_token)()
+        await RunInThreadPool(rabbitmqService.revoke_lease)()
+        await RunInThreadPool(mongooseService.revoke_lease)()
+        await RunInThreadPool(tortoiseConnService.revoke_lease)()
+        await RunInThreadPool(redisService.revoke_lease)()
 
+        if CAPABILITIES['object']:
+            objectS3Service = Get(ObjectS3Service)
+            await RunInThreadPool(objectS3Service.revoke_lease)()
+            
+        await RunInThreadPool(vaultService.revoke_auth_token)()
 
     @property
     def shutdown_hooks(self):

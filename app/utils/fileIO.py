@@ -4,9 +4,7 @@ import datetime
 from enum import Enum
 import os
 from pathlib import PurePath
-import sys
 import json
-import pickle
 import glob
 from typing import Any, Literal, overload
 # BUG file name must be a non null string
@@ -157,6 +155,9 @@ class File:
 
     def export(self)->bytes:
         ...
+    
+    def __str__(self):
+        return str(self.data)
     
 
 

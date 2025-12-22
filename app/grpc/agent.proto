@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package agent;
+
+service Agent {
+
+    //Unary
+    rpc Prompt(PromptRequest) returns (PromptAnswer);
+
+    //ServerSide Stream
+    rpc PromptStream(PromptRequest) returns (stream PromptAnswer);
+    
+    //ClientSide Stream
+    rpc StreamPrompt(stream PromptRequest) returns (PromptAnswer);
+
+    //Bi-Directional Stream
+    rpc S2SPrompt(stream PromptRequest) returns (stream PromptAnswer);
+
+}
+
+message PromptRequest {
+    string agent = 1;
+    string prompt = 2;
+    float temperature = 3;
+    string tool = 4;
+}
+
+message PromptAnswer {
+    int64 input_token = 1;
+    int64 output_token = 2;
+    string answer = 3;
+}
+

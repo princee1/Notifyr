@@ -1,11 +1,19 @@
-from app.utils.globals import APP_MODE
-from app.container import build_container,Get
+from app.utils.globals import APP_MODE,CAPABILITIES
 
-build_container()
+if CAPABILITIES['agentic']:
+    from app.container import Get, build_container
+    build_container()
 
-from app.callback import Callbacks_Stream,Callbacks_Sub
-from app.services.database.redis_service import RedisService
-from fastapi import FastAPI,Depends
-import app.routers
+    from app.agentic import bootstrap_agent_app
+    app = bootstrap_agent_app()
+    
+    if __name__ == "__main__":
+        import uvicorn
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    else:
+        ...
+
+else:
+    ...
 
 

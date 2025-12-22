@@ -12,7 +12,7 @@ from app.errors.service_error import BuildFailureError
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.file.base_fileretriever_service import BaseFileRetrieverService
 from app.services.file.file_service import FileService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.constant import MinioConstant, VaultTTLSyncConstant
 from app.utils.tools import RunInThreadPool
 from .config_service import  ConfigService
@@ -29,7 +29,7 @@ MINIO_OBJECT_DESTROY_STATE = 1001
 @Service(abstract_service_register=[BaseFileRetrieverService])
 class ObjectS3Service(TempCredentialsDatabaseService):
     
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService) -> None:
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService) -> None:
         TempCredentialsDatabaseService.__init__(self,configService,fileService,vaultService,VaultTTLSyncConstant.MINIO_TTL)
         
         self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
@@ -40,13 +40,13 @@ class ObjectS3Service(TempCredentialsDatabaseService):
             self.client_init()
             super().build()
         except ServerError as e:
-            raise BuildFailureError(f'Failed to build AmazonS3Service due to server error: {str(e)}') from e
+            raise BuildFailureError(f'Failed to build objectS3Service due to server error: {str(e)}') from e
         except InvalidResponseError as e:
-            raise BuildFailureError(f'Failed to build AmazonS3Service due to invalid response: {str(e)}') from e
+            raise BuildFailureError(f'Failed to build objectS3Service due to invalid response: {str(e)}') from e
         except S3Error as e:
-            raise BuildFailureError(f'Failed to build AmazonS3Service: {str(e)}') from e
+            raise BuildFailureError(f'Failed to build objectS3Service: {str(e)}') from e
         except MinioAdminException as e:
-            raise BuildFailureError(f'Failed to build AmazonS3Service due to Minio Admin error: {str(e)}') from e
+            raise BuildFailureError(f'Failed to build objectS3Service due to Minio Admin error: {str(e)}') from e
         
         
     async def _creds_rotator(self):

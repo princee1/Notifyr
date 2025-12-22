@@ -1,9 +1,6 @@
 import asyncio
 from random import randint, random
 from typing import Optional
-
-from pymongo import MongoClient
-from redis import Redis
 from app.classes.celery import SchedulerModel, TaskType
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service, ServiceStatus
 from app.errors.aps_error import APSJobDoesNotExists
@@ -12,11 +9,12 @@ from apscheduler.jobstores.mongodb import MongoDBJobStore
 from app.errors.service_error import BuildOkError, NotBuildedError, ServiceNotAvailableError
 from app.interface.timers import SchedulerInterface,MemoryJobStore
 from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
-from app.services.secret_service import HCVaultService
-from app.utils.constant import MongooseDBConstant, RedisConstant
+from app.services.vault_service import VaultService
+from app.utils.constant import MongooseDBConstant, RedisConstant, CeleryConstant
 from app.utils.tools import RunInThreadPool
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers import (
@@ -24,22 +22,24 @@ from apscheduler.schedulers import (
     SchedulerNotRunningError,
 )
 
+CeleryConstant.BACKEND_KEY_PREFIX
+
 
 # configuration
-LEADER_LOCK_KEY = "apscheduler:leader_lock"
+LEADER_LOCK_KEY = f"apscheduler@leader_lock"
 LEADER_LOCK_TTL = 600
 LEADER_LOCK_TTL_LOWER_BOUND = int(LEADER_LOCK_TTL * 0.50)
 LEADER_LOCK_TTL_UPPER_BOUND = int(LEADER_LOCK_TTL * 5.50)
 
 LEADER_RENEW_INTERVAL = 3.0 
-SCHEDULER_JOBSTORE_PREFIX = "apscheduler:"
+SCHEDULER_JOBSTORE_PREFIX = f"{CeleryConstant.BACKEND_KEY_PREFIX}apscheduler"
 
 @Service()
 class TaskService(BaseService,SchedulerInterface):
     _schedule_type_supported = {TaskType.DATETIME,TaskType.INTERVAL,TaskType.TIMEDELTA,TaskType.CRONTAB}
 
 
-    def __init__(self, configService: ConfigService,vaultService:HCVaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService):
+    def __init__(self, configService: ConfigService,vaultService:VaultService,processWorkerService:UvicornWorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService,costService:CostService):
         super().__init__()
         self.configService = configService
         self.uvicornWorkerService = processWorkerService
@@ -47,6 +47,7 @@ class TaskService(BaseService,SchedulerInterface):
         self.redisService = redisService
         self.mongooseService = mongooseService
         self.loggerService = loggerService
+        self.costService = costService
         
         self._leader = False
         self._leader_task: Optional[asyncio.Task] = None
@@ -77,17 +78,18 @@ class TaskService(BaseService,SchedulerInterface):
         if self._builded:
             self.shutdown(False)
         
-        self.redis_client = self.redisService.db['celery']
+        redis_client = self.redisService.db['celery']
+        self.redis_client = self.redisService.db['events']
         self.mongo_client = self.mongooseService.sync_client
         jobstores = {
             "redis": RedisJobStore(
-                host=self.redis_client.connection_pool.connection_kwargs.get("host", "localhost"),
-                port=self.redis_client.connection_pool.connection_kwargs.get("port", 6379),
+                host=redis_client.connection_pool.connection_kwargs.get("host", "localhost"),
+                port=redis_client.connection_pool.connection_kwargs.get("port", 6379),
                 db=RedisConstant.CELERY_DB,
-                jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}jobs",
-                run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}run_times",
-                username=self.redisService.db_user,
-                password=self.redisService.db_password
+                jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}/jobs@",
+                run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}:run_times",
+                username=redis_client.connection_pool.connection_kwargs.get('username'),
+                password=redis_client.connection_pool.connection_kwargs.get('password')
                 ),
             'memory':MemoryJobStore(),
             'mongodb':MongoDBJobStore(
@@ -147,7 +149,6 @@ class TaskService(BaseService,SchedulerInterface):
                     if val is None:
                         print(f"[{self.uvicornWorkerService.INSTANCE_ID}] Somehow the no one has the lock... Attempting right away")
                         continue
-                    val = val.decode()
                     if val != self.uvicornWorkerService.INSTANCE_ID:
                         # someone else took lock
                         if self._leader:
@@ -193,9 +194,17 @@ class TaskService(BaseService,SchedulerInterface):
     @RunInThreadPool
     def cancel_job(self,job_id:str=None):
         if job_id == None:
-            self._scheduler.remove_all_jobs(self.jobstore)
+            return self._scheduler.remove_all_jobs(self.jobstore)
         else:
             try:
-                self._scheduler.remove_job(job_id,self.jobstore)
+                return self._scheduler.remove_job(job_id,self.jobstore)
             except JobLookupError as e:
                 raise APSJobDoesNotExists(job_id,*e.args)
+            
+    @RunInThreadPool
+    def pause_job(self, job_id):
+        return SchedulerInterface.pause_job(self,job_id,self.jobstore)
+
+    @RunInThreadPool
+    def resume_job(self,job_id):
+        return SchedulerInterface.resume_job(self,job_id,self.jobstore)

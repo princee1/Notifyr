@@ -14,7 +14,7 @@ from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, C
 from app.services.admin_service import AdminService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.profile_service import ProfileService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.setting_service import SettingService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
@@ -144,7 +144,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         self.adminService = adminService
 
         self.settingService = Get(SettingService)
-        self.vaultService = Get(HCVaultService)
+        self.vaultService = Get(VaultService)
 
         self.key = self.vaultService.CLIENT_PASSWORD_HASH_KEY
 
@@ -423,11 +423,11 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully un-blacklisted", "un_blacklist": blacklist})
 
-    @PingService([HCVaultService])
+    @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseServiceLock(SettingService,lockType='reader')
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(VaultService,lockType='reader',check_status=False)
     @UseServiceLock(JWTAuthService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
@@ -448,10 +448,10 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
                                                                      "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},
                                                                      })
     
-    @PingService([HCVaultService])
+    @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
     @UseServiceLock(SettingService,lockType='reader')
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(VaultService,lockType='reader',check_status=False)
     @UseServiceLock(JWTAuthService,lockType='writer')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)

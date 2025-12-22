@@ -10,7 +10,7 @@ from app.errors.service_error import BuildFailureError, ServiceTemporaryNotAvail
 from app.interface.timers import IntervalParams, SchedulerInterface
 from app.services.config_service import ConfigService
 from app.services.file.file_service import FileService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 
 
 @AbstractServiceClass()
@@ -23,7 +23,7 @@ class DatabaseService(BaseService):
 @AbstractServiceClass()
 class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
 
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:HCVaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
         DatabaseService.__init__(self,configService,fileService)
         SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
         self.vaultService = vaultService
@@ -113,3 +113,14 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
             return True
         
         return  time.time() - self.last_rotated < self.auth_ttl    
+
+
+class BrokerService:
+    
+    def compute_broker_url(self)-> str:
+        pass
+
+class ResultBackendService:
+    
+    def compute_backend_url(self)-> str:
+        pass

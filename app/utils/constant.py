@@ -167,7 +167,6 @@ class MongooseDBConstant:
     WORKFLOW_COLLECTION ='workflow'
     EDGE_COLLECTION='edge'
     NODE_COLLECTION='node'
-    SETTING_COLLECTION = 'setting'
     TASKS_COLLECTION = 'tasks'
 
     DATABASE_NAME = 'notifyr'
@@ -256,13 +255,14 @@ class VaultConstant:
     CHAT_KEY='chat-key'
     S3_REST_KEY='s3-rest-key'
 
-    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis']
+    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis','redis-celery-broker','redis-celery-backend']
     MONGO_ROLE='mongo'
     POSTGRES_ROLE='postgres'
     REDIS_ROLE='redis'
+    CELERY_BROKER_ROLE='redis-celery-broker'
+    CELERY_BACKEND_ROLE='redis-celery-backend'
 
     NotifyrMinioRole = Literal['static','sts']
-
 
     NOTIFYR_SECRETS_MOUNT_POINT = 'notifyr-secrets'
     NOTIFYR_TRANSIT_MOUNT_POINT = 'notifyr-transit'
@@ -373,6 +373,36 @@ class LLMProviderConstant:
     GROQ='groq'
 class CeleryConstant:
     REFRESH_PROFILE_WORKER_STATE_COMMAND='refresh_profile'
+    BACKEND_KEY_PREFIX="notifyr/celery/backend/"
+    BROKER_KEY_PREFIX="notifyr/celery/broker/"
+
+    @staticmethod
+    def REDIS_QUEUE_NAME_RESOLVER(queue:str): return f"{CeleryConstant.BROKER_KEY_PREFIX}q@{queue}"
+
+    @staticmethod
+    def REDIS_TASK_ID_RESOLVER(task_id:str): return f"{CeleryConstant.BACKEND_KEY_PREFIX}task@{task_id}"
+
+    @staticmethod
+    def REDIS_BKG_TASK_ID_RESOLVER(task_id:str): return f"{CeleryConstant.BACKEND_KEY_PREFIX}task-bkg@{task_id}"
+
+    @staticmethod
+    def REDIS_SCHEDULE_ID_RESOLVER(schedule_id:str,index:int): return f"{CeleryConstant.BACKEND_KEY_PREFIX}schedule@{schedule_id}:{index}"
+
+    @staticmethod
+    def REDIS_APS_ID_RESOLVER(scheduler_id:str,index:int):return f"{CeleryConstant.BACKEND_KEY_PREFIX}apsscheduler@{scheduler_id}:{index}"
+
+class APSchedulerConstant:
+
+    @staticmethod
+    def REDIS_APS_ID_RESOLVER(scheduler_id:str,index:int):return f"{scheduler_id}:{index}"
+
+
+class MonitorConstant:
+    CONNECTION_COUNT = 0
+    CONNECTION_TOTAL = 1
+    BACKGROUND_TASK_COUNT = 2
+    ROUTE_TASK_COUNT = 3
+    REQUEST_LATENCY = 4
 
 class RabbitMQConstant:
-    CELERY_VIRTUAL_HOST='celery'
+    NOTIFYR_VIRTUAL_HOST='notifyr'

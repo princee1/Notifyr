@@ -4,15 +4,15 @@ from app.definition._service import LinkDep, Service
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.constant import VaultConstant, VaultTTLSyncConstant
 
 
-@Service(links=[LinkDep(HCVaultService,to_build=True,to_destroy=True)])
+@Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
     DATABASE_NAME = 'notifyr'
 
-    def __init__(self, configService: ConfigService,vaultService:HCVaultService):
+    def __init__(self, configService: ConfigService,vaultService:VaultService):
         super().__init__(configService, None,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
 
     def build(self,build_state=-1):
@@ -26,6 +26,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 port=5432
             )
             super().build()
+            self.generate_creds()
         except Exception as e:
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
 

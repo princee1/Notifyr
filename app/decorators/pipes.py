@@ -19,14 +19,12 @@ from app.models.email_model import BaseEmailSchedulerModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
-from app.services.assets_service import AssetService, AssetType, AssetTypeNotAllowedError, RouteAssetType, DIRECTORY_SEPARATOR
 from app.services.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file.file_service import FileService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
-from app.services.twilio_service import TwilioAccountMiniService, TwilioService
 from app.tasks import TASK_REGISTRY, task_name
 from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of, parseToBool
@@ -34,6 +32,7 @@ from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
 from app.services.object_service import Object,DeleteError,ObjectWriteResult
+from app.utils.globals import CAPABILITIES
 
 async def to_otp_path(template:str):
     template = "otp/" + template
@@ -54,51 +53,220 @@ class RegisterSchedulerPipe(Pipe):
             taskManager.meta['algorithm'] = self.algorithm
         return {}
 
-class TemplateParamsPipe(Pipe):
-    
-    asset_routes_key='asset_routes'
+if CAPABILITIES['object']:
+    from app.services.assets_service import AssetService, AssetType, AssetTypeNotAllowedError, RouteAssetType, DIRECTORY_SEPARATOR
 
-    def __init__(self,template_type:RouteAssetType=None,extension:str=None,accept_none=False,inject_asset_routes=False):
-        super().__init__(True)
-        self.assetService= Get(AssetService)
-        self.configService = Get(ConfigService)
-        self.template_type = template_type
-        self.extension = extension
-        self.accept_none = accept_none
-        self.inject_asset_routes = inject_asset_routes
+    class TemplateParamsPipe(Pipe):
+        
+        asset_routes_key='asset_routes'
 
-    async def pipe(self,template:str):
-            if template == '' and self.accept_none:
+        def __init__(self,template_type:RouteAssetType=None,extension:str=None,accept_none=False,inject_asset_routes=False):
+            super().__init__(True)
+            self.assetService= Get(AssetService)
+            self.configService = Get(ConfigService)
+            self.template_type = template_type
+            self.extension = extension
+            self.accept_none = accept_none
+            self.inject_asset_routes = inject_asset_routes
+
+        async def pipe(self,template:str):
+                if template == '' and self.accept_none:
+                    return {'template':template}
+                
+                if self.extension:
+                    template+="."+self.extension
+                
+                if self.template_type:
+                    asset_routes = self.assetService.exportRouteName(self.template_type)
+                    template = self.assetService.asset_rel_path(template,self.template_type)
+                else: 
+                    asset_routes = self.assetService.get_assets_dict_by_path(template)
+                            
+                if template not in asset_routes:
+                    raise TemplateNotFoundError(template)
+
+                if self.inject_asset_routes:
+                    return asset_routes
+                
                 return {'template':template}
             
-            if self.extension:
-                template+="."+self.extension
-            
-            if self.template_type:
-                asset_routes = self.assetService.exportRouteName(self.template_type)
-                template = self.assetService.asset_rel_path(template,self.template_type)
-            else: 
-                asset_routes = self.assetService.get_assets_dict_by_path(template)
-                        
-            if template not in asset_routes:
-                raise TemplateNotFoundError(template)
+    class TemplateSignatureQueryPipe(TemplateParamsPipe):
+        def __init__(self):
+            super().__init__('email', 'html', False)
 
-            if self.inject_asset_routes:
-                return asset_routes
-            
-            return {'template':template}
-        
-class TemplateSignatureQueryPipe(TemplateParamsPipe):
-    def __init__(self):
-        super().__init__('email', 'html', False)
-
-    async def pipe(self,scheduler: BaseEmailSchedulerModel):
-        if scheduler.signature == None:
+        async def pipe(self,scheduler: BaseEmailSchedulerModel):
+            if scheduler.signature == None:
+                return {}
+            val:dict =  await super().pipe(scheduler.signature.template)
+            scheduler.signature.template = val['template']
             return {}
-        val:dict =  await super().pipe(scheduler.signature.template)
-        scheduler.signature.template = val['template']
-        return {}
+            
+    class InjectTemplateInterface:
+
+
+        def __init__(self,assetService:AssetService,template_type:RouteAssetType,will_validate:bool):
+            self.assetService = assetService
+            self.template_type = template_type
+            self.will_validate= will_validate
+
+
+        def _inject_template(self,template:str):
+            assets = getattr(self.assetService,self.template_type,None)
+            if assets == None:
+                raise TemplateAssetError
+            
+            return assets[template]
+
+    class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterface):
         
+        SCHEDULER_TEMPLATE_ERROR_KEY = 'template'
+
+        def __init__(self,template_type:RouteAssetType ,data_key:str,index_key:str='', will_validate:bool = True,split:str='.'):
+            super().__init__(True)
+            PointerIterator.__init__(self,data_key,split)
+            self.template_type=template_type
+            self.will_validate= will_validate
+            index_key = 'index' if not index_key else index_key+'.index'
+            InjectTemplateInterface.__init__(self,Get(AssetService),template_type,will_validate)
+            self.index_ptr = PointerIterator(index_key,split)
+            
+        async def pipe(self,template:str,scheduler:SchedulerModel)->Template:
+
+                template = self._inject_template(template)
+                filtered_content =[]
+
+                if self.will_validate:
+                    for content in scheduler.content:
+                        ptr = self.ptr(content)
+                        idx_ptr = self.index_ptr.ptr(content)  
+                        if ptr == None:
+                            ...
+
+                        val = ptr.get_val()
+                        index = idx_ptr.get_val()
+                        if val == None:
+                            ...
+                        
+                        try:
+                            val = template.validate(val)
+                            if scheduler.filter_error:
+                                filtered_content.append(content)
+                        except Exception as e:
+                            if not scheduler.filter_error:
+                                raise e
+                            else:
+                                scheduler._errors[index] = {
+                                    'message':'Error while creating the template',
+                                    'error':exception_to_json(e),
+                                    'index':index
+                                }
+                                
+                    if scheduler.filter_error:
+                        scheduler.content = filtered_content
+                                    
+                return {'template':template,'scheduler':scheduler}
+        
+    class FilterAllowedSchemaPipe(Pipe):
+
+        @InjectInMethod()
+        def __init__(self,assetService:AssetService):
+            super().__init__(False)
+            self.assetService = assetService
+        
+        def pipe(self,result:dict[str,dict],authPermission:AuthPermission):
+            if authPermission == None:
+                return result
+            temp_res = {}
+            for path,schema in result.items():
+                try:
+                    self.assetService._raw_verify_asset_permission(authPermission,path)
+                    temp_res[path]=schema
+                except:
+                    continue
+            
+            return temp_res
+
+    class ObjectS3OperationResponsePipe(Pipe):
+            
+        def __init__(self,):
+            super().__init__(False)
+
+        def pipe(self,result:dict):
+            meta:Object|list[Object]|None = result.get('meta',[]) 
+            more_meta= type(meta) == list
+            write_result:ObjectWriteResult = result.get('result',None)
+
+            errors = [{
+                    "object_name": getattr(e, "object_name", None),
+                    "version_id": getattr(e, "version_id", None),
+                    "code": getattr(e, "code", None),
+                    "message": getattr(e, "message", None)} for e in result.get('errors',[]) ]
+            
+            write_result = {"bucket_name": write_result.bucket_name,
+                    "object_name": write_result.object_name,
+                    "version_id": write_result.version_id,
+                    "etag": write_result.etag,
+                    "last_modified":write_result.last_modified.isoformat(),
+                    "location":write_result.location,
+                    "http_headers": write_result.http_headers} if  write_result != None else {}
+
+            
+            if meta:
+                if not more_meta:   
+                    meta=[meta]
+
+                def parse_meta(m):
+                    m:dict = asdict(m)
+                    m['is_latest'] = parseToBool(m['is_latest'])
+                    m['last_modified'] = m['last_modified'].isoformat()
+                    if 'metadata' in m:
+                        m['metadata'] = dict(m['metadata'])
+                    m.pop('storage_class',None), m.pop('owner_id',None), m.pop('owner_name',None), m.pop('is_dir',None)
+                    return m
+                meta = [parse_meta(m) for m in meta]
+
+                if not more_meta:
+                    meta=meta[0]
+                
+            return {
+                'meta':meta,
+                'errors':errors,
+                'result':write_result,
+                'content': result.get('content',"")
+            }
+
+    class ValidFreeInputTemplatePipe(Pipe):
+
+        allowed_assets = tuple(AssetType._value2member_map_.keys())
+        allowed_extension = set(['.'+k for k in  Extension._value2member_map_.keys()])
+
+        def __init__(self, accept_empty=True,accept_dir=True,allowed_extension=None,allowed_assets=None):
+            super().__init__(True)
+            self.fileService = Get(FileService)
+            self.accept_empty=accept_empty
+            self.accept_dir = accept_dir
+            self._allowed_extension = self.allowed_extension if allowed_extension == None else allowed_extension
+            self._allowed_assets = self.allowed_assets if allowed_assets == None else allowed_assets
+
+
+        def pipe (self,template:str,objectsSearch:ObjectsSearch):
+            if template != '': # if the template input is not empty
+                if not template.startswith(self._allowed_assets):
+                    raise AssetTypeNotAllowedError
+                if not self.fileService.is_file(template,False,self._allowed_extension) and not self.accept_dir:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'Directory Not allowed')
+                
+                objectsSearch.is_file = self.fileService.soft_is_file(template)
+                if not objectsSearch.is_file and objectsSearch.version_id:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'There is no version on prefix')
+
+            else: # the template is empty
+                if not self.accept_empty:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'Object name cannot be empty')
+                objectsSearch.is_file = False
+        
+            return {}
+
 class CeleryTaskPipe(Pipe):
     
     def __init__(self):
@@ -142,62 +310,74 @@ class RelayPipe(Pipe):
             ...
 
         return {'relay':relay}
-    
-class TwilioPhoneNumberPipe(Pipe):
 
-    PhoneNumberChoice = Literal['default','otp','chat','auto-mess']
+if  CAPABILITIES['twilio']: 
+    from app.services.twilio_service import TwilioAccountMiniService, TwilioService
+    class TwilioPhoneNumberPipe(Pipe):
 
-    def __init__(self, phone_number_name:PhoneNumberChoice ='default',fallback=False):
-        super().__init__(True)
-        self.twilioService:TwilioService = Get(TwilioService)
-        self.configService = Get(ConfigService) 
-        if phone_number_name not in get_args(self.PhoneNumberChoice):
-            raise ValueError('Phone Number name not valid')
-        
-        self.fallback= fallback
-        self.phone_number_name = phone_number_name
-    
-    def pipe(self,twilio:TwilioAccountMiniService,scheduler:SMSCustomSchedulerModel | CallCustomSchedulerModel =None,otpModel:OTPModel=None,):
+        PhoneNumberChoice = Literal['default','otp','chat','auto-mess']
 
-        if scheduler!= None:
-            for content in scheduler.content:
-                content._from = self.setFrom_(twilio)
-                if not content.sender_type == 'raw':
-                    content.to = [self.twilioService.parse_to_phone_format(to) for to in content.to]
-            return {'scheduler':scheduler}
-
-        if otpModel != None:
-            otpModel.to = self.twilioService.parse_to_phone_format(otpModel.to)
-            otpModel._from = self.setFrom_(twilio)
-            return {'otpModel':otpModel}
-        
-        return {}
-
-    def setFrom_(self,twilio:TwilioAccountMiniService):
-        pn=None
-        match self.phone_number_name:
-            case 'default':
-                return twilio.depService.model.from_number  
+        def __init__(self, phone_number_name:PhoneNumberChoice ='default',fallback=False):
+            super().__init__(True)
+            self.twilioService:TwilioService = Get(TwilioService)
+            self.configService = Get(ConfigService) 
+            if phone_number_name not in get_args(self.PhoneNumberChoice):
+                raise ValueError('Phone Number name not valid')
             
-            case 'otp':
-                pn= twilio.depService.model.twilio_otp_number
-            
-            case 'chat':
-                pn= twilio.depService.model.twilio_chat_number
-            
-            case 'auto-mess':
-                pn= twilio.depService.model.twilio_automated_response_number
-
-            case _:
-                ...
-
-        if pn == None:
-            if self.fallback:
-                return twilio.depService.model.from_number
-
-            raise ServiceNotAvailableError(f'The {twilio.miniService_id} profile does not have {self.phone_number_name} set')
+            self.fallback= fallback
+            self.phone_number_name = phone_number_name
         
-        return pn
+        def pipe(self,twilio:TwilioAccountMiniService,scheduler:SMSCustomSchedulerModel | CallCustomSchedulerModel =None,otpModel:OTPModel=None,):
+
+            if scheduler!= None:
+                for content in scheduler.content:
+                    content._from = self.setFrom_(twilio)
+                    if not content.sender_type == 'raw':
+                        content.to = [self.twilioService.parse_to_phone_format(to) for to in content.to]
+                return {'scheduler':scheduler}
+
+            if otpModel != None:
+                otpModel.to = self.twilioService.parse_to_phone_format(otpModel.to)
+                otpModel._from = self.setFrom_(twilio)
+                return {'otpModel':otpModel}
+            
+            return {}
+
+        def setFrom_(self,twilio:TwilioAccountMiniService):
+            pn=None
+            match self.phone_number_name:
+                case 'default':
+                    return twilio.depService.model.from_number  
+                
+                case 'otp':
+                    pn= twilio.depService.model.twilio_otp_number
+                
+                case 'chat':
+                    pn= twilio.depService.model.twilio_chat_number
+                
+                case 'auto-mess':
+                    pn= twilio.depService.model.twilio_automated_response_number
+
+                case _:
+                    ...
+
+            if pn == None:
+                if self.fallback:
+                    return twilio.depService.model.from_number
+
+                raise ServiceNotAvailableError(f'The {twilio.miniService_id} profile does not have {self.phone_number_name} set')
+            
+            return pn
+        
+    async def parse_phone_number(phone_number:str) -> str:
+        """
+        Parse the phone number to the E.164 format.
+        """
+        twilioService:TwilioService = Get(TwilioService)
+        phone_number= twilioService.parse_to_phone_format(phone_number)       
+        return {
+            'phone_number':phone_number
+        }
             
 class AuthClientPipe(Pipe):
 
@@ -299,15 +479,6 @@ class TwilioResponseStatusPipe(Pipe):
         response.status_code = self.status_code
         return result    
 
-async def parse_phone_number(phone_number:str) -> str:
-    """
-    Parse the phone number to the E.164 format.
-    """
-    twilioService:TwilioService = Get(TwilioService)
-    phone_number= twilioService.parse_to_phone_format(phone_number)       
-    return {
-        'phone_number':phone_number
-    }
 
 async def verify_email_pipe(email:str):
     if not email_validator(email):
@@ -426,71 +597,6 @@ class ContactToInfoPipe(Pipe,PointerIterator):
         
         return {'scheduler':scheduler}
 
-class InjectTemplateInterface:
-
-
-    def __init__(self,assetService:AssetService,template_type:RouteAssetType,will_validate:bool):
-        self.assetService = assetService
-        self.template_type = template_type
-        self.will_validate= will_validate
-
-
-    def _inject_template(self,template:str):
-        assets = getattr(self.assetService,self.template_type,None)
-        if assets == None:
-            raise TemplateAssetError
-        
-        return assets[template]
-
-class TemplateValidationInjectionPipe(Pipe,PointerIterator,InjectTemplateInterface):
-    
-    SCHEDULER_TEMPLATE_ERROR_KEY = 'template'
-
-    def __init__(self,template_type:RouteAssetType ,data_key:str,index_key:str='', will_validate:bool = True,split:str='.'):
-        super().__init__(True)
-        PointerIterator.__init__(self,data_key,split)
-        self.template_type=template_type
-        self.will_validate= will_validate
-        index_key = 'index' if not index_key else index_key+'.index'
-        InjectTemplateInterface.__init__(self,Get(AssetService),template_type,will_validate)
-        self.index_ptr = PointerIterator(index_key,split)
-        
-    async def pipe(self,template:str,scheduler:SchedulerModel)->Template:
-
-            template = self._inject_template(template)
-            filtered_content =[]
-
-            if self.will_validate:
-                for content in scheduler.content:
-                    ptr = self.ptr(content)
-                    idx_ptr = self.index_ptr.ptr(content)  
-                    if ptr == None:
-                        ...
-
-                    val = ptr.get_val()
-                    index = idx_ptr.get_val()
-                    if val == None:
-                        ...
-                    
-                    try:
-                        val = template.validate(val)
-                        if scheduler.filter_error:
-                            filtered_content.append(content)
-                    except Exception as e:
-                        if not scheduler.filter_error:
-                            raise e
-                        else:
-                            scheduler._errors[index] = {
-                                'message':'Error while creating the template',
-                                'error':exception_to_json(e),
-                                'index':index
-                            }
-                            
-                if scheduler.filter_error:
-                    scheduler.content = filtered_content
-                                
-            return {'template':template,'scheduler':scheduler}
-
 class ContentIndexPipe(Pipe,PointerIterator):
 
     def __init__(self, var:str=None):
@@ -594,103 +700,4 @@ class MiniServiceInjectorPipe(Pipe):
             self.key: self.service.MiniServiceStore.get(profile)
             }
 
-class FilterAllowedSchemaPipe(Pipe):
-
-    @InjectInMethod()
-    def __init__(self,assetService:AssetService):
-        super().__init__(False)
-        self.assetService = assetService
     
-    def pipe(self,result:dict[str,dict],authPermission:AuthPermission):
-        if authPermission == None:
-            return result
-        temp_res = {}
-        for path,schema in result.items():
-            try:
-                self.assetService._raw_verify_asset_permission(authPermission,path)
-                temp_res[path]=schema
-            except:
-                continue
-        
-        return temp_res
-
-class ValidFreeInputTemplatePipe(Pipe):
-
-    allowed_assets = tuple(AssetType._value2member_map_.keys())
-    allowed_extension = set(['.'+k for k in  Extension._value2member_map_.keys()])
-
-    def __init__(self, accept_empty=True,accept_dir=True,allowed_extension=None,allowed_assets=None):
-        super().__init__(True)
-        self.fileService = Get(FileService)
-        self.accept_empty=accept_empty
-        self.accept_dir = accept_dir
-        self._allowed_extension = self.allowed_extension if allowed_extension == None else allowed_extension
-        self._allowed_assets = self.allowed_assets if allowed_assets == None else allowed_assets
-
-
-    def pipe (self,template:str,objectsSearch:ObjectsSearch):
-        if template != '': # if the template input is not empty
-            if not template.startswith(self._allowed_assets):
-                raise AssetTypeNotAllowedError
-            if not self.fileService.is_file(template,False,self._allowed_extension) and not self.accept_dir:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Directory Not allowed')
-            
-            objectsSearch.is_file = self.fileService.soft_is_file(template)
-            if not objectsSearch.is_file and objectsSearch.version_id:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST,'There is no version on prefix')
-
-        else: # the template is empty
-            if not self.accept_empty:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST,'Object name cannot be empty')
-            objectsSearch.is_file = False
-       
-        return {}
-    
-class ObjectS3OperationResponsePipe(Pipe):
-        
-    def __init__(self,):
-        super().__init__(False)
-
-    def pipe(self,result:dict):
-        meta:Object|list[Object]|None = result.get('meta',[]) 
-        more_meta= type(meta) == list
-        write_result:ObjectWriteResult = result.get('result',None)
-
-        errors = [{
-                "object_name": getattr(e, "object_name", None),
-                "version_id": getattr(e, "version_id", None),
-                "code": getattr(e, "code", None),
-                "message": getattr(e, "message", None)} for e in result.get('errors',[]) ]
-        
-        write_result = {"bucket_name": write_result.bucket_name,
-                "object_name": write_result.object_name,
-                "version_id": write_result.version_id,
-                "etag": write_result.etag,
-                "last_modified":write_result.last_modified.isoformat(),
-                "location":write_result.location,
-                "http_headers": write_result.http_headers} if  write_result != None else {}
-
-        
-        if meta:
-            if not more_meta:   
-                meta=[meta]
-
-            def parse_meta(m):
-                m:dict = asdict(m)
-                m['is_latest'] = parseToBool(m['is_latest'])
-                m['last_modified'] = m['last_modified'].isoformat()
-                if 'metadata' in m:
-                    m['metadata'] = dict(m['metadata'])
-                m.pop('storage_class',None), m.pop('owner_id',None), m.pop('owner_name',None), m.pop('is_dir',None)
-                return m
-            meta = [parse_meta(m) for m in meta]
-
-            if not more_meta:
-                meta=meta[0]
-            
-        return {
-            'meta':meta,
-            'errors':errors,
-            'result':write_result,
-            'content': result.get('content',"")
-        }

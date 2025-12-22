@@ -6,10 +6,10 @@ from app.classes.celery import AlgorithmType, InspectMode,RunType
 from app.classes.env_selector import StrategyType
 from app.container import GetAttr, GetDependsFunc
 from app.depends.dependencies import get_query_params
-from app.services.twilio_service import TwilioService
 from app.classes.broker import SubjectType
 from app.classes.email import MimeType
 from app.utils.constant import VariableConstant
+from app.utils.globals import CAPABILITIES
 
 
 # Helper: predicate -> validator that returns None when OK, or an error message including valid choices
@@ -27,10 +27,9 @@ def _wrap_checker(name: str, predicate: Callable[[object], bool], choices: list 
         return msg or f"Invalid value for {name!s}: {value!r}"
     return _checker
 
-
-verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_token')
-
-parse_to_phone_format: Callable = GetDependsFunc(TwilioService, 'parse_to_phone_format')
+if CAPABILITIES['twilio']:
+    from app.services.twilio_service import TwilioService
+    verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_token')
 
 # ----------------------------------------------                                    ---------------------------------- #
 

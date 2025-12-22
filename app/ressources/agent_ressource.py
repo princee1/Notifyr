@@ -13,10 +13,10 @@ from app.definition._service import StateProtocol
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
 from app.models.agents_model import AgentModel
-from app.services.agent.agent_service import AgentService
-from app.services.database.mongoose_service import MongooseService
+from app.services  import MongooseService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
+from app.services  import RemoteAgentService
 
 base_attr = {'id','revision_id','created_at','last_modified','version'}
 
@@ -34,8 +34,9 @@ class AgentsRessource(BaseHTTPRessource):
 
 
     @InjectInMethod()
-    def __init__(self,llmService:AgentService,mongooseService:MongooseService): 
-        self.llmService = llmService
+    def __init__(self,remoteAgentService:RemoteAgentService,mongooseService:MongooseService): 
+        super().__init__()
+        self.remoteAgentService = remoteAgentService
         self.mongooseService = mongooseService
     
     @UsePermission(AdminPermission) 
@@ -49,7 +50,7 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(agentModel,True)
         await agentModel.save()
 
-        broker.propagate_state(StateProtocol(name=AgentService,to_build=True,to_destroy=True))
+        broker.propagate_state(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UseRoles([Role.PUBLIC])        
@@ -67,7 +68,7 @@ class AgentsRessource(BaseHTTPRessource):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
         await self.mongooseService.delete(agentModel)
 
-        broker.propagate_state(StateProtocol(name=AgentService,to_build=True,to_destroy=True))
+        broker.propagate_state(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UsePermission(AdminPermission)
@@ -84,7 +85,7 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(agentModel,True)
         await agentModel.update_meta_profile()
 
-        broker.propagate_state(StateProtocol(name=AgentService,to_build=True,to_destroy=True))
+        broker.propagate_state(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UsePipe(DocumentFriendlyPipe,before=False)

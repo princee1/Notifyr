@@ -6,14 +6,13 @@ from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, Challe
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
 from app.services.monitoring_service import MonitoringService
-from app.services.task_service import TaskService
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod
 from fastapi import HTTPException, Request, Response,status
 from typing import Callable
 import time
-from app.utils.constant import HTTPHeaderConstant
+from app.utils.constant import HTTPHeaderConstant, MonitorConstant
 from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
     
 
@@ -30,8 +29,8 @@ class MetaDataMiddleWare(MiddleWare):
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
         start_time = time.time()
-        self.monitoringService.connection_count.inc()
-        self.monitoringService.connection_total.inc()
+        self.monitoringService.gauge_inc(MonitorConstant.CONNECTION_COUNT)
+        self.monitoringService.counter_inc(MonitorConstant.CONNECTION_TOTAL)
         request_id=  str(uuid4())
         request.state.request_id =request_id
 
@@ -43,14 +42,15 @@ class MetaDataMiddleWare(MiddleWare):
             response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.uvicornWorkerService.INSTANCE_ID
             response.headers[HTTPHeaderConstant.X_REQUEST_ID] = request_id
 
-            self.monitoringService.request_latency.observe(process_time)
+            self.monitoringService.histogram_observe(MonitorConstant.REQUEST_LATENCY,process_time)
             return response
         except HTTPException as e:
             process_time = time.time() - start_time
-            self.monitoringService.request_latency.observe(process_time)
+            self.monitoringService.histogram_observe(MonitorConstant.REQUEST_LATENCY,process_time)
             return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)',HTTPHeaderConstant.X_INSTANCE_ID:self.uvicornWorkerService.INSTANCE_ID})
         finally:
-            self.monitoringService.connection_count.dec()
+            self.monitoringService.gauge_dec(MonitorConstant.CONNECTION_COUNT)
+
 
 class LoadBalancerMiddleWare(MiddleWare):
     priority = MiddlewarePriority.LOAD_BALANCER
