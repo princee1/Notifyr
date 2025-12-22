@@ -55,10 +55,10 @@ class CostService(BaseService):
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:
             if not self.COST_PATH_OBJ.exists():
-                raise BuildFailureError
+                raise BuildFailureError('Cost file does not exist')
         
         if self.redisService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError
+            raise BuildFailureError('Redis Service not available')
 
     def build(self,build_state=-1):
 
@@ -193,11 +193,11 @@ class CostService(BaseService):
             traceback.print_exc()
 
     def verify_cost_file(self):
-        if self.system != 'credits':
-            raise BuildFailureError
+        if self.system != 'Notifyr Credit System':
+            raise BuildFailureError('Cost system not supported')
 
         if self.currency != 'NOTIFYR-CREDITS':
-            raise BuildFailureError
+            raise BuildFailureError('Currency not supported')
 
     def inject_cost_info(self,response:Response,bill:Bill):
         

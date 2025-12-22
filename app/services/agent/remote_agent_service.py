@@ -5,7 +5,7 @@ from typing import Callable, Generator, Self
 import grpc
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError, ServiceNotAvailableError
-from app.grpc.agent_interceptor import AgentClientAsyncInterceptor,AgentClientInterceptor
+from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
 from app.services.config_service import ConfigService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
@@ -51,9 +51,14 @@ class RemoteAgentService(BaseMiniServiceManager):
         if self.service_status != ServiceStatus.AVAILABLE:
             raise ServiceNotAvailableError
         
-        clientInterceptor = AgentClientAsyncInterceptor(self.auth_header) if APP_MODE == ApplicationMode.server else AgentClientInterceptor
-        self.channel = grpc.insecure_channel(self.configService.AGENTIC_HOST)
-        grpc.intercept_channel(self.channel,clientInterceptor)
+        if APP_MODE == ApplicationMode.worker:
+            self.channel = grpc.insecure_channel(self.configService.AGENTIC_HOST)
+            clientInterceptor = AgentClientInterceptor(self.auth_header)
+            self.channel = grpc.intercept_channel(self.channel,clientInterceptor)
+        else:
+            clientInterceptor = AgentClientAsyncInterceptor(self.auth_header)
+            self.channel = grpc.aio.insecure_channel(self.configService.AGENTIC_HOST,interceptors=[clientInterceptor])
+
         self.stub = agent_pb2_grpc.AgentStub(self.channel)
     
     def disconnect_channel(self):

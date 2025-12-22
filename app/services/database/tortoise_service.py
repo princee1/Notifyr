@@ -26,6 +26,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 port=5432
             )
             super().build()
+            self.generate_creds()
         except Exception as e:
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
 

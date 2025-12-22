@@ -50,6 +50,7 @@ class AgentClientAsyncInterceptor(grpc.aio.UnaryUnaryClientInterceptor,grpc.aio.
 
     def __init__(self, token):
         self.token = token
+        super().__init__()
 
     async def intercept_unary_unary(self, continuation, client_call_details, request):
         new_details = inject_bearer_token(client_call_details, self.token)
@@ -71,6 +72,7 @@ class AgentClientInterceptor(grpc.UnaryUnaryClientInterceptor):
 
     def __init__(self, token):
         self.token = token
+        super().__init__()
 
     def intercept_unary_unary(self, continuation, client_call_details, request):
         new_details = inject_bearer_token(client_call_details, self.token)

@@ -17,7 +17,7 @@ CONFIG_DIR=/run/secrets
 minio server /data --config-dir $CONFIG_DIR --console-address ":9001" &
 MINIO_PID=$!
 
-sleep 9
+sleep 15
 echo "Minio is UP!"
 
 VAULT_ACCESS_KEY=vaultadmin-minio
@@ -48,6 +48,11 @@ if mc admin user info notifyr "$VAULT_ACCESS_KEY" >/dev/null 2>&1; then
     echo "User '$VAULT_ACCESS_KEY' already exists. Skipping creation."
 else
     echo "User '$VAULT_ACCESS_KEY' does NOT exist. Creating..."
+    mc admin policy create notifyr app-access /app/policy/app-access.json || true
+    mc admin policy create notifyr dmz-access /app/policy/dmz-access.json || true
+
+    #mc admin policy create notifyr vault-admin /app/policy/vault-admin.json
+
     mc admin user add notifyr "$VAULT_ACCESS_KEY" "$VAULT_SECRET_KEY"
     mc admin policy attach notifyr consoleAdmin --user "$VAULT_ACCESS_KEY"
     #mc admin policy attach notifyr vault-admin --user "$VAULT_ACCESS_KEY"

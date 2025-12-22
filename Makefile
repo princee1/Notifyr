@@ -63,12 +63,12 @@ deploy-beat:
 
 deploy-agentic:
 	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.capabilities.agentic')" = "true" ]; then \
-		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.db.vector')" = "true" ]; then \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.vector')" = "true" ]; then \
 			echo "--- 🛠️ Creating the vector database Qdrant"; \
 			docker compose up -d qdrant; \
 			echo "--- ✅ Qdrant service is deployed"; \
 		fi; \
-		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.db.knowledge_graph')" = "true" ]; then \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.knowledge_graph')" = "true" ]; then \
 			echo "--- 🛠️ Knowledge not setup yet"; \
 		fi; \
 		sleep 10; \
@@ -135,8 +135,6 @@ deploy-data:
 	@sleep 3 && clear
 
 # 	# 2. Vault Initialization
-	$(call COMPOSE_RUN, Minio, up --build -d, minio)
-	@sleep 4 && clear
 	$(call COMPOSE_RUN, Vault Init, up, vault-init)
 	
 # 	# 3. Extract Secrets and Cleanup Init Container
@@ -189,8 +187,6 @@ prune:
 		$(DOCKER) stop $$($(DOCKER_COMPOSE_BASE) ps -q) || true; \
 		echo "--- 🗑️  Pruning stopped containers..."; \
 		$(DOCKER) container prune -f; \
-		echo "--- 🗑️  Removing minio image..."; \
-		$(DOCKER) image rm minio/minio:latest || true; \
 		echo "--- 🗑️  Removing all anonymous volumes..."; \
 		$(DOCKER) volume rm $$(docker volume ls -q) || true; \
 		sleep 3; \
