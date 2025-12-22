@@ -24,12 +24,14 @@ class AiAgentMiniService(BaseMiniService):
     """
     will register the tools
     and store the agent config
+    graph of tools
     call the provider
     tools idea:
-        - research on the internet
+        - research on the internet,crawl web 
         - knowledge graph
-        - rag
-        - rest,graphql, rpc fetch api
+        - faiss rag
+        - rest,graphql, fetch api
+        - connect to a mcp
     """
 
 @Service(is_manager=True,links=[LinkDep(RemoteAgentService)])

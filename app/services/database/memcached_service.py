@@ -40,13 +40,13 @@ class MemCachedService(DatabaseService,SchedulerInterface):
             version = self.sync_client.version().decode()
            
         except MemcacheClientError as e:
-            raise BuildFailureError
+            raise BuildFailureError(f"Failed to connect to Memcached. {e}")
         
         except MemcacheUnexpectedCloseError as e:
-            raise BuildFailureError
+            raise BuildFailureError(f"Failed to connect to Memcached. {e}")
             
         except MemcacheServerError as e:
-            raise BuildWarningError
+            raise BuildWarningError(f"Failed to connect to Memcached. {e}")
             
     @KeyEncoder
     async def get(self,key:str,default:Any=None,_raise=False,_return_bytes=False)->Any|bytes:

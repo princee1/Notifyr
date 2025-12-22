@@ -43,7 +43,7 @@ class RemoteAgentService(BaseMiniServiceManager):
         
     def build(self, build_state=...):
         if APP_MODE == ApplicationMode.agentic:
-            raise BuildOkError
+            raise BuildOkError("Running in Agentic mode; RemoteAgentService not required.")
         
         self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
         

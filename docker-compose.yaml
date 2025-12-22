@@ -184,6 +184,11 @@ services:
         target: /run/secrets/deploy.json
     volumes:
       - vault-shared:/vault/shared
+    depends_on:
+      - redis
+      - vault
+      - memcached
+      - mongodb
     environment:
       - MODE=${MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}

@@ -38,11 +38,8 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
             super().build()
 
         except Exception as e:
-            print(e)
-            print(e.__class__)
-            print(e.args)
             self.configService.BROKER_PROVIDER = 'redis'
-            raise BuildFailureError
+            raise BuildFailureError("Failed to connect to RabbitMQ with generated credentials. Ensure RabbitMQ is running and accessible.") from e
 
     
     def compute_broker_url(self):

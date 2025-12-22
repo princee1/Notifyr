@@ -93,14 +93,13 @@ build:
 	@echo "================================================="
 
 # Target to deploy all server components
-deploy-server:
+deploy-server: deploy-beat
 	@echo "================================================="
 	@echo "🚀 Starting Server Services Deployment"
 	@echo "================================================="
 
 # 	# Deploy and Scale Core Application Services
 	$(call COMPOSE_SCALE,app)
-	@$(MAKE) deploy-beat
 	$(call COMPOSE_SCALE,worker)
 # 	$(call COMPOSE_RUN, Beat Service, up -d, balancer)
 
@@ -161,7 +160,7 @@ deploy-data:
 
 
 # Main deployment target
-deploy: deploy-data deploy-server
+deploy: deploy-data deploy-agentic deploy-server
 	@echo "\n================================================="
 	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
 	@echo "================================================="
