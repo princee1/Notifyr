@@ -109,6 +109,7 @@ class BlacklistORM(models.Model):
 class PolicyORM(models.Model):
     policy_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     allowed_profiles = ArrayField('TEXT',default=list)  # TEXT[] as list
+    allowed_agents = ArrayField('TEXT', default=list)  # TEXT[] as list
     allowed_routes = fields.JSONField(default=dict)    # JSONB as dict
     allowed_assets = ArrayField('TEXT',default=list)   # TEXT[] as list
     allowed_blogs = ArrayField('TEXT',default=list)   # TEXT[] as list
@@ -126,6 +127,7 @@ class PolicyORM(models.Model):
         return {
             'policy_id':str(self.policy_id),
             'allowed_profiles':self.allowed_profiles,
+            'allowed_agents':self.allowed_agents,
             'allowed_routes':self.allowed_routes,
             'allowed_assets':self.allowed_assets,
             'allowed_blog':self.allowed_blogs,

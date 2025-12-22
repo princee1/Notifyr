@@ -51,24 +51,55 @@ endef
 notifyr-app:
 	$(call COMPOSE_SCALE,app)
 
+deploy-beat:
+	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.worker')" -gt 0 ]; then \
+		echo "--- 🛠️ Creating the beat server because at least one worker will be deployed"; \
+		docker compose up -d beat; \
+		echo "--- ✅ Beat service is deployed"; \
+	else \
+		echo "--- ⏭️ No workers is expected no need for the beat service"; \
+	fi
+
+
+deploy-agentic:
+	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.capabilities.agentic')" = "true" ]; then \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.vector')" = "true" ]; then \
+			echo "--- 🛠️ Creating the vector database Qdrant"; \
+			docker compose up -d qdrant; \
+			echo "--- ✅ Qdrant service is deployed"; \
+		fi; \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.knowledge_graph')" = "true" ]; then \
+			echo "--- 🛠️ Knowledge not setup yet"; \
+		fi; \
+		sleep 10; \
+		echo "--- 🛠️ Creating the agentic service because the ai functionality is required"; \
+		docker compose up -d agentic; \
+		echo "--- ✅ agentic service is deployed"; \
+	else \
+		echo "--- ⏭️ Agentic Service: Skipped (value = False)"; \
+	fi
+	
 build:
 	@echo "================================================="
 	@echo "🛠️  Building Docker services in $(DOCKER_COMPOSE_FILE)..."
 	@echo "================================================="
+	docker compose build vault-init
+	docker compose build app
+	docker compose build beat
+	docker compose build agentic
 	$(DOCKER_COMPOSE_BASE) build
 	@echo "================================================="
 	@echo "🎉  All images built successfully!"
 	@echo "================================================="
 
 # Target to deploy all server components
-deploy-server:
+deploy-server: deploy-beat
 	@echo "================================================="
 	@echo "🚀 Starting Server Services Deployment"
 	@echo "================================================="
 
 # 	# Deploy and Scale Core Application Services
 	$(call COMPOSE_SCALE,app)
-	$(call COMPOSE_RUN, Beat Service, up -d, beat)
 	$(call COMPOSE_SCALE,worker)
 # 	$(call COMPOSE_RUN, Beat Service, up -d, balancer)
 
@@ -79,6 +110,11 @@ deploy-server:
 	@echo "================================================="
 	@echo "✅ Server Services Deployment Complete"
 	@echo "================================================="
+
+server-down:
+	$(call COMPOSE_RUN, Beat Service,down, beat)
+	$(call COMPOSE_RUN, App Service,down, app)
+	$(call COMPOSE_RUN, Worker Service,down, worker)
 
 
 # Target to deploy all data components and run setup jobs
@@ -98,8 +134,6 @@ deploy-data:
 	@sleep 3 && clear
 
 # 	# 2. Vault Initialization
-	$(call COMPOSE_RUN, Minio, up --build -d, minio)
-	@sleep 4 && clear
 	$(call COMPOSE_RUN, Vault Init, up, vault-init)
 	
 # 	# 3. Extract Secrets and Cleanup Init Container
@@ -118,6 +152,7 @@ deploy-data:
 	$(call COMPOSE_RUN, NCS Setup, run -e ALLOWED_INIT=on --rm , ncs /ncs-utils.sh initialize)
 	$(call COMPOSE_RUN, NCS Always On, up -d, ncs)
 	@echo "--- ✅ Initial NCS Setup (Hard Reset) complete."
+	@$(MAKE) deploy-agentic
 	@sleep 3 && clear
 	@echo "================================================="
 	@echo "✅ Data & Secrets Setup Complete"
@@ -125,7 +160,7 @@ deploy-data:
 
 
 # Main deployment target
-deploy: deploy-data deploy-server
+deploy: deploy-data deploy-agentic deploy-server
 	@echo "\n================================================="
 	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
 	@echo "================================================="
@@ -151,8 +186,6 @@ prune:
 		$(DOCKER) stop $$($(DOCKER_COMPOSE_BASE) ps -q) || true; \
 		echo "--- 🗑️  Pruning stopped containers..."; \
 		$(DOCKER) container prune -f; \
-		echo "--- 🗑️  Removing minio image..."; \
-		$(DOCKER) image rm minio/minio:latest || true; \
 		echo "--- 🗑️  Removing all anonymous volumes..."; \
 		$(DOCKER) volume rm $$(docker volume ls -q) || true; \
 		sleep 3; \

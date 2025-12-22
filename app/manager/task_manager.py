@@ -13,10 +13,11 @@ import datetime as dt
 from app.container import Get
 from app.services.celery_service import CeleryService,TASK_REGISTRY
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.task_service import TaskService
 from app.utils.tools import RunInThreadPool
+from app.utils.constant import APSchedulerConstant, MonitorConstant, RedisConstant,CeleryConstant
 
 P = ParamSpec("P")
 
@@ -60,8 +61,15 @@ class TaskManager:
         self.taskService = Get(TaskService)
         self.redisService = Get(RedisService)
         self.monitoringService = Get(MonitoringService)
-
-        self.register_backgroundTask()
+    
+    @staticmethod
+    def parse_error(e:Exception,bypass=False,retry=None):
+        r = {'error_class':e.__class__,'args':str(e.args)}
+        if bypass:
+            r['bypass']=True
+        if retry:
+            r['retry'] = retry
+        return r
 
     def set_algorithm(self, algorithm: AlgorithmType):
         if algorithm not in get_args(AlgorithmType):
@@ -104,15 +112,25 @@ class TaskManager:
     async def select_task_env(self,task_weight:float,needed_envs:list[Literal[0,1]]=DEFAULT_MASK)->EnvSelection:
         current_workers_count = len(self.celeryService._workers)
         p1,p2,p3 = compute_p_values(current_workers_count,self.configService.CELERY_WORKERS_EXPECTED,task_weight)
-        return get_selector(self.meta['strategy'],celery_broker=self.configService.CELERY_BROKER).select(p1, p2, p3,needed_envs)
+        return get_selector(self.meta['strategy'],celery_broker=self.configService.BROKER_PROVIDER).select(p1, p2, p3,needed_envs)
 
     def register_backgroundTask(self):
-        async def callback():
+        callbacks = []
+        for callback in self._create_background_tasks():
+            async def wrapper():
+                await asyncio.sleep(0.1)
+                await callback()
+            if self.meta['runtype'] == 'sequential':
+                self.backgroundTasks.add_task(wrapper)
+
+        if self.meta['runtype'] == 'sequential':
+            return
+        
+        async def gather_wrapper():
             await asyncio.sleep(0.1)
-            if len(self.taskConfig)==0: 
-                return
-            return await self._run_task_in_background()
-        self.backgroundTasks.add_task(callback)
+            await asyncio.gather(*callbacks,return_exceptions=True)
+
+        self.backgroundTasks.add_task(gather_wrapper)
 
     @property
     def results(self):
@@ -134,74 +152,36 @@ class TaskManager:
     def schedule_ttd(self):
         return self.meta['ttd'] - self.taskConfig[0]['delay']
         
-    async def _run_task_in_background(self):
-        task_len = len(self.taskConfig)
-        ttl=self.meta['ttl']
-        is_saving_result = self.meta['save_result']
-        runType = self.meta['runtype']
-        is_retry = self.meta['retry']
+    def _create_background_tasks(self):
+        delay = t['delay']
+        to_retry = self.meta['retry']
 
         for i, t in enumerate(self.taskConfig):  # TODO add the index i to the results
             task:BackgroundTask = t['task']
-            delay = t['delay']
-            if delay and delay>0:
-                await asyncio.sleep(delay)
-
-            data=None if runType == 'parallel' else []
-            self.monitoringService.background_task_count.inc()
-           
+            
             async def callback():
-
-                async def parse_error(e:Exception,bypass=False):
-                    result = {'error_class':e.__class__,'args':str(e.args)}
-                    if bypass:
-                        result['bypass']=True
-                    if is_saving_result:
-                        if runType == 'sequential':
-                            data.append(result)
-                        else:
-                            await self.redisService.store_bkg_result(result, self.meta['request_id'],ttl)
-                    
-                    if runType =='parallel':
-                        self.monitoringService.background_task_count.dec()
-                        
-                    return result
-
+                if delay and delay>0:
+                    await asyncio.sleep(delay)
+                self.monitoringService.gauge_inc(MonitorConstant.BACKGROUND_TASK_COUNT)
                 try:
-                    if not asyncio.iscoroutine(task):
-                        result = await task()
-                    else:
-                        result = await task
-                    if is_saving_result:
-                        if runType == 'sequential':
-                            data.append(result)
-                        else:
-                            await self.redisService.store_bkg_result(result,self.meta['request_id'],ttl)
-                    
-                    if runType=='parallel':
-                        self.monitoringService.background_task_count.dec()                
-                    return result
+                    result= await task() if not asyncio.iscoroutine(task) else await task                    
                 except TaskRetryError as e:
                     error = e.error
-                    if is_retry:
-                        if not isinstance(self.scheduler,s) and isinstance(task,BackgroundTask):
-                            await self.celeryService.trigger_task_from_scheduler(self.scheduler,i,*task.args,**task.kwargs)
-                            return
-                        return await parse_error(error,True)
-                        
-                    return await parse_error(error)
+                    bypass =True
+                    if to_retry and isinstance(self.scheduler,s) and isinstance(task,BackgroundTask):
+                        retry_result = await self.celeryService.trigger_task_from_scheduler(self.scheduler,i,*task.args,**task.kwargs)
+                        bypass = False
+                    result= self.parse_error(error,bypass,retry_result if not bypass else None)
                 except Exception as e:
-                    return await parse_error(e)
-    
-            if runType=='sequential': 
-                await callback()
-            else:
-                asyncio.create_task(callback())
+                    result = self.parse_error(e)
+                finally:
+                    if self.meta['save_result']:
+                        await self.store_bkg_result(result, self.meta['request_id'],self.meta['ttl'],f"{i}")
+                    self.monitoringService.gauge_dec(MonitorConstant.BACKGROUND_TASK_COUNT)
 
-        if runType == 'sequential':
-            await self.redisService.store_bkg_result(data, self.meta['request_id'],ttl)
-            self.monitoringService.background_task_count.dec(task_len)
-       
+            yield callback
+        
+
     async def _offload_task(self,weight: float,delay: float,index:int,callback: Callable, *args, **kwargs)->TaskExecutionResult:
         """
         - RRule and Solar Task Type are rejected if theres no expected workers
@@ -313,7 +293,7 @@ class TaskManager:
     @RunInThreadPool
     def _schedule_aps_task(self,weight,delay,index:int,callback:Callable,*args,**kwargs):
         now = dt.datetime.now().isoformat()
-        job_id= f"{self.meta['request_id']}@{index}"
+        job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(self.meta['request_id'],index)
         task = TASK_REGISTRY[self.scheduler.task_name]['raw_task']
         delay += 0 if self.scheduler.task_option.countdown == None else self.scheduler.task_option.countdown
         match self.scheduler.task_type:
@@ -331,3 +311,12 @@ class TaskManager:
         next_run_at:dt.datetime =  job.next_run_time
         delta= (next_run_at.timestamp() +delay) - dt.datetime.now().timestamp()
         return TaskExecutionResult(True,now,'APSScheduler',naturaldelta(delta),index,str(self.scheduler._heaviness),None,False,job_id,'schedule','Task Added to the APSScheduler, delay or problem might occur')
+
+    async def store_bkg_result(self,data,name,expiry,index=None):
+        name=CeleryConstant.REDIS_BKG_TASK_ID_RESOLVER(name)
+        if index==None:
+            await self.redisService.hash_set(RedisConstant.CELERY_DB,name,mapping=data)
+        else:
+            await self.redisService.hash_set(RedisConstant.CELERY_DB,name,index,data)
+        
+        await self.redisService.expire(RedisConstant.CELERY_DB,name,expiry,nx=True)

@@ -1,7 +1,8 @@
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniServiceStore, Service, ServiceStatus
+from app.errors.service_error import BuildWarningError
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import DiscordWebhookModel, HTTPWebhookModel, KafkaWebhookModel, MongoDBWebhookModel, N8nHTTPWebhookModel, PostgresWebhookModel, RedisWebhookModel, SQSWebhookModel, SlackHTTPWebhookModel, WebhookProfileModel, ZapierHTTPWebhookModel
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
 from app.services.reactive_service import ReactiveService
 from app.services.webhook.broker_webhook_service import KafkaWebhookMiniService, RedisWebhookMiniService, SQSWebhookMiniService
@@ -10,9 +11,11 @@ from app.services.webhook.http_webhook_service import HTTPWebhookMiniService
 from app.services.webhook.provider_webhook_service import DiscordWebhookMiniService, MakeWebhookMiniService, MakeWebhookMiniService, N8NWebhookMiniService, SlackIncomingWebhookMiniService, ZapierWebhookMiniService
 from .config_service import ConfigService
 from app.utils.helper import issubclass_of
+from app.utils.globals import CAPABILITIES
 
 
 @Service(
+    is_manager=True,
     links=[LinkDep(ProfileService,to_build=True,to_destroy=True)]
 )
 class WebhookService(BaseMiniServiceManager):
@@ -41,6 +44,10 @@ class WebhookService(BaseMiniServiceManager):
         self.redisService = redisService
 
         self.MiniServiceStore = MiniServiceStore[WebhookAdapterInterface|BaseMiniService](self.name)
+
+    def verify_dependency(self):
+        if not CAPABILITIES['webhook']:
+            raise BuildWarningError
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
         count = self.profilesService.MiniServiceStore.filter_count(lambda p: issubclass_of(WebhookProfileModel,p.model.__class__)  )

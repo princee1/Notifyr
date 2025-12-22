@@ -3,8 +3,8 @@ from typing import Type
 from app.definition import _service
 from app.models.communication_model import IMAPProfileModel, SMTPProfileModel
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
 #from app.services.email.api_email_service import EmailAPIService
+from app.services.database.redis_service import RedisService
 from app.services.email.protocol_email_service import IMAPEmailMiniService, SMTPEmailMiniService
 from app.services.logger_service import LoggerService
 from app.services.profile_service import ProfileMiniService, ProfileService
@@ -58,6 +58,8 @@ class EmailService(_service.BaseMiniServiceManager):
 
 
 @_service.Service(
+    is_manager=True,
+    endService=True,
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
 class EmailSenderService(EmailService):
@@ -83,6 +85,8 @@ class EmailSenderService(EmailService):
 
 
 @_service.Service(
+    endService=True,
+    is_manager=True,
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
 class EmailReaderService(EmailService):

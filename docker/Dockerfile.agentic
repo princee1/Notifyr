@@ -1,0 +1,7 @@
+FROM notifyr/fastapi:community
+
+RUN pip install langchain
+
+RUN pip install qdrant-client
+
+COPY ./agentic_main.py ./agentic_main.py

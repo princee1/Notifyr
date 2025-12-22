@@ -10,16 +10,15 @@ from app.models.link_model import LinkORM
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
-from app.services.assets_service import AssetService
 from app.services.profile_service import ProfileService
 from app.services.task_service import TaskService
 from app.services.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.twilio_service import TwilioService
 from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request, UploadFile,status
+from app.utils.globals import CAPABILITIES
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
@@ -34,31 +33,6 @@ class CeleryTaskGuard(Guard):
         if self.task_types and scheduler.task_type not in self.task_types:
             return False,f'The task_type: [{scheduler.task_type}] is not permitted for this route'
         
-        return True,''
-
-class AssetGuard(Guard):
-    
-    def __init__(self,content_keys=[],allowed_path=[],options=[],accepted_type=None):
-        super().__init__()
-        self.assetService = Get(AssetService)       
-        self.configService = Get(ConfigService)
-        self.options = options
-        self.allowed_path = [self.configService.ASSETS_DIR +p for p in  allowed_path]
-        self.content_keys = content_keys
-        self.accepted_type = accepted_type
-
-    def _filter_allowed(self):
-        if self.accepted_type != None:
-            ...
-            #TODO If a route allowed a certain type asset
-    def guard(self,scheduler:SchedulerModel):
-        if scheduler == None:
-            return True,_
-        content = scheduler.model_dump(include={'content'})
-        content = flatten_dict(content)
-        flag = self.assetService.verify_content_asset_permission(content,self.content_keys,self.allowed_path,self.options)
-        if not flag:
-            return False, 'message'
         return True,''
                 
 class TaskWorkerGuard(Guard):
@@ -173,49 +147,49 @@ class BlacklistClientGuard(Guard):
         if is_blacklist:
             return False,'Client is blacklisted'
         return True,''
-    
 
-class CarrierTypeGuard(Guard):
+if CAPABILITIES['twilio']:
+    from app.services.twilio_service import TwilioService
+    class CarrierTypeGuard(Guard):
 
-    def __init__(self,accept_landline:bool,accept_voip:bool=False,accept_unknown:bool=False,):
-        super().__init__()
-        self.twilioService:TwilioService = Get(TwilioService)
-        self.accept_voip = accept_voip
-        self.accept_unknown = accept_unknown
-        self.accept_landline = accept_landline
-    
-    async def guard(self,otpModel:OTPModel=None,contact:ContactORM=None,scheduler:SchedulerModel=None):
-        return True
-        if otpModel != None:
-            phone_number = [[otpModel.to]]
-        elif contact != None:
-            phone_number = [[contact.phone]]
-        else:
+        def __init__(self,accept_landline:bool,accept_voip:bool=False,accept_unknown:bool=False,):
+            super().__init__()
+            self.twilioService:TwilioService = Get(TwilioService)
+            self.accept_voip = accept_voip
+            self.accept_unknown = accept_unknown
+            self.accept_landline = accept_landline
+        
+        async def guard(self,otpModel:OTPModel=None,contact:ContactORM=None,scheduler:SchedulerModel=None):
+            return True
+            if otpModel != None:
+                phone_number = [[otpModel.to]]
+            elif contact != None:
+                phone_number = [[contact.phone]]
+            else:
 
-            phone_number = [[to for to in content.to] for content in scheduler.content]
-        for _phone_number in phone_number:
-            for pn in _phone_number:
-                status_code,data = await self.twilioService.phone_lookup(phone_number,True)
-                if status_code != 200:
-                    return False,f'Callee Information not found: {pn}'
-                
-                carrier:dict= data.get('carrier',None)
-                if carrier == None:
-                    return False,f'Carrier Information not found: {pn}'
-
-                carrier_type = carrier.get('type','unknown')
-                if carrier_type ==None:
-                    carrier_type = 'unknown'
+                phone_number = [[to for to in content.to] for content in scheduler.content]
+            for _phone_number in phone_number:
+                for pn in _phone_number:
+                    status_code,data = await self.twilioService.phone_lookup(phone_number,True)
+                    if status_code != 200:
+                        return False,f'Callee Information not found: {pn}'
                     
-                if carrier_type == 'voip' and not self.accept_voip:
-                    return False,f'Carrier Type is Voip: {pn}'
-                if carrier_type == 'landline' and not self.accept_landline:
-                    return False,f'Carrier Type is Landline: {pn}'
-                if carrier_type == 'unknown' and not self.accept_unknown:
-                    return False,f'Carrier Type is Unknown: {pn}'
-                
-        return True,''
+                    carrier:dict= data.get('carrier',None)
+                    if carrier == None:
+                        return False,f'Carrier Information not found: {pn}'
 
+                    carrier_type = carrier.get('type','unknown')
+                    if carrier_type ==None:
+                        carrier_type = 'unknown'
+                        
+                    if carrier_type == 'voip' and not self.accept_voip:
+                        return False,f'Carrier Type is Voip: {pn}'
+                    if carrier_type == 'landline' and not self.accept_landline:
+                        return False,f'Carrier Type is Landline: {pn}'
+                    if carrier_type == 'unknown' and not self.accept_unknown:
+                        return False,f'Carrier Type is Unknown: {pn}'
+                    
+            return True,''
 
 class AccessLinkGuard(Guard):
     error_file = 'app/static/error-404-page/index.html'
@@ -307,7 +281,7 @@ class CeleryBrokerGuard(Guard):
         self.max_visibility_time = self.configService.CELERY_VISIBILITY_TIMEOUT *.15
     
     def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
-        if self.configService.CELERY_BROKER == 'redis':
+        if self.configService.BROKER_PROVIDER == 'redis':
             if scheduler.task_type in self._not_allowed_redis_eta:
                 if self.allowed_fallback:
                     taskManager.set_algorithm('aps')

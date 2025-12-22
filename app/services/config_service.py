@@ -5,22 +5,19 @@ from dotenv import load_dotenv, find_dotenv
 from enum import Enum
 from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarningError
 from app.utils.constant import RabbitMQConstant, RedisConstant
-from app.utils.fileIO import JSONFile
 from app.definition import _service
 import socket
-from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID
+from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID,APP_MODE, ApplicationMode
 from app.utils.helper import parseToBool
-import shutil
-import sys
 
 
 ENV = ".env"
-CELERY_EXE_PATH = shutil.which("celery").replace(".EXE", "")
 
 class MODE(Enum):
     DEV_MODE = 'dev'
     PROD_MODE = 'prod'
     TEST_MODE = 'test'
+    MONITOR_MODE = 'monitor'
 
     def toMode(val):
         match val:
@@ -30,16 +27,10 @@ class MODE(Enum):
                 return MODE.PROD_MODE
             case MODE.TEST_MODE.value:
                 return MODE.TEST_MODE
+            case MODE.MONITOR_MODE.value:
+                return MODE.MONITOR_MODE
             case _:
                 return MODE.DEV_MODE
-
-    def modeToAddr(mode):
-        match mode:
-            case MODE.DEV_MODE:
-                return "127.0.0.1"
-            case _:
-                return "127.0.0.1"
-
 
 class AssetMode(Enum):
     s3 = 's3'
@@ -48,44 +39,20 @@ class AssetMode(Enum):
     ftp = 'ftp'
 
 
-class CeleryMode(Enum):
-    flower = 'flower'
-    worker = 'worker'
-    beat = 'beat'
-    none = 'none'
-    purge = 'purge'
-
 class ServerConfig(TypedDict):
     host: str
     port: int
     reload: bool
     team: Literal['team','solo']
     workers: int
-    log_level: Literal["critical", "error",
-                       "warning", "info", "debug", "trace"]
+    log_level: Literal["critical", "error","warning", "info", "debug", "trace"]
 
-CeleryEnv = Literal['flower', 'worker', 'beat', 'none','purge']
 
-_celery_env_ = CeleryMode.none
 
 
 @_service.Service()
 class ConfigService(_service.BaseService):
         
-    if sys.argv[0] == CELERY_EXE_PATH:
-        global _celery_env_
-        _celery_env_ = CeleryMode._member_map_[sys.argv[3]]
-
-    _celery_env = _celery_env_
-
-    @property
-    def celery_env(self) -> CeleryMode:
-        return self._celery_env
-
-    def set_celery_env(env: CeleryEnv):
-        ConfigService._celery_env = CeleryMode._member_map_[env]
-
-
     def __init__(self) -> None:
         super().__init__()
         if not load_dotenv(ENV, verbose=True):
@@ -190,7 +157,6 @@ class ConfigService(_service.BaseService):
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
         self.ADMIN_KEY:str = self.getenv("ADMIN_KEY")
-        self.API_KEY:str = self.getenv("API_KEY")
         
         # SERVER CONFIG #
         self.HTTP_MODE:Literal['HTTP','HTTPS'] = self.getenv("HTTP_MODE",'HTTP')
@@ -198,12 +164,12 @@ class ConfigService(_service.BaseService):
         self.HTTPS_KEY:str = self.getenv("HTTPS_KEY", 'key.pem')
 
         # EMAIL OAUTH CONFIG #
-        self.OAUTH_METHOD_RETRIEVER:str = self.getenv('OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
-        self.OAUTH_JSON_KEY_FILE:str = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
-        self.OAUTH_TOKEN_DATA_FILE:str = self.getenv('OAUTH_DATA_FILE', 'mail_provider.tokens.json')
-        self.OAUTH_CLIENT_ID:str = self.getenv('OAUTH_CLIENT_ID')
-        self.OAUTH_CLIENT_SECRET:str = self.getenv('OAUTH_CLIENT_SECRET')
-        self.OAUTH_OUTLOOK_TENANT_ID:str = self.getenv('OAUTH_TENANT_ID')
+        # self.OAUTH_METHOD_RETRIEVER:str = self.getenv('OAUTH_METHOD_RETRIEVER', 'oauth_custom')  # OAuthFlow | OAuthLib
+        # self.OAUTH_JSON_KEY_FILE:str = self.getenv('OAUTH_JSON_KEY_FILE')  # JSON key file
+        # self.OAUTH_TOKEN_DATA_FILE:str = self.getenv('OAUTH_DATA_FILE', 'mail_provider.tokens.json')
+        # self.OAUTH_CLIENT_ID:str = self.getenv('OAUTH_CLIENT_ID')
+        # self.OAUTH_CLIENT_SECRET:str = self.getenv('OAUTH_CLIENT_SECRET')
+        # self.OAUTH_OUTLOOK_TENANT_ID:str = self.getenv('OAUTH_TENANT_ID')
 
         # ASSETS CONFIG #
         self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local' if self.MODE == MODE.DEV_MODE else 's3').lower())
@@ -219,9 +185,11 @@ class ConfigService(_service.BaseService):
 
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
+        # AGENTIC CONFIG #
+        self.AGENTIC_HOST = self.getenv('AGENTIC_HOST','localhost:50051' if self.MODE == MODE.DEV_MODE else 'agentic:50051')
+
         # HASHI CORP VAULT CONFIG #
-        self.VAULT_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('VAULT_ACTIVATED','true'), True)
-        self.VAULT_ADDR:str = self.getenv('VAULT_ADDR','http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200')
+        self.VAULT_ADDR:str = 'http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200'
 
         # MONGODB CONFIG #
         self.MONGO_HOST:str = self.getenv('MONGO_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'mongodb')
@@ -230,19 +198,16 @@ class ConfigService(_service.BaseService):
         self.REDIS_HOST:str = self.getenv("REDIS_HOST","localhost" if self.MODE == MODE.DEV_MODE else "redis")
 
         # RABBITMQ CONFIG #
-        self.RABBITMQ_HOST:Callable[...,str] = self.getenv("RABBITMQ_URL", "localhost" if self.MODE == MODE.DEV_MODE else "rabbitmq")
+        self.RABBITMQ_HOST:Callable[...,str] = self.getenv("RABBITMQ_HOST", "localhost" if self.MODE == MODE.DEV_MODE else "rabbitmq")
 
         # MEMCACHED CONFIG #
-        self.MEMCACHED_HOST:str = self.getenv("MEMCHACHED_URL","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
+        self.MEMCACHED_HOST:str = self.getenv("MEMCHACHED_HOST","localhost" if self.MODE == MODE.DEV_MODE else "memcached")
 
         # POSTGRES DB CONFIG #
         self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
         # CELERY CONFIG #
-        self.CELERY_BROKER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER','rabbitmq')
-
-        self.CELERY_MESSAGE_BROKER_URL:Callable[[str,str],str]= lambda u,p:self.getenv("CELERY_MESSAGE_BROKER_URL",f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}" if self.CELERY_BROKER == 'redis' else f"amqp://{u}:{p}@{self.RABBITMQ_HOST}:5672/{RabbitMQConstant.CELERY_VIRTUAL_HOST}")
-        self.CELERY_BACKEND_URL:Callable[[str,str],str] = lambda u,p: self.getenv("CELERY_BACKEND_URL", f"redis://{self.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}")
+        self.BROKER_PROVIDER:Literal['redis','rabbitmq'] = self.getenv('BROKER_PROVIDER','rabbitmq')
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
@@ -265,7 +230,7 @@ class ConfigService(_service.BaseService):
         if self.APS_JOBSTORE not in ['redis','mongodb','memory']:
             self.APS_JOBSTORE = 'memory'
         
-        if self.CELERY_BROKER not in ['redis','rabbitmq']:
+        if self.BROKER_PROVIDER not in ['redis','rabbitmq']:
             raise BuildWarningError()
 
     def __getitem__(self, key):
@@ -302,7 +267,7 @@ class UvicornWorkerService(_service.BaseService):
             return True
      
     def build(self, build_state = ...):
-        name = 'app' if self.configService._celery_env == CeleryMode.none else self.configService._celery_env.name
+        name = 'app' if APP_MODE == ApplicationMode.server else APP_MODE.name
 
         self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/{name}/"        
         raise BuildOkError

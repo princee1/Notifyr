@@ -2,7 +2,7 @@ from app.definition._service import BaseService, Service, ServiceStatus
 from app.errors.service_error import BuildOkError
 from app.models.properties_model import SettingsModel
 from app.services.config_service import ConfigService, MODE
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.utils.fileIO import JSONFile
 from app.utils.constant import SettingDBConstant,DEFAULT_SETTING, VaultConstant
 
@@ -17,7 +17,7 @@ SETTING_SERVICE_DEFAULT_SETTING_BUILD_STATE = 0
 @Service()
 class SettingService(BaseService):
     
-    def __init__(self,configService:ConfigService,vaultService:HCVaultService):
+    def __init__(self,configService:ConfigService,vaultService:VaultService):
         super().__init__()
         self.configService = configService
         self.vaultService = vaultService

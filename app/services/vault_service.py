@@ -9,7 +9,7 @@ from app.errors.service_error import BuildOkError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
 from app.services.config_service import MODE, ConfigService, UvicornWorkerService
 import hvac
-from app.services.file_service import FileService
+from app.services.file.file_service import FileService
 from app.utils.constant import VaultConstant, VaultTTLSyncConstant
 from app.utils.fileIO import FDFlag
 from datetime import datetime
@@ -43,7 +43,7 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
 
 
 @Service()
-class HCVaultService(BaseService,SchedulerInterface):
+class VaultService(BaseService,SchedulerInterface):
 
     _valid_role= {VaultConstant.MONGO_ROLE,VaultConstant.POSTGRES_ROLE}
     _secret_id_crontab='0 0 * * *'
@@ -70,8 +70,6 @@ class HCVaultService(BaseService,SchedulerInterface):
             raise ServiceTemporaryNotAvailableError(service=self.name)
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
-        # if self.configService.VAULT_ACTIVATED:
-        #     raise BuildOkError
         if self.configService.MODE == MODE.DEV_MODE:
             self._dev_token_login()
             self.read_tokens()

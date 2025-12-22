@@ -11,8 +11,8 @@ from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from app.services.database_service import RedisService
-from app.services.file_service import FileService
+from app.services.database.redis_service import RedisService
+from app.services.file.file_service import FileService
 from app.utils.constant import CostConstant, RedisConstant
 from app.utils.fileIO import JSONFile
 from app.classes.auth_permission import AuthPermission
@@ -55,25 +55,25 @@ class CostService(BaseService):
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:
             if not self.COST_PATH_OBJ.exists():
-                raise BuildFailureError
+                raise BuildFailureError('Cost file does not exist')
         
         if self.redisService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError
+            raise BuildFailureError('Redis Service not available')
 
     def build(self,build_state=-1):
 
         storage_uri = None if self.configService.MODE == MODE.DEV_MODE else None # TODO redis url + f'/{RedisConstant.LIMITER_DB}'
         self.GlobalLimiter = Limiter(get_remote_address, storage_uri=storage_uri, headers_enabled=True)
-        
+
         if self.configService.MODE == MODE.PROD_MODE:
             try:
                 self.costs_file= JSONFile(self.COST_PATH)
                 self.load_file_into_objects()
+                self.verify_cost_file()
                 self.service_status = ServiceStatus.AVAILABLE
-            except:
+            except Exception as e:
+                print(e)
                 raise BuildWarningError(f'Could not mount the cost file so limit will revert too default settings')
-            
-            self.verify_cost_file()
         else:
             self.service_status = ServiceStatus.AVAILABLE
     
@@ -193,11 +193,11 @@ class CostService(BaseService):
             traceback.print_exc()
 
     def verify_cost_file(self):
-        if self.system != 'credits':
-            raise BuildFailureError
+        if self.system != 'Notifyr Credit System':
+            raise BuildFailureError('Cost system not supported')
 
         if self.currency != 'NOTIFYR-CREDITS':
-            raise BuildFailureError
+            raise BuildFailureError('Currency not supported')
 
     def inject_cost_info(self,response:Response,bill:Bill):
         

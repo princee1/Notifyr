@@ -5,7 +5,7 @@ from app.decorators.handlers import AsyncIOHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, UseServiceLock, UseHandler, UsePermission, UseRoles,HTTPMethod
 from app.depends.dependencies import get_auth_permission
-from app.services.database_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService
 
 @PingService([TortoiseConnectionService])
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)

@@ -5,25 +5,25 @@ from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
 from app.interface.timers import IntervalParams, SchedulerInterface
-from app.services.aws_service import AmazonS3Service
-import app.services.aws_service as aws_service
-from app.services.database_service import RedisService
-from app.services.secret_service import HCVaultService
+from app.services.object_service import ObjectS3Service
+import app.services.object_service as object_service
+from app.services.database.redis_service import RedisService
+from app.services.vault_service import VaultService
 from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant, RedisConstant
 from app.utils.prettyprint import printJSON
 from app.utils.tools import RunInThreadPool
-from .config_service import AssetMode, CeleryMode, ConfigService, UvicornWorkerService
+from .config_service import AssetMode, ApplicationMode, ConfigService, UvicornWorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
-from .file_service import FileService
+from .file.file_service import FileService
 from app.definition import _service
 from enum import Enum
 import os
 from threading import Thread
 from typing import Any, Callable, Literal, Dict, get_args
 from app.utils.helper import IntegrityCache, PointerIterator, flatten_dict, issubclass_of
-from app.utils.globals import ASSET_SEPARATOR, DIRECTORY_SEPARATOR
+from app.utils.globals import APP_MODE, ASSET_SEPARATOR, DIRECTORY_SEPARATOR
 
 
 class AssetNotFoundError(BaseError):
@@ -182,7 +182,7 @@ class ThreadedReader(DiskReader):
 
 class S3ObjectReader(Reader):   
 
-    def __init__(self, configService: ConfigService, awsService: AmazonS3Service,vaultService:HCVaultService,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
+    def __init__(self, configService: ConfigService, awsService: ObjectS3Service,vaultService:VaultService,objects:list[Object],asset_cache:IntegrityCache,fileService:FileService, asset: type[Asset] = Asset, additionalCode: Callable = None) -> None:
         super().__init__(configService,fileService,asset_cache, asset, additionalCode)
         self.awsService = awsService
         self.vaultService = vaultService
@@ -220,20 +220,20 @@ class S3ObjectReader(Reader):
 #############################################                ##################################################
 
 @_service.Service(
-    links=[_service.LinkDep(AmazonS3Service,to_destroy=True, to_build=True)]
+    links=[_service.LinkDep(ObjectS3Service,to_destroy=True, to_build=True)]
 )
 class AssetService(_service.BaseService,SchedulerInterface):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:HCVaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,amazonS3Service:AmazonS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
+    def __init__(self,hcVaultService:VaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,objectS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
         super().__init__()
         SchedulerInterface.__init__(self,)
 
         self.fileService:FileService = fileService
         self.configService = configService
         self.processWorkerPeer = processWorkerPeer
-        self.amazonS3Service = amazonS3Service
+        self.objectS3Service = objectS3Service
         self.settingService = settingService
         self.hcVaultService = hcVaultService
         self.redisService = redisService
@@ -254,9 +254,8 @@ class AssetService(_service.BaseService,SchedulerInterface):
         self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events,tuple(),{})
 
     async def clear_object_events(self,):
-        objects_events = await self.redisService.hash_iter(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,iter=False)
-        print(objects_events)
-        await self.redisService.hash_del(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT,*objects_events.keys())
+        await self.redisService.delete(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT)
+        return
 
     def _read_globals_disk(self):
 
@@ -268,7 +267,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
         MLTemplate._globals.update(flatten_dict(self.globals.data))
     
     def _read_globals_s3(self):
-        data = self.amazonS3Service.read_object('globals.json')
+        data = self.objectS3Service.read_object('globals.json')
         data = json.loads(data.read())
         self.globals = JSONFile(self.ASSETS_GLOBALS_VARIABLES, data,False)
 
@@ -289,36 +288,36 @@ class AssetService(_service.BaseService,SchedulerInterface):
                 else:
                     self.read_asset_from_disk()
             
-            case aws_service.MINIO_OBJECT_BUILD_STATE:
+            case object_service.MINIO_OBJECT_BUILD_STATE:
                 self.download_into_disk()
 
         self.service_status = _service.ServiceStatus.AVAILABLE
         
     def verify_dependency(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
-            if not self.amazonS3Service.service_status == _service.ServiceStatus.AVAILABLE:
+            if not self.objectS3Service.service_status == _service.ServiceStatus.AVAILABLE:
                 raise _service.BuildFailureError('Amazon S3 Service not available')
 
     def read_asset_from_s3(self):
         self._read_globals_s3()
 
-        self.images.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
+        self.images.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.JPEG,FDFlag.READ_BYTES,AssetType.IMAGES.value))
-        self.css.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
+        self.css.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService)(
             Extension.CSS,...,AssetType.EMAIL.value))
 
-        self.email.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
+        self.email.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,HTMLTemplate,self.loadHTMLData('s3'))(
             Extension.HTML,...,AssetType.EMAIL.value))
-        self.pdf.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PDFTemplate)(
+        self.pdf.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PDFTemplate)(
             Extension.PDF,FDFlag.READ_BYTES,AssetType.PDF.value))
-        self.sms.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,SMSTemplate)(
+        self.sms.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,SMSTemplate)(
             Extension.XML,...,AssetType.SMS.value))
-        self.phone.update(S3ObjectReader(self.configService,self.amazonS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PhoneTemplate)(
+        self.phone.update(S3ObjectReader(self.configService,self.objectS3Service,self.hcVaultService,self.objects,self.asset_cache,self.fileService,PhoneTemplate)(
             Extension.XML,...,AssetType.PHONE.value))
 
     def read_bucket_metadata(self):
         self.buckets_size = 0
-        for obj in self.amazonS3Service.list_objects(recursive=True):
+        for obj in self.objectS3Service.list_objects(recursive=True):
             if obj.size:
                 self.buckets_size += obj.size
             if obj.object_name not in self.non_obj_template:
@@ -327,7 +326,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     def read_asset_from_disk(self):
         self._read_globals_disk()
 
-        if self.configService.celery_env in [CeleryMode.flower,CeleryMode.beat]:
+        if APP_MODE in [ApplicationMode.beat]:
             return 
         
         self.images.update(self.sanitize_paths(DiskReader(self.configService,self.fileService,self.asset_cache)(Extension.JPEG, FDFlag.READ_BYTES, AssetType.IMAGES.value)))
@@ -494,7 +493,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     async def save_globals(self):
         if self.configService.ASSET_MODE == AssetMode.s3:
             data = self.globals.export()
-            await self.amazonS3Service.upload_object('globals.json',data)
+            await self.objectS3Service.upload_object('globals.json',data)
         else:
             self.globals.save()
     
@@ -511,5 +510,5 @@ class AssetService(_service.BaseService,SchedulerInterface):
                 continue
 
             disk_rel_path = self.configService.normalize_assets_path(obj.object_name,'add',True)
-            self.amazonS3Service.write_into_disk(obj.object_name,disk_rel_path)
+            self.objectS3Service.write_into_disk(obj.object_name,disk_rel_path)
             

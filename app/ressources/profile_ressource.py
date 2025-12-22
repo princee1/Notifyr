@@ -3,9 +3,9 @@ from beanie import Document
 from fastapi import Depends,Request, Response,status
 from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
-from app.classes.condition import MongoCondition, simple_number_validation
-from app.container import Get, InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, CeleryControlHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler
+from app.classes.mongo import MongoCondition, simple_number_validation
+from app.container import InjectInMethod,Get
+from app.decorators.handlers import AsyncIOHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
@@ -18,10 +18,12 @@ from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfi
 from app.manager.broker_manager import Broker
 from app.services.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
-from app.services.database_service import MongooseService, RabbitMQService, RedisService
+from app.services.database.mongoose_service import MongooseService
+from app.services.database.rabbitmq_service import RabbitMQService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.task_service import TaskService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
@@ -42,7 +44,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     profileType:str
 
     @InjectInMethod()
-    def __init__(self,profileService:ProfileService,vaultService:HCVaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService,taskService:TaskService):
+    def __init__(self,profileService:ProfileService,vaultService:VaultService,mongooseService:MongooseService,celeryService:CeleryService,redisService:RedisService,taskService:TaskService):
         super().__init__()
         self.profileService = profileService
         self.vaultService = vaultService
@@ -55,8 +57,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         self.configService = Get(ConfigService)
         self.rabbitmqService = Get(RabbitMQService)
 
-    @PingService([HCVaultService])
-    @UseServiceLock(HCVaultService,MongooseService,lockType='reader')
+    @PingService([VaultService])
+    @UseServiceLock(VaultService,MongooseService,lockType='reader')
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler)
     @UsePermission(AdminPermission)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
@@ -79,9 +81,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return result
 
     @UsePermission(AdminPermission)
-    @PingService([HCVaultService])
+    @PingService([VaultService])
     @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryControlHandler)
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False,infinite_wait=True)
+    @UseServiceLock(VaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
@@ -108,18 +110,18 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         profileModel = await self.mongooseService.get(self.model,profile,True)
         modelUpdate = await self.pipe_profil_model(request,'model_update')
 
-        await self.profileService.update_profile(profileModel,modelUpdate)
+        await profileModel.update_profile(modelUpdate)
 
         await self.mongooseService.primary_key_constraint(profileModel,True)
-        profileModel = await self.profileService.update_meta_profile(profileModel)
+        await self.mongooseService.exists_unique(profileModel,True)
+        await profileModel.update_meta_profile()
 
         await channel.refresh_worker_state()
-
         broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return profileModel
     
-    @PingService([HCVaultService])
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @PingService([VaultService])
+    @UseServiceLock(VaultService,lockType='reader',check_status=False)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
@@ -135,7 +137,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.profile_model_satisfaction(modelCreds)
 
         await self.profileService.update_credentials(profile,modelCreds,self.model._vault)
-        await self.profileService.update_meta_profile(profileModel)
+        await profileModel.update_meta_profile()
 
         await channel.refresh_worker_state()
 
@@ -172,7 +174,6 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             raise ProfileModelRequestBodyError
         
         model:Type[BaseProfileModel | Document] = getattr(cls,modelType,None)
-        print(model)
         if model == None:
             raise AttributeError
         
@@ -194,7 +195,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
                 return False
             return True
 
-        mc:MongoCondition = self.model.condition
+        mc:MongoCondition = self.model._condition
         if mc == None:
             return
         
@@ -234,8 +235,8 @@ def generate_profil_model_ressource(model:Type[BaseProfileModel],path:str):
 
     forbid_extra = ConfigDict(extra="forbid")
     
-    model_update = subset_model(model,f'Update{model.__name__}',exclude=set(model.unique_indexes).union(model.secrets_keys).union(base_attr),__config__=forbid_extra)
-    model_creds = subset_model(model,f'Secrets{model.__name__}',include=set(model.secrets_keys).union(base_attr),__config__=forbid_extra)
+    model_update = subset_model(model,f'Update{model.__name__}',exclude=set(model._unique_indexes).union(model._secrets_keys).union(base_attr),__config__=forbid_extra)
+    model_creds = subset_model(model,f'Secrets{model.__name__}',include=set(model._secrets_keys).union(base_attr),__config__=forbid_extra)
 
     ModelRessource = type(f"{model.__name__}{BaseProfilModelRessource.__name__}",(BaseProfilModelRessource,),{'model':model,'profileType':path,'model_update':model_update,'model_creds':model_creds})
     setattr(ModelRessource,'meta',base_meta.copy())

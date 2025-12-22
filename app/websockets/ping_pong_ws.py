@@ -3,7 +3,7 @@ from fastapi import WebSocket
 from app.container import InjectInMethod
 from app.definition._ws import BaseWebSocketRessource,WebSocketRessource
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.health_service import HealthService
 
 PONG =b'PONG'

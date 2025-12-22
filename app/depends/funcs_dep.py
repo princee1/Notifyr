@@ -325,12 +325,14 @@ async def get_combined_policies(client:ClientORM):
     allowed_profiles = set()
     allowed_blogs = set()
     allowed_routes = {}
+    allowed_agents = set()
 
     for p in policies:
         p = await p
         roles.update(p.roles)
         allowed_assets.update(p.allowed_assets)
         allowed_profiles.update(p.allowed_profiles)
+        allowed_agents.update(p.allowed_agents)
         allowed_blogs.update(p.allowed_blogs)
 
         for k,r in p.allowed_routes.items():
@@ -350,6 +352,7 @@ async def get_combined_policies(client:ClientORM):
 
     allowed_assets = filter_paths(list(allowed_assets),'/')
     allowed_profiles = list(allowed_profiles)
+    allowed_agents = list(allowed_agents)
     roles = list(roles)
     allowed_blogs=list(allowed_blogs)
 
@@ -358,5 +361,6 @@ async def get_combined_policies(client:ClientORM):
         allowed_routes=allowed_routes,
         allowed_profiles=allowed_profiles,
         allowed_assets=allowed_assets,
+        allowed_agents=allowed_agents,
         allowed_blogs=allowed_blogs
     )

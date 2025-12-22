@@ -3,7 +3,7 @@ import functools
 from typing import Callable, Self
 from app.classes.profiles import ProfileModelException
 from app.definition._interface import Interface, IsInterface
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 
 @IsInterface
 class ProfileEventInterface(Interface):

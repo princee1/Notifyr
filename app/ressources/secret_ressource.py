@@ -1,6 +1,7 @@
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseServiceLock
-from app.services.database_service import MongooseService, TortoiseConnectionService
-from app.services.secret_service import HCVaultService
+from app.services.database.mongoose_service import MongooseService
+from app.services.database.tortoise_service import TortoiseConnectionService
+from app.services.vault_service import VaultService
 from app.container import Get, InjectInMethod
 from app.services.security_service import JWTAuthService
 
@@ -9,7 +10,7 @@ from app.services.security_service import JWTAuthService
 class CRUDSecretMessageRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self,vaultService:HCVaultService,jwtAuthService:JWTAuthService):
+    def __init__(self,vaultService:VaultService,jwtAuthService:JWTAuthService):
         super().__init__()
         self.vaultService = vaultService
         self.jwtAuthService = jwtAuthService
@@ -32,7 +33,7 @@ class CRUDSecretMessageRessource(BaseHTTPRessource):
 class SecretMessageRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self,vaultService:HCVaultService,mongooseService:MongooseService,tortoiseConnectionService:TortoiseConnectionService):
+    def __init__(self,vaultService:VaultService,mongooseService:MongooseService,tortoiseConnectionService:TortoiseConnectionService):
         super().__init__()
         self.vaultService =vaultService
         self.mongooseService = mongooseService
@@ -41,7 +42,7 @@ class SecretMessageRessource(BaseHTTPRessource):
         self.jwtService = Get(JWTAuthService)
     
 
-    @UseServiceLock(HCVaultService,lockType='reader')
+    @UseServiceLock(VaultService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],deprecated=True)
     async def print_creds(self,):
         ...

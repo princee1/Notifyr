@@ -6,16 +6,17 @@ from app.manager.task_manager import TaskManager
 from app.models.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
-from app.services.assets_service import AssetService, RouteAssetType
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.contacts_service import ContactsService
 from app.services.cost_service import CostService
-from app.services.database_service import RedisService
-from app.services.secret_service import HCVaultService
+
+from app.services.database.redis_service import RedisService
+from app.services.vault_service import VaultService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
 from app.utils.constant import HTTPHeaderConstant
+from app.utils.globals import CAPABILITIES
 from app.utils.helper import flatten_dict
 
  
@@ -75,74 +76,76 @@ class JWTRouteHTTPPermission(Permission):
 
         return True
     
+if CAPABILITIES['object']:
+    from app.services.assets_service import AssetService, RouteAssetType
+    class JWTAssetObjectPermission(Permission):
 
-class JWTAssetObjectPermission(Permission):
+        def __init__(self,template_type:RouteAssetType=None,extension:str=None,model_keys:list[str]=[],options=[],accept_none_template:bool=False):
+            #TODO Look for the scheduler object and the template
+            super().__init__()
+            self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
+            self.assetService:AssetService = Get(AssetService)
+            self.model_keys=model_keys
+            self.template_type = template_type
+            self.options = options
+            self.extension = extension
+            self.accept_none= accept_none_template
 
-    def __init__(self,template_type:RouteAssetType=None,extension:str=None,model_keys:list[str]=[],options=[],accept_none_template:bool=False):
-        #TODO Look for the scheduler object and the template
-        super().__init__()
-        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
-        self.assetService:AssetService = Get(AssetService)
-        self.model_keys=model_keys
-        self.template_type = template_type
-        self.options = options
-        self.extension = extension
-        self.accept_none= accept_none_template
+        def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
+            if authPermission['client_type'] == ClientType.Admin:
+                return True
+            
+            template_type = self.template_type if template_type == None else template_type
 
-    def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
-        if authPermission['client_type'] == ClientType.Admin:
-            return True
+            if template == '':
+                if self.accept_none:
+                    if template_type==None:
+                        return '/' in authPermission['allowed_assets']['dirs']
+                else:
+                    return False
         
-        template_type = self.template_type if template_type == None else template_type
+            if self.extension:
+                template +=f".{self.extension}"
+            
+            self.assetService.verify_asset_permission(template,authPermission,template_type,self.options)
 
-        if template == '':
-            if self.accept_none:
-                if template_type==None:
-                    return '/' in authPermission['allowed_assets']['dirs']
-            else:
+            if scheduler == None:
+                return True
+
+            if len(self.model_keys) == 0:
+                return True
+            
+            for content in scheduler.model_dump(include={'content'}):
+                content = flatten_dict(content)
+                if not self.assetService.verify_content_asset_permission(content,self.model_keys,authPermission,self.options):
+                    return False
+                                    
+            return True
+
+    class JWTStaticObjectPermission(Permission):
+            
+        def permission(self,authPermission:AuthPermission,blog:str):
+            if authPermission['client_type'] == ClientType.Admin:
+                return True
+            
+            if blog not in authPermission['allowed_blogs']:
                 return False
-       
-        if self.extension:
-            template +=f".{self.extension}"
-        
-        self.assetService.verify_asset_permission(template,authPermission,template_type,self.options)
-
-        if scheduler == None:
+            
             return True
 
-        if len(self.model_keys) == 0:
-            return True
-        
-        for content in scheduler.model_dump(include={'content'}):
-            content = flatten_dict(content)
-            if not self.assetService.verify_content_asset_permission(content,self.model_keys,authPermission,self.options):
-                return False
-                                
-        return True
+    class JWTSignatureAssetPermission(JWTAssetObjectPermission):
 
-class JWTStaticObjectPermission(Permission):
+        def __init__(self):
+            super().__init__('email')
         
-    def permission(self,authPermission:AuthPermission,blog:str):
-        if authPermission['client_type'] == ClientType.Admin:
-            return True
-        
-        if blog not in authPermission['allowed_blogs']:
-            return False
-        
-        return True
+        def permission(self, authPermission:AuthPermission, scheduler:BaseEmailSchedulerModel):
+            if  scheduler.signature == None:
+                return True
+            if scheduler.signature.template == "":
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Signature template not provided")
+            
+            return super().permission(authPermission, scheduler.signature, None, None)
 
-class JWTSignatureAssetPermission(JWTAssetObjectPermission):
-
-    def __init__(self):
-        super().__init__('email')
-    
-    def permission(self, authPermission:AuthPermission, scheduler:BaseEmailSchedulerModel):
-        if  scheduler.signature == None:
-            return True
-        if scheduler.signature.template == "":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Signature template not provided")
-        
-        return super().permission(authPermission, scheduler.signature, None, None)
 
 class JWTContactPermission(Permission):
 
@@ -278,6 +281,17 @@ class ProfilePermission(Permission):
         
         return True
     
+
+class AgentPermission(Permission):
+
+    async def permission(self,authPermission:AuthPermission,agent:str):
+        
+        if agent not in authPermission['allowed_agents']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Agent Is not allowed to be used'
+            )
+        return True
 
 
 class TaskCostPermission(Permission):

@@ -9,8 +9,11 @@ install	:
 cleandep:
 	pipreqs --clean requirements_dev.txt
 
-getdep: 
+getdevdep: 
 	pip freeze > requirements_dev.txt
+
+getdep:
+	pipreqs --ignore twilio,test,scripts,docs,docker,database,dashboard,balancer,assets,.venv .  
 
 venv:
 	python -m venv .venv
@@ -22,6 +25,9 @@ activate:
 
 deactivate:
 	deactivate
+
+proto:
+	python -m grpc_tools.protoc -I ./app/grpc --python_out=./app/grpc/ --grpc_python_out=./app/grpc ./app/grpc/agent.proto
 
 ################################   ENV AND CACHE              ###################################
 

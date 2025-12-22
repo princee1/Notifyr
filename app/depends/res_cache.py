@@ -1,12 +1,11 @@
 from functools import wraps
-from typing import Dict, Generic, Type, TypeVar, TypedDict
-from aiohttp_retry import Any, Callable
+from typing import Dict, Generic, Type, TypeVar, TypedDict,Any, Callable
 from pydantic import BaseModel
 from app.classes.minio import ObjectS3ResponseModel, key_setter
 from app.container import Get
-from app.services.database_service import MemCachedService,MemCacheNoValidKeysDefinedError
 from pydantic.main import _model_construction
-
+from app.errors.db_error import MemCacheNoValidKeysDefinedError
+from app.services.database.memcached_service import MemCachedService
 from app.utils.helper import APIFilterInject
 
 C = TypeVar('C',BaseModel,Dict,dict,bool,int,str)

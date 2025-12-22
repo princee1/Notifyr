@@ -7,19 +7,19 @@ from app.classes.auth_permission import MustHave, MustHaveRoleSuchAs, Role
 from app.container import Get,InjectInMethod
 from app.decorators.guards import ActiveContactGuard, ContactActionCodeGuard, RegisteredContactsGuard
 from app.decorators.handlers import AsyncIOHandler, ContactsHandler, TemplateHandler, TortoiseHandler, handle_http_exception
-from app.depends.funcs_dep import get_contact_permission, Get_Contact, get_subs_content,verify_twilio_token
+from app.depends.funcs_dep import get_contact_permission, Get_Contact, get_subs_content
 from app.decorators.permissions import JWTContactPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ContactORMCache,ContactSummaryORMCache
 from app.models.contacts_model import AppRegisteredContactModel, ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
-from app.services.database_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.services.twilio_service import SMSService, CallService
 from app.depends.dependencies import get_auth_permission, get_contact_token
 from app.decorators.pipes import ContactStatusPipe, RelayPipe
 from app.depends.variables import summary_query
+from app.utils.globals import CAPABILITIES
 
 
 CONTACTS_PREFIX = 'contacts'
@@ -160,6 +160,9 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
     async def get_contact_subscription(self, contact: Annotated[ContactORM, Depends(get_contacts)], subs_content: Annotated[ContentSubscriptionORM, Depends(get_subs_content)], authPermission=Depends(get_auth_permission)):
         return await self.subscriptionService.get_contact_subscription(contact, subs_content)
         
+if CAPABILITIES["twilio"]:
+    from app.services.twilio_service import TwilioService
+    from app.depends.variables import verify_twilio_token
 
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @UseHandler(TortoiseHandler,ContactsHandler,AsyncIOHandler)
@@ -176,28 +179,36 @@ class ContactSecurityRessource(BaseHTTPRessource):
         self.jwtAuthService = jwtService
         self.contactService = contactsService
     
-    @UseGuard(RegisteredContactsGuard)
-    @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
-    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.GET],dependencies=[Depends(verify_twilio_token)])
-    async def check_password(self,contact: Annotated[ContactORM, Depends(get_contacts)],request:Request, authPermission=Depends(get_auth_permission)):
-        ...
+    if CAPABILITIES["twilio"]:
+        @UseGuard(RegisteredContactsGuard)
+        @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
+        @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.GET],dependencies=[Depends(verify_twilio_token)])
+        async def check_password(self,contact: Annotated[ContactORM, Depends(get_contacts)],request:Request, authPermission=Depends(get_auth_permission)):
+            ...
 
-    @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
-    @UsePermission(JWTContactPermission('update'))
-    @UseGuard(RegisteredContactsGuard)
-    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PUT],dependencies=[Depends(verify_twilio_token)])
-    async def update_raw_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token),contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
-        # TODO update token permission after use
-        ...
+        @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
+        @UsePermission(JWTContactPermission('update'))
+        @UseGuard(RegisteredContactsGuard)
+        @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PUT],dependencies=[Depends(verify_twilio_token)])
+        async def update_raw_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token),contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
+            # TODO update token permission after use
+            ...
 
-    @UsePermission(JWTContactPermission('create'))
-    @UseGuard(RegisteredContactsGuard)
-    @PingService([CallService,EmailSenderService])
-    @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
-    async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
-        # TODO Request from the user
-        # TODO hash the token before sending
-        ...
+        @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
+        @UseGuard(RegisteredContactsGuard)
+        @UsePermission(JWTContactPermission('update'))
+        @BaseHTTPRessource.HTTPRoute('/token/{contact_id}',[HTTPMethod.GET],dependencies=[Depends(verify_twilio_token)])
+        async def verify_token(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token),contactPermission=Depends(get_contact_permission),authPermission=Depends(get_auth_permission)):
+            return
+
+        @UsePermission(JWTContactPermission('create'))
+        @UseGuard(RegisteredContactsGuard)
+        @PingService([TwilioService])
+        @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
+        async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
+            # TODO Request from the user
+            # TODO hash the token before sending
+            ...
     
     @UsePermission(JWTContactPermission('update'))
     @UseGuard(RegisteredContactsGuard)
@@ -207,12 +218,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
         # TODO hash the token before sending
         ...
 
-    @UseRoles(roles=[Role.TWILIO],options=[MustHave(Role.TWILIO)])
-    @UseGuard(RegisteredContactsGuard)
-    @UsePermission(JWTContactPermission('update'))
-    @BaseHTTPRessource.HTTPRoute('/token/{contact_id}',[HTTPMethod.GET],dependencies=[Depends(verify_twilio_token)])
-    async def verify_token(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token),contactPermission=Depends(get_contact_permission),authPermission=Depends(get_auth_permission)):
-        return
+   
     
     # @UseRoles(options=[MustHaveRoleSuchAs(Role.CONTACTS,Role.REFRESH,Role.RELAY)])
     # @UseGuard(RegisteredContactsGuard)
@@ -228,7 +234,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
 @HTTPRessource(CONTACTS_CRUD_PREFIX)
 class ContactsCRUDRessource(BaseHTTPRessource):
     @InjectInMethod()
-    def __init__(self, contactsService: ContactsService, emailService: EmailSenderService, smsService: SMSService):
+    def __init__(self, contactsService: ContactsService):
         super().__init__()
         self.contactsService = contactsService
 

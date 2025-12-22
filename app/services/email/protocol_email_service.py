@@ -13,9 +13,10 @@ from bs4 import BeautifulSoup
 from app.classes.profiles import ProfileState,ProfileModelException
 from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.models.communication_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
-from app.services.database_service import MongooseService, RedisService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService
+from app.utils.globals import APP_MODE
 from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 #from app.classes.mail_oauth_access import OAuth, MailOAuthFactory
@@ -27,7 +28,7 @@ from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameD
 
 from ..logger_service import LoggerService
 from app.definition import _service
-from ..config_service import CeleryMode, ConfigService
+from ..config_service import ApplicationMode, ConfigService
 import ssl
 
 from app.models.email_model import EmailStatus, EmailTrackingORM, TrackingEmailEventORM, map_smtp_error_to_status
@@ -63,7 +64,7 @@ class BaseEmailService(_service.BaseMiniService, ProfileEventInterface):
     @staticmethod
     def Lifecycle(pref: Literal['async', 'sync'] = None,build:bool =False):
 
-        if ConfigService._celery_env != CeleryMode.none:
+        if APP_MODE != ApplicationMode.server:
             pref = 'sync'
         elif pref == None:
             pref = 'async'
@@ -285,7 +286,7 @@ class SMTPEmailMiniService(BaseEmailService,EmailSendInterface):
         email = EmailBuilder(content, meta, images, attachment)
         # TODO add references and reply_to
 
-        # if self.configService.celery_env == CeleryMode.none:
+        # if APP_MODE == CeleryMode.none:
         #     return await self._send_message(email, message_tracking_id, contact_id=contact_id)
         return self._send_message(email,contact_ids=contact_ids, connector=connector)
 

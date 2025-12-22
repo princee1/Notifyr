@@ -1,5 +1,5 @@
 from app.definition._service import Service,BaseService
-from .database_service import MongooseService
+from app.services.database.mongoose_service import MongooseService
 
 
 @Service()

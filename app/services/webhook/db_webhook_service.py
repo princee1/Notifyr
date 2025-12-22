@@ -8,7 +8,7 @@ from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import AuthConfig, DBWebhookModel, MongoDBWebhookModel, PostgresWebhookModel
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.utils.constant import StreamConstant
 from pymongo.errors import ServerSelectionTimeoutError, ConfigurationError, OperationFailure

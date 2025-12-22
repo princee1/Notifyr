@@ -1,7 +1,7 @@
 {
     "version": "1.0.0",
     "currency": "NOTIFYR-CREDITS",
-    "system": "credits",
+    "system": "Notifyr Credit System",
     "product": "demo",
     "promotions": {},
     "rules": {
@@ -183,8 +183,11 @@
         "phone": 10000,
         "contact": 1000,
         "client": 5,
-        "profile": 10,
         "link": 2,
-        "blog":20
+        "agent":10,
+        "workflow":10,
+        "profile": 10,
+        "blog":20,
+        "tokens":100000000000
     }
 }

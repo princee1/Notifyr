@@ -2,7 +2,6 @@
 
 # --- 1. Environment Variable Checks (Required from outside) ---
 : ${VAULT_ADDR:?"Error: VAULT_ADDR environment variable is not set."}
-: ${REDIS_HOST:?"Error: REDIS_HOST environment variable is not set."}
 
 # --- 2. Global Shell Variables (Configured inside the script) ---
 COSTS_FILE="/run/secrets/costs.json"
@@ -114,7 +113,7 @@ transaction() {
     local credit_key="notifyr/credit:$key_suffix"
     local bill_key="notifyr/credit:$key_suffix@bill[$YEAR-$MONTH]"
 
-    local redis_url="redis://$REDIS_USER:$REDIS_PASS@$REDIS_HOST:$REDIS_PORT/$REDIS_DB"
+    local redis_url="redis://$REDIS_USER:$REDIS_PASS@redis:$REDIS_PORT/$REDIS_DB"
 
     case "$command" in
         incr|set)

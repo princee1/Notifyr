@@ -5,7 +5,6 @@ from typing import Callable
 
 from amqp import AccessRefused
 from fastapi.exceptions import ResponseValidationError
-from h11 import LocalProtocolError
 import hvac
 from minio import S3Error, ServerError
 import requests
@@ -598,10 +597,7 @@ class FastAPIHandler(Handler):
 
         except ResponseValidationError as e :
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Error while sending the response","error":e.errors()})
-
-        except LocalProtocolError as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail=e.error_status_hint)
-
+        
 
 
 class GlobalVarHandler(Handler):
@@ -652,9 +648,9 @@ class ProfileHandler(Handler):
     
 class PydanticHandler(Handler):
 
-    def handle(self, function, *args, **kwargs):
+    async def handle(self, function, *args, **kwargs):
         try:
-            return super().handle(function, *args, **kwargs)
+            return await super().handle(function, *args, **kwargs)
         except PydanticValidationError as e:
             raise HTTPException(status_code=422, detail=e.errors(include_url=False,include_context=False))
         

@@ -12,9 +12,9 @@ from app.interface.issue_auth import IssueAuthInterface
 from app.manager.broker_manager import Broker
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
-from app.services.database_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.profile_service import ProfileService
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 from app.services.setting_service import SettingService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
@@ -108,6 +108,7 @@ class PolicyRessource(BaseHTTPRessource):
             case 'merge':    
                 policy.allowed_assets = list(set(model.allowed_assets + policy.allowed_assets))
                 policy.allowed_profiles = list(set(model.allowed_profiles +policy.allowed_profiles))
+                policy.allowed_agents = list(set(model.allowed_agents +policy.allowed_agents))
                 policy.roles = list(set(model.roles + policy.roles))
                 policy.allowed_routes = {**policy.allowed_routes,**model.allowed_routes}
             
@@ -116,11 +117,13 @@ class PolicyRessource(BaseHTTPRessource):
                 policy.allowed_profiles = model.allowed_profiles
                 policy.roles = model.roles
                 policy.allowed_routes = model.allowed_routes
+                policy.allowed_agents = model.allowed_agents
             
             case 'delete':
                 policy.allowed_assets = list(set(policy.allowed_assets) - set(model.allowed_assets))
                 policy.allowed_profiles = list(set(policy.allowed_profiles) - set(model.allowed_profiles))
                 policy.roles = list(set(policy.roles) - set(model.roles))
+                policy.allowed_agents = list(set(policy.allowed_agents) - set(model.allowed_agents))
                 policy.allowed_routes = {k: v for k, v in policy.allowed_routes.items() if k not in model.allowed_routes}
 
         
@@ -141,7 +144,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         self.adminService = adminService
 
         self.settingService = Get(SettingService)
-        self.vaultService = Get(HCVaultService)
+        self.vaultService = Get(VaultService)
 
         self.key = self.vaultService.CLIENT_PASSWORD_HASH_KEY
 
@@ -420,11 +423,11 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully un-blacklisted", "un_blacklist": blacklist})
 
-    @PingService([HCVaultService])
+    @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
     @UseServiceLock(SettingService,lockType='reader')
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(VaultService,lockType='reader',check_status=False)
     @UseServiceLock(JWTAuthService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
@@ -445,10 +448,10 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
                                                                      "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},
                                                                      })
     
-    @PingService([HCVaultService])
+    @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
     @UseServiceLock(SettingService,lockType='reader')
-    @UseServiceLock(HCVaultService,lockType='reader',check_status=False)
+    @UseServiceLock(VaultService,lockType='reader',check_status=False)
     @UseServiceLock(JWTAuthService,lockType='writer')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)

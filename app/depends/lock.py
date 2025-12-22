@@ -2,7 +2,7 @@ import functools
 from typing import Callable
 from app.container import Get
 from app.definition._service import ServiceStatus
-from app.services.database_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService
 
 _valid_state = {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT}
 

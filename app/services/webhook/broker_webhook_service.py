@@ -4,7 +4,7 @@ from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, MiniSe
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import AuthConfig, KafkaWebhookModel, RedisWebhookModel, SQSWebhookModel
 from app.services.config_service import ConfigService
-from app.services.database_service import RedisService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from redis.asyncio import Redis,from_url as async_from_url
 from redis import Redis as SyncRedis,from_url

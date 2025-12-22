@@ -1,9 +1,7 @@
-from dataclasses import dataclass
 from typing import Callable, List, Literal,Dict,NotRequired, Optional, Self
 from pydantic import BaseModel, field_validator, model_validator
 from typing_extensions import TypedDict
 from enum import Enum
-from time import time
 
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from .template import Extension
@@ -97,6 +95,7 @@ class AuthPermission(TypedDict):
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str] | AssetsPermission
     allowed_profiles:List[str]=[]
+    allowed_agents:List[str]=[]
     allowed_blogs: List[str] = []
     challenge: str
     scope:str
@@ -133,6 +132,7 @@ class RoutePermissionModel(BaseModel):
 
 class PolicyModel(BaseModel):
     allowed_profiles:List[str]=[]
+    allowed_agents:List[str] = []
     allowed_routes: Dict[str, RoutePermissionModel] = {}
     allowed_assets: List[str] =[]
     allowed_blog: List[str] = []

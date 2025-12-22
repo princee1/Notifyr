@@ -11,8 +11,7 @@ from app.utils.constant import VaultConstant
 from app.utils.fileIO import FDFlag
 from app.utils.tools import Cache, RunInThreadPool, Time
 from .config_service import ConfigService
-from dataclasses import dataclass
-from .file_service import FileService
+from .file.file_service import FileService
 from app.definition._service import AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
@@ -25,7 +24,7 @@ from app.utils.helper import generateId, b64_encode, b64_decode
 import os
 import hmac
 import hashlib
-from app.services.secret_service import HCVaultService
+from app.services.vault_service import VaultService
 
 
 SEPARATOR = "|"
@@ -68,7 +67,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
     gen_id_path='generation-id'
     NONCE="1234567891234578"
 
-    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:VaultService) -> None:
         super().__init__()
         EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
@@ -284,7 +283,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 class SecurityService(BaseService, EncryptDecryptInterface):
     NONCE="1234567891234578"
 
-    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:HCVaultService) -> None:
+    def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:VaultService) -> None:
         super().__init__()
         EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
@@ -300,13 +299,6 @@ class SecurityService(BaseService, EncryptDecryptInterface):
 
         if token != self.API_KEY:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Api Key provided does not match the one given")
-
-    def generate_custom_api_key(self, ip_address: str):
-        raise NotImplementedError
-        time.sleep(random()/100)
-        data = ip_address + SEPARATOR +  \
-            str(time.time_ns()) + SEPARATOR + self.configService.API_KEY
-        return self._encode_value(data, self.vaultService.API_ENCRYPT_TOKEN)
 
     def build(self,build_state=-1):
         api_key = self.fileService.readFile('/run/secrets/api_key.txt',flag=FDFlag.READ)

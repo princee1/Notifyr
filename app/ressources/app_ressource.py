@@ -12,7 +12,7 @@ from app.depends.orm_cache import ContactORMCache, ContactSummaryORMCache
 from app.models.contacts_model import ContactORM, ContactSummary
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.file_service import FileService
+from app.services.file.file_service import FileService
 from app.services.link_service import LinkService
 from app.utils.fileIO import FDFlag
 

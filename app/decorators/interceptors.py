@@ -8,11 +8,22 @@ from app.definition._utils_decorator import Interceptor, InterceptorDefaultExcep
 from app.depends.res_cache import ResponseCacheInterface
 from app.manager.broker_manager import Broker
 from app.manager.keep_alive_manager import KeepAliveManager
+from app.manager.task_manager import TaskManager
 from app.services.cost_service import CostService
-from app.services.database_service import MemCachedService, RedisService
+from app.services.database.memcached_service import MemCachedService
+
+from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService
-from app.utils.constant import RedisConstant
+from app.utils.constant import CostConstant, RedisConstant
 from app.utils.helper import APIFilterInject, SkipCode, copy_response
+
+class RegisterBackgroundTaskInterceptor(Interceptor):
+
+    def intercept_before(self):
+        ...
+    
+    def intercept_after(self, result:Any,taskManager:TaskManager):
+        taskManager.register_backgroundTask()
 
 class KeepAliveResponseInterceptor(Interceptor):
     
@@ -21,7 +32,6 @@ class KeepAliveResponseInterceptor(Interceptor):
 
     def intercept_after(self,result:Any|Response, keepAliveConn:KeepAliveManager,request:Request):
         keepAliveConn.dispose()
-
 
 class ResponseCacheInterceptor(Interceptor):
 
@@ -57,7 +67,6 @@ class ResponseCacheInterceptor(Interceptor):
         else:
             backgroundTasks.add_task(self.cacheType.Delete,**kwargs)
         
-
 class TaskCostInterceptor(Interceptor):
     
     def __init__(self,singular_static_cost:int|None=None,retry_limit=20):
@@ -82,8 +91,6 @@ class TaskCostInterceptor(Interceptor):
         self.costService.inject_cost_info(response,bill)
         broker.push(RedisConstant.LIMITER_DB,self.costService.bill_key(cost.credit_key),bill)
         
-        
-
 class DataCostInterceptor(Interceptor):
 
     Mode = Literal['refund','purchase']
