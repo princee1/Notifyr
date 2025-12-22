@@ -12,6 +12,7 @@ from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
+from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.vault_service import VaultService
@@ -197,7 +198,7 @@ class Application(EventInterface):
         await redisService.close_connections()
 
         remoteAgentService = Get(RemoteAgentService)
-        remoteAgentService.disconnect_channel()
+        await remoteAgentService.disconnect_channel()
 
     @register_hook('startup',)
     async def start_leader_task_election(self):
@@ -288,14 +289,19 @@ class Application(EventInterface):
     async def revoke_dynamic_lease(self):
         mongooseService: MongooseService = Get(MongooseService)
         tortoiseConnService = Get(TortoiseConnectionService)
-        awsS3Service = Get(ObjectS3Service)
         redisService = Get(RedisService)
         vaultService = Get(VaultService)
+        rabbitmqService = Get(RabbitMQService)
 
+        await RunInThreadPool(rabbitmqService.revoke_lease)()
         await RunInThreadPool(mongooseService.revoke_lease)()
         await RunInThreadPool(tortoiseConnService.revoke_lease)()
-        await RunInThreadPool(awsS3Service.revoke_lease)()
         await RunInThreadPool(redisService.revoke_lease)()
+
+        if CAPABILITIES['object']:
+            objectS3Service = Get(ObjectS3Service)
+            await RunInThreadPool(objectS3Service.revoke_lease)()
+            
         await RunInThreadPool(vaultService.revoke_auth_token)()
 
     @property

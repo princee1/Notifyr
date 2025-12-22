@@ -281,7 +281,7 @@ class CeleryBrokerGuard(Guard):
         self.max_visibility_time = self.configService.CELERY_VISIBILITY_TIMEOUT *.15
     
     def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
-        if self.configService.CELERY_BROKER == 'redis':
+        if self.configService.BROKER_PROVIDER == 'redis':
             if scheduler.task_type in self._not_allowed_redis_eta:
                 if self.allowed_fallback:
                     taskManager.set_algorithm('aps')

@@ -12,7 +12,7 @@ from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.errors.db_error import RedisDatabaseDoesNotExistsError, RedisStreamDoesNotExistsError
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService, UvicornWorkerService
-from app.services.database.base_db_service import TempCredentialsDatabaseService
+from app.services.database.base_db_service import BrokerService, ResultBackendService, TempCredentialsDatabaseService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
 from app.utils.constant import RedisConstant, SubConstant, VaultConstant
@@ -29,7 +29,7 @@ DB_KEY = 'db'
 
 
 @Service()
-class RedisService(TempCredentialsDatabaseService):
+class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerService):
 
     GROUP = 'NOTIFYR-GROUP'
     
@@ -201,7 +201,7 @@ class RedisService(TempCredentialsDatabaseService):
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE)
         self.backend_creds = self.vaultService.database_engine.generate_credentials(VaultConstant.CELERY_BACKEND_ROLE)
         
-        if self.configService.CELERY_BROKER == 'redis':
+        if self.configService.BROKER_PROVIDER == 'redis':
             self.broker_creds = self.vaultService.database_engine.generate_credentials(VaultConstant.CELERY_BACKEND_ROLE)
 
         self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.backend_creds['data']['username'],password=self.backend_creds['data']['password'])
@@ -239,7 +239,7 @@ class RedisService(TempCredentialsDatabaseService):
             raise BuildFailureError(e.args)
 
     def revoke_lease(self):
-        if self.configService.CELERY_BROKER == 'redis':
+        if self.configService.BROKER_PROVIDER == 'redis':
             self.vaultService.revoke_lease(self.broker_creds['lease_id'])
 
         self.vaultService.revoke_lease(self.backend_creds['lease_id'])
@@ -348,4 +348,12 @@ class RedisService(TempCredentialsDatabaseService):
     async def range(self,database:int|str,name:str,start:int,stop:int,redis:Redis=None):
         return await redis.lrange(name,start,stop)
 
-  
+    
+    def compute_backend_url(self)->str:
+        return f"redis://{self.backend_creds['data']['username']}:{self.backend_creds['data']['password']}@{self.configService.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}"
+
+    def compute_broker_url(self)->str:
+        if self.configService.BROKER_PROVIDER == 'redis':
+            return f"redis://{self.broker_creds['data']['username']}:{self.broker_creds['data']['password']}@{self.configService.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}"
+        else:
+            return None

@@ -479,19 +479,19 @@ class BaseMiniServiceManager(BaseService):
 
     def build(self,counter:StatusCounter, build_state = DEFAULT_BUILD_STATE):
         if counter.total_service <1:
-            raise BuildFailureError
+            raise BuildFailureError('No mini service to build')
         
         if counter.available_service == counter.total_service:
             return
         
         if counter.acceptable_service < 1:
-            raise BuildWarningError
+            raise BuildWarningError('No acceptable mini service to build')
         
         if counter.acceptable_service < counter.total_service:
-            raise BuildOkError
+            raise BuildOkError('Some mini services are not acceptable')
         
         if counter.acceptable_service == counter.total_service:
-            raise BuildSkipError
+            raise BuildSkipError('All mini services works almost att')
         
     
     async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):

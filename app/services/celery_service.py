@@ -143,13 +143,13 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
         if self.configService.CELERY_WORKERS_EXPECTED < 1:
             raise BuildOkError('No workers expected')
         
-        if self.configService.CELERY_BROKER not in ['rabbitmq','redis']:
+        if self.configService.BROKER_PROVIDER not in ['rabbitmq','redis']:
             raise BuildOkError('')
         
-        if self.configService.CELERY_BROKER == 'redis' and self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
+        if self.configService.BROKER_PROVIDER == 'redis' and self.redisService.service_status == ServiceStatus.NOT_AVAILABLE:
             raise BuildOkError('')
 
-        if self.configService.CELERY_BROKER == 'rabbitmq' and self.rabbitmqService.service_status == ServiceStatus.NOT_AVAILABLE:
+        if self.configService.BROKER_PROVIDER == 'rabbitmq' and self.rabbitmqService.service_status == ServiceStatus.NOT_AVAILABLE:
             raise BuildOkError('')
          
     def build(self,build_state=-1):
@@ -268,7 +268,7 @@ class ChannelMiniService(BaseMiniService):
         
         scheduler:SchedulerModel = data.get('scheduler',None)
         taskManager = data.get('taskManager',None)
-        if self.configService.CELERY_BROKER == 'rabbitmq':
+        if self.configService.BROKER_PROVIDER == 'rabbitmq':
             add_warnings(scheduler,{'test':'rabbitmq'})
         else:
             add_warnings(scheduler,{'test':'redis'})
@@ -329,7 +329,7 @@ class ChannelMiniService(BaseMiniService):
     @RunInThreadPool
     async def delete_queue(self):
         await self.pause_worker()
-        if self.configService.CELERY_BROKER == 'redis':
+        if self.configService.BROKER_PROVIDER == 'redis':
             return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
         else:
             with celery_app.connection_or_acquire() as conn:
@@ -343,6 +343,6 @@ class ChannelMiniService(BaseMiniService):
 
     @property
     def queue(self):
-        if self.configService.CELERY_BROKER == 'redis':
+        if self.configService.BROKER_PROVIDER == 'redis':
             return CeleryConstant.REDIS_QUEUE_NAME_RESOLVER(self.depService.queue_name)
         return self.depService.queue_name

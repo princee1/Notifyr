@@ -39,12 +39,12 @@ class RemoteAgentService(BaseMiniServiceManager):
     
     def verify_dependency(self):
         if not CAPABILITIES['agentic']:
-            raise BuildWarningError
+            raise BuildWarningError('Agentic capability is not enabled')
         
+    def build(self, build_state=...):
         if APP_MODE == ApplicationMode.agentic:
             raise BuildOkError
         
-    def build(self, build_state=...):
         self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
         
     def register_channel(self):
@@ -61,11 +61,11 @@ class RemoteAgentService(BaseMiniServiceManager):
 
         self.stub = agent_pb2_grpc.AgentStub(self.channel)
     
-    def disconnect_channel(self):
+    async def disconnect_channel(self):
         if self.service_status != ServiceStatus.AVAILABLE:
             raise ServiceNotAvailableError
         if self.channel:
-            self.channel.close()
+            await self.channel.close()
             self.channel = None
             self.stub = None
 

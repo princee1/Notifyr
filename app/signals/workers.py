@@ -21,7 +21,7 @@ def on_worker_ready(sender, **kwargs):
     hostname = sender.hostname
     
     for id,p in profileService.MiniServiceStore:
-        if configService.CELERY_BROKER =='redis':
+        if configService.BROKER_PROVIDER =='redis':
             queue_name:str = CeleryConstant.REDIS_QUEUE_NAME_RESOLVER(p.queue_name)
         else:
             queue_name=p.queue_name

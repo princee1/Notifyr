@@ -156,8 +156,7 @@ services:
       - IPINFO_API_KEY=${IPINFO_API_KEY}
       - USERNAME=${USERNAME}
       - DOMAIN_NAME=${DOMAIN_NAME}
-      - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
-      - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
+      - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
       - APS_JOBSTORE=${APS_JOBSTORE}
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
     networks:
@@ -211,8 +210,7 @@ services:
       - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - REDIS_HOST=${REDIS_HOST-redis}
-      - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
-      - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
+      - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
       - MODE=${MODE:-prod}
     networks:
       - data_net
@@ -240,8 +238,7 @@ services:
     environment:
       - REDIS_HOST=${REDIS_HOST-redis}
       - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
-      - CELERY_BROKER=${CELERY_BROKER:-rabbitmq}
-      - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES}
+      - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
       - MODE=${MODE:-prod}
     networks:
       - data_net

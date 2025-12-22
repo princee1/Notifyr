@@ -1,25 +1,25 @@
 from app.definition._service import LinkDep, Service
 from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.services.config_service import ConfigService
-from app.services.database.base_db_service import TempCredentialsDatabaseService
+from app.services.database.base_db_service import BrokerService, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import RabbitMQConstant
 
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)]) 
-class RabbitMQService(TempCredentialsDatabaseService):
+class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
     
     def __init__(self, configService:ConfigService, fileService:FileService, vaultService:VaultService):
         super().__init__(configService, fileService, vaultService, 60*60*24*29)
     
     def verify_dependency(self):
-        if self.configService.CELERY_BROKER == 'redis':
-            raise BuildWarningError
+        if self.configService.BROKER_PROVIDER == 'redis':
+            raise BuildWarningError("Redis is set as the broker; skipping RabbitMQ setup.")
     
     def build(self, build_state = ...):
-        import pika
         self.creds=self.vaultService.rabbitmq_engine.generate_credentials()
+        import pika
         credentials = pika.PlainCredentials(username=self.db_user,password=self.db_password)
 
         params = pika.ConnectionParameters(
@@ -41,6 +41,11 @@ class RabbitMQService(TempCredentialsDatabaseService):
             print(e)
             print(e.__class__)
             print(e.args)
-            self.configService.CELERY_BROKER = 'redis'
+            self.configService.BROKER_PROVIDER = 'redis'
             raise BuildFailureError
+
     
+    def compute_broker_url(self):
+        if self.configService.BROKER_PROVIDER == 'redis':
+            return None
+        return f"amqp://{self.db_user}:{self.db_password}@{self.configService.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}"

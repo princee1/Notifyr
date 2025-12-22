@@ -457,6 +457,8 @@ setup_database_config(){
       max_ttl=30d
 
     vault write notifyr-rabbitmq/roles/celery-ntfr-role \
+      ttl=30d \
+      max_ttl=30d \
       vhosts='{
           "notifyr": {
               "configure": ".*",

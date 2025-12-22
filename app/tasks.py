@@ -41,16 +41,14 @@ TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 configService: ConfigService = Get(ConfigService)
 redisService  = Get(RedisService)
 vaultService = Get(VaultService)
-rabbitmqService = Get(RabbitMQService)
+backend_url = redisService.compute_backend_url()
 
-backend_url = configService.CELERY_BACKEND_URL(redisService.backend_creds['data']['username'],redisService.backend_creds['data']['password'])
-
-if configService.CELERY_BROKER == 'redis':
-    broker_url = configService.CELERY_MESSAGE_BROKER_URL(redisService.broker_creds['data']['username'],redisService.broker_creds['data']['password'])
+if APP_MODE != ApplicationMode.beat:
+    rabbitmqService = Get(RabbitMQService)
+    broker_url = redisService.compute_broker_url() if configService.BROKER_PROVIDER == 'redis' else rabbitmqService.compute_broker_url()
 else:
-    broker_url = configService.CELERY_MESSAGE_BROKER_URL(rabbitmqService.db_user,rabbitmqService.db_password)
+    broker_url = None
 ##############################################           ##################################################
-
 celery_app = Celery('celery_app',
                     backend=backend_url,
                     broker=broker_url,
@@ -76,7 +74,7 @@ celery_app.conf.worker_soft_shutdown_timeout = 120.0
 celery_app.conf.worker_enable_soft_shutdown_on_idle = True
 celery_app.conf.task_create_missing_queues = True
 
-if configService.CELERY_BROKER == 'redis':
+if configService.BROKER_PROVIDER == 'redis':
     celery_app.conf.visibility_timeout = configService.CELERY_VISIBILITY_TIMEOUT
     celery_app.conf.broker_transport_options = {
         'priority_steps': [1,2,3],

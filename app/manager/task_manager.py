@@ -112,7 +112,7 @@ class TaskManager:
     async def select_task_env(self,task_weight:float,needed_envs:list[Literal[0,1]]=DEFAULT_MASK)->EnvSelection:
         current_workers_count = len(self.celeryService._workers)
         p1,p2,p3 = compute_p_values(current_workers_count,self.configService.CELERY_WORKERS_EXPECTED,task_weight)
-        return get_selector(self.meta['strategy'],celery_broker=self.configService.CELERY_BROKER).select(p1, p2, p3,needed_envs)
+        return get_selector(self.meta['strategy'],celery_broker=self.configService.BROKER_PROVIDER).select(p1, p2, p3,needed_envs)
 
     def register_backgroundTask(self):
         callbacks = []

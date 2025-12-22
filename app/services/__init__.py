@@ -6,7 +6,6 @@ from app.services.logger_service import LoggerService
 
 if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.worker:
     from app.services.vault_service import VaultService
-    from app.services.database.rabbitmq_service import RabbitMQService
     from app.services.database.redis_service import RedisService
 
 if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
@@ -15,6 +14,7 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     from app.services.profile_service import ProfileService
     from app.services.cost_service import CostService
     from app.services.monitoring_service import MonitoringService
+    from app.services.database.rabbitmq_service import RabbitMQService
     
     from app.services.workflow_service import WorkflowService
     from app.services.webhook_service import WebhookService

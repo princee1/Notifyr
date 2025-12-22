@@ -113,3 +113,14 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
             return True
         
         return  time.time() - self.last_rotated < self.auth_ttl    
+
+
+class BrokerService:
+    
+    def compute_broker_url(self)-> str:
+        pass
+
+class ResultBackendService:
+    
+    def compute_backend_url(self)-> str:
+        pass
