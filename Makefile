@@ -165,6 +165,20 @@ deploy: deploy-data deploy-agentic deploy-server
 	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
 	@echo "================================================="
 
+agentic: deploy-data
+	@echo "\n================================================="
+	@echo "🚀 Starting AGENTIC-ONLY Deployment"
+	@echo "================================================="
+	@echo "--- 🛠️  Stopping dependent services for AGENTIC deployment..."
+	@sleep 30 && clear
+	docker compose down postgres
+	docker compose down rabbbitmq
+	docker compose down minio
+	docker compose down ncs
+	@echo "\n================================================="
+	@echo "🟢 AGENTIC DEPLOYMENT COMPLETE 🟢"
+	@echo "================================================="
+
 
 # ==============================================================================
 # 4. Maintenance & Utility Targets

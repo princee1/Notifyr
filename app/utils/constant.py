@@ -168,6 +168,7 @@ class MongooseDBConstant:
     EDGE_COLLECTION='edge'
     NODE_COLLECTION='node'
     TASKS_COLLECTION = 'tasks'
+    LLM_COLLECTION = 'llm'
 
     DATABASE_NAME = 'notifyr'
 
@@ -244,6 +245,7 @@ class VaultConstant:
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
     COMMUNICATION_SECRETS = 'communication'
+    LLM_SECRETS = 'llm'
     WEBHOOK_SECRETS = 'webhook'
     SETTINGS_SECRETS='setting'
     INTERNAL_API_SECRETS='internal-api'

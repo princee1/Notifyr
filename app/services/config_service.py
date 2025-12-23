@@ -188,6 +188,9 @@ class ConfigService(_service.BaseService):
         # AGENTIC CONFIG #
         self.AGENTIC_HOST = self.getenv('AGENTIC_HOST','localhost:50051' if self.MODE == MODE.DEV_MODE else 'agentic:50051')
 
+        # QDRANT CONFIG #
+        self.QDRANT_HOST:str = self.getenv('QDRANT_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'qdrant')
+
         # HASHI CORP VAULT CONFIG #
         self.VAULT_ADDR:str = 'http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200'
 

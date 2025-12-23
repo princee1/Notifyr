@@ -87,7 +87,7 @@ class SMTPProfileModel(ProtocolProfileModel):
     disposition_notification_to: Optional[str] = None
     return_receipt_to: Optional[str] = None
     auth_mode:Literal['password','oauth'] = 'password'
-    _secret_key: ClassVar[list[str]] = ["password","oauth_tokens"]
+    _secrets_keys: ClassVar[list[str]] = ["password","oauth_tokens"]
 
     @field_validator('password')
     def password_validation(cls,password:str|None):
@@ -128,7 +128,7 @@ class SMTPProfileModel(ProtocolProfileModel):
 class IMAPProfileModel(ProtocolProfileModel):
     password: str = Field(min_length=1,max_length=400)
 
-    _secret_key: ClassVar[list[str]] = ["password"]
+    _secrets_keys: ClassVar[list[str]] = ["password"]
 
 class AWSProfileModel(EmailProfileModel):
     region_name: str
@@ -136,20 +136,20 @@ class AWSProfileModel(EmailProfileModel):
     aws_access_key_id: str
     aws_secret_access_key: str
 
-    _secret_key: ClassVar[list[str]] = ["aws_secret_access_key"]
+    _secrets_keys: ClassVar[list[str]] = ["aws_secret_access_key"]
     unique_indexes: ClassVar[list[str]] = ['aws_access_key_id']
 
 class GMailAPIProfileModel(APIEmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
 
-    _secret_key: ClassVar[list[str]] = ["oauth_tokens"]
+    _secrets_keys: ClassVar[list[str]] = ["oauth_tokens"]
 
 class OutlookAPIProfileModel(APIEmailProfileModel):
     client_id: str
     client_secret: str
     tenant_id: str 
 
-    _secret_key: ClassVar[list[str]] = ["client_secret"]
+    _secrets_keys: ClassVar[list[str]] = ["client_secret"]
     unique_indexes:ClassVar[list[str]] = ['client_id','tenant_id','email_address']
 
 
@@ -166,7 +166,7 @@ class TwilioProfileModel(CommunicationProfileModel):
     twilio_automated_response_number: Optional[PhoneModel |str] = None
     main:bool = False
 
-    _secret_key: ClassVar[list[str]] = ["auth_token"]
+    _secrets_keys: ClassVar[list[str]] = ["auth_token"]
     _queue:ClassVar[str] = 'twilio'
 
     unique_indexes: ClassVar[list[str]] = ['account_sid']

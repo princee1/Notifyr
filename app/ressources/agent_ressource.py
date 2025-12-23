@@ -21,6 +21,10 @@ from app.services  import RemoteAgentService
 base_attr = {'id','revision_id','created_at','last_modified','version'}
 
 
+@HTTPRessource('prompt-playground')
+class PromptPlaygroundRessource(BaseHTTPRessource):
+    pass
+
 
 @PingService([MongooseService])
 @UseServiceLock(MongooseService,lockType='reader',check_status=False)

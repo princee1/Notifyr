@@ -439,6 +439,18 @@ services:
       QDRANT__HNSW__EF: 32
       QDRANT__CACHE__MAX_SIZE_MB: 128
 
+  memgraph:
+    image: memgraph/memgraph
+    container_name: memgraph
+    ports:
+      - "7687:7687"
+      - "3000:3000"  # Memgraph Lab (optional)
+    restart: unless-stopped
+    networks:
+      - data_net
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+
 volumes:
   qdrant_storage:
     driver: local
@@ -453,6 +465,7 @@ volumes:
     driver: local
   minio-data: {}
   rabbitmq_data:
+  memgraph_data:
 
 secrets:
   app_role_id:

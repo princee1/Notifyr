@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from app.routers.prompt_router import PromptPlaygroundRouter
 from .kg_graph_router import KnowledgeGraphDBRouter
 from .vector_db_router import VectorDBRouter
 from app.services import CostService
@@ -16,3 +17,5 @@ if AGENTIC_CAPABILITIES['knowledge_graph']:
 
 if AGENTIC_CAPABILITIES['vector']:
     Routers.append(VectorDBRouter())
+
+Routers.append(PromptPlaygroundRouter())

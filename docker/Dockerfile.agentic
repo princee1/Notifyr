@@ -4,4 +4,10 @@ RUN pip install langchain
 
 RUN pip install qdrant-client
 
+RUN pip install neo4j
+
+RUN pip install llama-index-core
+
+RUN pip install llama-index-readers-file
+
 COPY ./agentic_main.py ./agentic_main.py

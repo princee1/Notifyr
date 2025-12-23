@@ -10,3 +10,8 @@ class VectorDBRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
     def get_description(self) -> str:
         return "Vector Database management ressource"
+    
+
+    @BaseHTTPRessource.HTTPRoute('/collection',methods=[HTTPMethod.POST])
+    async def create_collection(self,):
+        ...
