@@ -9,7 +9,7 @@ from app.classes.auth_permission import AuthPermission,Role, filter_asset_permis
 from app.classes.minio import ObjectS3ResponseModel
 from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
 from app.container import Get, InjectInMethod
-from app.decorators.guards import GlobalsTemplateGuard
+from app.decorators.guards import GlobalsTemplateGuard, UploadFilesGuard
 from app.decorators.handlers import FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, VaultHandler
 from app.decorators.interceptors import ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
@@ -111,7 +111,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             metadata= None
             if encrypt:
                 file_bytes = file_bytes.decode()
-                file_bytes = self.hcVaultService.transit_engine.encrypt(file_bytes,'s3-rest-key')
+                file_bytes = await RunInThreadPool(self.hcVaultService.transit_engine.encrypt)(file_bytes,'s3-rest-key')
                 file_bytes = file_bytes.encode()
 
                 metadata = {MinioConstant.ENCRYPTED_KEY:True}

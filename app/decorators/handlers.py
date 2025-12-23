@@ -25,7 +25,6 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
@@ -41,6 +40,13 @@ from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUnique
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
+from app.errors.upload_error import (
+    MaxFileLimitError,
+    FileTooLargeError,
+    TotalFilesSizeExceededError,
+    DuplicateFileNameError,
+    InvalidExtensionError,
+)
 
 
 class ServiceAvailabilityHandler(Handler):
@@ -421,18 +427,6 @@ class SecurityClientHandler(Handler):
                 'message': 'Authorization ID mismatch',
             })
 
-
-class RequestErrorHandler(Handler):
-
-    async def handle(self, function, *args, **kwargs):
-        try:
-            return await function(*args, **kwargs)
-        except IdentifierTypeError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'message': 'Invalid identifier type specified'
-            })
-
-
 class ValueErrorHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -568,7 +562,6 @@ class EmailRelatedHandler(Handler):
         except EmailInvalidFormatError as e:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,)
 
-
 class ORMCacheHandler(Handler):
     
     async def handle(self, function, *args, **kwargs):
@@ -588,7 +581,6 @@ async def handle_http_exception(function, *args, **kwargs):
         raise ServerFileError('app/static/error-500-page/index.html',e.status_code)
     
 
-
 class FastAPIHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -598,7 +590,6 @@ class FastAPIHandler(Handler):
         except ResponseValidationError as e :
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Error while sending the response","error":e.errors()})
         
-
 
 class GlobalVarHandler(Handler):
 
@@ -949,3 +940,26 @@ class APSSchedulerHandler(Handler):
                 detail=''
             )
             
+
+class UploadFileHandler(Handler):
+
+    async def handle(self, function: Callable, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except MaxFileLimitError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        except DuplicateFileNameError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        except InvalidExtensionError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        except FileTooLargeError as e:
+            # 413 Payload Too Large
+            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
+
+        except TotalFilesSizeExceededError as e:
+            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
+        

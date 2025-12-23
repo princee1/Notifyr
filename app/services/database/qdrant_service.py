@@ -28,14 +28,12 @@ class QdrantService(BaseService):
     async def collection_exists(self,collection_name:str)->bool:
         return await self.client.collection_exists(collection_name)
 
-
     async def upsert_points(self,collection_name:str,ids,vectors,payloads):
         points = [PointStruct(id=id, vector=vector, payload=payload) for id, vector, payload in zip(ids, vectors, payloads)]
         await self.client.upsert(
             collection_name=collection_name,
             points=points
         )   
-    
     
     async def search(self,query_vector,collection_name:str,top_k:int=5):
         """Search the vector database for similar vectors."""
@@ -64,4 +62,4 @@ class QdrantService(BaseService):
     
     @property
     def dimension(self) -> int:
-        return int(self.configService.getenv("QDRANT_EMBEDDING_DIMENSION",default=532))
+        return int(self.configService.getenv("QDRANT_EMBEDDING_DIMENSION",default=512))

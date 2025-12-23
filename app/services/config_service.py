@@ -270,7 +270,5 @@ class UvicornWorkerService(_service.BaseService):
             return True
      
     def build(self, build_state = ...):
-        name = 'app' if APP_MODE == ApplicationMode.server else APP_MODE.name
-
-        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/{name}/"        
+        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PROCESS_PID}@{socket.gethostname()}:{APP_MODE.value}/"        
         raise BuildOkError

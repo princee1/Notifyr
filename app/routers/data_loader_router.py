@@ -1,47 +1,40 @@
 from typing import TypedDict
+from app.classes.arq_worker import ArqWorker,Job
 from app.container import Get
 from fastapi import APIRouter, Depends, HTTPException
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
-import app.data_tasks
-from arq.connections import RedisSettings,create_pool
+from app.data_tasks import DATA_TASK_REGISTRY
 from app.utils.constant import RedisConstant
 
+QUEUE_NAME = 'arq:data_loader'
 
-class DataLoaderArqWorker:
-
-    QUEUE_NAME = "data_loader_queue"
-
-    def __init__(self):
-        self.redisService = Get(RedisService)
-        self.registered_tasks = []
-
-    @property
-    def arq_url(self):
-        return f"redis://{self.redisService.db_user}:{self.redisService.db_password}@redis:6379/{RedisConstant.EVENT_DB}"
-
-    async def initialize(self):
-        redisSettings = RedisSettings.from_dsn(self.arq_url)
-        self._worker = await create_pool(redisSettings)
-
-    async def close(self):
-        await self._worker.close()
-
-    async def enqueue_task(self,task_name:str,_job_id:str=None,kwargs:dict={}):
-        if task_name not in self.registered_tasks:
-            raise HTTPException(status_code=400, detail=f"Task {task_name} is not registered.")
-        await self._worker.enqueue_job(task_name,job_id=_job_id,_queue_name=self.QUEUE_NAME,**kwargs)
-    
-    async def get_queued_jobs(self,):
-        return await self._worker.queued_jobs()
+def JobRouter(arqWorker:ArqWorker):
         
-    async def get_jobs_results(self):
-        return await self._worker.all_job_results()
+    router = APIRouter(prefix='/jobs')
+
+    async def get_queued_jobs(self):
+        ...
+    
+    async def get_jobs_result(self):
+        ...
+    
+    async def get_job_info(self):
+        ...
+    
+    async def get_job_result(self):
+        ...
+    
+    async def abort_job(self):
+        ...
+        
+
+    return router
 
 
 def DataLoaderRouter(depends:list=None):
-    prefix=''
+    prefix='/data-loader'
     if depends == None:
         depends =[]
 
@@ -49,14 +42,31 @@ def DataLoaderRouter(depends:list=None):
     redisService = Get(RedisService)
     fileService = Get(FileService)
 
-    arqWorker = DataLoaderArqWorker()
+    dataLoaderWorker = ArqWorker(
+        f"redis://{redisService.db_user}:{redisService.db_password}@redis:6379/{RedisConstant.EVENT_DB}",
+        DATA_TASK_REGISTRY,
+        QUEUE_NAME)
 
     async def on_startup():
-        await arqWorker.initialize()
+        await dataLoaderWorker.initialize()
     
     async def on_shutdown():
-        await arqWorker.close()
+        await dataLoaderWorker.close()
     
     router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
+    
+    router.include_router(JobRouter(dataLoaderWorker))
 
+    async def embed_files():
+        ...
+    
+    async def embed_text():
+        ...
+    
+    async def embed_web():
+        ...
+    
+    async def embed_api():
+        ...
+        
     return router

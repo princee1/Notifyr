@@ -12,6 +12,21 @@ class VectorDBRessource(BaseHTTPRessource):
         return "Vector Database management ressource"
     
 
-    @BaseHTTPRessource.HTTPRoute('/collection',methods=[HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_collection(self,):
+        ...
+
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
+    async def get_collection(self):
+        ...
+    
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE])
+    async def delete_collection(self):
+        ...
+
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
+    async def update_collection(self):
+        ...
+    
+    async def get_all_collection(self):
         ...

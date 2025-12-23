@@ -6,14 +6,16 @@ from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, JWTRouteHTTPPermission
-from app.decorators.pipes import DocumentFriendlyPipe
+from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
+from app.depends.funcs_dep import get_profile
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
 from app.models.agents_model import AgentModel
 from app.services  import MongooseService
+from app.services.agent.remote_agent_service import RemoteAgentMiniService
 from app.utils.constant import CostConstant
 from app.utils.helper import subset_model
 from app.services  import RemoteAgentService
@@ -97,4 +99,10 @@ class AgentsRessource(BaseHTTPRessource):
     async def get_all_agent(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         ...
 
-    
+    # @UseLimiter('100/hour')
+    # @PingService([RemoteAgentService],is_manager=False,infinite_wait=True)
+    # @UseServiceLock(RemoteAgentMiniService,lockType='reader',as_manager=True,miniLockType='reader')
+    # @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
+    # @BaseHTTPRessource.HTTPRoute('/prompt/{profile}/',methods=[HTTPMethod.POST],mount=False)
+    # async def prompt_playground(self,profile:str,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_profile)], response:Response,authPermission:AuthPermission= Depends(get_auth_permission)):
+    #     await agent.Prompt()
