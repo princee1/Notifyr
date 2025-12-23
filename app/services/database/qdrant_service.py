@@ -34,7 +34,8 @@ class QdrantService(BaseService):
         await self.client.upsert(
             collection_name=collection_name,
             points=points
-        )
+        )   
+    
     
     async def search(self,query_vector,collection_name:str,top_k:int=5):
         """Search the vector database for similar vectors."""

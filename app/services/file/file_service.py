@@ -121,3 +121,7 @@ class FileService(BaseService,):
         
         return htmlmin.minify(input,False,True,True,).encode()
         
+    def download_file(self,path:str,content):
+        with open(path,'wb') as f:
+            f.write(content)
+        

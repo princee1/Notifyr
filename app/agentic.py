@@ -1,14 +1,12 @@
 import asyncio
 from app.utils.tools import RunInThreadPool
-from app.container import Get
-
+from app.container import Get,Register
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.services import RedisService
 from app.services import VaultService
 from app.services import AgentService
 from app.services import MongooseService
 from app.services import QdrantService
-
 from app.depends.dependencies import get_bearer_token
 from fastapi import FastAPI,Depends
 from app.routers import Routers
@@ -47,6 +45,7 @@ def bootstrap_agent_app():
         mongooseService.start()
         redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
         grpcTask.set_task(asyncio.create_task(agentService.serve()))
+        
         
     async def on_shutdown():
         mongooseService.shutdown()

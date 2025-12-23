@@ -373,6 +373,9 @@ class LLMProviderConstant:
     GEMINI='gemini'
     COHERE='cohere'
     GROQ='groq'
+    OLLAMA='ollama'
+    LOCAL='local'
+
 class CeleryConstant:
     REFRESH_PROFILE_WORKER_STATE_COMMAND='refresh_profile'
     BACKEND_KEY_PREFIX="notifyr/celery/backend/"

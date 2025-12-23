@@ -12,7 +12,7 @@ from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
-from app.tasks import TASK_REGISTRY, celery_app, task_name
+from app.ntfr_tasks import TASK_REGISTRY, celery_app, task_name
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.errors.service_error import BuildError, BuildFailureError, BuildOkError, ServiceNotAvailableError
 from app.utils.constant import CeleryConstant, RedisConstant, SpecialKeyParameterConstant

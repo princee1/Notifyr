@@ -7,7 +7,7 @@ from .fileIO import JSONFile
 
 
 CELERY_EXE_PATH = shutil.which("celery").replace(".EXE", "")
-
+ARQ_EXE_PATH = shutil.which("arq").replace(".EXE", "") if shutil.which("arq") else ""
 
 DIRECTORY_SEPARATOR = '/' if os.name != 'nt' else '\\'
 ASSET_SEPARATOR = '/'
@@ -24,6 +24,7 @@ class ApplicationMode(Enum):
     server = 'server'
     agentic ='agentic'
     gunicorn = 'gunicorn'
+    arq = 'arq'
 
 class ServerCapabilities(TypedDict):
     email:bool
@@ -46,6 +47,8 @@ if sys.argv[0] == CELERY_EXE_PATH:
         APP_MODE = ApplicationMode.worker
 elif 'agentic_main.py' in sys.argv[0]:
     APP_MODE = ApplicationMode.agentic
+elif ARQ_EXE_PATH and sys.argv[0] == ARQ_EXE_PATH:
+    APP_MODE = ApplicationMode.arq
 else:
     APP_MODE = ApplicationMode.server
 

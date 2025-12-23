@@ -31,9 +31,7 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     
     if CAPABILITIES['notification']:
         from app.services.push_notification_service import PushNotificationService
-
     
-
 if APP_MODE == ApplicationMode.server:
     if CAPABILITIES['object']:
         from app.services.assets_service import AssetService
@@ -53,20 +51,24 @@ if APP_MODE == ApplicationMode.server:
     from app.services.contacts_service import ContactsService,SubscriptionService
 
 
-if APP_MODE == ApplicationMode.agentic:
+if (APP_MODE == ApplicationMode.agentic or APP_MODE == ApplicationMode.arq) and CAPABILITIES['agentic']:
     from app.services.database.redis_service import RedisService
     from app.services.cost_service import CostService
     from app.services.monitoring_service import MonitoringService
     from app.services.database.memcached_service import MemCachedService
     from app.services.vault_service import VaultService
     from app.services.database.mongoose_service import MongooseService
+    from app.services.agent.llm_provider_service import LLMProviderService
+    from app.services.agent.remote_agent_service import RemoteAgentService
+    from app.services.agent.agent_service import AgentService
+    from app.services.database.qdrant_service import QdrantService
+    from app.services.database.neo4j_service import Neo4JService
+    from app.services.file.file_service import FileService
 
-    if CAPABILITIES['agentic']:
-        from app.services.agent.llm_provider_service import LLMProviderService
-        from app.services.agent.remote_agent_service import RemoteAgentService
-        from app.services.agent.agent_service import AgentService
-        from app.services.database.qdrant_service import QdrantService
 
+if APP_MODE == ApplicationMode.arq:
+    from app.services.agent.data_loader_service import DataLoaderService
+    from app.services.file.file_service import FileService
 
 
 if APP_MODE == ApplicationMode.gunicorn and CAPABILITIES['object']:
