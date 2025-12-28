@@ -411,3 +411,7 @@ class MonitorConstant:
 
 class RabbitMQConstant:
     NOTIFYR_VIRTUAL_HOST='notifyr'
+
+
+class QdrantConstant:
+    CACHE_COLLECTION='prompt-cache'
