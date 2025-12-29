@@ -43,17 +43,12 @@ class DataLoaderRessource(BaseHTTPRessource):
 
     @UseLimiter('5/hour')
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST])
-    async def embed_text(self,request:Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
-
-    @UseLimiter('5/hour')
-    @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST])
     async def embed_web(self,request:Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         ...
     
     @UseLimiter('5/hour')
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST])
-    async def embed_from_api(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def embed_api_data(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         ...
 
     

@@ -14,6 +14,13 @@ from llama_index.readers.file import CSVReader,PDFReader, ImageReader, VideoAudi
 from app.utils.tools import RunAsync
 
 
+TEXT_READERS:dict[str,type[BaseReader]] = {
+        "pdf": PDFReader,
+        "docx": DocxReader,
+        "md": MarkdownReader,
+        "html": HTMLTagReader,
+        "pptx":PptxReader,
+}
 
 # Pre-load resources
 nltk.download(['stopwords', 'punkt', 'wordnet'], quiet=True)
@@ -31,7 +38,11 @@ class BaseDataLoader:
     async def process(self):
         ...
 
-
+    @staticmethod
+    def Factory(ext:str)-> 'BaseDataLoader':
+        if ext in TEXT_READERS.keys():
+            return TextDataLoader
+        
 class TextDataLoader(BaseDataLoader):
 
     class TextDetector:
@@ -60,14 +71,6 @@ class TextDataLoader(BaseDataLoader):
             count = self.freq_dist.N()
             return "low" if count < 80 else "medium" if count < 160 else "high"
 
-    readers:dict[str,type[BaseReader]] = {
-        "pdf": PDFReader,
-        "docx": DocxReader,
-        "md": MarkdownReader,
-        "html": HTMLTagReader,
-        "pptx":PptxReader,
-    }
-
     def __init__(self, api_key: str,file_path:str,lang:str,doc_type:str):
         super().__init__(api_key,file_path,lang,doc_type)
         self.embed_model = OpenAIEmbedding(api_key=api_key)
@@ -80,7 +83,7 @@ class TextDataLoader(BaseDataLoader):
         )
     
     async def process(self):
-        reader = self.readers[self.doc_type]
+        reader = TEXT_READERS[self.doc_type]
         documents = await reader().aload_data(self.file_path)
         nodes:list[TextNode] = await self.semantic_parser.abuild_semantic_nodes_from_documents(documents)
         
@@ -115,6 +118,7 @@ class TextDataLoader(BaseDataLoader):
                 "token_count": detector.freq_dist.N(),
                 "full_token_count": len(detector.tokens),
                 "word_count": detector.freq_dist.B(),
+                "most_common":detector.freq_dist.most_common(5),
                 "sentence_count": detector.sentence_count,
                 "keywords": await detector.extract_keywords(),
                 "topics": await detector.extract_topics(),
@@ -123,7 +127,7 @@ class TextDataLoader(BaseDataLoader):
             }
 
             yield PointStruct(
-                id=i,
+                id=node.node_id,
                 vector=node.embedding,
                 payload=payload
             )
@@ -151,7 +155,6 @@ class TextDataLoader(BaseDataLoader):
         if re.search(r"\b(def|class|import|return|void|public)\b", text_s): return "code"
         if any(x in text_s for x in ["∑", "∫", "λ", "δ", "=="]): return "equation"
         return "paragraph"
-
 
 class VideoDataLoader(BaseDataLoader):
 

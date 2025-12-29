@@ -1,7 +1,7 @@
-from typing import TypedDict
+from typing import List, TypedDict
 from app.classes.arq_worker import ArqWorker,Job
 from app.container import Get
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile,status
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
@@ -29,7 +29,6 @@ def JobRouter(arqWorker:ArqWorker):
     async def abort_job(self):
         ...
         
-
     return router
 
 
@@ -57,16 +56,18 @@ def DataLoaderRouter(depends:list=None):
     
     router.include_router(JobRouter(dataLoaderWorker))
 
-    async def embed_files():
+    
+    router.post('/text/',status_code=status.HTTP_202_ACCEPTED)
+    async def embed_text(request:Request,response:Response,files:List[UploadFile]):
         ...
     
-    async def embed_text():
+    router.post('/web/',status_code=status.HTTP_202_ACCEPTED)
+    async def embed_web_research(request:Request,response:Response):
         ...
     
-    async def embed_web():
+    router.post('/api/',status_code=status.HTTP_202_ACCEPTED)
+    async def embed_api(request:Request,response:Response,files:List[UploadFile]):
         ...
-    
-    async def embed_api():
-        ...
-        
+
+            
     return router

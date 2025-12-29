@@ -20,6 +20,32 @@ from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
 
 @MiniService()
 class AiAgentMiniService(BaseMiniService):
+    
+    class RagPipeline():
+        """
+        1. Embed the user query
+        2. look up the cache if hit return response else
+        3. extract concepts(topics) and keywords from the prompts
+        4. look for those values in the vector database with, with the agent
+        5. compare and fetch with the top-k closet vector 
+        6. do a tree depth search of related nodes only if needed
+        7. filter content
+        8. build the prompt with the user query
+        9. prompt using the llm
+        10. store the response in a cache or in the vector database
+        """
+    
+    class MCPPipeline:
+        ...
+    
+    class APIPipeline:
+        ...
+    
+    class KGRagPipeline:
+        ...
+    
+    class WebPipeline:
+        ...
     ...
     """
     will register the tools
@@ -29,10 +55,12 @@ class AiAgentMiniService(BaseMiniService):
     tools idea:
         - research on the internet,crawl web 
         - knowledge graph
-        - faiss rag
+        - qdrant rag
         - rest,graphql, fetch api
         - connect to a mcp
     """
+
+
 
 @Service(is_manager=True,links=[LinkDep(RemoteAgentService)])
 class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):

@@ -119,7 +119,7 @@ class RemoteAgentMiniService(BaseMiniService):
         @SilentFail
         async def StreamPrompt(self, callback:Callable[[],agent_message.PromptRequest]):
             request_generator=iterator_factory(callback=callback)
-            reply = self.remoteAgentService.stub.StreamPrompt(request_generator())
+            reply = self.remoteAgentService.stub.StreamPrompt(request_generator)
             reply = agent_message.PromptAnswer.from_proto(reply)
         
         @SilentFail

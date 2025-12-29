@@ -36,3 +36,8 @@ class ArqWorker:
     async def fetch_job(self,job_id):
         return Job(job_id,self,self.queue)
         
+    async def job_exists(self,):
+        ...
+
+    async def job_result_exists(self):
+        ...
