@@ -64,20 +64,10 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
     async def add_link(self, request: Request, linkModel: LinkModel, response: Response,authPermission=Depends(get_auth_permission)):
         link = linkModel.model_dump()
-        domain = urlparse(link['link_url']).netloc
         async with in_transaction():
-            if linkModel.public:
-                self.linkService.verify_safe_domain(domain)
-
-            public_security = {}
             link = await LinkORM.create(**link)
-
-            if not link.public:
-                public_key = await self.linkService.generate_public_signature(link)
-                public_security['public_key'] = public_key
-            else:
-                await LinkORMCache.Store(link.link_short_id,link)
-            return {"data": {**link.to_json},"security":public_security,  "message": "Link created successfully"}
+            await LinkORMCache.Store(link.link_short_id,link)
+            return {"data": {**link.to_json},  "message": "Link created successfully"}
 
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
@@ -116,23 +106,6 @@ class CRUDLinkRessource(BaseHTTPRessource):
         await link.save()
         await LinkORMCache.Invalid(link.link_short_id)
         return {"data": link.to_json(), "message": "Link updated successfully"}
-
-    @UseRoles([Role.ADMIN])
-    @UseGuard(AccessLinkGuard.verify_link_guard)
-    @HTTPStatusCode(status.HTTP_200_OK)
-    @BaseHTTPRessource.HTTPRoute('/verify', methods=[HTTPMethod.PATCH])
-    async def verify(self, request: Request, link: Annotated[LinkORM, Depends(get_link)], response: Response, verify_type: Literal['well-known', 'domain'] = Depends(verify_url)):
-        
-        public_key = await self.linkService.get_server_well_know(link)
-        ownership = await self.linkService.verify_public_signature(link, public_key)
-        if ownership:
-            link.verified = True
-            link.expiration_verification = None
-            await link.save()
-            await LinkORMCache.Store(link.link_short_id, link)
-            return {"data": link.to_json(), "message": "Link verified successfully"}
-
-        return {"error": "Verification failed", "message": "Unable to verify the link ownership"}
 
     @UseGuard(AccessLinkGuard(False))
     @UseRoles([Role.PUBLIC])
