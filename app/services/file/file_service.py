@@ -5,6 +5,10 @@ from app.services.config_service import ConfigService
 from app.utils.globals import DIRECTORY_SEPARATOR
 from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
 from app.utils.helper import PointerIterator
+import tempfile
+import os
+
+from app.utils.tools import RunInThreadPool
 
 
 @Service()
@@ -14,7 +18,23 @@ class FileService(BaseService,):
     def __init__(self,configService:ConfigService) -> None:
         super().__init__()
         self.configService = configService
-        
+
+    @RunInThreadPool
+    def download_temp_file(self,filename,content):
+        suffix = '_' + os.path.basename(filename)
+        tf = tempfile.NamedTemporaryFile(delete=False, prefix='dl_', suffix=suffix)
+        tf.write(content)
+        tf.flush()
+        tf.close()
+        return tf.name
+
+    def clean_up(self,tmp_name):
+        if tmp_name and os.path.exists(tmp_name):
+            try:
+                os.unlink(tmp_name)
+            except Exception:
+                pass
+
     def readFileDetail(self, path, flag:FDFlag, enc="utf-8"):
 
         filename  = getFilenameOnly(path)

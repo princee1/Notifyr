@@ -1,12 +1,5 @@
 from typing import Callable
-from app.container import Get,build_container
-from app.services import QdrantService
-from app.services import FileService
-from app.services import Neo4JService
-from app.services.database.mongoose_service import MongooseService
-from app.services.database.redis_service import RedisService
-from app.services.vault_service import VaultService
-from app.utils.constant import RedisConstant
+from app.classes.arq_worker import ArqWorker
 from app.utils.globals import APP_MODE,ApplicationMode
 
 DATA_TASK_REGISTRY = []
@@ -30,13 +23,13 @@ def RegisterTask(active:bool=True):
     return decorator
 
 @RegisterTask()
-async def process_text_loader_task(ctx,text_path: str,collection_name:str,lang:str='en'):
+async def process_file_loader_task(ctx,file_path: str,collection_name:str,lang:str='en',content_type:str=None):
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
 
-    extension =  fileService.get_extension(text_path)
+    extension =  fileService.get_extension(file_path)
     
-    textDataLoader = TextDataLoader(...,text_path,lang,extension)
+    textDataLoader = TextDataLoader(...,file_path,lang,extension,content_type)
     points = await textDataLoader.process()
     await qdrantService.upload_points(collection_name,list(points),)
     
@@ -53,10 +46,18 @@ async def process_api_data(ctx,url:list[str]):
 if APP_MODE == ApplicationMode.arq:
     from arq.connections import RedisSettings
     from app.classes.data_loader import TextDataLoader
+    from app.services import QdrantService
+    from app.services import Neo4JService
+    from app.services import FileService
+    from app.services.database.mongoose_service import MongooseService
+    from app.services.database.redis_service import RedisService
+    from app.services.vault_service import VaultService
+    from app.container import Get,build_container
 
     build_container()
+
     redisService = Get(RedisService)
-    arq_url = f"redis://{redisService.db_user}:{redisService.db_password}@redis:6379/{RedisConstant.EVENT_DB}"
+    arq_url = ArqWorker.create_arq_url(redisService.db_user,redisService.db_password)
     
     class WorkerSettings:
         functions = DATA_TASK_REGISTRY

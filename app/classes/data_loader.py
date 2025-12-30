@@ -28,6 +28,7 @@ STOP_WORDS = set(stopwords.words('english'))
 KW_EXTRACTOR = yake.KeywordExtractor(lan="en", n=1, top=10)
 
 
+
 class BaseDataLoader:
 
     def __init__(self, api_key: str,file_path:str,lang:str,doc_type:str):
@@ -104,6 +105,7 @@ class TextDataLoader(BaseDataLoader):
 
             payload = {
                 "text": node.text,
+                "document_name":self.file_path,
                 "document_id": node.ref_doc_id,
                 "node_id": node.node_id,
                 "source": node.metadata.get("file_name",node.metadata.get('file_path',None)),
