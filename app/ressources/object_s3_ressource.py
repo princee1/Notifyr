@@ -10,7 +10,7 @@ from app.classes.minio import ObjectS3ResponseModel
 from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard, UploadFilesGuard
-from app.decorators.handlers import FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
@@ -54,21 +54,12 @@ class S3ObjectWebhookRessource(BaseHTTPRessource):
 
 
 @UseRoles([Role.ASSETS])
-@UseHandler(ServiceAvailabilityHandler)
+@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @IncludeRessource(S3ObjectWebhookRessource)
 @HTTPRessource('objects')
 class S3ObjectRessource(BaseHTTPRessource):
-    
-    class UploadGuard(Guard):
-
-        def __init__(self,max_file:int,max_file_size=int):
-            super().__init__()        
-            self.max_file = max_file
-            self.max_file_size = max_file_size
-            self.configService = Get(ConfigService)
-            self.assetService = Get(AssetService)
-    
+        
     @staticmethod
     def pipe_restore(restore:bool,template:str,objectsSearch:ObjectsSearch):
         if restore:
@@ -94,42 +85,40 @@ class S3ObjectRessource(BaseHTTPRessource):
         self.is_asset_pipe= TemplateParamsPipe(accept_none=False,inject_asset_routes=True)
         self.free_input_pipe = ValidFreeInputTemplatePipe(False,True)
 
-    async def upload(self, files:list[UploadFile | dict],encrypt:bool=False):
+    async def upload(self, file:UploadFile | dict,encrypt:bool=False):
         
-        for file in files:
-            if type(file) == UploadFile:
-                file_bytes = await file.read()
-                filename = file.filename
-            else:
-                file_bytes = file['content']
-                filename = file['filename']
+        if type(file) == UploadFile:
+            file_bytes = await file.read()
+            filename = file.filename
+        else:
+            file_bytes = file['content']
+            filename = file['filename']
 
-            ext = self.fileService.get_extension(filename)
-            if ext == Extension.HTML.value:
-                ...
-                #file_bytes = self.fileService.html_minify(file_bytes)
-            metadata= None
-            if encrypt:
-                file_bytes = file_bytes.decode()
-                file_bytes = await RunInThreadPool(self.hcVaultService.transit_engine.encrypt)(file_bytes,'s3-rest-key')
-                file_bytes = file_bytes.encode()
+        ext = self.fileService.get_extension(filename)
+        if ext == Extension.HTML.value:
+            ...
+            #file_bytes = self.fileService.html_minify(file_bytes)
+        metadata= None
+        if encrypt:
+            file_bytes = file_bytes.decode()
+            file_bytes = await RunInThreadPool(self.hcVaultService.transit_engine.encrypt)(file_bytes,'s3-rest-key')
+            file_bytes = file_bytes.encode()
 
-                metadata = {MinioConstant.ENCRYPTED_KEY:True}
-            
+            metadata = {MinioConstant.ENCRYPTED_KEY:True}
             await self.objectS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
     @UsePermission(AdminPermission)
-    @UseHandler(FileNamingHandler,S3Handler,VaultHandler)
+    @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler)
     @PingService([ObjectS3Service])
-    @UseGuard(GlobalsTemplateGuard)
+    @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],mount=False)
     async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
         
         errors = {}
-        upload_files:list[UploadFile]= []
-
+        upload_files = []
+        meta = []
         for file in files:
             filename = file.filename
             ext = self.fileService.get_extension(ext)
@@ -147,16 +136,14 @@ class S3ObjectRessource(BaseHTTPRessource):
                 else:raise AssetConfusionError(filename)
 
             asset_type = EXTENSION_TO_ASSET_TYPE[ext]
+            meta.append((file.filename,file.size))
             file.filename = f"{asset_type}/{filename}"
-            upload_files.append(file)
+            upload_files.append(file.filename)
+            backgroundTask.add_task(self.upload,file)
 
-        backgroundTask.add_task(self.upload,upload_files)# TODO encrypt files
         broker.wait(len(upload_files)*2)
         broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
-        return {
-        "uploaded_files": [f.filename for f in upload_files],
-        "errors": errors
-        }
+        return {"uploaded_files": upload_files,"errors": errors}
 
 
     @UsePermission(JWTAssetObjectPermission(accept_none_template=True))

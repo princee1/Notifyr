@@ -1,12 +1,14 @@
-from typing import List
-from fastapi import Depends, Request, Response, UploadFile
+from typing import Annotated, List
+from fastapi import BackgroundTasks, Depends, Request, Response, UploadFile
 from fastapi.responses import RedirectResponse
-from app.classes.auth_permission import AuthPermission
+from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
+from app.cost.file_cost import FileCost
 from app.data_tasks import DATA_TASK_REGISTRY
 from app.decorators.guards import UploadFilesGuard
 from app.decorators.handlers import CostHandler, ServiceAvailabilityHandler, UploadFileHandler
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, UseGuard, UseHandler, UsePermission
+from app.decorators.interceptors import DataCostInterceptor
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, UseGuard, UseHandler, UseInterceptor, UsePermission, UseRoles
 from app.depends.dependencies import get_auth_permission
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
@@ -18,10 +20,7 @@ from app.classes.arq_worker import ArqWorker, DataTaskNotFoundError, JobDoesNotE
 from app.utils.constant import RedisConstant
 from app.models.data_task_model import (
     FileIngestTask,
-    WebCrawlTask,
-    APIFetchTask,
     EnqueueResponse,
-    JobInfo,
 )
 from typing import Dict, Any
 from fastapi import HTTPException
@@ -91,31 +90,30 @@ class DataLoaderRessource(BaseHTTPRessource):
         await dataLoaderWorker.close()
 
     @UseLimiter('5/hour')
+    @UseRoles([Role.ADMIN])
     @UseHandler(UploadFileHandler)
     @UseGuard(UploadFilesGuard())
+    @UseInterceptor(DataCostInterceptor('documents','purchase'))
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=EnqueueResponse)
-    async def embed_files(self,files:List[UploadFile],fileTask:FileIngestTask, request:Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
-        """
-        1. iterate over each files
-        2. save uploaded file to a temporary path (workers should be able to access it)
-        3. enqueue jobs with `FileIngestTask` kwargs
-        4. return the response with enqueued job ids
-        """
+    async def embed_files(self,files:List[UploadFile],fileTask:FileIngestTask, request:Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],backgroundTasks:BackgroundTasks,autPermission:AuthPermission=Depends(get_auth_permission)):
+        """ """
         jobs_ids = []
         errors = {}
+        meta = []
         for f in files:
             try:
+                
                 job_id = f"arq:{f.filename}"
                 await dataLoaderWorker.job_exists(job_id,True)
                 tmp_name = await self.fileService.download_temp_file(f.filename,await f.read())
                 fileTask._file_path = tmp_name
-                await dataLoaderWorker.enqueue_task('process_file_loader_task', _job_id=job_id, kwargs=fileTask.model_dump())
                 jobs_ids.append(job_id)
+                meta.append((f.filename,f.size))
+                backgroundTasks.add_task(dataLoaderWorker.enqueue_task,'process_file_loader_task', _job_id=job_id, kwargs=fileTask.model_dump())
             except JobDoesNotExistsError as e:
                 errors[e.job_id] = {'reason':e.reason}
-        
-        return EnqueueResponse(_jobs_ids=jobs_ids,_errors=errors).model_dump()
 
+        return EnqueueResponse(jobs_ids=jobs_ids,errors=errors,meta=meta).model_dump()
 
     @UseLimiter('5/hour')
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse)

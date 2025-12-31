@@ -53,6 +53,10 @@ class CostRules(TypedDict):
     retry_allowed: bool
     track_allowed:bool
 
+class FileCostDefinition(TypedDict):
+    max_file_size:int
+    max_file_size_extra_per_mb:int
+
 class SimpleTaskCostDefinition(TypedDict):
     __api_usage_cost__:int
     __rate_limit__:str

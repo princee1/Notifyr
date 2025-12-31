@@ -140,11 +140,14 @@
                 }
             }
         },
-        "data": {
+        "file": {
             "object": {
-                "count": 100,
-                "max_size": 10000,
-                "max_version_count": 3
+                "max_file_size": 100,
+                "max_file_size_extra_per_mb":5
+            },
+            "documents":{
+                "max_file_size":10,
+                "max_file_size_extra_per_mb":2
             }
         },
         "simple-task": {
@@ -188,6 +191,8 @@
         "workflow":10,
         "profile": 10,
         "blog":20,
+        "documents":10000,
+        "object":100000,
         "tokens":100000000000
     }
 }

@@ -111,7 +111,7 @@ class DataCostInterceptor(Interceptor):
 
     async def intercept_before(self,*args,**kwargs):
         cost:DataCost = kwargs.get('cost',None)
-        cost.init(self.price,self.credit,kwargs.get('func_meta',{}).get('cost_definition_name',None))
+        cost.init(self.price,self.credit)
 
         match self.mode:
             case 'purchase':

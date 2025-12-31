@@ -1,16 +1,15 @@
 from typing import Self, Type, List, Dict, Any, Optional, TypedDict
 from fastapi import Depends, Request
-from app.classes.auth_permission import FuncMetaData
+from app.classes.auth_permission import AuthPermission, FuncMetaData
 from app.classes.cost_definition import Bill, BillItem, SimpleTaskCostDefinition, TaskCostDefinition
 from app.container import Get
 from app.depends.class_dep import TrackerInterface
-from app.depends.dependencies import get_request_id
+from app.depends.dependencies import get_auth_permission, get_request_id
 from app.manager.task_manager import TaskManager
 from app.services.cost_service import REDIS_CREDIT_KEY_BUILDER, CostService
 from app.utils.helper import PointerIterator
 from app.classes.celery import SchedulerModel
 from datetime import datetime
-
 
 
 costService: CostService = Get(CostService)
@@ -19,7 +18,7 @@ class Cost:
 
     rules = costService.rules
     
-    def __init__(self, request_id: str=Depends(get_request_id)):
+    def __init__(self, request_id: str=Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         self.purchase_cost: int = 0
         self.refund_cost: int = 0
 
@@ -73,19 +72,16 @@ class Cost:
 
 class DataCost(Cost):
     
-    def init(self,default_price:int,credit_key:str,definition_name=None):
+    def init(self,default_price:int,credit_key:str):
         self.default_price = default_price
         self.credit_key = credit_key
-        self.definition_name = definition_name
 
     def pre_purchase(self):
         self.purchase(self.credit_key,self.default_price)
-
     
     def post_purchase(self,result:Any):
         self.purchase(self.credit_key,self.default_price)
-    
-    
+      
     def post_refund(self,result:Any):
         self.refund(self.credit_key,self.default_price)
 
@@ -101,7 +97,6 @@ class SimpleTaskCost(Cost):
     def compute_cost(self,func_meta:FuncMetaData):
         definition:SimpleTaskCostDefinition=func_meta['cost_definition']
         self.purchase('api_usage',amount=definition['__api_usage_cost__'])
-
 
 class TaskCost(SimpleTaskCost):
 
@@ -135,7 +130,6 @@ class TaskCost(SimpleTaskCost):
         return total_content, total_recipient
 
 
-        
 ###################################################             ################################################33333
 
 ###################################################             ################################################33333

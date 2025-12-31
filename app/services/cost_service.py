@@ -5,7 +5,7 @@ from typing import Callable, Self
 
 from fastapi import Response
 from redis import WatchError
-from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition,Bill
+from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, FileCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition,Bill
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
@@ -44,7 +44,7 @@ class CostService(BaseService):
         return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@receipts'
     
     @staticmethod
-    def redis_credit_key_builder(func:Callable):
+    def RedisCreditKeyBuilder(func:Callable):
 
         @functools.wraps(func)
         async def wrapper(self:Self,credit_key:str,*args,**kwargs):
@@ -77,7 +77,7 @@ class CostService(BaseService):
         else:
             self.service_status = ServiceStatus.AVAILABLE
     
-    @redis_credit_key_builder
+    @RedisCreditKeyBuilder
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.redis_limiter.get(credit_key)
         if current_balance == None:
@@ -91,12 +91,12 @@ class CostService(BaseService):
         if current_balance < purchase_cost:
             raise InsufficientCreditsError
 
-    @redis_credit_key_builder
+    @RedisCreditKeyBuilder
     async def refund_credits(self,credit_key:str,refund_cost:int):
         if refund_cost > 0:
             await self.redisService.increment(RedisConstant.LIMITER_DB,credit_key,refund_cost)
 
-    @redis_credit_key_builder
+    @RedisCreditKeyBuilder
     async def deduct_credits(self,credit_key:str,purchase_cost:int,retry_limit=5):
         retry=0
         while retry < retry_limit:
@@ -131,7 +131,7 @@ class CostService(BaseService):
         
         raise CreditDeductionFailedError
     
-    @redis_credit_key_builder
+    @RedisCreditKeyBuilder
     async def get_credit_balance(self,credit_key:str):
         credit = await self.redisService.retrieve(RedisConstant.LIMITER_DB,credit_key)
         if credit != None:
@@ -146,7 +146,7 @@ class CostService(BaseService):
             cost = self.costs_file.data.get(CostConstant.COST_KEY,None)  
 
             if cost == None:
-                raise BuildFailureError
+                raise BuildFailureError('Cost File not found')
             
             definition = flatten_dict(cost,dict_sep=self.DICT_SEP,_key_builder=lambda p:p+self.DICT_SEP,max_level=1)
             for k,v in definition.items():
@@ -179,8 +179,8 @@ class CostService(BaseService):
                     ...
                 elif cost_type == 'simple-task':
                     v = SimpleTaskCostDefinition(**base)
-                elif cost_type == 'data':
-                    ...
+                elif cost_type == 'file':
+                    v = FileCostDefinition(**base)
                 elif cost_type == 'ai':
                     ...
                 
