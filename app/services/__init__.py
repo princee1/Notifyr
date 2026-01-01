@@ -49,6 +49,7 @@ if APP_MODE == ApplicationMode.server:
     from app.services.security_service import JWTAuthService,SecurityService
     from app.services.file.file_service import FileService
     from app.services.contacts_service import ContactsService,SubscriptionService
+    from app.services.worker.arq_service import ArqService
 
 
 if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:

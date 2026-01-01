@@ -8,6 +8,7 @@ from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
+from app.services.worker.arq_service import DataTaskNotFoundError, JobDoesNotExistsError
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -926,6 +927,22 @@ class CostHandler(Handler):
 class CeleryControlHandler(Handler):
     ...
 
+
+class ArqHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except JobDoesNotExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"job_id": e.job_id, "reason": e.reason}
+            )
+        except DataTaskNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"task_name": e.job_id, "reason": e.reason}
+            )
 
 class APSSchedulerHandler(Handler):
 

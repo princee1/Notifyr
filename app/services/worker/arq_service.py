@@ -2,8 +2,14 @@ from arq.connections import RedisSettings,create_pool,ArqRedis
 from arq.jobs import Job,JobStatus
 from dataclasses import asdict
 from app.definition._error import BaseError
+from app.definition._service import BaseService
+from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.file.file_service import FileService
 from app.utils.constant import RedisConstant
+from app.services.database.redis_service import RedisService
 
+
+QUEUE_NAME = 'arq:data_loader_task'
 
 class DataTaskNotFoundError(BaseError):
     def __init__(self, job_id:str,reason:str):
@@ -17,16 +23,25 @@ class JobDoesNotExistsError(BaseError):
         self.job_id = job_id
         self.reason = reason
 
-class ArqWorker:
+class ArqService(BaseService):
 
     @staticmethod
     def create_arq_url(user,password)->str:
         return f"redis://{user}:{password}@redis:6379/{RedisConstant.EVENT_DB}"
 
-    def __init__(self,user,password,task_registry,queue:str):
-        self.arq_url = ArqWorker.create_arq_url(user,password)
-        self.task_registry = task_registry
-        self.queue = queue
+    def build(self, build_state = ...):
+
+        self.arq_url = ArqService.create_arq_url(self.redisService.db_user,self.redisService.db_password)
+        self.queue = QUEUE_NAME
+
+    def __init__(self,fileService:FileService,redisService:RedisService,configService:ConfigService,UvicornWorkerService:UvicornWorkerService):
+        self.fileService = fileService
+        self.redisService = redisService
+        self.configService = configService
+        self.uvicornWorkerService = UvicornWorkerService        
+        
+    def register_task(self,tasks):
+        self.task_registry = tasks
 
     async def initialize(self):
         redisSettings = RedisSettings.from_dsn(self.arq_url)
@@ -50,6 +65,11 @@ class ArqWorker:
 
     async def fetch_job(self,job_id:str):
         return Job(job_id,self,self.queue)
+    
+    async def abort_job(self,job_id:str):
+        job = await self.fetch_job(job_id)
+        return await job.abort()
+
         
     async def job_exists(self,job_id:str,raise_on_exist=False):
         job = await self.fetch_job(job_id)

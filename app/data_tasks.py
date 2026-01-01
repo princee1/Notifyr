@@ -1,5 +1,4 @@
 from typing import Callable
-from app.classes.arq_worker import ArqWorker
 from app.utils.globals import APP_MODE,ApplicationMode
 
 DATA_TASK_REGISTRY = []
@@ -44,6 +43,7 @@ async def process_api_data(ctx,url:list[str]):
     ...
 
 if APP_MODE == ApplicationMode.arq:
+    
     from arq.connections import RedisSettings
     from app.classes.data_loader import TextDataLoader
     from app.services import QdrantService
@@ -52,17 +52,16 @@ if APP_MODE == ApplicationMode.arq:
     from app.services.database.mongoose_service import MongooseService
     from app.services.database.redis_service import RedisService
     from app.services.vault_service import VaultService
+    from app.services.worker.arq_service import ArqService
     from app.container import Get,build_container
 
     build_container()
-
-    redisService = Get(RedisService)
-    arq_url = ArqWorker.create_arq_url(redisService.db_user,redisService.db_password)
+    arqService = Get(ArqService)
     
     class WorkerSettings:
         functions = DATA_TASK_REGISTRY
         result_ttl = 60*60*24
-        redis_settings = RedisSettings.from_dsn(arq_url)
+        redis_settings = RedisSettings.from_dsn(arqService.arq_url)
 
     async def startup():
         ...
