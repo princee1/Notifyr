@@ -8,7 +8,7 @@ from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
-from app.services.worker.arq_service import DataTaskNotFoundError, JobDoesNotExistsError
+from app.services.worker.arq_service import DataTaskNotFoundError, JobDoesNotExistsError,ResultNotFound
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -929,10 +929,14 @@ class CeleryControlHandler(Handler):
 
 
 class ArqHandler(Handler):
-
     async def handle(self, function, *args, **kwargs):
         try:
             return await function(*args, **kwargs)
+        except ResultNotFound as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"message": "Result not found", "reason":str(e)}
+            )
         except JobDoesNotExistsError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -1,6 +1,7 @@
-from typing import Tuple
+from typing import List, Tuple
 from pydantic import BaseModel
 
 
 class FileResponseUploadModel(BaseModel):
-    meta:Tuple[str,float]
+    meta:List[Tuple[str,float]]
+

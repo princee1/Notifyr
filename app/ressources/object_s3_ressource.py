@@ -6,12 +6,13 @@ from fastapi import BackgroundTasks, Body, Depends, File, HTTPException, Query, 
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission,Role, filter_asset_permission
-from app.classes.minio import ObjectS3ResponseModel
+from app.cost.file_cost import FileCost
+from app.models.object_model import ObjectResponseUploadModel, ObjectS3ResponseModel
 from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard, UploadFilesGuard
 from app.decorators.handlers import AsyncIOHandler, FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, UploadFileHandler, VaultHandler
-from app.decorators.interceptors import ResponseCacheInterceptor
+from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
@@ -26,7 +27,7 @@ from app.services import ObjectS3Service
 from app.services.config_service import ConfigService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
-from app.utils.constant import SECONDS_IN_AN_HOUR as HOUR, MinioConstant, VaultConstant
+from app.utils.constant import SECONDS_IN_AN_HOUR as HOUR, CostConstant, MinioConstant, VaultConstant
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from app.depends.variables import force_update_query
 from app.utils.helper import b64_encode
@@ -59,7 +60,7 @@ class S3ObjectWebhookRessource(BaseHTTPRessource):
 @IncludeRessource(S3ObjectWebhookRessource)
 @HTTPRessource('objects')
 class S3ObjectRessource(BaseHTTPRessource):
-        
+
     @staticmethod
     def pipe_restore(restore:bool,template:str,objectsSearch:ObjectsSearch):
         if restore:
@@ -111,10 +112,11 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler)
     @PingService([ObjectS3Service])
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
+    @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],mount=False)
-    async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],response_model=ObjectResponseUploadModel ,mount=False)
+    async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
         
         errors = {}
         upload_files = []
@@ -135,15 +137,14 @@ class S3ObjectRessource(BaseHTTPRessource):
                     continue
                 else:raise AssetConfusionError(filename)
 
-            asset_type = EXTENSION_TO_ASSET_TYPE[ext]
             meta.append((file.filename,file.size))
-            file.filename = f"{asset_type}/{filename}"
+            file.filename = f"{EXTENSION_TO_ASSET_TYPE[ext]}/{filename}"
             upload_files.append(file.filename)
             backgroundTask.add_task(self.upload,file)
 
         broker.wait(len(upload_files)*2)
         broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
-        return {"uploaded_files": upload_files,"errors": errors}
+        return ObjectResponseUploadModel(meta=meta,uploaded_files=upload_files,errors=errors)
 
 
     @UsePermission(JWTAssetObjectPermission(accept_none_template=True))

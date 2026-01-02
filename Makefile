@@ -63,12 +63,12 @@ deploy-beat:
 
 deploy-agentic:
 	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.capabilities.agentic')" = "true" ]; then \
-		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.vector')" = "true" ]; then \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.database.qdrant')" = "true" ]; then \
 			echo "--- 🛠️ Creating the vector database Qdrant"; \
 			docker compose up -d qdrant; \
 			echo "--- ✅ Qdrant service is deployed"; \
 		fi; \
-		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.agentic.knowledge_graph')" = "true" ]; then \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.database.neo4j')" = "true" ]; then \
 			echo "--- 🛠️ Knowledge not setup yet"; \
 		fi; \
 		sleep 10; \
@@ -83,6 +83,8 @@ build:
 	@echo "================================================="
 	@echo "🛠️  Building Docker services in $(DOCKER_COMPOSE_FILE)..."
 	@echo "================================================="
+	docker compose build minio
+	docker compose build postgres
 	docker compose build vault-init
 	docker compose build app
 	docker compose build beat
@@ -165,14 +167,14 @@ deploy: deploy-data deploy-agentic deploy-server
 	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
 	@echo "================================================="
 
-agentic: deploy-data
+agentic: deploy-data deploy-agentic
 	@echo "\n================================================="
 	@echo "🚀 Starting AGENTIC-ONLY Deployment"
 	@echo "================================================="
 	@echo "--- 🛠️  Stopping dependent services for AGENTIC deployment..."
 	@sleep 30 && clear
 	docker compose down postgres
-	docker compose down rabbbitmq
+	docker compose down rabbitmq
 	docker compose down minio
 	docker compose down ncs
 	@echo "\n================================================="

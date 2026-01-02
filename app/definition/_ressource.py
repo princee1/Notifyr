@@ -5,6 +5,7 @@ instance imported from `container`.
 from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
@@ -125,6 +126,9 @@ class Helper:
 
             elif result == None:
                 result = JSONResponse({},)
+            
+            elif isinstance(result,BaseModel):
+                result = JSONResponse(result.model_dump())
 
             return copy_response(result, response)
 

@@ -16,7 +16,7 @@
     },
     "capabilities": {
         "object": false,
-        "email": true,
+        "email": false,
         "twilio": false,
         "notification": false,
         "message": false,

@@ -6,8 +6,15 @@ RUN pip install qdrant-client
 
 RUN pip install neo4j
 
-RUN pip install llama-index-core
+RUN pip install llama-index-core llama-index-embeddings-openai
 
 RUN pip install llama-index-readers-file
 
+RUN pip install arq
+
+RUN pip install yake gensim
+
 COPY ./agentic_main.py ./agentic_main.py
+
+COPY ./app/data_tasks.py ./data_tasks.py
+

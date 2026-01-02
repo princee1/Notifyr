@@ -339,8 +339,11 @@ class CostConstant:
     CLIENT_CREDIT='client'
     AGENT_CREDIT='agent'
     WORKFLOW_CREDIT='workflow'
+    OBJECT_CREDIT = 'objects'
+    DOCUMENT_CREDIT = 'documents'
+    TOKEN_CREDIT  = 'tokens'
 
-    Credit =Literal['email','sms','phone','profile','client','agent','workflow']
+    Credit =Literal['email','sms','phone','profile','client','agent','workflow','objects','documents','tokens']
     
 
     COST_KEY='cost'

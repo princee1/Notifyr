@@ -192,7 +192,7 @@
         "profile": 10,
         "blog":20,
         "documents":10000,
-        "object":100000,
+        "objects":100000,
         "tokens":100000000000
     }
 }

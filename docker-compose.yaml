@@ -168,6 +168,28 @@ services:
   # ==========================================
   # WORKER LAYER
   # ==========================================
+  arq:
+    image: notifyr/agentic:community 
+    container_name: arq
+    entrypoint: ["arq", "app.data_tasks.WorkerSettings"]
+    volumes:
+      - vault-shared:/vault/shared
+    secrets:
+      - source: app_role_id
+        target: /run/secrets/app-role_id.txt
+      - source: costs
+        target: /run/secrets/costs.json
+      - source: deploy
+        target: /run/secrets/deploy.json
+    environment:
+      - MODE=${MODE:-prod}
+      - MONGO_HOST=${MONGO_HOST-mongodb}
+      - QDRANT_HOST=${QDRANT_HOST-qdrant}
+    networks:
+      - data_net
+      - vault_net 
+
+
   agentic:
     image: notifyr/agentic:community 
     container_name: agentic

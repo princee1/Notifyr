@@ -400,7 +400,7 @@ setup_database_config(){
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN"]'
+      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+MULTI","+EXEC"]'
 
     vault write notifyr-database/roles/admin-redis-ntfr-role \
       db_name="redis-notifyr" \

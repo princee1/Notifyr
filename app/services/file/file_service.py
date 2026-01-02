@@ -43,6 +43,16 @@ class FileService(BaseService,):
 
         return filename,content,dirName
 
+    def file_size_converter(self, size: int, mode: Literal['kb', 'mb']):
+        if size == None:
+            return 0
+        if mode == 'kb':
+            return round(size / 1024, 2)
+        elif mode == 'mb':
+            return round(size / (1024 * 1024), 2)
+        else:
+            raise ValueError("Mode must be 'kb' or 'mb'")
+
     def build(self,build_state=-1):
         ...
 

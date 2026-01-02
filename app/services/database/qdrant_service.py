@@ -57,8 +57,6 @@ class QdrantService(BaseService):
     async def update_collection(self,collect_name:str):
         return await self.client.update_collection(
             collection_name=collect_name,
-            
-
         )
 
     async def get_collections(self):
@@ -74,6 +72,9 @@ class QdrantService(BaseService):
 
     async def clear_collections(self,collection_name:str):
         ...        
+
+    async def delete_documents(self,collection_name:str,document_name:str):
+        ...
 
     @RunAsync    
     def upload_points(self,collection_name:str,points:list[PointStruct],wait:bool=True):

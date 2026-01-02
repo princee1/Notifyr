@@ -76,6 +76,7 @@ if APP_MODE == ApplicationMode.arq:
     from app.services.database.neo4j_service import Neo4JService
     from app.services.database.redis_service import RedisService
     from app.services.file.file_service import FileService
+    from app.services.worker.arq_service import ArqService
 
 
 if APP_MODE == ApplicationMode.gunicorn and CAPABILITIES['object']:
