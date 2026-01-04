@@ -983,4 +983,36 @@ class UploadFileHandler(Handler):
 
         except TotalFilesSizeExceededError as e:
             raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
+
+
+class FileHandler(Handler):
+    
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except PermissionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: You do not have access to this file. {str(e)}"
+            )
+        except IsADirectoryError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid path: The specified path is a directory, not a file. {str(e)}"
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Resource not found: {str(e)}"
+            )
+        except OSError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An internal server error occurred while processing the file."
+            )
         
+
+class ProxyRestGatewayHandler(Handler):
+    ...
+    

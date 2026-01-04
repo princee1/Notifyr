@@ -153,6 +153,7 @@ class ConfigService(_service.BaseService):
         self.BASE_DIR:str = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
         self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')
+        self.DATA_LOADER_DIR:str = self.getenv('DATA_LOADER_DIR', '/data-loader/' if self.MODE != MODE.DEV_MODE else './data-loader/')
 
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
@@ -186,7 +187,7 @@ class ConfigService(_service.BaseService):
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
         # AGENTIC CONFIG #
-        self.AGENTIC_HOST = self.getenv('AGENTIC_HOST','localhost:50051' if self.MODE == MODE.DEV_MODE else 'agentic:50051')
+        self.AGENTIC_HOST = self.getenv('AGENTIC_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'agentic')
 
         # QDRANT CONFIG #
         self.QDRANT_HOST:str = self.getenv('QDRANT_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'qdrant')

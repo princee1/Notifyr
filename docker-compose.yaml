@@ -138,6 +138,8 @@ services:
 
     volumes:
       - vault-shared:/vault/shared:ro
+      - data-loader:/data-loader/
+
     build:
       context: ./
       dockerfile: Dockerfile
@@ -174,6 +176,7 @@ services:
     entrypoint: ["arq", "app.data_tasks.WorkerSettings"]
     volumes:
       - vault-shared:/vault/shared
+      - data-loader:/data-loader/
     secrets:
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
@@ -488,6 +491,7 @@ volumes:
   minio-data: {}
   rabbitmq_data:
   memgraph_data:
+  data-loader:
 
 secrets:
   app_role_id:

@@ -52,12 +52,12 @@ class RemoteAgentService(BaseMiniServiceManager):
             raise ServiceNotAvailableError
         
         if APP_MODE == ApplicationMode.worker:
-            self.channel = grpc.insecure_channel(self.configService.AGENTIC_HOST)
+            self.channel = grpc.insecure_channel(self.agentic_grpc_host)
             clientInterceptor = AgentClientInterceptor(self.auth_header)
             self.channel = grpc.intercept_channel(self.channel,clientInterceptor)
         else:
             clientInterceptor = AgentClientAsyncInterceptor(self.auth_header)
-            self.channel = grpc.aio.insecure_channel(self.configService.AGENTIC_HOST,interceptors=[clientInterceptor])
+            self.channel = grpc.aio.insecure_channel(self.agentic_grpc_host,interceptors=[clientInterceptor])
 
         self.stub = agent_pb2_grpc.AgentStub(self.channel)
     
@@ -68,6 +68,14 @@ class RemoteAgentService(BaseMiniServiceManager):
             await self.channel.close()
             self.channel = None
             self.stub = None
+
+    @property
+    def agentic_grpc_host(self):
+        return f"{self.configService.AGENTIC_HOST}:50051"
+
+    @property
+    def agentic_http_host(self):
+        return f"{self.configService.AGENTIC_HOST}:8000"
 
 
 @MiniService()

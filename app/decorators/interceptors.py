@@ -82,14 +82,13 @@ class TaskCostInterceptor(Interceptor):
         cost:SimpleTaskCost = kwargs.get('cost')
         APIFilterInject(cost.register_meta_key)(**kwargs)
         APIFilterInject(cost.compute_cost)(**kwargs)
-        balance_before = await self.costService.deduct_credits(cost.credit_key,cost.purchase_cost,self.retry_limit)
-        cost.register_state(balance_before)
-
+        cost.balance_before = await self.costService.deduct_credits(cost.credit_key,cost.purchase_cost,self.retry_limit)
+        
     async def intercept_after(self, result:Any,cost:SimpleTaskCost,broker:Broker,response:Response):
         await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
         bill = cost.generate_bill()
         self.costService.inject_cost_info(response,bill)
-        broker.push(RedisConstant.LIMITER_DB,self.costService.bill_key(cost.credit_key),bill)
+        broker.add(self.costService.push_bill,cost.credit_key,bill)
         
 class DataCostInterceptor(Interceptor):
 
@@ -128,13 +127,12 @@ class DataCostInterceptor(Interceptor):
         match self.mode:
             case 'purchase':
                 APIFilterInject(cost.post_purchase)(result,**kwargs)
-                balance_before = await self.costService.deduct_credits(self.credit,cost.purchase_cost,self.retry_limit)
+                cost.balance_before = await self.costService.deduct_credits(self.credit,cost.purchase_cost,self.retry_limit)
             case 'refund':
-                balance_before = await self.costService.get_credit_balance(self.credit)
+                cost.balance_before = await self.costService.get_credit_balance(self.credit)
                 APIFilterInject(cost.post_refund)(result,**kwargs)
                 await self.costService.refund_credits(self.credit,cost.refund_cost)
 
-        cost.balance_before = balance_before
         bill = cost.generate_bill()
         self.costService.inject_cost_info(response,bill)
-        broker.push(RedisConstant.LIMITER_DB,self.costService.bill_key(self.credit),bill)
+        broker.add(self.costService.push_bill,self.credit,bill)

@@ -333,7 +333,7 @@ class SMSService(BaseTwilioCommunication):
                 data['to'] = to
 
                 try:
-                    message = twilioProfile.client.messages.create_async(
+                    message = await twilioProfile.client.messages.create_async(
                         provide_feedback=True, send_as_mms=True, 
                         status_callback=url,
                         **data)

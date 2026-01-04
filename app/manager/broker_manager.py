@@ -60,6 +60,10 @@ class Broker:
     def push(self,db:int,name,*values):
         self.backgroundTasks.add_task(self.redisService.push,db,name,*values)
 
+    @Mock()
+    def add(self,function,*args,**kwargs):
+        self.backgroundTasks.add_task(function,*args,**kwargs)
+
     def propagate_state(self,protocol:StateProtocol|MiniStateProtocol):
 
         if isinstance(protocol.get('service',None),type):

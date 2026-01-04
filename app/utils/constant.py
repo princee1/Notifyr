@@ -418,3 +418,9 @@ class RabbitMQConstant:
 
 class QdrantConstant:
     CACHE_COLLECTION='prompt-cache'
+
+
+class ArqDataTaskConstant:
+    FILE_DATA_TASK = 'file'
+    WEB_DATA_TASK = 'web'
+    API_DATA_TASK='api'

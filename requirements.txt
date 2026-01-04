@@ -1,6 +1,5 @@
 aiobotocore==2.25.2
 aiohttp==3.11.12
-aiohttp_retry==2.9.1
 aiokafka==0.12.0
 aiomcache==0.8.2
 aiorwlock==1.5.0

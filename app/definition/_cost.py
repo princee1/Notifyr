@@ -33,7 +33,7 @@ class Cost:
         self.definition_name=None
         
     def purchase(self,description:str,amount:int,quantity=1):
-        item = BillItem(description,amount,quantity)
+        item = BillItem(description,int(amount),quantity)
         self.purchase_items.append(item)
         self.purchase_cost += item.amount * item.quantity
 
@@ -45,7 +45,7 @@ class Cost:
         self.refund_cost = 0
     
     def refund(self,description:str,amount:int,quantity=1):
-        item = BillItem(description,amount,quantity)
+        item = BillItem(description,int(amount),quantity)
         self.refund_items.append(item)
         self.refund_cost += item.subtotal
 
@@ -86,9 +86,6 @@ class DataCost(Cost):
         self.refund(self.credit_key,self.default_price)
 
 class SimpleTaskCost(Cost):
-
-    def register_state(self, balance_before: int):
-        self.balance_before = balance_before
 
     def register_meta_key(self,func_meta:FuncMetaData):
         self.credit_key=func_meta['cost_definition']["__credit_key__"]

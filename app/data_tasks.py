@@ -1,13 +1,14 @@
 import functools
-from random import randint
 from typing import Any, Callable
-from app.classes.step import SkipStep, Step, StepRunner
-from app.utils.constant import CostConstant
+from app.classes.step import Step, StepRunner
+from app.utils.constant import CostConstant,ArqDataTaskConstant, RedisConstant
 from app.utils.globals import APP_MODE,ApplicationMode
 
-DATA_TASK_REGISTRY = []
+task_registry = []
+FILE_CLEANUP='file_cleanup'
+DATA_TASK_REGISTRY_NAME = {}
 
-def RegisterTask(active:bool=True):
+def RegisterTask(nickname:str,active:bool=True,wrap=True):
 
     def decorator(func:Callable):
         """
@@ -19,80 +20,106 @@ def RegisterTask(active:bool=True):
         :return: The function `RegisterTask` is returning the input function `func` after appending its name
         to the `DATA_TASK_REGISTRY` list.
         """
-        
-
+    
         @functools.wraps(func)
-        async def wrapper(ctx:dict[str,Any],*args,collection_name:str=None,job_id:str=None,step:Step = None,**kwargs):
+        async def wrapper(ctx:dict[str,Any],*args,collection_name:str=None,uri:str=None,step:Step = None,**kwargs):
 
             async def refund(size):
-                if step['status'] != 'running':
+                job_id = arqService.compute_job_id(file_path)
+
+                if size == None:
                     return
-                if size != None:
+                if step["current_step"] < DataLoaderStepIndex.PROCESS and nickname == ArqDataTaskConstant.FILE_DATA_TASK:
+                    file_path = arqService.compute_data_file_task_path(uri)
+                    await arqService.enqueue_task(FILE_CLEANUP,job_id=job_id, kwargs={'file_path':file_path})
+                else:
+                    cost = FileCost(job_id,None)
+                    cost.refund(f'Refund the data loader process: {uri}', fileService.file_size_converter(size,'mb'))
+                    await redisService.push(RedisConstant.LIMITER_DB,costService.bill_key(CostConstant.DOCUMENT_CREDIT),cost.generate_bill())
                     await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,size)
-    
+                
             if step==None:
-                step = Step(current_step=None,status='start',steps=dict())
+                step = Step(current_step=None,steps=dict())
             
             costService = Get(CostService)
             fileService = Get(FileService)
-
+            redisService = Get(RedisService)
             try:
-                res = await func(*args,**kwargs,step=step,collection_name=collection_name,job_id=job_id)
-                step['status'] = 'done'
-                await asyncio.sleep(randint(5,10))
-                return res
+                return await func(*args,**kwargs,step=step,collection_name=collection_name,uri=uri)
             except asyncio.CancelledError as e:
-                await refund(costService,fileService,kwargs.get('size',None),step)
+                await refund(kwargs.get('size',None))
                 raise e
             except Retry as e:
-                ## append the step
                 raise e
             except Exception as e:
                 await refund(kwargs.get('size',None))
                 raise e
 
         if active:
-            DATA_TASK_REGISTRY.append(wrapper)
-            return wrapper
-        
-        return func
+            task_registry.append(wrapper)
+            DATA_TASK_REGISTRY_NAME[nickname] = wrapper.__qualname__
+
+            return wrapper if wrap else func
+        else:
+            return func
 
     return decorator
 
-@RegisterTask()
-async def process_file_loader_task(ctx:dict[str,Any],file_path: str,collection_name:str,lang:str='en',content_type:str=None,job_id:str=None,size:int=None,step:Step = None):
+@RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
+async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:str='en',content_type:str=None,uri:str=None,size:int=None,step:Step = None):
 
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
     costService:CostService = Get(CostService)
+    arqService:ArqDataTaskService = Get(ArqDataTaskService) 
 
+    file_path = arqService.compute_data_file_task_path(uri)
+    job_id = arqService.compute_job_id(uri)
     extension =  fileService.get_extension(file_path)
     textDataLoader = TextDataLoader(...,file_path,lang,extension,content_type)
+    token = None
 
-    async with StepRunner(step,'process') as skip:
+    async with StepRunner(step,DataLoaderStepIndex.CHECK) as skip:
+        skip()
+        if not await qdrantService.collection_exists(collection_name,reverse=None):
+            return {"size":size,"collection_name":collection_name,"token":0,"error":True}
+
+    async with StepRunner(step,DataLoaderStepIndex.PROCESS) as skip:
         skip()
         points = await textDataLoader.process()
-        await costService.deduct_credits(CostConstant.TOKEN_CREDIT,1)
+        token = 1
         await qdrantService.upload_points(collection_name,list(points),)
-
-    async with StepRunner(step,'cleanup') as skip:
-        skip()
-        fileService.delete_tempfile(file_path)
     
-    return {"job_id":job_id,"size":size,"collection_name":collection_name,"tokens":1}
+    async with StepRunner(step,DataLoaderStepIndex.TOKEN_COST, params=token) as skip:
+        skip()
+        cost = TokenCost(job_id,None)
+        cost.purchase(f'Ai token data process: {uri}',step['current_params'])
+        cost.balance_before = await costService.deduct_credits(CostConstant.TOKEN_CREDIT,cost.purchase_cost)
+        await costService.push_bill(CostConstant.TOKEN_CREDIT,cost.generate_bill())
 
-@RegisterTask(False)
+    async with StepRunner(step,DataLoaderStepIndex.CLEANUP) as skip:
+        skip()
+        fileService.delete_file(file_path)
+    
+    return {"size":size,"collection_name":collection_name,"tokens":1}
+
+@RegisterTask(ArqDataTaskConstant.WEB_DATA_TASK,False)
 async def process_web_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',collection_name:str=None):
     ...
 
-@RegisterTask(False)
+@RegisterTask(ArqDataTaskConstant.API_DATA_TASK,False)
 async def process_api_data(ctx:dict[str,Any],url:list[str]):
     ...
+
+@RegisterTask(FILE_CLEANUP,True,False)
+async def delete_file(ctx:dict[str,Any],file_path:str=None):
+    fileService = Get(FileService)
+    return fileService.delete_file(file_path)
 
 if APP_MODE == ApplicationMode.arq:
     
     from arq.connections import RedisSettings
-    from app.classes.data_loader import TextDataLoader
+    from app.classes.data_loader import TextDataLoader, DataLoaderStepIndex
     from app.services import QdrantService
     from app.services import Neo4JService
     from app.services import FileService
@@ -100,17 +127,20 @@ if APP_MODE == ApplicationMode.arq:
     from app.services.database.redis_service import RedisService
     from app.services.vault_service import VaultService
     from app.services.cost_service import CostService
-    from app.services.worker.arq_service import ArqService,QUEUE_NAME
+    from app.cost.file_cost import FileCost
+    from app.cost.token_cost import TokenCost
+    from app.services.worker.arq_service import ArqDataTaskService,QUEUE_NAME
     from app.container import Get,build_container
     import asyncio
     from arq import Retry
 
 
     build_container()
-    arqService = Get(ArqService)
-    
+    arqService = Get(ArqDataTaskService)
+    arqService.register_task(DATA_TASK_REGISTRY_NAME)
+
     class WorkerSettings:
-        functions = DATA_TASK_REGISTRY
+        functions = task_registry
         redis_settings = RedisSettings.from_dsn(arqService.arq_url)
         queue_name = QUEUE_NAME
         max_jobs = 5
@@ -119,20 +149,28 @@ if APP_MODE == ApplicationMode.arq:
         retry_jobs = False
         burst = True
         max_burst_jobs = 5
+        job_completion_wait = 60
     
+    @staticmethod
     async def on_job_start():
         ...
     
+    @staticmethod
     async def on_job_end():
+        """ coroutine function to run on job end"""
         ...
     
+    @staticmethod
     async def after_job_end():
+        """coroutine function to run after job has ended and results have been recorded"""
         ...
 
-    async def startup():
+    @staticmethod
+    async def startup(ctx:dict[str,Any]):
         ...
 
-    async def shutdown():
+    @staticmethod
+    async def shutdown(ctx:dict[str,Any]):
         mongooseService = Get(MongooseService)
         neo4jService = Get(Neo4JService)
         redisService = Get(RedisService)

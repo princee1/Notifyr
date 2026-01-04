@@ -1,6 +1,6 @@
 from pathlib import PurePath
 from app.definition._service import BaseService,Service,AbstractServiceClass
-from typing import Literal
+from typing import Literal, Union
 from app.services.config_service import ConfigService
 from app.utils.globals import DIRECTORY_SEPARATOR
 from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
@@ -15,25 +15,60 @@ from app.utils.tools import RunInThreadPool
 class FileService(BaseService,):
     # TODO add security layer on some file: encription,decryption
     # TODO add file watcher
+    
     def __init__(self,configService:ConfigService) -> None:
         super().__init__()
         self.configService = configService
 
     @RunInThreadPool
-    def download_temp_file(self,filename,content):
-        suffix = '_' + os.path.basename(filename)
-        tf = tempfile.NamedTemporaryFile(delete=False, prefix='dl_', suffix=suffix)
-        tf.write(content)
-        tf.flush()
-        tf.close()
-        return tf.name
+    def download_file(self, file_path: str, content: Union[str, bytes]) -> str:
+        """
+        Saves content to the specified file_path. 
+        Works in both Docker and Host environments provided the path is accessible.
+        """
+        try:
+            directory = os.path.dirname(file_path)
+            if directory and not os.path.exists(directory):
+                try:
+                    os.makedirs(directory, exist_ok=True)
+                except OSError as e:
+                    raise PermissionError(f"Failed to create directory '{directory}': {str(e)}")
 
-    def clean_up(self,tmp_name):
-        if tmp_name and os.path.exists(tmp_name):
-            try:
-                os.unlink(tmp_name)
-            except Exception:
-                pass
+            data_to_write = content.encode('utf-8') if isinstance(content, str) else content
+
+            with open(file_path, 'wb') as f:
+                f.write(data_to_write)
+                
+            return file_path
+
+        except PermissionError as e:
+            raise PermissionError(f"Permission denied writing to '{file_path}'. Check Docker volume mounts or user permissions.") from e
+        except IsADirectoryError:
+            raise IsADirectoryError(f"The path '{file_path}' is a directory, not a file.")
+        except Exception as e:
+            raise OSError(f"An unexpected error occurred while downloading file to '{file_path}': {str(e)}")
+
+    def delete_file(self, file_path: str) -> bool:
+        """
+        Deletes a file at the given path.
+        """
+        if not file_path:
+            raise ValueError("File path cannot be empty.")
+
+        try:
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"Cannot delete: The file '{file_path}' does not exist.")
+
+            if os.path.isdir(file_path):
+                raise IsADirectoryError(f"Cannot delete: '{file_path}' is a directory. Use a directory removal method instead.")
+
+            os.remove(file_path)
+            return True
+
+        except PermissionError as e:
+            raise PermissionError(f"Permission denied deleting '{file_path}'. Ensure the application has write access.") from e
+        except OSError as e:
+            raise OSError(f"Error deleting file '{file_path}': {str(e)}")
 
     def readFileDetail(self, path, flag:FDFlag, enc="utf-8"):
 
@@ -150,8 +185,4 @@ class FileService(BaseService,):
             input = input.decode()
         
         return htmlmin.minify(input,False,True,True,).encode()
-        
-    def download_file(self,path:str,content):
-        with open(path,'wb') as f:
-            f.write(content)
-        
+                

@@ -10,8 +10,14 @@ from qdrant_client.models import PointStruct
 from llama_index.core.schema import TextNode
 from llama_index.readers.file.docs.base import BaseReader
 from llama_index.readers.file import CSVReader,PDFReader, ImageReader, VideoAudioReader,MarkdownReader,DocxReader,HTMLTagReader,PptxReader
-
 from app.utils.tools import RunAsync
+from enum import Enum
+
+class DataLoaderStepIndex(int,Enum):
+    CHECK = 1
+    PROCESS = 2
+    TOKEN_COST = 3
+    CLEANUP = 4
 
 
 TEXT_READERS:dict[str,type[BaseReader]] = {

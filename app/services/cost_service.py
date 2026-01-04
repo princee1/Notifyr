@@ -138,6 +138,10 @@ class CostService(BaseService):
             credit = int(credit)
         return credit
 
+    async def push_bill(self,credit:str,bill:Bill):
+        bill_key = self.bill_key(credit)
+        return await self.redisService.push(RedisConstant.LIMITER_DB,bill_key,bill)
+
     async def get_all_credits_balance(self):        
         return {k:await self.get_credit_balance(k) for k in self.plan_credits.keys() }
 

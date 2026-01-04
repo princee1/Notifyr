@@ -17,6 +17,7 @@ from app.services.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
+from app.services.worker.arq_service import ArqDataTaskService, DataTaskNotFoundError
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request, UploadFile, status
 from app.errors.upload_error import (
@@ -365,3 +366,18 @@ class UploadFilesGuard(Guard):
                 raise TotalFilesSizeExceededError(total_size, self.max_size)
 
         return True, ""
+    
+class ArqDataTaskGuard(Guard):
+
+    def __init__(self,data_task_name:str):
+        super().__init__()
+        self.data_task_name = data_task_name
+        self.arqService = Get(ArqDataTaskService)
+
+    async def guard(self):
+        if self.data_task_name not in self.arqService.task_registry:
+            raise DataTaskNotFoundError(self.data_task_name)
+        
+        return True,""
+        
+    

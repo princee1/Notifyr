@@ -26,6 +26,8 @@ class FileCost(DataCost):
     def init(self, default_price, credit_key):
         super().init(default_price, credit_key)
         self.definition:FileCostDefinition = self.costService.costs_definition.get(credit_key,FileCost.DEFAULT_DEF)
+        self.max_file_size = self.definition.get('max_file_size')
+        self.cost_per_extra_mb = self.definition.get('max_file_size_extra_per_mb')
 
     def pre_purchase(self, files: List[UploadFile]):
         """Compute cost for uploading files before they are processed.
@@ -34,9 +36,10 @@ class FileCost(DataCost):
         and adds purchase items.
         """
         for file in files:
-            cost, description = self.compute_cost(self.PRE_NAME, file.filename,file.size)
 
-            self.purchase(description, cost)
+            prices = self.compute_prices(self.PRE_NAME, file.filename,file.size)
+            for d,c,q in prices:
+                self.purchase(d,c,q) 
 
     def post_purchase(self, result: FileResponseUploadModel, backgroundTasks: BackgroundTasks):
         """Compute cost for files after they are processed.
@@ -44,30 +47,36 @@ class FileCost(DataCost):
         Iterates over result.meta tuples (filename, size), computes cost using FileCostDefinition,
         and adds purchase items.
         """
-        for (filename, file_size_mb),task in zip(result.meta,backgroundTasks):
-            cost, description = self.compute_cost(self.POST_NAME, filename,file_size_mb)
-
-            self.purchase(description, cost) 
+        for (metadata,task) in zip(result.metadata,backgroundTasks.tasks):
+            
+            filename,file_size_mb = metadata.uri,metadata.size
+            prices = self.compute_prices(self.POST_NAME, filename,file_size_mb)
+            for d,c,q in prices:
+                self.purchase(d,c,q) 
 
     def post_refund(self, result:FileResponseUploadModel):
-        for filename,size in result.meta:
-            cost,description = self.compute_cost(self.REFUND_NAME,filename,size)
+        for  metadata in result.metadata:
 
-            self.refund(description,cost)
+            filename,size = metadata.uri,metadata.size
+            prices = self.compute_prices(self.REFUND_NAME,filename,size)
+            for d,c,q in prices:
+                self.refund(d,c,q)
  
-    def compute_cost(self,name, filename:str|None,size:float |None):
-        max_file_size = self.definition.get('max_file_size', 10)
-        cost_per_extra_mb = self.definition.get('max_file_size_extra_per_mb', 1)
-
+    def compute_prices(self,name, filename:str|None,size:float |None):
         file_size_mb = self.fileService.file_size_converter(size,'mb')
         filename = filename or "unknown"
-        delta = max_file_size - file_size_mb
+        delta = self.max_file_size - file_size_mb
+        purchase:list[tuple[str,int]] = [] 
 
         if delta < 0:
-            cost = int((delta*-1) * cost_per_extra_mb) + int(file_size_mb)
-            description = f"{name} {filename} ({file_size_mb:.2f} MB, exceeds limit of {max_file_size} MB)"
-        else:
-            cost = int(file_size_mb)
-            description = f"{name} {filename} ({file_size_mb:.2f} MB)"
-        return cost,description
+            c = self.cost_per_extra_mb
+            q = int(delta*-1)
+            d = f"{name} {filename} ({file_size_mb:.2f} MB, exceeds limit of {self.max_file_size} MB)"
+            purchase.append((d,c,q))
+
+        q = int(file_size_mb)
+        d = f"{name} {filename} ({file_size_mb:.2f} MB)"
+        purchase.append((d,1,q))
+
+        return purchase
     

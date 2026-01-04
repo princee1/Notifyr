@@ -33,10 +33,6 @@ from app.depends.variables import force_update_query
 from app.utils.helper import b64_encode
 from app.utils.tools import RunInThreadPool
 
-# limit the size with a guard
-# limit the minio size also 
-
-
 @HTTPRessource('webhooks')
 class S3ObjectWebhookRessource(BaseHTTPRessource):
     
@@ -51,8 +47,6 @@ class S3ObjectWebhookRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST,HTTPMethod.GET,HTTPMethod.DELETE])
     def webhooks(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)]):
         ...
-
-
 
 @UseRoles([Role.ASSETS])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler)

@@ -12,7 +12,9 @@ RUN pip install llama-index-readers-file
 
 RUN pip install arq
 
-RUN pip install yake gensim
+RUN pip install yake 
+
+RUN pip install gensim 
 
 COPY ./agentic_main.py ./agentic_main.py
 

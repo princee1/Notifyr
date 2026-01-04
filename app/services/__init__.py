@@ -49,7 +49,7 @@ if APP_MODE == ApplicationMode.server:
     from app.services.security_service import JWTAuthService,SecurityService
     from app.services.file.file_service import FileService
     from app.services.contacts_service import ContactsService,SubscriptionService
-    from app.services.worker.arq_service import ArqService
+    from app.services.worker.arq_service import ArqDataTaskService
 
 
 if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
@@ -76,7 +76,7 @@ if APP_MODE == ApplicationMode.arq:
     from app.services.database.neo4j_service import Neo4JService
     from app.services.database.redis_service import RedisService
     from app.services.file.file_service import FileService
-    from app.services.worker.arq_service import ArqService
+    from app.services.worker.arq_service import ArqDataTaskService
 
 
 if APP_MODE == ApplicationMode.gunicorn and CAPABILITIES['object']:
