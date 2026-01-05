@@ -6,7 +6,7 @@ from app.container import Get
 from app.depends.class_dep import TrackerInterface
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.manager.task_manager import TaskManager
-from app.services.cost_service import REDIS_CREDIT_KEY_BUILDER, CostService
+from app.services.cost_service import CostService
 from app.utils.helper import PointerIterator
 from app.classes.celery import SchedulerModel
 from datetime import datetime
@@ -18,10 +18,10 @@ class Cost:
 
     rules = costService.rules
     
-    def __init__(self, request_id: str=Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    def __init__(self, request_id: str=Depends(get_request_id),authPermission:AuthPermission|None=Depends(get_auth_permission)):
         self.purchase_cost: int = 0
         self.refund_cost: int = 0
-
+        self.authPermission = authPermission
         self.request_id = request_id
 
         self.balance_before: Optional[int] = None
@@ -51,8 +51,8 @@ class Cost:
 
     def generate_bill(self)-> Bill:
         return {
-            "request_id": self.request_id,
-            #"credit":REDIS_CREDIT_KEY_BUILDER(self.credit_key),
+            "request_id":self.request_id,
+            "issuer":self.authPermission['client_username'],
             "definition": self.definition_name,
             "created_at": self.created_at.isoformat(),
             "p-items": [

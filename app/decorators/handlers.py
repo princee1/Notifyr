@@ -3,12 +3,13 @@ import asyncio
 import traceback
 from typing import Callable
 
+import aiohttp
 from amqp import AccessRefused
 from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
-from app.services.worker.arq_service import DataTaskNotFoundError, JobDoesNotExistsError,ResultNotFound
+from app.services.worker.arq_service import DataTaskNotFoundError, JobDoesNotExistsError, JobStatusNotValidError,ResultNotFound
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -945,7 +946,13 @@ class ArqHandler(Handler):
         except DataTaskNotFoundError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"task_name": e.job_id, "reason": e.reason}
+                detail={"job_id": e.job_id, "reason": e.reason}
+            )
+
+        except JobStatusNotValidError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'job_id':e.job_id,'status':e.status}
             )
 
 class APSSchedulerHandler(Handler):
@@ -1014,5 +1021,14 @@ class FileHandler(Handler):
         
 
 class ProxyRestGatewayHandler(Handler):
-    ...
+
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+
+        except aiohttp.ClientPayloadError as e:
+            body = e.args[0]
+            status = e.args[1]
+
     

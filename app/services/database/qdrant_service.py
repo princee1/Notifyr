@@ -79,7 +79,7 @@ class QdrantService(BaseService):
 
     async def clear_collections(self,collection_name:str):
         await  self.collection_exists(collection_name)
-        await self.client.delete(
+        return await self.client.delete(
             collection_name=collection_name,
             points_selector=FilterSelector(
                 filter=Filter()

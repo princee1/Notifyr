@@ -1,7 +1,8 @@
 import functools
 from typing import Any, Callable
+from app.classes.auth_permission import AuthPermission
 from app.classes.step import Step, StepRunner
-from app.utils.constant import CostConstant,ArqDataTaskConstant, RedisConstant
+from app.utils.constant import CostConstant,ArqDataTaskConstant, ParseStrategy, RedisConstant
 from app.utils.globals import APP_MODE,ApplicationMode
 
 task_registry = []
@@ -22,8 +23,9 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
         """
     
         @functools.wraps(func)
-        async def wrapper(ctx:dict[str,Any],*args,collection_name:str=None,uri:str=None,step:Step = None,**kwargs):
+        async def wrapper(ctx:dict[str,Any],*args,collection_name:str=None,uri:str=None,request_id:str=None,step:Step = None,**kwargs):
 
+            print(ctx)
             async def refund(size):
                 job_id = arqService.compute_job_id(file_path)
 
@@ -33,7 +35,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                     file_path = arqService.compute_data_file_task_path(uri)
                     await arqService.enqueue_task(FILE_CLEANUP,job_id=job_id, kwargs={'file_path':file_path})
                 else:
-                    cost = FileCost(job_id,None)
+                    cost = FileCost(request_id=request_id,authPermission=AuthPermission(client_username=job_id))
                     cost.refund(f'Refund the data loader process: {uri}', fileService.file_size_converter(size,'mb'))
                     await redisService.push(RedisConstant.LIMITER_DB,costService.bill_key(CostConstant.DOCUMENT_CREDIT),cost.generate_bill())
                     await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,size)
@@ -66,7 +68,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
     return decorator
 
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
-async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:str='en',content_type:str=None,uri:str=None,size:int=None,step:Step = None):
+async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:str='en',content_type:str=None,uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None):
 
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
@@ -75,8 +77,9 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
 
     file_path = arqService.compute_data_file_task_path(uri)
     job_id = arqService.compute_job_id(uri)
+
     extension =  fileService.get_extension(file_path)
-    textDataLoader = TextDataLoader(...,file_path,lang,extension,content_type)
+    textDataLoader = TextDataLoader(...,file_path,lang,extension,content_type,strategy)
     token = None
 
     async with StepRunner(step,DataLoaderStepIndex.CHECK) as skip:
@@ -86,13 +89,13 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
 
     async with StepRunner(step,DataLoaderStepIndex.PROCESS) as skip:
         skip()
-        points = await textDataLoader.process()
-        token = 1
-        await qdrantService.upload_points(collection_name,list(points),)
+        await textDataLoader.process()
+        token = textDataLoader.compute_token()
+        await qdrantService.upload_points(collection_name,list(textDataLoader.points),)
     
     async with StepRunner(step,DataLoaderStepIndex.TOKEN_COST, params=token) as skip:
         skip()
-        cost = TokenCost(job_id,None)
+        cost = TokenCost(request_id,AuthPermission(client_username=job_id))
         cost.purchase(f'Ai token data process: {uri}',step['current_params'])
         cost.balance_before = await costService.deduct_credits(CostConstant.TOKEN_CREDIT,cost.purchase_cost)
         await costService.push_bill(CostConstant.TOKEN_CREDIT,cost.generate_bill())
@@ -134,7 +137,6 @@ if APP_MODE == ApplicationMode.arq:
     import asyncio
     from arq import Retry
 
-
     build_container()
     arqService = Get(ArqDataTaskService)
     arqService.register_task(DATA_TASK_REGISTRY_NAME)
@@ -152,16 +154,16 @@ if APP_MODE == ApplicationMode.arq:
         job_completion_wait = 60
     
     @staticmethod
-    async def on_job_start():
+    async def on_job_start(ctx:dict[str,Any]):
         ...
     
     @staticmethod
-    async def on_job_end():
+    async def on_job_end(ctx:dict[str,Any]):
         """ coroutine function to run on job end"""
         ...
     
     @staticmethod
-    async def after_job_end():
+    async def after_job_end(ctx:dict[str,Any]):
         """coroutine function to run after job has ended and results have been recorded"""
         ...
 

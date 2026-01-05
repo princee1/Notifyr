@@ -1,32 +1,26 @@
-import re, nltk, yake
+import re, nltk, yake, json
 from typing import Any, List, Generator
+from enum import Enum
+
+# NLTK & Text Processing
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk import FreqDist
 from gensim import corpora, models
+
+# Llama Index Core
 from llama_index.core.node_parser import SentenceSplitter, SemanticSplitterNodeParser
-from llama_index.embeddings.openai import OpenAIEmbedding
-from qdrant_client.models import PointStruct
 from llama_index.core.schema import TextNode
-from llama_index.readers.file.docs.base import BaseReader
-from llama_index.readers.file import CSVReader,PDFReader, ImageReader, VideoAudioReader,MarkdownReader,DocxReader,HTMLTagReader,PptxReader
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+# Docling Integration
+from llama_index.readers.docling import DoclingReader
+from llama_index.node_parser.docling import DoclingNodeParser
+
+# Vector DB
+from qdrant_client.models import PointStruct
+from app.utils.constant import ParseStrategy
 from app.utils.tools import RunAsync
-from enum import Enum
-
-class DataLoaderStepIndex(int,Enum):
-    CHECK = 1
-    PROCESS = 2
-    TOKEN_COST = 3
-    CLEANUP = 4
-
-
-TEXT_READERS:dict[str,type[BaseReader]] = {
-        "pdf": PDFReader,
-        "docx": DocxReader,
-        "md": MarkdownReader,
-        "html": HTMLTagReader,
-        "pptx":PptxReader,
-}
 
 # Pre-load resources
 nltk.download(['stopwords', 'punkt', 'wordnet'], quiet=True)
@@ -34,25 +28,32 @@ STOP_WORDS = set(stopwords.words('english'))
 KW_EXTRACTOR = yake.KeywordExtractor(lan="en", n=1, top=10)
 
 
+class DataLoaderStepIndex(int, Enum):
+    CHECK = 1
+    PROCESS = 2
+    TOKEN_COST = 3
+    CLEANUP = 4
 
 class BaseDataLoader:
-
-    def __init__(self, api_key: str,file_path:str,lang:str,doc_type:str):
+    def __init__(self, api_key: str, file_path: str, lang: str, doc_type: str):
         self.file_path = file_path
         self.lang = lang
         self.doc_type = doc_type
 
     async def process(self):
-        ...
+        raise NotImplementedError
 
     @staticmethod
-    def Factory(ext:str)-> 'BaseDataLoader':
-        if ext in TEXT_READERS.keys():
+    def Factory(ext: str) -> 'BaseDataLoader':
+        if ext.lower() in ["pdf", "docx", "md", "html", "pptx", "txt"]:
             return TextDataLoader
-        
-class TextDataLoader(BaseDataLoader):
+        return None
 
+
+class TextDataLoader(BaseDataLoader):
+    
     class TextDetector:
+        """Helper class for analyzing text density, keywords, and topics."""
         def __init__(self, text: str):
             self.text = text
             self.tokens = [t.lower() for t in word_tokenize(text) if t.isalnum()]
@@ -78,9 +79,11 @@ class TextDataLoader(BaseDataLoader):
             count = self.freq_dist.N()
             return "low" if count < 80 else "medium" if count < 160 else "high"
 
-    def __init__(self, api_key: str,file_path:str,lang:str,doc_type:str):
-        super().__init__(api_key,file_path,lang,doc_type)
+    def __init__(self, api_key: str, file_path: str, lang: str, doc_type: str, strategy: ParseStrategy = ParseStrategy.SEMANTIC):
+        super().__init__(api_key, file_path, lang, doc_type)
+        self.strategy = strategy
         self.embed_model = OpenAIEmbedding(api_key=api_key)
+
         self.splitter = SentenceSplitter(chunk_size=1000, chunk_overlap=200)
         self.semantic_parser = SemanticSplitterNodeParser(
             buffer_size=3,
@@ -88,45 +91,66 @@ class TextDataLoader(BaseDataLoader):
             sentence_splitter=self.splitter.split_text,
             embed_model=self.embed_model,
         )
-    
+        self.structured_parser = DoclingNodeParser()
+
+        self.points = []
+        self.tokens = []
+
     async def process(self):
-        reader = TEXT_READERS[self.doc_type]
-        documents = await reader().aload_data(self.file_path)
-        nodes:list[TextNode] = await self.semantic_parser.abuild_semantic_nodes_from_documents(documents)
+        export_type = "markdown" if self.strategy == ParseStrategy.SEMANTIC else "json"
+        
+        reader = DoclingReader(export_type=export_type)
+        documents = await reader.aload_data(self.file_path)
+
+        nodes: List[TextNode] = []
+        if self.strategy == ParseStrategy.SEMANTIC:
+            nodes = await self.semantic_parser.abuild_semantic_nodes_from_documents(documents)
+        elif self.strategy == ParseStrategy.STRUCTURED:
+            nodes = self.structured_parser.get_nodes_from_documents(documents)
         
         current_section = "General"
         
         for i, node in enumerate(nodes):
             detector = self.TextDetector(node.text)
+
+            print(node.metadata)
             
-            # Efficiently parse relationships
             rel_ids = []
             for rel in node.relationships.values():
                 if isinstance(rel, list): rel_ids.extend([r.node_id for r in rel])
                 else: rel_ids.append(rel.node_id)
 
-            # Section tracking
-            new_section = self.extract_section(node.text)
-            if new_section: current_section = new_section
+            if self.strategy == ParseStrategy.SEMANTIC:
+                new_section = self.extract_section(node.text)
+                if new_section: current_section = new_section
+            else:
+                current_section = node.metadata.get("heading", current_section)
 
             payload = {
                 "text": node.text,
-                "document_name":self.file_path,
+                "document_name": self.file_path,
                 "document_id": node.ref_doc_id,
                 "node_id": node.node_id,
-                "source": node.metadata.get("file_name",node.metadata.get('file_path',None)),
+                "source": node.metadata.get("file_name", node.metadata.get('file_path', None)),
                 "document_type": self.doc_type,
+                "strategy": self.strategy.value,
+                
+                # Metadata handling
                 "page": node.metadata.get("page_label"),
+                "bbox": node.metadata.get("bbox",None),
+                
                 "chunk_id": f"{node.ref_doc_id}_{i}",
                 "chunk_index": i,
-                "title":node.metadata.get("title",""),
+                "title": node.metadata.get("title", ""),
                 "section": current_section,
                 "language": self.lang,
                 "content_type": self.detect_type(node.text),
+                
+                # Analytics
                 "token_count": detector.freq_dist.N(),
                 "full_token_count": len(detector.tokens),
                 "word_count": detector.freq_dist.B(),
-                "most_common":detector.freq_dist.most_common(5),
+                "most_common": detector.freq_dist.most_common(5),
                 "sentence_count": detector.sentence_count,
                 "keywords": await detector.extract_keywords(),
                 "topics": await detector.extract_topics(),
@@ -134,20 +158,24 @@ class TextDataLoader(BaseDataLoader):
                 "relationship": rel_ids
             }
 
-            yield PointStruct(
+            point = PointStruct(
                 id=node.node_id,
                 vector=node.embedding,
                 payload=payload
             )
-    
+            self.points.append(point)
+
+    def compute_token(self):
+        ...
+
     @classmethod
-    def extract_section(cls,text: str) -> str:
+    def extract_section(cls, text: str) -> str:
         # Matches: # Header, ## Header, 1.1 Header, or "Chapter 1: Header"
         patterns = [
-            r"^(#+)\s+(.*)",                          # Markdown
-            r"^(?:\d+\.)+\d*\s+(.*)",                # Numbered: 1.1.2
-            r"^(Chapter\s+\d+[:\-]?)\s*(.*)",        # Chapters
-            r"^[A-Z][A-Z\s]{5,20}$"                  # ALL CAPS short lines
+            r"^(#+)\s+(.*)",                      # Markdown
+            r"^(?:\d+\.)+\d*\s+(.*)",             # Numbered: 1.1.2
+            r"^(Chapter\s+\d+[:\-]?)\s*(.*)",     # Chapters
+            r"^[A-Z][A-Z\s]{5,20}$"               # ALL CAPS short lines
         ]
         for p in patterns:
             match = re.search(p, text, re.MULTILINE)
@@ -156,7 +184,7 @@ class TextDataLoader(BaseDataLoader):
         return None
 
     @classmethod
-    def detect_type(cls,text: str) -> str:
+    def detect_type(cls, text: str) -> str:
         text_s = text.strip()
         if cls.extract_section(text_s): return "heading"
         if "|" in text_s or re.search(r"{3,}.*{3,}", text_s): return "table"

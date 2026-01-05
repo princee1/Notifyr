@@ -18,7 +18,7 @@ class FileCost(DataCost):
 
     DEFAULT_DEF = FileCostDefinition(max_file_size=10,max_file_size_extra_per_mb=1)
 
-    def __init__(self,  request_id: str=Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    def __init__(self,  request_id: str=Depends(get_request_id),authPermission:AuthPermission|None=Depends(get_auth_permission)):
         super().__init__(request_id, authPermission)
         self.costService = Get(CostService)
         self.fileService = Get(FileService)

@@ -710,3 +710,13 @@ class ArqJobIdPipe(Pipe):
         self.arqService = arqService
     
     def pipe(self,job_id:str): return {'job_id':self.arqService.compute_job_id(job_id)}
+
+
+
+class DataClassToDictPipe(Pipe):
+
+    def __init__(self):
+        super().__init__(False)
+    
+    def pipe(self,result:Any):
+         return [asdict(r) for r in result]

@@ -1,5 +1,5 @@
 
-from typing import Callable,get_args
+from typing import Callable, Literal,get_args
 from fastapi import Query, Request, Response
 from app.classes.auth_permission import PolicyUpdateMode
 from app.classes.celery import AlgorithmType, InspectMode,RunType
@@ -111,3 +111,10 @@ policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','merg
 # ----------------------------------------------                                    ---------------------------------- #
 
 celery_inspect_mode_query:Callable[[Request],str] = get_query_params('mode','stats',False,raise_except=True,checker=_wrap_checker('mode',lambda m:m in get_args(InspectMode),choices=list(get_args(InspectMode))))
+
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+DeleteMode = Literal['hard','soft']
+
+delete_mode_query:Callable[[Request],DeleteMode] = get_query_params('mode','soft',False,raise_except=True,checker=_wrap_checker('mode',lambda v: v in get_args(DeleteMode),choices=list(get_args(DeleteMode))))

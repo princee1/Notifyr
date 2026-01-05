@@ -10,8 +10,7 @@ from app.services.config_service import ConfigService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.globals import APP_MODE, CAPABILITIES,ApplicationMode
-from grpc import aio
-from app.grpc import agent_pb2,agent_pb2_grpc,agent_message
+from app.grpc import agent_pb2_grpc,agent_message
 
 
 def iterator_factory(callback,wait=0.5):

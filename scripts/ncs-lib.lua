@@ -7,8 +7,9 @@ redis.register_function('credit_transaction', function(keys, args)
 
     local op         = args[1]
     local value      = tonumber(args[2])
-    local request_id = args[3]
-    local created_at = args[4]
+    local issuer     = args[3]
+    local request_id = args[4]
+    local created_at = args[5]
 
     if not value then
         return redis.error_reply("value must be numeric")
@@ -31,8 +32,8 @@ redis.register_function('credit_transaction', function(keys, args)
 
     redis.call("LPUSH", bill_key, cjson.encode({
         request_id = request_id,
+        issuer = issuer,
         definition = (op == "set" and "Set balance" or "Topup"),
-        -- credit = credit_key,
         created_at = created_at,
         purchase_total = 0,
         refund_total = value,
