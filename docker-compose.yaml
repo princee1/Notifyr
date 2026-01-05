@@ -161,6 +161,7 @@ services:
       - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
       - APS_JOBSTORE=${APS_JOBSTORE}
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
+      - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
       - app_net
       - data_net
@@ -188,6 +189,7 @@ services:
       - MODE=${MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
+      - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
       - data_net
       - vault_net 
@@ -198,6 +200,8 @@ services:
     container_name: agentic
     entrypoint: ["python", "agentic_main.py"]
     build:
+      args:
+      - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
       context: ./
       dockerfile: ./docker/Dockerfile.agentic
     secrets:
@@ -218,6 +222,7 @@ services:
       - MODE=${MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
+      - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
       - agentic_net
       - data_net

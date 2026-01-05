@@ -27,10 +27,9 @@ class DataIngestTask(BaseModel):
 			return None
 		return tDelta.build('timedelta')
 	
-
-
 class FileDataIngestTask(DataIngestTask):
 	strategy: ParseStrategy
+	use_docling:bool = False
 
 class FileDataEnqueueResponse(FileResponseUploadModel):
 	pass

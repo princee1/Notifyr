@@ -1,5 +1,9 @@
 FROM notifyr/fastapi:community
 
+ARG INSTALL_DOCLING=false
+
+COPY --chown=notifyr:notifyr ./scripts/docling.sh .
+
 RUN pip install langchain
 
 RUN pip install qdrant-client
@@ -15,6 +19,8 @@ RUN pip install arq
 RUN pip install yake 
 
 RUN pip install gensim 
+
+RUN ./docling.sh ${INSTALL_DOCLING}
 
 COPY ./agentic_main.py ./agentic_main.py
 

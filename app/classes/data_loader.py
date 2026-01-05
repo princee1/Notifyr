@@ -8,32 +8,46 @@ from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk import FreqDist
 from gensim import corpora, models
 
-# Llama Index Core
 from llama_index.core.node_parser import SentenceSplitter, SemanticSplitterNodeParser
 from llama_index.core.schema import TextNode
 from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.core.readers.base import BaseReader
+from llama_index.readers.file import (
+    PDFReader, DocxReader, MarkdownReader, 
+    HTMLTagReader, PptxReader,XMLReader
+)
 
+DOCLING_INSTALLED = True
 # Docling Integration
-from llama_index.readers.docling import DoclingReader
-from llama_index.node_parser.docling import DoclingNodeParser
+try:
+    from llama_index.readers.docling import DoclingReader
+    from llama_index.node_parser.docling import DoclingNodeParser
+except ImportError as e:
+    DOCLING_INSTALLED = False
+    
 
-# Vector DB
 from qdrant_client.models import PointStruct
 from app.utils.constant import ParseStrategy
 from app.utils.tools import RunAsync
 
-# Pre-load resources
 nltk.download(['stopwords', 'punkt', 'wordnet'], quiet=True)
 STOP_WORDS = set(stopwords.words('english'))
 KW_EXTRACTOR = yake.KeywordExtractor(lan="en", n=1, top=10)
 
+TEXT_READERS: dict[str, type[BaseReader]] = {
+    "pdf": PDFReader,
+    "docx": DocxReader,
+    "md": MarkdownReader,
+    "html": HTMLTagReader,
+    "pptx": PptxReader,
+    "xml":XMLReader
+}
 
 class DataLoaderStepIndex(int, Enum):
     CHECK = 1
     PROCESS = 2
     TOKEN_COST = 3
     CLEANUP = 4
-
 class BaseDataLoader:
     def __init__(self, api_key: str, file_path: str, lang: str, doc_type: str):
         self.file_path = file_path
@@ -45,15 +59,14 @@ class BaseDataLoader:
 
     @staticmethod
     def Factory(ext: str) -> 'BaseDataLoader':
-        if ext.lower() in ["pdf", "docx", "md", "html", "pptx", "txt"]:
+        # Docling handles PDF, DOCX, PPTX, HTML, MD, etc.
+        if ext.lower() in ["pdf", "docx", "md", "html", "pptx", "txt",'xml']:
             return TextDataLoader
         return None
-
 
 class TextDataLoader(BaseDataLoader):
     
     class TextDetector:
-        """Helper class for analyzing text density, keywords, and topics."""
         def __init__(self, text: str):
             self.text = text
             self.tokens = [t.lower() for t in word_tokenize(text) if t.isalnum()]
@@ -68,7 +81,6 @@ class TextDataLoader(BaseDataLoader):
         @RunAsync
         def extract_topics(self, num_topics=3) -> List[str]:
             if len(self.clean_tokens) < 5: return []
-            # Fast LDA implementation for small chunks
             dict_ = corpora.Dictionary([self.clean_tokens])
             corpus = [dict_.doc2bow(self.clean_tokens)]
             lda = models.LdaModel(corpus, num_topics=num_topics, id2word=dict_, passes=10)
@@ -79,11 +91,18 @@ class TextDataLoader(BaseDataLoader):
             count = self.freq_dist.N()
             return "low" if count < 80 else "medium" if count < 160 else "high"
 
-    def __init__(self, api_key: str, file_path: str, lang: str, doc_type: str, strategy: ParseStrategy = ParseStrategy.SEMANTIC):
+    def __init__(self, api_key: str, file_path: str, lang: str, doc_type: str, 
+                 strategy: ParseStrategy = ParseStrategy.SEMANTIC, use_docling: bool = False):
         super().__init__(api_key, file_path, lang, doc_type)
+
+        if use_docling and DOCLING_INSTALLED:
+            raise TypeError('Docling must be installed to use it')
+
         self.strategy = strategy
+        self.use_docling = use_docling
         self.embed_model = OpenAIEmbedding(api_key=api_key)
 
+        # Parsers
         self.splitter = SentenceSplitter(chunk_size=1000, chunk_overlap=200)
         self.semantic_parser = SemanticSplitterNodeParser(
             buffer_size=3,
@@ -91,40 +110,44 @@ class TextDataLoader(BaseDataLoader):
             sentence_splitter=self.splitter.split_text,
             embed_model=self.embed_model,
         )
-        self.structured_parser = DoclingNodeParser()
-
+        self.structured_parser = DoclingNodeParser() if use_docling else None
         self.points = []
         self.tokens = []
 
     async def process(self):
-        export_type = "markdown" if self.strategy == ParseStrategy.SEMANTIC else "json"
-        
-        reader = DoclingReader(export_type=export_type)
-        documents = await reader.aload_data(self.file_path)
+        if self.use_docling:
+            export_type = "markdown" if self.strategy == ParseStrategy.SEMANTIC else "json"
+            reader = DoclingReader(export_type=export_type)
+            documents = await reader.aload_data(self.file_path)
+        else:
+            reader_cls = TEXT_READERS.get(self.doc_type)
+            documents = await reader_cls().aload_data(self.file_path)
 
+        # 2. SPLIT INTO NODES
         nodes: List[TextNode] = []
         if self.strategy == ParseStrategy.SEMANTIC:
             nodes = await self.semantic_parser.abuild_semantic_nodes_from_documents(documents)
-        elif self.strategy == ParseStrategy.STRUCTURED:
+        elif self.strategy == ParseStrategy.STRUCTURED and self.use_docling:
             nodes = self.structured_parser.get_nodes_from_documents(documents)
+        elif self.strategy == ParseStrategy.SPLITTER:
+            nodes = self.splitter.get_nodes_from_documents(documents)
+        else:
+            raise ValueError('Must be a valid parse strategy (semantic,structured,splitter)')
         
         current_section = "General"
-        
         for i, node in enumerate(nodes):
             detector = self.TextDetector(node.text)
-
-            print(node.metadata)
             
             rel_ids = []
             for rel in node.relationships.values():
                 if isinstance(rel, list): rel_ids.extend([r.node_id for r in rel])
                 else: rel_ids.append(rel.node_id)
 
-            if self.strategy == ParseStrategy.SEMANTIC:
+            if self.use_docling and self.strategy == ParseStrategy.STRUCTURED:
+                current_section = node.metadata.get("heading", current_section)
+            else:
                 new_section = self.extract_section(node.text)
                 if new_section: current_section = new_section
-            else:
-                current_section = node.metadata.get("heading", current_section)
 
             payload = {
                 "text": node.text,
@@ -134,10 +157,10 @@ class TextDataLoader(BaseDataLoader):
                 "source": node.metadata.get("file_name", node.metadata.get('file_path', None)),
                 "document_type": self.doc_type,
                 "strategy": self.strategy.value,
+                "parser": "docling" if self.use_docling else "llama",
                 
-                # Metadata handling
                 "page": node.metadata.get("page_label"),
-                "bbox": node.metadata.get("bbox",None),
+                "bbox": node.metadata.get("bbox", None),
                 
                 "chunk_id": f"{node.ref_doc_id}_{i}",
                 "chunk_index": i,
@@ -146,7 +169,6 @@ class TextDataLoader(BaseDataLoader):
                 "language": self.lang,
                 "content_type": self.detect_type(node.text),
                 
-                # Analytics
                 "token_count": detector.freq_dist.N(),
                 "full_token_count": len(detector.tokens),
                 "word_count": detector.freq_dist.B(),
@@ -158,19 +180,17 @@ class TextDataLoader(BaseDataLoader):
                 "relationship": rel_ids
             }
 
-            point = PointStruct(
+            self.points.append(PointStruct(
                 id=node.node_id,
                 vector=node.embedding,
                 payload=payload
-            )
-            self.points.append(point)
+            ))
 
     def compute_token(self):
         ...
 
     @classmethod
     def extract_section(cls, text: str) -> str:
-        # Matches: # Header, ## Header, 1.1 Header, or "Chapter 1: Header"
         patterns = [
             r"^(#+)\s+(.*)",                      # Markdown
             r"^(?:\d+\.)+\d*\s+(.*)",             # Numbered: 1.1.2

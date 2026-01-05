@@ -68,7 +68,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
     return decorator
 
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
-async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:str='en',content_type:str=None,uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None):
+async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:str='en',content_type:str=None,uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None):
 
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
@@ -79,7 +79,7 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
     job_id = arqService.compute_job_id(uri)
 
     extension =  fileService.get_extension(file_path)
-    textDataLoader = TextDataLoader(...,file_path,lang,extension,content_type,strategy)
+    textDataLoader = TextDataLoader(...,file_path,lang,extension,content_type,strategy,use_docling)
     token = None
 
     async with StepRunner(step,DataLoaderStepIndex.CHECK) as skip:

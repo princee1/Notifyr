@@ -428,3 +428,4 @@ class ArqDataTaskConstant:
 class ParseStrategy(str, Enum):
     SEMANTIC = "semantic"
     STRUCTURED = "structured" 
+    SPLITTER  = "splitter"

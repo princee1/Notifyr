@@ -107,6 +107,13 @@ class DataLoaderRessource(BaseHTTPRessource):
     async def inject_request_id(ingestTask:DataIngestTask,request_id:str):
         ingestTask._request_id = request_id
         return {}
+    
+    @staticmethod
+    async def docling_guard(ingestTask:FileDataIngestTask):
+        configService = Get(ConfigService)
+        if not configService.INSTALL_DOCLING and ingestTask.use_docling:
+            return False,"Docling is not installed"
+        return True,""
 
     @InjectInMethod()
     def __init__(self,configService:ConfigService,vaultService:VaultService,fileService:FileService,arqService:ArqDataTaskService):
@@ -118,11 +125,11 @@ class DataLoaderRessource(BaseHTTPRessource):
 
     @UseLimiter('5/hour')
     @UsePipe(inject_request_id)
-    @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard())
-    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseServiceLock(ArqDataTaskService,lockType='reader')
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
+    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=FileDataEnqueueResponse)
     async def embed_files(self,files:List[UploadFile],ingestTask:FileDataIngestTask, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],backgroundTasks:BackgroundTasks,autPermission:AuthPermission=Depends(get_auth_permission)):
         response_data = FileDataEnqueueResponse()

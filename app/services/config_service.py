@@ -174,6 +174,8 @@ class ConfigService(_service.BaseService):
 
         # ASSETS CONFIG #
         self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local' if self.MODE == MODE.DEV_MODE else 's3').lower())
+
+        self.INSTALL_DOCLING:bool = ConfigService.parseToBool(self.getenv('INSTALL_DOCLING','false'),False)
         
         # S3 STORAGE CONFIG #
         self.S3_CRED_TYPE:Literal['MINIO','AWS'] = self.getenv('S3_CRED_TYPE','MINIO').upper()
