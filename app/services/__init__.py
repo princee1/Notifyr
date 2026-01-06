@@ -30,7 +30,7 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
         ...
     
     if CAPABILITIES['notification']:
-        from app.services.push_notification_service import PushNotificationService
+        from app.services.notification_service import InAppNotificationService,PushNotificationService
     
 if APP_MODE == ApplicationMode.server:
     if CAPABILITIES['object']:
