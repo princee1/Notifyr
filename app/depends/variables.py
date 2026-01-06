@@ -28,7 +28,7 @@ def _wrap_checker(name: str, predicate: Callable[[object], bool], choices: list 
     return _checker
 
 if CAPABILITIES['twilio']:
-    from app.services.twilio_service import TwilioService
+    from app.services.ntfr.twilio_service import TwilioService
     verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_token')
 
 # ----------------------------------------------                                    ---------------------------------- #

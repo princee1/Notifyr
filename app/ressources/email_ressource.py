@@ -14,7 +14,7 @@ from app.depends.funcs_dep import get_profile, get_template
 from app.interface.email import EmailSendInterface
 from app.manager.broker_manager import Broker
 from app.models.email_model import BaseEmailSchedulerModel, CustomEmailSchedulerModel, EmailTemplateSchedulerModel
-from app.services.celery_service import CeleryService, ChannelMiniService
+from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService
 from app.services.config_service import ConfigService
@@ -23,12 +23,12 @@ from app.services.link_service import LinkService
 from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseInterceptor, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
-from app.services.email_service import EmailReaderService, EmailSenderService
+from app.services.ntfr.email_service import EmailReaderService, EmailSenderService
 from fastapi import Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission
 from app.decorators import permissions, handlers,pipes,guards
 from app.depends.variables import email_verifier,wait_timeout_query
-from app.services.task_service import TaskService
+from app.services.worker.task_service import TaskService
 from app.utils.constant import CostConstant, StreamConstant
 from app.utils.globals import DIRECTORY_SEPARATOR,CAPABILITIES
 

@@ -9,9 +9,9 @@ from app.decorators.pipes import MiniServiceInjectorPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
-from app.services.celery_service import CeleryService, ChannelMiniService, InspectMode
+from app.services.worker.celery_service import CeleryService, ChannelMiniService, InspectMode
 from app.services.config_service import ConfigService
-from app.services.task_service import TaskService
+from app.services.worker.task_service import TaskService
 from app.depends.variables import celery_inspect_mode_query
 
 @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])

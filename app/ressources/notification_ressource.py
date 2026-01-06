@@ -1,4 +1,4 @@
-from app.services.notification_service import InAppNotificationService, PushNotificationService
+from app.services.ntfr.notification_service import InAppNotificationService, PushNotificationService
 from app.container import InjectInMethod
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource
 

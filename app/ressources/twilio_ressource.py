@@ -13,7 +13,7 @@ from app.depends.variables import carrier_info,callee_info
 from app.ressources.twilio.sms_ressource import SMSRessource
 from app.ressources.twilio.call_ressource import CallRessource
 from app.ressources.twilio.fax_ressource import FaxRessource
-from app.services.twilio_service import TwilioAccountMiniService, TwilioService, CallService
+from app.services.ntfr.twilio_service import TwilioAccountMiniService, TwilioService, CallService
 from app.ressources.twilio.conversation_ressource import ConversationRessource
 
 

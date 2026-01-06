@@ -1,7 +1,7 @@
 from typing import Any, TypedDict
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.webhook.db_webhook_service import DBPayload, DBWebhookInterface, WebhookBulkUploadError
-from app.services.webhook_service import WebhookService
+from app.services.ntfr.webhook_service import WebhookService
 from app.utils.constant import StreamConstant
 from app.definition._service import StateProtocol
 from app.services import RedisService

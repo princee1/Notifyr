@@ -9,7 +9,7 @@ from app.services.webhook.broker_webhook_service import KafkaWebhookMiniService,
 from app.services.webhook.db_webhook_service import MongoDBWebhookMiniService, PostgresWebhookMiniService
 from app.services.webhook.http_webhook_service import HTTPWebhookMiniService
 from app.services.webhook.provider_webhook_service import DiscordWebhookMiniService, MakeWebhookMiniService, MakeWebhookMiniService, N8NWebhookMiniService, SlackIncomingWebhookMiniService, ZapierWebhookMiniService
-from .config_service import ConfigService
+from ..config_service import ConfigService
 from app.utils.helper import issubclass_of
 from app.utils.globals import CAPABILITIES
 

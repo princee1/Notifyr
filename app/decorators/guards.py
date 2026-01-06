@@ -12,8 +12,8 @@ from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
-from app.services.task_service import TaskService
-from app.services.celery_service import CeleryService,task_name
+from app.services.worker.task_service import TaskService
+from app.services.worker.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
@@ -158,7 +158,7 @@ class BlacklistClientGuard(Guard):
         return True,''
 
 if CAPABILITIES['twilio']:
-    from app.services.twilio_service import TwilioService
+    from app.services.ntfr.twilio_service import TwilioService
     class CarrierTypeGuard(Guard):
 
         def __init__(self,accept_landline:bool,accept_voip:bool=False,accept_unknown:bool=False,):

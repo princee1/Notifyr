@@ -11,11 +11,11 @@ from starlette.background import BackgroundTask,BackgroundTasks
 from app.depends.variables import *
 import datetime as dt
 from app.container import Get
-from app.services.celery_service import CeleryService,TASK_REGISTRY
+from app.services.worker.celery_service import CeleryService,TASK_REGISTRY
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
-from app.services.task_service import TaskService
+from app.services.worker.task_service import TaskService
 from app.utils.tools import RunInThreadPool
 from app.utils.constant import APSchedulerConstant, MonitorConstant, RedisConstant,CeleryConstant
 

@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.container import Get, InjectInMethod
 from  app.definition._ressource import BaseHTTPRessource,HTTPRessource, IncludeWebsocket, PingService, UseServiceLock, UseHandler, UsePermission, UseRoles
-from app.services.celery_service import CeleryService
+from app.services.worker.celery_service import CeleryService
 from app.services.setting_service import SettingService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService

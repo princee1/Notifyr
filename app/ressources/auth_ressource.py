@@ -29,7 +29,7 @@ from app.utils.globals import CAPABILITIES
 
 
 if CAPABILITIES['twilio']:
-    from app.services.twilio_service import TwilioService
+    from app.services.ntfr.twilio_service import TwilioService
     from app.depends.variables import  verify_twilio_token
 
 REFRESH_AUTH_PREFIX = 'refresh'   

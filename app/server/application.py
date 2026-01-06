@@ -16,7 +16,7 @@ from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.vault_service import VaultService
-from app.services.task_service import TaskService
+from app.services.worker.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Request, Response, FastAPI
@@ -46,7 +46,7 @@ from app.utils.globals import CAPABILITIES
 from app.classes.profiles import ProfilModelValues
 
 if CAPABILITIES['object']:
-    from app.services.object_service import ObjectS3Service
+    from app.services.database.object_service import ObjectS3Service
 
 HTTPMode = Literal['HTTPS', 'HTTP']
 

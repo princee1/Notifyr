@@ -19,7 +19,7 @@ from app.models.email_model import BaseEmailSchedulerModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
-from app.services.celery_service import CeleryService, ChannelMiniService
+from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file.file_service import FileService
@@ -32,7 +32,7 @@ from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, co
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
-from app.services.object_service import Object,DeleteError,ObjectWriteResult
+from app.services.database.object_service import Object,DeleteError,ObjectWriteResult
 from app.utils.globals import CAPABILITIES
 
 async def to_otp_path(template:str):
@@ -313,7 +313,7 @@ class RelayPipe(Pipe):
         return {'relay':relay}
 
 if  CAPABILITIES['twilio']: 
-    from app.services.twilio_service import TwilioAccountMiniService, TwilioService
+    from app.services.ntfr.twilio_service import TwilioAccountMiniService, TwilioService
     class TwilioPhoneNumberPipe(Pipe):
 
         PhoneNumberChoice = Literal['default','otp','chat','auto-mess']

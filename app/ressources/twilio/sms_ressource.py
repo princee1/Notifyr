@@ -25,14 +25,14 @@ from app.services.setting_service import SettingService
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
-from app.services.task_service import TaskService
-from app.services.twilio_service import SMSService, TwilioAccountMiniService, TwilioService
+from app.services.worker.task_service import TaskService
+from app.services.ntfr.twilio_service import SMSService, TwilioAccountMiniService, TwilioService
 from app.depends.dependencies import  get_auth_permission
 from app.depends.variables import profile_query
 from app.depends.funcs_dep import get_profile, get_template,wait_timeout_query
 from app.utils.constant import CostConstant, StreamConstant
 from app.utils.helper import uuid_v1_mc
-from app.services.celery_service import CeleryService, ChannelMiniService
+from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.utils.globals import CAPABILITIES
 
 if CAPABILITIES['object']:

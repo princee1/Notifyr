@@ -1,5 +1,5 @@
 from app.services.link_service import LinkService
-from .config_service import ConfigService
+from ..config_service import ConfigService
 from app.definition._service import BaseService, Service
 #import firebase_admin
 

@@ -1,5 +1,5 @@
 from typing import Type
-from app.services.celery_service import CeleryService
+from app.services.worker.celery_service import CeleryService
 from app.services.config_service import AssetMode, ConfigService
 from app.services import CostService
 from app.container import Register, Get
