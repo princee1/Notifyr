@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import Depends, Request, Response
+from fastapi import Depends, Request, Response, status
 from app.classes.auth_permission import AuthPermission
 from app.container import InjectInMethod
 from app.cost.file_cost import FileCost
@@ -19,7 +19,6 @@ from app.services.config_service import ConfigService
 from app.services.worker.arq_service import ArqDataTaskService, JobStatus, JobStatusNotValidError
 from app.utils.constant import ArqDataTaskConstant, CostConstant
 import aiohttp
-from fastapi import status
 
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('vector')
@@ -60,7 +59,7 @@ class VectorDBRessource(BaseHTTPRessource):
 
     @UseLimiter('30/minutes')
     @UseHandler(ProxyRestGatewayHandler)
-    @BaseHTTPRessource.HTTPRoute('/{collection_name}',methods=[HTTPMethod.GET])
+    @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.GET])
     async def get_collection(self, request:Request,response:Response,collection_name:str,autPermission:AuthPermission=Depends(get_auth_permission)):
         
         async with ( self.session.get(f'/all') if not collection_name else self.session.get(f'/{collection_name}') )as res:
@@ -73,7 +72,7 @@ class VectorDBRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
-    @BaseHTTPRessource.HTTPRoute('/{collection_name}',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
+    @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(delete_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete all results and delete all enqueued job matching the collection_name filtered by the task_name """
 
@@ -110,7 +109,7 @@ class VectorDBRessource(BaseHTTPRessource):
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK))
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @HTTPStatusCode(status.HTTP_200_OK)
-    @BaseHTTPRessource.HTTPRoute('/docs/{job_id}',methods=[HTTPMethod.DELETE])
+    @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE])
     async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete result and the point associated with the job_id filtered by the task_name """
 

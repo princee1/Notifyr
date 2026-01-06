@@ -1,5 +1,5 @@
-from aiohttp_retry import Any
-from openai import BaseModel
+from typing import Any
+from pydantic import BaseModel
 from app.models.file_model import FileResponseUploadModel
 
 class DeleteCollectionModel(FileResponseUploadModel):

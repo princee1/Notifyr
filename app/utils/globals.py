@@ -41,6 +41,11 @@ class AgenticServerCapabilities(TypedDict):
     knowledge_graph:bool
     vector:bool
 
+class Scaling(TypedDict):
+    balancer:int
+    worker:int
+    app:int
+
 if sys.argv[0] == CELERY_EXE_PATH:
     if sys.argv[3] == 'beat':
         APP_MODE = ApplicationMode.beat
@@ -55,6 +60,6 @@ else:
 
 _deployment=JSONFile('/run/secrets/deploy.json',os_link=False,from_data=None)
 
-
 CAPABILITIES:ServerCapabilities = _deployment['capabilities']
 AGENTIC_CAPABILITIES:AgenticServerCapabilities = _deployment['agentic']
+SCALING:Scaling = _deployment['scaling']

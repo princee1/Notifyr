@@ -65,7 +65,7 @@ class JobArqRessource(BaseHTTPRessource):
 
     @UseHandler(AsyncIOHandler)
     @UsePipe(ArqJobIdPipe)
-    @BaseHTTPRessource.HTTPRoute('/{job_id}/result/', methods=[HTTPMethod.GET])
+    @BaseHTTPRessource.HTTPRoute('/result/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_result(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         job = await self.arqService.job_exists(job_id, raise_on_exist=False)
         result = await self.arqService.job_results(job)

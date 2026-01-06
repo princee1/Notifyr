@@ -165,6 +165,7 @@ deploy-data:
 
 # Main deployment target
 deploy: deploy-data deploy-agentic deploy-server
+	@sleep 10 && clear
 	@echo "\n================================================="
 	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
 	@echo "================================================="

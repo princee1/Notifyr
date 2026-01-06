@@ -7,7 +7,7 @@ from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarning
 from app.utils.constant import RabbitMQConstant, RedisConstant
 from app.definition import _service
 import socket
-from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID,APP_MODE, ApplicationMode
+from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID,APP_MODE, ApplicationMode,SCALING
 from app.utils.helper import parseToBool
 
 
@@ -218,7 +218,8 @@ class ConfigService(_service.BaseService):
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
-        self.CELERY_WORKERS_EXPECTED = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_EXPECTED","1"), 1)
+        
+        self.CELERY_WORKERS_EXPECTED = SCALING.get('worker',0)
 
         # APS CONFIG #
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)

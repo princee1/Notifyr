@@ -33,11 +33,14 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
         from app.services.ntfr.notification_service import InAppNotificationService,PushNotificationService
     
 if APP_MODE == ApplicationMode.server:
+
     if CAPABILITIES['object']:
         from app.services.assets_service import AssetService
         from app.services.database.object_service import ObjectS3Service
+    
+    if CAPABILITIES['chat']:
+        from app.services.ntfr.chat_service import ChatService
 
-    from app.services.ntfr.chat_service import ChatService
     from app.services.database.memcached_service import  MemCachedService
     from app.services.database.tortoise_service import TortoiseConnectionService
     from app.services.link_service import LinkService

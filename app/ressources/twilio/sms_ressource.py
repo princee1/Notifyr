@@ -22,7 +22,6 @@ from app.models.twilio_model import SMSEventORM
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService
-from app.services.ntfr.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.worker.task_service import TaskService
@@ -49,10 +48,9 @@ SMS_ONGOING_PREFIX = 'ongoing'
 @HTTPRessource(SMS_ONGOING_PREFIX)
 class OnGoingSMSRessource(BaseHTTPRessource):
     @InjectInMethod()
-    def __init__(self, smsService: SMSService,chatService:ChatService,contactService:ContactsService,configService:ConfigService,settingService:SettingService,twilioService:TwilioService) -> None:
+    def __init__(self, smsService: SMSService,contactService:ContactsService,configService:ConfigService,settingService:SettingService,twilioService:TwilioService) -> None:
         super().__init__()
         self.smsService: SMSService = smsService
-        self.chatService: ChatService = chatService
         self.contactService: ContactsService = contactService
         self.configService:ConfigService = configService
         self.settingService = settingService
@@ -157,8 +155,10 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         ...
 
 
-
 SMS_INCOMING_PREFIX = "incoming"
+
+if CAPABILITIES['chat']:
+    from app.services import ChatService
 
 @UseRoles([Role.TWILIO])
 @PingService([SMSService])
@@ -168,30 +168,35 @@ SMS_INCOMING_PREFIX = "incoming"
 @HTTPRessource(SMS_INCOMING_PREFIX )
 class IncomingSMSRessource(BaseHTTPRessource):
     @InjectInMethod()
-    def __init__(self,smsService:SMSService,contactsService:ContactsService,chatService:ChatService,redisService:RedisService) -> None:
+    def __init__(self,smsService:SMSService,contactsService:ContactsService,redisService:RedisService) -> None:
         self.smsService: SMSService = smsService
         self.contactsService: ContactsService = contactsService
-        self.chatService: ChatService = chatService
         self.redisService:RedisService = redisService
         #super().__init__(dependencies=[Depends(verify_twilio_token)])
         super().__init__()
 
-    @BaseHTTPRessource.HTTPRoute('/menu/',methods=[HTTPMethod.POST])
-    async def sms_menu(self,authPermission=Depends(get_auth_permission)):
-        pass
-    
-    @UseRoles([Role.CHAT])
-    @BaseHTTPRessource.HTTPRoute('/live-chat/',methods=[HTTPMethod.POST])
-    async def sms_chat(self,authPermission=Depends(get_auth_permission)):
-        pass
+    if CAPABILITIES['chat']:
 
-    @BaseHTTPRessource.HTTPRoute('/automate-response/',methods=[HTTPMethod.POST])
-    async def sms_automated(self,authPermission=Depends(get_auth_permission)):
-        pass
-    
-    @BaseHTTPRessource.HTTPRoute('/handler_fail/',methods=[HTTPMethod.POST])
-    async def sms_primary_handler_fail(self,authPermission=Depends(get_auth_permission)):
-        pass
+        @BaseHTTPRessource.HTTPRoute('/menu/',methods=[HTTPMethod.POST])
+        async def sms_menu(self,authPermission=Depends(get_auth_permission)):
+            chatService = Get(ChatService)
+            pass
+        
+        @UseRoles([Role.CHAT])
+        @BaseHTTPRessource.HTTPRoute('/live-chat/',methods=[HTTPMethod.POST])
+        async def sms_chat(self,authPermission=Depends(get_auth_permission)):
+            chatService = Get(ChatService)
+            pass
+
+        @BaseHTTPRessource.HTTPRoute('/automate-response/',methods=[HTTPMethod.POST])
+        async def sms_automated(self,authPermission=Depends(get_auth_permission)):
+            chatService = Get(ChatService)
+            pass
+        
+        @BaseHTTPRessource.HTTPRoute('/handler_fail/',methods=[HTTPMethod.POST])
+        async def sms_primary_handler_fail(self,authPermission=Depends(get_auth_permission)):
+            chatService = Get(ChatService)
+            pass
 
     @BaseHTTPRessource.HTTPRoute('/status/',methods=[HTTPMethod.POST])
     async def sms_call_status_changes(self,status: SMSStatusModel,broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
