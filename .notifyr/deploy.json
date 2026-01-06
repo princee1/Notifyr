@@ -22,7 +22,8 @@
         "message": false,
         "agentic": true,
         "webhook": false,
-        "workflow": false
+        "workflow": false,
+        "chat":false
     },
     "resource_limits": {
         "cpu_limit": "500m",

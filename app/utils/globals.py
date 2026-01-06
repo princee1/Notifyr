@@ -35,6 +35,7 @@ class ServerCapabilities(TypedDict):
     webhook:bool
     object:bool
     workflow:bool
+    chat:bool
 
 class AgenticServerCapabilities(TypedDict):
     knowledge_graph:bool

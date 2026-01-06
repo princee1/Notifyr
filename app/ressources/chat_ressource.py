@@ -18,16 +18,13 @@ from app.utils.helper import generateId
 
 CHAT_PREFIX= 'chat'
 
-class SupportModel(BaseModel):
+class ChatModel(BaseModel):
     ...
-
-SUPPORT_PREFIX = 'support'
-
 
 @UseRoles([Role.CHAT])
 @UsePermission(JWTRouteHTTPPermission)
-@HTTPRessource(prefix=SUPPORT_PREFIX,websockets=[ChatWebSocket])
-class SupportRessource(BaseHTTPRessource):
+@HTTPRessource(prefix=CHAT_PREFIX,websockets=[ChatWebSocket])
+class ChatRessource(BaseHTTPRessource):
 
     @InjectInMethod()
     def __init__(self,jwtAuthService:JWTAuthService, configService: ConfigService,contactService:ContactsService,celeryService:CeleryService):
@@ -39,7 +36,7 @@ class SupportRessource(BaseHTTPRessource):
         self.settingDB = Get(SettingService)
 
     @BaseHTTPRessource.Post('/')
-    def support(self,supportModel:SupportModel, register:bool = Query(False),chat_upgrade:bool = Query(False),authPermission=Depends(get_auth_permission)):
+    def support(self,supportModel:ChatModel, register:bool = Query(False),chat_upgrade:bool = Query(False)):
         ...
     
     @UseServiceLock(SettingService,lockType='reader')

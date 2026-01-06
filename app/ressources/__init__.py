@@ -10,7 +10,6 @@ Register(CeleryService)
 configService = Get(ConfigService)
 costService = Get(CostService)
 
-from .support_ressource import SupportRessource
 from .admin_ressource import AdminRessource
 from .result_ressource import ResultBackendRessource
 from .contacts_ressources import ContactsRessource
@@ -26,7 +25,7 @@ from .celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
 
 
-BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
+BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [
                                                  AdminRessource,
                                                  ResultBackendRessource,
                                                  ContactsRessource,
@@ -76,3 +75,8 @@ if CAPABILITIES['notification']:
 
 if CAPABILITIES['message']:
     ...
+
+if CAPABILITIES['chat']:
+    from .chat_ressource import ChatRessource
+    BASE_RESSOURCES.append(ChatRessource)
+
