@@ -55,11 +55,11 @@ if CAPABILITIES['workflow']:
     ...
 
 if CAPABILITIES['twilio']:
-    from .twilio_ressource import TwilioRessource
+    from .ntfr.twilio_ressource import TwilioRessource
     BASE_RESSOURCES.append(TwilioRessource)
 
 if CAPABILITIES['email']:
-    from .email_ressource import EmailRessource
+    from .ntfr.email_ressource import EmailRessource
     BASE_RESSOURCES.append(EmailRessource)
 
 if CAPABILITIES['agentic']:
@@ -70,13 +70,13 @@ if CAPABILITIES['agentic']:
 
 
 if CAPABILITIES['notification']:
-    from .notification_ressource import NotificationRessource
+    from .ntfr.notification_ressource import NotificationRessource
     BASE_RESSOURCES.append(NotificationRessource)
 
 if CAPABILITIES['message']:
     ...
 
 if CAPABILITIES['chat']:
-    from .chat_ressource import ChatRessource
+    from .ntfr.chat_ressource import ChatRessource
     BASE_RESSOURCES.append(ChatRessource)
 
