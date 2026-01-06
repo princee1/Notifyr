@@ -41,13 +41,11 @@ def ip_lookup_key_builder(
 @Service()
 class LinkService(BaseService):
 
-    def __init__(self, configService: ConfigService, redisService: RedisService, reactiveService: ReactiveService, securityService: SecurityService,tortoiseConnService:TortoiseConnectionService):
+    def __init__(self, configService: ConfigService, securityService: SecurityService,tortoiseConnService:TortoiseConnectionService):
         super().__init__()
 
         self.tortoiseConnService = tortoiseConnService
         self.configService = configService
-        self.reactiveService = reactiveService
-        self.redisService = redisService
         self.securityService = securityService
 
         self.BASE_URL: Callable[[str], str] = lambda v: self.configService.getenv('PROD_URL', "")+v

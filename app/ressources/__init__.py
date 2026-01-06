@@ -38,9 +38,7 @@ BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
                                                  AnalyticsRessource,
                                                  ProfilRessource,
                                                  CostRessource,
-                                                 CeleryRessource
-                                                
-]
+                                                 CeleryRessource]
 
 
 if CAPABILITIES['object']:
@@ -48,10 +46,8 @@ if CAPABILITIES['object']:
     from .blog_ressource import BlogsRessource
     if configService.ASSET_MODE == AssetMode.s3:
         BASE_RESSOURCES.append(S3ObjectRessource)
-    
     BASE_RESSOURCES.append(BlogsRessource)
     
-
 
 if CAPABILITIES['webhook']:
     ...
@@ -75,9 +71,8 @@ if CAPABILITIES['agentic']:
 
 
 if CAPABILITIES['notification']:
-    from app.ressources.push_notification_ressource import PushNotificationRessource
-    BASE_RESSOURCES.append(PushNotificationRessource)
-    
+    from .notification_ressource import NotificationRessource
+    BASE_RESSOURCES.append(NotificationRessource)
 
 if CAPABILITIES['message']:
     ...
