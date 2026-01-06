@@ -171,10 +171,11 @@ services:
   # ==========================================
   # WORKER LAYER
   # ==========================================
-  arq:
+  data:
     image: notifyr/agentic:community 
-    container_name: arq
+    container_name: data-loader
     entrypoint: ["arq", "app.data_tasks.WorkerSettings"]
+    #command: ["tail", "-f" ,"/dev/null"]
     volumes:
       - vault-shared:/vault/shared
       - data-loader:/data-loader/

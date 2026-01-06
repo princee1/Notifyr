@@ -27,8 +27,6 @@ class QdrantService(BaseService):
                 url=self.qdrant_url,
                 timeout=10,
             )
-
-            
         except  Exception as e:
             raise BuildFailureError(f"Failed to connect to Qdrant: {e}")
        
@@ -50,13 +48,6 @@ class QdrantService(BaseService):
     async def get_collection(self,collection_name:str):
         await  self.collection_exists(collection_name)
         return await self.client.get_collection(collection_name)
-
-    async def update_collection(self,collect_name:str):
-        return await self.client.update_collection(
-            collection_name=collect_name,
-
-
-        )
 
     async def get_collections(self):
         return await self.client.get_collections()    

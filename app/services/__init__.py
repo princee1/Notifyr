@@ -66,9 +66,10 @@ if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
     from app.services.database.neo4j_service import Neo4JService
     from app.services.file.file_service import FileService
     from app.services.profile_service import ProfileService
+    from app.services.worker.arq_service import ArqDataTaskService
 
 
-if APP_MODE == ApplicationMode.arq:
+if APP_MODE == ApplicationMode.arq and CAPABILITIES['agentic']:
     from app.services.vault_service import VaultService
     from app.services.database.mongoose_service import MongooseService
     from app.services.agent.llm_provider_service import LLMProviderService

@@ -5,8 +5,8 @@ from app.services.database.memcached_service import MemCachedService
 from app.services.database.qdrant_service import QdrantService
 from app.services.database.redis_service import RedisService
 from app.services.worker.arq_service import ArqDataTaskService
-prefix='vector'
 
+prefix='/vector'
 
 def VectorDBRouter(depends:list=None):
     if depends == None:
@@ -45,7 +45,6 @@ def VectorDBRouter(depends:list=None):
         collection = await qdrantService.get_collection(
             collection_name
             )
-    
         return collection.model_dump()
        
     @router.delete('/',status_code=status.HTTP_200_OK)
@@ -73,7 +72,6 @@ def VectorDBRouter(depends:list=None):
             document_name=document_name,
             collection_name=collection_name,
         )
-
         return res.model_dump()
 
     return router

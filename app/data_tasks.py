@@ -1,8 +1,8 @@
 import functools
 from typing import Any, Callable
-from app.classes.auth_permission import AuthPermission
 from app.classes.step import Step, StepRunner
-from app.utils.constant import CostConstant,ArqDataTaskConstant, ParseStrategy, RedisConstant
+from app.models.file_model import FileResponseUploadModel, UriMetadata
+from app.utils.constant import CostConstant,ArqDataTaskConstant, ParseStrategy
 from app.utils.globals import APP_MODE,ApplicationMode
 
 task_registry = []
@@ -35,16 +35,16 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                     file_path = arqService.compute_data_file_task_path(uri)
                     await arqService.enqueue_task(FILE_CLEANUP,job_id=job_id, kwargs={'file_path':file_path})
                 else:
-                    cost = FileCost(request_id=request_id,authPermission=AuthPermission(client_username=job_id))
-                    cost.refund(f'Refund the data loader process: {uri}', fileService.file_size_converter(size,'mb'))
-                    await redisService.push(RedisConstant.LIMITER_DB,costService.bill_key(CostConstant.DOCUMENT_CREDIT),cost.generate_bill())
-                    await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,size)
-                
+                    cost = FileCost(request_id,job_id).init(1,CostConstant.DOCUMENT_CREDIT)
+                    cost.post_refund(FileResponseUploadModel(metadata=[UriMetadata(uri,size)]))
+                    cost.balance_before = await costService.get_credit_balance(CostConstant.DOCUMENT_CREDIT)
+                    await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,cost.refund_cost)
+                    await costService.push_bill(CostConstant.DOCUMENT_CREDIT,cost.generate_bill())
+      
             if step==None:
                 step = Step(current_step=None,steps=dict())
             
             costService = Get(CostService)
-            fileService = Get(FileService)
             redisService = Get(RedisService)
             try:
                 return await func(*args,**kwargs,step=step,collection_name=collection_name,uri=uri)
@@ -95,7 +95,7 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
     
     async with StepRunner(step,DataLoaderStepIndex.TOKEN_COST, params=token) as skip:
         skip()
-        cost = TokenCost(request_id,AuthPermission(client_username=job_id))
+        cost = TokenCost(request_id,job_id)
         cost.purchase(f'Ai token data process: {uri}',step['current_params'])
         cost.balance_before = await costService.deduct_credits(CostConstant.TOKEN_CREDIT,cost.purchase_cost)
         await costService.push_bill(CostConstant.TOKEN_CREDIT,cost.generate_bill())
@@ -130,8 +130,6 @@ if APP_MODE == ApplicationMode.arq:
     from app.services.database.redis_service import RedisService
     from app.services.vault_service import VaultService
     from app.services.cost_service import CostService
-    from app.cost.file_cost import FileCost
-    from app.cost.token_cost import TokenCost
     from app.services.worker.arq_service import ArqDataTaskService,QUEUE_NAME
     from app.container import Get,build_container
     import asyncio
@@ -140,6 +138,9 @@ if APP_MODE == ApplicationMode.arq:
     build_container()
     arqService = Get(ArqDataTaskService)
     arqService.register_task(DATA_TASK_REGISTRY_NAME)
+
+    from app.cost.file_cost import FileCost
+    from app.cost.token_cost import TokenCost
 
     class WorkerSettings:
         functions = task_registry

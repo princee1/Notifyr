@@ -8,6 +8,11 @@ schedule = "0 23 * * 1"
 container = "credit-system"
 command= "/ncs-utils.sh squash"
 
+[job-exec "daily_data_loader"]
+schedule = "0 */8 * * *"
+container = "data-loader"
+command= "arq app.data_tasks.WorkerSettings"
+
 [job-local "beat.twoweekly-restart"]
 schedule = "0 0 0 */14 * *"
 command = "/container-restart.sh beat" 

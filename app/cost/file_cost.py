@@ -1,13 +1,14 @@
 from typing import List
-from fastapi import BackgroundTasks, Depends, UploadFile
-from app.classes.auth_permission import AuthPermission
 from app.classes.cost_definition import FileCostDefinition
 from app.container import Get
 from app.definition._cost import DataCost
-from app.depends.dependencies import get_auth_permission, get_request_id
-from app.models.file_model import FileResponseUploadModel
-from app.services import CostService
 from app.services.file.file_service import FileService
+from app.utils.globals import APP_MODE, ApplicationMode
+from app.models.file_model import FileResponseUploadModel
+
+
+if APP_MODE == ApplicationMode.server:
+    from fastapi import BackgroundTasks,UploadFile
 
 
 class FileCost(DataCost):
@@ -18,41 +19,40 @@ class FileCost(DataCost):
 
     DEFAULT_DEF = FileCostDefinition(max_file_size=10,max_file_size_extra_per_mb=1)
 
-    def __init__(self,  request_id: str=Depends(get_request_id),authPermission:AuthPermission|None=Depends(get_auth_permission)):
-        super().__init__(request_id, authPermission)
-        self.costService = Get(CostService)
-        self.fileService = Get(FileService)
-
     def init(self, default_price, credit_key):
         super().init(default_price, credit_key)
         self.definition:FileCostDefinition = self.costService.costs_definition.get(credit_key,FileCost.DEFAULT_DEF)
         self.max_file_size = self.definition.get('max_file_size')
         self.cost_per_extra_mb = self.definition.get('max_file_size_extra_per_mb')
+        self.fileService = Get(FileService)
+        return self
 
-    def pre_purchase(self, files: List[UploadFile]):
-        """Compute cost for uploading files before they are processed.
-        
-        Iterates over each file, computes cost based on file size using FileCostDefinition,
-        and adds purchase items.
-        """
-        for file in files:
+    if  APP_MODE == ApplicationMode.server:
 
-            prices = self.compute_prices(self.PRE_NAME, file.filename,file.size)
-            for d,c,q in prices:
-                self.purchase(d,c,q) 
-
-    def post_purchase(self, result: FileResponseUploadModel, backgroundTasks: BackgroundTasks):
-        """Compute cost for files after they are processed.
-        
-        Iterates over result.meta tuples (filename, size), computes cost using FileCostDefinition,
-        and adds purchase items.
-        """
-        for (metadata,task) in zip(result.metadata,backgroundTasks.tasks):
+        def pre_purchase(self, files: List[UploadFile]):
+            """Compute cost for uploading files before they are processed.
             
-            filename,file_size_mb = metadata.uri,metadata.size
-            prices = self.compute_prices(self.POST_NAME, filename,file_size_mb)
-            for d,c,q in prices:
-                self.purchase(d,c,q) 
+            Iterates over each file, computes cost based on file size using FileCostDefinition,
+            and adds purchase items.
+            """
+            for file in files:
+
+                prices = self.compute_prices(self.PRE_NAME, file.filename,file.size)
+                for d,c,q in prices:
+                    self.purchase(d,c,q) 
+
+        def post_purchase(self, result: FileResponseUploadModel, backgroundTasks: BackgroundTasks):
+            """Compute cost for files after they are processed.
+            
+            Iterates over result.meta tuples (filename, size), computes cost using FileCostDefinition,
+            and adds purchase items.
+            """
+            for (metadata,task) in zip(result.metadata,backgroundTasks.tasks):
+                
+                filename,file_size_mb = metadata.uri,metadata.size
+                prices = self.compute_prices(self.POST_NAME, filename,file_size_mb)
+                for d,c,q in prices:
+                    self.purchase(d,c,q) 
 
     def post_refund(self, result:FileResponseUploadModel):
         for  metadata in result.metadata:

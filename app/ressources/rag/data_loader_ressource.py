@@ -20,7 +20,7 @@ from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqDataTaskService, JobDoesNotExistsError
-from app.models.data_task_model import (
+from app.models.data_ingest_model import (
     AbortedJobResponse,
     EnqueueResponse,
     DataIngestTask,

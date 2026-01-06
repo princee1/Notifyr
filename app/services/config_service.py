@@ -157,6 +157,7 @@ class ConfigService(_service.BaseService):
 
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
+        self.COST_FLAG:bool = ConfigService.parseToBool(self.getenv('COST_FLAG','true'),True)
         self.ADMIN_KEY:str = self.getenv("ADMIN_KEY")
         
         # SERVER CONFIG #

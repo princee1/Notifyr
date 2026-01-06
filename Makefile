@@ -89,6 +89,8 @@ build:
 	docker compose build app
 	docker compose build beat
 	docker compose build agentic
+	docker compose build ncs
+	docker compose build ofelia
 	$(DOCKER_COMPOSE_BASE) build
 	@echo "================================================="
 	@echo "🎉  All images built successfully!"

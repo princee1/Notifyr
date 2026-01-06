@@ -31,7 +31,7 @@ class ServerCapabilities(TypedDict):
     twilio:bool
     notification:bool
     message:bool
-    agent:bool
+    agentic:bool
     webhook:bool
     object:bool
     workflow:bool

@@ -387,7 +387,7 @@ setup_database_config(){
       db_name="redis" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~notifyr/celery/backend/*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+EXEC","+EVALSHA","+script|load", "+script|exists","+MULTI"]'
+      creation_statements='["~notifyr/celery/backend/*", "+@string","+@transaction", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+EXEC","+EVALSHA","+script|load", "+script|exists","+MULTI"]'
       #creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash","+@sortedset","+@read","+SMEMBERS","+PUBLISH","+SUBSCRIBE","+EXISTS","+EVAL", "+EVALSHA","+script|load", "+script|exists","+MULTI"]'
 
     vault write notifyr-database/roles/admin-redis-celery-ntfr-role \
@@ -400,7 +400,7 @@ setup_database_config(){
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+MULTI","+EXEC"]'
+      creation_statements='["~*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset","+@transaction", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO"]'
 
     vault write notifyr-database/roles/admin-redis-ntfr-role \
       db_name="redis-notifyr" \

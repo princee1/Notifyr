@@ -1,7 +1,7 @@
 import functools
 from pathlib import Path
 import traceback
-from typing import Callable, Self
+from typing import Any, Callable, Self
 
 from fastapi import Response
 from redis import WatchError
@@ -35,14 +35,7 @@ class CostService(BaseService):
         self.redisService = redisService
         self.fileService = fileService
         self.costs_definition={}
-    
-    def bill_key(self,credit:CostConstant.Credit):
-        now = datetime.now()
-        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@bill[{now.year}-{now.month}]'
 
-    def receipts_key(self,credit:CostConstant.Credit):
-        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@receipts'
-    
     @staticmethod
     def RedisCreditKeyBuilder(func:Callable):
 
@@ -52,6 +45,20 @@ class CostService(BaseService):
             return await func(self,credit_key,*args,**kwargs)
         return wrapper
     
+    @staticmethod
+    def CreditSilentFail(value:Any=None):
+
+        def decorator(function:Callable):
+
+            async def wrapper(self:Self,*args,**kwargs):
+                if not self.configService.COST_FLAG:
+                    return value
+                return await function(self,*args,**kwargs)
+            
+            return wrapper
+
+        return decorator
+
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:
             if not self.COST_PATH_OBJ.exists():
@@ -77,6 +84,10 @@ class CostService(BaseService):
         else:
             self.service_status = ServiceStatus.AVAILABLE
     
+    ###################################################                        #######################################
+
+    ###################################################                        #######################################
+
     @RedisCreditKeyBuilder
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.redis_limiter.get(credit_key)
@@ -91,12 +102,14 @@ class CostService(BaseService):
         if current_balance < purchase_cost:
             raise InsufficientCreditsError
 
+    @CreditSilentFail()
     @RedisCreditKeyBuilder
     async def refund_credits(self,credit_key:str,refund_cost:int):
         if refund_cost > 0:
             await self.redisService.increment(RedisConstant.LIMITER_DB,credit_key,refund_cost)
 
     @RedisCreditKeyBuilder
+    @CreditSilentFail(0)
     async def deduct_credits(self,credit_key:str,purchase_cost:int,retry_limit=5):
         retry=0
         while retry < retry_limit:
@@ -138,12 +151,30 @@ class CostService(BaseService):
             credit = int(credit)
         return credit
 
+    @CreditSilentFail()
+    @RedisCreditKeyBuilder
     async def push_bill(self,credit:str,bill:Bill):
         bill_key = self.bill_key(credit)
-        return await self.redisService.push(RedisConstant.LIMITER_DB,bill_key,bill)
-
+        await self.redisService.push(RedisConstant.LIMITER_DB,bill_key,bill)
+        return
+    
     async def get_all_credits_balance(self):        
         return {k:await self.get_credit_balance(k) for k in self.plan_credits.keys() }
+
+    ###################################################                        #######################################
+    
+    ###################################################                        #######################################
+
+    def bill_key(self,credit:CostConstant.Credit):
+        now = datetime.now()
+        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@bill[{now.year}-{now.month}]'
+
+    def receipts_key(self,credit:CostConstant.Credit):
+        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@receipts'
+    
+    ###################################################                        #######################################
+    
+    ###################################################                        #######################################
 
     def load_file_into_objects(self):
         try:
@@ -203,21 +234,12 @@ class CostService(BaseService):
         if self.currency != 'NOTIFYR-CREDITS':
             raise BuildFailureError('Currency not supported')
 
-    def inject_cost_info(self,response:Response,bill:Bill):
-        
-        credit = bill['credit']
-        current_balance = bill['balance_after']
-        total = bill['total']
-        definition_name = bill.get('definition',None)
-
-        response.headers.append('X-Credit-Name',credit)
-        response.headers.append('X-Current-Balance',str(current_balance))
-        response.headers.append('X-Total-Cost',str(total))
-        if definition_name:
-            response.headers.append('X-Definition',definition_name)
-
     def is_current_credit_overdraft_allowed(self,current_credits:int,credit_key:str):
         return (self.rules.get('auto_block_on_zero_credit', True) or (((-1 * current_credits)  / self.plan_credits[credit_key]) <self.rules.get('overdraft_ratio_allowed',self.OVERDRAFT_ALLOWED) ))
+
+    ###################################################                        #######################################
+    
+    ###################################################                        #######################################
 
     @property
     def version(self)->str:

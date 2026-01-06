@@ -184,6 +184,10 @@
         "email": 10000000,
         "sms": 1000000,
         "phone": 10000,
+        "message":100000,
+        "webhook":10000,
+        "notification":1000,
+
         "contact": 1000,
         "client": 5,
         "link": 2,
@@ -191,6 +195,7 @@
         "workflow":10,
         "profile": 10,
         "blog":20,
+        
         "documents":10000,
         "objects":100000,
         "tokens":100000000000
