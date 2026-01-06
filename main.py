@@ -51,13 +51,12 @@ build_container()
 gc.collect()
 ########################################################################
 
-from app.server.app_initialization import bootstrap_fastapi_server,initialize_config_service
+from app.server.app_server import bootstrap_fastapi_server,initialize_config_service
 from app.services import ConfigService
 configService:ConfigService = initialize_config_service(args)
 
 gc.collect()
 ########################################################################
-
 
 
 # Main entry point

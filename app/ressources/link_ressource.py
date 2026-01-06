@@ -168,6 +168,7 @@ class LinkRessource(BaseHTTPRessource):
         return RedirectResponse(redirect_url,status.HTTP_308_PERMANENT_REDIRECT)
 
     @UseLimiter(limit_value='10000/minutes')
+    @HTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.HTTPRoute('/p/p.png/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_pixel(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
         self.send_email_event(broker,link_query,EmailStatus.OPENED)

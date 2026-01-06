@@ -22,7 +22,7 @@ from app.models.twilio_model import CallEventORM, CallStatusEnum
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
-from app.services.chat_service import ChatService
+from app.services.ntfr.chat_service import ChatService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService

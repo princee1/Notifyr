@@ -5,7 +5,7 @@ from app.models.communication_model import IMAPProfileModel, SMTPProfileModel
 from app.services.config_service import ConfigService
 #from app.services.email.api_email_service import EmailAPIService
 from app.services.database.redis_service import RedisService
-from app.services.email.protocol_email_service import IMAPEmailMiniService, SMTPEmailMiniService
+from app.services.mini.email.protocol_email_service import IMAPEmailMiniService, SMTPEmailMiniService
 from app.services.logger_service import LoggerService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.reactive_service import ReactiveService

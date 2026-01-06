@@ -4,7 +4,7 @@ from app.classes.auth_permission import WSPermission
 from app.container import InjectInMethod
 from app.definition._ws import BaseProtocol,BaseWebSocketRessource,WebSocketRessource
 from fastapi import HTTPException, WebSocket
-from app.services.chat_service import ChatService
+from app.services.ntfr.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
 

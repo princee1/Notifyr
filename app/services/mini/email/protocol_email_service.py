@@ -26,9 +26,9 @@ from app.utils.tools import Time,Mock
 from app.utils.constant import EmailHostConstant
 from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameDomainEmailError, extract_email_id_from_msgid
 
-from ..logger_service import LoggerService
+from ...logger_service import LoggerService
 from app.definition import _service
-from ..config_service import ApplicationMode, ConfigService
+from ...config_service import ApplicationMode, ConfigService
 import ssl
 
 from app.models.email_model import EmailStatus, EmailTrackingORM, TrackingEmailEventORM, map_smtp_error_to_status

@@ -22,7 +22,7 @@ from app.models.twilio_model import SMSEventORM
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService
-from app.services.chat_service import ChatService
+from app.services.ntfr.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.worker.task_service import TaskService

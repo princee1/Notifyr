@@ -37,7 +37,7 @@ if APP_MODE == ApplicationMode.server:
         from app.services.assets_service import AssetService
         from app.services.database.object_service import ObjectS3Service
 
-    from app.services.chat_service import ChatService
+    from app.services.ntfr.chat_service import ChatService
     from app.services.database.memcached_service import  MemCachedService
     from app.services.database.tortoise_service import TortoiseConnectionService
     from app.services.link_service import LinkService

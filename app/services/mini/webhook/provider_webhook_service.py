@@ -6,7 +6,7 @@ from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
-from app.services.webhook.http_webhook_service import HTTPWebhookMiniService
+from app.services.mini.webhook.http_webhook_service import HTTPWebhookMiniService
 from app.models.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
 from discord_webhook import DiscordEmbed,DiscordWebhook,AsyncDiscordWebhook
 

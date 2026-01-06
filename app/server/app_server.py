@@ -17,7 +17,7 @@ from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService, UvicornWorkerService
 from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Request, Response, FastAPI
 from slowapi.middleware import SlowAPIMiddleware
@@ -36,7 +36,7 @@ from app.utils.tools import RunInThreadPool
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 # from fastapi_cache.backends.memcached import MemcachedBackend
 
-from .app_meta import *
+from ..meta.server_meta import *
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
 from app.models.communication_model import *
@@ -73,7 +73,7 @@ def register_hook(state:Literal['shutdown','startup'],active=True):
 
     return callback
 
-class Application(EventInterface):
+class AppServer(EventInterface):
 
     def __init__(self,port:int=None,log_level:str=None,host:str=None):
         self.log_level = log_level
@@ -313,3 +313,12 @@ class Application(EventInterface):
         return [getattr(self,x) for x in _startup_hooks]
     
 #######################################################                          #####################################################
+
+def initialize_config_service(server_args):
+    config_service = Get(ConfigService)
+    workerService = Get(UvicornWorkerService)
+    workerService.set_server_config(server_args)
+    return config_service
+    
+def bootstrap_fastapi_server(port:int=None,log_level:str=None,host:str=None):
+    return AppServer(port,log_level,host)

@@ -29,7 +29,7 @@ class GrpcTask:
                 pass
             self.task = None
 
-def bootstrap_agent_app():
+def bootstrap_agent_app()->FastAPI:
     redisService = Get(RedisService)
     vaultService = Get(VaultService)
     agentService = Get(AgentService)

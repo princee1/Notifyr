@@ -5,7 +5,7 @@ if CAPABILITIES['agentic']:
     from app.utils.prettyprint import PrettyPrinter_
     build_container()
 
-    from app.agentic import bootstrap_agent_app
+    from app.server.agentic_server import bootstrap_agent_app
     app = bootstrap_agent_app()
     PrettyPrinter_.show(1, print_stack=False)
     PrettyPrinter_.space_line()
