@@ -145,7 +145,7 @@
                 "max_file_size": 100,
                 "max_file_size_extra_per_mb":5
             },
-            "documents":{
+            "document":{
                 "max_file_size":10,
                 "max_file_size_extra_per_mb":2
             }
@@ -196,8 +196,8 @@
         "profile": 10,
         "blog":20,
         
-        "documents":10000,
-        "objects":100000,
-        "tokens":100000000000
+        "document":10000,
+        "object":100000,
+        "token":100000000000
     }
 }

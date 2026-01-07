@@ -337,13 +337,20 @@ class CostConstant:
     PHONE_CREDIT='phone'
     PROFILE_CREDIT='profile'
     CLIENT_CREDIT='client'
+    CONTACT_CREDIT='contact'
     AGENT_CREDIT='agent'
     WORKFLOW_CREDIT='workflow'
-    OBJECT_CREDIT = 'objects'
-    DOCUMENT_CREDIT = 'documents'
-    TOKEN_CREDIT  = 'tokens'
+    OBJECT_CREDIT = 'object'
+    DOCUMENT_CREDIT = 'document'
+    TOKEN_CREDIT  = 'token'
+    CHAT_CREDIT = 'chat'
+    MESSAGE_CREDIT='message'
+    WEBHOOK_CREDIT='webhook'
+    BLOG_CREDIT='blog'
+    NOTIFICATION_CREDIT='notification'
 
-    Credit =Literal['email','sms','phone','profile','client','agent','workflow','objects','documents','tokens']
+
+    Credit =Literal['email','sms','phone','profile','client','agent','workflow','object','document','token','chat','blog','webhook','contact','message','notification']
     
 
     COST_KEY='cost'

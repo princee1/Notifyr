@@ -18,8 +18,25 @@ from app.utils.fileIO import JSONFile
 from app.classes.auth_permission import AuthPermission
 from app.utils.helper import flatten_dict
 from datetime import datetime
+from app.utils.globals import  CAPABILITIES
 
 REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"notifyr/credit:{credit_key}"
+
+CREDIT_TO_CAPABILITIES:dict[CostConstant.Credit,str] = {
+    'email':'email',
+    'agent':'agentic',
+    'object':'object',
+    'sms':'twilio',
+    'phone':'twilio',
+    'document':'agentic',
+    'token':'agentic',
+    'message':'message',
+    'webhook':'webhook',
+    'workflow':'workflow',
+    'chat':'chat',
+    'notification':'notification'
+}
+
 
 @Service()
 class CostService(BaseService):
@@ -77,6 +94,7 @@ class CostService(BaseService):
                 self.costs_file= JSONFile(self.COST_PATH)
                 self.load_file_into_objects()
                 self.verify_cost_file()
+                self.init_plan_credits()
                 self.service_status = ServiceStatus.AVAILABLE
             except Exception as e:
                 print(e)
@@ -158,7 +176,8 @@ class CostService(BaseService):
         await self.redisService.push(RedisConstant.LIMITER_DB,bill_key,bill)
         return
     
-    async def get_all_credits_balance(self):        
+    async def get_all_credits_balance(self):    
+
         return {k:await self.get_credit_balance(k) for k in self.plan_credits.keys() }
 
     ###################################################                        #######################################
@@ -175,6 +194,18 @@ class CostService(BaseService):
     ###################################################                        #######################################
     
     ###################################################                        #######################################
+
+    def init_plan_credits(self):
+        self.plan_credits:CostCredits = {}
+        all_credits:dict = self.costs_file.data.get(CostConstant.CREDITS_KEY,{})
+        for credit,default in all_credits.items():
+            if credit in CREDIT_TO_CAPABILITIES:
+                cap = CREDIT_TO_CAPABILITIES[credit]
+                if not CAPABILITIES[cap]:
+                    continue
+            
+            self.plan_credits[credit]=default
+            
 
     def load_file_into_objects(self):
         try:
@@ -260,11 +291,7 @@ class CostService(BaseService):
     @property
     def promotions(self):
         return self.costs_file.data.get(CostConstant.PROMOTIONS_KEY,{})
-    
-    @property
-    def plan_credits(self)->CostCredits:
-        return self.costs_file.data.get(CostConstant.CREDITS_KEY,{})
-
+        
     @property
     def rules(self)->CostRules:
         return self.costs_file.data.get(CostConstant.RULES_KEY,{})

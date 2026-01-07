@@ -78,8 +78,8 @@ redis.register_function('bill_squash', function(keys, args)
     for _, r in ipairs(bills) do
         local obj = cjson.decode(r)
 
-        if obj.amount then
-            total = total + obj.amount
+        if obj.total then
+            total = total + obj.total
         end
 
         if not balance_before then

@@ -7,6 +7,7 @@ command= "/ncs-utils.sh topup"
 schedule = "0 23 * * 1"
 container = "credit-system"
 command= "/ncs-utils.sh squash"
+no-overlap = "true"
 
 [job-exec "daily_data_loader"]
 schedule = "0 */8 * * *"

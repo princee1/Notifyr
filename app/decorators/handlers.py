@@ -868,6 +868,7 @@ class MemCachedHandler(Handler):
     
 from app.classes.cost_definition import (
     CostException,
+    CreditNotInPlanError,
     PaymentFailedError,
     InsufficientCreditsError,
     InvalidPurchaseRequestError,
@@ -916,6 +917,12 @@ class CostHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={'message': 'Product not found', 'error': str(e)}
+            )
+    
+        except CreditNotInPlanError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={'message':'Credit does not appear in the plan','error':str(e)}
             )
 
         except CostException as e:

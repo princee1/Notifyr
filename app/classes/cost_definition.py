@@ -19,7 +19,6 @@ class BillItem:
 
 class Bill(TypedDict):
     request_id: str
-    # credit: Any
     definition: Optional[str]
     created_at: str
     items: List[BillItem]
@@ -134,3 +133,6 @@ class CurrencyNotSupportedError(CostException):
 
 class ProductNotFoundError(CostException):
     """Requested product does not exist."""
+
+class CreditNotInPlanError(CostException):
+    """Credit does not exists in the current plan"""

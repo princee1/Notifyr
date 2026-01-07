@@ -24,12 +24,15 @@ class Cost:
     if APP_MODE == ApplicationMode.server:
         
         def __init__(self,request_id: str=Depends(get_request_id),authPermission:AuthPermission|None=Depends(get_auth_permission)):
-            self.__inner__init__(request_id,authPermission['client_username'])
+            if authPermission == None:
+                username='default'
+            else:
+                username = authPermission['client_username']
+            self.__inner__init__(request_id,username)
 
         @staticmethod
-        def inject_cost_info(response:Response,bill:Bill):
+        def inject_cost_info(response:Response,bill:Bill,credit:str):
             
-            credit = bill['credit']
             current_balance = bill['balance_after']
             total = bill['total']
             definition_name = bill.get('definition',None)

@@ -84,8 +84,7 @@ class AppServer(EventInterface):
         self.configService: ConfigService = Get(ConfigService)
         self.costService: CostService = Get(CostService)
         
-        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,
-                           root_path=ROOT_PATH,version=VERSION,
+        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,version=VERSION,
                            on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks,)
         self.app.state.limiter = self.costService.GlobalLimiter
 

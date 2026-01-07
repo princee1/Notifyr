@@ -115,7 +115,7 @@ transaction() {
     local val="$3"
 
     local credit_key="notifyr/credit:$key_suffix"
-    local bill_key="notifyr/credit:$key_suffix@bill[$YEAR-$MONTH]"
+    local bill_key="$credit_key@bill[$YEAR-$MONTH]"
 
     local redis_url="redis://$REDIS_USER:$REDIS_PASS@redis:$REDIS_PORT/$REDIS_DB"
 

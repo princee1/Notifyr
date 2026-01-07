@@ -249,7 +249,7 @@ class BaseService():
     # TODO Dependency that use service with failed might not properly, need to handle the view
     def _builder(self,quiet:bool=False,build_state:int = -1,force_sync_verify:bool=False):
         
-        is_mini_service =f'Mini service ID: ({self.miniService_id})- ' if isinstance(self,BaseMiniService) else ''
+        is_mini_service =f' Mini service ID: ({self.miniService_id})- ' if isinstance(self,BaseMiniService) else ''
         reason = 'Service Built'
         try:
             now = dt.datetime.now()

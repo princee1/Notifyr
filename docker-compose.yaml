@@ -21,10 +21,11 @@ services:
   # EDGE LAYER
   # ==========================================
   traefik:
-    image: traefik:v2
+    image: traefik:v3.6
     container_name: traefik
     command:
       - "--providers.docker=true"
+      - "--providers.docker.network=notifyr_app_net"
       - "--api.insecure=true"
       - --log.level=INFO
       - --providers.docker.exposedbydefault=false
@@ -473,9 +474,6 @@ services:
   memgraph:
     image: memgraph/memgraph
     container_name: memgraph
-    ports:
-      - "7687:7687"
-      - "3000:3000"  # Memgraph Lab (optional)
     restart: unless-stopped
     networks:
       - data_net
@@ -548,7 +546,6 @@ networks:
       driver: default
       config:
         - subnet: 172.25.0.0/16
-          ip_range: 172.25.10.0/24
           gateway: 172.25.0.1
 
   lb_net:
@@ -557,7 +554,6 @@ networks:
       driver: default
       config:
         - subnet: 172.26.0.0/16
-          ip_range: 172.26.5.0/24
           gateway: 172.26.0.1
 
   edge_net:

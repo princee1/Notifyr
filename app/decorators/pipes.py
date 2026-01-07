@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import json
 from typing import Any, Callable, Coroutine, Literal, Optional, Type, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
@@ -715,8 +716,27 @@ class ArqJobIdPipe(Pipe):
 
 class DataClassToDictPipe(Pipe):
 
-    def __init__(self):
+    def __init__(self,silent:bool=True):
         super().__init__(False)
+        self.silent = silent
     
     def pipe(self,result:Any):
-         return [asdict(r) for r in result]
+        if isinstance(result,list):
+            return [asdict(r) for r in result]
+        else:
+            return asdict(result)
+
+class JSONLoadsPipe(Pipe):
+    def __init__(self,silent:bool=True):
+        super().__init__(False)
+        self.silent = silent
+
+    def pipe(self,result:list[str]|str):
+        if isinstance(result,list):
+            return [json.loads(r) for r in result]
+        elif isinstance(result,str):
+            return json.loads(result)
+        else:
+            if not self.silent:
+                raise TypeError
+            return result

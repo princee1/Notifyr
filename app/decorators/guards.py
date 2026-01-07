@@ -1,5 +1,6 @@
 from typing import Any, List
 from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPermission
+from app.classes.cost_definition import CreditNotInPlanError
 from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
@@ -10,6 +11,7 @@ from app.models.link_model import LinkORM
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
+from app.services.cost_service import CostService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
 from app.services.worker.task_service import TaskService
@@ -18,6 +20,7 @@ from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
 from app.services.worker.arq_service import ArqDataTaskService, DataTaskNotFoundError
+from app.utils.constant import CostConstant
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request, UploadFile, status
 from app.errors.upload_error import (
@@ -381,3 +384,15 @@ class ArqDataTaskGuard(Guard):
         return True,""
         
     
+class CreditPlanGuard(Guard):
+
+    @InjectInMethod()
+    def __init__(self,costService:CostService):
+        super().__init__()
+        self.costService = costService
+
+    def guard(self,credit:CostConstant.Credit):
+        if credit not in self.costService.plan_credits:
+            raise CreditNotInPlanError(credit)
+        
+        return True,""
