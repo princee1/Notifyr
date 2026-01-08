@@ -11,7 +11,7 @@ configService = Get(ConfigService)
 costService = Get(CostService)
 
 from .admin_ressource import AdminRessource
-from .result_ressource import ResultBackendRessource
+from .worker.result_ressource import ResultBackendRessource
 from .contacts_ressources import ContactsRessource
 from .auth_ressource import AuthRessource
 from .app_ressource import AppRessource
@@ -21,7 +21,7 @@ from .properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
 from .profile_ressource import ProfilRessource
 from .cost_ressource import CostRessource
-from .celery_ressource import CeleryRessource
+from .worker.celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
 
 
@@ -63,9 +63,11 @@ if CAPABILITIES['email']:
     BASE_RESSOURCES.append(EmailRessource)
 
 if CAPABILITIES['agentic']:
-    from app.ressources.rag_db_ressource import RagDBRessource
-    from app.ressources.agent_ressource import AgentsRessource
-    BASE_RESSOURCES.append(RagDBRessource)
+    from app.ressources.agentic.gateway_ressource import GatewayAgenticRessource
+    from app.ressources.agentic.agent_ressource import AgentsRessource
+    from app.ressources.agentic.data_loader_ressource import DataLoaderRessource
+    BASE_RESSOURCES.append(DataLoaderRessource)
+    BASE_RESSOURCES.append(GatewayAgenticRessource)
     BASE_RESSOURCES.append(AgentsRessource)
 
 
