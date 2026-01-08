@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import Optional,TypedDict
 
+from app.definition._error import BaseError
+
 
 class SearchParamsModel(BaseModel):
     hnsw_ef: Optional[int] = Field(
@@ -62,3 +64,6 @@ class MultimediaPayload(TypedDict):
 class DataPontsPayload(TypedDict):
     ...
 
+
+class QdrantCollectionDoesNotExist(BaseError):
+    ...

@@ -184,10 +184,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     def check_db(func:Callable):
 
         @functools.wraps(func)
-        async def wrapper(self,database:int|str,*args,**kwargs):
-            if 'redis' in kwargs and (not kwargs['redis'] or  not isinstance(kwargs['redis'],Redis)):
-                ... # TODO if should keep the instance passed
-
+        async def wrapper(self:Self,database:int|str,*args,**kwargs):
+            if 'redis' in kwargs and kwargs['redis'] and isinstance(kwargs['redis'],Redis):
+                return await func(self,database,*args,**kwargs)
+            
             if database not in self.db:
                 raise RedisDatabaseDoesNotExistsError(database)
             kwargs['redis'] = self.db[database]
@@ -342,6 +342,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
        
     @check_db
     async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
+        element = [json.dumps(e) for e in list(element)]
         return await redis.lpush(name,*element)
 
     @check_db

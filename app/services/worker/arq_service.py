@@ -4,6 +4,8 @@ from typing import Any, Callable, Literal, Union
 from arq.connections import RedisSettings,create_pool,ArqRedis
 from arq.jobs import Job,JobStatus,ResultNotFound,JobResult,JobDef
 from arq.constants import result_key_prefix,job_key_prefix
+from redis import WatchError
+from app.classes.step import Step
 from app.definition._error import BaseError
 from app.definition._service import BaseService, Service
 from app.services.config_service import ConfigService, UvicornWorkerService
@@ -98,12 +100,32 @@ class ArqDataTaskService(BaseService):
                 return await job_id.abort(timeout=0.5)
             except asyncio.TimeoutError:
                 return False
+            
+        async def update_step(self,job_id:str|Job,step:Step,max_retries=3):
+            retry = 0
+            async with self.redisService.db[RedisConstant.EVENT_DB].pipeline(transaction=True) as pipe:
+                while retry<max_retries:
+                    try:
+                        job_key = job_key_prefix+job_id
+                        await pipe.watch(job_key)
+                        info_fetched:dict = await self.redisService.retrieve(RedisConstant.EVENT_DB,job_key,redis=pipe)
+                        print(info_fetched)
+                        kwargs:dict = info_fetched.get('kwargs',{})
+                        kwargs.update({'step':step})
+                        pipe.multi()
+                        await self.redisService.store(RedisConstant.EVENT_DB,job_key,info_fetched,redis=pipe)
+                        await pipe.execute()
+                        return
+                    except WatchError as e:
+                        retry+=1
+                    
+                return WatchError('Could not commit the change')
+
         
         async def dequeue_task(self,job_id:str):
-            val = await self.redisService.rem(RedisConstant.EVENT_DB,QUEUE_NAME,job_id)
-            print(val)
+            r_val = await self.redisService.rem(RedisConstant.EVENT_DB,QUEUE_NAME,job_id)
             job_key = job_key_prefix+job_id
-            await self.redisService.delete(RedisConstant.EVENT_DB,job_key)
+            d_vel = await self.redisService.delete(RedisConstant.EVENT_DB,job_key)
             return
 
         async def get_result(self,job_id:str|Job,_raise=True):
@@ -137,7 +159,7 @@ class ArqDataTaskService(BaseService):
         async def filter(self,task:str,params:Any,where:str):
             ...
             
-        async def exists(self,job_id:str,raise_on_exist=False,delete_on_error:bool=False):
+        async def exists(self,job_id:str,raise_on_exist=False,delete_on_error:bool=False,raise_on_complete=True):
             job = await self.fetch(job_id)
             status:JobStatus = await job.status()
                         
@@ -150,7 +172,7 @@ class ArqDataTaskService(BaseService):
                         result:JobResult = await job.result_info()
                         if result and not result.success:
                             await self.delete_result(job_id)
-                    if not raise_on_exist:
+                    if not raise_on_exist and raise_on_complete:
                         raise JobDoesNotExistsError(job_id,'job as been completed')
                 
                 case JobStatus.in_progress | JobStatus.queued | JobStatus.deferred:

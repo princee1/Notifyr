@@ -50,18 +50,24 @@ class JobArqRessource(BaseHTTPRessource):
         self.fileService = fileService
     
     @UseHandler(AsyncIOHandler)
+    @PingService([ArqDataTaskService])
+    @UseServiceLock(ArqDataTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
     async def get_queued_jobs(self, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.arqService.get_queued_jobs()
         
     @UseHandler(AsyncIOHandler)
+    @PingService([ArqDataTaskService])
+    @UseServiceLock(ArqDataTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
     @BaseHTTPRessource.HTTPRoute('/results/', methods=[HTTPMethod.GET])
     async def get_jobs_result(self, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.arqService.get_jobs_results()
         
-    @UseHandler(AsyncIOHandler)
+    @UseHandler(AsyncIOHandler)    
+    @PingService([ArqDataTaskService])
+    @UseServiceLock(ArqDataTaskService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/info/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_info(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
@@ -69,13 +75,17 @@ class JobArqRessource(BaseHTTPRessource):
         return info
 
     @UseHandler(AsyncIOHandler)
+    @PingService([ArqDataTaskService])
+    @UseServiceLock(ArqDataTaskService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/result/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_result(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
-        job = await self.arqService.exists(job_id, raise_on_exist=False)
+        job = await self.arqService.exists(job_id, raise_on_exist=False,raise_on_complete=False)
         result = await self.arqService.get_result(job)
         return result
 
     @UseLimiter('5/hour') 
+    @PingService([ArqDataTaskService])
+    @UseServiceLock(ArqDataTaskService,lockType='reader')
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{job_id}/', methods=[HTTPMethod.DELETE],response_model=AbortedJobResponse)
@@ -159,7 +169,8 @@ class DataLoaderRessource(BaseHTTPRessource):
                     kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by')),
                             **meta.model_dump(),
                             'request_id':request_id,
-                            '_nickname':ArqDataTaskConstant.FILE_DATA_TASK
+                            '_nickname':ArqDataTaskConstant.FILE_DATA_TASK,
+                            'step':None
                             }
                 )
             except JobAlreadyExistsError as e:

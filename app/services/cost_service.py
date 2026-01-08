@@ -134,8 +134,8 @@ class CostService(BaseService):
         if refund_cost > 0:
             await self.redisService.increment(RedisConstant.LIMITER_DB,credit_key,refund_cost)
 
-    @RedisCreditKeyBuilder
     @CreditSilentFail(0)
+    @RedisCreditKeyBuilder
     async def deduct_credits(self,credit_key:str,purchase_cost:int,retry_limit=5):
         retry=0
         while retry < retry_limit:

@@ -1,3 +1,4 @@
+from random import randint
 import re, nltk, yake, json
 from typing import Any, List, Generator
 from enum import Enum
@@ -28,7 +29,7 @@ except ImportError as e:
 
 from qdrant_client.models import PointStruct
 from app.utils.constant import ParseStrategy
-from app.utils.tools import RunAsync
+from app.utils.tools import Mock, RunAsync
 
 nltk.download(['stopwords', 'punkt', 'wordnet'], quiet=True)
 STOP_WORDS = set(stopwords.words('english'))
@@ -46,8 +47,9 @@ TEXT_READERS: dict[str, type[BaseReader]] = {
 class DataLoaderStepIndex(int, Enum):
     CHECK = 1
     PROCESS = 2
-    TOKEN_COST = 3
-    CLEANUP = 4
+    TOKEN_VERIFY = 3
+    TOKEN_COST = 4
+    CLEANUP = 5
 class BaseDataLoader:
     def __init__(self, api_key: str, file_path: str, lang: str, extension: str,category:str):
         self.file_path = file_path
@@ -95,12 +97,14 @@ class TextDataLoader(BaseDataLoader):
     def __init__(self, api_key: str, file_path: str, lang: str, extension: str,category:str,
                  strategy: ParseStrategy = ParseStrategy.SEMANTIC, use_docling: bool = False):
         super().__init__(api_key, file_path, lang, extension,category)
-
+        self.points = []
+        self.tokens = []
         if use_docling and DOCLING_INSTALLED:
             raise TypeError('Docling must be installed to use it')
 
         self.strategy = strategy
         self.use_docling = use_docling
+        return
         self.embed_model = OpenAIEmbedding(api_key=api_key)
 
         # Parsers
@@ -112,9 +116,9 @@ class TextDataLoader(BaseDataLoader):
             embed_model=self.embed_model,
         )
         self.structured_parser = DoclingNodeParser() if use_docling else None
-        self.points = []
-        self.tokens = []
+        
 
+    @Mock()
     async def process(self):
         if self.use_docling:
             export_type = "markdown" if self.strategy == ParseStrategy.SEMANTIC else "json"
@@ -191,7 +195,7 @@ class TextDataLoader(BaseDataLoader):
             ))
 
     def compute_token(self):
-        ...
+        return randint(2000,30000)
 
     @classmethod
     def extract_section(cls, text: str) -> str:

@@ -59,7 +59,7 @@ class CostRessource(BaseHTTPRessource):
 
     @UseRoles([Role.ADMIN])
     @UseHandler(CostHandler,RedisHandler)
-    @PingService([CostService,RedisService])
+    @PingService([RedisService])
     @UseGuard(CreditPlanGuard)
     @UsePipe(JSONLoadsPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)

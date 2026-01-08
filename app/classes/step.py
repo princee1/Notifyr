@@ -26,6 +26,7 @@ class StepRunner:
 
     def __init__(self, state: Step, step_index: int, params: Any = None):
         self.state = state
+        print(self.state)
         self.step_index = step_index
         self.params = params
 
@@ -37,9 +38,13 @@ class StepRunner:
         if self.step_index in self.state['steps']:
             return SkipStepObj(True)
         
+        if self.step_index >= self.state['current_step']:
+            return SkipStepObj(True)
+        
         return SkipStepObj(False)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        print(exc_type,exc_val)
         if exc_type is None:
             self.state['steps'][self.step_index] = True
         elif exc_type == SkipStep:
