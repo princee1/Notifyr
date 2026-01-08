@@ -44,11 +44,13 @@ class StepRunner:
         return SkipStepObj(False)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        print(exc_type,exc_val)
         if exc_type is None:
             self.state['steps'][self.step_index] = True
+            self.state['current_params'] = None
+            return True
         elif exc_type == SkipStep:
-            return
+            self.state['current_params'] = None
+            return True
         else:
             raise exc_val
-        self.state['current_params'] = None
+        
