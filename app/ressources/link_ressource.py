@@ -20,7 +20,6 @@ from app.services.database.redis_service import RedisService
 from app.services.link_service import LinkService
 from fastapi import status
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
-from app.depends.variables import  verify_url
 from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkModel
 from app.utils.constant import  StreamConstant
 from app.utils.helper import  uuid_v1_mc

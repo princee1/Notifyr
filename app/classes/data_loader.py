@@ -49,10 +49,11 @@ class DataLoaderStepIndex(int, Enum):
     TOKEN_COST = 3
     CLEANUP = 4
 class BaseDataLoader:
-    def __init__(self, api_key: str, file_path: str, lang: str, doc_type: str):
+    def __init__(self, api_key: str, file_path: str, lang: str, extension: str,category:str):
         self.file_path = file_path
         self.lang = lang
-        self.doc_type = doc_type
+        self.extension = extension
+        self.category = category
 
     async def process(self):
         raise NotImplementedError
@@ -91,9 +92,9 @@ class TextDataLoader(BaseDataLoader):
             count = self.freq_dist.N()
             return "low" if count < 80 else "medium" if count < 160 else "high"
 
-    def __init__(self, api_key: str, file_path: str, lang: str, doc_type: str, 
+    def __init__(self, api_key: str, file_path: str, lang: str, extension: str,category:str,
                  strategy: ParseStrategy = ParseStrategy.SEMANTIC, use_docling: bool = False):
-        super().__init__(api_key, file_path, lang, doc_type)
+        super().__init__(api_key, file_path, lang, extension,category)
 
         if use_docling and DOCLING_INSTALLED:
             raise TypeError('Docling must be installed to use it')
@@ -120,7 +121,7 @@ class TextDataLoader(BaseDataLoader):
             reader = DoclingReader(export_type=export_type)
             documents = await reader.aload_data(self.file_path)
         else:
-            reader_cls = TEXT_READERS.get(self.doc_type)
+            reader_cls = TEXT_READERS.get(self.extension)
             documents = await reader_cls().aload_data(self.file_path)
 
         # 2. SPLIT INTO NODES
@@ -155,7 +156,7 @@ class TextDataLoader(BaseDataLoader):
                 "document_id": node.ref_doc_id,
                 "node_id": node.node_id,
                 "source": node.metadata.get("file_name", node.metadata.get('file_path', None)),
-                "document_type": self.doc_type,
+                "extension": self.extension,
                 "strategy": self.strategy.value,
                 "parser": "docling" if self.use_docling else "llama",
                 
@@ -168,6 +169,9 @@ class TextDataLoader(BaseDataLoader):
                 "section": current_section,
                 "language": self.lang,
                 "content_type": self.detect_type(node.text),
+
+                "document_type":"file",
+                "category":self.category,
                 
                 "token_count": detector.freq_dist.N(),
                 "full_token_count": len(detector.tokens),

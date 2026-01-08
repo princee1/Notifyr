@@ -63,7 +63,7 @@ class FileCost(DataCost):
                 self.refund(d,c,q)
  
     def compute_prices(self,name, filename:str|None,size:float |None):
-        file_size_mb = self.fileService.file_size_converter(size,'mb')
+        file_size_mb = self.fileService.file_size_converter(size,'kb')
         filename = filename or "unknown"
         delta = self.max_file_size - file_size_mb
         purchase:list[tuple[str,int]] = [] 

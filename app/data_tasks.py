@@ -4,6 +4,7 @@ from app.classes.step import Step, StepRunner
 from app.models.file_model import FileResponseUploadModel, UriMetadata
 from app.utils.constant import CostConstant,ArqDataTaskConstant, ParseStrategy
 from app.utils.globals import APP_MODE,ApplicationMode
+from app.utils.tools import RunAsync
 
 task_registry = []
 FILE_CLEANUP='file_cleanup'
@@ -23,19 +24,17 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
         """
     
         @functools.wraps(func)
-        async def wrapper(ctx:dict[str,Any],*args,collection_name:str=None,uri:str=None,request_id:str=None,step:Step = None,**kwargs):
+        async def wrapper(ctx:dict[str,Any],*args,collection_name:str=None,uri:str=None,request_id:str=None,step:Step = None,_nickname:str=nickname,**kwargs):
 
             print(ctx)
             async def refund(size):
-                job_id = arqService.compute_job_id(file_path)
-
                 if size == None:
                     return
                 if step["current_step"] < DataLoaderStepIndex.PROCESS and nickname == ArqDataTaskConstant.FILE_DATA_TASK:
-                    file_path = arqService.compute_data_file_task_path(uri)
-                    await arqService.enqueue_task(FILE_CLEANUP,job_id=job_id, kwargs={'file_path':file_path})
+                    file_path = arqService.compute_data_file_upload_path(uri)
+                    await arqService.enqueue_task(FILE_CLEANUP,job_id=uri, kwargs={'file_path':file_path})
                 else:
-                    cost = FileCost(request_id,job_id).init(1,CostConstant.DOCUMENT_CREDIT)
+                    cost = FileCost(request_id,uri).init(1,CostConstant.DOCUMENT_CREDIT)
                     cost.post_refund(FileResponseUploadModel(metadata=[UriMetadata(uri,size)]))
                     cost.balance_before = await costService.get_credit_balance(CostConstant.DOCUMENT_CREDIT)
                     await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,cost.refund_cost)
@@ -47,7 +46,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
             costService = Get(CostService)
             redisService = Get(RedisService)
             try:
-                return await func(*args,**kwargs,step=step,collection_name=collection_name,uri=uri)
+                return await func(*args,**kwargs,step=step,collection_name=collection_name,uri=uri,request_id=request_id)
             except asyncio.CancelledError as e:
                 await refund(kwargs.get('size',None))
                 raise e
@@ -68,18 +67,17 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
     return decorator
 
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
-async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:str='en',content_type:str=None,uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None):
+async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:str='en',category:str=None,uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None):
 
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
     costService:CostService = Get(CostService)
     arqService:ArqDataTaskService = Get(ArqDataTaskService) 
 
-    file_path = arqService.compute_data_file_task_path(uri)
-    job_id = arqService.compute_job_id(uri)
+    file_path = arqService.compute_data_file_upload_path(uri)
 
     extension =  fileService.get_extension(file_path)
-    textDataLoader = TextDataLoader(...,file_path,lang,extension,content_type,strategy,use_docling)
+    textDataLoader = TextDataLoader(...,file_path,lang,extension,category,strategy,use_docling)
     token = None
 
     async with StepRunner(step,DataLoaderStepIndex.CHECK) as skip:
@@ -95,14 +93,14 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
     
     async with StepRunner(step,DataLoaderStepIndex.TOKEN_COST, params=token) as skip:
         skip()
-        cost = TokenCost(request_id,job_id)
+        cost = TokenCost(request_id,uri)
         cost.purchase(f'Ai token data process: {uri}',step['current_params'])
         cost.balance_before = await costService.deduct_credits(CostConstant.TOKEN_CREDIT,cost.purchase_cost)
         await costService.push_bill(CostConstant.TOKEN_CREDIT,cost.generate_bill())
 
     async with StepRunner(step,DataLoaderStepIndex.CLEANUP) as skip:
         skip()
-        fileService.delete_file(file_path)
+        await RunAsync(fileService.delete_file)(file_path)
     
     return {"size":size,"collection_name":collection_name,"tokens":1}
 
@@ -117,7 +115,7 @@ async def process_api_data(ctx:dict[str,Any],url:list[str]):
 @RegisterTask(FILE_CLEANUP,True,False)
 async def delete_file(ctx:dict[str,Any],file_path:str=None):
     fileService = Get(FileService)
-    return fileService.delete_file(file_path)
+    return await RunAsync(fileService.delete_file)(file_path)
 
 if APP_MODE == ApplicationMode.arq:
     

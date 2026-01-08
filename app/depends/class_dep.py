@@ -1,18 +1,22 @@
 from typing import Annotated, Literal,TypedDict
 from urllib.parse import urlparse
 from fastapi import  Depends,  Query, Request, Response
+from pydantic import BaseModel
 from app.classes.broker import SubjectType
 from app.classes.mail_provider import get_email_provider_name
+from app.classes.scheduler import TimedeltaSchedulerModel
 from app.definition._error import ServerFileError
+from app.definition._interface import Interface
 from app.interface.email import EmailInterface, EmailSendInterface
 from app.models.call_model import BaseVoiceCallModel
+from app.models.data_ingest_model import DataIngestFileModel
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
 from app.models.link_model import LinkORM
 from app.models.sms_model import OnGoingBaseSMSModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.config_service import ConfigService
 from app.container import Get
-from app.utils.constant import SpecialKeyAttributesConstant
+from app.utils.constant import ParseStrategy, SpecialKeyAttributesConstant
 from app.utils.validation import url_validator
 from .variables import *
 from app.services.link_service import LinkService
@@ -20,6 +24,18 @@ from app.utils.helper import get_value_in_list,  uuid_v1_mc
 from datetime import datetime, timedelta, timezone
 import random
 from time import time
+
+from .variables import _wrap_checker
+
+track:Callable[[Request],bool] = get_query_params('track','false',True,raise_except=True)
+
+class ToPydanticModelInterface(Interface):
+
+    def __init__(self):
+       super().__init__()
+
+    def to_model(self)->BaseModel:
+        ...
 
 
 class TrackerInterface:
@@ -200,7 +216,14 @@ class TwilioTracker(TrackerInterface):
 
                 yield twilio_id,sent_event, tracking_data
 
+
+
 class SubjectParams: #NOTE rename to ReactiveParams
+
+    subject_id_params:Callable[[Request],str] = get_query_params('subject_id',None)
+
+    sid_type_params:Callable[[Request],str] = get_query_params("sid_type","plain",checker=_wrap_checker('sid_type', lambda v: v in get_args(SubjectType), choices=list(get_args(SubjectType))))
+
 
     def __init__(self,request:Request,sid_type:Annotated[str|None,Depends(sid_type_params)],subject_id:Annotated[str|None,Depends(subject_id_params)]):
         self.sid_type = sid_type
@@ -342,3 +365,55 @@ class ObjectsSearch:
         self.version_id = version_id
         self.assets = assets
         self.is_file:bool = None
+
+
+class FileDataIngestQuery(ToPydanticModelInterface):
+
+    collection_name_query: Callable[[Request], str] = get_query_params('collection_name', raise_except=True)
+
+    lang_query: Callable[[Request], str] = get_query_params('lang', default='en',raise_except=True)
+
+    content_type_query: Callable[[Request], str | None] = get_query_params('content_type', default=None)
+
+    expires_query: Callable[[Request], int| None] = get_query_params('expires', default=None,parse=True,raise_except=False,return_none=True)
+
+    defer_by_query: Callable[[Request], int | None] = get_query_params('defer_by',default=None,parse=True,raise_except=False,return_none=True)
+
+    strategy_query: Callable[[Request], ParseStrategy] = get_query_params('strategy','semantic',raise_except=True,checker=_wrap_checker('strategy',predicate=lambda v: v in [m.lower() for m in ParseStrategy._member_names_], choices=[m.lower() for m in ParseStrategy._member_names_]))
+
+    use_docling_query: Callable[[Request], bool] = get_query_params('use_docling',default='false',parse=True)
+
+
+    def __init__(
+        self,
+        collection_name: str = Depends(collection_name_query),
+        lang: str = Depends(lang_query),
+        content_type: str | None = Depends(content_type_query),
+        expires: int | None = Depends(expires_query),
+        defer_by: int | None = Depends(defer_by_query),
+        strategy: ParseStrategy = Depends(strategy_query),
+        use_docling: bool = Depends(use_docling_query),
+    ):
+        self.expires = 1 if expires == None else expires
+        self.defer_by = 1 if expires == None else defer_by
+        self.collection_name = collection_name
+        self.lang = lang
+        self.content_type = content_type
+        self.strategy = strategy
+        self.use_docling = use_docling
+
+    
+    def __repr__(self):
+        return f'FileDataIngestQuery(collection_name={self.collection_name},expires={self.expires})'
+
+    def to_model(self):
+        return DataIngestFileModel(
+            collection_name=self.collection_name,
+            lang=self.lang,
+            category=self.content_type,
+            expires=TimedeltaSchedulerModel(seconds=self.expires),
+            defer_by=TimedeltaSchedulerModel(seconds=self.defer_by),
+            strategy=self.strategy,
+            use_docling=self.use_docling
+        )
+

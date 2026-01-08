@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission,Role, filter_asset_permission
 from app.cost.file_cost import FileCost
+from app.models.file_model import UriMetadata
 from app.models.object_model import ObjectResponseUploadModel, ObjectS3ResponseModel
 from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
 from app.container import Get, InjectInMethod
@@ -131,7 +132,7 @@ class S3ObjectRessource(BaseHTTPRessource):
                     continue
                 else:raise AssetConfusionError(filename)
 
-            meta.append((file.filename,file.size))
+            meta.append(UriMetadata(file.filename,file.size))
             file.filename = f"{EXTENSION_TO_ASSET_TYPE[ext]}/{filename}"
             upload_files.append(file.filename)
             backgroundTask.add_task(self.upload,file)

@@ -1,3 +1,4 @@
+import asyncio
 import functools
 from pathlib import Path
 import traceback
@@ -56,10 +57,17 @@ class CostService(BaseService):
     @staticmethod
     def RedisCreditKeyBuilder(func:Callable):
 
-        @functools.wraps(func)
-        async def wrapper(self:Self,credit_key:str,*args,**kwargs):
-            credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
-            return await func(self,credit_key,*args,**kwargs)
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def wrapper(self:Self,credit_key:str,*args,**kwargs):
+                credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
+                return await func(self,credit_key,*args,**kwargs)            
+        else:
+            @functools.wraps(func)
+            def wrapper(self:Self,credit_key:str,*args,**kwargs):
+                credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
+                return func(self,credit_key,*args,**kwargs)
+
         return wrapper
     
     @staticmethod
@@ -170,8 +178,7 @@ class CostService(BaseService):
         return credit
 
     @CreditSilentFail()
-    @RedisCreditKeyBuilder
-    async def push_bill(self,credit:str,bill:Bill):
+    async def push_bill(self,credit:CostConstant.Credit,bill:Bill):
         bill_key = self.bill_key(credit)
         await self.redisService.push(RedisConstant.LIMITER_DB,bill_key,bill)
         return
@@ -183,13 +190,14 @@ class CostService(BaseService):
     ###################################################                        #######################################
     
     ###################################################                        #######################################
-
+    @RedisCreditKeyBuilder
     def bill_key(self,credit:CostConstant.Credit):
         now = datetime.now()
-        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@bill[{now.year}-{now.month}]'
+        return f'{credit}@bill[{now.year}-{now.month}]'
 
+    @RedisCreditKeyBuilder
     def receipts_key(self,credit:CostConstant.Credit):
-        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@receipts'
+        return f'{credit}@receipts'
     
     ###################################################                        #######################################
     

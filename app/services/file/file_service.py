@@ -1,3 +1,4 @@
+import math
 from pathlib import PurePath
 from app.definition._service import BaseService,Service,AbstractServiceClass
 from typing import Literal, Union
@@ -7,7 +8,7 @@ from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent,lis
 from app.utils.helper import PointerIterator
 import tempfile
 import os
-
+import hashlib
 from app.utils.tools import RunInThreadPool
 
 
@@ -29,10 +30,10 @@ class FileService(BaseService,):
         try:
             directory = os.path.dirname(file_path)
             if directory and not os.path.exists(directory):
-                try:
-                    os.makedirs(directory, exist_ok=True)
-                except OSError as e:
-                    raise PermissionError(f"Failed to create directory '{directory}': {str(e)}")
+                os.makedirs(directory, exist_ok=True)
+
+            if os.path.exists(file_path):
+                raise FileExistsError(f'File already exists: {file_path}')
 
             data_to_write = content.encode('utf-8') if isinstance(content, str) else content
 
@@ -42,12 +43,14 @@ class FileService(BaseService,):
             return file_path
 
         except PermissionError as e:
-            raise PermissionError(f"Permission denied writing to '{file_path}'. Check Docker volume mounts or user permissions.") from e
+            raise PermissionError(f"Permission denied writing to '{file_path}'") from e
         except IsADirectoryError:
             raise IsADirectoryError(f"The path '{file_path}' is a directory, not a file.")
-        except Exception as e:
+        except FileExistsError as e:
+            raise e
+        except OSError as e:
             raise OSError(f"An unexpected error occurred while downloading file to '{file_path}': {str(e)}")
-
+        
     def delete_file(self, file_path: str) -> bool:
         """
         Deletes a file at the given path.
@@ -67,6 +70,8 @@ class FileService(BaseService,):
 
         except PermissionError as e:
             raise PermissionError(f"Permission denied deleting '{file_path}'. Ensure the application has write access.") from e
+        except (FileNotFoundError , IsADirectoryError) as e:
+            raise e
         except OSError as e:
             raise OSError(f"Error deleting file '{file_path}': {str(e)}")
 
@@ -82,9 +87,9 @@ class FileService(BaseService,):
         if size == None:
             return 0
         if mode == 'kb':
-            return round(size / 1024, 2)
+            return math.ceil(size / 1024)
         elif mode == 'mb':
-            return round(size / (1024 * 1024), 2)
+            return math.ceil(size / (1024 * 1024))
         else:
             raise ValueError("Mode must be 'kb' or 'mb'")
 
@@ -186,3 +191,10 @@ class FileService(BaseService,):
         
         return htmlmin.minify(input,False,True,True,).encode()
                 
+    @RunInThreadPool
+    def compute_sha256(self,file_obj) -> str:
+        hasher = hashlib.sha256()
+        for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+            hasher.update(chunk)
+        file_obj.seek(0)
+        return hasher.hexdigest()

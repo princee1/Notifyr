@@ -196,7 +196,7 @@
         "profile": 10,
         "blog":20,
         
-        "document":10000,
+        "document":300000,
         "object":100000,
         "token":100000000000
     }

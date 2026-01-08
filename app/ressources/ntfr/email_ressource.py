@@ -1,8 +1,8 @@
-from typing import Annotated, Callable, Literal
+from typing import Annotated, Callable, Literal, get_args
 import aiohttp
 from aiohttp_retry import Tuple
 from app.classes.auth_permission import MustHave, Role
-from app.classes.email import parse_mime_content
+from app.classes.email import MimeType, parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
 from app.cost.email_cost import EmailCost
@@ -25,9 +25,9 @@ from app.container import Get, InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseInterceptor, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.ntfr.email_service import EmailReaderService, EmailSenderService
 from fastapi import Request, Response, status
-from app.depends.dependencies import Depends, get_auth_permission
+from app.depends.dependencies import Depends, get_auth_permission, get_query_params
 from app.decorators import permissions, handlers,pipes,guards
-from app.depends.variables import email_verifier,wait_timeout_query
+from app.depends.variables import _wrap_checker, wait_timeout_query
 from app.services.worker.task_service import TaskService
 from app.utils.constant import CostConstant, StreamConstant
 from app.utils.globals import DIRECTORY_SEPARATOR,CAPABILITIES
@@ -50,6 +50,10 @@ DEFAULT_RESPONSE = {
 @UsePermission(permissions.JWTRouteHTTPPermission)
 @HTTPRessource(EMAIL_PREFIX)
 class EmailRessource(BaseHTTPRessource):
+
+    mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_except=True,checker=_wrap_checker('mime', lambda v: v in get_args(MimeType), choices=list(get_args(MimeType))))
+
+    #signature_query:Callable[[Request],str] = get_query_params("sign",None,False)
 
 
     @InjectInMethod()
@@ -205,21 +209,7 @@ class EmailRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/otp/{profile}/',methods=[HTTPMethod.POST])
     async def send_otpEmail(self,):
         ...
-        
-    @UseLimiter(limit_value='10/day')
-    @UseRoles([Role.PUBLIC])
-    @UseHandler(handlers.EmailRelatedHandler())
-    @UsePipe(pipes.verify_email_pipe)
-    @BaseHTTPRessource.HTTPRoute("/verify/{email}",methods=[HTTPMethod.GET],mount=False)
-    async def verify_email(self,email:str,request:Request,verifier:Literal['smtp','reacherhq']=Depends(email_verifier)):
-        if verifier == 'smtp':
-            return self.emailService.verify_same_domain_email(email)
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f'http://localhost:8088/verify/{email}') as resp:
-                if resp.status == 200:
-                    return await resp.json()
-            return {"error": f"Failed to verify email. Status code: {resp.status}"}
+            
     
     def on_startup(self):
         super().on_startup()
@@ -256,3 +246,19 @@ class EmailRessource(BaseHTTPRessource):
         
         return tracking_link_callback,tracking_url
         
+
+    
+    # @UseLimiter(limit_value='10/day')
+    # @UseRoles([Role.PUBLIC])
+    # @UseHandler(handlers.EmailRelatedHandler())
+    # @UsePipe(pipes.verify_email_pipe)
+    # @BaseHTTPRessource.HTTPRoute("/verify/{email}",methods=[HTTPMethod.GET],mount=False)
+    # async def verify_email(self,email:str,request:Request,verifier:Literal['smtp','reacherhq']=Depends(email_verifier)):
+    #     if verifier == 'smtp':
+    #         return self.emailService.verify_same_domain_email(email)
+        
+    #     async with aiohttp.ClientSession() as session:
+    #         async with session.get(f'http://localhost:8088/verify/{email}') as resp:
+    #             if resp.status == 200:
+    #                 return await resp.json()
+    #         return {"error": f"Failed to verify email. Status code: {resp.status}"}

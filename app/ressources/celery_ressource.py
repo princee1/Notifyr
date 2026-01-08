@@ -1,4 +1,4 @@
-from typing import Annotated, get_args
+from typing import Annotated, Callable, get_args
 from aiohttp_retry import List
 from fastapi import Depends, HTTPException, Request, Response,status
 from app.classes.auth_permission import AuthPermission, Role
@@ -7,18 +7,21 @@ from app.decorators.handlers import AsyncIOHandler, CeleryControlHandler, MiniSe
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import MiniServiceInjectorPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import get_profile
 from app.services.worker.celery_service import CeleryService, ChannelMiniService, InspectMode
 from app.services.config_service import ConfigService
 from app.services.worker.task_service import TaskService
-from app.depends.variables import celery_inspect_mode_query
+from app.depends.variables import _wrap_checker
 
 @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,ProfileHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('celery-control')
 class CeleryRessource(BaseHTTPRessource):
+
+    celery_inspect_mode_query:Callable[[Request],str] = get_query_params('mode','stats',False,raise_except=True,checker=_wrap_checker('mode',lambda m:m in get_args(InspectMode),choices=list(get_args(InspectMode))))
+
 
     @InjectInMethod()
     def __init__(self,celeryService:CeleryService,configService:ConfigService,taskService:TaskService):

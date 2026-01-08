@@ -67,7 +67,7 @@ def VectorDBRouter(depends:list=None):
 
     @router.delete('/docs/{collection_name}/{job_id}',status_code=status.HTTP_200_OK)
     async def delete_document(collection_name:str,job_id:str,request:Request,response:Response):
-        document_name = arqService.get_job_name(job_id)
+        document_name = job_id
         res = await qdrantService.delete_document(
             document_name=document_name,
             collection_name=collection_name,

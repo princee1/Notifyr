@@ -8,8 +8,8 @@ class UriMetadata(BaseModel):
 
 class UploadError(BaseModel):
     path: Optional[str] = None
+    fix:Optional[str] = None
     reason: str
-    fix:str
 
 class FileResponseUploadModel(BaseModel):
     metadata: List[UriMetadata] = []

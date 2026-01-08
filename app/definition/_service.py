@@ -114,7 +114,7 @@ class VariableProtocol(TypedDict):
 
 #################################            #####################################
 
-WAIT_TIME = .1
+WAIT_TIME = .01
 
 ACCEPTABLE_STATES = {ServiceStatus.AVAILABLE, ServiceStatus.PARTIALLY_AVAILABLE, ServiceStatus.WORKS_ALMOST_ATT}
 

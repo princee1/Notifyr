@@ -153,14 +153,14 @@ class AppServer(EventInterface):
                 self._mount_directories(ressource_type)
                 self.pretty_printer.success(
                     f"[{now}] Ressource {ressource_type.__name__} added successfully", saveable=True)
-                self.pretty_printer.wait(0.1, press_to_continue=False)
+                self.pretty_printer.wait(0.01, press_to_continue=False)
             except Exception as e:
                 print(e.__class__)
                 print(e)
                 traceback.print_exc()
                 self.pretty_printer.error(
                     f"[{now}] Error adding ressource {ressource_type.__name__} to the app", saveable=True)
-                self.pretty_printer.wait(0.1, press_to_continue=True)
+                self.pretty_printer.wait(0.1, press_to_continue=False)
 
         self.pretty_printer.show(
             pause_before=1, clear_stack=True, space_line=False)

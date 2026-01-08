@@ -136,7 +136,6 @@ services:
         target: /run/secrets/costs.json
       - source: deploy
         target: /run/secrets/deploy.json
-
     volumes:
       - vault-shared:/vault/shared:ro
       - data-loader:/data-loader/
@@ -178,7 +177,7 @@ services:
     entrypoint: ["arq", "app.data_tasks.WorkerSettings"]
     #command: ["tail", "-f" ,"/dev/null"]
     volumes:
-      - vault-shared:/vault/shared
+      - vault-shared:/vault/shared:ro
       - data-loader:/data-loader/
     secrets:
       - source: app_role_id

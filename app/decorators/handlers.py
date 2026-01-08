@@ -9,7 +9,7 @@ from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
-from app.services.worker.arq_service import DataTaskNotFoundError, JobDoesNotExistsError, JobStatusNotValidError,ResultNotFound
+from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobStatusNotValidError,ResultNotFound
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -956,10 +956,22 @@ class ArqHandler(Handler):
                 detail={"job_id": e.job_id, "reason": e.reason}
             )
 
+        except JobAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"job_id": e.job_id, "reason": e.reason}
+            )
+
         except JobStatusNotValidError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={'job_id':e.job_id,'status':e.status}
+            )
+
+        except JobDequeueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={'job_id':e.job_id}
             )
 
 class APSSchedulerHandler(Handler):

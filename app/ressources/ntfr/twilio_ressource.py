@@ -7,9 +7,8 @@ from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, ProfileH
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import MiniServiceInjectorPipe, parse_phone_number
 from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import get_profile
-from app.depends.variables import carrier_info,callee_info
 from app.ressources.twilio.sms_ressource import SMSRessource
 from app.ressources.twilio.call_ressource import CallRessource
 from app.ressources.twilio.fax_ressource import FaxRessource
@@ -17,12 +16,22 @@ from app.services.ntfr.twilio_service import TwilioAccountMiniService, TwilioSer
 from app.ressources.twilio.conversation_ressource import ConversationRessource
 
 
-parse_to_phone_format: Callable = GetDependsFunc(TwilioService, 'parse_to_phone_format')
+# ----------------------------------------------                                    ---------------------------------- #
+
 
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler,MiniServiceHandler)
 @HTTPRessource('twilio',routers=[SMSRessource,CallRessource,ConversationRessource,FaxRessource])
 class TwilioRessource(BaseHTTPRessource):
+
+    carrier_info:Callable[[Request],bool]=get_query_params('carrier_info','true',True)
+
+    callee_info:Callable[[Request],bool]=get_query_params('callee_info','false',True)
+
+    add_ons:Callable[[Request],bool]=get_query_params('add_ons','false',True)
+
+    parse_to_phone_format: Callable = GetDependsFunc(TwilioService, 'parse_to_phone_format')
+
 
     @InjectInMethod()
     def __init__(self,twilioService:TwilioService,callService:CallService) -> None:

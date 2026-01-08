@@ -10,7 +10,7 @@ from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.definition._service import BaseMiniService, BaseMiniServiceManager
-from app.depends.class_dep import ObjectsSearch
+from app.depends.class_dep import ObjectsSearch,ToPydanticModelInterface
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
 from app.manager.task_manager import TaskManager
@@ -702,18 +702,6 @@ class MiniServiceInjectorPipe(Pipe):
             self.key: self.service.MiniServiceStore.get(profile)
             }
 
-    
-class ArqJobIdPipe(Pipe):
-
-    @InjectInMethod()
-    def __init__(self,arqService:ArqDataTaskService):
-        super().__init__(True)
-        self.arqService = arqService
-    
-    def pipe(self,job_id:str): return {'job_id':self.arqService.compute_job_id(job_id)}
-
-
-
 class DataClassToDictPipe(Pipe):
 
     def __init__(self,silent:bool=True):
@@ -740,3 +728,14 @@ class JSONLoadsPipe(Pipe):
             if not self.silent:
                 raise TypeError
             return result
+
+class QueryToModelPipe(Pipe):
+
+    def __init__(self,key:str):
+        super().__init__(True)
+        self.key = key
+    
+    def pipe(self,query:ToPydanticModelInterface,):
+        return {
+            self.key : query.to_model()
+        }

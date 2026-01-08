@@ -348,9 +348,12 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     async def range(self,database:int|str,name:str,start:int,stop:int,redis:Redis=None):
         return await redis.lrange(name,start,stop)
 
+    @check_db
+    async def rem(self,database:int|str,name:str,*keys:str,redis:Redis=None):
+        return await redis.zrem(name,*keys)
     
-    def compute_backend_url(self)->str:
-        return f"redis://{self.backend_creds['data']['username']}:{self.backend_creds['data']['password']}@{self.configService.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}"
+    def compute_backend_url(self,db=RedisConstant.CELERY_DB)->str:
+        return f"redis://{self.backend_creds['data']['username']}:{self.backend_creds['data']['password']}@{self.configService.REDIS_HOST}:6379/{db}"
 
     def compute_broker_url(self)->str:
         if self.configService.BROKER_PROVIDER == 'redis':
