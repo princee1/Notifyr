@@ -17,6 +17,7 @@ from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status, SubscriptionORM
 from app.models.email_model import BaseEmailSchedulerModel
+from app.models.file_model import FileResponseUploadModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
@@ -739,3 +740,8 @@ class QueryToModelPipe(Pipe):
         return {
             self.key : query.to_model()
         }
+
+async def update_status_upon_no_metadata_pipe(result:FileResponseUploadModel,response:Response):
+    if len(result.metadata) == 0:
+        response.status_code = status.HTTP_200_OK
+    return result

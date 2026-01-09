@@ -120,13 +120,18 @@ class ArqDataTaskService(BaseService):
                         retry+=1
                     
                 return WatchError('Could not commit the change')
-
-        
+  
         async def dequeue_task(self,job_id:str):
-            r_val = await self.redisService.rem(RedisConstant.EVENT_DB,QUEUE_NAME,job_id)
-            job_key = job_key_prefix+job_id
-            d_vel = await self.redisService.delete(RedisConstant.EVENT_DB,job_key)
+            q_val = await self.redisService.rem(RedisConstant.EVENT_DB,QUEUE_NAME,job_id)
+            j_val,r_del = await self.delete(job_id)
             return
+
+        async def delete(self, job_id):
+            job_key = job_key_prefix+job_id
+            j_del = await self.redisService.delete(RedisConstant.EVENT_DB,job_key)
+            result_key = f"{result_key_prefix}{job_id}"
+            r_del = await self.redisService.delete(RedisConstant.EVENT_DB,result_key)
+            return j_del,r_del
 
         async def get_result(self,job_id:str|Job,_raise=True):
             if isinstance(job_id,str):
@@ -159,7 +164,7 @@ class ArqDataTaskService(BaseService):
         async def filter(self,task:str,params:Any,where:str):
             ...
             
-        async def exists(self,job_id:str,raise_on_exist=False,delete_on_error:bool=False,raise_on_complete=True):
+        async def exists(self,job_id:str,raise_on_exist=False,delete_on_error:bool=False,return_status=False):
             job = await self.fetch(job_id)
             status:JobStatus = await job.status()
                         
@@ -167,24 +172,25 @@ class ArqDataTaskService(BaseService):
                 case JobStatus.not_found:
                     if not raise_on_exist:
                         raise JobDoesNotExistsError(job_id,'does not exists')
+                    
                 case JobStatus.complete:
+                    just_delete_flag = True
                     if delete_on_error:
                         result:JobResult = await job.result_info()
                         if result and not result.success:
-                            await self.delete_result(job_id)
-                    if not raise_on_exist and raise_on_complete:
-                        raise JobDoesNotExistsError(job_id,'job as been completed')
-                
+                            just_delete_flag=False
+                            await self.delete(job_id)
+
+                    if raise_on_exist and just_delete_flag:
+                        raise JobAlreadyExistsError(job_id,'job as been completed')  
+                    
                 case JobStatus.in_progress | JobStatus.queued | JobStatus.deferred:
                     if raise_on_exist:
                         raise JobAlreadyExistsError(job_id,'job already exists')
-
+            if return_status:
+                return job,status
             return job
-        
-        async def delete_result(self, job_id: str ) -> bool:
-            result_key = f"{result_key_prefix}{job_id}"
-            return await self.redisService.delete(RedisConstant.EVENT_DB,result_key)
-       
+               
     def compute_data_file_upload_path(self,filename:str):
         return f"{self.configService.DATA_LOADER_DIR}uploads/{filename}"
     

@@ -70,6 +70,7 @@ if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
     from app.services.file.file_service import FileService
     from app.services.profile_service import ProfileService
     from app.services.worker.arq_service import ArqDataTaskService
+    from app.services.reactive_service import ReactiveService
 
 
 if APP_MODE == ApplicationMode.arq and CAPABILITIES['agentic']:

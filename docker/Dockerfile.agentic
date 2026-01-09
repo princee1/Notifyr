@@ -4,21 +4,11 @@ ARG INSTALL_DOCLING=false
 
 COPY --chown=notifyr:notifyr ./scripts/docling.sh .
 
-RUN pip install langchain
+RUN pip install langchain qdrant-client neo4j
 
-RUN pip install qdrant-client
+RUN pip install llama-index-core llama-index-embeddings-openai install llama-index-readers-file
 
-RUN pip install neo4j
-
-RUN pip install llama-index-core llama-index-embeddings-openai
-
-RUN pip install llama-index-readers-file
-
-RUN pip install arq
-
-RUN pip install yake 
-
-RUN pip install gensim 
+RUN pip install arq  yake gensim 
 
 RUN ./docling.sh ${INSTALL_DOCLING}
 

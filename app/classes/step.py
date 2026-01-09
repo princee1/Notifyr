@@ -26,19 +26,17 @@ class StepRunner:
 
     def __init__(self, state: Step, step_index: int, params: Any = None):
         self.state = state
-        print(self.state)
         self.step_index = step_index
         self.params = params
 
     async def __aenter__(self):
-        self.state['current_step'] = self.step_index
         if self.params != None:
             self.state['current_params'] = self.params
         
         if self.step_index in self.state['steps']:
             return SkipStepObj(True)
         
-        if self.step_index >= self.state['current_step']:
+        if self.state['current_step'] >= self.step_index:
             return SkipStepObj(True)
         
         return SkipStepObj(False)
@@ -47,10 +45,12 @@ class StepRunner:
         if exc_type is None:
             self.state['steps'][self.step_index] = True
             self.state['current_params'] = None
-            return True
-        elif exc_type == SkipStep:
+            self.state['current_step'] = self.step_index
+            return True  # nothing to propagate
+
+        if exc_type is SkipStep:
             self.state['current_params'] = None
-            return True
-        else:
-            raise exc_val
+            return True  # suppress SkipStep
+
+        return False
         

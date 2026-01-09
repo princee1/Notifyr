@@ -29,7 +29,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
 
             async def refund():
                 if step["current_step"] < DataLoaderStepIndex.PROCESS:
-                    cost = FileCost(request_id,uri).init(1,CostConstant.DOCUMENT_CREDIT)
+                    cost = FileCost(request_id,f"arq-job@{uri}").init(1,CostConstant.DOCUMENT_CREDIT)
                     cost.post_refund(FileResponseUploadModel(metadata=[UriMetadata(uri=uri,size=size)]))
                     cost.balance_before = await costService.get_credit_balance(CostConstant.DOCUMENT_CREDIT)
                     await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,cost.refund_cost)
@@ -99,7 +99,7 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
         skip()
         if strategy != ParseStrategy.SEMANTIC:
             raise SkipStep()
-        cost = TokenCost(request_id,uri)
+        cost = TokenCost(request_id,f"arq-job@{uri}")
         cost.purchase(f'Ai token data process: {uri}',step['current_params'])
         cost.balance_before = await costService.deduct_credits(CostConstant.TOKEN_CREDIT,cost.purchase_cost)
         await costService.push_bill(CostConstant.TOKEN_CREDIT,cost.generate_bill())
@@ -108,8 +108,7 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
         skip()
         await RunAsync(fileService.delete_file)(file_path)
 
-    
-    return {"size":size,"collection_name":collection_name,"tokens":1}
+    return {"size":size,"collection_name":collection_name,"tokens":step['current_params']}
 
 @RegisterTask(ArqDataTaskConstant.WEB_DATA_TASK,False)
 async def process_web_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',collection_name:str=None):

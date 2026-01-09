@@ -8,3 +8,7 @@ class KeepAliveTimeoutError(BaseError):
 
 class ReactiveSubjectNotFoundError(BaseError):
     ... 
+
+
+class ReactiveSubjectAlreadyExist(BaseError):
+    ...

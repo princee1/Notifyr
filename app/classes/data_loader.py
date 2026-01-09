@@ -46,8 +46,8 @@ TEXT_READERS: dict[str, type[BaseReader]] = {
 
 class DataLoaderStepIndex(int, Enum):
     CHECK = 1
-    PROCESS = 2
-    TOKEN_VERIFY = 3
+    TOKEN_VERIFY = 2
+    PROCESS = 3
     TOKEN_COST = 4
     CLEANUP = 5
 class BaseDataLoader:

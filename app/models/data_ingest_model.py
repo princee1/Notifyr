@@ -38,5 +38,5 @@ class AbortedJobResponse(FileResponseUploadModel):
 	status:str
 
 	
-class EnqueueResponse(BaseModel):
+class EnqueueResponse(FileResponseUploadModel):
 	...

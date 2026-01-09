@@ -5,7 +5,7 @@ from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessour
 from app.depends.dependencies import get_auth_permission
 
 @UsePermission(JWTRouteHTTPPermission)
-@HTTPRessource('graph')
+@HTTPRessource('k-graph')
 class KGGraphDBRessource(BaseHTTPRessource):
 
     def __init__(self):

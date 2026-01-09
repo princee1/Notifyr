@@ -9,7 +9,7 @@ from app.cost.web_cost import WebCost
 from app.decorators.guards import ArqDataTaskGuard, UploadFilesGuard
 from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, FileHandler, MiniServiceHandler, PydanticHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.pipes import  DataClassToDictPipe, MiniServiceInjectorPipe, QueryToModelPipe
+from app.decorators.pipes import  DataClassToDictPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.depends.class_dep import FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_request_id
@@ -79,7 +79,7 @@ class JobArqRessource(BaseHTTPRessource):
     @UseServiceLock(ArqDataTaskService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/result/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_result(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
-        job = await self.arqService.exists(job_id, raise_on_exist=False,raise_on_complete=False)
+        job = await self.arqService.exists(job_id, raise_on_exist=False)
         result = await self.arqService.get_result(job)
         return result
 
@@ -90,8 +90,7 @@ class JobArqRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{job_id}/', methods=[HTTPMethod.DELETE],response_model=AbortedJobResponse)
     async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],autPermission:AuthPermission=Depends(get_auth_permission)):
-        job = await self.arqService.exists(job_id, raise_on_exist=False)
-        status = await self.arqService.status(job)
+        job,status = await self.arqService.exists(job_id, raise_on_exist=False,return_status=True)
 
         match status:
             case JobStatus.queued | JobStatus.deferred:
@@ -139,6 +138,7 @@ class DataLoaderRessource(BaseHTTPRessource):
 
     @UseLimiter('5/hour')
     @UsePipe(QueryToModelPipe('ingestTask'))
+    @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseServiceLock(ArqDataTaskService,lockType='reader')
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler)
@@ -147,13 +147,17 @@ class DataLoaderRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=IngestFileEnqueueResponse)
     async def embed_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],backgroundTasks:BackgroundTasks,files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
         _response = IngestFileEnqueueResponse()
-        
+        ingest_sha = set()
         for file in files:
             try:
                 uri= file.filename.lower()
-
                 file_path = self.arqService.compute_data_file_upload_path(uri)
                 sha = await self.fileService.compute_sha256(file.file)
+
+                if sha in ingest_sha:
+                    raise JobAlreadyExistsError(uri,'file already added')
+                
+                ingest_sha.add(sha)
 
                 await self.arqService.exists(uri, True,True)
                 await self.arqService.search(ArqDataTaskConstant.FILE_DATA_TASK,{'sha':sha},True)
@@ -181,6 +185,7 @@ class DataLoaderRessource(BaseHTTPRessource):
         return _response
 
     @UseLimiter('5/hour')
+    @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseHandler(ArqHandler,AsyncIOHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK))
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
@@ -193,6 +198,7 @@ class DataLoaderRessource(BaseHTTPRessource):
         """
     
     @UseLimiter('5/hour')
+    @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UsePermission(ProfilePermission)
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK))
