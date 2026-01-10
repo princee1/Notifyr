@@ -1,12 +1,20 @@
 from typing import TypedDict, Literal, Any
 from random import randint
 import asyncio
+from time import time
+from datetime import datetime
+
 
 Status=Literal['start','running', 'done']
 
+class StepMeta(TypedDict):
+    success:Literal[True]
+    time:int
+    date:str
+
 class Step(TypedDict):
     current_step: int
-    steps: dict[int, Any]
+    steps: dict[int, StepMeta]
     current_params: Any
 
 class SkipStep(Exception):
@@ -28,6 +36,8 @@ class StepRunner:
         self.state = state
         self.step_index = step_index
         self.params = params
+        self.start_time = time()
+
 
     async def __aenter__(self):
         if self.params != None:
@@ -43,7 +53,9 @@ class StepRunner:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if exc_type is None:
-            self.state['steps'][self.step_index] = True
+            now = datetime.now().isoformat()
+            meta =  StepMeta(success=True,time=time()-self.start_time,date=now)
+            self.state['steps'][self.step_index] =meta
             self.state['current_params'] = None
             self.state['current_step'] = self.step_index
             return True  # nothing to propagate

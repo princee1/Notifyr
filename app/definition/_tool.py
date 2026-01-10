@@ -5,3 +5,6 @@ class Tool:
 
 class Pipeline(Tool):
     ...
+
+class ReAct(Tool):
+    ...

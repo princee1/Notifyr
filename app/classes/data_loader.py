@@ -11,8 +11,8 @@ from gensim import corpora, models
 
 from llama_index.core.node_parser import SentenceSplitter, SemanticSplitterNodeParser
 from llama_index.core.schema import TextNode
-from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core.readers.base import BaseReader
+from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.readers.file import (
     PDFReader, DocxReader, MarkdownReader, 
     HTMLTagReader, PptxReader,XMLReader
@@ -51,11 +51,12 @@ class DataLoaderStepIndex(int, Enum):
     TOKEN_COST = 4
     CLEANUP = 5
 class BaseDataLoader:
-    def __init__(self, api_key: str, file_path: str, lang: str, extension: str,category:str):
+    def __init__(self,embedding_model:BaseEmbedding ,file_path: str, lang: str, extension: str,category:str):
         self.file_path = file_path
         self.lang = lang
         self.extension = extension
         self.category = category
+        self.em
 
     async def process(self):
         raise NotImplementedError
@@ -94,9 +95,9 @@ class TextDataLoader(BaseDataLoader):
             count = self.freq_dist.N()
             return "low" if count < 80 else "medium" if count < 160 else "high"
 
-    def __init__(self, api_key: str, file_path: str, lang: str, extension: str,category:str,
+    def __init__(self,embedding_model:BaseEmbedding , file_path: str, lang: str, extension: str,category:str,
                  strategy: ParseStrategy = ParseStrategy.SEMANTIC, use_docling: bool = False):
-        super().__init__(api_key, file_path, lang, extension,category)
+        super().__init__(embedding_model, file_path, lang, extension,category)
         self.points = []
         self.tokens = []
         if use_docling and DOCLING_INSTALLED:
@@ -105,15 +106,13 @@ class TextDataLoader(BaseDataLoader):
         self.strategy = strategy
         self.use_docling = use_docling
         return
-        self.embed_model = OpenAIEmbedding(api_key=api_key)
-
         # Parsers
         self.splitter = SentenceSplitter(chunk_size=1000, chunk_overlap=200)
         self.semantic_parser = SemanticSplitterNodeParser(
             buffer_size=3,
             breakpoint_percentile_threshold=95,
             sentence_splitter=self.splitter.split_text,
-            embed_model=self.embed_model,
+            embed_model=self.embedding_model,
         )
         self.structured_parser = DoclingNodeParser() if use_docling else None
         

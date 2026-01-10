@@ -3,7 +3,7 @@ import functools
 from typing import Callable, Generator, Self
 
 import grpc
-from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError, ServiceNotAvailableError
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
 from app.services.config_service import ConfigService
@@ -40,11 +40,12 @@ class RemoteAgentService(BaseMiniServiceManager):
         if not CAPABILITIES['agentic']:
             raise BuildWarningError('Agentic capability is not enabled')
         
-    def build(self, build_state=...):
+    def build(self, build_state=DEFAULT_BUILD_STATE):
         if APP_MODE == ApplicationMode.agentic:
             raise BuildOkError("Running in Agentic mode; RemoteAgentService not required.")
         
-        self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
+        if build_state == DEFAULT_BUILD_STATE:
+            self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
         
     def register_channel(self):
         if self.service_status != ServiceStatus.AVAILABLE:

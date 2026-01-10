@@ -12,7 +12,7 @@ from reactivex import Subject
 from reactivex.disposable import Disposable
 
 
-ReactiveType= Literal['HTTP','Celery','BackgroundTask','RedisPubSub','RedisStream','RedisQueue']
+ReactiveType= Literal['HTTP','Celery','BackgroundTask','RedisPubSub','RedisStream','RedisQueue','Normal']
 
 
 @dataclass

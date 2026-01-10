@@ -1,5 +1,6 @@
 import asyncio
-from app.services.reactive_service import ReactiveService
+from app.classes.prompt import PromptToken
+from app.utils.constant import CostConstant
 from app.utils.tools import RunInThreadPool
 from app.container import Get,Register
 from app.callback import Callbacks_Stream,Callbacks_Sub
@@ -8,6 +9,8 @@ from app.services import VaultService
 from app.services import AgentService
 from app.services import MongooseService
 from app.services import QdrantService
+from app.services import CostService
+from app.services import ReactiveService
 from app.depends.dependencies import get_bearer_token
 from fastapi import FastAPI,Depends
 from app.routers import Routers
@@ -31,6 +34,17 @@ class GrpcTask:
                 pass
             self.task = None
 
+async def on_purchase_token_next(tokens:PromptToken):
+    costService = Get(CostService)
+    cost = TokenCost(tokens['request_id'],tokens['issuer'])
+    cost.purchase('input token',1,tokens['input'])
+    cost.purchase('output token',1,tokens['output'])
+    bill = cost.generate_bill()
+    await costService.push_bill(CostConstant.TOKEN_CREDIT,bill)
+
+def on_purchase_token_complete():
+    ...
+
 def bootstrap_agent_app()->FastAPI:
     redisService = Get(RedisService)
     vaultService = Get(VaultService)
@@ -48,11 +62,15 @@ def bootstrap_agent_app()->FastAPI:
         mongooseService.start()
         redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
         grpcTask.set_task(asyncio.create_task(agentService.serve()))
+        agentService.subscribe_token(
+            on_next=lambda t: asyncio.create_task(on_purchase_token_next(t)),
+            on_complete=on_purchase_token_complete
+            )
+
         
     async def on_shutdown():
         mongooseService.shutdown()
 
-        redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
         await redisService.close_connections()
         await RunInThreadPool(redisService.revoke_lease)()
@@ -61,6 +79,8 @@ def bootstrap_agent_app()->FastAPI:
         await RunInThreadPool(vaultService.revoke_auth_token)()
         await agentService.stop()
         grpcTask.cancel_task()
+
+        agentService.complete_purchase()
 
     app = FastAPI(on_shutdown=[on_shutdown],
                   on_startup=[on_startup],

@@ -1,10 +1,10 @@
 from fastapi import Request, Response
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, IncludeRessource,HTTPMethod
-from app.ressources.agentic.gateway.kg_graph_ressource  import KGGraphDBRessource
+from app.ressources.agentic.gateway.k_graph_ressource  import KGraphDBRessource
 from app.ressources.agentic.gateway.vector_ressource  import VectorDBRessource
 
 
-@IncludeRessource(KGGraphDBRessource)
+@IncludeRessource(KGraphDBRessource)
 @IncludeRessource(VectorDBRessource)
 @HTTPRessource('rag-db')
 class GatewayAgenticRessource(BaseHTTPRessource):

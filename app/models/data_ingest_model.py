@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, PrivateAttr, field_validator
 
 from app.utils.constant import ParseStrategy
@@ -10,6 +10,7 @@ class DataIngestModel(BaseModel):
 	collection_name: str
 	lang: Optional[str] = 'en'
 	category: Optional[str] = None
+	knowledge_db:Literal['vector','k-graph','both']= 'vector'
 	expires: Optional[TimedeltaSchedulerModel|None] = None
 	defer_by: Optional[TimedeltaSchedulerModel|None] = None
 

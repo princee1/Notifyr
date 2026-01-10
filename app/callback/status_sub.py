@@ -2,7 +2,7 @@ import asyncio
 import traceback
 from typing import Any
 from app.container import Get
-from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseMiniServiceManager, BaseService, LinkParams, MiniStateProtocol, ServiceStatus,StateProtocol, VariableProtocol, LiaisonDependency
+from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseMiniServiceManager, BaseService, LinkParams, MiniStateProtocol, ServiceStatus,StateProtocol, VariableProtocol, LiaisonDependency,MirrorDependency
 from app.interface.timers import SchedulerInterface
 from app.utils.constant import SubConstant
 from app.utils.tools import RunInThreadPool
@@ -70,7 +70,12 @@ async def SetServiceStatus(message:StateProtocol,service=None):
     try:
         print("Starting..")
         if service == None:
-            service:BaseService = Get(_CLASS_DEPENDENCY[message['service']])
+            service = message['service']
+
+            if service in MirrorDependency:
+                service = MirrorDependency[service]
+
+            service:BaseService = Get(_CLASS_DEPENDENCY[service])
         
         async with service.statusLock.writer:
 
@@ -141,9 +146,13 @@ async def SetServiceVariables(message:VariableProtocol):
 
 async def SetMiniProfilStatus(message:MiniStateProtocol):
     try:
+
         service = message.get('service',None)
         if service == None:
             return 
+        if service in MirrorDependency:
+            service = MirrorDependency[service]
+            
         service:BaseMiniServiceManager = Get(service)
         if not isinstance(service,BaseMiniServiceManager):
             return 

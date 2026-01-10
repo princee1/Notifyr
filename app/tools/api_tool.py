@@ -1,5 +1,8 @@
-from app.definition._tool import Pipeline
+from app.definition._tool import ReAct,Tool,Pipeline
 
-class APITool(Pipeline):
+class APIFetchTool(Pipeline):
+    ...
+
+class APIControlTool(ReAct):
     ...
 

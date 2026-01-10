@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .kg_graph_router import KnowledgeGraphDBRouter
+from .k_graph_db_router import KnowledgeGraphDBRouter
 from .vector_db_router import VectorDBRouter
 from app.services import CostService
 from app.services import VaultService

@@ -6,7 +6,7 @@ from app.depends.dependencies import get_auth_permission
 
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('k-graph')
-class KGGraphDBRessource(BaseHTTPRessource):
+class KGraphDBRessource(BaseHTTPRessource):
 
     def __init__(self):
         super().__init__(None,None)

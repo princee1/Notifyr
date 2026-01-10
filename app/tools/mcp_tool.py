@@ -1,4 +1,4 @@
-from app.definition._tool import Tool
-class MCPTool(Tool):
+from app.definition._tool import ReAct
+class MCPTool(ReAct):
     ...
     
