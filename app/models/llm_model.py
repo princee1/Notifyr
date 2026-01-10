@@ -19,7 +19,8 @@ class LLMProfileModel(BaseProfileModel):
     _vault:ClassVar[str] = VaultConstant.LLM_SECRETS
     provider:LLMProvider
     models:List[str] = []
-    embedding_models:Embedding
+    embedding_search:Embedding
+    embedding_parse:Embedding
     max__input_tokens:Optional[int] = None
     max_output_tokens:Optional[int] = None
     _queue:ClassVar[str] = 'llm'

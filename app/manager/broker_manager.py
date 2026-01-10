@@ -1,8 +1,11 @@
+import functools
 from typing import Any, Literal
 from fastapi import BackgroundTasks
 from app.container import Get
+from app.definition._cost import Cost, DataCost
 from app.definition._service import BaseMiniServiceManager, MiniStateProtocol, ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
 from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.cost_service import CostService
 from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.constant import SubConstant
@@ -14,15 +17,17 @@ import asyncio
 
 class Broker:
     
-    def __init__(self,request:Request,response:Response,backgroundTasks:BackgroundTasks):
+    def __init__(self,request:Request,response:Response,backgroundTasks:BackgroundTasks,cost:Cost|DataCost=None):
         self.reactiveService:ReactiveService = Get(ReactiveService)
         self.redisService:RedisService = Get(RedisService)
         self.configService:ConfigService = Get(ConfigService)
+        self.costService:CostService = Get(CostService)
         self.uvicornWorkerService:UvicornWorkerService = Get(UvicornWorkerService)
         
         self.backgroundTasks = backgroundTasks
         self.request = request
         self.response = response
+        self.cost = cost
 
     @Mock()
     def publish(self,channel:str,sid_type:SubjectType,subject_id:str, value:Any,state:Literal['next','complete']='next'):
@@ -63,6 +68,29 @@ class Broker:
     #@Mock()
     def add(self,function,*args,**kwargs):
         self.backgroundTasks.add_task(function,*args,**kwargs)
+
+    #@Mock()
+    def payement(self,items:tuple,function:Callable,*args,**kwargs):
+        if self.cost == None:
+            raise AttributeError('Cost not found in the request')
+
+        @functools.wraps(function)
+        async def wrapper(*a,**k):
+            try:
+                return await function(*a,**k)
+            except:
+                self.cost.reset_bill()
+                if isinstance(self,DataCost):
+                    self.cost.post_refund()
+                else:
+                    self.cost.refund()
+                
+                self.cost.balance_before = await self.costService.get_credit_balance(...)
+                self.costService.refund_credits()
+                bill = self.cost.generate_bill()
+                await self.costService.push_bill(...,bill)
+
+        self.backgroundTasks.add_task(wrapper,*args,**kwargs)
 
     def propagate_state(self,protocol:StateProtocol|MiniStateProtocol):
 

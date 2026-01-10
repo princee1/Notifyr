@@ -51,6 +51,9 @@ redis.register_function('bill_squash', function(keys, args)
     local bill_key = keys[1]
     local credit_key = keys[2]
     local bills = redis.call("LRANGE", bill_key, 0, -1)
+    
+    local left = bill_key:match("([^@]+)")
+    local receipts = left .. "@receipts"
 
     if #bills == 0 then
         local before = tonumber(redis.call("GET", credit_key) or "0")
@@ -105,10 +108,6 @@ redis.register_function('bill_squash', function(keys, args)
 
     -- Clear bills list
     redis.call("LTRIM", bill_key, 1, 0)
-
-    local left = bill_key:match("([^@]+)")
-    local receipts = left .. "@receipts"
-
     redis.call("LPUSH", receipts, cjson.encode(squashed))
 
     return squashed

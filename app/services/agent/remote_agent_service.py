@@ -1,7 +1,6 @@
 import asyncio
 import functools
 from typing import Callable, Generator, Self
-
 import grpc
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError, ServiceNotAvailableError
@@ -11,6 +10,7 @@ from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.globals import APP_MODE, CAPABILITIES,ApplicationMode
 from app.grpc import agent_pb2_grpc,agent_message
+
 
 
 def iterator_factory(callback,wait=0.5):
@@ -107,7 +107,7 @@ class RemoteAgentMiniService(BaseMiniService):
         def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = self.remoteAgentService.stub.Prompt(request)
-            reply = agent_message.PromptAnswer.from_proto(reply)
+            return agent_message.PromptAnswer.from_proto(reply)
 
     elif APP_MODE == ApplicationMode.server:
 
@@ -115,7 +115,7 @@ class RemoteAgentMiniService(BaseMiniService):
         async def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = self.remoteAgentService.stub.Prompt(request)
-            reply = agent_message.PromptAnswer.from_proto(reply)
+            return agent_message.PromptAnswer.from_proto(reply)
 
         @SilentFail
         async def PromptStream(self, request:agent_message.PromptRequest)->None:
@@ -128,7 +128,7 @@ class RemoteAgentMiniService(BaseMiniService):
         async def StreamPrompt(self, callback:Callable[[],agent_message.PromptRequest]):
             request_generator=iterator_factory(callback=callback)
             reply = self.remoteAgentService.stub.StreamPrompt(request_generator)
-            reply = agent_message.PromptAnswer.from_proto(reply)
+            return agent_message.PromptAnswer.from_proto(reply)
         
         @SilentFail
         async def S2SPrompt(self, callback:Callable[[],agent_message.PromptRequest]):

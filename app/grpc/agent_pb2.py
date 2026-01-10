@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61gent.proto\x12\x05\x61gent\"<\n\rPromptRequest\x12\r\n\x05\x61gent\x18\x01 \x01(\t\x12\x0e\n\x06prompt\x18\x02 \x01(\t\x12\x0c\n\x04tool\x18\x03 \x01(\t\"\x1e\n\x0cPromptAnswer\x12\x0e\n\x06\x61nswer\x18\x01 \x01(\t2\xf2\x01\n\x05\x41gent\x12\x33\n\x06Prompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer\x12;\n\x0cPromptStream\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer0\x01\x12;\n\x0cStreamPrompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x12:\n\tS2SPrompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x30\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61gent.proto\x12\x05\x61gent\"<\n\rPromptRequest\x12\r\n\x05\x61gent\x18\x01 \x01(\t\x12\x0e\n\x06prompt\x18\x02 \x01(\t\x12\x0c\n\x04tool\x18\x03 \x01(\t\"<\n\x0cPromptAnswer\x12\x0e\n\x06\x61nswer\x18\x01 \x01(\t\x12\r\n\x05\x65rror\x18\x02 \x01(\x08\x12\r\n\x05_type\x18\x03 \x01(\t2\xf2\x01\n\x05\x41gent\x12\x33\n\x06Prompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer\x12;\n\x0cPromptStream\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer0\x01\x12;\n\x0cStreamPrompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x12:\n\tS2SPrompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x30\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PROMPTREQUEST']._serialized_start=22
   _globals['_PROMPTREQUEST']._serialized_end=82
   _globals['_PROMPTANSWER']._serialized_start=84
-  _globals['_PROMPTANSWER']._serialized_end=114
-  _globals['_AGENT']._serialized_start=117
-  _globals['_AGENT']._serialized_end=359
+  _globals['_PROMPTANSWER']._serialized_end=144
+  _globals['_AGENT']._serialized_start=147
+  _globals['_AGENT']._serialized_end=389
 # @@protoc_insertion_point(module_scope)

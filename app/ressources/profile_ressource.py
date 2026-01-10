@@ -73,10 +73,10 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.profile_model_satisfaction(profileModel)
 
         result = await self.profileService.add_profile(profileModel)
-        broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
-
         profileMiniService = ProfileMiniService(None,None,self.redisService,result)
         await ChannelMiniService(profileMiniService,self.configService,self.rabbitmqService,self.redisService,self.celeryService).create_queue()
+        
+        broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
 
         return result
 

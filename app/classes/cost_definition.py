@@ -136,3 +136,6 @@ class ProductNotFoundError(CostException):
 
 class CreditNotInPlanError(CostException):
     """Credit does not exists in the current plan"""
+
+class CostPostPaymentError(CostException):
+    """Error after payment"""

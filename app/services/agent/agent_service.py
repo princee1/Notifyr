@@ -58,13 +58,20 @@ class AgentMiniService(BaseMiniService):
                 self.agent_model = agent_validation_model.model_construct(**m)
             
             params = self.agent_model.model_dump(include=factory_include)
-            self.depService.factory(
+            self.chat = self.depService.factory(
                 **{
                     **params,
                 }
             )
         except ValidationError as e:
             raise BuildFailureError('Could not validate the agent model')
+    
+    async def invoke(self):
+        ...
+    
+    async def stream(self):
+        ...
+
     
 
 @Service(is_manager=True,links=[LinkDep(LLMProviderService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)],mirror=RemoteAgentService)

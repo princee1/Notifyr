@@ -55,36 +55,45 @@ class PromptRequest:
     def is_complete(self) -> bool:
         return len(self.missing_fields()) == 0
 
-
 @dataclass
 class PromptAnswer:
     answer: Optional[str] = None
+    error: bool = False
+    _type: Optional[str] = None
 
     @classmethod
     def from_proto(cls, proto: agent_pb2.PromptAnswer) -> "PromptAnswer":
-        pr =  cls(
+        pr = cls(
             answer=proto.answer if proto.answer != "" else None,
+            error=proto.error,
+            _type=proto._type if proto._type != "" else None,
         )
         del proto
         return pr
-    
 
     def to_proto(self) -> agent_pb2.PromptAnswer:
         resp = agent_pb2.PromptAnswer()
         if self.answer is not None:
             resp.answer = self.answer
+        resp.error = self.error
+        if self._type is not None:
+            resp._type = self._type
         return resp
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PromptAnswer":
         return cls(
             answer=data.get("answer"),
+            error=data.get("error", False),
+            _type=data.get("_type"),
         )
 
     def missing_fields(self) -> List[str]:
         missing: List[str] = []
         if _is_missing_str(self.answer):
             missing.append("answer")
+        if _is_missing_str(self._type):
+            missing.append("_type")
         return missing
 
     def is_complete(self) -> bool:

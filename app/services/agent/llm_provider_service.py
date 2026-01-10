@@ -28,7 +28,9 @@ class LLMProviderMiniService(BaseMiniService):
     def build(self, build_state = ...):
         api_key =self.depService.credentials.to_plain()
 
-        embedding = self.model.embedding_models.model_dump()
+        embedding_search = self.model.embedding_search.model_dump()
+        embedding_parse = self.model.embedding_parse.model_dump()
+
         match self.model.provider:
             case 'anthropic':
                 ...
@@ -48,8 +50,8 @@ class LLMProviderMiniService(BaseMiniService):
             case 'ollama':
                 ...
             case 'openai':
-                self.embedding_model = OpenAIEmbedding(api_key=api_key,**embedding)
-                self.embedding_search_model= OpenAIEmbedding(api_key=api_key,**embedding)
+                self.embedding_search_model = OpenAIEmbedding(api_key=api_key,**embedding_search)
+                self.embedding_parse_model= OpenAIEmbedding(api_key=api_key,**embedding_parse)
     
     def factory(self,model:str,temperature:float,timeout:float,**kwargs)->BaseChatModel:
         api_key =lambda: self.depService.credentials.to_plain()
@@ -100,7 +102,6 @@ class LLMProviderService(BaseMiniServiceManager):
                 self.configService,
                 p
             )
-
             provider._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
             state_counter.count(provider)
             self.MiniServiceStore.add(provider)

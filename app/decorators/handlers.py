@@ -9,6 +9,7 @@ from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
+from app.errors.llm_error import LLMProviderDoesNotExistError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobStatusNotValidError,ResultNotFound
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
@@ -1050,4 +1051,14 @@ class ProxyRestGatewayHandler(Handler):
             body = e.args[0]
             status = e.args[1]
 
-    
+
+class AgenticHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except LLMProviderDoesNotExistError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'LLM provider with id {e.provider} does not exist'
+            )
