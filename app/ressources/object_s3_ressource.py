@@ -4,31 +4,30 @@ import zipfile
 from aiohttp_retry import List
 from fastapi import BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile,status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from app.classes.auth_permission import AuthPermission,Role, filter_asset_permission
 from app.cost.file_cost import FileCost
-from app.models.file_model import UriMetadata
+from app.cost.object_cost import ObjectCost
+from app.manager.merchant_manager import Merchant
+from app.models.file_model import FileResponseUploadModel, UriMetadata
 from app.models.object_model import ObjectResponseUploadModel, ObjectS3ResponseModel
 from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard, UploadFilesGuard
-from app.decorators.handlers import AsyncIOHandler, FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, UploadFileHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
-from app.decorators.pipes import ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
+from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
-from app.definition._utils_decorator import Guard
 from app.depends.class_dep import ObjectsSearch
 from app.depends.dependencies import get_auth_permission
 from app.depends.res_cache import MinioResponseCache
 from app.manager.broker_manager import Broker
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError
-from app.services import ObjectS3Service
-from app.services.config_service import ConfigService
+from app.services.database.object_service import ObjectS3Service,Object
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
-from app.utils.constant import SECONDS_IN_AN_HOUR as HOUR, CostConstant, MinioConstant, VaultConstant
+from app.utils.constant import SECONDS_IN_AN_HOUR as HOUR, CostConstant, MinioConstant
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from app.depends.variables import force_update_query
 from app.utils.helper import b64_encode
@@ -104,18 +103,20 @@ class S3ObjectRessource(BaseHTTPRessource):
             await self.objectS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
     @UsePermission(AdminPermission)
-    @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler)
     @PingService([ObjectS3Service])
+    @UsePipe(MerchantPipe)
+    @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler,FileHandler,CostHandler)
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],response_model=ObjectResponseUploadModel ,mount=False)
-    async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],backgroundTask:BackgroundTasks,files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
         
         errors = {}
         upload_files = []
-        meta = []
+        metadata = []
+
         for file in files:
             filename = file.filename
             ext = self.fileService.get_extension(ext)
@@ -131,15 +132,21 @@ class S3ObjectRessource(BaseHTTPRessource):
                     errors[filename]={'name':AssetConfusionError.__name__,'description':"filename must start with either phone or sms"} 
                     continue
                 else:raise AssetConfusionError(filename)
-
-            meta.append(UriMetadata(file.filename,file.size))
+            
+            meta = UriMetadata(file.filename,file.size)
+            metadata.append(meta)
             file.filename = f"{EXTENSION_TO_ASSET_TYPE[ext]}/{filename}"
             upload_files.append(file.filename)
-            backgroundTask.add_task(self.upload,file)
+
+            merchant.safe_payment(
+                None,
+                (FileResponseUploadModel([meta]),),
+                self.upload,
+                file)
 
         broker.wait(len(upload_files)*2)
-        broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
-        return ObjectResponseUploadModel(meta=meta,uploaded_files=upload_files,errors=errors)
+        broker.propagate(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
+        return ObjectResponseUploadModel(metadata=metadata,uploaded_files=upload_files,errors=errors)
 
 
     @UsePermission(JWTAssetObjectPermission(accept_none_template=True))
@@ -170,28 +177,47 @@ class S3ObjectRessource(BaseHTTPRessource):
 
     @UsePermission(AdminPermission)
     @PingService([ObjectS3Service])
-    @UseHandler(S3Handler)
+    @UseHandler(S3Handler,FileHandler,CostHandler)
     @UseGuard(GlobalsTemplateGuard)
+    @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'refund'))
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UsePipe(ValidFreeInputTemplatePipe(False,True))
+    @UsePipe(ValidFreeInputTemplatePipe(False,True),MerchantPipe(-1))
     @UseServiceLock(ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/delete/{template:path}',methods=[HTTPMethod.DELETE],response_model=ObjectS3ResponseModel)
-    async def delete_object(self,template:str,response:Response,request:Request,broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],force:bool=Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_object(self,template:str,response:Response,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],force:bool=Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
         
         if objectsSearch.version_id:
-            meta = await self.objectS3Service.delete_object(template,version_id=objectsSearch.version_id) 
+            meta:list[Object]|Object = await self.objectS3Service.stat_objet(template,version_id=objectsSearch.version_id,buckets=MinioConstant.ASSETS_BUCKET)
+            merchant.safe_payment(
+                None,
+                (ObjectS3ResponseModel([meta]),),
+                self.objectS3Service.delete_object,
+                template,
+                version_id=objectsSearch.version_id
+            )
             if meta.is_delete_marker: # NOTE the user deleted the marker object and rollback to the latest version
                 response.status_code = status.HTTP_201_CREATED 
-            return {'meta':meta}
         else:
             if objectsSearch.is_file:
                 objectsSearch.recursive = False
                 objectsSearch.match = None
 
-            broker.wait(2)
-            broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
-            return await self.objectS3Service.delete_objects_prefix(template,objectsSearch.recursive,objectsSearch.match,force)
+            meta:list[Object]|Object = await self.objectS3Service.fetch_objects(template,objectsSearch.recursive,objectsSearch.match,force)
+            cost.save_meta(meta)
+            merchant.activate_post_payment()
+            merchant.safe_payment(
+                None,
+                (ObjectS3ResponseModel(meta),),
+                self.objectS3Service.delete_objects_prefix,
+                meta
+            )
 
+        broker.wait(2)
+        broker.propagate(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
+        return {
+            'meta':meta
+        }
+            
 
     @PingService([ObjectS3Service,VaultService])
     @UseRoles(roles=[Role.PUBLIC])
@@ -256,7 +282,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
         backgroundTask.add_task(self.upload,[{'content':content.encode(),'filename':template}],False)
         broker.wait(3)
-        broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
+        broker.propagate(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
         return {
             'meta':meta,
         }
@@ -284,7 +310,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             raise AssetTypeNotAllowedError
         
         broker.wait(3)
-        broker.propagate_state(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
+        broker.propagate(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
 
         return await self.objectS3Service.copy_object(template,destination_template,objectsSearch.version_id,move)
 

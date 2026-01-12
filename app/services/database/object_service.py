@@ -85,25 +85,21 @@ class ObjectS3Service(TempCredentialsDatabaseService):
 
     @RunInThreadPool
     async def delete_object(self,object_name: str,version_id: str = None,buckets=MinioConstant.ASSETS_BUCKET):
-        _object = await self.stat_objet(object_name,version_id,buckets=buckets)
         self.client.remove_object(buckets, object_name, version_id=version_id)
-        return _object
 
     @RunInThreadPool
-    def delete_objects_prefix(self, prefix: str,recursive: bool = True,match:str=None,delete_version=False,objects=None,buckets=MinioConstant.ASSETS_BUCKET):
-        if not objects:
-            objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=delete_version,include_delete_marker=False)
-        if not objects:
-            raise ObjectNotFoundError 
-        
-        errors = self.client.remove_objects(buckets, [DeleteObject(obj.object_name) for obj in objects])
-        return {
-            'meta':objects,
-            'errors':errors
-        }
+    def delete_objects_prefix(self, objects:list[Object],buckets=MinioConstant.ASSETS_BUCKET):
+        return self.client.remove_objects(buckets, [DeleteObject(obj.object_name) for obj in objects])
         # Alternatively, if you want to delete all objects under the prefix without using remove_objects
         # for obj in objects:
         #     self.client.remove_object(MinioConstant.TEMPLATE_BUCKET, obj.object_name)
+
+    def fetch_objects(self,prefix:str,recursive:bool=True,match:bool=True,include_version:bool=False,buckets=MinioConstant.ASSETS_BUCKET):
+        objects = self.list_objects(prefix=prefix, recursive=recursive,match=match,include_version=include_version,include_delete_marker=False,buckets=buckets)
+        if not objects:
+            raise ObjectNotFoundError 
+        return objects
+        
 
     def read_object(self,object_name: str,version_id: str = None,buckets=MinioConstant.ASSETS_BUCKET):
         _object = self.client.get_object(buckets, object_name, version_id=version_id)  

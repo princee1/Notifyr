@@ -9,12 +9,13 @@ from app.cost.web_cost import WebCost
 from app.decorators.guards import ArqDataTaskGuard, UploadFilesGuard
 from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, FileHandler, MiniServiceHandler, PydanticHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.pipes import  DataClassToDictPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
+from app.decorators.pipes import  DataClassToDictPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.depends.class_dep import FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_profile
 from app.manager.broker_manager import Broker
+from app.manager.merchant_manager import Merchant
 from app.services.config_service import ConfigService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileMiniService, ProfileService
@@ -30,7 +31,7 @@ from app.models.data_ingest_model import (
     IngestFileEnqueueResponse,
     DataIngestFileModel,
 )
-from app.models.file_model import  UploadError
+from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_tasks import DATA_TASK_REGISTRY_NAME
 from app.utils.constant import ArqDataTaskConstant, CostConstant
 from app.utils.tools import RunInThreadPool
@@ -137,7 +138,7 @@ class DataLoaderRessource(BaseHTTPRessource):
         self.arqService = arqService
 
     @UseLimiter('5/hour')
-    @UsePipe(QueryToModelPipe('ingestTask'))
+    @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseServiceLock(ArqDataTaskService,lockType='reader')
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
@@ -145,7 +146,7 @@ class DataLoaderRessource(BaseHTTPRessource):
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=IngestFileEnqueueResponse)
-    async def embed_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def embed_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
         _response = IngestFileEnqueueResponse()
         ingest_sha = set()
         for file in files:
@@ -166,7 +167,10 @@ class DataLoaderRessource(BaseHTTPRessource):
                 meta = IngestDataUriMetadata(uri=uri, size=file.size,sha=sha)
                 _response.metadata.append(meta)
 
-                broker.add(self.arqService.enqueue_task,ArqDataTaskConstant.FILE_DATA_TASK,
+                merchant.safe_payment(
+                    None,
+                    (FileResponseUploadModel([meta]),),
+                    self.arqService.enqueue_task,ArqDataTaskConstant.FILE_DATA_TASK,
                     job_id=uri,
                     expires=ingestTask.expires,
                     defer_by=ingestTask.defer_by,

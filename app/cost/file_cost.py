@@ -41,13 +41,13 @@ class FileCost(DataCost):
                 for d,c,q in prices:
                     self.purchase(d,c,q) 
 
-        def post_purchase(self, result: FileResponseUploadModel, backgroundTasks: BackgroundTasks):
+        def post_purchase(self, result: FileResponseUploadModel):
             """Compute cost for files after they are processed.
             
             Iterates over result.meta tuples (filename, size), computes cost using FileCostDefinition,
             and adds purchase items.
             """
-            for (metadata,task) in zip(result.metadata,backgroundTasks.tasks):
+            for i,metadata in enumerate(result.metadata):
                 
                 filename,file_size_mb = metadata.uri,metadata.size
                 prices = self.compute_prices(self.POST_NAME, filename,file_size_mb)

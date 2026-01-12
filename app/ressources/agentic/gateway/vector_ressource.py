@@ -12,6 +12,7 @@ from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessour
 from app.depends.dependencies import get_auth_permission
 from app.depends.variables import DeleteMode,delete_mode_query
 from app.manager.broker_manager import Broker
+from app.manager.merchant_manager import Merchant
 from app.models.data_ingest_model import IngestDataUriMetadata
 from app.models.file_model import UriMetadata
 from app.models.vector_model import DeleteCollectionModel, QdrantCollectionModel
@@ -81,7 +82,7 @@ class VectorDBRessource(BaseHTTPRessource):
     @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
-    async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(delete_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(delete_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete all results and delete all enqueued job matching the collection_name filtered by the task_name """
 
         jobs_queue = []
@@ -103,12 +104,17 @@ class VectorDBRessource(BaseHTTPRessource):
                raise aiohttp.ClientPayloadError(res_body,res.status)
     
         for j in jobs_queue:
-            broker.add(self.arqService.abort,j)
-            broker.wait(1)
+            merchant.payment(
+                self.arqService.abort,
+                j,
+                )
+            merchant.wait(1)
     
         for j in jobs_done:
-            broker.add(self.arqService.delete,j)
-
+            merchant.payment(
+                self.arqService.delete,
+                j,
+                )
         return DeleteCollectionModel(metadata=meta,gateway_body=res_body,job_dequeued=jobs_queue,jod_deleted=jobs_done)
             
     @UseLimiter('1/minutes')
@@ -119,7 +125,7 @@ class VectorDBRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE])
-    async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete result and the point associated with the job_id filtered by the task_name """
 
         job,state = await self.arqService.exists(job_id,return_status=True)
@@ -136,6 +142,9 @@ class VectorDBRessource(BaseHTTPRessource):
             if res.status != status.HTTP_200_OK:
                raise aiohttp.ClientPayloadError(res_body,res.status)
         
-        broker.add(self.arqService.delete,job_id)
+        merchant.payment(
+            self.arqService.delete,
+            job_id
+            )
         return DeleteCollectionModel(metadata=[meta],gateway_body=res_body,job_dequeued=[],jod_deleted=[job_id])
        

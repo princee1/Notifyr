@@ -9,10 +9,12 @@ from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
+from app.definition._cost import Cost
 from app.definition._service import BaseMiniService, BaseMiniServiceManager
 from app.depends.class_dep import ObjectsSearch,ToPydanticModelInterface
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
+from app.manager.merchant_manager import Merchant
 from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status, SubscriptionORM
@@ -745,3 +747,17 @@ async def update_status_upon_no_metadata_pipe(result:FileResponseUploadModel,res
     if len(result.metadata) == 0:
         response.status_code = status.HTTP_200_OK
     return result
+
+class MerchantPipe(Pipe):
+    
+    def __init__(self,factor:Literal[-1,1]=1):
+        super().__init__(True)
+        if factor not in [-1,1]:
+            raise ValueError('Value must be -1 or 1')
+
+        self.factor = factor
+
+    
+    def pipe(self,cost:Cost,merchant:Merchant):
+        merchant.inject_cost(cost)
+        return {}

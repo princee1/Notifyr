@@ -103,7 +103,7 @@ class TaskCostInterceptor(Interceptor):
         await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
         bill = cost.generate_bill()
         Cost.inject_cost_info(response,bill,cost.credit_key)
-        broker.add(self.costService.push_bill,cost.credit_key,bill)
+        await self.costService.push_bill(cost.credit_key,bill)
         
 class DataCostInterceptor(Interceptor):
 
@@ -137,8 +137,9 @@ class DataCostInterceptor(Interceptor):
             
     async def intercept_after(self, result:Any,*args,**kwargs):
         response:Response = kwargs.get('response')
-        broker:Broker = kwargs.get('broker')
         cost:DataCost = kwargs.get('cost',None)
+        if cost.bypass:
+            return
         match self.mode:
             case 'purchase':
                 APIFilterInject(cost.post_purchase)(result,**kwargs)
@@ -150,4 +151,4 @@ class DataCostInterceptor(Interceptor):
 
         bill = cost.generate_bill()
         Cost.inject_cost_info(response,bill,self.credit)
-        broker.add(self.costService.push_bill,self.credit,bill)
+        await self.costService.push_bill(self.credit,bill)

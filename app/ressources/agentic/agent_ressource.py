@@ -6,7 +6,7 @@ from app.container import InjectInMethod
 from app.decorators.handlers import AgenticHandler, AsyncIOHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, JWTRouteHTTPPermission
-from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
+from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
@@ -14,6 +14,7 @@ from app.depends.funcs_dep import get_profile
 from app.errors.llm_error import LLMModelNotPermittedError, LLMProviderDoesNotExistError
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
+from app.manager.merchant_manager import Merchant
 from app.models.agents_model import AgentModel
 from app.services  import MongooseService
 from app.services.agent.remote_agent_service import RemoteAgentMiniService
@@ -56,10 +57,11 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission) 
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
     @UseHandler(AgenticHandler)
+    @UsePipe(MerchantPipe())
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], authPermission:AuthPermission=Depends(get_auth_permission)):
         
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
@@ -71,9 +73,13 @@ class AgentsRessource(BaseHTTPRessource):
         if llm_model.models and agentModel.model in llm_model.models:
             raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
         
-        await agentModel.save()
+        merchant.safe_payment(
+            None,
+            (None,),
+            agentModel.save
+        )
 
-        broker.propagate_state(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
+        broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UseRoles([Role.PUBLIC])        
@@ -84,14 +90,20 @@ class AgentsRessource(BaseHTTPRessource):
         return  await self.mongooseService.get(AgentModel,agent,True)
          
     @UsePermission(AdminPermission)
+    @UsePipe(MerchantPipe(-1))
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{agent:str}/',methods=[HTTPMethod.DELETE])
-    async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
-        await self.mongooseService.delete(agentModel)
 
-        broker.propagate_state(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
+        merchant.safe_payment(
+            None,
+            (None,),
+            self.mongooseService.delete,
+            agentModel
+        )
+        broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UsePermission(AdminPermission)
@@ -108,7 +120,7 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(agentModel,True)
         await agentModel.update_meta_profile()
 
-        broker.propagate_state(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
+        broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
     @UseRoles([Role.PUBLIC])        

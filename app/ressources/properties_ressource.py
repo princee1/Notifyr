@@ -73,7 +73,7 @@ class SettingsRessource(BaseHTTPRessource):
             raise ValueError('REFRESH_EXPIRATION must be at least two times greater than AUTH_EXPIRATION')
 
         await self.settingService.update_setting(current_data)
-        broker.propagate_state(StateProtocol(service=SettingService, status=None, to_build=True, callback_state_function=self.settingService.aio_get_settings.__name__,
+        broker.propagate(StateProtocol(service=SettingService, status=None, to_build=True, callback_state_function=self.settingService.aio_get_settings.__name__,
             build_state=SETTING_SERVICE_ASYNC_BUILD_STATE))
         
         return current_data
@@ -182,9 +182,9 @@ if CAPABILITIES['object']:
 
         def propagate_asset_state(self, broker: Broker):
             if self.configService.ASSET_MODE == AssetMode.local:
-                broker.propagate_state(StateProtocol(service=AssetService, to_build=True))
+                broker.propagate(StateProtocol(service=AssetService, to_build=True))
             else:
-                broker.propagate_state(StateProtocol(service=ObjectS3Service, to_build=True))
+                broker.propagate(StateProtocol(service=ObjectS3Service, to_build=True))
     
     ressource.append(GlobalAssetVariableRessource)
 

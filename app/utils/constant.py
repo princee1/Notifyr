@@ -348,6 +348,7 @@ class CostConstant:
     WEBHOOK_CREDIT='webhook'
     BLOG_CREDIT='blog'
     NOTIFICATION_CREDIT='notification'
+    LINK_CREDIT='link'
 
 
     Credit =Literal['email','sms','phone','profile','client','agent','workflow','object','document','token','chat','blog','webhook','contact','message','notification']

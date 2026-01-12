@@ -69,30 +69,7 @@ class Broker:
     def add(self,function,*args,**kwargs):
         self.backgroundTasks.add_task(function,*args,**kwargs)
 
-    #@Mock()
-    def payement(self,items:tuple,function:Callable,*args,**kwargs):
-        if self.cost == None:
-            raise AttributeError('Cost not found in the request')
-
-        @functools.wraps(function)
-        async def wrapper(*a,**k):
-            try:
-                return await function(*a,**k)
-            except:
-                self.cost.reset_bill()
-                if isinstance(self,DataCost):
-                    self.cost.post_refund()
-                else:
-                    self.cost.refund()
-                
-                self.cost.balance_before = await self.costService.get_credit_balance(...)
-                self.costService.refund_credits()
-                bill = self.cost.generate_bill()
-                await self.costService.push_bill(...,bill)
-
-        self.backgroundTasks.add_task(wrapper,*args,**kwargs)
-
-    def propagate_state(self,protocol:StateProtocol|MiniStateProtocol):
+    def propagate(self,protocol:StateProtocol|MiniStateProtocol):
 
         if isinstance(protocol.get('service',None),type):
             protocol['service'] = protocol['service'].__name__

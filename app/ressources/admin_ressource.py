@@ -434,7 +434,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
         await self.jwtAuthService.revoke_all_tokens()
 
-        broker.propagate_state(StateProtocol(
+        broker.propagate(StateProtocol(
             service=self.jwtAuthService.name,
             to_build=True,
             bypass_async_verify=True,
@@ -460,7 +460,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         unRevokeModel = unRevokeModel.model_dump()
         await self.jwtAuthService.unrevoke_all_tokens(**unRevokeModel)
         
-        broker.propagate_state(StateProtocol(
+        broker.propagate(StateProtocol(
             service=self.jwtAuthService.name,
             to_build=True,
             bypass_async_verify=True,

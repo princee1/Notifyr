@@ -119,6 +119,9 @@ class BaseProfileModel(BaseDocument):
             raise ValueError(f"String too long (max {MAX_LEN})")
         return v
 
+    @property
+    def profile_id(self):
+        return str(self.id)
 ######################################################
 # Error Model
 ######################################################

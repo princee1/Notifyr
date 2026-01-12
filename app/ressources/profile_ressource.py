@@ -8,7 +8,7 @@ from app.container import InjectInMethod,Get
 from app.decorators.handlers import AsyncIOHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
-from app.decorators.pipes import DocumentFriendlyPipe, MiniServiceInjectorPipe
+from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
@@ -16,6 +16,7 @@ from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
 from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.manager.broker_manager import Broker
+from app.manager.merchant_manager import Merchant
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
@@ -61,24 +62,36 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseServiceLock(VaultService,MongooseService,lockType='reader')
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler)
     @UsePermission(AdminPermission)
+    @UsePipe(MerchantPipe())
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request,'model')
         
         await self.mongooseService.primary_key_constraint(profileModel,True)
         await self.mongooseService.exists_unique(profileModel,True)
         await self.profile_model_satisfaction(profileModel)
-
-        result = await self.profileService.add_profile(profileModel)
-        profileMiniService = ProfileMiniService(None,None,self.redisService,result)
-        await ChannelMiniService(profileMiniService,self.configService,self.rabbitmqService,self.redisService,self.celeryService).create_queue()
         
-        broker.propagate_state(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
+        async def rollback():
+            return await self.profileService._delete_encrypted_creds(profileModel.profile_id,profileModel._vault)
 
-        return result
+        async def transaction():
+            async with self.mongooseService.transaction() as (session,tr):
+                result = await self.profileService.add_profile(profileModel)
+                merchant.activate_rollback()
+                profileMiniService = ProfileMiniService(None,None,self.redisService,result)
+                await ChannelMiniService(profileMiniService,self.configService,self.rabbitmqService,self.redisService,self.celeryService).create_queue()
+            
+        merchant.safe_payment(
+            rollback,
+            (None,),
+            transaction,
+        )
+
+        broker.propagate(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
+        return profileModel.model_dump(mode='json',exclude=(*profileModel._secrets_keys,))
 
     @UsePermission(AdminPermission)
     @PingService([VaultService])
@@ -86,16 +99,29 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseServiceLock(VaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),MerchantPipe(-1))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
-    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
-        
+    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.mongooseService.get(self.model,profile,True)
-        await self.profileService.delete_profile(profileModel)
-        await channel.delete_queue()
+        creds = await self.profileService._read_encrypted_creds(profileModel.profile_id)
+
+        async def rollback():
+            await self.profileService._put_encrypted_creds(profileModel.profile_id,creds,profileModel._vault)
+
+        async def transaction():
+            async with self.mongooseService.transaction() as (session,tr):
+                await self.profileService.delete_profile(profileModel)
+                merchant.activate_rollback()
+                await channel.delete_queue()
+
+        merchant.safe_payment(
+            rollback,
+            (None,),
+            transaction,
+        )
         
-        broker.propagate_state(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
+        broker.propagate(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         return profileModel
     
     @UseHandler(PydanticHandler,CeleryControlHandler)
@@ -117,7 +143,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await profileModel.update_meta_profile()
 
         await channel.refresh_worker_state()
-        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
+        broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return profileModel
     
     @PingService([VaultService])
@@ -141,7 +167,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         await channel.refresh_worker_state()
 
-        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
+        broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return None
        
     @UseRoles([Role.PUBLIC])
@@ -162,7 +188,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
     async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         await channel.refresh_worker_state()
-        broker.propagate_state(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
+        broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         
 
     

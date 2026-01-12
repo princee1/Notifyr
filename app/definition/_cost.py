@@ -60,6 +60,8 @@ class Cost:
         self.credit_key=...
         self.definition_name=None
 
+        self.indexes:dict[int,int] = {}
+        self.bypass = False
         self.costService = Get(CostService)
         
     def purchase(self,description:str,amount:int,quantity=1):
@@ -100,6 +102,8 @@ class Cost:
             "balance_after": self.balance_before - (self.purchase_cost - self.refund_cost),
         }
 
+    def post_payment(self,result:Any):
+        ...
 
 class DataCost(Cost):
     
@@ -114,6 +118,9 @@ class DataCost(Cost):
         self.purchase(self.credit_key,self.default_price)
       
     def post_refund(self,result:Any):
+        self.refund(self.credit_key,self.default_price)
+    
+    def post_payment(self,result:Any):
         self.refund(self.credit_key,self.default_price)
 
 if APP_MODE == ApplicationMode.server:
