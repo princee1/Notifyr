@@ -21,10 +21,11 @@ class FileCost(DataCost):
 
     def init(self, default_price, credit_key):
         super().init(default_price, credit_key)
-        self.definition:FileCostDefinition = self.costService.costs_definition.get(credit_key,FileCost.DEFAULT_DEF)
-        self.max_file_size = self.definition.get('max_file_size')
-        self.cost_per_extra_mb = self.definition.get('max_file_size_extra_per_mb')
         self.fileService = Get(FileService)
+        self.definition:FileCostDefinition = self.costService.costs_definition.get(credit_key,FileCost.DEFAULT_DEF)
+        self.max_file_size = self.definition.get('max_file_size') * 1024
+        self.cost_per_extra_mb = self.definition.get('max_file_size_extra_per_mb')
+
         return self
 
     if  APP_MODE == ApplicationMode.server:
@@ -71,11 +72,11 @@ class FileCost(DataCost):
         if delta < 0:
             c = self.cost_per_extra_mb
             q = int(delta*-1)
-            d = f"{name} {filename} ({file_size_mb:.2f} MB, exceeds limit of {self.max_file_size} MB)"
+            d = f"{name} {filename} ({file_size_mb:.2f} KB, exceeds limit of {self.max_file_size} KB)"
             purchase.append((d,c,q))
 
         q = int(file_size_mb)
-        d = f"{name} {filename} ({file_size_mb:.2f} MB)"
+        d = f"{name} {filename} ({file_size_mb:.2f} KB)"
         purchase.append((d,1,q))
 
         return purchase

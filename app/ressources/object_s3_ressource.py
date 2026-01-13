@@ -140,7 +140,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
             merchant.safe_payment(
                 None,
-                (FileResponseUploadModel([meta]),),
+                FileResponseUploadModel(metadata=[meta]),
                 self.upload,
                 file)
 
@@ -190,7 +190,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             meta:list[Object]|Object = await self.objectS3Service.stat_objet(template,version_id=objectsSearch.version_id,buckets=MinioConstant.ASSETS_BUCKET)
             merchant.safe_payment(
                 None,
-                (ObjectS3ResponseModel([meta]),),
+                ObjectS3ResponseModel(meta=[meta]),
                 self.objectS3Service.delete_object,
                 template,
                 version_id=objectsSearch.version_id
@@ -207,7 +207,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             merchant.activate_post_payment()
             merchant.safe_payment(
                 None,
-                (ObjectS3ResponseModel(meta),),
+                ObjectS3ResponseModel(meta=meta),
                 self.objectS3Service.delete_objects_prefix,
                 meta
             )

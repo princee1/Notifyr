@@ -123,10 +123,10 @@ class CostService(BaseService):
         current_balance = int(current_balance)
 
         if current_balance <= 0:
-            raise InsufficientCreditsError
+            raise InsufficientCreditsError(current_balance,purchase_cost,credit_key)
         
         if current_balance < purchase_cost:
-            raise InsufficientCreditsError
+            raise InsufficientCreditsError(current_balance,purchase_cost,credit_key)
 
     @CreditSilentFail()
     @RedisCreditKeyBuilder
@@ -151,7 +151,7 @@ class CostService(BaseService):
 
                     if current_balance < purchase_cost and not self.rules.get('credit_overdraft_allowed',False):
                         await pipe.unwatch()
-                        raise InsufficientCreditsError
+                        raise InsufficientCreditsError(current_balance,purchase_cost,credit_key)
                     
                     new_balance = current_balance - purchase_cost
                     new_balance = int(new_balance)
@@ -179,6 +179,8 @@ class CostService(BaseService):
 
     @CreditSilentFail()
     async def push_bill(self,credit:CostConstant.Credit,bill:Bill):
+        if bill['total'] == 0:
+            return
         bill_key = self.bill_key(credit)
         await self.redisService.push(RedisConstant.LIMITER_DB,bill_key,bill)
         return

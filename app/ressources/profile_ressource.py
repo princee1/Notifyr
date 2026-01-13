@@ -10,7 +10,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseInterceptor, UseServiceLock, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
@@ -63,6 +63,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler)
     @UsePermission(AdminPermission)
     @UsePipe(MerchantPipe())
+    @Throttle(normal=(200,75))
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
@@ -86,7 +87,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             
         merchant.safe_payment(
             rollback,
-            (None,),
+            None,
             transaction,
         )
 
@@ -95,6 +96,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @UsePermission(AdminPermission)
     @PingService([VaultService])
+    @Throttle(normal=(200,75))
     @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryControlHandler)
     @UseServiceLock(VaultService,lockType='reader',check_status=False,infinite_wait=True)
     @UseServiceLock(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
@@ -117,7 +119,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         merchant.safe_payment(
             rollback,
-            (None,),
+            None,
             transaction,
         )
         

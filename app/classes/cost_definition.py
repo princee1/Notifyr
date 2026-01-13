@@ -121,6 +121,11 @@ class PaymentFailedError(CostException):
 
 class InsufficientCreditsError(CostException):
     """Not enough credits to complete the purchase."""
+    def __init__(self, current_balance:int,purchase_cost:int,credit:str):
+        super().__init__()
+        self.current_balance = current_balance
+        self.purchase_cost = purchase_cost
+        self.credit=credit
 
 class InvalidPurchaseRequestError(CostException):
     """Missing or invalid purchase data."""

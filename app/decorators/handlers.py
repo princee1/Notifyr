@@ -893,7 +893,12 @@ class CostHandler(Handler):
         except InsufficientCreditsError as e:
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail={'message': 'Insufficient credits to complete the purchase'}
+                detail={
+                    'message': 'Insufficient credits to complete the purchase',
+                    'credit':e.credit,
+                    'current_balance':e.current_balance,
+                    'purchase_cost':e.purchase_cost
+                    }
             )
 
         except InvalidPurchaseRequestError as e:

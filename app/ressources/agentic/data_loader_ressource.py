@@ -10,7 +10,7 @@ from app.decorators.guards import ArqDataTaskGuard, UploadFilesGuard
 from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, FileHandler, MiniServiceHandler, PydanticHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.depends.class_dep import FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_profile
@@ -84,7 +84,8 @@ class JobArqRessource(BaseHTTPRessource):
         result = await self.arqService.get_result(job)
         return result
 
-    @UseLimiter('5/hour') 
+    @UseLimiter('5/hour')
+    @Throttle(uniform=(100,300))
     @PingService([ArqDataTaskService])
     @UseServiceLock(ArqDataTaskService,lockType='reader')
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler)
@@ -102,7 +103,7 @@ class JobArqRessource(BaseHTTPRessource):
                     size,uri,sha = info.kwargs.get('size',0), info.kwargs.get('uri',None),info.kwargs.get('sha','unknown')
                     file_path = self.arqService.compute_data_file_upload_path(uri)
                     await RunInThreadPool(self.fileService.delete_file)(file_path)
-                    return AbortedJobResponse(aborted= True, metadata=[IngestDataUriMetadata(uri=uri,size=size,sha=sha)],status=status)
+                return AbortedJobResponse(aborted= True, metadata=[IngestDataUriMetadata(uri=uri,size=size,sha=sha)],status=status)
                 
             case JobStatus.complete:
                 return AbortedJobResponse(metadata=[],aborted=False,status=status)
@@ -137,7 +138,8 @@ class DataLoaderRessource(BaseHTTPRessource):
         self.fileService = fileService
         self.arqService = arqService
 
-    @UseLimiter('5/hour')
+    @UseLimiter('10/hour')
+    @Throttle(normal=(300,150))
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseServiceLock(ArqDataTaskService,lockType='reader')
@@ -169,7 +171,7 @@ class DataLoaderRessource(BaseHTTPRessource):
 
                 merchant.safe_payment(
                     None,
-                    (FileResponseUploadModel([meta]),),
+                    FileResponseUploadModel(metadata=[meta]),
                     self.arqService.enqueue_task,ArqDataTaskConstant.FILE_DATA_TASK,
                     job_id=uri,
                     expires=ingestTask.expires,

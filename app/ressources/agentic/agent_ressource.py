@@ -11,7 +11,7 @@ from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
 from app.depends.funcs_dep import get_profile
-from app.errors.llm_error import LLMModelNotPermittedError, LLMProviderDoesNotExistError
+from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
 from app.manager.merchant_manager import Merchant
@@ -73,9 +73,12 @@ class AgentsRessource(BaseHTTPRessource):
         if llm_model.models and agentModel.model in llm_model.models:
             raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
         
+        if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
+            raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
+
         merchant.safe_payment(
             None,
-            (None,),
+            None,
             agentModel.save
         )
 
@@ -99,7 +102,7 @@ class AgentsRessource(BaseHTTPRessource):
 
         merchant.safe_payment(
             None,
-            (None,),
+            None,
             self.mongooseService.delete,
             agentModel
         )
@@ -107,7 +110,7 @@ class AgentsRessource(BaseHTTPRessource):
         return agentModel
 
     @UsePermission(AdminPermission)
-    @UseHandler(PydanticHandler)
+    @UseHandler(PydanticHandler,AgenticHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{agent:str}/',methods=[HTTPMethod.PUT])
     async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],body: dict = Body(...),authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -115,6 +118,16 @@ class AgentsRessource(BaseHTTPRessource):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
         agentUpdateModel = self.UpdateAgentModel.model_validate(body)
         await agentModel.update_profile(agentUpdateModel)
+
+        llm_model =  await self.mongooseService.find_one(LLMProfileModel,{'_id':agentModel.provider})
+        if llm_model == None:
+            raise LLMProviderDoesNotExistError(agentModel.provider)
+
+        if llm_model.models and agentModel.model in llm_model.models:
+            raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
+        
+        if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
+            raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
 
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)

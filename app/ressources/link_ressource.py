@@ -77,7 +77,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
         
         merchant.safe_payment(
             None,
-            (None,),
+            None,
             transaction
         )
         
@@ -106,7 +106,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
             
             merchant.safe_payment(
                 None,
-                (None,),
+                None,
                 transaction
             )
 

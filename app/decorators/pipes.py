@@ -759,5 +759,5 @@ class MerchantPipe(Pipe):
 
     
     def pipe(self,cost:Cost,merchant:Merchant):
-        merchant.inject_cost(cost)
+        merchant.inject_cost(cost,self.factor)
         return {}

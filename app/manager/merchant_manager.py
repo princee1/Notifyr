@@ -1,6 +1,6 @@
 import asyncio
 import functools
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 from fastapi import BackgroundTasks, Depends, Request, Response
 from app.classes.auth_permission import AuthPermission
 from app.container import Get
@@ -41,7 +41,7 @@ class Merchant:
                 ...
         self.backgroundTasks.add_task(wrapper,*args,**kwargs)
 
-    def safe_payment(self,rollbackFunc:Callable[[],None],items:tuple,function:Callable,*args,**kwargs):
+    def safe_payment(self,rollbackFunc:Callable[[],None],items:Any|tuple[Any,...],function:Callable,*args,**kwargs):
         if self.cost == None:
             raise AttributeError('Cost not found in the request')
 
@@ -66,7 +66,7 @@ class Merchant:
 
                 self.cost.reset_bill()
                 if isinstance(self,DataCost):
-                    self.cost.post_refund(*items)
+                    self.cost.post_refund(items)
                 else:
                     self.cost.refund(*items)
                     

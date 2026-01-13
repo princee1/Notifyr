@@ -387,6 +387,9 @@ class LLMProviderConstant:
     OLLAMA='ollama'
     LOCAL='local'
 
+    LLMProvider = Literal['openai','anthropic','cohere','groq','deepseek']
+
+
 class CeleryConstant:
     REFRESH_PROFILE_WORKER_STATE_COMMAND='refresh_profile'
     BACKEND_KEY_PREFIX="notifyr/celery/backend/"

@@ -17,7 +17,7 @@ import asyncio
 
 class Broker:
     
-    def __init__(self,request:Request,response:Response,backgroundTasks:BackgroundTasks,cost:Cost|DataCost=None):
+    def __init__(self,request:Request,response:Response,backgroundTasks:BackgroundTasks):
         self.reactiveService:ReactiveService = Get(ReactiveService)
         self.redisService:RedisService = Get(RedisService)
         self.configService:ConfigService = Get(ConfigService)
@@ -27,7 +27,6 @@ class Broker:
         self.backgroundTasks = backgroundTasks
         self.request = request
         self.response = response
-        self.cost = cost
 
     @Mock()
     def publish(self,channel:str,sid_type:SubjectType,subject_id:str, value:Any,state:Literal['next','complete']='next'):
