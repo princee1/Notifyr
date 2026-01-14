@@ -79,6 +79,6 @@ if CAPABILITIES['message']:
     ...
 
 if CAPABILITIES['chat']:
-    from .ntfr.chat_ressource import ChatRessource
-    BASE_RESSOURCES.append(ChatRessource)
+    from .ntfr.live_chat_ressource import LiveChatRessource
+    BASE_RESSOURCES.append(LiveChatRessource)
 

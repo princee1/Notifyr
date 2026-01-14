@@ -6,9 +6,30 @@ from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
-from app.services.mini.webhook.http_webhook_service import HTTPWebhookMiniService
+from app.services.mini.outbound.http_outbound_service import HTTPOutboundMiniService
 from app.models.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
 from discord_webhook import DiscordEmbed,DiscordWebhook,AsyncDiscordWebhook
+
+
+@MiniService()
+class HTTPWebhookMiniService(HTTPOutboundMiniService,WebhookAdapterInterface):
+    def __init__(self, profileMiniService, configService:ConfigService, redisService:RedisService):
+        super().__init__(profileMiniService, configService, redisService)
+        WebhookAdapterInterface.__init__(self)
+
+    @WebhookAdapterInterface.batch
+    @WebhookAdapterInterface.retry
+    async def deliver_async(self, payload:Any, event_type:str = 'event'):
+        return await super().deliver_async(payload, event_type)
+    
+    @WebhookAdapterInterface.retry
+    async def deliver(self, payload:str, event_type:str = 'event'):
+        return super().deliver(payload, event_type)
+    
+    @staticmethod
+    def generate_delivery_id():
+        return WebhookAdapterInterface.generate_delivery_id()
+
 
 @MiniService()
 class DiscordWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
@@ -75,14 +96,14 @@ class DiscordWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         return resp.status_code,resp.content
     
 @MiniService()
-class ZapierWebhookMiniService(HTTPWebhookMiniService):
+class ZapierWebhookMiniService(HTTPOutboundMiniService):
 
     def __init__(self,profileMiniService:ProfileMiniService[ZapierHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         self.depService = profileMiniService
         super().__init__(profileMiniService,configService,redisService)
 
 @MiniService()      
-class MakeWebhookMiniService(HTTPWebhookMiniService):
+class MakeWebhookMiniService(HTTPOutboundMiniService):
     """
     Make (Integromat) webhooks are HTTP endpoints that accept JSON or form data.
     This wrapper mirrors ZapierAdapter but provides the common header name
@@ -93,7 +114,7 @@ class MakeWebhookMiniService(HTTPWebhookMiniService):
         super().__init__(profileMiniService,configService,redisService)
 
 @MiniService()
-class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
+class SlackIncomingWebhookMiniService(HTTPOutboundMiniService):
     """
     Slack Incoming Webhooks accept JSON payloads:
        {"text": "message", "blocks": [...], "attachments": [...]}
@@ -148,7 +169,7 @@ class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
         return base
 
 @MiniService()
-class N8NWebhookMiniService(HTTPWebhookMiniService):
+class N8NWebhookMiniService(HTTPOutboundMiniService):
     def __init__(self,profileMiniService:ProfileMiniService[MakeHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         super().__init__(profileMiniService,configService,redisService)
         self.depService = profileMiniService

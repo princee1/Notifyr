@@ -21,7 +21,7 @@ service Agent {
 message PromptRequest {
     string agent = 1;
     string prompt = 2;
-    string tool = 3;
+    string context = 3;
 }
 
 message PromptAnswer {

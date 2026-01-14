@@ -5,7 +5,7 @@ import json
 from typing import Any, Tuple
 import requests
 import aiohttp
-from app.definition._service import BaseMiniService, MiniService
+from app.definition._service import BaseMiniService, LinkDep, MiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
 from app.models.webhook_model import AuthConfig, HTTPWebhookModel, SignatureConfig
 from app.services.config_service import ConfigService
@@ -13,13 +13,12 @@ from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 
 
-@MiniService()
-class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
+@MiniService(links=[LinkDep(ProfileMiniService,build_follow_dep=True)])
+class HTTPOutboundMiniService(BaseMiniService):
 
     def __init__(self,profileMiniService:ProfileMiniService[HTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         self.depService = profileMiniService
         super().__init__(profileMiniService,None)
-        WebhookAdapterInterface.__init__(self,)
         self.configService = configService
         self.redisService = redisService
 
@@ -28,7 +27,7 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         return self.depService.model
 
     async def close(self):
-        await self.client_async.aclose()
+        await self.client_async.close()
 
     def build(self, build_state = ...):
         
@@ -74,8 +73,6 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         headers[sig_header] = self.hmac_signature(secrets, body_bytes,algo)
     
 
-    @WebhookAdapterInterface.batch
-    @WebhookAdapterInterface.retry
     async def deliver_async(self,payload: Any,event_type:str='event') -> Tuple[int, bytes]: 
         method, headers, request_kwargs, auth, url = self.prepare_request(payload, event_type)
         webhook_handler = self.client_async.request(method, url,auth=auth,headers=headers,params=self.model.params,timeout=self.model.timeout, **request_kwargs)
@@ -86,7 +83,6 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         asyncio.create_task(webhook_handler)
         return 201,{}
 
-    @WebhookAdapterInterface.retry
     def deliver(self,payload: Any,event_type:str='event') -> tuple[int, bytes]:
         method, headers, request_kwargs, auth, url = self.prepare_request(payload, event_type)
 
@@ -98,7 +94,10 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         body_bytes = self.json_bytes(payload)
         method = self.model.method
 
-        headers = {"Content-Type": "application/json","X-Delivery-Id": delivery_id,"X-Event-Type": event_type,}
+        headers = {"Content-Type": "application/json","X-Event-Type": event_type,}
+        
+        if delivery_id:
+            headers.update({"X-Delivery-Id": delivery_id})
 
         cred= self.depService.credentials.to_plain()
 
@@ -113,4 +112,5 @@ class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         url = cred['url']
         return method,headers,request_kwargs,auth,url
 
-
+    def generate_delivery_id(self):
+        return None

@@ -381,11 +381,26 @@ class BaseMiniService(BaseService,):
 
     def _builder(self, quiet = False, build_state = -1, force_sync_verify = False):
         return super()._builder(quiet, build_state, force_sync_verify)
-        
+    
+    @overload
     def register(self):
-        if self.depService != None:
-            self.depService.used_by_services[self.__class__] = self
+        ...
 
+    @overload
+    def register(self,service:Self):
+        ...
+    
+    def register(self,*args):
+        if len(args) == 1:
+            service = args[0]
+            if service != None and service != self.depService:
+                service.used_by_services[self.__class__] = self
+        else:
+            if self.depService != None:
+                self.depService.used_by_services[self.__class__] = self
+
+
+            
     @property
     def write_lock(self):
         ...
@@ -422,11 +437,17 @@ class MiniServiceStore(Generic[TMS]):
             raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
         return self._store_[miniService_id]
 
-    def exists(self,miniService_id:str|Any):
+    def exists(self,miniService_id:str|Any,_raise=True):
         if miniService_id == None:
-            raise MiniServiceCannotBeIdentifiedError
+            if _raise:
+                raise MiniServiceCannotBeIdentifiedError
+            else:
+                return False
         if miniService_id not in self:
-            raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
+            if _raise:
+                raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
+            else:
+                raise False
         return True
     
     @property

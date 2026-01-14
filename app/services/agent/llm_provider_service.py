@@ -126,6 +126,7 @@ class LLMProviderMiniService(BaseMiniService):
     def ChatDataFactory(self,)->BaseChatModel:
         ...
 
+    
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
 class LLMProviderService(BaseMiniServiceManager):
     

@@ -7,8 +7,7 @@ from app.services.profile_service import ProfileService
 from app.services.reactive_service import ReactiveService
 from app.services.mini.webhook.broker_webhook_service import KafkaWebhookMiniService, RedisWebhookMiniService, SQSWebhookMiniService
 from app.services.mini.webhook.db_webhook_service import MongoDBWebhookMiniService, PostgresWebhookMiniService
-from app.services.mini.webhook.http_webhook_service import HTTPWebhookMiniService
-from app.services.mini.webhook.provider_webhook_service import DiscordWebhookMiniService, MakeWebhookMiniService, MakeWebhookMiniService, N8NWebhookMiniService, SlackIncomingWebhookMiniService, ZapierWebhookMiniService
+from app.services.mini.webhook.provider_webhook_service import DiscordWebhookMiniService, HTTPWebhookMiniService, MakeWebhookMiniService, MakeWebhookMiniService, N8NWebhookMiniService, SlackIncomingWebhookMiniService, ZapierWebhookMiniService
 from ..config_service import ConfigService
 from app.utils.helper import issubclass_of
 from app.utils.globals import CAPABILITIES
@@ -31,9 +30,7 @@ class WebhookService(BaseMiniServiceManager):
         KafkaWebhookModel: MakeWebhookMiniService,
         N8nHTTPWebhookModel: N8NWebhookMiniService,
         PostgresWebhookModel: PostgresWebhookMiniService,
-        MongoDBWebhookModel: MongoDBWebhookMiniService,
-
-        
+        MongoDBWebhookModel: MongoDBWebhookMiniService, 
     }
     
     def __init__(self,configService:ConfigService,profileService:ProfileService,reactiveService:ReactiveService,redisService:RedisService):

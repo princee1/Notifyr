@@ -12,14 +12,14 @@ def _is_missing_str(value: Optional[str]) -> bool:
 class PromptRequest:
     agent: Optional[str] = None
     prompt: Optional[str] = None
-    tool: Optional[str] = None
+    context: Optional[str] = None
 
     @classmethod
     def from_proto(cls, proto: agent_pb2.PromptRequest) -> "PromptRequest":
         pr = cls(
             agent=proto.agent if proto.agent != "" else None,
             prompt=proto.prompt if proto.prompt != "" else None,
-            tool=proto.tool if proto.tool != "" else None,
+            context=proto.context if proto.context != "" else None,
         )
         del proto
         return pr
@@ -30,8 +30,8 @@ class PromptRequest:
             req.agent = self.agent
         if self.prompt is not None:
             req.prompt = self.prompt
-        if self.tool is not None:
-            req.tool = self.tool
+        if self.context is not None:
+            req.context = self.context
         return req
 
     @classmethod
@@ -39,7 +39,7 @@ class PromptRequest:
         return cls(
             agent=data.get("agent"),
             prompt=data.get("prompt"),
-            tool=data.get("tool"),
+            context=data.get("context"),
         )
 
     def missing_fields(self) -> List[str]:
@@ -48,8 +48,8 @@ class PromptRequest:
             missing.append("agent")
         if _is_missing_str(self.prompt):
             missing.append("prompt")
-        if _is_missing_str(self.tool):
-            missing.append("tool")
+        if _is_missing_str(self.context):
+            missing.append("context")
         return missing
 
     def is_complete(self) -> bool:
