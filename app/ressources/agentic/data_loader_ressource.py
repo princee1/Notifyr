@@ -6,11 +6,12 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
 from app.cost.web_cost import WebCost
-from app.decorators.guards import ArqDataTaskGuard, UploadFilesGuard
-from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, FileHandler, MiniServiceHandler, PydanticHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
+from app.decorators.guards import ArqDataTaskGuard, LLMProviderGuard, UploadFilesGuard
+from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, FileHandler, MiniServiceHandler, PydanticHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._utils_decorator import Guard
 from app.depends.class_dep import FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_profile
@@ -144,8 +145,8 @@ class DataLoaderRessource(BaseHTTPRessource):
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseServiceLock(ArqDataTaskService,lockType='reader')
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
+    @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,AgenticHandler)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),LLMProviderGuard,UploadFilesGuard(),docling_guard)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=IngestFileEnqueueResponse)
     async def embed_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
@@ -191,14 +192,16 @@ class DataLoaderRessource(BaseHTTPRessource):
         return _response
 
     @UseLimiter('5/hour')
+    @Throttle(normal=(300,150))
+    @UsePipe(MerchantPipe())
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseHandler(ArqHandler,AsyncIOHandler)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK))
+    @UseHandler(ArqHandler,AsyncIOHandler,AgenticHandler)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseServiceLock(ArqDataTaskService,lockType='reader')
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def embed_web(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[WebCost,Depends(WebCost)],backgroundTasks:BackgroundTasks,request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def embed_web(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[WebCost,Depends(WebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing a `WebCrawlTask` and enqueues it.
         """
@@ -206,14 +209,16 @@ class DataLoaderRessource(BaseHTTPRessource):
     @UseLimiter('5/hour')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UsePermission(ProfilePermission)
+    @Throttle(normal=(300,150))
+    @UsePipe(MerchantPipe())
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK))
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),LLMProviderGuard)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
-    @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler)
+    @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,AgenticHandler)
     @UsePipe(MiniServiceInjectorPipe(ProfileService))
     @UseServiceLock(ArqDataTaskService,ProfileService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/api/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def embed_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],backgroundTasks:BackgroundTasks,cost:Annotated[WebCost,Depends(WebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def embed_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[WebCost,Depends(WebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing an `APIFetchTask` and enqueues it.
         """

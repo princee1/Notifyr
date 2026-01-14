@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List, Literal, Optional
-from pydantic import BaseModel, PrivateAttr, field_validator
+from pydantic import BaseModel, field_validator
 
 from app.utils.constant import ParseStrategy
 from .file_model import FileResponseUploadModel, UploadError, UriMetadata
@@ -9,6 +9,7 @@ from app.classes.scheduler import TimedeltaSchedulerModel
 class DataIngestModel(BaseModel):
 	collection_name: str
 	lang: Optional[str] = 'en'
+	provider:str
 	category: Optional[str] = None
 	knowledge_db:Literal['vector','k-graph','both']= 'vector'
 	expires: Optional[TimedeltaSchedulerModel|None] = None

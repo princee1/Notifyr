@@ -18,3 +18,6 @@ class LLMModelMaxTokenExceededError(BaseError):
         self.provider = provider
         self.agentMaxToken = agent_max_token
         self.llm_max_token = llm_max_token
+
+class  LLMRateLimiterError(BaseError):
+    ...

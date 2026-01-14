@@ -52,7 +52,7 @@ class LLMProviderMiniService(BaseMiniService):
                 self.embedding_search_model = OpenAIEmbedding(api_key=api_key,**embedding_search)
                 self.embedding_parse_model= OpenAIEmbedding(api_key=api_key,**embedding_parse)
     
-    def factory(self,agentModel:AgentModel)->BaseChatModel:
+    def ChatAgentFactory(self,agentModel:AgentModel)->BaseChatModel:
         api_key =lambda: self.depService.credentials.to_plain()
 
         max_output_token = self.model.max_output_tokens
@@ -122,7 +122,10 @@ class LLMProviderMiniService(BaseMiniService):
             case 'ollama':
                 raise NotImplementedError()
                 return ChatOllama()
-        
+
+    def ChatDataFactory(self,)->BaseChatModel:
+        ...
+
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
 class LLMProviderService(BaseMiniServiceManager):
     

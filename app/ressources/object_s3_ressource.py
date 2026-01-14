@@ -17,7 +17,7 @@ from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, Fi
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._service import StateProtocol
 from app.depends.class_dep import ObjectsSearch
 from app.depends.dependencies import get_auth_permission
@@ -100,11 +100,12 @@ class S3ObjectRessource(BaseHTTPRessource):
             file_bytes = file_bytes.encode()
 
             metadata = {MinioConstant.ENCRYPTED_KEY:True}
-            await self.objectS3Service.upload_object(filename,file_bytes,metadata=metadata)
+        await self.objectS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
     @UsePermission(AdminPermission)
     @PingService([ObjectS3Service])
     @UsePipe(MerchantPipe)
+    @Throttle(normal=(200,60))
     @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler,FileHandler,CostHandler)
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
@@ -122,6 +123,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             ext = self.fileService.get_extension(ext)
             try:
                 self.fileService.is_file(filename,allowed_extensions=ValidFreeInputTemplatePipe.allowed_extension)
+                
             except (MultipleExtensionError,ExtensionNotAllowedError) as e:
                 if force:
                     errors[filename]= {'name':e.__class__.__name__,'description':e.mess}
@@ -177,8 +179,9 @@ class S3ObjectRessource(BaseHTTPRessource):
 
     @UsePermission(AdminPermission)
     @PingService([ObjectS3Service])
-    @UseHandler(S3Handler,FileHandler,CostHandler)
     @UseGuard(GlobalsTemplateGuard)
+    @Throttle(uniform=(100,180))
+    @UseHandler(S3Handler,FileHandler,CostHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'refund'))
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UsePipe(ValidFreeInputTemplatePipe(False,True),MerchantPipe(-1))
@@ -264,28 +267,40 @@ class S3ObjectRessource(BaseHTTPRessource):
                 
     @PingService([ObjectS3Service,VaultService])
     @UsePermission(AdminPermission)
-    @UseHandler(S3Handler,VaultHandler,TemplateHandler,FileNamingHandler)
-    @UseGuard(GlobalsTemplateGuard)
-    @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}))
+    @Throttle(normal=(300,200))
+    @UseHandler(S3Handler,VaultHandler,TemplateHandler,FileNamingHandler,CostHandler,UploadFileHandler)
+    @UseGuard(GlobalsTemplateGuard,UploadFilesGuard(1,allowed_extensions=['.xml','.html','.css','.scss']))
+    @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
+    @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}),MerchantPipe())
     @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/modify/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectS3ResponseModel,mount=False)
-    async def modify_object(self,template:str,request:Request,broker:Annotated[Broker,Depends(Broker)],backgroundTask:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],content: str = Body(..., media_type="text/plain"),authPermission:AuthPermission=Depends(get_auth_permission)):
-        meta= await self.objectS3Service.stat_objet(template,objectsSearch.version_id,True)
+    @BaseHTTPRessource.HTTPRoute('/modify/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectResponseUploadModel,mount=False)
+    async def modify_object(self,template:str,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)], objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],files:List[UploadFile]=File(...),authPermission:AuthPermission=Depends(get_auth_permission)):
+        meta:Object = await self.objectS3Service.stat_objet(template,objectsSearch.version_id,True)
         encrypted = meta.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if meta.metadata else False
         assetType = template.split('/')[0]
         extension = self.fileService.get_extension(template)
-        match assetType:
-            case 'email': HTMLTemplate('',content,'') if extension == Extension.HTML.value else ...
-            case 'phone': PhoneTemplate('',content,'')
-            case 'sms': SMSTemplate('',content,'')
 
-        backgroundTask.add_task(self.upload,[{'content':content.encode(),'filename':template}],False)
+        file = files[0]
+        content = await file.read()
+
+        match assetType:
+            case 'email': HTMLTemplate('',content.decode(),'') if extension == Extension.HTML.value else ...
+            case 'phone': PhoneTemplate('',content.decode(),'')
+            case 'sms': SMSTemplate('',content.decode(),'')
+
+        uri = UriMetadata(uri=template,size=file.size)
+
+        merchant.safe_payment(
+            None,
+            FileResponseUploadModel(metadata=[uri]),
+            self.upload,
+            [{'content':content,'filename':template}],
+            False
+        )
+
         broker.wait(3)
         broker.propagate(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
-        return {
-            'meta':meta,
-        }
+        return ObjectResponseUploadModel(metadata=[uri],uploaded_files=[file.filename])
     
 
     @PingService([ObjectS3Service])

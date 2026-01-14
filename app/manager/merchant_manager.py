@@ -21,6 +21,7 @@ class Merchant:
         self.to_post_payment = False
         self.costService = Get(CostService)
         self.mongooseService = Get(MongooseService)
+        self.index = 0
     
     def inject_cost(self,cost:Cost|SimpleTaskCost|DataCost,factor:Literal[-1,1]):
         self.cost = cost
@@ -33,13 +34,14 @@ class Merchant:
         self.to_post_payment=True
 
     def payment(self,function:Callable,*args,**kwargs):
-
         async def wrapper():
             try:
                 await function(*args,**kwargs)
             except:
                 ...
         self.backgroundTasks.add_task(wrapper,*args,**kwargs)
+        self._set_indexes()
+        
 
     def safe_payment(self,rollbackFunc:Callable[[],None],items:Any|tuple[Any,...],function:Callable,*args,**kwargs):
         if self.cost == None:
@@ -73,6 +75,8 @@ class Merchant:
                 self._refund()
                 
         self.backgroundTasks.add_task(wrapper,*args,**kwargs)
+        self._set_indexes()
+
     
     def wait(self,seconds:int|float):
         self.backgroundTasks.add_task(asyncio.sleep(seconds))
@@ -82,3 +86,7 @@ class Merchant:
         self.costService.refund_credits(self.cost.credit_key,self.cost.refund_cost*self.factor)
         bill = self.cost.generate_bill()
         await self.costService.push_bill(self.cost.credit_key,bill)
+    
+    async def _set_indexes(self,):
+        self.cost.indexes[self.index] = len(self.backgroundTasks.tasks) -1
+        self.index +=1

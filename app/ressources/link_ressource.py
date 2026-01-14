@@ -8,7 +8,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import GetLink
 from app.depends.class_dep import  LinkQuery
@@ -64,6 +64,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UsePipe(MerchantPipe)
+    @Throttle(uniform=(100,500))
     @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT))
     @UseHandler(ORMCacheHandler,CostHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
@@ -92,6 +93,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe(-1))
     @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT,'refund'))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @Throttle(uniform=(100,400))
     @UseHandler(ORMCacheHandler,CostHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE])
     async def delete_link(self,response:Response,request:Request,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission)):

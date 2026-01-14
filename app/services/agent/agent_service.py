@@ -58,7 +58,7 @@ class AgentMiniService(BaseMiniService):
                 m = agent_validation_model.model_validate(self.agent_model).model_dump()
                 self.agent_model = agent_validation_model.model_construct(**m)
             
-            self.chat = self.depService.factory(self.agent_model)
+            self.chat = self.depService.ChatAgentFactory(self.agent_model)
         except ValidationError as e:
             raise BuildFailureError('Could not validate the agent model')
     

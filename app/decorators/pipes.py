@@ -193,19 +193,20 @@ if CAPABILITIES['object']:
 
     class ObjectS3OperationResponsePipe(Pipe):
             
-        def __init__(self,):
+        def __init__(self,accept_other=False):
             super().__init__(False)
+            self.accept_other = accept_other
 
         def pipe(self,result:dict):
-            meta:Object|list[Object]|None = result.get('meta',[]) 
+            meta:Object|list[Object]|None = result.pop('meta',[]) 
             more_meta= type(meta) == list
-            write_result:ObjectWriteResult = result.get('result',None)
+            write_result:ObjectWriteResult = result.pop('result',None)
 
             errors = [{
                     "object_name": getattr(e, "object_name", None),
                     "version_id": getattr(e, "version_id", None),
                     "code": getattr(e, "code", None),
-                    "message": getattr(e, "message", None)} for e in result.get('errors',[]) ]
+                    "message": getattr(e, "message", None)} for e in result.pop('errors',[]) ]
             
             write_result = {"bucket_name": write_result.bucket_name,
                     "object_name": write_result.object_name,
@@ -233,12 +234,14 @@ if CAPABILITIES['object']:
                 if not more_meta:
                     meta=meta[0]
                 
-            return {
+            res = {
                 'meta':meta,
                 'errors':errors,
                 'result':write_result,
                 'content': result.get('content',"")
             }
+
+            return res if not self.accept_other else { **result, **res}
 
     class ValidFreeInputTemplatePipe(Pipe):
 

@@ -26,6 +26,7 @@ class FileCost(DataCost):
         self.max_file_size = self.definition.get('max_file_size') * 1024
         self.cost_per_extra_mb = self.definition.get('max_file_size_extra_per_mb')
 
+        self.definition_name = f"File@{self.credit_key}"
         return self
 
     if  APP_MODE == ApplicationMode.server:

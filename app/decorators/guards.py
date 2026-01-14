@@ -5,13 +5,18 @@ from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
+from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
 from app.manager.task_manager import TaskManager
+from app.models.agents_model import AgentModel
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.data_ingest_model import DataIngestModel
 from app.models.link_model import LinkORM
+from app.models.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.cost_service import CostService
+from app.services.database.mongoose_service import MongooseService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
 from app.services.worker.task_service import TaskService
@@ -20,7 +25,7 @@ from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
 from app.services.worker.arq_service import ArqDataTaskService, DataTaskNotFoundError
-from app.utils.constant import CostConstant
+from app.utils.constant import CostConstant, LLMProviderConstant
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request, UploadFile, status
 from app.errors.upload_error import (
@@ -396,3 +401,34 @@ class CreditPlanGuard(Guard):
             raise CreditNotInPlanError(credit)
         
         return True,""
+
+
+class LLMProviderGuard(Guard):
+
+    def __init__(self):
+        super().__init__()
+        self.mongooseService = Get(MongooseService)
+
+    async def guard(self, ingestTask:DataIngestModel=None,agentModel:AgentModel=None):
+
+        provider = ingestTask.provider if ingestTask != None else agentModel.provider
+
+        llm_model =  await self.mongooseService.find_one(LLMProfileModel,{'_id':provider})
+        if llm_model == None:
+            raise LLMProviderDoesNotExistError(provider)
+
+        if agentModel != None:
+            
+            if llm_model.models:
+                if agentModel.model in llm_model.models:
+                    raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
+            else:
+                models = LLMProviderConstant.MODELS[llm_model.provider]
+                if agentModel.model not in models:
+                    raise LLMModelNotPermittedError(llm_model.provider,agentModel.model,list(models))
+            
+            if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
+                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
+        
+        return True,""
+            
