@@ -14,7 +14,7 @@ from app.depends.orm_cache import ContactORMCache,ContactSummaryORMCache
 from app.models.contacts_model import AppRegisteredContactModel, ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
 from app.services.database.tortoise_service import TortoiseConnectionService
-from app.services.email_service import EmailSenderService
+from app.services.ntfr.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_contact_token
 from app.decorators.pipes import ContactStatusPipe, RelayPipe
@@ -161,7 +161,7 @@ class ContactsSubscriptionRessource(BaseHTTPRessource):
         return await self.subscriptionService.get_contact_subscription(contact, subs_content)
         
 if CAPABILITIES["twilio"]:
-    from app.services.twilio_service import TwilioService
+    from app.services.ntfr.twilio_service import TwilioService
     from app.depends.variables import verify_twilio_token
 
 @UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True)

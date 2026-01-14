@@ -140,11 +140,14 @@
                 }
             }
         },
-        "data": {
+        "file": {
             "object": {
-                "count": 100,
-                "max_size": 10000,
-                "max_version_count": 3
+                "max_file_size": 100,
+                "max_file_size_extra_per_mb":5
+            },
+            "document":{
+                "max_file_size":10,
+                "max_file_size_extra_per_mb":2
             }
         },
         "simple-task": {
@@ -181,6 +184,10 @@
         "email": 10000000,
         "sms": 1000000,
         "phone": 10000,
+        "message":100000,
+        "webhook":10000,
+        "notification":1000,
+
         "contact": 1000,
         "client": 5,
         "link": 2,
@@ -188,6 +195,9 @@
         "workflow":10,
         "profile": 10,
         "blog":20,
-        "tokens":100000000000
+        
+        "document":300000,
+        "object":100000,
+        "token":100000000000
     }
 }

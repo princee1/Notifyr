@@ -173,7 +173,7 @@ class JSONFile(File):
             return 
 
         if from_data != None:
-            self.data = from_data
+            self.data:dict = from_data
             self.loaded = True
             self.save(FDFlag.CREATE)
             return 

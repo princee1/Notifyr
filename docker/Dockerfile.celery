@@ -3,14 +3,14 @@ from debian:bookworm-slim as builder
 RUN apt-get update && apt-get install -y --no-install-recommends make  && rm -rf /var/lib/apt/lists/*
 
 RUN  cat <<EOF > Makefile
-celery_app = app.tasks.celery_app
+celery_app = app.ntfr_tasks.celery_app
 
 ###############################      CELERY                     #######################################
 celery-docker:
-	celery -A app.tasks.celery_app worker --pool=gevent --concurrency=100  --loglevel=info --max-tasks-per-child=2000 --max-memory-per-child=200000
+	celery -A app.ntfr_tasks.celery_app worker --pool=gevent --concurrency=100  --loglevel=info --max-tasks-per-child=2000 --max-memory-per-child=200000
 
 redbeat:
-	celery -A app.tasks.celery_app beat -S redbeat.RedBeatScheduler --max-interval 30 --loglevel=info
+	celery -A app.ntfr_tasks.celery_app beat -S redbeat.RedBeatScheduler --max-interval 30 --loglevel=info
 
 ###############################     HTTPS               #######################################
 

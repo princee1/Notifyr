@@ -3,7 +3,7 @@ from dataclasses import asdict
 from typing import Any, Coroutine, Literal, ParamSpec, TypedDict
 from fastapi import Depends
 from humanize import naturaldelta
-from app.classes.celery import FALLBACK_ENV_TASK, AlgorithmType, Compute_Weight, SchedulerModel, TaskExecutionResult, TaskRetryError, TaskType, add_messages, s
+from app.classes.celery import FALLBACK_ENV_TASK, AlgorithmType, Compute_Weight, RunType, SchedulerModel, TaskExecutionResult, TaskRetryError, TaskType, add_messages, s
 from app.classes.env_selector import DEFAULT_MASK, EnvSelection, StrategyType, compute_p_values, get_selector
 from app.definition._service import ServiceStatus
 from app.depends.dependencies import get_request_id
@@ -11,11 +11,12 @@ from starlette.background import BackgroundTask,BackgroundTasks
 from app.depends.variables import *
 import datetime as dt
 from app.container import Get
-from app.services.celery_service import CeleryService,TASK_REGISTRY
+from app.depends.variables import _wrap_checker
+from app.services.worker.celery_service import CeleryService,TASK_REGISTRY
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
-from app.services.task_service import TaskService
+from app.services.worker.task_service import TaskService
 from app.utils.tools import RunInThreadPool
 from app.utils.constant import APSchedulerConstant, MonitorConstant, RedisConstant,CeleryConstant
 
@@ -41,10 +42,29 @@ class TaskMeta(TypedDict):
 
 class TaskManager:
     
+    background_query:Callable = get_query_params('background','true',True)
+
+    fallback_query:Callable = get_query_params('fallback','true',True)
+
+    split_query: Callable = get_query_params('split','false',True)
+
+    runtype_query:Callable=get_query_params('runtype','sequential',False,checker=_wrap_checker('runtype', lambda v: v in get_args(RunType), choices=list(get_args(RunType))))
+
+    save_results_query:Callable=get_query_params('save','false',True,raise_except=True)
+
+    return_results_query:Callable= get_query_params('return_results','true',True)
+
+    retry_query:Callable= get_query_params('retry','false',True)
+
+    algorithm_query:Callable = get_query_params('algorithm','route',True,checker=_wrap_checker('algorithm', lambda v: v in get_args(AlgorithmType), choices=list(get_args(AlgorithmType))))
+
+    strategy_query:Callable = get_query_params('strategy','softmax',True,checker=_wrap_checker('strategy', lambda v: v in get_args(StrategyType), choices=list(get_args(StrategyType))))
+
+
     _mask_schedule:list[EnvSelection] = [0,1,1,0]
     _not_allowed_aps_task_type: set[TaskType] = {TaskType.RRULE,TaskType.SOLAR}
 
-    def __init__(self,backgroundTasks:BackgroundTasks,response:Response,request:Request,request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl=Query(1, ge=0, le=24*60*60), save_results:bool=Depends(save_results_query), return_results:bool=Depends(get_task_results),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query),fallback:bool=Depends(fallback_query)):
+    def __init__(self,backgroundTasks:BackgroundTasks,response:Response,request:Request,request_id: str = Depends(get_request_id), background: bool = Depends(background_query), runtype: RunType = Depends(runtype_query), ttl:int=Query(1, ge=0, le=24*60*60), save_results:bool=Depends(save_results_query), return_results:bool=Depends(return_results_query),retry:bool=Depends(retry_query),split:bool = Depends(split_query),algorithm:AlgorithmType = Depends(algorithm_query),strategy:StrategyType = Depends(strategy_query),fallback:bool=Depends(fallback_query)):
         self.return_results:bool = return_results
         self.backgroundTasks = backgroundTasks
         self.response = response

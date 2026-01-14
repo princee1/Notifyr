@@ -21,13 +21,12 @@ service Agent {
 message PromptRequest {
     string agent = 1;
     string prompt = 2;
-    float temperature = 3;
-    string tool = 4;
+    string tool = 3;
 }
 
 message PromptAnswer {
-    int64 input_token = 1;
-    int64 output_token = 2;
-    string answer = 3;
+    string answer = 1;
+    bool error = 2;
+    string _type = 3;
 }
 

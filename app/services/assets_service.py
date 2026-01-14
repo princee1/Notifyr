@@ -5,8 +5,8 @@ from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
 from app.interface.timers import IntervalParams, SchedulerInterface
-from app.services.object_service import ObjectS3Service
-import app.services.object_service as object_service
+from app.services.database.object_service import ObjectS3Service
+import app.services.database.object_service as object_service
 from app.services.database.redis_service import RedisService
 from app.services.vault_service import VaultService
 from app.services.setting_service import SettingService

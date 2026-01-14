@@ -7,7 +7,7 @@
     "description": "Configuration for the high-availability, microservice architecture.",
     "scaling": {
         "app": 1,
-        "worker": 1,
+        "worker": 0,
         "balancer": 1
     },
     "agentic": {
@@ -16,16 +16,26 @@
     },
     "capabilities": {
         "object": false,
-        "email": true,
+        "email": false,
         "twilio": false,
         "notification": false,
         "message": false,
         "agentic": true,
         "webhook": false,
-        "workflow": false
+        "workflow": false,
+        "chat":false
     },
     "resource_limits": {
         "cpu_limit": "500m",
         "memory_limit": "512Mi"
+    },
+    "database":{
+        "postgres": true,
+        "redis": true,
+        "rabbitmq": true,
+        "qdrant": true,
+        "neo4j": true,
+        "minio": true,
+        "mongodb": true
     }
 }

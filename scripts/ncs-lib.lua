@@ -7,8 +7,9 @@ redis.register_function('credit_transaction', function(keys, args)
 
     local op         = args[1]
     local value      = tonumber(args[2])
-    local request_id = args[3]
-    local created_at = args[4]
+    local issuer     = args[3]
+    local request_id = args[4]
+    local created_at = args[5]
 
     if not value then
         return redis.error_reply("value must be numeric")
@@ -31,8 +32,8 @@ redis.register_function('credit_transaction', function(keys, args)
 
     redis.call("LPUSH", bill_key, cjson.encode({
         request_id = request_id,
+        issuer = issuer,
         definition = (op == "set" and "Set balance" or "Topup"),
-        -- credit = credit_key,
         created_at = created_at,
         purchase_total = 0,
         refund_total = value,
@@ -50,6 +51,9 @@ redis.register_function('bill_squash', function(keys, args)
     local bill_key = keys[1]
     local credit_key = keys[2]
     local bills = redis.call("LRANGE", bill_key, 0, -1)
+    
+    local left = bill_key:match("([^@]+)")
+    local receipts = left .. "@receipts"
 
     if #bills == 0 then
         local before = tonumber(redis.call("GET", credit_key) or "0")
@@ -77,8 +81,8 @@ redis.register_function('bill_squash', function(keys, args)
     for _, r in ipairs(bills) do
         local obj = cjson.decode(r)
 
-        if obj.amount then
-            total = total + obj.amount
+        if obj.total then
+            total = total + obj.total
         end
 
         if not balance_before then
@@ -104,10 +108,6 @@ redis.register_function('bill_squash', function(keys, args)
 
     -- Clear bills list
     redis.call("LTRIM", bill_key, 1, 0)
-
-    local left = bill_key:match("([^@]+)")
-    local receipts = left .. "@receipts"
-
     redis.call("LPUSH", receipts, cjson.encode(squashed))
 
     return squashed

@@ -1,17 +1,16 @@
 import asyncio
 import functools
 from typing import Callable, Generator, Self
-
 import grpc
-from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError, ServiceNotAvailableError
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
 from app.services.config_service import ConfigService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.globals import APP_MODE, CAPABILITIES,ApplicationMode
-from grpc import aio
-from app.grpc import agent_pb2,agent_pb2_grpc,agent_message
+from app.grpc import agent_pb2_grpc,agent_message
+
 
 
 def iterator_factory(callback,wait=0.5):
@@ -41,23 +40,24 @@ class RemoteAgentService(BaseMiniServiceManager):
         if not CAPABILITIES['agentic']:
             raise BuildWarningError('Agentic capability is not enabled')
         
-    def build(self, build_state=...):
+    def build(self, build_state=DEFAULT_BUILD_STATE):
         if APP_MODE == ApplicationMode.agentic:
             raise BuildOkError("Running in Agentic mode; RemoteAgentService not required.")
         
-        self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
+        if build_state == DEFAULT_BUILD_STATE:
+            self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
         
     def register_channel(self):
         if self.service_status != ServiceStatus.AVAILABLE:
             raise ServiceNotAvailableError
         
         if APP_MODE == ApplicationMode.worker:
-            self.channel = grpc.insecure_channel(self.configService.AGENTIC_HOST)
+            self.channel = grpc.insecure_channel(self.agentic_grpc_host)
             clientInterceptor = AgentClientInterceptor(self.auth_header)
             self.channel = grpc.intercept_channel(self.channel,clientInterceptor)
         else:
             clientInterceptor = AgentClientAsyncInterceptor(self.auth_header)
-            self.channel = grpc.aio.insecure_channel(self.configService.AGENTIC_HOST,interceptors=[clientInterceptor])
+            self.channel = grpc.aio.insecure_channel(self.agentic_grpc_host,interceptors=[clientInterceptor])
 
         self.stub = agent_pb2_grpc.AgentStub(self.channel)
     
@@ -68,6 +68,14 @@ class RemoteAgentService(BaseMiniServiceManager):
             await self.channel.close()
             self.channel = None
             self.stub = None
+
+    @property
+    def agentic_grpc_host(self):
+        return f"{self.configService.AGENTIC_HOST}:50051"
+
+    @property
+    def agentic_http_host(self):
+        return f"{self.configService.AGENTIC_HOST}:8000"
 
 
 @MiniService()
@@ -99,7 +107,7 @@ class RemoteAgentMiniService(BaseMiniService):
         def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = self.remoteAgentService.stub.Prompt(request)
-            reply = agent_message.PromptAnswer.from_proto(reply)
+            return agent_message.PromptAnswer.from_proto(reply)
 
     elif APP_MODE == ApplicationMode.server:
 
@@ -107,7 +115,7 @@ class RemoteAgentMiniService(BaseMiniService):
         async def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = self.remoteAgentService.stub.Prompt(request)
-            reply = agent_message.PromptAnswer.from_proto(reply)
+            return agent_message.PromptAnswer.from_proto(reply)
 
         @SilentFail
         async def PromptStream(self, request:agent_message.PromptRequest)->None:
@@ -119,8 +127,8 @@ class RemoteAgentMiniService(BaseMiniService):
         @SilentFail
         async def StreamPrompt(self, callback:Callable[[],agent_message.PromptRequest]):
             request_generator=iterator_factory(callback=callback)
-            reply = self.remoteAgentService.stub.StreamPrompt(request_generator())
-            reply = agent_message.PromptAnswer.from_proto(reply)
+            reply = self.remoteAgentService.stub.StreamPrompt(request_generator)
+            return agent_message.PromptAnswer.from_proto(reply)
         
         @SilentFail
         async def S2SPrompt(self, callback:Callable[[],agent_message.PromptRequest]):

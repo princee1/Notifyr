@@ -1,23 +1,40 @@
 from typing import Any, List
 from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPermission
+from app.classes.cost_definition import CreditNotInPlanError
 from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
+from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
 from app.manager.task_manager import TaskManager
+from app.models.agents_model import AgentModel
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.data_ingest_model import DataIngestModel
 from app.models.link_model import LinkORM
+from app.models.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
+from app.services.cost_service import CostService
+from app.services.database.mongoose_service import MongooseService
+from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
-from app.services.task_service import TaskService
-from app.services.celery_service import CeleryService,task_name
+from app.services.worker.task_service import TaskService
+from app.services.worker.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
+from app.services.worker.arq_service import ArqDataTaskService, DataTaskNotFoundError
+from app.utils.constant import CostConstant, LLMProviderConstant
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
-from fastapi import HTTPException, Request, UploadFile,status
+from fastapi import HTTPException, Request, UploadFile, status
+from app.errors.upload_error import (
+    MaxFileLimitError,
+    FileTooLargeError,
+    TotalFilesSizeExceededError,
+    DuplicateFileNameError,
+    InvalidExtensionError,
+)
 from app.utils.globals import CAPABILITIES
 
 class CeleryTaskGuard(Guard):
@@ -149,7 +166,7 @@ class BlacklistClientGuard(Guard):
         return True,''
 
 if CAPABILITIES['twilio']:
-    from app.services.twilio_service import TwilioService
+    from app.services.ntfr.twilio_service import TwilioService
     class CarrierTypeGuard(Guard):
 
         def __init__(self,accept_landline:bool,accept_voip:bool=False,accept_unknown:bool=False,):
@@ -296,8 +313,122 @@ class CeleryBrokerGuard(Guard):
         return True,''
     
 
-class TaskTypeEnvGuard(Guard):
+class UploadFilesGuard(Guard):
 
-    def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
-        if taskManager.meta['algorithm'] == 'route' and scheduler.task_type != TaskType.NOW:
-            ...
+    def __init__(self, max_files: int = 5, max_files_size: int | None = None, max_size: int | None = None, allowed_extensions: List[str] | None = None):
+        """
+        :param max_files: maximum number of files allowed
+        :param max_files_size: maximum size per file in bytes (None = no per-file limit)
+        :param max_size: maximum total size across all files in bytes (None = no total limit)
+        :param allowed_extensions: list of allowed lowercase extensions (e.g. ['.png', '.jpg']) or None
+        """
+        super().__init__()
+        self.max_files = max_files
+        self.max_files_size = max_files_size
+        self.max_size = max_size
+        self.allowed_extensions = [e.lower() for e in allowed_extensions] if allowed_extensions else None
+        self.fileService = Get(FileService)
+
+    async def guard(self, files: List[UploadFile]):
+        """Validate uploaded files.
+
+        Raises specific BaseError subclasses when validation fails so higher-level handlers
+        can convert them into proper HTTP responses.
+        """
+        if not isinstance(files, list):
+            raise HTTPException(status_code=400, detail="files must be a list of UploadFile")
+
+        if self.max_files is not None and len(files) > self.max_files:
+            raise MaxFileLimitError(f"Maximum number of files exceeded: {len(files)} > {self.max_files}")
+
+        filenames = set()
+        total_size = 0
+
+        for f in files:
+            filename = f.filename
+                  
+            if not filename:
+                # treat missing name as invalid
+                raise DuplicateFileNameError("<missing>")
+
+            # duplicate names
+            if filename in filenames:
+                raise DuplicateFileNameError(filename)
+            filenames.add(filename)
+
+            # extension check
+            if self.allowed_extensions is not None:
+                lower = filename.lower()
+                ext = self.fileService.get_extension(ext)      
+                if ext not in self.allowed_extensions:
+                    raise InvalidExtensionError(filename, self.allowed_extensions)
+
+            total_size += f.size
+
+            # per-file size limit
+            if self.max_files_size is not None and f.size > self.max_files_size:
+                raise FileTooLargeError(filename, f.size, self.max_files_size)
+
+        
+            if self.max_size is not None and total_size > self.max_size:
+                raise TotalFilesSizeExceededError(total_size, self.max_size)
+
+        return True, ""
+    
+class ArqDataTaskGuard(Guard):
+
+    def __init__(self,data_task_name:str):
+        super().__init__()
+        self.data_task_name = data_task_name
+        self.arqService = Get(ArqDataTaskService)
+
+    async def guard(self):
+        if self.data_task_name not in self.arqService.task_registry:
+            raise DataTaskNotFoundError(self.data_task_name)
+        
+        return True,""
+        
+    
+class CreditPlanGuard(Guard):
+
+    @InjectInMethod()
+    def __init__(self,costService:CostService):
+        super().__init__()
+        self.costService = costService
+
+    def guard(self,credit:CostConstant.Credit):
+        if credit not in self.costService.plan_credits:
+            raise CreditNotInPlanError(credit)
+        
+        return True,""
+
+
+class LLMProviderGuard(Guard):
+
+    def __init__(self):
+        super().__init__()
+        self.mongooseService = Get(MongooseService)
+
+    async def guard(self, ingestTask:DataIngestModel=None,agentModel:AgentModel=None):
+
+        provider = ingestTask.provider if ingestTask != None else agentModel.provider
+
+        llm_model =  await self.mongooseService.find_one(LLMProfileModel,{'_id':provider})
+        if llm_model == None:
+            raise LLMProviderDoesNotExistError(provider)
+
+        if agentModel != None:
+            
+            if llm_model.models:
+                if agentModel.model in llm_model.models:
+                    raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
+            else:
+                models = LLMProviderConstant.MODELS[llm_model.provider]
+                if agentModel.model not in models:
+                    raise LLMModelNotPermittedError(llm_model.provider,agentModel.model,list(models))
+            
+            if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
+                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
+        
+        return True,""
+            

@@ -1,28 +1,30 @@
 from typing import Annotated, Literal,get_args
-from urllib.parse import urlparse
 from fastapi import BackgroundTasks, Depends, Query, Request, Response
-from fastapi.staticfiles import StaticFiles
-from app.classes.auth_permission import Role
+from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.guards import AccessLinkGuard
-from app.decorators.handlers import ORMCacheHandler, TortoiseHandler
+from app.decorators.handlers import CostHandler, ORMCacheHandler, TortoiseHandler
+from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.decorators.pipes import MerchantPipe
+from app.definition._cost import DataCost
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import GetLink
 from app.depends.class_dep import  LinkQuery
 from app.depends.orm_cache import LinkORMCache
 from app.manager.broker_manager import Broker
+from app.manager.merchant_manager import Merchant
 from app.models.email_model import EmailStatus, TrackingEmailEventORM
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.database.redis_service import RedisService
+from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.link_service import LinkService
 from fastapi import status
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
-from app.depends.variables import  verify_url
 from app.models.link_model import LinkORM,LinkModel, QRCodeModel, UpdateLinkModel
-from app.utils.constant import  StreamConstant
+from app.utils.constant import  CostConstant, StreamConstant
 from app.utils.helper import  uuid_v1_mc
 from tortoise.transactions import in_transaction
 from datetime import datetime, timezone
@@ -48,7 +50,8 @@ async def get_link_cache(link_id:str,)->LinkORM:
 @UseRoles([Role.LINK])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(TortoiseHandler)
-@PingService([LinkService])
+@PingService([TortoiseConnectionService])
+@UseServiceLock(TortoiseConnectionService)
 @HTTPRessource(LINK_MANAGER_PREFIX)
 class CRUDLinkRessource(BaseHTTPRessource):
 
@@ -59,51 +62,69 @@ class CRUDLinkRessource(BaseHTTPRessource):
         self.linkService = linkService
 
     @UseRoles([Role.ADMIN])
-    @HTTPStatusCode(201)
-    @UseHandler(ORMCacheHandler)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
+    @UsePipe(MerchantPipe)
+    @Throttle(uniform=(100,500))
+    @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT))
+    @UseHandler(ORMCacheHandler,CostHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
-    async def add_link(self, request: Request, linkModel: LinkModel, response: Response,authPermission=Depends(get_auth_permission)):
+    async def add_link(self, request: Request, linkModel: LinkModel,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], response: Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         link = linkModel.model_dump()
-        domain = urlparse(link['link_url']).netloc
-        async with in_transaction():
-            if linkModel.public:
-                self.linkService.verify_safe_domain(domain)
 
-            public_security = {}
-            link = await LinkORM.create(**link)
-
-            if not link.public:
-                public_key = await self.linkService.generate_public_signature(link)
-                public_security['public_key'] = public_key
-            else:
+        async def transaction():
+            async with in_transaction():
+                link = await LinkORM.create(**link)
                 await LinkORMCache.Store(link.link_short_id,link)
-            return {"data": {**link.to_json},"security":public_security,  "message": "Link created successfully"}
+        
+        merchant.safe_payment(
+            None,
+            None,
+            transaction
+        )
+        
+        return link
 
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
     async def read_link(self, request: Request, link: Annotated[LinkORM, Depends(get_link)],authPermission=Depends(get_auth_permission)):
-        return {"data": link.to_json, "message": "Link retrieved successfully"}
+        return link.to_json
 
     @UseRoles([Role.ADMIN])
-    @UseHandler(ORMCacheHandler)
+    @UsePipe(MerchantPipe(-1))
+    @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT,'refund'))
+    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @Throttle(uniform=(100,400))
+    @UseHandler(ORMCacheHandler,CostHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE])
-    async def delete_link(self, link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission)):
+    async def delete_link(self,response:Response,request:Request,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission)):
         link_data = link.to_json.copy()
+
         if not archive:
-            await link.delete()
+            response.status_code = status.HTTP_200_OK
+            async def transaction():
+                async with in_transaction():
+                    await link.delete()
+                    await LinkORMCache.Invalid(link.link_short_id)
+            
+            merchant.safe_payment(
+                None,
+                None,
+                transaction
+            )
+
+        else:
+            link.archived = True
+            cost.bypass = True
+            await link.save()
             await LinkORMCache.Invalid(link.link_short_id)
-            return {"data": link_data, "message": "Link deleted successfully"}
         
-        link.archived = True
-        await link.save()
-        await LinkORMCache.Invalid(link.link_short_id)
-        return {"data": link_data, "message": "Link archived successfully"}
+        return link_data
 
     @UseRoles([Role.ADMIN])
     @HTTPStatusCode(200)
     @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
-    async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,response:Response,authPermission=Depends(get_auth_permission)):
+    async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
         if linkUpdateModel.archived != None:
             link.archived = linkUpdateModel.archived
         
@@ -115,24 +136,8 @@ class CRUDLinkRessource(BaseHTTPRessource):
 
         await link.save()
         await LinkORMCache.Invalid(link.link_short_id)
-        return {"data": link.to_json(), "message": "Link updated successfully"}
-
-    @UseRoles([Role.ADMIN])
-    @UseGuard(AccessLinkGuard.verify_link_guard)
-    @HTTPStatusCode(status.HTTP_200_OK)
-    @BaseHTTPRessource.HTTPRoute('/verify', methods=[HTTPMethod.PATCH])
-    async def verify(self, request: Request, link: Annotated[LinkORM, Depends(get_link)], response: Response, verify_type: Literal['well-known', 'domain'] = Depends(verify_url)):
         
-        public_key = await self.linkService.get_server_well_know(link)
-        ownership = await self.linkService.verify_public_signature(link, public_key)
-        if ownership:
-            link.verified = True
-            link.expiration_verification = None
-            await link.save()
-            await LinkORMCache.Store(link.link_short_id, link)
-            return {"data": link.to_json(), "message": "Link verified successfully"}
-
-        return {"error": "Verification failed", "message": "Unable to verify the link ownership"}
+        return link.to_json
 
     @UseGuard(AccessLinkGuard(False))
     @UseRoles([Role.PUBLIC])
@@ -195,6 +200,7 @@ class LinkRessource(BaseHTTPRessource):
         return RedirectResponse(redirect_url,status.HTTP_308_PERMANENT_REDIRECT)
 
     @UseLimiter(limit_value='10000/minutes')
+    @HTTPStatusCode(status.HTTP_200_OK)
     @BaseHTTPRessource.HTTPRoute('/p/p.png/',methods=[HTTPMethod.GET,HTTPMethod.POST],mount=True)
     def track_pixel(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],link_query:Annotated[LinkQuery,Depends(LinkQuery)]):
         self.send_email_event(broker,link_query,EmailStatus.OPENED)

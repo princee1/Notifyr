@@ -3,8 +3,7 @@ from typing import Any, Callable, Literal
 from app.classes.broker import SubjectType
 from app.definition._error import BaseError
 from app.definition._service import BaseService, Service
-from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundError
-from app.interface.timers import IntervalInterface, SchedulerInterface
+from app.errors.async_error import LockNotFoundError, ReactiveSubjectNotFoundError,ReactiveSubjectAlreadyExist
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.utils.helper import generateId
@@ -13,7 +12,7 @@ from reactivex import Subject
 from reactivex.disposable import Disposable
 
 
-ReactiveType= Literal['HTTP','Celery','BackgroundTask','RedisPubSub','RedisStream','RedisQueue']
+ReactiveType= Literal['HTTP','Celery','BackgroundTask','RedisPubSub','RedisStream','RedisQueue','Normal']
 
 
 @dataclass
@@ -90,9 +89,12 @@ class ReactiveService(BaseService):
             subject_id = generateId(20)
         else:
             if subject_id == None:
-                raise ...
+                raise ValueError('Subject id must be set')
         
         rxSub= ReactiveSubject(name=name,reactive_type=type_,subject_id=subject_id,sid_type=sid_type)
+        if rxSub.subject_id in self._subscriptions:
+            raise ReactiveSubjectAlreadyExist(rxSub.subject_id)
+
         self._subscriptions[rxSub.subject_id]=rxSub
         return rxSub
     

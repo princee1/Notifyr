@@ -14,10 +14,6 @@ CREATE TABLE IF NOT EXISTS Link (
     converted_count INT DEFAULT NULL,
     total_session_count INT DEFAULT NULL,
     public BOOLEAN DEFAULT TRUE,
-    -- ownership_public_key TEXT DEFAULT NULL,
-    -- ownership_private_key TEXT DEFAULT NULL,
-    ownership_signature TEXT DEFAULT NULL,
-    ownership_nonce VARCHAR(50) DEFAULT NULL,
     verified BOOLEAN DEFAULT FALSE,
     archived BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (link_id)

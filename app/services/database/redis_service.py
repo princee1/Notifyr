@@ -184,10 +184,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     def check_db(func:Callable):
 
         @functools.wraps(func)
-        async def wrapper(self,database:int|str,*args,**kwargs):
-            if 'redis' in kwargs and (not kwargs['redis'] or  not isinstance(kwargs['redis'],Redis)):
-                ... # TODO if should keep the instance passed
-
+        async def wrapper(self:Self,database:int|str,*args,**kwargs):
+            if 'redis' in kwargs and kwargs['redis'] and isinstance(kwargs['redis'],Redis):
+                return await func(self,database,*args,**kwargs)
+            
             if database not in self.db:
                 raise RedisDatabaseDoesNotExistsError(database)
             kwargs['redis'] = self.db[database]
@@ -342,15 +342,19 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
        
     @check_db
     async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
+        element = [json.dumps(e) for e in list(element)]
         return await redis.lpush(name,*element)
 
     @check_db
     async def range(self,database:int|str,name:str,start:int,stop:int,redis:Redis=None):
         return await redis.lrange(name,start,stop)
 
+    @check_db
+    async def rem(self,database:int|str,name:str,*keys:str,redis:Redis=None):
+        return await redis.zrem(name,*keys)
     
-    def compute_backend_url(self)->str:
-        return f"redis://{self.backend_creds['data']['username']}:{self.backend_creds['data']['password']}@{self.configService.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}"
+    def compute_backend_url(self,db=RedisConstant.CELERY_DB)->str:
+        return f"redis://{self.backend_creds['data']['username']}:{self.backend_creds['data']['password']}@{self.configService.REDIS_HOST}:6379/{db}"
 
     def compute_broker_url(self)->str:
         if self.configService.BROKER_PROVIDER == 'redis':

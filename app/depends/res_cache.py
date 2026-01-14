@@ -1,7 +1,7 @@
 from functools import wraps
 from typing import Dict, Generic, Type, TypeVar, TypedDict,Any, Callable
 from pydantic import BaseModel
-from app.classes.minio import ObjectS3ResponseModel, key_setter
+from app.models.object_model import ObjectS3ResponseModel, key_setter
 from app.container import Get
 from pydantic.main import _model_construction
 from app.errors.db_error import MemCacheNoValidKeysDefinedError

@@ -19,7 +19,6 @@ class BillItem:
 
 class Bill(TypedDict):
     request_id: str
-    # credit: Any
     definition: Optional[str]
     created_at: str
     items: List[BillItem]
@@ -52,6 +51,10 @@ class CostRules(TypedDict):
 
     retry_allowed: bool
     track_allowed:bool
+
+class FileCostDefinition(TypedDict):
+    max_file_size:int
+    max_file_size_extra_per_mb:int
 
 class SimpleTaskCostDefinition(TypedDict):
     __api_usage_cost__:int
@@ -118,6 +121,11 @@ class PaymentFailedError(CostException):
 
 class InsufficientCreditsError(CostException):
     """Not enough credits to complete the purchase."""
+    def __init__(self, current_balance:int,purchase_cost:int,credit:str):
+        super().__init__()
+        self.current_balance = current_balance
+        self.purchase_cost = purchase_cost
+        self.credit=credit
 
 class InvalidPurchaseRequestError(CostException):
     """Missing or invalid purchase data."""
@@ -130,3 +138,9 @@ class CurrencyNotSupportedError(CostException):
 
 class ProductNotFoundError(CostException):
     """Requested product does not exist."""
+
+class CreditNotInPlanError(CostException):
+    """Credit does not exists in the current plan"""
+
+class CostPostPaymentError(CostException):
+    """Error after payment"""

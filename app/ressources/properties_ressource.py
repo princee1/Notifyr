@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Callable
 from fastapi import Depends, Request, Response, status
 from fastapi.params import Query
 from app.classes.auth_permission import Role
@@ -8,12 +8,12 @@ from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import GlobalPointerIteratorPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseServiceLock, UseRoles
 from app.definition._service import StateProtocol, ServiceStatus
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_query_params
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
 from app.manager.broker_manager import Broker
 from app.models.properties_model import GlobalVarModel, SettingsModel
-from app.services.object_service import ObjectS3Service
-from app.depends.variables import global_var_key, force_update_query, wait_timeout_query
+from app.services.database.object_service import ObjectS3Service
+from app.depends.variables import force_update_query, wait_timeout_query
 from app.services.config_service import AssetMode, ConfigService
 from app.services.vault_service import VaultService
 from app.services.setting_service import SETTING_SERVICE_ASYNC_BUILD_STATE, DEFAULT_SETTING, SettingService
@@ -73,7 +73,7 @@ class SettingsRessource(BaseHTTPRessource):
             raise ValueError('REFRESH_EXPIRATION must be at least two times greater than AUTH_EXPIRATION')
 
         await self.settingService.update_setting(current_data)
-        broker.propagate_state(StateProtocol(service=SettingService, status=None, to_build=True, callback_state_function=self.settingService.aio_get_settings.__name__,
+        broker.propagate(StateProtocol(service=SettingService, status=None, to_build=True, callback_state_function=self.settingService.aio_get_settings.__name__,
             build_state=SETTING_SERVICE_ASYNC_BUILD_STATE))
         
         return current_data
@@ -89,6 +89,9 @@ if CAPABILITIES['object']:
     @UseHandler(ServiceAvailabilityHandler, AsyncIOHandler, GlobalVarHandler)
     @HTTPRessource(VARIABLES_ROUTE)
     class GlobalAssetVariableRessource(BaseHTTPRessource):
+
+        global_var_key:tuple[Callable[[Request],str],Callable[[Request],str]] = get_query_params('key',None,True),get_query_params('key',None,True,raise_except=True)
+
 
         @InjectInMethod()
         def __init__(self, configService: ConfigService, assetService: AssetService, awsS3Service: ObjectS3Service):
@@ -179,9 +182,9 @@ if CAPABILITIES['object']:
 
         def propagate_asset_state(self, broker: Broker):
             if self.configService.ASSET_MODE == AssetMode.local:
-                broker.propagate_state(StateProtocol(service=AssetService, to_build=True))
+                broker.propagate(StateProtocol(service=AssetService, to_build=True))
             else:
-                broker.propagate_state(StateProtocol(service=ObjectS3Service, to_build=True))
+                broker.propagate(StateProtocol(service=ObjectS3Service, to_build=True))
     
     ressource.append(GlobalAssetVariableRessource)
 

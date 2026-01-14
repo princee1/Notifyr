@@ -97,7 +97,7 @@ class TimedeltaSchedulerModel(Scheduler):
     def check_after(self) -> Self:
         _object = self.build('timedelta')
         if _object.total_seconds() <= 0:
-            raise ValueError("Timedelta must be positive")
+            raise ValueError("Timedelta must be positive and non null")
 
         self._beat_object = self.build(mode='datetime')
         

@@ -9,6 +9,8 @@ from app.depends.dependencies import get_request_id
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.depends.variables import *
 
+keep_connection:Callable[[Request],bool]=get_query_params('keep_connection','false',True)
+
 
 class KeepAliveManager:
 

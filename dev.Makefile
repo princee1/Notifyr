@@ -1,5 +1,5 @@
 src_dir = .
-celery_app = app.tasks.celery_app
+celery_app = app.ntfr_tasks.celery_app
 app_name = default
 
 ################################     VIRTUAL ENVIRONNEMENT            ###################################

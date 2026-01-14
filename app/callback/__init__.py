@@ -18,7 +18,7 @@ if APP_MODE == ApplicationMode.server:
 
 
 if APP_MODE == ApplicationMode or APP_MODE == ApplicationMode.agentic:
-    from .g_state_sub import G_State_Subs
+    from .status_sub import G_State_Subs
 
     Callbacks_Sub.update(G_State_Subs)
 

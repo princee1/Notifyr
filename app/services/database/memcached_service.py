@@ -47,6 +47,12 @@ class MemCachedService(DatabaseService,SchedulerInterface):
             
         except MemcacheServerError as e:
             raise BuildWarningError(f"Failed to connect to Memcached. {e}")
+    
+    def replace(self):
+        ...
+    
+    async def flush(self):
+        return self.client.flush_all()
             
     @KeyEncoder
     async def get(self,key:str,default:Any=None,_raise=False,_return_bytes=False)->Any|bytes:
@@ -88,4 +94,4 @@ class MemCachedService(DatabaseService,SchedulerInterface):
     
     async def close(self):
         self.sync_client.close()
-        self.client.close()
+        await self.client.close()

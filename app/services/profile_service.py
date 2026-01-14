@@ -29,7 +29,7 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
     def __init__(self,vaultService:VaultService,mongooseService:MongooseService,redisService:RedisService, model:TModel,model_type:Type[TModel]=None):
         if model_type != None:
             self.model_type = model_type
-            self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__name__}')
+            self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__class__.__name__}')
             super().__init__(None,str(model['_id']))
             self.queue_name = f'{self.model_type._queue}:{self.miniService_id}'
 
@@ -92,7 +92,6 @@ class ProfileService(BaseMiniServiceManager):
                     self.vaultService,
                     self.mongooseService,
                     self.redisService,
-                    self.taskService,
                     model=m,model_type=v)
                 p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 self.MiniServiceStore.add(p)
@@ -130,7 +129,7 @@ class ProfileService(BaseMiniServiceManager):
     
     ########################################################       ################################3
 
-    async def add_profile(self,profile:BaseProfileModel):
+    async def add_profile(self,profile:BaseProfileModel,session=None):
         creds = {}
 
         for skey in profile._secrets_keys:
@@ -150,14 +149,14 @@ class ProfileService(BaseMiniServiceManager):
                 
                 creds[skey] = secret
             
-        result:BaseProfileModel = await self.mongooseService.insert(profile)
+        result:BaseProfileModel = await self.mongooseService.insert(profile,session=session)
         result_id = str(result.id)
-        self._put_encrypted_creds(result_id,creds,result._vault)
+        await self._put_encrypted_creds(result_id,creds,result._vault)
         return result
     
-    async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False):
+    async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False,session=None):
         profile_id = str(profileModel.id)
-        result = await profileModel.delete()
+        result = await profileModel.delete(session=session)
         await self._delete_encrypted_creds(profile_id,profileModel._vault)
         return result
      

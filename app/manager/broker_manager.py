@@ -1,8 +1,11 @@
+import functools
 from typing import Any, Literal
 from fastapi import BackgroundTasks
 from app.container import Get
+from app.definition._cost import Cost, DataCost
 from app.definition._service import BaseMiniServiceManager, MiniStateProtocol, ServiceDoesNotExistError, ServiceStatus, StateProtocol,_CLASS_DEPENDENCY, StateProtocolMalFormattedError
 from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.cost_service import CostService
 from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService
 from app.utils.constant import SubConstant
@@ -18,6 +21,7 @@ class Broker:
         self.reactiveService:ReactiveService = Get(ReactiveService)
         self.redisService:RedisService = Get(RedisService)
         self.configService:ConfigService = Get(ConfigService)
+        self.costService:CostService = Get(CostService)
         self.uvicornWorkerService:UvicornWorkerService = Get(UvicornWorkerService)
         
         self.backgroundTasks = backgroundTasks
@@ -60,7 +64,11 @@ class Broker:
     def push(self,db:int,name,*values):
         self.backgroundTasks.add_task(self.redisService.push,db,name,*values)
 
-    def propagate_state(self,protocol:StateProtocol|MiniStateProtocol):
+    #@Mock()
+    def add(self,function,*args,**kwargs):
+        self.backgroundTasks.add_task(function,*args,**kwargs)
+
+    def propagate(self,protocol:StateProtocol|MiniStateProtocol):
 
         if isinstance(protocol.get('service',None),type):
             protocol['service'] = protocol['service'].__name__

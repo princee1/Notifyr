@@ -1,7 +1,18 @@
 FROM notifyr/fastapi:community
 
-RUN pip install langchain
+ARG INSTALL_DOCLING=false
 
-RUN pip install qdrant-client
+COPY --chown=notifyr:notifyr ./scripts/docling.sh .
+
+RUN pip install langchain qdrant-client neo4j
+
+RUN pip install llama-index-core llama-index-embeddings-openai install llama-index-readers-file
+
+RUN pip install arq  yake gensim 
+
+RUN ./docling.sh ${INSTALL_DOCLING}
 
 COPY ./agentic_main.py ./agentic_main.py
+
+COPY ./app/data_tasks.py ./data_tasks.py
+

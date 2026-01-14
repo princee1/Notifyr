@@ -19,15 +19,14 @@ from app.models.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.call_model import  CallCustomSchedulerModel, CallStatusModel, CallTemplateSchedulerModel, CallTwimlSchedulerModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
 from app.models.twilio_model import CallEventORM, CallStatusEnum
-from app.services.celery_service import CeleryService, ChannelMiniService
+from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
-from app.services.chat_service import ChatService
 from app.services.contacts_service import ContactsService
 from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService
-from app.services.task_service import TaskService
-from app.services.twilio_service import CallService, TwilioAccountMiniService, TwilioService
+from app.services.worker.task_service import TaskService
+from app.services.ntfr.twilio_service import CallService, TwilioAccountMiniService, TwilioService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission
@@ -53,12 +52,11 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
 
     @InjectInMethod()
-    def __init__(self, callService: CallService, chatService: ChatService, contactsService: ContactsService) -> None:
+    def __init__(self, callService: CallService, contactsService: ContactsService,reactiveService:ReactiveService,redisService:RedisService) -> None:
         self.callService = callService
-        self.chatService = chatService
         self.contactsService = contactsService
-        self.reactiveService: ReactiveService = Get(ReactiveService)
-        self.redisService:RedisService = Get(RedisService)
+        self.reactiveService = reactiveService
+        self.redisService = redisService
 
         super().__init__()
 
@@ -242,9 +240,10 @@ class OnGoingCallRessource(BaseHTTPRessource):
         return taskManager.results
 
 
-
 CALL_INCOMING_PREFIX = "incoming"
 
+if CAPABILITIES['chat']:
+    from app.services.ntfr.chat_service import ChatService
 
 @UseRoles([Role.TWILIO])
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
@@ -253,9 +252,8 @@ CALL_INCOMING_PREFIX = "incoming"
 @HTTPRessource(CALL_INCOMING_PREFIX)
 class IncomingCallRessources(BaseHTTPRessource):
     @InjectInMethod()
-    def __init__(self, callService: CallService, chatService: ChatService, contactsService: ContactsService, loggerService: LoggerService,reactiveService:ReactiveService) -> None:
+    def __init__(self, callService: CallService,contactsService: ContactsService, loggerService: LoggerService,reactiveService:ReactiveService) -> None:
         self.callService = callService
-        self.chatService = chatService
         self.contactsService = contactsService
         self.loggerService = loggerService
         self.reactiveService = reactiveService
@@ -263,26 +261,34 @@ class IncomingCallRessources(BaseHTTPRessource):
         # super().__init__(dependencies=[Depends(verify_twilio_token)]) # TODO need to the signature
         super().__init__()
 
-    @BaseHTTPRessource.HTTPRoute('/menu/', methods=[HTTPMethod.POST])
-    async def voice_menu(self, authPermission=Depends(get_auth_permission)):
-        ...
+    if CAPABILITIES['chat']:
 
-    @UseRoles([Role.CHAT])
-    @BaseHTTPRessource.HTTPRoute('/live-chat/', methods=[HTTPMethod.POST])
-    async def voice_live_chat(self, authPermission=Depends(get_auth_permission)):
-        pass
+        @BaseHTTPRessource.HTTPRoute('/menu/', methods=[HTTPMethod.POST])
+        async def voice_menu(self, authPermission=Depends(get_auth_permission)):
+            chatService = Get(ChatService)
 
-    @BaseHTTPRessource.HTTPRoute('/automate-response/', methods=[HTTPMethod.POST])
-    async def voice_automate_response(self, authPermission=Depends(get_auth_permission)):
-        pass
+        @UseRoles([Role.CHAT])
+        @BaseHTTPRessource.HTTPRoute('/live-chat/', methods=[HTTPMethod.POST])
+        async def voice_live_chat(self, authPermission=Depends(get_auth_permission)):
+            chatService = Get(ChatService)
+            
+        @BaseHTTPRessource.HTTPRoute('/automate-response/', methods=[HTTPMethod.POST])
+        async def voice_automate_response(self, authPermission=Depends(get_auth_permission)):
+            chatService = Get(ChatService)
+            pass
 
-    @BaseHTTPRessource.HTTPRoute('/handler_fail/', methods=[HTTPMethod.POST])
-    async def voice_primary_handler_fail(self, authPermission=Depends(get_auth_permission)):
-        pass
+        @BaseHTTPRessource.HTTPRoute('/partial-result/', methods=[HTTPMethod.POST])
+        async def partial_result(self,authPermission=Depends(get_auth_permission)):
+            chatService = Get(ChatService)
+            ...
+        
+        @BaseHTTPRessource.HTTPRoute('/handler_fail/', methods=[HTTPMethod.POST])
+        async def voice_primary_handler_fail(self, authPermission=Depends(get_auth_permission)):
+            pass
 
-    @BaseHTTPRessource.HTTPRoute('/error/', methods=[HTTPMethod.POST])
-    async def voice_error(self, authPermission=Depends(get_auth_permission)):
-        pass
+        @BaseHTTPRessource.HTTPRoute('/error/', methods=[HTTPMethod.POST])
+        async def voice_error(self, authPermission=Depends(get_auth_permission)):
+            pass
     
     @UseHandler(ReactiveHandler)
     @UsePipe(TwilioResponseStatusPipe,before=False)
@@ -314,7 +320,6 @@ class IncomingCallRessources(BaseHTTPRessource):
                 event['description']=f'The call is in the {status.CallStatus} state',
             broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,CallEventORM.JSON(event_id=str(uuid_v1_mc()),direction='O',**event))
         return 
-
         
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
@@ -326,14 +331,8 @@ class IncomingCallRessources(BaseHTTPRessource):
         return
         
         
-    @BaseHTTPRessource.HTTPRoute('/partial-result/', methods=[HTTPMethod.POST])
-    async def partial_result(self,authPermission=Depends(get_auth_permission)):
-        ...
-    
-
 
 CALL_PREFIX = "call"
-
 
 @IncludeRessource(IncomingCallRessources, OnGoingCallRessource)
 @HTTPRessource(CALL_PREFIX)

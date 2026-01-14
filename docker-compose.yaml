@@ -21,10 +21,11 @@ services:
   # EDGE LAYER
   # ==========================================
   traefik:
-    image: traefik:v2
+    image: traefik:v3.6
     container_name: traefik
     command:
       - "--providers.docker=true"
+      - "--providers.docker.network=notifyr_app_net"
       - "--api.insecure=true"
       - --log.level=INFO
       - --providers.docker.exposedbydefault=false
@@ -135,9 +136,10 @@ services:
         target: /run/secrets/costs.json
       - source: deploy
         target: /run/secrets/deploy.json
-
     volumes:
       - vault-shared:/vault/shared:ro
+      - data-loader:/data-loader/
+
     build:
       context: ./
       dockerfile: Dockerfile
@@ -159,6 +161,7 @@ services:
       - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
       - APS_JOBSTORE=${APS_JOBSTORE}
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
+      - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
       - app_net
       - data_net
@@ -168,11 +171,38 @@ services:
   # ==========================================
   # WORKER LAYER
   # ==========================================
+  data:
+    image: notifyr/agentic:community 
+    container_name: data-loader
+    entrypoint: ["arq", "app.data_tasks.WorkerSettings"]
+    #command: ["tail", "-f" ,"/dev/null"]
+    volumes:
+      - vault-shared:/vault/shared:ro
+      - data-loader:/data-loader/
+    secrets:
+      - source: app_role_id
+        target: /run/secrets/app-role_id.txt
+      - source: costs
+        target: /run/secrets/costs.json
+      - source: deploy
+        target: /run/secrets/deploy.json
+    environment:
+      - MODE=${MODE:-prod}
+      - MONGO_HOST=${MONGO_HOST-mongodb}
+      - QDRANT_HOST=${QDRANT_HOST-qdrant}
+      - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
+    networks:
+      - data_net
+      - vault_net 
+
+
   agentic:
     image: notifyr/agentic:community 
     container_name: agentic
     entrypoint: ["python", "agentic_main.py"]
     build:
+      args:
+      - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
       context: ./
       dockerfile: ./docker/Dockerfile.agentic
     secrets:
@@ -193,6 +223,7 @@ services:
       - MODE=${MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
+      - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
       - agentic_net
       - data_net
@@ -439,6 +470,15 @@ services:
       QDRANT__HNSW__EF: 32
       QDRANT__CACHE__MAX_SIZE_MB: 128
 
+  memgraph:
+    image: memgraph/memgraph
+    container_name: memgraph
+    restart: unless-stopped
+    networks:
+      - data_net
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+
 volumes:
   qdrant_storage:
     driver: local
@@ -453,6 +493,8 @@ volumes:
     driver: local
   minio-data: {}
   rabbitmq_data:
+  memgraph_data:
+  data-loader:
 
 secrets:
   app_role_id:
@@ -503,7 +545,6 @@ networks:
       driver: default
       config:
         - subnet: 172.25.0.0/16
-          ip_range: 172.25.10.0/24
           gateway: 172.25.0.1
 
   lb_net:
@@ -512,7 +553,6 @@ networks:
       driver: default
       config:
         - subnet: 172.26.0.0/16
-          ip_range: 172.26.5.0/24
           gateway: 172.26.0.1
 
   edge_net:

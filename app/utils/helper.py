@@ -3,6 +3,7 @@ from inspect import getmro
 from abc import ABC
 import json
 from random import choice, seed
+import random
 from string import hexdigits, digits, ascii_letters,punctuation
 import time
 from typing import Any, Callable, Literal, Optional, Union,Tuple, Type, TypeVar, get_args, get_origin
@@ -582,6 +583,37 @@ def cron_interval(cron_expr: str, start_time: float) -> float:
     t1 = itr.get_next(datetime)
     t2 = itr.get_next(datetime)
     return (t2 - t1).total_seconds()
+
+def _make_delay_fn(
+    *,
+    fixed: float | None = None,
+    fn: Callable[[], float] | None = None,
+    uniform: tuple[float, float] | None = None,
+    normal: tuple[float, float] | None = None,
+    exponential: float | None = None,
+) -> Callable[[], float]:
+    """
+    Returns a zero-arg function producing a delay (seconds)
+    """
+
+    if fixed is not None:
+        return lambda: fixed
+
+    if fn is not None:
+        return fn
+
+    if uniform is not None:
+        a, b = uniform
+        return lambda: random.uniform(a, b)
+
+    if normal is not None:
+        mu, sigma = normal
+        return lambda: max(0.0, random.gauss(mu, sigma))
+
+    if exponential is not None:
+        return lambda: random.expovariate(exponential)
+
+    raise ValueError("Throttle requires a delay strategy")
 
 ###################################### ** Model Helper **  ###########################################
 def is_optional(annotation) -> bool:

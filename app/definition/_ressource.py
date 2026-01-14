@@ -5,11 +5,12 @@ instance imported from `container`.
 from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
 from app.services.config_service import MODE, ConfigService
-from app.utils.helper import copy_response
+from app.utils.helper import _make_delay_fn, copy_response
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services import CostService
 from app.container import Get, Need
@@ -37,7 +38,7 @@ PATH_SEPARATOR = "/"
 
 
 MIN_TIMEOUT = -1
-
+MS_TO_SEC = 1000
 
 
 class MountMetaData(TypedDict):
@@ -125,6 +126,9 @@ class Helper:
 
             elif result == None:
                 result = JSONResponse({},)
+            
+            elif isinstance(result,BaseModel):
+                result = JSONResponse(result.model_dump())
 
             return copy_response(result, response)
 
@@ -870,6 +874,38 @@ def HTTPStatusCode(code: int | str):
     return decorator
 
 ################################################################                           #########################################################
+def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,uniform: tuple[float, float] | None = None,normal: tuple[float, float] | None = None,exponential: float | None = None,):
+    """
+    Throttle decorator supporting deterministic and probabilistic delays in mMS
+
+    Examples:
+        @Throttle(fixed=100)
+        @Throttle(uniform=(200, 500))
+        @Throttle(fn=lambda: random.random())
+        @Throttle(normal=(250, 50))
+    """
+
+    delay_fn = _make_delay_fn(fixed=fixed,fn=fn,uniform=uniform,normal=normal,exponential=exponential,)
+
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, Throttle, None,fn=delay_fn)
+        if cls != None:
+            return cls
+        
+        def wrapper(target_function:Callable[...,Any]):
+            
+            @functools.wraps(target_function)
+            async def callback(*args,**kwargs):
+                delay = delay_fn()
+                if delay > 0:
+                    await asyncio.sleep(delay/MS_TO_SEC)
+                return await target_function(*args,**kwargs)
+            return callback
+        
+        Helper.appends_funcs_callback(func,wrapper,DecoratorPriority.LIMITER,0.5)
+        return func
+
+    return decorator    
 
 
 def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]=lambda req:1):

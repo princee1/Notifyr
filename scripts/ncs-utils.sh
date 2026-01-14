@@ -6,6 +6,10 @@
 # --- 2. Global Shell Variables (Configured inside the script) ---
 COSTS_FILE="/run/secrets/costs.json"
 
+# --- 3. JQ Filter for the ntfr service ---
+JQ_NTFR_FILTER='.credits | to_entries[] | select(.key=="phone" or .key=="sms" or .key=="email" or .key=="message" or .key=="notification" or .key=="webhook") | "\(.key)=\(.value)"'
+JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
+
 VAULT_TOKEN_FILE="/run/secrets/credit_token.txt"
 VAULT_REDIS_PATH="notifyr-database/creds/credit-redis-ntfr-role"
 
@@ -111,7 +115,7 @@ transaction() {
     local val="$3"
 
     local credit_key="notifyr/credit:$key_suffix"
-    local bill_key="notifyr/credit:$key_suffix@bill[$YEAR-$MONTH]"
+    local bill_key="$credit_key@bill[$YEAR-$MONTH]"
 
     local redis_url="redis://$REDIS_USER:$REDIS_PASS@redis:$REDIS_PORT/$REDIS_DB"
 
@@ -122,7 +126,8 @@ transaction() {
                 "$bill_key" \
                 "$command" \
                 "$val" \
-                "[NotifyrCreditSystem]:$(pwgen -s 12 1)" \
+                "NotifyrCreditSystem"\
+                "$(uuidgen)" \
                 "$(date -Is)"
             ;;
         squash)
@@ -138,27 +143,24 @@ transaction() {
 
 
 
-# 1. topup: INCRBY for 'phone', 'sms', 'email'
+# 1. topup: INCRBY for 'phone', 'sms', 'email, notification, message, webhook'
 topup_cost() {
     echo "🚀 Topping up phone, sms, email credits in Redis DB $REDIS_DB from $COSTS_FILE"
     
-    JQ_FILTER='.credits | to_entries[] | select(.key=="phone" or .key=="sms" or .key=="email") | "\(.key)=\(.value)"'
     while IFS="=" read -r key val; do
         echo "+ $val -> $key"
         transaction "incr" "$key" "$val"
-    done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
+    done < <(jq -r "$JQ_NTFR_FILTER" "$COSTS_FILE")
 }
 
-# 2. reset: SET for 'phone', 'sms', 'email'
+# 2. reset: SET for 'phone', 'sms', 'email, notification, message, webhook'
 reset_cost() {
     echo "🔄 Resetting phone, sms, email credits in Redis DB $REDIS_DB from $COSTS_FILE"
-    
-    JQ_FILTER='.credits | to_entries[] | select(.key=="phone" or .key=="sms" or .key=="email") | "\(.key)=\(.value)"'
 
     while IFS="=" read -r key val; do
         echo "SET $key -> $val"
         transaction "set" "$key" "$val"
-    done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")
+    done < <(jq -r "$JQ_NTFR_FILTER" "$COSTS_FILE")
 }
 
 # 3. initialize: SET for ALL keys in .credits
@@ -171,8 +173,7 @@ init() {
         echo "Resetting at this stage is not permitted... "
         return
     fi
-
-    JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
+    
     while IFS="=" read -r key val; do
         echo "SET $key -> $val"
         transaction "set" "$key" "$val"
@@ -182,7 +183,7 @@ init() {
 #4. squash: LTRIM the bill and LPUSH into a receipts for ALL keys in .credits
 squash(){
     echo "🔥 Squash all receipts into a summary for ALL credits in Redis DB $REDIS_DB from $COSTS_FILE"
-    JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
+
     while IFS="=" read -r key val; do
         transaction squash "$key" "$val"
     done < <(jq -r "$JQ_FILTER" "$COSTS_FILE")

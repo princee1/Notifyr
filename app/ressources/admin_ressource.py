@@ -1,5 +1,5 @@
 from random import randint
-from typing import Annotated
+from typing import Annotated, Callable, get_args
 from fastapi import Depends, Query, Request, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -8,6 +8,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.definition._service import StateProtocol
 from app.depends.funcs_dep import GetPolicy, get_blacklist, get_group, get_client
 from app.depends.orm_cache import WILDCARD, AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache, PolicyORMCache
+from app.depends.variables import _wrap_checker
 from app.interface.issue_auth import IssueAuthInterface
 from app.manager.broker_manager import Broker
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
@@ -31,12 +32,12 @@ from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from datetime import timedelta
 from tortoise.transactions import in_transaction
-from app.depends.variables import policy_update_mode_query
 from tortoise.expressions import Q
 
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
 
+policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','merge',False,raise_except=True,checker=_wrap_checker('mode', lambda v: v in get_args(PolicyUpdateMode), choices=list(get_args(PolicyUpdateMode))))
 
 
 @PingService([TortoiseConnectionService],infinite_wait=True)
@@ -433,7 +434,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
         await self.jwtAuthService.revoke_all_tokens()
 
-        broker.propagate_state(StateProtocol(
+        broker.propagate(StateProtocol(
             service=self.jwtAuthService.name,
             to_build=True,
             bypass_async_verify=True,
@@ -459,7 +460,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
         unRevokeModel = unRevokeModel.model_dump()
         await self.jwtAuthService.unrevoke_all_tokens(**unRevokeModel)
         
-        broker.propagate_state(StateProtocol(
+        broker.propagate(StateProtocol(
             service=self.jwtAuthService.name,
             to_build=True,
             bypass_async_verify=True,

@@ -25,6 +25,7 @@ PossibleDependencies: Dict[str, list[type]] = {}
 OptionalDependencies: Dict[str, list[type]] = {}
 ManagerDependency: Dict[str,bool] = {}
 EndService:List[Type] = []
+MirrorDependency:Dict[type,type]
 
 _CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []
@@ -114,7 +115,7 @@ class VariableProtocol(TypedDict):
 
 #################################            #####################################
 
-WAIT_TIME = .1
+WAIT_TIME = .01
 
 ACCEPTABLE_STATES = {ServiceStatus.AVAILABLE, ServiceStatus.PARTIALLY_AVAILABLE, ServiceStatus.WORKS_ALMOST_ATT}
 
@@ -249,7 +250,7 @@ class BaseService():
     # TODO Dependency that use service with failed might not properly, need to handle the view
     def _builder(self,quiet:bool=False,build_state:int = -1,force_sync_verify:bool=False):
         
-        is_mini_service =f'Mini service ID: ({self.miniService_id})- ' if isinstance(self,BaseMiniService) else ''
+        is_mini_service =f' Mini service ID: ({self.miniService_id})- ' if isinstance(self,BaseMiniService) else ''
         reason = 'Service Built'
         try:
             now = dt.datetime.now()
@@ -562,7 +563,7 @@ def AbstractServiceClass()->Callable[[Type[S]],Type[S]]:
         return cls
     return class_decorator
 
-def Service(links:list[LinkDep]=[],is_manager = False,abstract_service_register:list[Type[BaseService]]=[],endService=False)->Callable[[Type[S]],Type[S]]:
+def Service(links:list[LinkDep]=[],is_manager = False,abstract_service_register:list[Type[BaseService]]=[],endService=False,mirror:Type[BaseService]=None)->Callable[[Type[S]],Type[S]]:
 
     def class_decorator(cls: Type[S]) -> Type[S]:
         if cls.__name__ not in AbstractServiceClasses and cls not in __DEPENDENCY:
@@ -570,13 +571,17 @@ def Service(links:list[LinkDep]=[],is_manager = False,abstract_service_register:
             _CLASS_DEPENDENCY[cls.__name__] = cls
         LinkDep.dep_liaison(cls,links)
         ManagerDependency[cls.__name__] = is_manager
+
+        if mirror !=None:
+            MirrorDependency[mirror,__name__]=cls.__name__
+
         if endService:
             EndService.append(cls)
         return cls
     
     return class_decorator
 
-def MiniService(links:list[LinkDep]=[],override_init = False,scope=None )->Callable[[Type[S]],Type[S]]:
+def MiniService(links:list[LinkDep]=[],override_init = False,scope=None)->Callable[[Type[S]],Type[S]]:
     def class_decorator(cls: Type[S])->Type[S]:
         LinkDep.dep_liaison(cls,links)
         __MINI_SERVICE_DEPENDENCY.append(cls)

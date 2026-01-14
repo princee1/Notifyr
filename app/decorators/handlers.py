@@ -3,11 +3,14 @@ import asyncio
 import traceback
 from typing import Callable
 
+import aiohttp
 from amqp import AccessRefused
 from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
+from app.errors.llm_error import LLMProviderDoesNotExistError
+from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobStatusNotValidError,ResultNotFound
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -25,7 +28,6 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.request_error import IdentifierTypeError
 from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
@@ -41,6 +43,13 @@ from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUnique
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
+from app.errors.upload_error import (
+    MaxFileLimitError,
+    FileTooLargeError,
+    TotalFilesSizeExceededError,
+    DuplicateFileNameError,
+    InvalidExtensionError,
+)
 
 
 class ServiceAvailabilityHandler(Handler):
@@ -421,18 +430,6 @@ class SecurityClientHandler(Handler):
                 'message': 'Authorization ID mismatch',
             })
 
-
-class RequestErrorHandler(Handler):
-
-    async def handle(self, function, *args, **kwargs):
-        try:
-            return await function(*args, **kwargs)
-        except IdentifierTypeError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'message': 'Invalid identifier type specified'
-            })
-
-
 class ValueErrorHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -568,7 +565,6 @@ class EmailRelatedHandler(Handler):
         except EmailInvalidFormatError as e:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,)
 
-
 class ORMCacheHandler(Handler):
     
     async def handle(self, function, *args, **kwargs):
@@ -588,7 +584,6 @@ async def handle_http_exception(function, *args, **kwargs):
         raise ServerFileError('app/static/error-500-page/index.html',e.status_code)
     
 
-
 class FastAPIHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -598,7 +593,6 @@ class FastAPIHandler(Handler):
         except ResponseValidationError as e :
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Error while sending the response","error":e.errors()})
         
-
 
 class GlobalVarHandler(Handler):
 
@@ -875,6 +869,7 @@ class MemCachedHandler(Handler):
     
 from app.classes.cost_definition import (
     CostException,
+    CreditNotInPlanError,
     PaymentFailedError,
     InsufficientCreditsError,
     InvalidPurchaseRequestError,
@@ -898,7 +893,12 @@ class CostHandler(Handler):
         except InsufficientCreditsError as e:
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail={'message': 'Insufficient credits to complete the purchase'}
+                detail={
+                    'message': 'Insufficient credits to complete the purchase',
+                    'credit':e.credit,
+                    'current_balance':e.current_balance,
+                    'purchase_cost':e.purchase_cost
+                    }
             )
 
         except InvalidPurchaseRequestError as e:
@@ -924,6 +924,12 @@ class CostHandler(Handler):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={'message': 'Product not found', 'error': str(e)}
             )
+    
+        except CreditNotInPlanError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={'message':'Credit does not appear in the plan','error':str(e)}
+            )
 
         except CostException as e:
             # generic cost-related errors fallback
@@ -935,6 +941,44 @@ class CostHandler(Handler):
 class CeleryControlHandler(Handler):
     ...
 
+
+class ArqHandler(Handler):
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except ResultNotFound as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"message": "Result not found", "reason":str(e)}
+            )
+        except JobDoesNotExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"job_id": e.job_id, "reason": e.reason}
+            )
+        except DataTaskNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"job_id": e.job_id, "reason": e.reason}
+            )
+
+        except JobAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"job_id": e.job_id, "reason": e.reason}
+            )
+
+        except JobStatusNotValidError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'job_id':e.job_id,'status':e.status}
+            )
+
+        except JobDequeueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={'job_id':e.job_id}
+            )
 
 class APSSchedulerHandler(Handler):
 
@@ -949,3 +993,77 @@ class APSSchedulerHandler(Handler):
                 detail=''
             )
             
+
+class UploadFileHandler(Handler):
+
+    async def handle(self, function: Callable, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except MaxFileLimitError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        except DuplicateFileNameError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        except InvalidExtensionError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        except FileTooLargeError as e:
+            # 413 Payload Too Large
+            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
+
+        except TotalFilesSizeExceededError as e:
+            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
+
+
+class FileHandler(Handler):
+    
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except PermissionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: You do not have access to this file. {str(e)}"
+            )
+        except IsADirectoryError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid path: The specified path is a directory, not a file. {str(e)}"
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Resource not found: {str(e)}"
+            )
+        except OSError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An internal server error occurred while processing the file."
+            )
+        
+
+class ProxyRestGatewayHandler(Handler):
+
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+
+        except aiohttp.ClientPayloadError as e:
+            body = e.args[0]
+            status = e.args[1]
+
+
+class AgenticHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except LLMProviderDoesNotExistError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'LLM provider with id {e.provider} does not exist'
+            )

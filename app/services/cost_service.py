@@ -1,11 +1,12 @@
+import asyncio
 import functools
 from pathlib import Path
 import traceback
-from typing import Callable, Self
+from typing import Any, Callable, Self
 
 from fastapi import Response
 from redis import WatchError
-from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition,Bill
+from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, FileCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition,Bill
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
@@ -18,8 +19,25 @@ from app.utils.fileIO import JSONFile
 from app.classes.auth_permission import AuthPermission
 from app.utils.helper import flatten_dict
 from datetime import datetime
+from app.utils.globals import  CAPABILITIES
 
 REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"notifyr/credit:{credit_key}"
+
+CREDIT_TO_CAPABILITIES:dict[CostConstant.Credit,str] = {
+    'email':'email',
+    'agent':'agentic',
+    'object':'object',
+    'sms':'twilio',
+    'phone':'twilio',
+    'document':'agentic',
+    'token':'agentic',
+    'message':'message',
+    'webhook':'webhook',
+    'workflow':'workflow',
+    'chat':'chat',
+    'notification':'notification'
+}
+
 
 @Service()
 class CostService(BaseService):
@@ -35,23 +53,37 @@ class CostService(BaseService):
         self.redisService = redisService
         self.fileService = fileService
         self.costs_definition={}
-    
-    def bill_key(self,credit:CostConstant.Credit):
-        now = datetime.now()
-        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@bill[{now.year}-{now.month}]'
 
-    def receipts_key(self,credit:CostConstant.Credit):
-        return f'{REDIS_CREDIT_KEY_BUILDER(credit)}@receipts'
-    
     @staticmethod
-    def redis_credit_key_builder(func:Callable):
+    def RedisCreditKeyBuilder(func:Callable):
 
-        @functools.wraps(func)
-        async def wrapper(self:Self,credit_key:str,*args,**kwargs):
-            credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
-            return await func(self,credit_key,*args,**kwargs)
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def wrapper(self:Self,credit_key:str,*args,**kwargs):
+                credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
+                return await func(self,credit_key,*args,**kwargs)            
+        else:
+            @functools.wraps(func)
+            def wrapper(self:Self,credit_key:str,*args,**kwargs):
+                credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
+                return func(self,credit_key,*args,**kwargs)
+
         return wrapper
     
+    @staticmethod
+    def CreditSilentFail(value:Any=None):
+
+        def decorator(function:Callable):
+
+            async def wrapper(self:Self,*args,**kwargs):
+                if not self.configService.COST_FLAG:
+                    return value
+                return await function(self,*args,**kwargs)
+            
+            return wrapper
+
+        return decorator
+
     def verify_dependency(self):
         if self.configService.MODE == MODE.PROD_MODE:
             if not self.COST_PATH_OBJ.exists():
@@ -70,6 +102,7 @@ class CostService(BaseService):
                 self.costs_file= JSONFile(self.COST_PATH)
                 self.load_file_into_objects()
                 self.verify_cost_file()
+                self.init_plan_credits()
                 self.service_status = ServiceStatus.AVAILABLE
             except Exception as e:
                 print(e)
@@ -77,7 +110,11 @@ class CostService(BaseService):
         else:
             self.service_status = ServiceStatus.AVAILABLE
     
-    @redis_credit_key_builder
+    ###################################################                        #######################################
+
+    ###################################################                        #######################################
+
+    @RedisCreditKeyBuilder
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.redis_limiter.get(credit_key)
         if current_balance == None:
@@ -86,17 +123,19 @@ class CostService(BaseService):
         current_balance = int(current_balance)
 
         if current_balance <= 0:
-            raise InsufficientCreditsError
+            raise InsufficientCreditsError(current_balance,purchase_cost,credit_key)
         
         if current_balance < purchase_cost:
-            raise InsufficientCreditsError
+            raise InsufficientCreditsError(current_balance,purchase_cost,credit_key)
 
-    @redis_credit_key_builder
+    @CreditSilentFail()
+    @RedisCreditKeyBuilder
     async def refund_credits(self,credit_key:str,refund_cost:int):
         if refund_cost > 0:
             await self.redisService.increment(RedisConstant.LIMITER_DB,credit_key,refund_cost)
 
-    @redis_credit_key_builder
+    @CreditSilentFail(0)
+    @RedisCreditKeyBuilder
     async def deduct_credits(self,credit_key:str,purchase_cost:int,retry_limit=5):
         retry=0
         while retry < retry_limit:
@@ -112,7 +151,7 @@ class CostService(BaseService):
 
                     if current_balance < purchase_cost and not self.rules.get('credit_overdraft_allowed',False):
                         await pipe.unwatch()
-                        raise InsufficientCreditsError
+                        raise InsufficientCreditsError(current_balance,purchase_cost,credit_key)
                     
                     new_balance = current_balance - purchase_cost
                     new_balance = int(new_balance)
@@ -131,22 +170,59 @@ class CostService(BaseService):
         
         raise CreditDeductionFailedError
     
-    @redis_credit_key_builder
+    @RedisCreditKeyBuilder
     async def get_credit_balance(self,credit_key:str):
         credit = await self.redisService.retrieve(RedisConstant.LIMITER_DB,credit_key)
         if credit != None:
             credit = int(credit)
         return credit
 
-    async def get_all_credits_balance(self):        
+    @CreditSilentFail()
+    async def push_bill(self,credit:CostConstant.Credit,bill:Bill):
+        if bill['total'] == 0:
+            return
+        bill_key = self.bill_key(credit)
+        await self.redisService.push(RedisConstant.LIMITER_DB,bill_key,bill)
+        return
+    
+    async def get_all_credits_balance(self):    
+
         return {k:await self.get_credit_balance(k) for k in self.plan_credits.keys() }
+
+    ###################################################                        #######################################
+    
+    ###################################################                        #######################################
+    @RedisCreditKeyBuilder
+    def bill_key(self,credit:CostConstant.Credit):
+        now = datetime.now()
+        return f'{credit}@bill[{now.year}-{now.month}]'
+
+    @RedisCreditKeyBuilder
+    def receipts_key(self,credit:CostConstant.Credit):
+        return f'{credit}@receipts'
+    
+    ###################################################                        #######################################
+    
+    ###################################################                        #######################################
+
+    def init_plan_credits(self):
+        self.plan_credits:CostCredits = {}
+        all_credits:dict = self.costs_file.data.get(CostConstant.CREDITS_KEY,{})
+        for credit,default in all_credits.items():
+            if credit in CREDIT_TO_CAPABILITIES:
+                cap = CREDIT_TO_CAPABILITIES[credit]
+                if not CAPABILITIES[cap]:
+                    continue
+            
+            self.plan_credits[credit]=default
+            
 
     def load_file_into_objects(self):
         try:
             cost = self.costs_file.data.get(CostConstant.COST_KEY,None)  
 
             if cost == None:
-                raise BuildFailureError
+                raise BuildFailureError('Cost File not found')
             
             definition = flatten_dict(cost,dict_sep=self.DICT_SEP,_key_builder=lambda p:p+self.DICT_SEP,max_level=1)
             for k,v in definition.items():
@@ -179,8 +255,8 @@ class CostService(BaseService):
                     ...
                 elif cost_type == 'simple-task':
                     v = SimpleTaskCostDefinition(**base)
-                elif cost_type == 'data':
-                    ...
+                elif cost_type == 'file':
+                    v = FileCostDefinition(**base)
                 elif cost_type == 'ai':
                     ...
                 
@@ -199,21 +275,12 @@ class CostService(BaseService):
         if self.currency != 'NOTIFYR-CREDITS':
             raise BuildFailureError('Currency not supported')
 
-    def inject_cost_info(self,response:Response,bill:Bill):
-        
-        credit = bill['credit']
-        current_balance = bill['balance_after']
-        total = bill['total']
-        definition_name = bill.get('definition',None)
-
-        response.headers.append('X-Credit-Name',credit)
-        response.headers.append('X-Current-Balance',str(current_balance))
-        response.headers.append('X-Total-Cost',str(total))
-        if definition_name:
-            response.headers.append('X-Definition',definition_name)
-
     def is_current_credit_overdraft_allowed(self,current_credits:int,credit_key:str):
         return (self.rules.get('auto_block_on_zero_credit', True) or (((-1 * current_credits)  / self.plan_credits[credit_key]) <self.rules.get('overdraft_ratio_allowed',self.OVERDRAFT_ALLOWED) ))
+
+    ###################################################                        #######################################
+    
+    ###################################################                        #######################################
 
     @property
     def version(self)->str:
@@ -234,11 +301,7 @@ class CostService(BaseService):
     @property
     def promotions(self):
         return self.costs_file.data.get(CostConstant.PROMOTIONS_KEY,{})
-    
-    @property
-    def plan_credits(self)->CostCredits:
-        return self.costs_file.data.get(CostConstant.CREDITS_KEY,{})
-
+        
     @property
     def rules(self)->CostRules:
         return self.costs_file.data.get(CostConstant.RULES_KEY,{})

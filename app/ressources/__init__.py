@@ -1,5 +1,5 @@
 from typing import Type
-from app.services.celery_service import CeleryService
+from app.services.worker.celery_service import CeleryService
 from app.services.config_service import AssetMode, ConfigService
 from app.services import CostService
 from app.container import Register, Get
@@ -10,9 +10,8 @@ Register(CeleryService)
 configService = Get(ConfigService)
 costService = Get(CostService)
 
-from .support_ressource import SupportRessource
 from .admin_ressource import AdminRessource
-from .result_ressource import ResultBackendRessource
+from .worker.result_ressource import ResultBackendRessource
 from .contacts_ressources import ContactsRessource
 from .auth_ressource import AuthRessource
 from .app_ressource import AppRessource
@@ -22,11 +21,11 @@ from .properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
 from .profile_ressource import ProfilRessource
 from .cost_ressource import CostRessource
-from .celery_ressource import CeleryRessource
+from .worker.celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
 
 
-BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [SupportRessource,
+BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [
                                                  AdminRessource,
                                                  ResultBackendRessource,
                                                  ContactsRessource,
@@ -56,23 +55,30 @@ if CAPABILITIES['workflow']:
     ...
 
 if CAPABILITIES['twilio']:
-    from .twilio_ressource import TwilioRessource
+    from .ntfr.twilio_ressource import TwilioRessource
     BASE_RESSOURCES.append(TwilioRessource)
 
 if CAPABILITIES['email']:
-    from .email_ressource import EmailRessource
+    from .ntfr.email_ressource import EmailRessource
     BASE_RESSOURCES.append(EmailRessource)
 
 if CAPABILITIES['agentic']:
-    from app.ressources.rag_db_ressource import RagDBRessource
-    from app.ressources.agent_ressource import AgentsRessource
-    BASE_RESSOURCES.append(RagDBRessource)
+    from app.ressources.agentic.gateway_ressource import GatewayAgenticRessource
+    from app.ressources.agentic.agent_ressource import AgentsRessource
+    from app.ressources.agentic.data_loader_ressource import DataLoaderRessource
+    BASE_RESSOURCES.append(DataLoaderRessource)
+    BASE_RESSOURCES.append(GatewayAgenticRessource)
     BASE_RESSOURCES.append(AgentsRessource)
 
 
 if CAPABILITIES['notification']:
-    from .notification_ressource import NotificationRessource
+    from .ntfr.notification_ressource import NotificationRessource
     BASE_RESSOURCES.append(NotificationRessource)
 
 if CAPABILITIES['message']:
     ...
+
+if CAPABILITIES['chat']:
+    from .ntfr.chat_ressource import ChatRessource
+    BASE_RESSOURCES.append(ChatRessource)
+

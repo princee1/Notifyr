@@ -3,8 +3,8 @@
 from fastapi import WebSocket
 from app.container import InjectInMethod
 from app.definition._ws import BaseProtocol, BaseWebSocketRessource, WebSocketRessource
-from app.services.chat_service import ChatService
-from app.services.twilio_service import CallService
+from app.services.ntfr.chat_service import ChatService
+from app.services.ntfr.twilio_service import CallService
 
 
 class TwilioProtocol(BaseProtocol):

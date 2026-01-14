@@ -1,8 +1,6 @@
 
 from cachetools import cached,TTLCache
 from typing import Any, Dict, Literal
-
-from app.classes.rsa import RSA
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._interface import Interface, IsInterface
 from app.errors.service_error import BuildWarningError
@@ -14,7 +12,6 @@ from .config_service import ConfigService
 from .file.file_service import FileService
 from app.definition._service import AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
-from cryptography.fernet import Fernet, InvalidToken
 import base64
 from fastapi import HTTPException, Request, status
 import time
@@ -161,9 +158,6 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             return decoded
 
         # TODO: For each exception, we should return a specific error message
-
-        except InvalidToken as e:
-            ...
 
         except jwt.InvalidSignatureError as e:
             ...
@@ -337,11 +331,4 @@ class SecurityService(BaseService, EncryptDecryptInterface):
     
     def verify_admin_signature(self,):
         ...
-
-    def generate_rsa_key_pair(self,key_size=2048):
-        rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
-        return RSA(password=rsa_secret_pwd,key_size=key_size)
-
-    def generate_rsa_from_encrypted_keys(self,private_key=None,public_key=None):
-        rsa_secret_pwd = self.vaultService.RSA_SECRET_PASSWORD
-        return RSA(rsa_secret_pwd,private_key=private_key,public_key=public_key)
+    

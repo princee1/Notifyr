@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from typing import List
 from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
 from pymongo import MongoClient
@@ -12,6 +14,7 @@ from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import VaultTTLSyncConstant
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import ConnectionFailure, OperationFailure
 
 
 
@@ -164,6 +167,20 @@ class MongooseService(TempCredentialsDatabaseService):
         temp.update(list(documents))
         self._documents = list(temp)
 
+    @asynccontextmanager
+    async def transaction(self,retries=1,timeout=5,wait=1):
+        async with await self.client.start_session() as session:
+            for attempt in range(retries):
+                try:
+                    async with session.start_transaction():
+                        yield session
+                    break
+                except (ConnectionFailure, OperationFailure):
+                    if attempt == retries - 1:
+                        raise
+                    else:
+                        if wait:
+                            await asyncio.sleep(wait)
 
     ##################################################
     # Connection string

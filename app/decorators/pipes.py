@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import json
 from typing import Any, Callable, Coroutine, Literal, Optional, Type, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
@@ -8,30 +9,34 @@ from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
+from app.definition._cost import Cost
 from app.definition._service import BaseMiniService, BaseMiniServiceManager
-from app.depends.class_dep import ObjectsSearch
+from app.depends.class_dep import ObjectsSearch,ToPydanticModelInterface
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
+from app.manager.merchant_manager import Merchant
 from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status, SubscriptionORM
 from app.models.email_model import BaseEmailSchedulerModel
+from app.models.file_model import FileResponseUploadModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
-from app.services.celery_service import CeleryService, ChannelMiniService
+from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file.file_service import FileService
 from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
-from app.tasks import TASK_REGISTRY, task_name
+from app.ntfr_tasks import TASK_REGISTRY, task_name
+from app.services.worker.arq_service import ArqDataTaskService
 from app.utils.constant import SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of, parseToBool
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
-from app.services.object_service import Object,DeleteError,ObjectWriteResult
+from app.services.database.object_service import Object,DeleteError,ObjectWriteResult
 from app.utils.globals import CAPABILITIES
 
 async def to_otp_path(template:str):
@@ -188,19 +193,20 @@ if CAPABILITIES['object']:
 
     class ObjectS3OperationResponsePipe(Pipe):
             
-        def __init__(self,):
+        def __init__(self,accept_other=False):
             super().__init__(False)
+            self.accept_other = accept_other
 
         def pipe(self,result:dict):
-            meta:Object|list[Object]|None = result.get('meta',[]) 
+            meta:Object|list[Object]|None = result.pop('meta',[]) 
             more_meta= type(meta) == list
-            write_result:ObjectWriteResult = result.get('result',None)
+            write_result:ObjectWriteResult = result.pop('result',None)
 
             errors = [{
                     "object_name": getattr(e, "object_name", None),
                     "version_id": getattr(e, "version_id", None),
                     "code": getattr(e, "code", None),
-                    "message": getattr(e, "message", None)} for e in result.get('errors',[]) ]
+                    "message": getattr(e, "message", None)} for e in result.pop('errors',[]) ]
             
             write_result = {"bucket_name": write_result.bucket_name,
                     "object_name": write_result.object_name,
@@ -228,12 +234,14 @@ if CAPABILITIES['object']:
                 if not more_meta:
                     meta=meta[0]
                 
-            return {
+            res = {
                 'meta':meta,
                 'errors':errors,
                 'result':write_result,
                 'content': result.get('content',"")
             }
+
+            return res if not self.accept_other else { **result, **res}
 
     class ValidFreeInputTemplatePipe(Pipe):
 
@@ -312,7 +320,7 @@ class RelayPipe(Pipe):
         return {'relay':relay}
 
 if  CAPABILITIES['twilio']: 
-    from app.services.twilio_service import TwilioAccountMiniService, TwilioService
+    from app.services.ntfr.twilio_service import TwilioAccountMiniService, TwilioService
     class TwilioPhoneNumberPipe(Pipe):
 
         PhoneNumberChoice = Literal['default','otp','chat','auto-mess']
@@ -700,4 +708,59 @@ class MiniServiceInjectorPipe(Pipe):
             self.key: self.service.MiniServiceStore.get(profile)
             }
 
+class DataClassToDictPipe(Pipe):
+
+    def __init__(self,silent:bool=True):
+        super().__init__(False)
+        self.silent = silent
     
+    def pipe(self,result:Any):
+        if isinstance(result,list):
+            return [asdict(r) for r in result]
+        else:
+            return asdict(result)
+
+class JSONLoadsPipe(Pipe):
+    def __init__(self,silent:bool=True):
+        super().__init__(False)
+        self.silent = silent
+
+    def pipe(self,result:list[str]|str):
+        if isinstance(result,list):
+            return [json.loads(r) for r in result]
+        elif isinstance(result,str):
+            return json.loads(result)
+        else:
+            if not self.silent:
+                raise TypeError
+            return result
+
+class QueryToModelPipe(Pipe):
+
+    def __init__(self,key:str):
+        super().__init__(True)
+        self.key = key
+    
+    def pipe(self,query:ToPydanticModelInterface,):
+        return {
+            self.key : query.to_model()
+        }
+
+async def update_status_upon_no_metadata_pipe(result:FileResponseUploadModel,response:Response):
+    if len(result.metadata) == 0:
+        response.status_code = status.HTTP_200_OK
+    return result
+
+class MerchantPipe(Pipe):
+    
+    def __init__(self,factor:Literal[-1,1]=1):
+        super().__init__(True)
+        if factor not in [-1,1]:
+            raise ValueError('Value must be -1 or 1')
+
+        self.factor = factor
+
+    
+    def pipe(self,cost:Cost,merchant:Merchant):
+        merchant.inject_cost(cost,self.factor)
+        return {}

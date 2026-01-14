@@ -7,7 +7,7 @@ from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarning
 from app.utils.constant import RabbitMQConstant, RedisConstant
 from app.definition import _service
 import socket
-from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID,APP_MODE, ApplicationMode
+from app.utils.globals import DIRECTORY_SEPARATOR, PARENT_PID, PROCESS_PID,APP_MODE, ApplicationMode,SCALING
 from app.utils.helper import parseToBool
 
 
@@ -153,9 +153,11 @@ class ConfigService(_service.BaseService):
         self.BASE_DIR:str = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
         self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')
+        self.DATA_LOADER_DIR:str = self.getenv('DATA_LOADER_DIR', '/data-loader/' if self.MODE != MODE.DEV_MODE else './data-loader/')
 
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
+        self.COST_FLAG:bool = ConfigService.parseToBool(self.getenv('COST_FLAG','true'),True)
         self.ADMIN_KEY:str = self.getenv("ADMIN_KEY")
         
         # SERVER CONFIG #
@@ -173,6 +175,8 @@ class ConfigService(_service.BaseService):
 
         # ASSETS CONFIG #
         self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local' if self.MODE == MODE.DEV_MODE else 's3').lower())
+
+        self.INSTALL_DOCLING:bool = ConfigService.parseToBool(self.getenv('INSTALL_DOCLING','false'),False)
         
         # S3 STORAGE CONFIG #
         self.S3_CRED_TYPE:Literal['MINIO','AWS'] = self.getenv('S3_CRED_TYPE','MINIO').upper()
@@ -186,7 +190,10 @@ class ConfigService(_service.BaseService):
         self.MINIO_SSL:bool = ConfigService.parseToBool(self.getenv('MINIO_SSL','false'), False)
 
         # AGENTIC CONFIG #
-        self.AGENTIC_HOST = self.getenv('AGENTIC_HOST','localhost:50051' if self.MODE == MODE.DEV_MODE else 'agentic:50051')
+        self.AGENTIC_HOST = self.getenv('AGENTIC_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'agentic')
+
+        # QDRANT CONFIG #
+        self.QDRANT_HOST:str = self.getenv('QDRANT_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'qdrant')
 
         # HASHI CORP VAULT CONFIG #
         self.VAULT_ADDR:str = 'http://127.0.0.1:8200' if self.MODE == MODE.DEV_MODE else 'http://vault:8200'
@@ -211,7 +218,8 @@ class ConfigService(_service.BaseService):
 
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
-        self.CELERY_WORKERS_EXPECTED = ConfigService.parseToInt(self.getenv("CELERY_WORKERS_EXPECTED","1"), 1)
+        
+        self.CELERY_WORKERS_EXPECTED = SCALING.get('worker',0)
 
         # APS CONFIG #
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
@@ -267,7 +275,5 @@ class UvicornWorkerService(_service.BaseService):
             return True
      
     def build(self, build_state = ...):
-        name = 'app' if APP_MODE == ApplicationMode.server else APP_MODE.name
-
-        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PARENT_PID}@{socket.gethostname()}/{name}/"        
+        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PROCESS_PID}@{socket.gethostname()}:{APP_MODE.value}/"        
         raise BuildOkError
