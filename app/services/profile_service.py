@@ -129,7 +129,7 @@ class ProfileService(BaseMiniServiceManager):
     
     ########################################################       ################################3
 
-    async def add_profile(self,profile:BaseProfileModel):
+    async def add_profile(self,profile:BaseProfileModel,session=None):
         creds = {}
 
         for skey in profile._secrets_keys:
@@ -149,14 +149,14 @@ class ProfileService(BaseMiniServiceManager):
                 
                 creds[skey] = secret
             
-        result:BaseProfileModel = await self.mongooseService.insert(profile)
+        result:BaseProfileModel = await self.mongooseService.insert(profile,session=session)
         result_id = str(result.id)
         await self._put_encrypted_creds(result_id,creds,result._vault)
         return result
     
-    async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False):
+    async def delete_profile(self,profileModel:BaseProfileModel,raise_:bool = False,session=None):
         profile_id = str(profileModel.id)
-        result = await profileModel.delete()
+        result = await profileModel.delete(session=session)
         await self._delete_encrypted_creds(profile_id,profileModel._vault)
         return result
      

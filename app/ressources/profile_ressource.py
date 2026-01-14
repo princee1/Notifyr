@@ -80,7 +80,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         async def transaction():
             async with self.mongooseService.transaction() as (session,tr):
-                result = await self.profileService.add_profile(profileModel)
+                result = await self.profileService.add_profile(profileModel,session=session)
                 merchant.activate_rollback()
                 profileMiniService = ProfileMiniService(None,None,self.redisService,result)
                 await ChannelMiniService(profileMiniService,self.configService,self.rabbitmqService,self.redisService,self.celeryService).create_queue()
@@ -113,7 +113,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         async def transaction():
             async with self.mongooseService.transaction() as (session,tr):
-                await self.profileService.delete_profile(profileModel)
+                await self.profileService.delete_profile(profileModel,session=session)
                 merchant.activate_rollback()
                 await channel.delete_queue()
 
