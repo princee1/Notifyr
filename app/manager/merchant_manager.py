@@ -39,10 +39,10 @@ class Merchant:
                 await function(*args,**kwargs)
             except:
                 ...
+            
         self.backgroundTasks.add_task(wrapper,*args,**kwargs)
         self._set_indexes()
         
-
     def safe_payment(self,rollbackFunc:Callable[[],None],items:Any|tuple[Any,...],function:Callable,*args,**kwargs):
         if self.cost == None:
             raise AttributeError('Cost not found in the request')
@@ -76,16 +76,18 @@ class Merchant:
                 
         self.backgroundTasks.add_task(wrapper,*args,**kwargs)
         self._set_indexes()
-
-    
+  
     def wait(self,seconds:int|float):
         self.backgroundTasks.add_task(asyncio.sleep(seconds))
 
     async def _refund(self):
-        self.cost.balance_before = await self.costService.get_credit_balance(self.cost.credit_key)
-        self.costService.refund_credits(self.cost.credit_key,self.cost.refund_cost*self.factor)
         bill = self.cost.generate_bill()
-        await self.costService.push_bill(self.cost.credit_key,bill)
+        bill['total']*=self.factor
+        if self.factor == 1:
+            bill['refund_type'] = 'Cancelling a purchase'
+        else:
+            bill['refund_type'] = 'Cancelling a reimbursement'
+        self.costService.refund_credits(self.cost.credit_key,bill)
     
     async def _set_indexes(self,):
         self.cost.indexes[self.index] = len(self.backgroundTasks.tasks) -1

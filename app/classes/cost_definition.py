@@ -144,3 +144,15 @@ class CreditNotInPlanError(CostException):
 
 class CostPostPaymentError(CostException):
     """Error after payment"""
+
+class CostLessThanZeroError(CostException):
+    """Trying to deduct credit but losing money instead"""
+    def __init__(self, total):
+        super().__init__()
+        self.total = total
+
+class CostMoreThanZeroError(CostException):
+    """Trying to give credit but taking money instead"""
+    def __init__(self, total):
+        super().__init__()
+        self.total = total

@@ -7,7 +7,7 @@ from app.decorators.pipes import JSONLoadsPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._utils_decorator import Pipe
 from app.depends.dependencies import get_auth_permission
-from app.services.cost_service import CostService
+from app.services.cost_service import CostService,REDIS_CREDIT_KEY_BUILDER
 from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService
 from fastapi import Depends, Query, Request, Response
@@ -21,6 +21,9 @@ from app.utils.constant import CostConstant, RedisConstant
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('costs')
 class CostRessource(BaseHTTPRessource):
+
+    async def credit_pipe(credit:str):
+        return REDIS_CREDIT_KEY_BUILDER(credit)
 
     @InjectInMethod()
     def __init__(self,costService:CostService,reactiveService:ReactiveService,redisService:RedisService):
@@ -60,6 +63,7 @@ class CostRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UseHandler(CostHandler,RedisHandler)
     @PingService([RedisService])
+    @UsePipe(credit_pipe)
     @UseGuard(CreditPlanGuard)
     @UsePipe(JSONLoadsPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)
@@ -72,6 +76,7 @@ class CostRessource(BaseHTTPRessource):
 
     @UseRoles([Role.ADMIN])
     @UseGuard(CreditPlanGuard)
+    @UsePipe(credit_pipe)
     @UseHandler(CostHandler,RedisHandler)
     @UsePipe(JSONLoadsPipe,before=False)
     @PingService([CostService,RedisService])

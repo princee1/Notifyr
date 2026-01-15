@@ -29,6 +29,18 @@ class ObjectCost(FileCost):
             prices=self.compute_prices(self.POST_NAME,f'{name} @ {version}',size)
             for d,c,q in prices:
                 self.refund(d,c,q)
+    
+    def pre_purchase(self, meta:Object):
+        size = meta.size
+        name = meta.object_name
+        version = meta.version_id
+
+        prices=self.compute_prices('File Copying: ',f'{name} @ {version}',size)
+        for d,c,q in prices:
+            self.refund(d,c,q)
+    
+    def post_purchase(self, meta:Object):
+        self.pre_purchase(meta)
                 
     def post_payment(self,errors:list[DeleteError]):
         for e in errors:
@@ -38,6 +50,6 @@ class ObjectCost(FileCost):
             if key not in self.meta:
                 continue
             size = self.meta[key]
-            prices=self.compute_prices(self.POST_NAME,f'{name} @ {version}',size)
+            prices=self.compute_prices('File deletion cancelled:',f'{name} @ {version}',size)
             for d,c,q in prices:
                 self.refund(d,c,q)

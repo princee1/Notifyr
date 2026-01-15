@@ -2,6 +2,7 @@ from typing import Any, Callable, Type, get_args
 from fastapi.responses import JSONResponse
 from typing_extensions import Literal
 from fastapi import BackgroundTasks, Request, Response,status
+from app.classes.cost_definition import CostLessThanZeroError, CostMoreThanZeroError
 from app.container import Get, InjectInMethod
 from app.definition._cost import Cost, DataCost, SimpleTaskCost,Bill
 from app.definition._utils_decorator import Interceptor, InterceptorDefaultException
@@ -95,16 +96,25 @@ class TaskCostInterceptor(Interceptor):
 
     async def intercept_before(self,*args,**kwargs):
         cost:SimpleTaskCost = kwargs.get('cost')
+        response:Response = kwargs.get('response')
+
         APIFilterInject(cost.register_meta_key)(**kwargs)
         APIFilterInject(cost.compute_cost)(**kwargs)
-        cost.balance_before = await self.costService.deduct_credits(cost.credit_key,cost.purchase_cost,self.retry_limit)
-        
-    async def intercept_after(self, result:Any,cost:SimpleTaskCost,broker:Broker,response:Response):
-        await self.costService.refund_credits(cost.credit_key,cost.refund_cost)
         bill = cost.generate_bill()
-        Cost.inject_cost_info(response,bill,cost.credit_key)
-        await self.costService.push_bill(cost.credit_key,bill)
+        cost.last_total = bill['total']
+        if cost.last_total < 0:
+            raise CostLessThanZeroError(cost.last_total)
         
+        await self.costService.deduct_credits(cost.credit_key,bill,self.retry_limit)
+        Cost.inject_cost_info(response,bill,cost.credit_key)
+        cost.reset_bill()
+            
+    async def intercept_after(self, result:Any,cost:SimpleTaskCost,broker:Broker,response:Response,taskManager:TaskManager):
+        bill = cost.generate_bill()
+        if bill['total'] != 0:
+            await self.costService.refund_credits(cost.credit_key,bill)
+            Cost.inject_cost_info(response,bill,cost.credit_key,cost.last_total)
+                
 class DataCostInterceptor(Interceptor):
 
     Mode = Literal['refund','purchase']
@@ -130,7 +140,11 @@ class DataCostInterceptor(Interceptor):
         match self.mode:
             case 'purchase':
                 APIFilterInject(cost.pre_purchase)(**kwargs)
-                await self.costService.check_enough_credits(self.credit, cost.purchase_cost)
+                bill = cost.generate_bill()
+                if cost.last_total < 0:
+                    raise CostLessThanZeroError(bill['total'])
+                
+                await self.costService.check_enough_credits(self.credit,bill['total'])
                 cost.reset_bill() # reset the potential bill
             case 'refund':
                 ...      
@@ -143,12 +157,15 @@ class DataCostInterceptor(Interceptor):
         match self.mode:
             case 'purchase':
                 APIFilterInject(cost.post_purchase)(result,**kwargs)
-                cost.balance_before = await self.costService.deduct_credits(self.credit,cost.purchase_cost,self.retry_limit)
+                bill = cost.generate_bill()
+                if bill['total'] < 0:
+                    raise CostLessThanZeroError(cost.last_total)
+                await self.costService.deduct_credits(self.credit,bill,self.retry_limit)
             case 'refund':
                 APIFilterInject(cost.post_refund)(result,**kwargs)
-                cost.balance_before = await self.costService.get_credit_balance(self.credit)
-                await self.costService.refund_credits(self.credit,cost.refund_cost)
+                bill = cost.generate_bill()
+                if bill['total'] > 0:
+                    raise CostMoreThanZeroError(bill['total'])
+                await self.costService.refund_credits(self.credit,bill)
 
-        bill = cost.generate_bill()
         Cost.inject_cost_info(response,bill,self.credit)
-        await self.costService.push_bill(self.credit,bill)

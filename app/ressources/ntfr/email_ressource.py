@@ -118,7 +118,7 @@ class EmailRessource(BaseHTTPRessource):
         @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
         @UseServiceLock(ProfileService,EmailSenderService,CeleryService,AssetService,lockType='reader',check_status=False,as_manager =True)
         @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetObjectPermission('email'),permissions.JWTSignatureAssetPermission())
-        @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.CostHandler,handlers.ContactsHandler(),handlers.ProfileHandler)
+        @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.CostHandler,handlers.ContactsHandler(),handlers.ProfileHandler,handlers.RedisHandler)
         @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
         @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard(),guards.CeleryBrokerGuard)
         @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'))
@@ -155,7 +155,7 @@ class EmailRessource(BaseHTTPRessource):
         
 
         @UseLimiter(limit_value='10/minutes')
-        @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler)
+        @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler,handlers.RedisHandler())
         @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
         @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
         @UsePermission(permissions.TaskCostPermission(),permissions.JWTSignatureAssetPermission())

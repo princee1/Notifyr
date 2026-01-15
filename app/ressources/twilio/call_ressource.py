@@ -7,7 +7,7 @@ from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSeq
 from app.classes.template import PhoneTemplate
 from app.cost.call_cost import CallCost
 from app.decorators.guards import CeleryBrokerGuard, CeleryTaskGuard, RegisteredContactsGuard, TrackGuard
-from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, CostHandler, MiniServiceHandler, ReactiveHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
+from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, CostHandler, MiniServiceHandler, ReactiveHandler, RedisHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.interceptors import KeepAliveResponseInterceptor, RegisterBackgroundTaskInterceptor, TaskCostInterceptor
 from app.decorators.permissions import TaskCostPermission, JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
@@ -69,7 +69,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @PingService([ProfileService,TwilioService,CallService],is_manager=True)
         @UseServiceLock(AssetService,lockType='reader')
         @UseServiceLock(ProfileService,TwilioService,lockType='reader',check_status=False)
-        @UseHandler(AsyncIOHandler,TemplateHandler,CostHandler)
+        @UseHandler(AsyncIOHandler,TemplateHandler,CostHandler,RedisHandler)
         @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
         @UsePipe(OffloadedTaskResponsePipe(),before=False)
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('otp',True), TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','','',False))
@@ -87,7 +87,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UsePermission(TaskCostPermission(),JWTAssetObjectPermission('phone'))
         @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
         @UseServiceLock(AssetService,ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
-        @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler,CostHandler,MiniServiceHandler)
+        @UseHandler(TemplateHandler, CeleryTaskHandler,ContactsHandler,CostHandler,MiniServiceHandler,RedisHandler)
         @UsePipe(OffloadedTaskResponsePipe(), before=False)
         @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
         @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard,CeleryBrokerGuard)
@@ -133,7 +133,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UseServiceLock(AssetService,ProfileService,TwilioService,lockType='reader',check_status=False)
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),TwilioPhoneNumberPipe('otp',True),)
         @UseInterceptor(TaskCostInterceptor,KeepAliveResponseInterceptor)
-        @UseHandler(CostHandler,AsyncIOHandler,ReactiveHandler,StreamDataParserHandler)
+        @UseHandler(CostHandler,AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,RedisHandler)
         @BaseHTTPRessource.Get('/otp/', cost_definition=CostConstant.phone_digit_otp)
         async def enter_digit_otp(self, twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],otpModel: GatherDtmfOTPModel, request: Request, response: Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
 
@@ -155,7 +155,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),TwilioPhoneNumberPipe('default'))
         @UseInterceptor(TaskCostInterceptor,KeepAliveResponseInterceptor)
         @UsePermission(TaskCostPermission())
-        @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,CostHandler)
+        @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,CostHandler,RedisHandler)
         @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], mount=False,cost_definition=CostConstant.phone_auth)
         async def voice_authenticate(self, request: Request,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)],cost:Annotated[CallCost,Depends(CallCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
 
@@ -180,7 +180,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.RELAY])
     @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
     @UsePermission(TaskCostPermission())
-    @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler)
+    @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler,RedisHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
     @UseServiceLock(ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
@@ -212,7 +212,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseServiceLock(ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False)
     @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
     @UsePermission(TaskCostPermission())
-    @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler)
+    @UseHandler(CeleryTaskHandler,ContactsHandler,CostHandler,RedisHandler)
     @UsePipe(OffloadedTaskResponsePipe(), before=False)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe(),ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @UseGuard(CeleryTaskGuard(['task_send_custom_voice_call']),TrackGuard,CeleryBrokerGuard)

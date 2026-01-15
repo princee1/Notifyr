@@ -16,7 +16,7 @@ from app.services.profile_service import  ProfileMiniService, ProfileService
 from app.services.database.neo4j_service import Neo4JService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
-from app.utils.constant import MongooseDBConstant
+from app.utils.constant import CostConstant, MongooseDBConstant
 from app.utils.helper import subset_model
 from .llm_provider_service import LLMProviderMiniService, LLMProviderService
 from .remote_agent_service import  RemoteAgentService
@@ -130,7 +130,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         async with self.statusLock.reader as lock:
             service = self.MiniServiceStore.get(request.agent)
             async with service.statusLock.reader as l:
-                await self.costService.check_enough_credits()
+                await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
 
                 reply = agent_message.PromptAnswer()
                 reply.to_proto()
@@ -146,7 +146,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             async with service.statusLock.reader as l:
 
                 for i in range(5): # stream
-                    await self.costService.check_enough_credits()
+                    await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
                     
                     reply = agent_message.PromptAnswer()
                     reply = reply.to_proto()
@@ -165,7 +165,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         async with self.statusLock.reader as lock:
             service = self.MiniServiceStore.get(request.agent)
             async with service.statusLock.reader as l:
-                await self.costService.check_enough_credits()
+                await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
                 
                 reply = agent_message.PromptAnswer()         
                 reply = reply.to_proto()
@@ -181,7 +181,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                 service = self.MiniServiceStore.get(request.agent)
 
                 async with service.statusLock.reader as l:
-                    await self.costService.check_enough_credits()
+                    await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
 
                     asyncio.sleep(0.1)
                     reply = agent_message.PromptAnswer()

@@ -31,17 +31,19 @@ class Cost:
             self.__inner__init__(request_id,username)
 
         @staticmethod
-        def inject_cost_info(response:Response,bill:Bill,credit:str):
+        def inject_cost_info(response:Response,bill:Bill,credit:str,_total=0):
             
             current_balance = bill['balance_after']
             total = bill['total']
             definition_name = bill.get('definition',None)
 
-            response.headers.append('X-Credit-Name',credit)
-            response.headers.append('X-Current-Balance',str(current_balance))
-            response.headers.append('X-Total-Cost',str(total))
             if definition_name:
                 response.headers.append('X-Definition',definition_name)
+
+            response.headers.append('X-Credit-Name',credit)
+            response.headers.append('X-Current-Balance',str(current_balance))
+            response.headers.append('X-Total-Cost',str(total+_total))
+            
     else:
         def  __init__(self,request_id:str,issuer:str):
             self.__inner__init__(request_id, issuer)
@@ -49,6 +51,7 @@ class Cost:
     def __inner__init__(self, request_id, issuer):
         self.purchase_cost: int = 0
         self.refund_cost: int = 0
+        self.last_total:int = 0
         self.issuer = issuer
         self.request_id = request_id
 
@@ -69,12 +72,14 @@ class Cost:
         self.purchase_items.append(item)
         self.purchase_cost += item.amount * item.quantity
 
-    def reset_bill(self):
+    def reset_bill(self,force =False):
         self.purchase_items.clear()
         self.refund_items.clear()
-
         self.purchase_cost = 0
         self.refund_cost = 0
+        
+        if force:
+            self.last_total = 0
     
     def refund(self,description:str,amount:int,quantity=1):
         item = BillItem(description,int(amount),quantity)
@@ -98,8 +103,8 @@ class Cost:
             "purchase_total": self.purchase_cost,
             "refund_total": self.refund_cost,
             "total":self.purchase_cost - self.refund_cost,
-            "balance_before": self.balance_before,
-            "balance_after": self.balance_before - (self.purchase_cost - self.refund_cost),
+            "balance_before": 0,
+            "balance_after": 0,
         }
 
     def post_payment(self,result:Any):
