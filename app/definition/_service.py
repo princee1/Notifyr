@@ -25,7 +25,7 @@ PossibleDependencies: Dict[str, list[type]] = {}
 OptionalDependencies: Dict[str, list[type]] = {}
 ManagerDependency: Dict[str,bool] = {}
 EndService:List[Type] = []
-MirrorDependency:Dict[type,type]
+MirrorDependency:Dict[type,type] = {}
 
 _CLASS_DEPENDENCY:Dict[str,type]= {}
 __DEPENDENCY: list[type] = []
@@ -594,7 +594,7 @@ def Service(links:list[LinkDep]=[],is_manager = False,abstract_service_register:
         ManagerDependency[cls.__name__] = is_manager
 
         if mirror !=None:
-            MirrorDependency[mirror,__name__]=cls.__name__
+            MirrorDependency[mirror.__name__]=cls.__name__
 
         if endService:
             EndService.append(cls)
@@ -602,12 +602,15 @@ def Service(links:list[LinkDep]=[],is_manager = False,abstract_service_register:
     
     return class_decorator
 
-def MiniService(links:list[LinkDep]=[],override_init = False,scope=None)->Callable[[Type[S]],Type[S]]:
+def MiniService(links:list[LinkDep]=[],override_init = False,scope=None,mirror:Type[BaseService]=None)->Callable[[Type[S]],Type[S]]:
     def class_decorator(cls: Type[S])->Type[S]:
         LinkDep.dep_liaison(cls,links)
         __MINI_SERVICE_DEPENDENCY.append(cls)
         if override_init:
             MiniServiceMeta.append((cls,scope))
+        if mirror !=None:
+            MirrorDependency[mirror.__name__]=cls.__name__
+
         return cls
     return class_decorator
 

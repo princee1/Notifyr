@@ -50,8 +50,6 @@ init_vault(){
   if [ -f "$VAULT_SECRETS_DIR/unseal_key.json" ]; then
     echo "Vault appears already initialized. Unsealing..."
     
-    cat "$VAULT_SECRETS_DIR/unseal_key.json"
-
     local uk1=$(cat "$VAULT_SECRETS_DIR/unseal_key.json" | jq -r '.uk1')
     local uk2=$(cat "$VAULT_SECRETS_DIR/unseal_key.json" | jq -r '.uk2')
 
@@ -489,13 +487,15 @@ create_database_config(){
     setup_config_kv2 "postgres_connection" "set"
   fi
 
+  echo "waiting for mongodb server" && sleep 20
+
   # --- MONGODB CONNECTION ---
   if ! setup_config_kv2 "mongodb_connection" "check"; then
     echo "Configuring MongoDB connection..."
     vault write notifyr-database/config/mongodb \
       plugin_name="mongodb-database-plugin" \
       allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role" \
-      connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin" \
+      connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
       username="$MONGO_INITDB_ROOT_USERNAME" \
       password="$MONGO_INITDB_ROOT_PASSWORD"
 

@@ -19,7 +19,7 @@ from app.services.vault_service import VaultService
 from app.utils.constant import CostConstant, MongooseDBConstant
 from app.utils.helper import subset_model
 from .llm_provider_service import LLMProviderMiniService, LLMProviderService
-from .remote_agent_service import  RemoteAgentService
+from .remote_agent_service import  RemoteAgentMiniService, RemoteAgentService
 from concurrent import futures
 import grpc
 from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
@@ -35,7 +35,7 @@ REACTIVE_TOKEN_COST = 'token_cost'
 
 factory_include = ('temperature','model','timeout')
 
-@MiniService(links=[LinkDep(LLMProviderMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
+@MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMProviderMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class AgentMiniService(BaseMiniService):
     ...
     """

@@ -172,8 +172,8 @@ class MongooseService(TempCredentialsDatabaseService):
         async with await self.client.start_session() as session:
             for attempt in range(retries):
                 try:
-                    async with session.start_transaction():
-                        yield session
+                    async with session.start_transaction() as tr:
+                        yield session,tr
                     break
                 except (ConnectionFailure, OperationFailure):
                     if attempt == retries - 1:
@@ -187,7 +187,8 @@ class MongooseService(TempCredentialsDatabaseService):
     ##################################################
     @property
     def mongo_uri(self):
-        return f"mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017/{self.DATABASE_NAME}"
+        replica = self.configService.getenv('MONGO_REPLICA_NAME','notifyr-0')
+        return f"mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017/{self.DATABASE_NAME}?replicaSet={replica}"
         
     ##################################################
     # Healthcheck

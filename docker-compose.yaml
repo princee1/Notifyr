@@ -160,6 +160,7 @@ services:
       - DOMAIN_NAME=${DOMAIN_NAME}
       - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
       - APS_JOBSTORE=${APS_JOBSTORE}
+      - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
@@ -189,6 +190,7 @@ services:
     environment:
       - MODE=${MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}
+      - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
@@ -222,6 +224,7 @@ services:
     environment:
       - MODE=${MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}
+      - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
@@ -245,6 +248,7 @@ services:
     environment:
       - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
       - MONGO_HOST=${MONGO_HOST-mongodb}
+      - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - REDIS_HOST=${REDIS_HOST-redis}
       - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
       - MODE=${MODE:-prod}
@@ -336,6 +340,8 @@ services:
 
       AWS_VAULT_USER: set_user_in_container_start
       AWS_VAULT_PASSWORD: set_password_in_container_start
+
+      MONGO_REPLICA_NAME: ${MONGO_REPLICA_NAME:-nrp}
 
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       MONGO_HOST: ${MONGO_HOST:-mongodb}
@@ -429,12 +435,19 @@ services:
     image: mongo:8.0-noble
     container_name: mongodb
     restart: always
+    entrypoint: ["mongo-entrypoint.sh"]
+    secrets:
+      - source: mongo_keyfile
+        target: /run/secrets/mongo-keyfile.txt
     volumes:
       - mongo-data:/data/db
+      - ./scripts/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
+      - ./scripts/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
       MONGO_INITDB_DATABASE: notifyr
+      MONGO_REPLICA_NAME: ${MONGO_REPLICA_NAME:-nrp}
     networks:
       - data_net
 
@@ -521,6 +534,8 @@ secrets:
     file: ./.secrets/credit_token.txt
   deploy:
     file: ./.notifyr/deploy.json
+  mongo_keyfile:
+    file: ./.secrets/mongo-keyfile.txt
   
 
 networks:

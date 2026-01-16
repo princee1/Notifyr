@@ -10,7 +10,6 @@ from app.services.logger_service import LoggerService
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_cohere import ChatCohere
-from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
 from langchain_core.language_models import BaseChatModel
 from llama_index.embeddings.openai import OpenAIEmbedding
@@ -119,9 +118,7 @@ class LLMProviderMiniService(BaseMiniService):
                     reasoning_format=agentModel.reasoning_format
                 )
             
-            case 'ollama':
-                raise NotImplementedError()
-                return ChatOllama()
+            case 'ollama': raise NotImplementedError()
 
     def ChatDataFactory(self,)->BaseChatModel:
         ...

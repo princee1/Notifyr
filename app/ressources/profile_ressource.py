@@ -63,7 +63,6 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @PingService([VaultService])
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_201_CREATED)
-    @UsePipe(DocumentFriendlyPipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UseServiceLock(VaultService,lockType='reader')
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler,RedisHandler)
@@ -91,6 +90,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             transaction,
         )
 
+        broker.wait(2)
         broker.propagate(StateProtocol(service=ProfileService,to_destroy=True,to_build=True,bypass_async_verify=False))
         return profileModel.model_dump(mode='json',exclude=(*profileModel._secrets_keys,))
 
@@ -173,16 +173,26 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return None
-       
+
+    @UseRoles([Role.PUBLIC])
+    @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseServiceLock(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
+    async def read_profiles(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+        profiles =  await self.mongooseService.find_all(self.model)
+        profiles = filter(lambda p: p.profile_id in authPermission['allowed_profiles'],profiles)
+        profiles = list(profiles)
+        return profiles
+    
     @UseRoles([Role.PUBLIC])
     @UseHandler(MiniServiceHandler)
     @UsePermission(ProfilePermission)
     @UseServiceLock(ProfileService,lockType='reader',as_manager=True,motor_fallback=True)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.GET])
-    async def read_profiles(self,profile:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/single/{profile}/',methods=[HTTPMethod.GET])
+    async def read_profile(self,profile:str,request:Request, response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.mongooseService.get(self.model,profile,True)
-
+        
     @UseRoles([Role.PUBLIC])
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
@@ -193,9 +203,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         await channel.refresh_worker_state()
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
-        
-
-    
+         
     @classmethod
     async def pipe_profil_model(cls,request:Request,modelType:Literal['model','model_creds','model_update']): 
         try:

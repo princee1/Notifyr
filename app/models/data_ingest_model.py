@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List, Literal, Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_serializer, field_validator
 
 from app.utils.constant import ParseStrategy
 from .file_model import FileResponseUploadModel, UploadError, UriMetadata
@@ -23,6 +23,10 @@ class DataIngestModel(BaseModel):
 		if delta.total_seconds() <= 10:
 			return None
 		return delta
+
+	@field_serializer("defer_by","expires")
+	def hide_password(self, v:TimedeltaSchedulerModel):
+		return v.build('timedelta').total_seconds()
 	
 class DataIngestFileModel(DataIngestModel):
 	strategy: ParseStrategy

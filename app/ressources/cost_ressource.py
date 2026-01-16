@@ -22,8 +22,9 @@ from app.utils.constant import CostConstant, RedisConstant
 @HTTPRessource('costs')
 class CostRessource(BaseHTTPRessource):
 
+    @staticmethod
     async def credit_pipe(credit:str):
-        return REDIS_CREDIT_KEY_BUILDER(credit)
+        return {'credit':REDIS_CREDIT_KEY_BUILDER(credit)}
 
     @InjectInMethod()
     def __init__(self,costService:CostService,reactiveService:ReactiveService,redisService:RedisService):
@@ -63,12 +64,12 @@ class CostRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UseHandler(CostHandler,RedisHandler)
     @PingService([RedisService])
-    @UsePipe(credit_pipe)
     @UseGuard(CreditPlanGuard)
     @UsePipe(JSONLoadsPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)
     async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
+        credit = (await self.credit_pipe(credit))['credit']
         bill_key = self.costService.bill_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,bill_key,start,stop) or []
     
@@ -76,13 +77,13 @@ class CostRessource(BaseHTTPRessource):
 
     @UseRoles([Role.ADMIN])
     @UseGuard(CreditPlanGuard)
-    @UsePipe(credit_pipe)
     @UseHandler(CostHandler,RedisHandler)
     @UsePipe(JSONLoadsPipe,before=False)
     @PingService([CostService,RedisService])
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}/', methods=[HTTPMethod.GET],)
     async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for summary endpoint. Implement retrieval from DB/audit store when available."""
+        credit = (await self.credit_pipe(credit))['credit']
         receipt_key =  self.costService.receipts_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,receipt_key,start,stop) or []
         

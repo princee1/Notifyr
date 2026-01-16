@@ -84,6 +84,7 @@ build:
 	@echo "🛠️  Building Docker services in $(DOCKER_COMPOSE_FILE)..."
 	@echo "================================================="
 	docker compose build minio
+	docker compose build mongodb
 	docker compose build postgres
 	docker compose build vault-init
 	docker compose build app
@@ -135,7 +136,14 @@ deploy-data:
 	@echo "--- 🔑 Initializing API Key Credentials..."
 	./scripts/generate-creds.sh api-key
 	@echo "--- ✅ API Key Credentials ready."
+
+	@echo "--- 🔑 Initializing MongoDB Replicas Keyfile"
+	./scripts/generate-creds.sh mongodb
+	@echo "--- ✅ MongoDB keyfile ready."
 	@sleep 3 && clear
+
+	$(call COMPOSE_RUN, MongoDB Setup, up -d, mongodb)
+	@echo "waiting for mongodb to setup... " && sleep 20
 
 # 	# 2. Vault Initialization
 	$(call COMPOSE_RUN, Vault Init, up, vault-init)
@@ -146,7 +154,7 @@ deploy-data:
 	$(DOCKER) rm vault-init
 	@echo "--- ✅ Secrets copied and vault-init removed."
 	@sleep 1 && clear
-
+	
 # 	# 4. Deploy Persistent Vault
 	$(call COMPOSE_RUN, Vault Persistent, up -d, vault)
 	@sleep 3 && clear

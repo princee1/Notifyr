@@ -118,7 +118,7 @@ class CostService(BaseService):
 
     @RedisCreditKeyBuilder
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
-        current_balance = await self.redisService.redis_limiter.get(credit_key)
+        current_balance = await self.redisService.retrieve(RedisConstant.LIMITER_DB,credit_key)
         if current_balance == None:
             raise InvalidPurchaseRequestError
         
@@ -169,7 +169,6 @@ class CostService(BaseService):
                     
                     new_balance = current_balance - bill_total
                     new_balance = int(new_balance)
-                    
                     pipe.multi()
                     pipe.set(credit_key, new_balance)
 
@@ -177,7 +176,7 @@ class CostService(BaseService):
                     await self.push_bill(credit_key,bill,redis=pipe)
 
                     await pipe.execute()
-
+                    return
                 except WatchError:
                     retry+=1
                     continue

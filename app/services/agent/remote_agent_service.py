@@ -69,8 +69,6 @@ class RemoteAgentService(BaseMiniServiceManager):
 
 
     def register_channel(self):
-        if self.service_status != ServiceStatus.AVAILABLE:
-            raise ServiceNotAvailableError
         
         if APP_MODE == ApplicationMode.worker:
             self.channel = grpc.insecure_channel(self.agentic_grpc_host)

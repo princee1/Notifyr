@@ -59,20 +59,22 @@ class Merchant:
                         await self._refund()
                     except:
                         return
-            except:
+            except Exception as e:
                 try:
                     if self.to_rollback:
                         await rollbackFunc()
                 except:
                     ...
+                
+                print('Error in safe payment',e.__class__,e)
 
                 self.cost.reset_bill()
-                if isinstance(self,DataCost):
+                if isinstance(self.cost,DataCost):
                     self.cost.post_refund(items)
                 else:
                     self.cost.refund(*items)
                     
-                self._refund()
+                await self._refund()
                 
         self.backgroundTasks.add_task(wrapper,*args,**kwargs)
         self._set_indexes()
@@ -87,8 +89,8 @@ class Merchant:
             bill['refund_type'] = 'Cancelling a purchase'
         else:
             bill['refund_type'] = 'Cancelling a reimbursement'
-        self.costService.refund_credits(self.cost.credit_key,bill)
+        await self.costService.refund_credits(self.cost.credit_key,bill)
     
-    async def _set_indexes(self,):
+    def _set_indexes(self,):
         self.cost.indexes[self.index] = len(self.backgroundTasks.tasks) -1
         self.index +=1

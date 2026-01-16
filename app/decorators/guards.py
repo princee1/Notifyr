@@ -413,7 +413,7 @@ class LLMProviderGuard(Guard):
 
         provider = ingestTask.provider if ingestTask != None else agentModel.provider
 
-        llm_model =  await self.mongooseService.find_one(LLMProfileModel,{'_id':provider})
+        llm_model:LLMProfileModel =  await self.mongooseService.find_one(LLMProfileModel,{'_id':provider})
         if llm_model == None:
             raise LLMProviderDoesNotExistError(provider)
 

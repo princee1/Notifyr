@@ -22,12 +22,12 @@ class RegisterBackgroundTaskInterceptor(Interceptor):
 
     def intercept_before(self):
         ...
-    
+
     def intercept_after(self, result:Any,taskManager:TaskManager):
         taskManager.register_backgroundTask()
 
 class KeepAliveResponseInterceptor(Interceptor):
-    
+
     def intercept_before(self):
         ...
 
@@ -47,17 +47,17 @@ class ResponseCacheInterceptor(Interceptor):
     async def intercept_before(self,*args,**kwargs):
         if self.mode != 'cache':
             return
-        
+
         result = await self.cacheType.Get(**kwargs)
         if result == None:
             return
-        
+
         response:Response = kwargs.get('response')
         response.status_code = self.hit_status_code
 
         if not self.raise_default_exception:
             raise SkipCode(result,True)
-        
+
         raise InterceptorDefaultException(response=copy_response(JSONResponse(result),response))
 
     async def intercept_after(self, result:Any,*args,**kwargs):
@@ -69,22 +69,22 @@ class ResponseCacheInterceptor(Interceptor):
             backgroundTasks.add_task(self.cacheType.Delete,**kwargs)
 
 class CacheInterceptor(Interceptor):
-    
+
     def __init__(self,key_builder:Callable[[Request],str], expires:int,inject_headers=True):
         super().__init__(True, True)
         self.memcachedService = Get(MemCachedService)
         self.key_builder = key_builder
         self.expires = expires
         self.inject_headers = inject_headers
-    
+
     def intercept_before(self,request:Request,response:Response):
         ...
-    
+
     def intercept_after(self, result:dict|list):
         ...
-    
+
 class TaskCostInterceptor(Interceptor):
-    
+
     def __init__(self,singular_static_cost:int|None=None,retry_limit=20):
         super().__init__(False, True)
         self.redisService = Get(RedisService)
@@ -104,27 +104,27 @@ class TaskCostInterceptor(Interceptor):
         cost.last_total = bill['total']
         if cost.last_total < 0:
             raise CostLessThanZeroError(cost.last_total)
-        
+
         await self.costService.deduct_credits(cost.credit_key,bill,self.retry_limit)
         Cost.inject_cost_info(response,bill,cost.credit_key)
         cost.reset_bill()
-            
+
     async def intercept_after(self, result:Any,cost:SimpleTaskCost,broker:Broker,response:Response,taskManager:TaskManager):
         bill = cost.generate_bill()
         if bill['total'] != 0:
             await self.costService.refund_credits(cost.credit_key,bill)
             Cost.inject_cost_info(response,bill,cost.credit_key,cost.last_total)
-                
+
 class DataCostInterceptor(Interceptor):
 
     Mode = Literal['refund','purchase']
 
     def __init__(self,credit:str,mode:Mode='purchase',price=1,retry_limit=20):
         super().__init__(False, False)
-        
+
         if mode not in get_args(self.Mode):
             raise ValueError('Invalid DataCostInterceptor Mode')
-        
+
         self.mode = mode
         self.credit=credit
         self.price = price
@@ -143,12 +143,12 @@ class DataCostInterceptor(Interceptor):
                 bill = cost.generate_bill()
                 if cost.last_total < 0:
                     raise CostLessThanZeroError(bill['total'])
-                
+
                 await self.costService.check_enough_credits(self.credit,bill['total'])
                 cost.reset_bill() # reset the potential bill
             case 'refund':
-                ...      
-            
+                ...
+
     async def intercept_after(self, result:Any,*args,**kwargs):
         response:Response = kwargs.get('response')
         cost:DataCost = kwargs.get('cost',None)
