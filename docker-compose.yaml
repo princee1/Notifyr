@@ -435,6 +435,7 @@ services:
     image: mongo:8.0-noble
     container_name: mongodb
     restart: always
+    command: []
     entrypoint: ["mongo-entrypoint.sh"]
     secrets:
       - source: mongo_keyfile

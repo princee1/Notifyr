@@ -26,6 +26,8 @@ if [ -z "$TYPE" ]; then
     echo "Usage:"
     echo "  $0 api-key [--force]"
     echo "  $0 minio [--force]"
+    echo "  $0 mongodb [--force]"
+
     exit 1
 fi
 
