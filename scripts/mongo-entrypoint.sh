@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-
-
 VOLUME_DIR=/data/db
 INIT_FILE="$VOLUME_DIR/init.lock"
 
@@ -26,8 +24,6 @@ fi
 # Wait until init file exists
 if [ ! -f "$INIT_FILE" ]; then
   sleep 5
-
-  
 
   docker-entrypoint.sh mongod \
     --replSet "$MONGO_REPLICA_NAME" \
@@ -64,15 +60,19 @@ if [ ! -f "$INIT_FILE" ]; then
       --password "$MONGO_INITDB_ROOT_PASSWORD" \
       --authenticationDatabase admin \
       --eval "rs.initiate({_id:'$MONGO_REPLICA_NAME',members:[{_id:0,host:'mongodb:27017'}]})"  
+    
+    echo "MongoDB Server Replicas Setting up..."
+    sleep 10
   fi
 
+  kill "$MONGO_PID"
   wait "$MONGO_PID"
-
-else
-  exec docker-entrypoint.sh mongod \
-    --replSet "$MONGO_REPLICA_NAME" \
-    --keyFile "$KEYFILE" \
-    --bind_ip_all &
-
 fi
+
+exec docker-entrypoint.sh mongod \
+  --replSet "$MONGO_REPLICA_NAME" \
+  --keyFile "$KEYFILE" \
+  --bind_ip_all \
+  "$@"
+
 

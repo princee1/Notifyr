@@ -12,8 +12,6 @@ services:
     restart: always
     env_file:
       - .env
-    depends_on:
-      - redis
     ports:
       - "5555:5555"
 
@@ -36,16 +34,23 @@ services:
       PGADMIN_DEFAULT_PASSWORD: test
     ports:
       - "7070:7070"
-    depends_on:
-      - postgres
+
+  mongo-express:
+    image: mongo-express:1
+    container_name: mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=${MONGO_REPLICA_NAME:-nrp}
+      ME_CONFIG_BASICAUTH: "false"
+    networks:
+      - data_net
 
   redis-commander:
     container_name: redis-commander
     hostname: redis-commander
     image: rediscommander/redis-commander:latest
     restart: always
-    depends_on:
-      - redis
     environment:
       - REDIS_HOSTS=local:redis:6379
     ports:
