@@ -2,16 +2,20 @@ import asyncio
 import functools
 from typing import Callable, Generator, Self
 import grpc
+from app.definition import _service
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError, ServiceNotAvailableError
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
+from app.models.agents_model import AgentModel
 from app.services.config_service import ConfigService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
+from app.utils.constant import MongooseDBConstant
 from app.utils.globals import APP_MODE, CAPABILITIES,ApplicationMode
 from app.grpc import agent_pb2_grpc,agent_message
 
 
+CREATE_AGENT_BUILD_STATE = -124
 
 def iterator_factory(callback,wait=0.5):
     async def request_generator():
@@ -47,9 +51,24 @@ class RemoteAgentService(BaseMiniServiceManager):
         if build_state == DEFAULT_BUILD_STATE:
             self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
         
+        models = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
+        counter = self.StatusCounter(len(models))
+        self.MiniServiceStore.clear()
+
+        for model in models:
+            agent = RemoteAgentMiniService(
+                self.configService,
+                self,
+                model
+            )
+            agent._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
+            counter.count(agent)
+            self.MiniServiceStore.add(agent)
+        
+        return super().build(counter, build_state)
+
+
     def register_channel(self):
-        if self.service_status != ServiceStatus.AVAILABLE:
-            raise ServiceNotAvailableError
         
         if APP_MODE == ApplicationMode.worker:
             self.channel = grpc.insecure_channel(self.agentic_grpc_host)
@@ -81,10 +100,12 @@ class RemoteAgentService(BaseMiniServiceManager):
 @MiniService()
 class RemoteAgentMiniService(BaseMiniService):
     
-    def __init__(self,configService:ConfigService,remoteAgentService:RemoteAgentService):
-        super().__init__(None, id)
+    def __init__(self,configService:ConfigService,remoteAgentService:RemoteAgentService,agentModel:AgentModel):
+
+        super().__init__(None, str(agentModel.id))
         self.configService = configService
         self.remoteAgentService = remoteAgentService
+        self.agentModel = agentModel
 
     def SilentFail(func:Callable):
         @functools.wraps(func)

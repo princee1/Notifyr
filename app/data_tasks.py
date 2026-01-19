@@ -31,9 +31,8 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                 if step["current_step"] < DataLoaderStepIndex.PROCESS:
                     cost = FileCost(request_id,f"arq-job@{uri}").init(1,CostConstant.DOCUMENT_CREDIT)
                     cost.post_refund(FileResponseUploadModel(metadata=[UriMetadata(uri=uri,size=size)]))
-                    cost.balance_before = await costService.get_credit_balance(CostConstant.DOCUMENT_CREDIT)
-                    await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,cost.refund_cost)
-                    await costService.push_bill(CostConstant.DOCUMENT_CREDIT,cost.generate_bill())
+                    bill = cost.generate_bill()
+                    await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,cost.refund_cost,bill)
                 
                 if step['current_step'] < DataLoaderStepIndex.CLEANUP and nickname == ArqDataTaskConstant.FILE_DATA_TASK:
                     _step = Step(current_step=DataLoaderStepIndex.CLEANUP-1,steps={},current_params=None)
@@ -100,9 +99,9 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
         if strategy != ParseStrategy.SEMANTIC:
             raise SkipStep()
         cost = TokenCost(request_id,f"arq-job@{uri}")
-        cost.purchase(f'Ai token data process: {uri}',step['current_params'])
-        cost.balance_before = await costService.deduct_credits(CostConstant.TOKEN_CREDIT,cost.purchase_cost)
-        await costService.push_bill(CostConstant.TOKEN_CREDIT,cost.generate_bill())
+        cost.purchase(f'Ai token data process: {uri}',1,step['current_params'])
+        bill = cost.generate_bill()
+        await costService.deduct_credits(CostConstant.TOKEN_CREDIT,bill)
     
     async with StepRunner(step,DataLoaderStepIndex.CLEANUP) as skip:
         skip()

@@ -869,6 +869,8 @@ class MemCachedHandler(Handler):
     
 from app.classes.cost_definition import (
     CostException,
+    CostLessThanZeroError,
+    CostMoreThanZeroError,
     CreditNotInPlanError,
     PaymentFailedError,
     InsufficientCreditsError,
@@ -923,6 +925,18 @@ class CostHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={'message': 'Product not found', 'error': str(e)}
+            )
+    
+        except CostLessThanZeroError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Trying to deduct credit but losing money instead {e.total}'
+            )
+
+        except CostMoreThanZeroError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Trying to give credit but taking money instead: {e.total}'
             )
     
         except CreditNotInPlanError as e:

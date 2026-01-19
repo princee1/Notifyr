@@ -13,7 +13,6 @@ class System(BaseModel):
     behaviors:list[str] = []
     task:str 
 
-
 class AgentModel(BaseDocument):
     
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION 
@@ -21,7 +20,7 @@ class AgentModel(BaseDocument):
     provider: LLMProviderConstant.LLMProvider
     memory:List[str] = []
     model: str
-    tools: list[str] = []
+    tools: list[ToolModel] = []
     temperature: float = 0.7
     timeout:float = 20
     max_retries:int = 5

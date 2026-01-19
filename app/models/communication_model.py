@@ -115,7 +115,7 @@ class SMTPProfileModel(ProtocolProfileModel):
         def parse_email(email:str):
             if email == None:
                 return None
-            if email.lower().strip() == '_same_as_email_address_':
+            if email.lower().strip() == '__same__':
                 return self.email_address
             if not email_validator(email):
                 raise ValueError('Email format not valid')

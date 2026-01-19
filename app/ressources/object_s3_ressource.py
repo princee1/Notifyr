@@ -13,7 +13,7 @@ from app.models.object_model import ObjectResponseUploadModel, ObjectS3ResponseM
 from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard, UploadFilesGuard
-from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, FileNamingHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, UploadFileHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, FileNamingHandler, RedisHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
@@ -24,6 +24,7 @@ from app.depends.dependencies import get_auth_permission
 from app.depends.res_cache import MinioResponseCache
 from app.manager.broker_manager import Broker
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError
+from app.services.cost_service import CostService
 from app.services.database.object_service import ObjectS3Service,Object
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
@@ -70,15 +71,17 @@ class S3ObjectRessource(BaseHTTPRessource):
         return s3Service.external, '' if s3Service.external else 'Cannot generate presigned url for a non external s3 endpoint'
 
     @InjectInMethod()
-    def __init__(self, assetService: AssetService, objectS3Service: ObjectS3Service, hcVaultService: VaultService,fileService:FileService):
+    def __init__(self, assetService: AssetService, objectS3Service: ObjectS3Service, hcVaultService: VaultService,fileService:FileService,costService:CostService):
         super().__init__()
         self.assetService: AssetService = assetService
         self.objectS3Service: ObjectS3Service = objectS3Service
         self.hcVaultService: VaultService = hcVaultService
         self.fileService = fileService
+        self.costService = costService
 
         self.is_asset_pipe= TemplateParamsPipe(accept_none=False,inject_asset_routes=True)
         self.free_input_pipe = ValidFreeInputTemplatePipe(False,True)
+        self.copy_interceptor = DataCostInterceptor(CostConstant.OBJECT_CREDIT)
 
     async def upload(self, file:UploadFile | dict,encrypt:bool=False):
         
@@ -106,10 +109,10 @@ class S3ObjectRessource(BaseHTTPRessource):
     @PingService([ObjectS3Service])
     @UsePipe(MerchantPipe)
     @Throttle(normal=(200,60))
-    @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler,FileHandler,CostHandler)
+    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
-    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler,FileHandler,CostHandler,RedisHandler)
     @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],response_model=ObjectResponseUploadModel ,mount=False)
     async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -181,7 +184,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @PingService([ObjectS3Service])
     @UseGuard(GlobalsTemplateGuard)
     @Throttle(uniform=(100,180))
-    @UseHandler(S3Handler,FileHandler,CostHandler)
+    @UseHandler(S3Handler,FileHandler,CostHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'refund'))
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UsePipe(ValidFreeInputTemplatePipe(False,True),MerchantPipe(-1))
@@ -265,14 +268,14 @@ class S3ObjectRessource(BaseHTTPRessource):
         }
 
                 
-    @PingService([ObjectS3Service,VaultService])
-    @UsePermission(AdminPermission)
     @Throttle(normal=(300,200))
-    @UseHandler(S3Handler,VaultHandler,TemplateHandler,FileNamingHandler,CostHandler,UploadFileHandler)
-    @UseGuard(GlobalsTemplateGuard,UploadFilesGuard(1,allowed_extensions=['.xml','.html','.css','.scss']))
+    @UsePermission(AdminPermission)
+    @PingService([ObjectS3Service,VaultService])
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
-    @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}),MerchantPipe())
     @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @UseGuard(GlobalsTemplateGuard,UploadFilesGuard(1,allowed_extensions=['.xml','.html','.css','.scss']))
+    @UseHandler(S3Handler,VaultHandler,TemplateHandler,FileNamingHandler,CostHandler,UploadFileHandler,RedisHandler)
+    @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}),MerchantPipe())
     @BaseHTTPRessource.HTTPRoute('/modify/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectResponseUploadModel,mount=False)
     async def modify_object(self,template:str,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)], objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],files:List[UploadFile]=File(...),authPermission:AuthPermission=Depends(get_auth_permission)):
         meta:Object = await self.objectS3Service.stat_objet(template,objectsSearch.version_id,True)
@@ -304,14 +307,14 @@ class S3ObjectRessource(BaseHTTPRessource):
     
 
     @PingService([ObjectS3Service])
-    @UseHandler(S3Handler,FileNamingHandler)
     @UsePermission(AdminPermission)
-    @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UsePipe(ValidFreeInputTemplatePipe(False,False),pipe_restore)
     @UseGuard(GlobalsTemplateGuard)
+    @UsePipe(ObjectS3OperationResponsePipe,before=False)
+    @UseHandler(S3Handler,FileNamingHandler,CostHandler,RedisHandler)
+    @UsePipe(ValidFreeInputTemplatePipe(False,False),pipe_restore,MerchantPipe())
     @UseServiceLock(ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/copy/{template:path}/to/{destination_template:path}',methods=[HTTPMethod.PATCH],response_model=ObjectS3ResponseModel,mount=False)
-    async def copy_object(self,template:str,request:Request,response:Response,destination_template:str,broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],move:bool = Query(False),restore:bool = Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def copy_object(self,template:str,request:Request,response:Response,destination_template:str,cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],move:bool = Query(False),restore:bool = Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
 
         self.free_input_pipe.pipe(destination_template,objectsSearch)
         if objectsSearch.is_file:
@@ -324,10 +327,34 @@ class S3ObjectRessource(BaseHTTPRessource):
         if template.split('/')[0] !=  destination_template.split('/')[0]:
             raise AssetTypeNotAllowedError
         
+        meta: Object = await self.objectS3Service.stat_objet(check_existence=True)
+        
         broker.wait(3)
         broker.propagate(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
 
-        return await self.objectS3Service.copy_object(template,destination_template,objectsSearch.version_id,move)
+        if move:
+            return await self.objectS3Service.copy_object(template,destination_template,objectsSearch.version_id,move)
+        else:
+           
+           await self.copy_interceptor.intercept_before(**{'cost':cost,'meta':meta})
+           await self.copy_interceptor.intercept_after(
+               meta,
+               **{'cost':cost,'response':response}
+           )
+           merchant.safe_payment(
+               None,
+               ObjectS3ResponseModel(meta=[meta]),
+               self.objectS3Service.copy_object,
+               template,
+               destination_template,
+               objectsSearch.version_id,
+               move
+           )
+        
+        return {
+            'meta':meta
+        }
+
 
     
     ##################################################################################################################

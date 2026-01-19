@@ -3,7 +3,7 @@ from fastapi import BackgroundTasks, Depends, Query, Request, Response
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.guards import AccessLinkGuard
-from app.decorators.handlers import CostHandler, ORMCacheHandler, TortoiseHandler
+from app.decorators.handlers import CostHandler, ORMCacheHandler, RedisHandler, TortoiseHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe
@@ -62,11 +62,11 @@ class CRUDLinkRessource(BaseHTTPRessource):
         self.linkService = linkService
 
     @UseRoles([Role.ADMIN])
-    @HTTPStatusCode(status.HTTP_201_CREATED)
     @UsePipe(MerchantPipe)
     @Throttle(uniform=(100,500))
+    @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT))
-    @UseHandler(ORMCacheHandler,CostHandler)
+    @UseHandler(ORMCacheHandler,CostHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
     async def add_link(self, request: Request, linkModel: LinkModel,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], response: Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         link = linkModel.model_dump()
@@ -90,11 +90,11 @@ class CRUDLinkRessource(BaseHTTPRessource):
         return link.to_json
 
     @UseRoles([Role.ADMIN])
-    @UsePipe(MerchantPipe(-1))
-    @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT,'refund'))
-    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @Throttle(uniform=(100,400))
-    @UseHandler(ORMCacheHandler,CostHandler)
+    @UsePipe(MerchantPipe(-1))
+    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @UseHandler(ORMCacheHandler,CostHandler,RedisHandler)
+    @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE])
     async def delete_link(self,response:Response,request:Request,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission)):
         link_data = link.to_json.copy()

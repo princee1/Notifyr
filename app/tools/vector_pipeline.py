@@ -1,6 +1,8 @@
 from app.definition._tool import Pipeline
+from app.services.config_service import ConfigService
+from app.services.database.qdrant_service import QdrantService
 
-class RagPipeline(Pipeline):
+class VectorRagPipeline(Pipeline):
         """
         1. Embed the user query
         2. look up the cache if hit return response else
@@ -13,4 +15,9 @@ class RagPipeline(Pipeline):
         9. prompt using the llm
         10. store the response in a cache or in the vector database
         """
+
+        def __init__(self,qdrantService:QdrantService,configService:ConfigService,):
+                super().__init__()
+                self.qdrantService = qdrantService
+                self.configService = configService
     

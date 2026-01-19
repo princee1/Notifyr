@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y curl postgresql-15-cron postgresql-15-p
 
 COPY database/*.sql /database/
 
-COPY --chown=postgres:postgres scripts/db-init.sh /docker-entrypoint-initdb.d/init.sh
+COPY --chown=postgres:postgres scripts/postgres-init.sh /docker-entrypoint-initdb.d/init.sh
 
 RUN chmod +x /docker-entrypoint-initdb.d/init.sh
 

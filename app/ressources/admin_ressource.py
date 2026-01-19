@@ -5,12 +5,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard, PolicyGuard
 from app.decorators.interceptors import DataCostInterceptor
+from app.definition._cost import DataCost
 from app.definition._service import StateProtocol
 from app.depends.funcs_dep import GetPolicy, get_blacklist, get_group, get_client
 from app.depends.orm_cache import WILDCARD, AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache, PolicyORMCache
 from app.depends.variables import _wrap_checker
 from app.interface.issue_auth import IssueAuthInterface
 from app.manager.broker_manager import Broker
+from app.manager.merchant_manager import Merchant
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.database.tortoise_service import TortoiseConnectionService
@@ -25,7 +27,7 @@ from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthType, PolicyModel, PolicyUpdateMode, Role, Scope
-from app.decorators.handlers import AsyncIOHandler, CostHandler, ORMCacheHandler, PydanticHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, ORMCacheHandler, PydanticHandler, RedisHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe, ObjectRelationalFriendlyPipe
 from app.utils.helper import  parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
@@ -149,12 +151,13 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
         self.key = self.vaultService.CLIENT_PASSWORD_HASH_KEY
 
-    @UseHandler(CostHandler)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
+    @UseHandler(CostHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT))
     @UseServiceLock(SettingService,lockType='reader')
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/')
-    async def create_client(self, client: ClientModel,gid: str = Depends(get_query_params('gid', 'id')), authPermission=Depends(get_auth_permission)):
+    async def create_client(self,  merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, client: ClientModel,gid: str = Depends(get_query_params('gid', 'id')), authPermission=Depends(get_auth_permission)):
         
         policy_ids = client.policy_ids
         password, salt = self.securityService.store_password(client.password, self.key)
@@ -172,6 +175,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
         else:
             group = None
 
+
         async with in_transaction():
             group_id = None if group == None else str(group.group_id)
             client_data['group'] = group
@@ -184,9 +188,9 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             await ChallengeORMCache.Store(client.client_id,challenge,ttl_auth_challenge)
 
             policy = await AuthPermissionCache.Cache([group_id,client.client_id],client=client)
+        
 
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Client successfully created", "client": client.to_json,
-                                                                          "Policy":policy})
+        return {"client": client.to_json,"Policy":policy}
 
     async def create_challenge(self, client: ClientORM):
         challenge = ChallengeORM(client=client)
@@ -233,19 +237,28 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @UsePermission(AdminPermission)
     @UsePipe(ForceClientPipe)
-    @UseHandler(ORMCacheHandler,CostHandler)
+    @HTTPStatusCode(status.HTTP_200_OK,)
+    @UseHandler(ORMCacheHandler,CostHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT,'refund'))
     @BaseHTTPRessource.Delete('/')
-    async def delete_client(self, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
-        async with in_transaction():
-            await client.delete()
+    async def delete_client(self, merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
+        
+        async def transaction():
+            async with in_transaction():
+                await client.delete()
 
-            group_id = None if client.group==None else str(client.group.group_id)
+                group_id = None if client.group==None else str(client.group.group_id)
 
-            await ClientORMCache.Invalid([group_id,client.client_id])
-            await AuthPermissionCache.Invalid([group_id,client.client_id])
+                await ClientORMCache.Invalid([group_id,client.client_id])
+                await AuthPermissionCache.Invalid([group_id,client.client_id])
+        
+        merchant.safe_payment(
+            None,
+            None,
+            transaction
+        )
 
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Client successfully deleted", "client": client.to_json})
+        return client.to_json
 
     @UseRoles(roles=[Role.CONTACTS])
     @BaseHTTPRessource.Get('/all',deprecated=True,mount=False)

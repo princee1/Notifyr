@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import ClassVar, Self, TypedDict,Optional, Any, Callable
 import operator
+import uuid
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 
@@ -45,9 +46,11 @@ class MongoCondition(TypedDict):
 
 
 from beanie import Document
+from app.utils.helper import uuid_v1_mc
 
 class BaseDocument(Document):
-        
+    id: str = Field(default_factory=lambda: f"{uuid_v1_mc(1)}")
+
     alias: str
     description: Optional[str] = Field(default=None,min_length=0,max_length=400)
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())

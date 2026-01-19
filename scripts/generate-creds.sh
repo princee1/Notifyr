@@ -12,7 +12,7 @@ FORCE=0
 
 for arg in "$@"; do
     case "$arg" in
-        api-key|minio)
+        api-key|minio|mongodb)
             TYPE="$arg"
             ;;
         -f|--force)
@@ -26,6 +26,8 @@ if [ -z "$TYPE" ]; then
     echo "Usage:"
     echo "  $0 api-key [--force]"
     echo "  $0 minio [--force]"
+    echo "  $0 mongodb [--force]"
+
     exit 1
 fi
 
@@ -39,6 +41,10 @@ case "$TYPE" in
         CONFIG_FILE="$SECRET_DIR/minio-root.json"
         DESCRIPTION="MinIO credentials file"
         ;;
+    mongodb)
+        CONFIG_FILE="$SECRET_DIR/mongo-keyfile.txt"
+        DESCRIPTION="Mongo db replicas keyfile"
+
 esac
 
 # ---- Existing file handling ----
@@ -58,6 +64,10 @@ case "$TYPE" in
         echo "✨ Generating new API key and saving it to $CONFIG_FILE"
         KEY="api_key:$(pwgen -s 100 1)"
         echo -n "$KEY" > "$CONFIG_FILE"
+        ;;
+    mongodb)
+        echo "✨ Generating new API key and saving it to $CONFIG_FILE"
+        openssl rand -base64 756 > "$CONFIG_FILE"
         ;;
     minio)
         echo "✨ Generating new MinIO root credentials and saving them to $CONFIG_FILE"

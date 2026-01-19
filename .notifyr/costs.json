@@ -187,6 +187,7 @@
         "message":100000,
         "webhook":10000,
         "notification":1000,
+        "chat":1000000,
 
         "contact": 1000,
         "client": 5,

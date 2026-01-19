@@ -7,7 +7,7 @@ from app.decorators.pipes import JSONLoadsPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, UseServiceLock
 from app.definition._utils_decorator import Pipe
 from app.depends.dependencies import get_auth_permission
-from app.services.cost_service import CostService
+from app.services.cost_service import CostService,REDIS_CREDIT_KEY_BUILDER
 from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService
 from fastapi import Depends, Query, Request, Response
@@ -21,6 +21,10 @@ from app.utils.constant import CostConstant, RedisConstant
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('costs')
 class CostRessource(BaseHTTPRessource):
+
+    @staticmethod
+    async def credit_pipe(credit:str):
+        return {'credit':REDIS_CREDIT_KEY_BUILDER(credit)}
 
     @InjectInMethod()
     def __init__(self,costService:CostService,reactiveService:ReactiveService,redisService:RedisService):
@@ -65,6 +69,7 @@ class CostRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)
     async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
+        credit = (await self.credit_pipe(credit))['credit']
         bill_key = self.costService.bill_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,bill_key,start,stop) or []
     
@@ -78,6 +83,7 @@ class CostRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}/', methods=[HTTPMethod.GET],)
     async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission)):
         """Placeholder for summary endpoint. Implement retrieval from DB/audit store when available."""
+        credit = (await self.credit_pipe(credit))['credit']
         receipt_key =  self.costService.receipts_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,receipt_key,start,stop) or []
         

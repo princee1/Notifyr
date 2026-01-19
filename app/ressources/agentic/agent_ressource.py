@@ -4,7 +4,7 @@ from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
-from app.decorators.handlers import AgenticHandler, AsyncIOHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgenticHandler, AsyncIOHandler, CostHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
@@ -57,11 +57,11 @@ class AgentsRessource(BaseHTTPRessource):
         self.provider_guard = LLMProviderGuard()
     
     @UsePermission(AdminPermission) 
-    @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
-    @UseHandler(AgenticHandler)
     @Throttle(normal=(200,80))
     @UsePipe(MerchantPipe())
     @UseGuard(LLMProviderGuard())
+    @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
+    @UseHandler(AgenticHandler,RedisHandler,CostHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
@@ -88,6 +88,7 @@ class AgentsRessource(BaseHTTPRessource):
          
     @UsePermission(AdminPermission)
     @UsePipe(MerchantPipe(-1))
+    @UseHandler(CostHandler,RedisHandler)
     @Throttle(normal=(200,80))
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @UsePipe(DocumentFriendlyPipe,before=False)

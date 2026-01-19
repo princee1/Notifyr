@@ -4,7 +4,7 @@ from app.classes.auth_permission import AuthPermission
 from app.container import InjectInMethod
 from app.cost.file_cost import FileCost
 from app.decorators.guards import ArqDataTaskGuard
-from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, ProxyRestGatewayHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import update_status_upon_no_metadata_pipe
@@ -79,7 +79,7 @@ class VectorDBRessource(BaseHTTPRessource):
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @PingService([RemoteAgentService,ArqDataTaskService])
     @UseServiceLock(ArqDataTaskService,lockType='reader')
-    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler)
+    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(delete_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
@@ -121,7 +121,7 @@ class VectorDBRessource(BaseHTTPRessource):
     @PingService([RemoteAgentService,ArqDataTaskService])
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseServiceLock(ArqDataTaskService,lockType='reader')
-    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler)
+    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE])

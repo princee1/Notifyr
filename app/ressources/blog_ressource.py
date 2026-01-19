@@ -2,7 +2,7 @@ from typing import Annotated
 from fastapi import Depends, Request, Response
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, MemCachedHandler, ServiceAvailabilityHandler, TortoiseHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, MemCachedHandler, RedisHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, JWTStaticObjectPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, UseHandler, UseInterceptor, UseLimiter, UsePermission, UseRoles
@@ -11,6 +11,7 @@ from app.services.database.object_service import ObjectS3Service
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService,JWTAuthService
 from app.definition._cost import DataCost
+from app.utils.constant import CostConstant
 
 
 @HTTPRessource('social')
@@ -49,8 +50,9 @@ class BlogsRessource(BaseHTTPRessource):
         self.configService = configService
         self.awsS3Service = awsS3Service
 
+    @UseHandler(CostHandler,RedisHandler)
     @UsePermission(AdminPermission)
-    @UseInterceptor(DataCostInterceptor)
+    @UseInterceptor(DataCostInterceptor(CostConstant.BLOG_CREDIT))
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_blog(self,request:Request, response:Response,cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
         ...
@@ -69,7 +71,8 @@ class BlogsRessource(BaseHTTPRessource):
         ...
 
     @UsePermission(AdminPermission)
-    @UseInterceptor(DataCostInterceptor)
+    @UseHandler(CostHandler,RedisHandler)
+    @UseInterceptor(DataCostInterceptor(CostConstant.BLOG_CREDIT,'refund'))
     @UseInterceptor(ResponseCacheInterceptor('invalid-only'))
     @BaseHTTPRessource.HTTPRoute('/{blog}/',methods=[HTTPMethod.DELETE])
     async def delete_blog(self,blog:str,request:Request,response:Response,cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)): # type: ignore

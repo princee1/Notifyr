@@ -113,15 +113,14 @@ class ObjectS3Service(TempCredentialsDatabaseService):
     
     @RunInThreadPool
     async def copy_object(self,source_object_name: str,dest_object_name: str,version_id: str = None,move=False,buckets=MinioConstant.ASSETS_BUCKET):
-        self.read_object(source_object_name,version_id,buckets).close()
         result = self.client.copy_object(
             buckets,
             dest_object_name,
             source=CopySource(bucket=buckets, object=source_object_name, version_id=version_id)
         )
-        
         if move:
             self.client.remove_object(buckets, source_object_name, version_id=version_id)
+
         meta = await self.stat_objet(dest_object_name,check_existence=True,buckets=buckets)
         return {
             'result':result,
