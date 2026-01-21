@@ -389,7 +389,7 @@ class Container():
             for s in params.values():
                 c = s.__class__ 
                 dep_services[c]=s
-                s.used_by_services[obj.__class__] = obj
+                s.add_used_services(obj)
             
             obj.dependant_services= dep_services
             willBuild = self.DEPENDENCY_MetaData[typ.__name__][DependencyConstant.FLAG_BUILD_KEY]
@@ -437,11 +437,12 @@ class Container():
             cache[dep.name] = True
             
             for x in dep.used_by_services.values():
-                if x.name in cache:
-                    continue
-                linkP =  LiaisonDependency[x.name]
-                linkP = linkP[dep.__class__]
-                __destroy(x,linkParams=linkP)
+                for s in x:
+                    if s.name in cache:
+                        continue
+                    linkP =  LiaisonDependency[s.name]
+                    linkP = linkP[dep.__class__]
+                    __destroy(s,linkParams=linkP)
         
         if all: 
             for d in dependency.values():
@@ -469,16 +470,18 @@ class Container():
             cache[service.name] = True
             
             for used_s in service.used_by_services.values():
-                if used_s.name in cache:
-                    continue
+                for s in used_s:
+                    if s.name in cache:
+                        continue
 
-                linkP =  LiaisonDependency[used_s.name]
-                linkP = linkP[service.__class__]
-                __reload(used_s,linkP)
+                    linkP =  LiaisonDependency[s.name]
+                    linkP = linkP[service.__class__]
+                    __reload(s,linkP)
 
         if all:
             for all_s in s.values():
-                __reload(all_s)
+                for x in all_s:
+                    __reload(x)
         else:
             __reload(s)
         

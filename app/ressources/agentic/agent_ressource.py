@@ -114,13 +114,13 @@ class AgentsRessource(BaseHTTPRessource):
         
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
         agentUpdateModel = self.UpdateAgentModel.model_validate(body)
-        await agentModel.update_profile(agentUpdateModel)
+        await agentModel.update_content(agentUpdateModel)
 
         await self.provider_guard.guard(agentModel=agentModel)
         
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
-        await agentModel.update_meta_profile()
+        await agentModel.update_meta()
 
         broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel

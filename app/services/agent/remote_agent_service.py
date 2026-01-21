@@ -17,7 +17,7 @@ from app.grpc import agent_pb2_grpc,agent_message
 
 CREATE_AGENT_BUILD_STATE = -124
 
-def iterator_factory(callback,wait=0.5):
+def iterator_factory(callback:Callable,wait=0.5):
     async def request_generator():
         while True:
             request: agent_message.PromptRequest = await callback()
@@ -67,7 +67,6 @@ class RemoteAgentService(BaseMiniServiceManager):
         
         return super().build(counter, build_state)
 
-
     def register_channel(self):
         
         if APP_MODE == ApplicationMode.worker:
@@ -81,8 +80,6 @@ class RemoteAgentService(BaseMiniServiceManager):
         self.stub = agent_pb2_grpc.AgentStub(self.channel)
     
     async def disconnect_channel(self):
-        if self.service_status != ServiceStatus.AVAILABLE:
-            raise ServiceNotAvailableError
         if self.channel:
             await self.channel.close()
             self.channel = None

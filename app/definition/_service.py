@@ -124,16 +124,15 @@ class BaseService():
     CONTAINER_LIFECYCLE_SCOPE:bool = True
 
     def __init__(self) -> None:
-        self.build_status: BuildErrorLevel = None
         self._builded: bool = False
         self._destroyed: bool = False
+
         self.prettyPrinter: PrettyPrinter = PrettyPrinter_
         self.service_status: ServiceStatus = None
         self.method_not_available: set[str] = set()
         self.dependant_services:dict[Type[BaseService],BaseService] = {}
-        self.used_by_services:dict[Type[BaseService],BaseService] ={}
+        self.used_by_services:dict[Type[BaseService],List[BaseService]] ={} # BUG memory might occur if the chain dep is not properly set
         self.statusLock = RWLock()
-        self.stateCounter = 0
 
         self.pretty_print_wait_time = WAIT_TIME
 
@@ -230,6 +229,12 @@ class BaseService():
 
     def __str__(self) -> str:
         return f"Service: {self.__class__.__name__} Hash: {self.__hash__()}"
+    
+    def add_used_services(self,service:Self):
+        if service.__class__ not in self.used_by_services:
+            self.used_by_services[service.__class__] = [service]
+        else:
+            self.used_by_services[service.__class__].append(service)
 
     @Mock()
     def report(self,state:Literal['destroy','build','variable']='build',variables:dict[str,Any]=None,reason:str=None, state_value:int=None):
@@ -392,15 +397,13 @@ class BaseMiniService(BaseService,):
     
     def register(self,*args):
         if len(args) == 1:
-            service = args[0]
+            service:Self = args[0]
             if service != None and service != self.depService:
-                service.used_by_services[self.__class__] = self
+                service.add_used_services(self)
         else:
             if self.depService != None:
-                self.depService.used_by_services[self.__class__] = self
+                self.depService.add_used_services(self)
 
-
-            
     @property
     def write_lock(self):
         ...
@@ -408,6 +411,10 @@ class BaseMiniService(BaseService,):
     @property
     def read_lock(self):
         ...
+
+    @property
+    def name(self):
+        return f"{super().name}@{self.miniService_id}"
 
 
 
@@ -445,7 +452,7 @@ class MiniServiceStore(Generic[TMS]):
                 return False
         if miniService_id not in self:
             if _raise:
-                raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
+                raise MiniServiceDoesNotExistsError(miniService_id)
             else:
                 raise False
         return True
@@ -459,7 +466,7 @@ class MiniServiceStore(Generic[TMS]):
 
     def __delitem__(self, miniService_id: str | Any):
         if miniService_id not in self._store_:
-            raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
+            raise MiniServiceDoesNotExistsError(miniService_id)
         del self._store_[miniService_id]
 
     def __iter__(self):

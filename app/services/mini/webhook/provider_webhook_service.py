@@ -96,14 +96,14 @@ class DiscordWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
         return resp.status_code,resp.content
     
 @MiniService()
-class ZapierWebhookMiniService(HTTPOutboundMiniService):
+class ZapierWebhookMiniService(HTTPWebhookMiniService):
 
     def __init__(self,profileMiniService:ProfileMiniService[ZapierHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         self.depService = profileMiniService
         super().__init__(profileMiniService,configService,redisService)
 
 @MiniService()      
-class MakeWebhookMiniService(HTTPOutboundMiniService):
+class MakeWebhookMiniService(HTTPWebhookMiniService):
     """
     Make (Integromat) webhooks are HTTP endpoints that accept JSON or form data.
     This wrapper mirrors ZapierAdapter but provides the common header name
@@ -114,7 +114,7 @@ class MakeWebhookMiniService(HTTPOutboundMiniService):
         super().__init__(profileMiniService,configService,redisService)
 
 @MiniService()
-class SlackIncomingWebhookMiniService(HTTPOutboundMiniService):
+class SlackIncomingWebhookMiniService(HTTPWebhookMiniService):
     """
     Slack Incoming Webhooks accept JSON payloads:
        {"text": "message", "blocks": [...], "attachments": [...]}
@@ -138,7 +138,7 @@ class SlackIncomingWebhookMiniService(HTTPOutboundMiniService):
 
     async def deliver_async(self,payload: Any):
         slack_message = self._convert_payload(payload)
-        return await super().deliver_deliver(slack_message)
+        return await super().deliver_async(slack_message)
     
     def deliver(self,payload:Any):
         slack_message = self._convert_payload(payload)
@@ -169,7 +169,7 @@ class SlackIncomingWebhookMiniService(HTTPOutboundMiniService):
         return base
 
 @MiniService()
-class N8NWebhookMiniService(HTTPOutboundMiniService):
+class N8NWebhookMiniService(HTTPWebhookMiniService):
     def __init__(self,profileMiniService:ProfileMiniService[MakeHTTPWebhookModel],configService:ConfigService,redisService:RedisService):
         super().__init__(profileMiniService,configService,redisService)
         self.depService = profileMiniService

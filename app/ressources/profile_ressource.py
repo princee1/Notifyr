@@ -140,11 +140,11 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         profileModel = await self.mongooseService.get(self.model,profile,True)
         modelUpdate = await self.pipe_profil_model(request,'model_update')
 
-        await profileModel.update_profile(modelUpdate)
+        await profileModel.update_content(modelUpdate)
 
         await self.mongooseService.primary_key_constraint(profileModel,True)
         await self.mongooseService.exists_unique(profileModel,True)
-        await profileModel.update_meta_profile()
+        await profileModel.update_meta()
 
         await channel.refresh_worker_state()
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
@@ -167,7 +167,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await self.profile_model_satisfaction(modelCreds)
 
         await self.profileService.update_credentials(profile,modelCreds,self.model._vault)
-        await profileModel.update_meta_profile()
+        await profileModel.update_meta()
 
         await channel.refresh_worker_state()
 

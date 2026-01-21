@@ -1,7 +1,9 @@
 import asyncio
-from typing import Any, Callable
+import functools
+from typing import Any, Callable, Dict, List, Self
 from fastapi import HTTPException
 from pydantic import ValidationError
+from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
 from app.errors.service_error import BuildFailureError, MiniServiceDoesNotExistsError
@@ -12,6 +14,7 @@ from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.qdrant_service import QdrantService
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
+from app.services.mini.outbound.http_outbound_service import HTTPOutboundMiniService
 from app.services.profile_service import  ProfileMiniService, ProfileService
 from app.services.database.neo4j_service import Neo4JService
 from app.services.reactive_service import ReactiveService
@@ -23,7 +26,10 @@ from .remote_agent_service import  RemoteAgentMiniService, RemoteAgentService
 from concurrent import futures
 import grpc
 from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
+
 from langchain.agents.factory import create_agent
+from langchain.tools import tool, ToolRuntime
+from langgraph.graph.state import CompiledStateGraph
 
 
 agent_validation_model = subset_model(AgentModel,'ValidationAgentModel')
@@ -44,20 +50,24 @@ class AgentMiniService(BaseMiniService):
     graph of tools
     call the provider
     """
-    def __init__(self,configService:ConfigService,neo4jService:Neo4JService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,agent_model:AgentModel):
+    def __init__(self,configService:ConfigService,neo4jService:Neo4JService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,agent_model:AgentModel,outboundServices:Dict[str,HTTPOutboundMiniService]=[]):
             self.depService = llmProviderMService
             super().__init__(llmProviderMService,str(agent_model.id))
             self.mongooseService = mongooseService
-            self.agent_model=agent_model
             self.configService = configService
             self.neo4jService =  neo4jService
             self.qdrantService = qdrantService
-        
+            self.outboundServices = outboundServices
+            self.agent_model=agent_model
+
+            for outbound in self.outboundServices.values():
+                self.register(outbound)
+
             self.executors ={}
     
     def verify_dependency(self):
         if self.depService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError()
+            raise BuildFailureError('LLM Provider is not available')
     
     def build(self, build_state = ...):
         try:
@@ -67,16 +77,12 @@ class AgentMiniService(BaseMiniService):
             
             self.chat = self.depService.ChatAgentFactory(self.agent_model)
 
-            tools = self._init_tools()
-            middleware = self._init_middleware()
-            prompt = self._init_prompt()
-            res_format = self._init_response_format()
-
+            self._init_tools()
+            self._init_middleware()
+            self._init_prompt()
+            self._init_response_format()
             self.init_long_term_memory()
-
-            self.agent = create_agent(
-                model=self.chat,
-            )
+            self.agent = self.create_agent()
 
         except ValidationError as e:
             raise BuildFailureError('Could not validate the agent model')
@@ -86,21 +92,28 @@ class AgentMiniService(BaseMiniService):
     
     def _init_middleware(self):
         ...
-    
-    def init_long_term_memory(self):
-        ...
-    
+        
     def _init_prompt(self):
         ...
     
     def _init_response_format(self):
         ...
 
-    def _update_long_term_memory(self):
-        ...    
-
-    def register_executor(self):
+    def _build_graph(self):
         ...
+
+    def init_long_term_memory(self):
+        ...
+
+    async def update_long_term_memory(self):
+        ...  
+
+    def create_agent(self,ref_id=None,memory=None):
+        agent = create_agent(
+                model=self.chat,
+            )
+
+        return agent
 
     async def fetch_chat_history(self):
         ...
@@ -108,23 +121,55 @@ class AgentMiniService(BaseMiniService):
     async def fetch_contact_memory(self):
         ...
     
-    async def invoke(self):
-        ...
+    @staticmethod
+    def Base_Agent(function:Callable):
+        async def wrapper(self:Self,agent:CompiledStateGraph=None):
+            if agent == None:
+                agent = self.agent
 
-    async def stream(self):
-        ...
-    
-    async def executor_invoke(self):
-        ...
-    
-    async def executor_stream(self):
-        ...
+            return await function(self,agent)
 
+        return wrapper
+
+    @Base_Agent
+    async def invoke(self,agent:CompiledStateGraph):
+        ...
     
+    @Base_Agent
+    async def stream(self,agent:CompiledStateGraph):
+        ...
 
 @Service(is_manager=True,links=[LinkDep(LLMProviderService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)],mirror=RemoteAgentService)
 class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
+    @staticmethod
+    def Error_Handler(function:Callable):
+        """
+        This is a decorator that acts as exception handler, method for the grpc communication will have to be decorated
+        by this to handle error found in their implementation
+        
+        :param function: The function to decorate
+        :type function: Callable
+        """
+
+        @functools.wraps(function)
+        async def handler(self:Self,request:Any|list[Any],context):
+            try:
+                return await function(self,request,context)
+            except MiniServiceDoesNotExistsError as e:
+                context.abort(grpc.StatusCode.NOT_FOUND,
+                              f'Agent @ {e.miniService_id} does not exist')
+            
+            except InvalidPurchaseRequestError as e:
+                context.abort(grpc.StatusCode.UNAVAILABLE)
+            
+            except InsufficientCreditsError as e:
+                context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED,
+                              f"Credit not suffisant. Current Balance: {e.current_balance} - Cost: {e.purchase_cost}")
+
+        return handler
+
+    @Error_Handler
     async def Prompt(self, request, context):
         request = agent_message.PromptRequest.from_proto(request)
         async with self.statusLock.reader as lock:
@@ -137,7 +182,8 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                 
                 self.purchase_token()
                 return reply
-            
+
+    @Error_Handler
     async def PromptStream(self, request, context):
         request = agent_message.PromptRequest.from_proto(request)
 
@@ -154,7 +200,8 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
                     yield reply
                     asyncio.sleep(0.2)
-            
+
+    @Error_Handler
     async def StreamPrompt(self, request_iterator, context):
         
         streams = []
@@ -173,6 +220,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                 self.purchase_token()
                 return reply
 
+    @Error_Handler
     async def S2SPrompt(self, request_iterator, context):
         for request in request_iterator:
             request = agent_message.PromptRequest.from_proto(request)
@@ -239,10 +287,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         self.reactive_subject.on_completed()
 
     def filter_outbound_agentic(self,outbound_id:str):
-        for id,service in self.MiniServiceStore:
-            ...
-        
-
+        ...
 
     def build(self, build_state=...):
         if build_state == DEFAULT_BUILD_STATE:
@@ -274,7 +319,6 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     self.neo4jService,
                     self.qdrantService,
                     self.mongooseService,
-                    self.profileService,
                     provider,
                     model
                 )
@@ -282,7 +326,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                 counter.count(agent)
                 self.MiniServiceStore.add(agent)
             except MiniServiceDoesNotExistsError as e:
-                ...
+                continue
                     
         return super().build(counter, build_state)
     

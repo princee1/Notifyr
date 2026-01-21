@@ -6,7 +6,11 @@ from app.utils.constant import LLMProviderConstant, MongooseDBConstant
 Effort=Literal['high','medium','low']
 
 class ToolModel(BaseDocument):
-    ...
+
+    tool_description:str
+    tool:str
+    outbound_service:str
+
 
 class System(BaseModel):
     persona:str
@@ -17,10 +21,11 @@ class AgentModel(BaseDocument):
     
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION 
 
-    provider: LLMProviderConstant.LLMProvider
     memory:List[str] = []
     model: str
-    tools: list[ToolModel] = []
+    tools: list[str] = []
+
+    provider: LLMProviderConstant.LLMProvider
     temperature: float = 0.7
     timeout:float = 20
     max_retries:int = 5

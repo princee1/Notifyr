@@ -15,49 +15,49 @@ async def recursive(s:BaseService,message:StateProtocol,cache=None):
     if s.name in cache:
         return
 
-    for d in s.used_by_services.values():
-
-        if d.name in cache:
-            continue
-        
-        linkP =  LiaisonDependency[d.name]
-        
-        if s.__class__ not in linkP:
-            continue
-
-        linkP:LinkParams = linkP[s.__class__]
-
-        async with d.statusLock.writer:
-            follow:bool =  linkP.get('build_follow_dep',False)
-            force_sync_verify = False
-            if not follow:
-                to_build:bool = linkP.get('to_build',False)
-                to_destroy:bool = linkP.get('to_destroy',False)
-                to_async_verify = linkP.get('to_async_verify',False)
-                build_state = linkP.get('build_state',DEFAULT_BUILD_STATE)
-                destroy_state=linkP.get('destroy_state',DEFAULT_DESTROY_STATE)
-            else:
-                to_destroy =  message.get('to_destroy',False)
-                to_build = message.get('to_build',False)
-                to_async_verify = not message.get('bypass_async_verify',False)
-                build_state = message.get('build_state',DEFAULT_BUILD_STATE)
-                destroy_state = message.get('destroy_state',DEFAULT_DESTROY_STATE)
-                force_sync_verify = message.get('force_sync_verify',False)
-
-            if to_destroy:
-                await RunInThreadPool(d._destroyer)(LIFECYCLE_QUIET,destroy_state=destroy_state)
+    for v in s.used_by_services.values():
+        for d in v:
+            if d.name in cache:
+                continue
             
-            if to_build:
-                build = True
-                if to_async_verify:
-                    build = await d.async_verify_dependency()
+            linkP =  LiaisonDependency[d.name]
+            
+            if s.__class__ not in linkP:
+                continue
+
+            linkP:LinkParams = linkP[s.__class__]
+
+            async with d.statusLock.writer:
+                follow:bool =  linkP.get('build_follow_dep',False)
+                force_sync_verify = False
+                if not follow:
+                    to_build:bool = linkP.get('to_build',False)
+                    to_destroy:bool = linkP.get('to_destroy',False)
+                    to_async_verify = linkP.get('to_async_verify',False)
+                    build_state = linkP.get('build_state',DEFAULT_BUILD_STATE)
+                    destroy_state=linkP.get('destroy_state',DEFAULT_DESTROY_STATE)
+                else:
+                    to_destroy =  message.get('to_destroy',False)
+                    to_build = message.get('to_build',False)
+                    to_async_verify = not message.get('bypass_async_verify',False)
+                    build_state = message.get('build_state',DEFAULT_BUILD_STATE)
+                    destroy_state = message.get('destroy_state',DEFAULT_DESTROY_STATE)
+                    force_sync_verify = message.get('force_sync_verify',False)
+
+                if to_destroy:
+                    await RunInThreadPool(d._destroyer)(LIFECYCLE_QUIET,destroy_state=destroy_state)
                 
-                if build:
-                    await RunInThreadPool(d._builder)(LIFECYCLE_QUIET,build_state=build_state,force_sync_verify=force_sync_verify)          
+                if to_build:
+                    build = True
+                    if to_async_verify:
+                        build = await d.async_verify_dependency()
+                    
+                    if build:
+                        await RunInThreadPool(d._builder)(LIFECYCLE_QUIET,build_state=build_state,force_sync_verify=force_sync_verify)          
 
-        await recursive(d,message,cache)
+            await recursive(d,message,cache)
 
-        cache[d.name] = True
+            cache[d.name] = True
 
 
 class ServiceStateScheduler(SchedulerInterface):

@@ -43,7 +43,7 @@ class LiveChatRessource(BaseHTTPRessource):
     @UseServiceLock(SettingService,lockType='reader')
     @UseHandler(WebSocketHandler)
     @BaseHTTPRessource.Get('/live-chat-permission/{ws_path}',)
-    def issue_chat_permission(self, ws_path:str, authPermission=Depends(get_auth_permission)):
+    def issue_chat_permission(self, ws_path:str):
 
         self._check_ws_path(ws_path)
         run_id = self.websockets[ChatWebSocket.__name__].run_id
@@ -60,15 +60,18 @@ class LiveChatRessource(BaseHTTPRessource):
     async def end_chat(self):
         ...
 
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE])
+    @UsePermission(JWTRouteHTTPPermission)
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE],authPermission=Depends(get_auth_permission))
     async def dequeue_chat(self):
         ...
     
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.FETCH])
+    @UsePermission(JWTRouteHTTPPermission)
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],authPermission=Depends(get_auth_permission))
     async def check_priority(self):
         ...
 
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
+    @UsePermission(JWTRouteHTTPPermission)
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT],authPermission=Depends(get_auth_permission))
     async def modify_priority(self):
         ...
 

@@ -8,3 +8,7 @@ class KnowledgeGraphRagPipeline(Pipeline):
         super().__init__()
         self.neo4JService = neo4JService
         self.configService = configService
+
+
+    async def __call__(self):
+        ...

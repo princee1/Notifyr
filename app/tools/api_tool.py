@@ -6,10 +6,16 @@ class APIFetchTool(Pipeline):
         super().__init__()
         self.outboundService = httpOutboundService
     
+    async def __call__(self,):
+        ...
+
 
 class APIControlTool(ReAct):
     
     def __init__(self,httpOutboundService:HTTPOutboundMiniService):
         super().__init__()
         self.outboundService = httpOutboundService
+
+    async def __call__(self,):
+        ...
 
