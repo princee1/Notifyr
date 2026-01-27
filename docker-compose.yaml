@@ -145,21 +145,28 @@ services:
       dockerfile: Dockerfile
     environment:
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE:-false}
+
       - POSTGRES_HOST=${POSTGRES_HOST-postgres}
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - S3_ENDPOINT=${S3_ENDPOINT-minio:9000}
       - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
       - REDIS_HOST=${REDIS_HOST-redis}
+      - NEO4J_HOST=${NEO4J_HOST-memgraph}
+
       - MODE=${MODE:-prod}
       - TWILIO_MODE=prod
       - TWILIO_TEST_URL=${TWILIO_TEST_URL}
       - PROD_URL=${PROD_URL}
+
       - GOOGLE_SAFE_SEARCH_API_KEY=${GOOGLE_SAFE_SEARCH_API_KEY}
       - IPINFO_API_KEY=${IPINFO_API_KEY}
+
       - USERNAME=${USERNAME}
       - DOMAIN_NAME=${DOMAIN_NAME}
+  
       - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
       - APS_JOBSTORE=${APS_JOBSTORE}
+
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
@@ -190,6 +197,7 @@ services:
     environment:
       - MODE=${MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}
+      - NEO4J_HOST=${NEO4J_HOST-memgraph}
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
@@ -226,6 +234,7 @@ services:
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
+      - NEO4J_HOST=${NEO4J_HOST-memgraph}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
     networks:
       - agentic_net
@@ -338,6 +347,9 @@ services:
       REDIS_USER: ${REDIS_USER:?Redis user must be set}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Redis password must be set}
 
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+
       AWS_VAULT_USER: set_user_in_container_start
       AWS_VAULT_PASSWORD: set_password_in_container_start
 
@@ -348,6 +360,8 @@ services:
       S3_ENDPOINT: ${S3_ENDPOINT:-minio:9000}
       RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
       REDIS_HOST: ${REDIS_HOST:-redis}
+      NEO4J_HOST: ${NEO4J_HOST:-memgraph}
+
     volumes:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
@@ -435,7 +449,9 @@ services:
     image: mongo:8.0-noble
     container_name: mongodb
     restart: always
-    command: []
+    command:
+       - --oplogSize=512
+       - --wiredTigerCacheSizeGB=1
     entrypoint: ["mongo-entrypoint.sh"]
     secrets:
       - source: mongo_keyfile

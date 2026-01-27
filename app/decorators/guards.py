@@ -408,6 +408,7 @@ class LLMProviderGuard(Guard):
     def __init__(self):
         super().__init__()
         self.mongooseService = Get(MongooseService)
+        self.configService = Get(ConfigService)
 
     async def guard(self, ingestTask:DataIngestModel=None,agentModel:AgentModel=None):
 
@@ -429,6 +430,9 @@ class LLMProviderGuard(Guard):
             
             if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
                 raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
+        
+        if ingestTask!=None:
+            ...
         
         return True,""
             

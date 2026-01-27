@@ -65,8 +65,8 @@ if CAPABILITIES['email']:
 if CAPABILITIES['agentic']:
     from app.ressources.agentic.gateway_ressource import GatewayAgenticRessource
     from app.ressources.agentic.agent_ressource import AgentsRessource
-    from app.ressources.agentic.data_loader_ressource import DataLoaderRessource
-    BASE_RESSOURCES.append(DataLoaderRessource)
+    from app.ressources.agentic.data_ingest_ressource import DataIngestRessource
+    BASE_RESSOURCES.append(DataIngestRessource)
     BASE_RESSOURCES.append(GatewayAgenticRessource)
     BASE_RESSOURCES.append(AgentsRessource)
 

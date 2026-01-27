@@ -68,7 +68,8 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
     costService:CostService = Get(CostService)
-    arqService:ArqDataTaskService = Get(ArqDataTaskService) 
+    llmProviderService:LLMProviderService = Get(LLMProviderService)
+    arqService:ArqDataTaskService = Get(ArqDataTaskService)
 
     file_path = arqService.compute_data_file_upload_path(uri)
 
@@ -124,12 +125,13 @@ if APP_MODE == ApplicationMode.arq:
     from app.classes.data_loader import TextDataLoader, DataLoaderStepIndex
     from app.services import QdrantService
     from app.services import Neo4JService
+    from app.services import LLMProviderService
     from app.services import FileService
-    from app.services.database.mongoose_service import MongooseService
-    from app.services.database.redis_service import RedisService
-    from app.services.vault_service import VaultService
-    from app.services.cost_service import CostService
-    from app.services.worker.arq_service import ArqDataTaskService,QUEUE_NAME
+    from app.services import MongooseService
+    from app.services import RedisService
+    from app.services import VaultService
+    from app.services import CostService
+    from app.services import ArqDataTaskService,QUEUE_NAME
     from app.container import Get,build_container
     import asyncio
     from arq import Retry

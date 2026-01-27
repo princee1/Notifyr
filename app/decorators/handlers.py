@@ -1081,3 +1081,8 @@ class AgenticHandler(Handler):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f'LLM provider with id {e.provider} does not exist'
             )
+
+
+class GrpcHandler(Handler):
+    async def handle(self, function, *args, **kwargs):
+        return await super().handle(function, *args, **kwargs)

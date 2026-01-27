@@ -56,7 +56,7 @@ class BaseDataLoader:
         self.lang = lang
         self.extension = extension
         self.category = category
-        self.em
+        self.embedding_model = embedding_model
 
     async def process(self):
         raise NotImplementedError
@@ -105,7 +105,6 @@ class TextDataLoader(BaseDataLoader):
 
         self.strategy = strategy
         self.use_docling = use_docling
-        return
         # Parsers
         self.splitter = SentenceSplitter(chunk_size=1000, chunk_overlap=200)
         self.semantic_parser = SemanticSplitterNodeParser(
@@ -116,7 +115,6 @@ class TextDataLoader(BaseDataLoader):
         )
         self.structured_parser = DoclingNodeParser() if use_docling else None
         
-
     @Mock()
     async def process(self):
         if self.use_docling:
@@ -127,7 +125,6 @@ class TextDataLoader(BaseDataLoader):
             reader_cls = TEXT_READERS.get(self.extension)
             documents = await reader_cls().aload_data(self.file_path)
 
-        # 2. SPLIT INTO NODES
         nodes: List[TextNode] = []
         if self.strategy == ParseStrategy.SEMANTIC:
             nodes = await self.semantic_parser.abuild_semantic_nodes_from_documents(documents)

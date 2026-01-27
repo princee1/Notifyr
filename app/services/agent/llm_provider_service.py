@@ -83,12 +83,21 @@ class LLMProviderMiniService(BaseMiniService):
                     timeout_seconds=agentModel.timeout, 
                 )
 
-            case 'deepseek'| 'openai':
+            case 'deepseek'| 'openai' | 'gemini':
+
+                match provider:
+                    case 'deepseek':
+                        base_url = "https://api.deepseek.com"
+                    case 'gemini':
+                        base_url= "https://generativelanguage.googleapis.com/v1beta"
+                    case _:
+                        base_url = None
+
                 return ChatOpenAI(
                     streaming=True,
                     max_completion_tokens=max_tokens,
                     api_key=api_key,
-                    base_url="https://api.deepseek.com" if provider == 'deepseek' else None,
+                    base_url= base_url,
                     temperature=agentModel.temperature,
                     max_retries=agentModel.max_retries,
                     timeout=agentModel.timeout,
@@ -100,8 +109,6 @@ class LLMProviderMiniService(BaseMiniService):
                     reasoning_effort=agentModel.effort,
                     openai_proxy=agentModel.proxy_url
             )
-            
-            case 'gemini': raise NotImplementedError()
             
             case 'groq': 
                 return ChatGroq(
@@ -120,9 +127,11 @@ class LLMProviderMiniService(BaseMiniService):
             
             case 'ollama': raise NotImplementedError()
 
-    def ChatDataFactory(self,)->BaseChatModel:
+    def ChatGraphFactory(self,)->BaseChatModel:
         ...
 
+    def EmbeddingFactory(self):
+        ...
     
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
 class LLMProviderService(BaseMiniServiceManager):

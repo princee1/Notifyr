@@ -121,8 +121,8 @@ class JobArqRessource(BaseHTTPRessource):
 @IncludeRessource(JobArqRessource)
 @UseHandler(ServiceAvailabilityHandler,CostHandler)
 @UsePermission(JWTRouteHTTPPermission)
-@HTTPRessource('data-loader')
-class DataLoaderRessource(BaseHTTPRessource):
+@HTTPRessource('data-ingest')
+class DataIngestRessource(BaseHTTPRessource):
     
     @staticmethod
     async def docling_guard(ingestTask:DataIngestFileModel):
@@ -143,13 +143,13 @@ class DataLoaderRessource(BaseHTTPRessource):
     @Throttle(normal=(300,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
-    @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @UsePipe(update_status_upon_no_metadata_pipe,before=False)
+    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,AgenticHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),LLMProviderGuard,UploadFilesGuard(),docling_guard)
-    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=IngestFileEnqueueResponse)
-    async def embed_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
         _response = IngestFileEnqueueResponse()
         ingest_sha = set()
         for file in files:
@@ -201,7 +201,7 @@ class DataLoaderRessource(BaseHTTPRessource):
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def embed_web(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[WebCost,Depends(WebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_web(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[WebCost,Depends(WebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing a `WebCrawlTask` and enqueues it.
         """
@@ -218,7 +218,7 @@ class DataLoaderRessource(BaseHTTPRessource):
     @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,AgenticHandler,RedisHandler)
     @UseServiceLock(ArqDataTaskService,ProfileService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/api/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def embed_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[WebCost,Depends(WebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[WebCost,Depends(WebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing an `APIFetchTask` and enqueues it.
         """

@@ -6,12 +6,18 @@ from app.utils.constant import ParseStrategy
 from .file_model import FileResponseUploadModel, UploadError, UriMetadata
 from app.classes.scheduler import TimedeltaSchedulerModel
 
+
+class ProviderModel(BaseModel):
+	provider:str
+	model:str
+
+
 class DataIngestModel(BaseModel):
 	collection_name: str
 	lang: Optional[str] = 'en'
-	provider:str
 	category: Optional[str] = None
-	knowledge_db:Literal['vector','k-graph','both']= 'vector'
+	provider:str
+	knowledge:Literal['vector','k-graph','both']= 'vector'
 	expires: Optional[TimedeltaSchedulerModel|None] = None
 	defer_by: Optional[TimedeltaSchedulerModel|None] = None
 
@@ -25,7 +31,7 @@ class DataIngestModel(BaseModel):
 		return delta
 
 	@field_serializer("defer_by","expires")
-	def hide_password(self, v:TimedeltaSchedulerModel):
+	def time_serialize(self, v:TimedeltaSchedulerModel):
 		return v.build('timedelta').total_seconds()
 	
 class DataIngestFileModel(DataIngestModel):

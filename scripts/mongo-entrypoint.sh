@@ -67,12 +67,11 @@ if [ ! -f "$INIT_FILE" ]; then
 
   kill "$MONGO_PID"
   wait "$MONGO_PID"
+else 
+  exec docker-entrypoint.sh mongod \
+    --replSet "$MONGO_REPLICA_NAME" \
+    --keyFile "$KEYFILE" \
+    --bind_ip_all \
+    "$@"
 fi
-
-exec docker-entrypoint.sh mongod \
-  --replSet "$MONGO_REPLICA_NAME" \
-  --keyFile "$KEYFILE" \
-  --bind_ip_all \
-  "$@"
-
 

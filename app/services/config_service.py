@@ -213,6 +213,11 @@ class ConfigService(_service.BaseService):
         # POSTGRES DB CONFIG #
         self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
+        # NEO4J DB CONFIG #
+        self.NEO4J_HOST:str = self.getenv('NEO4J_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'memgraph')
+
+        self.GRAPH_SERVICE:Literal['neo4j','memgraph'] = 'memgraph'
+
         # CELERY CONFIG #
         self.BROKER_PROVIDER:Literal['redis','rabbitmq'] = self.getenv('BROKER_PROVIDER','rabbitmq')
 

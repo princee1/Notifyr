@@ -1,10 +1,11 @@
 from typing import Annotated, Type
 from fastapi import Body, Depends, Request, Response,status
+from fastapi.responses import StreamingResponse
 from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
-from app.decorators.handlers import AgenticHandler, AsyncIOHandler, CostHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgenticHandler, AsyncIOHandler, CostHandler, GrpcHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
@@ -133,14 +134,20 @@ class AgentsRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])        
     @UseLimiter('100/hour')
-    @UseHandler(AgenticHandler)
+    @UseHandler(AgenticHandler,GrpcHandler)
     @Throttle(uniform=(30,60))
     @UsePermission(AgentPermission)
+    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @PingService([RemoteAgentService],is_manager=True,infinite_wait=True)
     @UseServiceLock(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
-    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_profile)], response:Response,profile:str=Depends(get_agent), authPermission:AuthPermission= Depends(get_auth_permission)):
-        await agent.Prompt(
+        stream = False
+        if not stream:
+            return await agent.Prompt()
+        else:
+            await agent.PromptStream()
+            return StreamingResponse(
+
+            )
             
-        )

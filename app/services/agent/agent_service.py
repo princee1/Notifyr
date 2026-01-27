@@ -50,7 +50,7 @@ class AgentMiniService(BaseMiniService):
     graph of tools
     call the provider
     """
-    def __init__(self,configService:ConfigService,neo4jService:Neo4JService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,agent_model:AgentModel,outboundServices:Dict[str,HTTPOutboundMiniService]=[]):
+    def __init__(self,configService:ConfigService,neo4jService:Neo4JService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,agent_model:AgentModel,outboundServices:Dict[str,HTTPOutboundMiniService]={}):
             self.depService = llmProviderMService
             super().__init__(llmProviderMService,str(agent_model.id))
             self.mongooseService = mongooseService
