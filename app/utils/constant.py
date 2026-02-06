@@ -473,6 +473,8 @@ class RabbitMQConstant:
 class QdrantConstant:
     CACHE_COLLECTION='prompt-cache'
 
+class BoltConstant:
+    DATABASE_NAME='notifyr'
 
 class ArqDataTaskConstant:
     FILE_DATA_TASK = 'file'

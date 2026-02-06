@@ -11,6 +11,13 @@ class ProviderModel(BaseModel):
 	provider:str
 	model:str
 
+class VectorConfig(BaseModel):
+	collection_name: str
+	category: Optional[str] = None
+	
+class KGraphConfig(BaseModel):
+	community:str
+
 
 class DataIngestModel(BaseModel):
 	collection_name: str

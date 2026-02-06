@@ -48,8 +48,6 @@ class ServerConfig(TypedDict):
     log_level: Literal["critical", "error","warning", "info", "debug", "trace"]
 
 
-
-
 @_service.Service()
 class ConfigService(_service.BaseService):
         
@@ -214,7 +212,7 @@ class ConfigService(_service.BaseService):
         self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
         # NEO4J DB CONFIG #
-        self.NEO4J_HOST:str = self.getenv('NEO4J_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'memgraph')
+        self.BOLT_HOST:str = self.getenv('BOLT_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'memgraph')
 
         self.GRAPH_SERVICE:Literal['neo4j','memgraph'] = 'memgraph'
 
@@ -268,9 +266,13 @@ class UvicornWorkerService(_service.BaseService):
         self.configService = configService
     
     def set_server_config(self, config):
-        self.server_config = ServerConfig(host=config.host, port=config.port,
-                                          reload=config.reload, workers=config.workers, log_level=config.log_level,
-                                          team=config.team)
+        self.server_config = ServerConfig(host=config.host,
+                                          port=config.port,
+                                          reload=config.reload,
+                                          workers=config.workers,
+                                          log_level=config.log_level,
+                                          team=config.team,
+                                          )
 
     @property
     def pool(self):

@@ -9,7 +9,7 @@ from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermi
 from app.manager.task_manager import TaskManager
 from app.models.agents_model import AgentModel
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
-from app.models.data_ingest_model import DataIngestModel
+from app.models.ingest_model import DataIngestModel
 from app.models.link_model import LinkORM
 from app.models.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel

@@ -34,7 +34,7 @@
         "redis": true,
         "rabbitmq": true,
         "qdrant": true,
-        "neo4j": true,
+        "bolt": true,
         "minio": true,
         "mongodb": true
     }

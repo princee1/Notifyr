@@ -16,7 +16,7 @@ from app.services.database.qdrant_service import QdrantService
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
 from app.services.mini.outbound.http_outbound_service import HTTPOutboundMiniService
 from app.services.profile_service import  ProfileMiniService, ProfileService
-from app.services.database.neo4j_service import Neo4JService
+from app.services.database.bolt_service import BoltService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
 from app.utils.constant import CostConstant, MongooseDBConstant
@@ -50,12 +50,12 @@ class AgentMiniService(BaseMiniService):
     graph of tools
     call the provider
     """
-    def __init__(self,configService:ConfigService,neo4jService:Neo4JService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,agent_model:AgentModel,outboundServices:Dict[str,HTTPOutboundMiniService]={}):
+    def __init__(self,configService:ConfigService,boltService:BoltService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,agent_model:AgentModel,outboundServices:Dict[str,HTTPOutboundMiniService]={}):
             self.depService = llmProviderMService
             super().__init__(llmProviderMService,str(agent_model.id))
             self.mongooseService = mongooseService
             self.configService = configService
-            self.neo4jService =  neo4jService
+            self.boltService =  boltService
             self.qdrantService = qdrantService
             self.outboundServices = outboundServices
             self.agent_model=agent_model
@@ -249,7 +249,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     qdrantService:QdrantService,
                     reactiveService:ReactiveService,
                     profileService:ProfileService,
-                    neo4jService:Neo4JService,
+                    boltService:BoltService,
                     costService:CostService) -> None:
         
         super().__init__()
@@ -258,7 +258,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         self.vaultService = vaultService
         self.llmProviderService = llmProviderService
         self.qdrantService = qdrantService
-        self.neo4jService = neo4jService
+        self.boltService = boltService
         self.profileService = profileService
         self.reactiveService = reactiveService
         self.costService = costService
@@ -316,7 +316,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
                 agent = AgentMiniService(
                     self.configService,
-                    self.neo4jService,
+                    self.boltService,
                     self.qdrantService,
                     self.mongooseService,
                     provider,

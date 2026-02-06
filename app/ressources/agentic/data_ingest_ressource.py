@@ -24,7 +24,7 @@ from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqDataTaskService, JobAlreadyExistsError,JobStatus
-from app.models.data_ingest_model import (
+from app.models.ingest_model import (
     AbortedJobResponse,
     IngestDataUriMetadata,
     EnqueueResponse,
@@ -159,7 +159,7 @@ class DataIngestRessource(BaseHTTPRessource):
                 sha = await self.fileService.compute_sha256(file.file)
 
                 if sha in ingest_sha:
-                    raise JobAlreadyExistsError(uri,'file already added')
+                    raise JobAlreadyExistsError(uri,'File already added')
                 
                 ingest_sha.add(sha)
 

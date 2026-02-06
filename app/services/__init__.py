@@ -66,7 +66,7 @@ if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
     from app.services.agent.remote_agent_service import RemoteAgentService
     from app.services.agent.agent_service import AgentService
     from app.services.database.qdrant_service import QdrantService
-    from app.services.database.neo4j_service import Neo4JService
+    from app.services.database.bolt_service import BoltService
     from app.services.file.file_service import FileService
     from app.services.profile_service import ProfileService
     from app.services.worker.arq_service import ArqDataTaskService
@@ -78,7 +78,7 @@ if APP_MODE == ApplicationMode.arq and CAPABILITIES['agentic']:
     from app.services.database.mongoose_service import MongooseService
     from app.services.agent.llm_provider_service import LLMProviderService
     from app.services.database.qdrant_service import QdrantService
-    from app.services.database.neo4j_service import Neo4JService
+    from app.services.database.bolt_service import BoltService
     from app.services.database.redis_service import RedisService
     from app.services.file.file_service import FileService
     from app.services.worker.arq_service import ArqDataTaskService

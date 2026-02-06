@@ -7,7 +7,7 @@
 COSTS_FILE="/run/secrets/costs.json"
 
 # --- 3. JQ Filter for the ntfr service ---
-JQ_NTFR_FILTER='.credits | to_entries[] | select(.key=="phone" or .key=="sms" or .key=="email" or .key=="message" or .key=="notification" or .key=="webhook") | "\(.key)=\(.value)"'
+JQ_NTFR_FILTER='.credits | to_entries[] | select(.key==chat or .key=="phone" or .key=="sms" or .key=="email" or .key=="message" or .key=="notification" or .key=="webhook") | "\(.key)=\(.value)"'
 JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
 
 VAULT_TOKEN_FILE="/run/secrets/credit_token.txt"

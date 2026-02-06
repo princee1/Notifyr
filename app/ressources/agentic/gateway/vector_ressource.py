@@ -13,7 +13,7 @@ from app.depends.dependencies import get_auth_permission
 from app.depends.variables import DeleteMode,delete_mode_query
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
-from app.models.data_ingest_model import IngestDataUriMetadata
+from app.models.ingest_model import IngestDataUriMetadata
 from app.models.file_model import UriMetadata
 from app.models.vector_model import DeleteCollectionModel, QdrantCollectionModel
 from app.services.agent.remote_agent_service import RemoteAgentService

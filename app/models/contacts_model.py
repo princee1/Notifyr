@@ -286,12 +286,12 @@ class ContactModel(BaseModel):
     frequency:Frequency
 
     @field_validator('email')
-    def  check_email(cls,email):
+    def  check_email(cls,email:str):
         if email == None:
             return None
         if not email_validator(email):
             raise ValueError('Value is not the correct email format')
-        return email
+        return email.lower()
 
     @field_validator('phone')
     def  check_phone(cls,phone):
