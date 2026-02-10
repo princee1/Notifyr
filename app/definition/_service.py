@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 import functools
 import traceback
-from typing import Any, List, Literal, Self, overload, Callable, Type, TypeVar, Dict
+from typing import Any, List, Literal, Self, Set, overload, Callable, Type, TypeVar, Dict
 from app.utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from app.utils.constant import DependencyConstant
 from app.utils.helper import generateId, issubclass_of
@@ -131,7 +131,7 @@ class BaseService():
         self.service_status: ServiceStatus = None
         self.method_not_available: set[str] = set()
         self.dependant_services:dict[Type[BaseService],BaseService] = {}
-        self.used_by_services:dict[Type[BaseService],List[BaseService]] ={} # BUG memory might occur if the chain dep is not properly set
+        self.used_by_services:dict[Type[BaseService],Set[BaseService]] ={} # BUG memory might occur if the chain dep is not properly set
         self.statusLock = RWLock()
 
         self.pretty_print_wait_time = WAIT_TIME
@@ -232,9 +232,9 @@ class BaseService():
     
     def add_used_services(self,service:Self):
         if service.__class__ not in self.used_by_services:
-            self.used_by_services[service.__class__] = [service]
+            self.used_by_services[service.__class__] = set([service])
         else:
-            self.used_by_services[service.__class__].append(service)
+            self.used_by_services[service.__class__].add(service)
 
     @Mock()
     def report(self,state:Literal['destroy','build','variable']='build',variables:dict[str,Any]=None,reason:str=None, state_value:int=None):
@@ -434,12 +434,12 @@ class MiniServiceStore(Generic[TMS]):
         if miniService.miniService_id in self._store_:
             raise MiniServiceAlreadyExistsError(f"MiniService with id '{miniService.miniService_id}' already exists.")
         if miniService.miniService_id == None:
-            raise MiniServiceCannotBeIdentifiedError
+            raise MiniServiceCannotBeIdentifiedError('MiniService cant be identified')
         self._store_[miniService.miniService_id] = miniService
 
     def get(self, miniService_id: str | Any):
         if miniService_id == None:
-            raise MiniServiceCannotBeIdentifiedError
+            raise MiniServiceCannotBeIdentifiedError('MiniService cant be identified')
         if miniService_id not in self._store_:
             raise MiniServiceDoesNotExistsError(f"MiniService with id '{miniService_id}' does not exist.")
         return self._store_[miniService_id]
@@ -447,7 +447,7 @@ class MiniServiceStore(Generic[TMS]):
     def exists(self,miniService_id:str|Any,_raise=True):
         if miniService_id == None:
             if _raise:
-                raise MiniServiceCannotBeIdentifiedError
+                raise MiniServiceCannotBeIdentifiedError('MiniService cant be identified')
             else:
                 return False
         if miniService_id not in self:

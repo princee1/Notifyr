@@ -185,6 +185,7 @@ class MLTemplate(Template):
         self.validation_selector = validation_selector
         super().__init__(filename, content, dirName,size)
         self.ignore = self.filename.endswith(f".registry.{self.extension}")
+        self.parser:str = None
 
     def _built_template(self,content):
         ...
@@ -243,12 +244,14 @@ class MLTemplate(Template):
 
     def _validate(self, document: dict):
         """See: https://docs.python-cerberus.org/errors.html"""
-        if self.schema == None or self.schema == {}:
-            return True,document
-        Validator = CustomValidator(self.schema)
-        for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues.items():
-            Validator.__setattr__(property_, flag)
         try:
+            if self.schema == None or self.schema == {}:
+                return True,document
+            
+            Validator = CustomValidator(self.schema)
+            for property_, flag in HTMLTemplate.DefaultValidatorConstructorParamValues.items():
+                Validator.__setattr__(property_, flag)
+
             document = Validator.normalized(document)
             if not Validator.validate(document):
                 return False, Validator.errors

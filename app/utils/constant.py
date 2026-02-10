@@ -169,6 +169,7 @@ class MongooseDBConstant:
     NODE_COLLECTION='node'
     TASKS_COLLECTION = 'tasks'
     LLM_COLLECTION = 'llm'
+    CUSTOM_MODEL_COLLECTION = 'custom'
 
     DATABASE_NAME = 'notifyr'
 

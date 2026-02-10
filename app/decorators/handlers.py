@@ -39,7 +39,7 @@ from requests.exceptions import SSLError, Timeout
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from app.errors.db_error import DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError, DocumentPrimaryKeyConflictError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
+from app.errors.db_error import DocumentAddConditionError, DocumentConditionWrongMethodError, DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError, DocumentPrimaryKeyConflictError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
@@ -50,7 +50,6 @@ from app.errors.upload_error import (
     DuplicateFileNameError,
     InvalidExtensionError,
 )
-
 
 class ServiceAvailabilityHandler(Handler):
 
@@ -91,7 +90,6 @@ class ServiceAvailabilityHandler(Handler):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                                 detail='Service does not exists')
             
-
 class TemplateHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -153,7 +151,6 @@ class TemplateHandler(Handler):
         except SkipTemplateCreationError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST,detail='Couldnt create a template')
 
-
 class WebSocketHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -164,7 +161,6 @@ class WebSocketHandler(Handler):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
                 'message': 'WS Path Not Found'
             })
-
 
 class CeleryTaskHandler(Handler):
 
@@ -253,7 +249,6 @@ class TwilioHandler(Handler):
                 'message': 'Request timed out',
             })
 
-
 class ContactsHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -280,7 +275,6 @@ class ContactsHandler(Handler):
 
         except ContactMissingInfoKeyError as e:
             raise  HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={'message':f'Contact missing {e.info_key} info key'})
-
 
 class TortoiseHandler(Handler):
 
@@ -374,7 +368,6 @@ class TortoiseHandler(Handler):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                                 'message': 'ORM error', 'detail': mess, })
 
-
 class SecurityClientHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -440,7 +433,6 @@ class ValueErrorHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=mess)
 
-
 class MotorErrorHandler(Handler):
     
     async def handle(self, function, *args, **kwargs):
@@ -450,7 +442,7 @@ class MotorErrorHandler(Handler):
         except DocumentDoesNotExistsError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Document with id {e.id} does not exists'
+                detail=f'Document with id "{e.id}" does not exists'
             )
 
         except DocumentPrimaryKeyConflictError as e:
@@ -469,7 +461,18 @@ class MotorErrorHandler(Handler):
                     "message":f"The document with the values entered {'already exists' if e.exists  else 'does not exists'}"
                 }
             )
+        
+        except DocumentAddConditionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,detail={"message":e.message,"detail":e.detail})
+        
+        except DocumentConditionWrongMethodError as  e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail='Document condition method is wrong')
 
+        except DocumentDoesNotExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,detail=f"Document with id '{e.id}' does not exists")
 
 class AsyncIOHandler(Handler):
 
@@ -523,7 +526,6 @@ class ReactiveHandler(Handler):
                 'message':'subject id not found'
             })
 
-
 class StreamDataParserHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         try:
@@ -552,24 +554,11 @@ class StreamDataParserHandler(Handler):
                 status_code=422,
                 detail=f"Validation error in stream data: {str(e)}"
             )
-        
-class EmailRelatedHandler(Handler):
-
-    async def handle(self, function, *args, **kwargs):
-        
-        try:
-            await super().handle(function, *args, **kwargs)
-        except NotSameDomainEmailError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,)
-
-        except EmailInvalidFormatError as e:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,)
 
 class ORMCacheHandler(Handler):
     
     async def handle(self, function, *args, **kwargs):
         return await function(*args,**kwargs)
-
 
 async def handle_http_exception(function, *args, **kwargs):
     
@@ -583,7 +572,6 @@ async def handle_http_exception(function, *args, **kwargs):
 
         raise ServerFileError('app/static/error-500-page/index.html',e.status_code)
     
-
 class FastAPIHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -593,7 +581,6 @@ class FastAPIHandler(Handler):
         except ResponseValidationError as e :
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Error while sending the response","error":e.errors()})
         
-
 class GlobalVarHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -606,16 +593,12 @@ class GlobalVarHandler(Handler):
         except GlobalKeyDoesNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f"Key '{e.key}' does not exists or it is not a JSON")
             
-
 class ProfileHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
         try:
             return await super().handle(function, *args, **kwargs)
-        
-        except PydanticValidationError as e:
-            raise HTTPException(status_code=422, detail=e.errors(include_url=False,include_context=False))
-        
+                
         except ProfileModelTypeDoesNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,)
     
@@ -664,7 +647,6 @@ class VaultHandler(Handler):
 
         except requests.exceptions.ReadTimeout:
             raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,detail="Vault server did not respond in time")
-
 
 class MiniServiceHandler(Handler):
 
@@ -879,7 +861,6 @@ from app.classes.cost_definition import (
     CurrencyNotSupportedError,
     ProductNotFoundError,
 )
-
 class CostHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -955,7 +936,6 @@ class CostHandler(Handler):
 class CeleryControlHandler(Handler):
     ...
 
-
 class ArqHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         try:
@@ -1007,7 +987,6 @@ class APSSchedulerHandler(Handler):
                 detail=''
             )
             
-
 class UploadFileHandler(Handler):
 
     async def handle(self, function: Callable, *args, **kwargs):
@@ -1029,7 +1008,6 @@ class UploadFileHandler(Handler):
 
         except TotalFilesSizeExceededError as e:
             raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
-
 
 class FileHandler(Handler):
     
@@ -1058,7 +1036,6 @@ class FileHandler(Handler):
                 detail="An internal server error occurred while processing the file."
             )
         
-
 class ProxyRestGatewayHandler(Handler):
 
 
@@ -1070,7 +1047,6 @@ class ProxyRestGatewayHandler(Handler):
             body = e.args[0]
             status = e.args[1]
 
-
 class AgenticHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -1081,7 +1057,6 @@ class AgenticHandler(Handler):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f'LLM provider with id {e.provider} does not exist'
             )
-
 
 class GrpcHandler(Handler):
     async def handle(self, function, *args, **kwargs):

@@ -59,7 +59,7 @@ class Guard(DecoratorObj):
         super().__init__(self.guard, True)
 
     def guard(self) -> tuple[bool, str]:
-        ...
+        return True,""
 
 
 class GuardDefaultException(DecoratorException):

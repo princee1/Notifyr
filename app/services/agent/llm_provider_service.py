@@ -1,10 +1,12 @@
+from typing import TypedDict
+from aiohttp_retry import Any
 from pydantic import SecretStr
 from app.definition import _service
 from app.models.agents_model import AgentModel
-from app.models.llm_model import LLMProfileModel
+from app.models.llm_model import GRAPHITI_EMBEDDER_PROVIDER_SET, LLMProfileModel
 from app.services.profile_service import ProfileMiniService, ProfileService
 from ..config_service import ConfigService
-from app.definition._service import BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager
+from app.definition._service import BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from langchain_openai import ChatOpenAI
@@ -13,6 +15,12 @@ from langchain_cohere import ChatCohere
 from langchain_groq import ChatGroq
 from langchain_core.language_models import BaseChatModel
 from llama_index.embeddings.openai import OpenAIEmbedding
+
+class GraphitiConfig(TypedDict):
+    client:Any
+    embedding:Any
+    reranker:Any
+
 
 @MiniService(links=[LinkDep(ProfileMiniService,to_build=True)])
 class LLMProviderMiniService(BaseMiniService):
@@ -127,12 +135,9 @@ class LLMProviderMiniService(BaseMiniService):
             
             case 'ollama': raise NotImplementedError()
 
-    def ChatGraphFactory(self,)->BaseChatModel:
-        ...
-
     def EmbeddingFactory(self):
         ...
-    
+
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
 class LLMProviderService(BaseMiniServiceManager):
     
@@ -145,6 +150,9 @@ class LLMProviderService(BaseMiniServiceManager):
         self.MiniServiceStore = MiniServiceStore[LLMProviderMiniService](self.name)
 
     def build(self, build_state=...):
+
+        self.graphiti_config:GraphitiConfig = {}
+        current_id = None
         
         count = self.profileService.MiniServiceStore.filter_count(lambda p: p.model.__class__ == LLMProfileModel )
         state_counter = self.StatusCounter(count)
@@ -161,6 +169,30 @@ class LLMProviderService(BaseMiniServiceManager):
             provider._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
             state_counter.count(provider)
             self.MiniServiceStore.add(provider)
+
+            if provider.service_status != ServiceStatus.AVAILABLE:
+                continue
+            
+            
+            if provider.model.graph_config != None:
+                if provider.model.provider in GRAPHITI_EMBEDDER_PROVIDER_SET:
+                    current_id = provider.miniService_id
+
+                self.graphiti_config['client'] = provider.miniService_id
+            
+            if provider.model.graph_embedding_config != None:
+                self.graphiti_config['embedding'] = provider.miniService_id
+            
+            if provider.model.graph_reranker_config != None:
+                self.graphiti_config['reranker'] = provider.miniService_id
+
+        if current_id != None:
+            if self.graphiti_config.get('embedding',None) == None:
+                self.graphiti_config['embedding'] = current_id
+            
+            if self.graphiti_config.get('reranker',None) == None:
+                self.graphiti_config['reranker'] = current_id
+
 
         super().build(state_counter)
     

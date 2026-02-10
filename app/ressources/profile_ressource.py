@@ -3,7 +3,6 @@ from beanie import Document
 from fastapi import Depends,Request, Response,status
 from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
-from app.classes.mongo import MongoCondition, simple_number_validation
 from app.container import InjectInMethod,Get
 from app.decorators.handlers import AsyncIOHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
 from app.decorators.interceptors import DataCostInterceptor
@@ -23,7 +22,7 @@ from app.services.database.mongoose_service import MongooseService
 from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService
-from app.classes.profiles import ProfileModelAddConditionError, ProfileModelConditionWrongMethodError, ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
+from app.classes.profiles import  ProfileModelRequestBodyError, ProfileModelTypeDoesNotExistsError
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
 from app.utils.constant import CostConstant
@@ -39,9 +38,9 @@ PROFILE_PREFIX = 'profile'
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('will be overwritten')
 class BaseProfilModelRessource(BaseHTTPRessource):
-    model: Type[BaseProfileModel | Document]
-    model_update:Type[BaseProfileModel | Document]
-    model_creds:Type[BaseProfileModel | Document]
+    model: Type[BaseProfileModel]
+    model_update:Type[BaseProfileModel]
+    model_creds:Type[BaseProfileModel]
     profileType:str
 
     @InjectInMethod()
@@ -72,7 +71,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         
         await self.mongooseService.primary_key_constraint(profileModel,True)
         await self.mongooseService.exists_unique(profileModel,True)
-        await self.profile_model_satisfaction(profileModel)
+        await self.mongooseService.condition_satisfaction(profileModel)
         
         async def rollback():
             return await self.profileService._delete_encrypted_creds(profileModel.profile_id,profileModel._vault)
@@ -164,7 +163,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         modelCreds = await self.pipe_profil_model(request,'model_creds')
 
         modelCreds = modelCreds.model_dump()
-        await self.profile_model_satisfaction(modelCreds)
+        await self.mongooseService.condition_satisfaction(modelCreds)
 
         await self.profileService.update_credentials(profile,modelCreds,self.model._vault)
         await profileModel.update_meta()
@@ -189,7 +188,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePermission(ProfilePermission)
     @UseServiceLock(ProfileService,lockType='reader',as_manager=True,motor_fallback=True)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @BaseHTTPRessource.HTTPRoute('/single/{profile}/',methods=[HTTPMethod.GET])
+    @BaseHTTPRessource.HTTPRoute('/s/{profile}/',methods=[HTTPMethod.GET])
     async def read_profile(self,profile:str,request:Request, response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.mongooseService.get(self.model,profile,True)
         
@@ -220,51 +219,6 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         return model.model_validate(body)
 
-    async def profile_model_satisfaction(self,profileModel:BaseProfileModel | dict):
-        
-        def validate_filter(m:MongoCondition,p_dump):
-            try:
-                for k,v in m['filter'].items():
-                    if v == p_dump[k]:
-                        continue
-                    else:
-                        return False
-            except KeyError:
-                return False
-            return True
-
-        mc:MongoCondition = self.model._condition
-        if mc == None:
-            return
-        
-        if isinstance(profileModel,BaseProfileModel):
-            profile_dump = profileModel.model_dump(mode='json')    
-        else:
-            profile_dump = profileModel
-
-        if not validate_filter(mc,profile_dump):
-            return
-
-        count = await self.mongooseService.count(self.model,mc['filter'])
-        if mc['method'] != 'simple-number-validation':
-            raise ProfileModelConditionWrongMethodError
-
-        if simple_number_validation(count,mc['rule']):
-            raise ProfileModelAddConditionError()
-        
-        if not mc.get('force',False):
-            return
-
-        for k,v in mc['filter'].items():
-            if not isinstance(v,(str,int,float,bool,list,dict)):
-                continue
-
-            if isinstance(profileModel,BaseProfileModel):
-                print(k,v)
-                setattr(profileModel,k,v)
-            else:
-                profile_dump[k] = v
-            
 
 base_meta = BaseProfilModelRessource.meta
 base_attr = {'id','revision_id','created_at','last_modified','version'}

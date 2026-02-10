@@ -153,6 +153,10 @@ class ConfigService(_service.BaseService):
         self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')
         self.DATA_LOADER_DIR:str = self.getenv('DATA_LOADER_DIR', '/data-loader/' if self.MODE != MODE.DEV_MODE else './data-loader/')
 
+
+        # GRAPHITI CONFIG #
+        self.GRAPHITI_MAX_COROUTINES = ConfigService.parseToInt(self.getenv('GRAPHITI_MAX_COROUTINES'))
+
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
         self.COST_FLAG:bool = ConfigService.parseToBool(self.getenv('COST_FLAG','true'),True)
@@ -211,10 +215,12 @@ class ConfigService(_service.BaseService):
         # POSTGRES DB CONFIG #
         self.POSTGRES_HOST:str = self.getenv('POSTGRES_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'postgres')
 
-        # NEO4J DB CONFIG #
-        self.BOLT_HOST:str = self.getenv('BOLT_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'memgraph')
+        # GRAPHITI DB CONFIG #
+        self.GRAPHITI_HOST:str = self.getenv('GRAPHITI_HOST','localhost' if self.MODE == MODE.DEV_MODE else 'neo4j')
 
-        self.GRAPH_SERVICE:Literal['neo4j','memgraph'] = 'memgraph'
+        self.GRAPH_SERVICE:Literal['neo4j','memgraph'] = 'neo4j'
+
+        self.GRAPHITI_PROTOCOL:str = self.getenv('GRAPHITI_PROTOCOL','bolt')
 
         # CELERY CONFIG #
         self.BROKER_PROVIDER:Literal['redis','rabbitmq'] = self.getenv('BROKER_PROVIDER','rabbitmq')

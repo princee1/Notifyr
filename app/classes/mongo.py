@@ -1,21 +1,13 @@
 from datetime import datetime
-from typing import ClassVar, Self, TypedDict,Optional, Any, Callable
+from typing import ClassVar, List, Self, TypedDict,Optional, Any, Callable
 import operator
 import uuid
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
+from app.definition._error import BaseError
 
 Operator = Literal["$eq","$ne","$gt","$ge","$lt","$le","$in","$nin"]
 Method = Literal['simple-number-validation','advanced-number-validation']
-
-mapping = {
-        "$eq": "==",
-        "$ne": "!=",
-        "$gt": ">",
-        "$ge": ">=",
-        "$lt": "<",
-        "$le": "<=",
-    }
 
 OPS:dict[Operator,Callable[[int,int],bool]]= {
     "$eq": operator.eq,
@@ -39,11 +31,38 @@ def simple_number_validation(value, condition:dict[Operator,int]):
     return True
 
 class MongoCondition(TypedDict):
-    force:bool
-    rule:dict |Any
-    filter:dict
-    method:Method
+    validation:Literal['match','exist'] # whether we check the condition satisfaction if the value exist(all) or match
+    force:bool # if the document does not have the filter value, force it
+    rule:dict |Any # rule to respect in regards of how many document have 
+    filter:dict # value to filter the search
+    method:Method # method to compare the rule too
 
+
+def validate_filter(mc:MongoCondition,p_dump):
+
+    if mc['bypass_validate']:
+        return True
+    
+    try:
+        for k,v in mc['filter'].items():
+            
+            match mc['validation']:
+
+                case 'match':
+                    if v == p_dump[k]:
+                        continue
+                    else:
+                        return False
+                
+                case 'exist':
+                    if v != None:
+                        continue
+                    else:
+                        return False
+                
+    except KeyError:
+        return False
+    return True
 
 from beanie import Document
 from app.utils.helper import uuid_v1_mc
@@ -58,7 +77,7 @@ class BaseDocument(Document):
     version: int = 1
 
     _unique_indexes: ClassVar[list[str]] = []
-    _condition:ClassVar[Optional[MongoCondition]] = None
+    _condition:ClassVar[Optional[List[MongoCondition]]] = None
     _collection:ClassVar[Optional[str]] = None
     _primary_key:ClassVar[str]  = 'alias'
 

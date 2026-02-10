@@ -1,4 +1,7 @@
 
+from typing import Any, Optional
+
+from aiohttp_retry import Any
 from app.definition._error import BaseError
 
 
@@ -28,6 +31,19 @@ class DocumentDoesNotExistsError(BaseError):
     def __init__(self,id, *args):
         super().__init__(*args)
         self.id = id
+
+class DocumentAddConditionError(BaseError):
+    def __init__(self,message:str = 'Document does not satisfy the condition to be added',detail:Optional[Any] = None):
+        self.message = message
+        self.detail = detail
+        super().__init__()
+
+class DocumentConditionWrongMethodError(BaseError):
+    ...
+
+class DocumentConditionFilterDoesNotExistOnModelError(BaseError):
+    ...
+
     
 class DocumentAlreadyDeletedError(BaseError):
     ...

@@ -15,7 +15,7 @@
         "vector": true
     },
     "capabilities": {
-        "object": false,
+        "object": true,
         "email": false,
         "twilio": false,
         "notification": false,
@@ -34,7 +34,7 @@
         "redis": true,
         "rabbitmq": true,
         "qdrant": true,
-        "bolt": true,
+        "graphiti": true,
         "minio": true,
         "mongodb": true
     }

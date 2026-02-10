@@ -11,12 +11,13 @@ from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.models.agents_model import AgentModel
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
+from app.services.custom_service import CustomModelService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.qdrant_service import QdrantService
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
 from app.services.mini.outbound.http_outbound_service import HTTPOutboundMiniService
 from app.services.profile_service import  ProfileMiniService, ProfileService
-from app.services.database.bolt_service import BoltService
+from app.services.database.graphiti_service import GraphitiService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
 from app.utils.constant import CostConstant, MongooseDBConstant
@@ -50,13 +51,14 @@ class AgentMiniService(BaseMiniService):
     graph of tools
     call the provider
     """
-    def __init__(self,configService:ConfigService,boltService:BoltService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,agent_model:AgentModel,outboundServices:Dict[str,HTTPOutboundMiniService]={}):
+    def __init__(self,configService:ConfigService,graphitiService:GraphitiService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,customService:CustomModelService,agent_model:AgentModel,outboundServices:Dict[str,HTTPOutboundMiniService]={}):
             self.depService = llmProviderMService
             super().__init__(llmProviderMService,str(agent_model.id))
             self.mongooseService = mongooseService
             self.configService = configService
-            self.boltService =  boltService
+            self.graphitiService =  graphitiService
             self.qdrantService = qdrantService
+            self.customService = customService
             self.outboundServices = outboundServices
             self.agent_model=agent_model
 
@@ -249,8 +251,9 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     qdrantService:QdrantService,
                     reactiveService:ReactiveService,
                     profileService:ProfileService,
-                    boltService:BoltService,
-                    costService:CostService) -> None:
+                    graphitiService:GraphitiService,
+                    costService:CostService,
+                    customService:CustomModelService) -> None:
         
         super().__init__()
         self.configService = configService
@@ -258,10 +261,11 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         self.vaultService = vaultService
         self.llmProviderService = llmProviderService
         self.qdrantService = qdrantService
-        self.boltService = boltService
+        self.graphitiService = graphitiService
         self.profileService = profileService
         self.reactiveService = reactiveService
         self.costService = costService
+        self.customService = customService
 
         self.MiniServiceStore = MiniServiceStore[AgentMiniService](self.name)
 
@@ -316,7 +320,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
                 agent = AgentMiniService(
                     self.configService,
-                    self.boltService,
+                    self.graphitiService,
                     self.qdrantService,
                     self.mongooseService,
                     provider,

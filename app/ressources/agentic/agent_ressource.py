@@ -93,7 +93,7 @@ class AgentsRessource(BaseHTTPRessource):
     @Throttle(normal=(200,80))
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.DELETE])
+    @BaseHTTPRessource.HTTPRoute('/s/{agent}/',methods=[HTTPMethod.DELETE])
     async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
 
@@ -128,7 +128,7 @@ class AgentsRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])        
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
     async def get_all_agent(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         ...
 

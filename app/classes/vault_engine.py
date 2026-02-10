@@ -104,7 +104,7 @@ class KV2VaultEngine(VaultEngine):
             params["version"] = version
         
         read_response = self.client.secrets.kv.v2.read_secret_version(**params)
-        print("KV2 Read:", read_response)
+        #print("KV2 Read:", read_response)
         if 'data' in read_response:
             return read_response['data']
         return {}

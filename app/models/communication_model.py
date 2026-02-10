@@ -47,7 +47,7 @@ class ProtocolProfileModel(EmailProfileModel):
     email_host: EmailHostConstant
     server: Optional[str] = None
     port: Optional[int] = None
-    unique_indexes: ClassVar[list[str]] = ['email_host','email_address']
+    _unique_indexes: ClassVar[list[str]] = ['email_host','email_address']
 
 
     @model_validator(mode='after')
@@ -69,7 +69,7 @@ class ProtocolProfileModel(EmailProfileModel):
 
 class APIEmailProfileModel(EmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
-    unique_indexes: ClassVar[list[str]] = ['email_address']
+    _unique_indexes: ClassVar[list[str]] = ['email_address']
 
     class Settings:
         is_root=True
@@ -137,7 +137,7 @@ class AWSProfileModel(EmailProfileModel):
     aws_secret_access_key: str
 
     _secrets_keys: ClassVar[list[str]] = ["aws_secret_access_key"]
-    unique_indexes: ClassVar[list[str]] = ['aws_access_key_id']
+    _unique_indexes: ClassVar[list[str]] = ['aws_access_key_id']
 
 class GMailAPIProfileModel(APIEmailProfileModel):
     oauth_tokens: ProfileModelAuthToken
@@ -150,7 +150,7 @@ class OutlookAPIProfileModel(APIEmailProfileModel):
     tenant_id: str 
 
     _secrets_keys: ClassVar[list[str]] = ["client_secret"]
-    unique_indexes:ClassVar[list[str]] = ['client_id','tenant_id','email_address']
+    _unique_indexes:ClassVar[list[str]] = ['client_id','tenant_id','email_address']
 
 
 ######################################################
@@ -169,13 +169,15 @@ class TwilioProfileModel(CommunicationProfileModel):
     _secrets_keys: ClassVar[list[str]] = ["auth_token"]
     _queue:ClassVar[str] = 'twilio'
 
-    unique_indexes: ClassVar[list[str]] = ['account_sid']
-    condition:ClassVar[Optional[MongoCondition]] = MongoCondition(
+    _unique_indexes: ClassVar[list[str]] = ['account_sid']
+    _condition:ClassVar[Optional[MongoCondition]] = [MongoCondition(
+        validation='match',
         force=True,
         rule={"$ge":1},
         filter={"main":True},
         method='simple-number-validation',
-    )
+    ),
+    ]
 
     @field_validator('twilio_url')
     def twilio_url_validator(cls,twilio_url)->str:

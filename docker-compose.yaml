@@ -151,7 +151,7 @@ services:
       - S3_ENDPOINT=${S3_ENDPOINT-minio:9000}
       - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
       - REDIS_HOST=${REDIS_HOST-redis}
-      - BOLT_HOST=${BOLT_HOST-memgraph}
+      - GRAPHITI_HOST=${GRAPHITI_HOST-neo4j}
 
       - MODE=${MODE:-prod}
       - TWILIO_MODE=prod
@@ -197,14 +197,16 @@ services:
     environment:
       - MODE=${MODE:-prod}
       - MONGO_HOST=${MONGO_HOST-mongodb}
-      - BOLT_HOST=${BOLT_HOST-memgraph}
+      - GRAPHITI_HOST=${GRAPHITI_HOST-neo4j}
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
+      - GRAPHITI_MAX_COROUTINES=${GRAPHITI_MAX_COROUTINES:-10}
+      - GRAPHITI_PROTOCOL=${GRAPHITI_PROTOCOL:-bolt}
+      - GRAPHITI_SERVICE=${GRAPHITI_SERVICE:-neo4j}
     networks:
       - data_net
       - vault_net 
-
 
   agentic:
     image: notifyr/agentic:community 
@@ -234,8 +236,11 @@ services:
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
-      - BOLT_HOST=${BOLT_HOST-memgraph}
+      - GRAPHITI_HOST=${GRAPHITI_HOST-neo4j}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
+      - GRAPHITI_MAX_COROUTINES=${GRAPHITI_MAX_COROUTINES:-10}
+      - GRAPHITI_PROTOCOL=${GRAPHITI_PROTOCOL:-bolt}
+      - GRAPHITI_SERVICE=${GRAPHITI_SERVICE:-neo4j}
     networks:
       - agentic_net
       - data_net
@@ -360,7 +365,10 @@ services:
       S3_ENDPOINT: ${S3_ENDPOINT:-minio:9000}
       RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
       REDIS_HOST: ${REDIS_HOST:-redis}
-      BOLT_HOST: ${BOLT_HOST:-memgraph}
+      GRAPHITI_HOST: ${GRAPHITI_HOST:-neo4j}
+
+      GRAPHITI_SERVICE: ${GRAPHITI_SERVICE:-neo4j}
+      GRAPHITI_PROTOCOL: ${GRAPHITI_PROTOCOL:-bolt}
 
     volumes:
       - vault-data:/vault/data
@@ -514,14 +522,17 @@ services:
       - memgraph_data:/var/lib/memgraph
   
   neo4j:
-    image: neo4j:5-community
+    image: neo4j:2026-community
     container_name: neo4j
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:7474:7474"
     networks:
       - data_net
     environment:
       NEO4J_AUTH: ${NEO4J_USER:?Neo4j user must be set}/${NEO4J_PASSWORD:?Neo4j password must be set}
       NEO4J_dbms_default__database: notifyr
+      NEO4J_PLUGINS: '["apoc"]'
     volumes:
       - neo4j_data:/data
 

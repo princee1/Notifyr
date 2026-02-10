@@ -3,15 +3,19 @@ from fastapi import Depends, Request, Response, status
 from fastapi.params import Query
 from app.classes.auth_permission import Role
 from app.container import Get, InjectInMethod
-from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, ServiceAvailabilityHandler
+from app.decorators.guards import MongooseHardLimitGuard
+from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler, TemplateHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.decorators.pipes import GlobalPointerIteratorPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseServiceLock, UseRoles
+from app.decorators.pipes import DocumentFriendlyPipe, GlobalPointerIteratorPipe
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseServiceLock, UseRoles
 from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
 from app.manager.broker_manager import Broker
+from app.models.custom_model import CustomModel, UpdateCustomModel
 from app.models.properties_model import GlobalVarModel, SettingsModel
+from app.services.custom_service import CustomModelService
+from app.services.database.mongoose_service import MongooseService
 from app.services.database.object_service import ObjectS3Service
 from app.depends.variables import force_update_query, wait_timeout_query
 from app.services.config_service import AssetMode, ConfigService
@@ -32,6 +36,8 @@ configService = Get(ConfigService)
 
 
 SETTINGS_ROUTE = 'settings'
+PROPERTIES_PREFIX = 'properties'
+
 
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler, AsyncIOHandler)
@@ -188,8 +194,105 @@ if CAPABILITIES['object']:
     
     ressource.append(GlobalAssetVariableRessource)
 
- 
-PROPERTIES_PREFIX = 'properties'
+if CAPABILITIES['agentic']:
+    @UsePermission(JWTRouteHTTPPermission)
+    @UseHandler(ServiceAvailabilityHandler, AsyncIOHandler,MotorErrorHandler)
+    @HTTPRessource('custom-model')
+    class CustomModelRessource(BaseHTTPRessource):
+
+        @InjectInMethod()
+        def __init__(self,configService:ConfigService, mongooseService:MongooseService,customService:CustomModelService):
+            super().__init__()
+            self.configService = configService
+            self.mongooseService =  mongooseService
+            self.customService = customService
+
+        @UseRoles([Role.ADMIN])
+        @UseLimiter('5/minutes')
+        @UsePipe(DocumentFriendlyPipe,before=False)
+        @UseGuard(MongooseHardLimitGuard(200,CustomModel))
+        @UseHandler(TemplateHandler,PydanticHandler)
+        @UseServiceLock(CustomModelService,lockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
+        async def add_custom_model(self,custom:CustomModel,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
+            
+            self.customService.verify_edge()
+
+            await self.mongooseService.primary_key_constraint(custom,True)
+            await self.mongooseService.exists_unique(custom,True)
+
+            broker.propagate(
+                StateProtocol(
+                    service = CustomModelService,
+                    to_build=True,
+                )
+            ) 
+            await self.mongooseService.insert(custom)
+
+            return custom
+
+        @UseRoles([Role.ADMIN])
+        @UseLimiter('5/minutes')
+        @UsePipe(DocumentFriendlyPipe,before=False)
+        @UseHandler(TemplateHandler,PydanticHandler)
+        @UseServiceLock(CustomModelService,lockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/{model}/',methods=[HTTPMethod.PUT])
+        async def update_custom_model(self,model:str,custom:UpdateCustomModel, response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
+
+            model:CustomModel = await self.mongooseService.get(CustomModel,model,True)
+            
+            self.customService.verify_edge()
+
+            await model.update_content(custom)
+
+            await self.mongooseService.primary_key_constraint(model,True)
+            await self.mongooseService.exists_unique(model,True)
+
+            await model.update_meta()
+
+            broker.propagate(
+                StateProtocol(
+                    service = CustomModelService,
+                    to_build=True,
+                )
+            )
+            return model
+        
+        @Throttle(uniform=(50,200))
+        @UsePipe(DocumentFriendlyPipe,before=False)
+        @UseServiceLock(CustomModelService,lockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/s/{model}',methods=[HTTPMethod.GET])
+        async def fetch_custom_model(self,model:str,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
+            model:CustomModel = await self.mongooseService.get(CustomModel,model,True)
+            return model
+
+        @Throttle(uniform=(50,200))
+        @UsePipe(DocumentFriendlyPipe,before=False)
+        @UseServiceLock(CustomModelService,lockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
+        async def fetch_all(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
+            models = await self.mongooseService.find_all(CustomModel)
+            return models
+
+        @UseLimiter('5/minutes')
+        @UseRoles([Role.ADMIN])
+        @UseServiceLock(CustomModelService,lockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/{model}',methods=[HTTPMethod.DELETE])
+        async def delete_custom_model(self,model:str,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
+            model:CustomModel = await self.mongooseService.get(CustomModel,model,True)
+            await self.mongooseService.delete(model)
+            
+            broker.propagate(
+                StateProtocol(
+                    service = CustomModelService,
+                    to_build=True,
+                )
+            )
+
+            return model
+    
+    ressource.append(CustomModelRessource)
+
 
 @HTTPRessource(PROPERTIES_PREFIX,routers=ressource)
 class PropertiesRessource(BaseHTTPRessource):

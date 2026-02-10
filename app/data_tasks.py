@@ -124,7 +124,7 @@ if APP_MODE == ApplicationMode.arq:
     from arq.connections import RedisSettings
     from app.classes.data_loader import TextDataLoader, DataLoaderStepIndex
     from app.services import QdrantService
-    from app.services import BoltService
+    from app.services import GraphitiService
     from app.services import LLMProviderService
     from app.services import FileService
     from app.services import MongooseService
@@ -177,7 +177,7 @@ if APP_MODE == ApplicationMode.arq:
     @staticmethod
     async def shutdown(ctx:dict[str,Any]):
         mongooseService = Get(MongooseService)
-        boltService = Get(BoltService)
+        graphitiService = Get(graphitiService)
         redisService = Get(RedisService)
 
         qdrantService = Get(QdrantService)

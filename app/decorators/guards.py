@@ -1,6 +1,7 @@
-from typing import Any, List
+from typing import Any, List, Type
 from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPermission
 from app.classes.cost_definition import CreditNotInPlanError
+from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
@@ -435,4 +436,33 @@ class LLMProviderGuard(Guard):
             ...
         
         return True,""
+            
+
+class DataIngestGuard(Guard):
+
+    def __init__(self,accept_vector:bool=True,accept_graphiti:bool = True):
+        super().__init__()
+        if not accept_vector and not accept_graphiti:
+            raise ValueError('')
+        
+        self.accept_vector = accept_vector
+        self.accept_graphiti = accept_graphiti
+    
+    def guard(self,ingestTask:DataIngestModel):
+        return super().guard()
+
+
+class MongooseHardLimitGuard(Guard):
+    
+    def __init__(self,limit:int |str,model:Type[BaseDocument]):
+        self.limit = limit
+        self.model = model
+        self.mongooseService = Get(MongooseService)
+    
+    async def guard(self):
+        count = self.mongooseService.count(self.model)
+        if count >= self.limit:
+            raise ...
+        
+        return True,''
             

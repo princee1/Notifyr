@@ -1,24 +1,23 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import List
+from typing import List, Literal, Type, TypeVar
 from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
 from pymongo import MongoClient
+from app.classes.mongo import BaseDocument, MongoCondition, simple_number_validation, validate_filter
 from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service
 from app.errors.service_error import BuildFailureError
-from app.models.communication_model import *
 from app.errors.db_error import *
 from beanie import Document, PydanticObjectId, init_beanie
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
-from app.utils.constant import VaultTTLSyncConstant
+from app.utils.constant import MongooseDBConstant, VaultConstant, VaultTTLSyncConstant
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
 
-
-D = TypeVar('D',bound=Document)
+D = TypeVar('D',bound=BaseDocument)
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])     
 class MongooseService(TempCredentialsDatabaseService):
@@ -67,6 +66,21 @@ class MongooseService(TempCredentialsDatabaseService):
     async def count(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).count()
     
+    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={},return_model=False)->list[D]:
+        
+        filter['_class_id'] = {"$regex": f"{model.__name__}$" }
+    
+        if collection not in self.mongoConstant.available_collection:
+            raise MongoCollectionDoesNotExists(collection)
+
+        mongo_collection = self.sync_db[collection]
+        docs= mongo_collection.find(filter,projection).to_list()
+        return docs if not return_model else [model.model_construct(**doc) for doc in docs]
+    
+    ##################################################
+    # Document integrity
+    ##################################################
+
     async def primary_key_constraint(self,model:D,raise_when:bool = None):
         pk_field = getattr(model,'_primary_key',None)
         if not pk_field:
@@ -96,18 +110,42 @@ class MongooseService(TempCredentialsDatabaseService):
                 raise DocumentExistsUniqueConstraintError(exists=is_exist,model=model.__class__,params=params)
         else:
             return is_exist
-
-    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={},return_model=False)->list[D]:
-        
-        filter['_class_id'] = {"$regex": f"{model.__name__}$" }
     
-        if collection not in self.mongoConstant.available_collection:
-            raise MongoCollectionDoesNotExists(collection)
+    async def condition_satisfaction(self,document:BaseDocument | dict):
+        
+        if not document._condition:
+            return
 
-        mongo_collection = self.sync_db[collection]
-        docs= mongo_collection.find(filter,projection).to_list()
-        return docs if not return_model else [model.model_construct(**doc) for doc in docs]
-       
+        for mc in document._condition:
+            
+            if isinstance(document,BaseDocument):
+                profile_dump = document.model_dump(mode='json')    
+            else:
+                profile_dump = document
+
+            if not validate_filter(mc,profile_dump):
+                continue
+
+            count = await self.count(document.__class__,mc['filter'])
+            if mc['method'] != 'simple-number-validation':
+                raise DocumentConditionWrongMethodError
+
+            if simple_number_validation(count,mc['rule']):
+                raise DocumentAddConditionError()
+            
+            if not mc.get('force',False):
+                return
+
+            for k,v in mc['filter'].items():
+                if not isinstance(v,(str,int,float,bool,list,dict)):
+                    continue
+
+                if isinstance(document,BaseDocument):
+                    print(k,v)
+                    setattr(document,k,v)
+                else:
+                    profile_dump[k] = v
+                   
     ##################################################
     # Service lifecycle
     ##################################################

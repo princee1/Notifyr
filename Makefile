@@ -68,8 +68,10 @@ deploy-agentic:
 			docker compose up -d qdrant; \
 			echo "--- ✅ Qdrant service is deployed"; \
 		fi; \
-		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.database.neo4j')" = "true" ]; then \
-			echo "--- 🛠️ Knowledge not setup yet"; \
+		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.database.graphiti')" = "true" ]; then \
+			echo "--- 🛠️ Creating the knowledge graph database"; \
+			docker compose up -d neo4j; \
+			echo "--- ✅ Neo4j service is deployed"; \
 		fi; \
 		sleep 10; \
 		echo "--- 🛠️ Creating the agentic service because the ai functionality is required"; \
@@ -86,12 +88,19 @@ build:
 	docker compose build minio
 	docker compose build mongodb
 	docker compose build postgres
+	docker compose build redis
+	docker compose build memcached
+	docker compose build rabbitmq
 	docker compose build vault-init
 	docker compose build app
 	docker compose build beat
 	docker compose build agentic
 	docker compose build ncs
+	docker compose build neo4j
+	docker compose build memgraph
 	docker compose build ofelia
+	docker compose build traeffik
+	docker compose build qdrant
 	$(DOCKER_COMPOSE_BASE) build
 	@echo "================================================="
 	@echo "🎉  All images built successfully!"
