@@ -18,6 +18,13 @@ class DocumentPrimaryKeyConflictError(BaseError):
         self.model = model
         self.pk_field = pk_field
 
+class CollectionHardLimitReachedError(BaseError):
+
+    def __init__(self, limit:int,collection:str):
+        super().__init__(limit,collection,)
+        self.limit = limit
+        self.collection = collection
+
 class DocumentExistsUniqueConstraintError(BaseError):
     def __init__(self, *args,exists=True,model=None,params = {}):
         super().__init__(*args)

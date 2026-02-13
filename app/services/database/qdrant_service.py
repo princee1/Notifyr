@@ -1,5 +1,6 @@
 from typing import Any
 from fastapi import HTTPException
+from app.classes.chunk import Chunk
 from app.definition._service import BaseService, Service
 from app.errors.service_error import BuildFailureError
 from app.services.file.file_service import FileService
@@ -107,13 +108,24 @@ class QdrantService(BaseService):
             raise HTTPException(status_code=500, detail=f'Failed to delete points: {e}')
     
     @RunAsync    
-    def upload_points(self,collection_name:str,points:list[PointStruct],wait:bool=True):
+    def upload_points(self,collection_name:str,points:list[Chunk],wait:bool=True):
+        temp = []
+        for p in points:
+            temp.append(
+                PointStruct(
+                    p.chunk_id,
+                    p.vector,
+                    p.payload
+                )
+            )
+        points = temp
         return self.client.upload_points(
             collection_name=collection_name,
             points=points,
             wait=wait,
             batch_size=64,
-            parallel=2
+            parallel=2,
+            max_retries=3
         )   
     
     async def search(self,query_vector:list[float],collection_name:str,filter:Filter=None,searchParamsModel:SearchParamsModel=None,score_threshold:float=None, top_k:int=5):

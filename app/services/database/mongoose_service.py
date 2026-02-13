@@ -21,8 +21,6 @@ D = TypeVar('D',bound=BaseDocument)
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])     
 class MongooseService(TempCredentialsDatabaseService):
-    COLLECTION_REF = Literal["agent", "chat", "profile"]
-    DATABASE_NAME = MongooseDBConstant.DATABASE_NAME
 
     def __init__(
         self,
@@ -176,10 +174,10 @@ class MongooseService(TempCredentialsDatabaseService):
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE)
         
         self.sync_client = MongoClient(self.mongo_uri)
-        self.sync_db = self.sync_client[self.DATABASE_NAME]
+        self.sync_db = self.sync_client[MongooseDBConstant.DATABASE_NAME]
 
         self.client = AsyncIOMotorClient(self.mongo_uri)
-        self.motor_db = self.client[self.DATABASE_NAME]
+        self.motor_db = self.client[MongooseDBConstant.DATABASE_NAME]
 
     async def _creds_rotator(self):
         self.close_connection()
@@ -226,7 +224,7 @@ class MongooseService(TempCredentialsDatabaseService):
     @property
     def mongo_uri(self):
         replica = self.configService.getenv('MONGO_REPLICA_NAME','notifyr-0')
-        return f"mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017/{self.DATABASE_NAME}?replicaSet={replica}"
+        return f"mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017/{MongooseDBConstant.DATABASE_NAME}?replicaSet={replica}"
         
     ##################################################
     # Healthcheck

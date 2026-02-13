@@ -204,6 +204,7 @@ services:
       - GRAPHITI_MAX_COROUTINES=${GRAPHITI_MAX_COROUTINES:-10}
       - GRAPHITI_PROTOCOL=${GRAPHITI_PROTOCOL:-bolt}
       - GRAPHITI_SERVICE=${GRAPHITI_SERVICE:-neo4j}
+      - GRAPHITI_TELEMETRY_ENABLED=false
     networks:
       - data_net
       - vault_net 
@@ -241,6 +242,7 @@ services:
       - GRAPHITI_MAX_COROUTINES=${GRAPHITI_MAX_COROUTINES:-10}
       - GRAPHITI_PROTOCOL=${GRAPHITI_PROTOCOL:-bolt}
       - GRAPHITI_SERVICE=${GRAPHITI_SERVICE:-neo4j}
+      - GRAPHITI_TELEMETRY_ENABLED=false
     networks:
       - agentic_net
       - data_net

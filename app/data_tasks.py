@@ -93,7 +93,7 @@ async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:st
         await textDataLoader.process()
         token = textDataLoader.compute_token()
         step['current_params']=token
-        await qdrantService.upload_points(collection_name,textDataLoader.points,)
+        await qdrantService.upload_points(collection_name,textDataLoader.chunks)
         
     async with StepRunner(step,DataLoaderStepIndex.TOKEN_COST) as skip:
         skip()
@@ -131,7 +131,7 @@ if APP_MODE == ApplicationMode.arq:
     from app.services import RedisService
     from app.services import VaultService
     from app.services import CostService
-    from app.services import ArqDataTaskService,QUEUE_NAME
+    from app.services.worker.arq_service import ArqDataTaskService,QUEUE_NAME
     from app.container import Get,build_container
     import asyncio
     from arq import Retry

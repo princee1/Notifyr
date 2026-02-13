@@ -6,6 +6,7 @@ from app.definition._error import ServerFileError
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
+from app.errors.db_error import CollectionHardLimitReachedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
 from app.manager.task_manager import TaskManager
 from app.models.agents_model import AgentModel
@@ -462,7 +463,7 @@ class MongooseHardLimitGuard(Guard):
     async def guard(self):
         count = self.mongooseService.count(self.model)
         if count >= self.limit:
-            raise ...
+            raise CollectionHardLimitReachedError(self.limit,self.model._collection)
         
         return True,''
             

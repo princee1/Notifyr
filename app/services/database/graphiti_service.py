@@ -1,9 +1,13 @@
+from datetime import datetime
 from typing import Any, Dict, Iterator, Type
+from typing_extensions import Literal
+from app.classes.chunk import Chunk
+from app.classes.rag_search import GraphitiSearchConfig
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, LinkDep, Service, ServiceStatus
 from app.errors.service_error import BuildError, BuildFailureError, BuildNotImplementedError
 from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
 from app.services.config_service import ConfigService, UvicornWorkerService
-from app.services.cost_service import CostService
+from app.services.custom_service import CustomService
 from app.services.database.mongoose_service import MongooseService
 from app.services.vault_service import VaultService
 from neo4j import AsyncGraphDatabase,GraphDatabase
@@ -23,8 +27,12 @@ from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.llm_client.client import LLMClient 
 from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT,SearchConfig,SearchResults
+from graphiti_core.search.search_filters import SearchFilters
 
-from app.utils.constant import LLMProviderConstant
+
+from app.utils.constant import GraphitiConstant, LLMProviderConstant
+import app.prompt.graphiti_prompt as graphiti_prompt
 
 
 CLIENT_MAP:Dict[LLMProviderConstant.LLMProvider,Type[LLMClient]] = {
@@ -37,8 +45,8 @@ GRAPHITI_BUILD_STATE = 421
     links=[LinkDep(service=LLMProviderService,to_build=True,build_state=GRAPHITI_BUILD_STATE)]
 )
 class GraphitiService(BaseService):
-    
-    def __init__(self,configService:ConfigService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMProviderService,customService:CostService):
+      
+    def __init__(self,configService:ConfigService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMProviderService,customService:CustomService):
         super().__init__()
         self.configService = configService
         self.uvicornWorkerService = uvicornWorkerService
@@ -68,33 +76,136 @@ class GraphitiService(BaseService):
 
     async def close(self):
         await self.graphiti.close()
+        await self.client.close()
 
-    async def search(self):
-        ...
+    async def search(self,query:str,group_type:Literal['domain','contact'],groups_ids:list[str]=[],center_node:str=None,edges:list[str]=[],nodes:list[str]=[],config:SearchConfig=None):
+        edges = self.customService.to_edge(edges).keys() or None
+        nodes = self.customService.to_entities(nodes).keys() or None
+
+        filtered_group_ids = []
+        for grp in groups_ids:
+            grp = f'{GraphitiConstant.DOMAIN_PREFIX if group_type =='domain' else GraphitiConstant.CONTACT_PREFIX}{grp}'
+            filtered_group_ids.append(grp)
+
+        search_filter = SearchFilters(
+            edge_types=edges,
+            nodes=nodes,
+        )
+
+        result = await self.graphiti.search_(
+            query=query,
+            group_ids=filtered_group_ids,
+            search_filter=search_filter,
+            config=config,
+            center_node_uuid=center_node
+        )
+        return result
     
-    async def center_search(self):
-        ...
+    async def build_communities(self):
+        await self.graphiti.build_communities()
 
-    async def add_content(self,name:str,body:dict):
-        result = await self.graphiti.add_episode(
-            source=EpisodeType.json
+    async def add_chunk_episode(self,chunk:Chunk,instruction:str=None,entities:list[str]=None,edges:list[str]=None):
+        name = f"{chunk.payload['document_name']} - {chunk.payload['chunk_id']} - {chunk.payload['title']}"
+        source = chunk.payload['source']
+
+        description = graphiti_prompt.CHUNK_DESCRIPTION_PROMPT(
+            chunk.payload['document_name'],
+            chunk.category,
+            chunk.payload['section'] or '',
+            chunk.payload['title'] or '',
+            chunk.payload['topics'] or [],
+            chunk.payload['keywords'] or [],
+            chunk.payload['most_common'] or [],
+            chunk.lang,
         )
 
-    async def add_text(self,name:str,body:str):
-        result = await self.graphiti.add_episode(
-            source=EpisodeType.text
+        domain = chunk.category
+        body = f"""
+        text: {chunk.payload['text']}
+        -----
+        Metadata:
+        Page: {chunk.payload['page']}
+        Document Id: {chunk.payload['document_id']}
+        Density: {chunk.payload['density']}
+        Language: {chunk.lang}
+        """
+
+        return await self.add_content_episode(
+            name,
+            body,
+            source,
+            description,
+            instruction,
+            domain,
+            entities,
+            edges
         )
 
-    async def add_message(self):
+    async def add_content_episode(self,name:str,body:dict|str,source:str,description:str,instruction:str=None,domain:str=None,entities:list[str]=None,edges:list[str]=None):
+        
+        if not isinstance(body,dict) or not isinstance(body,str):
+            raise ...
+
+        episode_type = EpisodeType.json if isinstance(body,dict) else EpisodeType.text
+
+        entities = self.customService.to_entities(entities) or None
+        edges = self.customService.to_edge(edges) or None
+        edge_map = None
+        if edges:
+            edge_map = self.customService.to_edge_map(edges,entities) or None
+        
+        domain = f'{GraphitiConstant.DOMAIN_PREFIX}{domain}'
+
         result = await self.graphiti.add_episode(
-            source=EpisodeType.message
+            name=name,
+            episode_body=body,
+            source_description=description,
+            reference_time=datetime.now(),
+            source=episode_type,
+            custom_extraction_instructions=instruction,
+            group_id=domain,
+            edge_type_map=edge_map,
+            edge_types=edges,
+            entity_types=entities,
+            saga=source,
+            update_communities=True
         )
+
+        return result
+
+    async def add_message_episode(self,subject:str,description:str,message:Any,contact_id:str):
+        contact_id=f'{GraphitiConstant.CONTACT_PREFIX}{contact_id}'
+
+        description = graphiti_prompt.CONVERSATION_DESCRIPTION_PROMPT(
+            description,
+            contact_id,
+            ...
+        )
+        episode_name = f"{subject} - {contact_id}"
+        
+        result = await self.graphiti.add_episode(
+            name=episode_name,
+            episode_body=message,
+            source_description=description,
+            source=EpisodeType.message,
+            custom_extraction_instructions=graphiti_prompt.CONVERSATION_EXTRACTION_PROMPT(
+                subject=subject
+            ),
+            reference_time=datetime.now(),
+            group_id=contact_id,
+            saga=subject
+        )
+
+        return result
   
     async def bulk_add_episode(self, iterator:Iterator[Any],episode_type:EpisodeType):
         ...
     
     async def init_database(self,):
-        ...
+        try:
+            await self.graphiti.build_indices_and_constraints()
+        except:
+            ...
 
     def _setup_llm_provider(self):
 
@@ -189,5 +300,5 @@ class GraphitiService(BaseService):
         
     @property
     def uri(self):
-        return f'{self.configService.GRAPHITI_PROTOCOL}://{self.configService.GRAPHITI_HOST}:7687'
+        return f'{self.configService.GRAPHITI_PROTOCOL}://{self.configService.GRAPHITI_HOST}:7687?database=?database={GraphitiConstant.DATABASE_NAME}'
     

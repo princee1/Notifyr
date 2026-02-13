@@ -15,7 +15,7 @@
         "vector": true
     },
     "capabilities": {
-        "object": true,
+        "object": false,
         "email": false,
         "twilio": false,
         "notification": false,

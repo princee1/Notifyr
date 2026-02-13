@@ -25,9 +25,8 @@ try:
     from llama_index.node_parser.docling import DoclingNodeParser
 except ImportError as e:
     DOCLING_INSTALLED = False
-    
 
-from qdrant_client.models import PointStruct
+from app.classes.chunk import Chunk, ChunkPayload
 from app.utils.constant import ParseStrategy
 from app.utils.tools import Mock, RunAsync
 
@@ -98,7 +97,7 @@ class TextDataLoader(BaseDataLoader):
     def __init__(self,embedding_model:BaseEmbedding , file_path: str, lang: str, extension: str,category:str,
                  strategy: ParseStrategy = ParseStrategy.SEMANTIC, use_docling: bool = False):
         super().__init__(embedding_model, file_path, lang, extension,category)
-        self.points = []
+        self.chunks = []
         self.tokens = []
         if use_docling and DOCLING_INSTALLED:
             raise TypeError('Docling must be installed to use it')
@@ -150,7 +149,7 @@ class TextDataLoader(BaseDataLoader):
                 new_section = self.extract_section(node.text)
                 if new_section: current_section = new_section
 
-            payload = {
+            payload = ChunkPayload(**{
                 "text": node.text,
                 "document_name": self.file_path,
                 "document_id": node.ref_doc_id,
@@ -170,7 +169,7 @@ class TextDataLoader(BaseDataLoader):
                 "language": self.lang,
                 "content_type": self.detect_type(node.text),
 
-                "document_type":"file",
+                "document_type":"textfile",
                 "category":self.category,
                 
                 "token_count": detector.freq_dist.N(),
@@ -182,12 +181,14 @@ class TextDataLoader(BaseDataLoader):
                 "topics": await detector.extract_topics(),
                 "density": detector.density_label(),
                 "relationship": rel_ids
-            }
+            })
 
-            self.points.append(PointStruct(
-                id=node.node_id,
+            self.chunks.append(Chunk(
+                chunk_id=node.node_id,
                 vector=node.embedding,
-                payload=payload
+                payload=payload,
+                category=self.category,
+                lang=self.lang
             ))
 
     def compute_token(self):

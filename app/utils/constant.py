@@ -486,3 +486,9 @@ class ParseStrategy(str, Enum):
     SEMANTIC = "semantic"
     STRUCTURED = "structured" 
     SPLITTER  = "splitter"
+
+
+class GraphitiConstant:
+    DOMAIN_PREFIX='domain@'
+    CONTACT_PREFIX='contact@'
+    DATABASE_NAME='notifyr'

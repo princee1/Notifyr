@@ -11,7 +11,8 @@ from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.models.agents_model import AgentModel
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
-from app.services.custom_service import CustomModelService
+from app.services.custom_service import CustomService
+from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.qdrant_service import QdrantService
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
@@ -51,12 +52,23 @@ class AgentMiniService(BaseMiniService):
     graph of tools
     call the provider
     """
-    def __init__(self,configService:ConfigService,graphitiService:GraphitiService,qdrantService:QdrantService, mongooseService:MongooseService,llmProviderMService:LLMProviderMiniService,customService:CustomModelService,agent_model:AgentModel,outboundServices:Dict[str,HTTPOutboundMiniService]={}):
+    def __init__(self,
+                configService:ConfigService,
+                graphitiService:GraphitiService,
+                qdrantService:QdrantService,
+                mongooseService:MongooseService,
+                llmProviderMService:LLMProviderMiniService,
+                customService:CustomService,
+                memcachedService:MemCachedService,
+                agent_model:AgentModel,
+                outboundServices:Dict[str,HTTPOutboundMiniService]={}):
+            
             self.depService = llmProviderMService
             super().__init__(llmProviderMService,str(agent_model.id))
             self.mongooseService = mongooseService
             self.configService = configService
             self.graphitiService =  graphitiService
+            self.memcachedService = memcachedService
             self.qdrantService = qdrantService
             self.customService = customService
             self.outboundServices = outboundServices
@@ -253,7 +265,8 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     profileService:ProfileService,
                     graphitiService:GraphitiService,
                     costService:CostService,
-                    customService:CustomModelService) -> None:
+                    memcachedService:MemCachedService,
+                    customService:CustomService) -> None:
         
         super().__init__()
         self.configService = configService
@@ -265,6 +278,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         self.profileService = profileService
         self.reactiveService = reactiveService
         self.costService = costService
+        self.memcachedService = memcachedService
         self.customService = customService
 
         self.MiniServiceStore = MiniServiceStore[AgentMiniService](self.name)
@@ -324,6 +338,8 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     self.qdrantService,
                     self.mongooseService,
                     provider,
+                    self.customService,
+                    self.memcachedService,
                     model
                 )
                 agent._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
