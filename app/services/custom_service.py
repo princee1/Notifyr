@@ -40,6 +40,9 @@ class CustomService(BaseService):
         self.models_registry = MODEL_REGISTRY
 
     def to_entities(self,entities:List[str]):
+        if not entities:
+            return None
+        
         entities_map = {}
         for e in entities:
             if e not in self.models_registry:
@@ -56,6 +59,9 @@ class CustomService(BaseService):
         return entities_map
         
     def to_edge(self,edges:List[str]):
+        if not edges:
+            return None
+
         edge = {}
         for e in edges:
             if e not in self.models_registry:

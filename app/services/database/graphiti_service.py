@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Any, Dict, Iterator, Type
 from typing_extensions import Literal
 from app.classes.chunk import Chunk
-from app.classes.rag_search import GraphitiSearchConfig
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, LinkDep, Service, ServiceStatus
 from app.errors.service_error import BuildError, BuildFailureError, BuildNotImplementedError
 from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
@@ -29,8 +28,10 @@ from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT,SearchConfig,SearchResults
 from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.nodes import Node
 
 
+from app.utils.helper import uuid_v1_mc
 from app.utils.constant import GraphitiConstant, LLMProviderConstant
 import app.prompt.graphiti_prompt as graphiti_prompt
 
@@ -78,9 +79,9 @@ class GraphitiService(BaseService):
         await self.graphiti.close()
         await self.client.close()
 
-    async def search(self,query:str,group_type:Literal['domain','contact'],groups_ids:list[str]=[],center_node:str=None,edges:list[str]=[],nodes:list[str]=[],config:SearchConfig=None):
+    async def search(self,query:str,group_type:Literal['domain','contact'],groups_ids:list[str]=[],center_node:str=None,edges:list[str]=[],entities:list[str]=[],config:SearchConfig=None):
         edges = self.customService.to_edge(edges).keys() or None
-        nodes = self.customService.to_entities(nodes).keys() or None
+        entities = self.customService.to_entities(entities).keys() or None
 
         filtered_group_ids = []
         for grp in groups_ids:
@@ -89,7 +90,7 @@ class GraphitiService(BaseService):
 
         search_filter = SearchFilters(
             edge_types=edges,
-            nodes=nodes,
+            nodes=entities,
         )
 
         result = await self.graphiti.search_(
@@ -103,6 +104,11 @@ class GraphitiService(BaseService):
     
     async def build_communities(self):
         await self.graphiti.build_communities()
+
+    ##########################################################################
+    #######################                             ######################
+    #######################                             ######################
+    ##########################################################################
 
     async def add_chunk_episode(self,chunk:Chunk,instruction:str=None,entities:list[str]=None,edges:list[str]=None):
         name = f"{chunk.payload['document_name']} - {chunk.payload['chunk_id']} - {chunk.payload['title']}"
@@ -129,6 +135,7 @@ class GraphitiService(BaseService):
         Density: {chunk.payload['density']}
         Language: {chunk.lang}
         """
+        uuid = f"{chunk.payload['document_id']}@{uuid_v1_mc()}"
 
         return await self.add_content_episode(
             name,
@@ -138,10 +145,11 @@ class GraphitiService(BaseService):
             instruction,
             domain,
             entities,
-            edges
+            edges,
+            uuid
         )
 
-    async def add_content_episode(self,name:str,body:dict|str,source:str,description:str,instruction:str=None,domain:str=None,entities:list[str]=None,edges:list[str]=None):
+    async def add_content_episode(self,name:str,body:dict|str,source:str,description:str,instruction:str=None,domain:str=None,entities:list[str]=None,edges:list[str]=None,uuid:str|None=None):
         
         if not isinstance(body,dict) or not isinstance(body,str):
             raise ...
@@ -168,7 +176,8 @@ class GraphitiService(BaseService):
             edge_types=edges,
             entity_types=entities,
             saga=source,
-            update_communities=True
+            #update_communities=True,
+            uuid=uuid,
         )
 
         return result
@@ -197,10 +206,90 @@ class GraphitiService(BaseService):
         )
 
         return result
-  
-    async def bulk_add_episode(self, iterator:Iterator[Any],episode_type:EpisodeType):
+
+    ##########################################################################
+    #######################                             ######################
+    #######################                             ######################
+    ##########################################################################
+
+    async def get_domain_nodes(self, domain: str, domain_type: Literal['domain', 'contact']) -> list[dict]:
+        formatted_domain_id = f'{GraphitiConstant.DOMAIN_PREFIX if domain_type == "domain" else GraphitiConstant.CONTACT_PREFIX}{domain}'
+        
+        async with self.client.session(database= GraphitiConstant.DATABASE_NAME) as session:
+            result = await session.run(
+                """
+                MATCH (n:Entity|Episode|Community) 
+                WHERE n.group_id = $group_id
+                RETURN n
+                """,
+                group_id=formatted_domain_id
+            )
+            nodes = []
+            async for record in result:
+                nodes.append(dict(record['n']))
+            return nodes
+
+    async def get_document_nodes(self, document_id: str) -> list[dict]:
+        """
+        Retrieve all nodes where the UUID starts with a specific prefix.
+        
+        Returns:
+            List of node dictionaries with matching UUIDs
+        """
+        async with self.client.session() as session:
+            result = await session.run(
+                """
+                MATCH (n:Entity|Episode|Community) 
+                WHERE STARTS_WITH(n.uuid, $prefix)
+                RETURN n
+                """,
+                prefix=document_id
+            )
+            nodes = []
+            async for record in result:
+                nodes.append(dict(record['n']))
+            return nodes
+
+    async def delete_document(self, document_id: str) -> int:
+        """
+        Delete all nodes where the UUID starts with a specific prefix.
+                    
+        Returns:
+            Number of nodes deleted
+        """
+        async with self.client.session(session=GraphitiConstant.DATABASE_NAME) as session:
+            result = await session.run(
+                """
+                MATCH (n:Entity|Episode|Community) 
+                WHERE STARTS_WITH(n.uuid, $prefix)
+                DETACH DELETE n
+                RETURN count(n) as deleted_count
+                """,
+                prefix=document_id
+            )
+            record = await result.single()
+            return record['deleted_count'] if record else 0
+
+    async def delete_domain(self,domain:str,batch:int=100):
+        await Node.delete_by_group_id(
+            group_id=domain,
+            batch_size=batch
+        )
+
+    async def delete_node_by(self,uuid:str):
+        await Node.delete_by_uuids(
+            batch_size=1,
+            uuids=[uuid]
+        )
+    
+    async def get_node_by(self,uuid:str):
         ...
     
+    ##########################################################################
+    #######################                             ######################
+    #######################                             ######################
+    ##########################################################################
+
     async def init_database(self,):
         try:
             await self.graphiti.build_indices_and_constraints()

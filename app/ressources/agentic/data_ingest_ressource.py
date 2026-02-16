@@ -5,7 +5,7 @@ from fastapi import BackgroundTasks, Depends, File, Request, Response, UploadFil
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
-from app.cost.web_cost import WebCost
+from app.cost.ingest_cost import WebCost
 from app.decorators.guards import ArqDataTaskGuard, LLMProviderGuard, UploadFilesGuard
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
@@ -20,6 +20,7 @@ from app.manager.merchant_manager import Merchant
 from app.services.config_service import ConfigService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileMiniService, ProfileService
+from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
@@ -45,11 +46,12 @@ from app.utils.tools import RunInThreadPool
 class JobArqRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self,configService:ConfigService,vaultService:VaultService,arqService:ArqDataTaskService,fileService:FileService):
+    def __init__(self,configService:ConfigService,arqService:ArqDataTaskService,fileService:FileService,settingService:SettingService):
         super().__init__(None,None)
         self.arqService = arqService
         self.configService = configService
         self.fileService = fileService
+        self.settingService = settingService
     
     @UseHandler(AsyncIOHandler)
     @PingService([ArqDataTaskService])
@@ -222,6 +224,16 @@ class DataIngestRessource(BaseHTTPRessource):
         """
         Accepts a JSON body describing an `APIFetchTask` and enqueues it.
         """
+
+    @Throttle(normal=(300,150))
+    @UsePipe(MerchantPipe())
+    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK))
+    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
+    @BaseHTTPRessource.HTTPRoute('/research/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
+    async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+        ...
 
     async def on_startup(self):
         self.arqService.register_task(DATA_TASK_REGISTRY_NAME)

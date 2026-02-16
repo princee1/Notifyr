@@ -25,7 +25,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
         """
     
         @functools.wraps(func)
-        async def wrapper(ctx:dict[str,Any],*args,collection_name:str=None,uri:str=None,request_id:str=None,step:Step = None,_nickname:str=nickname,size:int=None,**kwargs):
+        async def wrapper(ctx:dict[str,Any],*args,uri:str=None,request_id:str=None,step:Step = None,_nickname:str=nickname,size:int=None,**kwargs):
 
             async def refund():
                 if step["current_step"] < DataLoaderStepIndex.PROCESS:
@@ -36,7 +36,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                 
                 if step['current_step'] < DataLoaderStepIndex.CLEANUP and nickname == ArqDataTaskConstant.FILE_DATA_TASK:
                     _step = Step(current_step=DataLoaderStepIndex.CLEANUP-1,steps={},current_params=None)
-                    await func(ctx,*args,**kwargs,step=_step,collection_name=collection_name,uri=uri,request_id=request_id,size=size)
+                    await func(ctx,*args,**kwargs,step=_step,uri=uri,request_id=request_id,size=size)
       
             if step==None:
                 step = Step(current_step=0,steps={},current_params=None)
@@ -44,7 +44,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
             costService = Get(CostService)
             redisService = Get(RedisService)
             try:
-                return await func(ctx,*args,**kwargs,step=step,collection_name=collection_name,uri=uri,request_id=request_id,size=size)
+                return await func(ctx,*args,**kwargs,step=step,uri=uri,request_id=request_id,size=size)
             except (asyncio.CancelledError,Exception) as e:
                 await refund()
                 raise e
@@ -63,7 +63,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
     return decorator
 
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
-async def process_file_loader_task(ctx:dict[str,Any],collection_name:str,lang:str='en',category:str=None,uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None):
+async def process_file_loader_task(ctx:dict[str,Any],vector_config:dict|None=None,graph_config:dict|None = None,lang:str='en',uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None):
 
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
@@ -122,7 +122,7 @@ async def process_api_data(ctx:dict[str,Any],url:list[str]):
 if APP_MODE == ApplicationMode.arq:
     
     from arq.connections import RedisSettings
-    from app.classes.data_loader import TextDataLoader, DataLoaderStepIndex
+    from app.ingestion.file_ingestion import TextDataLoader, DataLoaderStepIndex
     from app.services import QdrantService
     from app.services import GraphitiService
     from app.services import LLMProviderService

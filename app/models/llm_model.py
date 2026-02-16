@@ -38,7 +38,6 @@ class GraphitiLLMConfig(BaseModel):
             raise ValueError("max_tokens must be a positive integer")
         return v
 
-
 class GraphitiEmbeddingConfig(BaseModel):
     embedding_model:str
     embedding_dim:Optional[int] = 1024

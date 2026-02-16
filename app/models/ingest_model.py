@@ -1,35 +1,30 @@
-from enum import Enum
-from typing import List, Literal, Optional
-from pydantic import BaseModel, field_serializer, field_validator
-
+from typing import List, Optional, Self
+from pydantic import BaseModel, field_serializer, field_validator, model_validator
 from app.utils.constant import ParseStrategy
-from .file_model import FileResponseUploadModel, UploadError, UriMetadata
+from .file_model import FileResponseUploadModel, UriMetadata
 from app.classes.scheduler import TimedeltaSchedulerModel
 
 
-class ProviderModel(BaseModel):
-	provider:str
-	model:str
-
 class VectorConfig(BaseModel):
 	collection_name: str
-	category: Optional[str] = None
+	category: str
 	
 class KGraphConfig(BaseModel):
-	community:str
-
+	domain:str
+	entities:Optional[list[str]] = []
+	edges:Optional[list[str]] = []
+	description:Optional[str] = None
+	instruction:Optional[str] = None
 
 class DataIngestModel(BaseModel):
-	collection_name: str
+	vector_config: Optional[VectorConfig] =  None
+	graph_config: Optional[KGraphConfig] = None
 	lang: Optional[str] = 'en'
-	category: Optional[str] = None
-	provider:str
-	knowledge:Literal['vector','k-graph','both']= 'vector'
 	expires: Optional[TimedeltaSchedulerModel|None] = None
 	defer_by: Optional[TimedeltaSchedulerModel|None] = None
 
 	@field_validator('expires','defer_by')
-	def transform_into_timedelta(tDelta:TimedeltaSchedulerModel|None):
+	def transform_into_timedelta(cls,tDelta:TimedeltaSchedulerModel|None):
 		if tDelta == None:
 			return None
 		delta = tDelta.build('timedelta')
@@ -38,9 +33,16 @@ class DataIngestModel(BaseModel):
 		return delta
 
 	@field_serializer("defer_by","expires")
-	def time_serialize(self, v:TimedeltaSchedulerModel):
+	def time_serialize(cls, v:TimedeltaSchedulerModel):
 		return v.build('timedelta').total_seconds()
-	
+
+	@model_validator(mode='after')
+	def config_validation(self:Self)->Self:
+		if self.vector_config == None and self.graph_config == None:
+			raise ValueError('You must define at least one ')
+
+		return self
+			
 class DataIngestFileModel(DataIngestModel):
 	strategy: ParseStrategy
 	use_docling:bool = False
@@ -51,11 +53,9 @@ class IngestDataUriMetadata(UriMetadata):
 class IngestFileEnqueueResponse(FileResponseUploadModel):
     metadata: List[IngestDataUriMetadata] = []
 	
-
 class AbortedJobResponse(FileResponseUploadModel):
 	aborted:bool
 	status:str
-
 	
 class EnqueueResponse(FileResponseUploadModel):
 	...

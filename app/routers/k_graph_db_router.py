@@ -13,16 +13,44 @@ def KnowledgeGraphDBRouter(depends:list=None):
 
     memcachedService= Get(MemCachedService)
     redisService = Get(RedisService)
-    graphitiService = Get(graphitiService)
+    graphitiService = Get(GraphitiService)
 
-    
     async def on_startup():
         await graphitiService.init_database()
     
     async def on_shutdown():
         await graphitiService.close()
     
-
     router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
 
+    @router.get('/node/{uuid}/')
+    async def get_node(self,uuid:str):
+        ...
+
+    @router.delete('/node/{uuid}/')
+    async def delete_node(self,uuid:str):
+        ...
+
+    ########################         #######################
+    ########################         #######################
+
+    @router.get('/document/{document_id}/')
+    async def get_document_graph(self,document_id:str):
+        ...
+
+    @router.delete('/document/{document_id}/')
+    async def delete_document(self,document_id:str):
+        ...
+
+    ########################         #######################
+    ########################         #######################
+
+    @router.get('/domain/{domain}/')
+    async def get_domain_graph(self,domain:str):
+        ...
+    
+    @router.delete('/domain/{domain}/')
+    async def delete_domain(self,domain:str):
+        ...
+    
     return router

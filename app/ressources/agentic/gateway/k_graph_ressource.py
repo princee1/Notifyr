@@ -16,5 +16,20 @@ class KGraphDBRessource(BaseHTTPRessource):
         return "Knowledge Graph Database management ressource"
 
     
+    async def get_node(self,uuid:str):
+        ...
+
+    async def delete_node(self,uuid:str):
+        ...
+
+    async def get_document_graph(self,document_id:str):
+        ...
+
+    async def delete_document(self,document_id:str):
+        ...
+
+    async def get_domain_graph(self,domain:str):
+        ...
     
-    
+    async def delete_domain(self,domain:str):
+        ...

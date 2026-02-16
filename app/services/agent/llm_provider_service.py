@@ -21,6 +21,9 @@ class GraphitiConfig(TypedDict):
     embedding:Any
     reranker:Any
 
+class VectorConfig(TypedDict):
+    ...
+
 
 @MiniService(links=[LinkDep(ProfileMiniService,to_build=True)])
 class LLMProviderMiniService(BaseMiniService):
@@ -35,29 +38,23 @@ class LLMProviderMiniService(BaseMiniService):
         return self.depService.model
     
     def build(self, build_state = ...):
+        ...
+
+    def _create_embedding(self):
         api_key =self.depService.credentials.to_plain()
 
         embedding_search = self.model.embedding_search.model_dump()
         embedding_parse = self.model.embedding_parse.model_dump()
 
-        match self.model.provider:
-            case 'anthropic':
-                ...
-            
-            case 'cohere':
-                ...
-            
+        match self.model.provider:            
             case 'gemini':
-                ...
-            
-            case 'groq':
                 ...
             
             case 'ollama':
                 ...
             case 'openai' | 'deepseek':
-                self.embedding_search_model = OpenAIEmbedding(api_key=api_key,**embedding_search)
-                self.embedding_parse_model= OpenAIEmbedding(api_key=api_key,**embedding_parse)
+                embedding_search_model = OpenAIEmbedding(api_key=api_key,**embedding_search)
+                embedding_parse_model= OpenAIEmbedding(api_key=api_key,**embedding_parse)
     
     def ChatAgentFactory(self,agentModel:AgentModel)->BaseChatModel:
         api_key =lambda: self.depService.credentials.to_plain()
@@ -135,9 +132,6 @@ class LLMProviderMiniService(BaseMiniService):
             
             case 'ollama': raise NotImplementedError()
 
-    def EmbeddingFactory(self):
-        ...
-
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
 class LLMProviderService(BaseMiniServiceManager):
     
@@ -152,6 +146,8 @@ class LLMProviderService(BaseMiniServiceManager):
     def build(self, build_state=...):
 
         self.graphiti_config:GraphitiConfig = {}
+        self.vector_config:VectorConfig = {}
+        
         current_id = None
         
         count = self.profileService.MiniServiceStore.filter_count(lambda p: p.model.__class__ == LLMProfileModel )
