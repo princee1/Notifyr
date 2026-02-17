@@ -38,13 +38,20 @@ class JobAlreadyExistsError(BaseError):
 class JobStatusNotValidError(BaseError): 
 
     def __init__(self,job_id:str, status:str):
-        super().__init__()
+        super().__init__(job_id,status)
         self.job_id = job_id
         self.status = status
 
 class JobDequeueError(BaseError):
     def __init__(self, job_id:str):
+        super().__init__(job_id)
         self.job_id= job_id
+
+class UnexpectedJobStatusError(BaseError):
+    def __init__(self, job_id:str,job_status):
+        super().__init__(job_id,job_status)
+        self.job_id = job_id
+        self.job_status = job_status
 
 @Service()
 class ArqDataTaskService(BaseService):

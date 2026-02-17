@@ -6,6 +6,7 @@ from app.models.file_model import FileResponseUploadModel, UriMetadata
 from app.utils.constant import CostConstant,ArqDataTaskConstant, ParseStrategy
 from app.utils.globals import APP_MODE,ApplicationMode
 from app.utils.tools import RunAsync
+from app.models.ingest_model import VectorConfig,KGraphConfig
 
 task_registry = []
 FILE_CLEANUP='file_cleanup'
@@ -44,7 +45,16 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
             costService = Get(CostService)
             redisService = Get(RedisService)
             try:
-                return await func(ctx,*args,**kwargs,step=step,uri=uri,request_id=request_id,size=size)
+                vector_config = kwargs.get('vector_config',None)
+                graph_config = kwargs.get('graph_config',None)
+
+                if vector_config != None:
+                    vector_config = VectorConfig(**vector_config)
+                
+                if graph_config != None:
+                    graph_config = KGraphConfig(**graph_config)
+
+                return await func(ctx,*args,**kwargs,vector_config=vector_config,graph_config=graph_config,step=step,uri=uri,request_id=request_id,size=size)
             except (asyncio.CancelledError,Exception) as e:
                 await refund()
                 raise e
@@ -62,26 +72,29 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
 
     return decorator
 
+
+
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
-async def process_file_loader_task(ctx:dict[str,Any],vector_config:dict|None=None,graph_config:dict|None = None,lang:str='en',uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None):
+async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,lang:str='en',uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None):
 
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
+    graphitiService:GraphitiService = Get(GraphitiService)
     costService:CostService = Get(CostService)
-    llmProviderService:LLMProviderService = Get(LLMProviderService)
     arqService:ArqDataTaskService = Get(ArqDataTaskService)
 
     file_path = arqService.compute_data_file_upload_path(uri)
 
     extension =  fileService.get_extension(file_path)
-    textDataLoader = TextDataLoader(...,file_path,lang,extension,category,strategy,use_docling)
+    textDataLoader = TextDataLoader(qdrantService.embedding_parse,file_path,lang,extension,vector_config.category,strategy,use_docling)
     token = None
 
     async with StepRunner(step,DataLoaderStepIndex.CHECK) as skip:
         skip()
-        if not await qdrantService.collection_exists(collection_name,reverse=None):
-           raise QdrantCollectionDoesNotExist(collection_name)
-        
+        if vector_config != None:
+            if not await qdrantService.collection_exists(vector_config.collection_name,reverse=None):
+                raise QdrantCollectionDoesNotExist(vector_config.collection_name)
+            
     async with StepRunner(step,DataLoaderStepIndex.TOKEN_VERIFY) as skip:
         skip()
         if strategy != ParseStrategy.SEMANTIC:
@@ -93,8 +106,14 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:dict|None=Non
         await textDataLoader.process()
         token = textDataLoader.compute_token()
         step['current_params']=token
-        await qdrantService.upload_points(collection_name,textDataLoader.chunks)
+
+        if vector_config != None:
+            await qdrantService.upload_points(vector_config.collection_name,textDataLoader.chunks)
         
+        if graph_config != None:
+            for chunk in textDataLoader.chunks:
+                await graphitiService.add_chunk_episode(chunk,graph_config.instruction,graph_config.entities,graph_config.edges)
+
     async with StepRunner(step,DataLoaderStepIndex.TOKEN_COST) as skip:
         skip()
         if strategy != ParseStrategy.SEMANTIC:
@@ -108,15 +127,33 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:dict|None=Non
         skip()
         await RunAsync(fileService.delete_file)(file_path)
 
-    return {"size":size,"collection_name":collection_name,"tokens":step['current_params']}
+    return {"size":size,"collection_name":vector_config.collection_name,"tokens":step['current_params']}
+
 
 @RegisterTask(ArqDataTaskConstant.WEB_DATA_TASK,False)
-async def process_web_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',collection_name:str=None):
-    ...
+async def process_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None):
+
+    qdrantService:QdrantService = Get(QdrantService)
+    graphitiService:GraphitiService = Get(GraphitiService)
+    costService:CostService = Get(CostService)
+    arqService:ArqDataTaskService = Get(ArqDataTaskService)
+
 
 @RegisterTask(ArqDataTaskConstant.API_DATA_TASK,False)
-async def process_api_data(ctx:dict[str,Any],url:list[str]):
-    ...
+async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None):
+    qdrantService:QdrantService = Get(QdrantService)
+    graphitiService:GraphitiService = Get(GraphitiService)
+    costService:CostService = Get(CostService)
+    arqService:ArqDataTaskService = Get(ArqDataTaskService)
+
+
+@RegisterTask(ArqDataTaskConstant.WEB_DATA_TASK,False)
+async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None):
+    qdrantService:QdrantService = Get(QdrantService)
+    graphitiService:GraphitiService = Get(GraphitiService)
+    costService:CostService = Get(CostService)
+    arqService:ArqDataTaskService = Get(ArqDataTaskService)
+
 
 
 if APP_MODE == ApplicationMode.arq:

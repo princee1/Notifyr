@@ -23,13 +23,6 @@ def KnowledgeGraphDBRouter(depends:list=None):
     
     router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
 
-    @router.get('/node/{uuid}/')
-    async def get_node(self,uuid:str):
-        ...
-
-    @router.delete('/node/{uuid}/')
-    async def delete_node(self,uuid:str):
-        ...
 
     ########################         #######################
     ########################         #######################
@@ -53,4 +46,15 @@ def KnowledgeGraphDBRouter(depends:list=None):
     async def delete_domain(self,domain:str):
         ...
     
+    ########################         #######################
+    ########################         #######################
+
+    @router.post('/playground/')
+    async def graphiti_playground(self,):
+        await graphitiService.search(
+            "",
+            group_type='domain',
+
+        )
+
     return router

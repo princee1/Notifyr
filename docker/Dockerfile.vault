@@ -2,6 +2,12 @@ FROM golang:latest AS builder
 
 RUN apt-get update && apt-get install -y git make && rm -rf /var/lib/apt/lists/*
 
+RUN go install github.com/mitchellh/gox@latest
+
+ENV XC_OSARCH=linux/amd64
+
+ENV VAULT_DEV_BUILD=1
+
 WORKDIR /build
 
 # ARG COMMIT_SHA=75862a1065ff489a4601791ad22062e22ee7a1d1
@@ -12,11 +18,17 @@ WORKDIR /build
 
 RUN git clone https://github.com/princee1/vault-plugin-secrets-minio.git
 
+RUN git clone https://github.com/HomaiLabs/neo4j-vault-database-plugin.git
+
 WORKDIR /build/vault-plugin-secrets-minio/
 
 RUN make deps
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/vault-plugin-secrets-minio
+
+WORKDIR /build/neo4j-vault-database-plugin/
+
+RUN make build
 
 FROM hashicorp/vault:latest
 
@@ -313,9 +325,11 @@ EOF
 
 RUN mkdir /etc/vault && mkdir etc/vault/plugins
 COPY --from=builder /build/vault-plugin-secrets-minio/vault-plugin-secrets-minio /etc/vault/plugins/
+COPY --from=builder /build/neo4j-vault-database-plugin/pkg/linux_amd64/neo4j-vault-database-plugin /etc/vault/plugins/
 
 RUN chown root:vaultuser /etc/vault/plugins/ && chmod 755 /etc/vault/plugins
 RUN chown root:vaultuser /etc/vault/plugins/vault-plugin-secrets-minio && chmod 755 /etc/vault/plugins/vault-plugin-secrets-minio
+RUN chown root:vaultuser /etc/vault/plugins/neo4j-vault-database-plugin && chmod 755 /etc/vault/plugins/neo4j-vault-database-plugin
 
 RUN chown -R vaultuser:vaultuser /vault/data
 RUN chmod 700 /vault/data

@@ -1,8 +1,9 @@
 from typing import Any
 from fastapi import HTTPException
 from app.classes.chunk import Chunk
-from app.definition._service import BaseService, Service
+from app.definition._service import BaseService, LinkDep, Service
 from app.errors.service_error import BuildFailureError
+from app.services.agent.llm_provider_service import LLMProviderService
 from app.services.file.file_service import FileService
 from app.services.config_service import ConfigService
 from qdrant_client import AsyncQdrantClient
@@ -12,25 +13,87 @@ from app.services.vault_service import VaultService
 from app.utils.constant import QdrantConstant
 from app.classes.qdrant import SearchParamsModel
 from app.utils.tools import RunAsync
+from app.utils.globals import APP_MODE,ApplicationMode
 
-@Service()
+
+QDRANT_BUILD_STATE = 543
+
+@Service(
+    links=[LinkDep(service=LLMProviderService,to_build=True,build_state=QDRANT_BUILD_STATE)]
+)
 class QdrantService(BaseService):
     
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService):
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,llmProviderService:LLMProviderService):
         super().__init__()
         self.configService = configService
         self.fileService = fileService
         self.vaultService = vaultService
+        self.llmProviderService = llmProviderService
     
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
-        try:
-            self.client = AsyncQdrantClient(
-                url=self.qdrant_url,
-                timeout=10,
-            )
-        except  Exception as e:
-            raise BuildFailureError(f"Failed to connect to Qdrant: {e}")
-       
+
+        if build_state == DEFAULT_BUILD_STATE:
+            try:
+                    self.client = AsyncQdrantClient(
+                        url=self.qdrant_url,
+                        timeout=10,
+                    )
+            except  Exception as e:
+                raise BuildFailureError(f"Failed to connect to Qdrant: {e}")
+
+        if APP_MODE == ApplicationMode.arq:
+            self._create_embedding()
+            
+    def _create_embedding(self):
+        from llama_index.embeddings.openai import OpenAIEmbedding,OpenAIEmbeddingMode
+        from llama_index.embeddings.gemini import GeminiEmbedding
+        
+        embedding_provider_id = self.llmProviderService.vector_config.get('embedding',None)
+        if not embedding_provider_id:
+            raise BuildFailureError("No embedding provider configured in vector_embedding_config")
+        
+        embedding_provider = self.llmProviderService.MiniServiceStore.get(embedding_provider_id)
+        
+        vector_config = embedding_provider.model.vector_embedding_config
+        api_key = embedding_provider.depService.credentials.to_plain()
+
+        match embedding_provider.model.provider:
+            case 'gemini':
+                embedding = GeminiEmbedding(
+                    api_key=api_key,
+                    model_name=vector_config.model,
+                    timeout=vector_config.timeout,
+                    max_retries=vector_config.max_retries,
+                    api_base=vector_config.base_url,
+                )
+
+                self.embedding_parse = embedding
+                self.embedding_search = embedding
+            
+            case 'openai':
+                self.embedding_parse = OpenAIEmbedding(
+                    api_key=api_key,
+                    mode=OpenAIEmbeddingMode.TEXT_SEARCH_MODE,
+                    model=vector_config.model,
+                    timeout=vector_config.timeout,
+                    max_retries=vector_config.max_retries,
+                    api_base=vector_config.base_url,
+                    api_version=vector_config.api_version,
+                )
+    
+                self.embedding_search = OpenAIEmbedding(
+                    api_key=api_key,
+                    mode=OpenAIEmbeddingMode.SIMILARITY_MODE,
+                    model=vector_config.model,
+                    timeout=vector_config.timeout,
+                    max_retries=vector_config.max_retries,
+                    api_base=vector_config.base_url,
+                    api_version=vector_config.api_version,
+                )
+
+            case _:
+                raise BuildFailureError(f"Unsupported embedding provider: {embedding_provider.model.provider}")
+
     async def create_cache_db(self):
         try:
             return await self.create_collection(QdrantConstant.CACHE_COLLECTION)

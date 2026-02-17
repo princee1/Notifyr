@@ -161,9 +161,15 @@ setup_engine(){
   vault secrets enable -path=notifyr-aws -seal-wrap aws
 
   # Minio plugin registration
-  local CHECKSUM=$( sha256sum /etc/vault/plugins/vault-plugin-secrets-minio 2>/dev/null | cut -d " " -f 1 )
-  [[ -n "$CHECKSUM" ]] || die "Could not calculate plugin sha256 sum"
-  vault plugin register -sha256="$CHECKSUM" -command="vault-plugin-secrets-minio" secret vault-plugin-secrets-minio
+  local MINIO_CHECKSUM=$( sha256sum /etc/vault/plugins/vault-plugin-secrets-minio 2>/dev/null | cut -d " " -f 1 )
+  [[ -n "$MINIO_CHECKSUM" ]] || die "Could not calculate vault-plugin-secrets-minio plugin sha256 sum"
+  vault plugin register -sha256="$MINIO_CHECKSUM" -command="vault-plugin-secrets-minio" secret vault-plugin-secrets-minio
+
+  local NEO4J_CHECKSUM=$( sha256sum /etc/vault/plugins/neo4j-vault-database-plugin 2>/dev/null | cut -d " " -f 1 )
+  [[ -n "$NEO4J_CHECKSUM" ]] || die "Could not calculate neo4j-vault-database-plugin plugin sha256 sum"
+
+  # Neo4j database engine addition
+  vault write sys/plugins/catalog/notifyr-database/neo4j-vault-database-plugin sha256=$NEO4J_CHECKSUM  command="neo4j-vault-database-plugin"
 
   # Minio secrets engine enablement
   vault secrets enable \

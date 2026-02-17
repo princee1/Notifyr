@@ -9,8 +9,9 @@ from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
+from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMProviderDoesNotExistError
-from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobStatusNotValidError,ResultNotFound
+from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -972,7 +973,13 @@ class ArqHandler(Handler):
         except JobDequeueError as e:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={'job_id':e.job_id}
+                detail={'job_id': e.job_id}
+            )
+
+        except UnexpectedJobStatusError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={'job_id': e.job_id,'status':e.job_status}
             )
 
 class APSSchedulerHandler(Handler):
@@ -1062,3 +1069,20 @@ class AgenticHandler(Handler):
 class GrpcHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         return await super().handle(function, *args, **kwargs)
+
+
+class GraphitiHandler(Handler):
+    ...
+
+class DataIngestHandler(Handler):
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except AgenticDatabaseNotAllowedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": f"Database '{e.database}' is not allowed for this operation.",
+                    "database": e.database
+                }
+            )

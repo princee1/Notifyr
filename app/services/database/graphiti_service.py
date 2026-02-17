@@ -37,7 +37,11 @@ import app.prompt.graphiti_prompt as graphiti_prompt
 
 
 CLIENT_MAP:Dict[LLMProviderConstant.LLMProvider,Type[LLMClient]] = {
-    'groq':GroqClient,'gemini':GeminiClient,'openai':OpenAIClient,'anthropic':AnthropicClient,'deepseek':OpenAIGenericClient
+    'groq':GroqClient,
+    'gemini':GeminiClient,
+    'openai':OpenAIClient,
+    'anthropic':AnthropicClient,
+    'deepseek':OpenAIGenericClient
 }
 
 GRAPHITI_BUILD_STATE = 421
@@ -114,7 +118,7 @@ class GraphitiService(BaseService):
         name = f"{chunk.payload['document_name']} - {chunk.payload['chunk_id']} - {chunk.payload['title']}"
         source = chunk.payload['source']
 
-        description = graphiti_prompt.CHUNK_DESCRIPTION_PROMPT(
+        description = description or graphiti_prompt.CHUNK_DESCRIPTION_PROMPT(
             chunk.payload['document_name'],
             chunk.category,
             chunk.payload['section'] or '',
@@ -215,7 +219,7 @@ class GraphitiService(BaseService):
     async def get_domain_nodes(self, domain: str, domain_type: Literal['domain', 'contact']) -> list[dict]:
         formatted_domain_id = f'{GraphitiConstant.DOMAIN_PREFIX if domain_type == "domain" else GraphitiConstant.CONTACT_PREFIX}{domain}'
         
-        async with self.client.session(database= GraphitiConstant.DATABASE_NAME) as session:
+        async with self.client.session() as session:
             result = await session.run(
                 """
                 MATCH (n:Entity|Episode|Community) 
@@ -257,7 +261,7 @@ class GraphitiService(BaseService):
         Returns:
             Number of nodes deleted
         """
-        async with self.client.session(session=GraphitiConstant.DATABASE_NAME) as session:
+        async with self.client.session() as session:
             result = await session.run(
                 """
                 MATCH (n:Entity|Episode|Community) 
@@ -272,6 +276,7 @@ class GraphitiService(BaseService):
 
     async def delete_domain(self,domain:str,batch:int=100):
         await Node.delete_by_group_id(
+            self.client,
             group_id=domain,
             batch_size=batch
         )

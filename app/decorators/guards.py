@@ -7,6 +7,7 @@ from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
 from app.errors.db_error import CollectionHardLimitReachedError
+from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
 from app.manager.task_manager import TaskManager
 from app.models.agents_model import AgentModel
@@ -439,18 +440,22 @@ class LLMProviderGuard(Guard):
         return True,""
             
 
-class DataIngestGuard(Guard):
+class DataIngestDatabaseGuard(Guard):
 
     def __init__(self,accept_vector:bool=True,accept_graphiti:bool = True):
         super().__init__()
         if not accept_vector and not accept_graphiti:
-            raise ValueError('')
+            raise ValueError('At least one (vector or graph) config must Be set')
         
         self.accept_vector = accept_vector
         self.accept_graphiti = accept_graphiti
     
     def guard(self,ingestTask:DataIngestModel):
-        return super().guard()
+        if not self.accept_graphiti and ingestTask.graph_config != None:
+            raise AgenticDatabaseNotAllowedError('kgraph')
+
+        if not self.accept_vector and ingestTask.vector_config != None:
+            raise AgenticDatabaseNotAllowedError('vector')
 
 
 class MongooseHardLimitGuard(Guard):
@@ -461,7 +466,7 @@ class MongooseHardLimitGuard(Guard):
         self.mongooseService = Get(MongooseService)
     
     async def guard(self):
-        count = self.mongooseService.count(self.model)
+        count = await self.mongooseService.count(self.model)
         if count >= self.limit:
             raise CollectionHardLimitReachedError(self.limit,self.model._collection)
         

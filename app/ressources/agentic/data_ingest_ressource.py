@@ -1,17 +1,14 @@
-import asyncio
-from random import random
 from typing import Annotated, List
-from fastapi import BackgroundTasks, Depends, File, Request, Response, UploadFile,status
+from fastapi import Depends, File, Request, Response, UploadFile,status
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
-from app.cost.ingest_cost import WebCost
-from app.decorators.guards import ArqDataTaskGuard, LLMProviderGuard, UploadFilesGuard
-from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
+from app.cost.ingest_cost import IngestFileCost, IngestWebCost
+from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, LLMProviderGuard, UploadFilesGuard
+from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
-from app.definition._utils_decorator import Guard
 from app.depends.class_dep import FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_profile
@@ -24,12 +21,11 @@ from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
-from app.services.worker.arq_service import ArqDataTaskService, JobAlreadyExistsError,JobStatus
+from app.services.worker.arq_service import ArqDataTaskService, JobAlreadyExistsError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import (
     AbortedJobResponse,
     IngestDataUriMetadata,
     EnqueueResponse,
-    DataIngestModel,
     IngestFileEnqueueResponse,
     DataIngestFileModel,
 )
@@ -116,13 +112,16 @@ class JobArqRessource(BaseHTTPRessource):
                 return AbortedJobResponse(metadata=[],aborted=bool(result),status=status)
             
             case _:
-                ...
+                raise UnexpectedJobStatusError(
+                    job_id,
+                    status
+                )
 
 @UseRoles([Role.ADMIN])
 @PingService([ArqDataTaskService])
 @IncludeRessource(JobArqRessource)
-@UseHandler(ServiceAvailabilityHandler,CostHandler)
 @UsePermission(JWTRouteHTTPPermission)
+@UseHandler(ServiceAvailabilityHandler,CostHandler,DataIngestHandler)
 @HTTPRessource('data-ingest')
 class DataIngestRessource(BaseHTTPRessource):
     
@@ -151,7 +150,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,AgenticHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),LLMProviderGuard,UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=IngestFileEnqueueResponse)
-    async def ingest_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestFileCost,Depends(IngestFileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
         _response = IngestFileEnqueueResponse()
         ingest_sha = set()
         for file in files:
@@ -203,7 +202,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_web(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[WebCost,Depends(WebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_web(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing a `WebCrawlTask` and enqueues it.
         """
@@ -215,12 +214,12 @@ class DataIngestRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(MiniServiceInjectorPipe(ProfileService))
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),LLMProviderGuard)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,AgenticHandler,RedisHandler)
     @UseServiceLock(ArqDataTaskService,ProfileService,lockType='reader',as_manager=True)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),LLMProviderGuard,DataIngestDatabaseGuard(False))
     @BaseHTTPRessource.HTTPRoute('/api/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[WebCost,Depends(WebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing an `APIFetchTask` and enqueues it.
         """
@@ -234,6 +233,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/research/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         ...
+
 
     async def on_startup(self):
         self.arqService.register_task(DATA_TASK_REGISTRY_NAME)

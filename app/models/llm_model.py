@@ -7,14 +7,35 @@ from app.utils.constant import MongooseDBConstant, VaultConstant,LLMProviderCons
 DEFAULT_MAX_TOKENS = 8192
 DEFAULT_TEMPERATURE = 1
 
+openai_embedding = [
+    "text-embedding-ada-002",
+    "text-embedding-3-small",
+    "text-embedding-3-large"
+]
 
-openai_embedding =  ["text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large"]
-gemini_embedding =  ['text-embedding-001','gemini-embedding-001','text-embedding-005']
+gemini_embedding = [
+    "models/embedding-001",
+    "text-embedding-001",
+    "gemini-embedding-001",
+    "embedding-001",
+    "models/text-embedding-004",
+    "text-embedding-004",
+    "models/text-embedding-005",
+    "text-embedding-005"
+]
 
-class EmbeddingConfig(BaseModel):
+VALID_EMBEDDING_MODELS = {
+    'openai': openai_embedding,
+    'gemini': gemini_embedding,
+}
+
+class VectorEmbeddingConfig(BaseModel):
     model:str
-    max_retries: int = 10,
+    max_retries: int = 10
     timeout: float = 60
+    base_url: str | None = None
+    api_version: str | None = None
+    batch_size: int = Field(default=100, ge=10, le=500)
 
 class GraphitiLLMConfig(BaseModel):
     model: Optional[str] = None
@@ -44,9 +65,9 @@ class GraphitiEmbeddingConfig(BaseModel):
     base_url:Optional[str] = None
     batch:Optional[int] = Field(default=100,ge=10,le=500)
 
-GRAPHITI_EMBEDDER_PROVIDER_SET = {
+EMBEDDER_PROVIDER_SET = {
                     'openai',
-                    # 'gemini',
+                    'gemini',
                     }
 
 class LLMProfileModel(BaseProfileModel):
@@ -54,8 +75,7 @@ class LLMProfileModel(BaseProfileModel):
     provider:LLMProviderConstant.LLMProvider
     models:List[str] = []
 
-    embedding_search:EmbeddingConfig
-    embedding_parse:EmbeddingConfig
+    vector_embedding_config:Optional[VectorEmbeddingConfig] = None
 
     graph_config: Optional[GraphitiLLMConfig] = None
     graph_embedding_config: Optional[GraphitiEmbeddingConfig] = None
@@ -67,7 +87,7 @@ class LLMProfileModel(BaseProfileModel):
     api_key:str
     api_name:str = 'default'
     api_version:Optional[str]=None
-    endpoint:Optional[str] = None
+    base_url:Optional[str] = None
 
     _secrets_keys:ClassVar[List[str]] = ['api_key']
     _unique_indexes: ClassVar[list[str]] = ['provider','api_name']
@@ -76,6 +96,13 @@ class LLMProfileModel(BaseProfileModel):
     _queue:ClassVar[str] = 'llm'
 
     _condition:ClassVar[Optional[MongoCondition]] = [
+        MongoCondition(
+            validation='exist',
+            force=False,
+            filter={'vector_embedding_config':{"$ne":None}},
+            method='simple-number-validation',
+            rule={"$ge":1}
+        ), 
         MongoCondition(
             validation='exist',
             force=False,
@@ -111,32 +138,53 @@ class LLMProfileModel(BaseProfileModel):
     
     @model_validator(mode='after')
     def graphiti_validation(self:Self)->Self:
-        if self.graph_embedding_config != None and self.provider not in GRAPHITI_EMBEDDER_PROVIDER_SET:
+        if self.graph_embedding_config != None and self.provider not in EMBEDDER_PROVIDER_SET:
             raise ValueError('We can only use the openai or gemini embedding')
 
-        if self.graph_reranker_config != None and self.provider not in GRAPHITI_EMBEDDER_PROVIDER_SET:
+        if self.graph_reranker_config != None and self.provider not in EMBEDDER_PROVIDER_SET:
             raise ValueError('We can only use the openai or gemini reranker')
     
     @model_validator(mode='after')
-    def models_validation(self:Self)->Self:
+    def models_validation(self: Self) -> Self:
+        # Validate base models
         if self.models:
             diff = set(self.models).difference(LLMProviderConstant.MODELS[self.provider])
             if len(diff) > 0:
-                raise ValueError(f'Those models: {list(diff)} are not associated with the provider:{self.provider}' )
+                raise ValueError(f'Those models: {list(diff)} are not associated with the provider:{self.provider}')
             
-            if self.graph_config != None:
-                if self.graph_config.model not in self.models:
+            # Validate graph_config models
+            if self.graph_config is not None:
+                if self.graph_config.model and self.graph_config.model not in self.models:
                     raise ValueError(f"Graph client config model '{self.graph_config.model}' is not listed in models for provider '{self.provider}'.")
-
-                if self.graph_config.small_model not in self.models:
+                
+                if self.graph_config.small_model and self.graph_config.small_model not in self.models:
                     raise ValueError(f"Graph client config small_model '{self.graph_config.small_model}' is not listed in models for provider '{self.provider}'.")
             
-            if self.graph_reranker_config != None:
-                if self.graph_reranker_config.model not in self.models:
+            # Validate graph_reranker_config models
+            if self.graph_reranker_config is not None:
+                if self.graph_reranker_config.model and self.graph_reranker_config.model not in self.models:
                     raise ValueError(f"Graph reranker config model '{self.graph_reranker_config.model}' is not listed in models for provider '{self.provider}'.")
+        
+        # Validate vector_embedding_config
+        if self.vector_embedding_config is not None:
+            valid_embedding_models = VALID_EMBEDDING_MODELS.get(self.provider, [])
+            if not valid_embedding_models:
+                raise ValueError(f"Provider '{self.provider}' does not support vector embeddings.")
+            
+            if self.vector_embedding_config.model not in valid_embedding_models:
+                raise ValueError(f"Embedding model '{self.vector_embedding_config.model}' is not valid for provider '{self.provider}'. Valid models: {valid_embedding_models}")
+        
+        # Validate graph_embedding_config
+        if self.graph_embedding_config is not None:
+            valid_embedding_models = VALID_EMBEDDING_MODELS.get(self.provider, [])
+            if not valid_embedding_models:
+                raise ValueError(f"Provider '{self.provider}' does not support graph embeddings.")
+            
+            if self.graph_embedding_config.embedding_model not in valid_embedding_models:
+                raise ValueError(f"Graph embedding model '{self.graph_embedding_config.embedding_model}' is not valid for provider '{self.provider}'. Valid models: {valid_embedding_models}")
+        
         return self
-
-
+    
     @model_validator(mode='after')
     def reasoning_verbosity_validation(self: Self) -> Self:
         if self.graph_config is not None:
@@ -150,14 +198,13 @@ class LLMProfileModel(BaseProfileModel):
     @model_validator(mode='after')
     def graph_embedding_config_validation(self:Self) -> Self:
         if self.graph_embedding_config != None:
-            if self.provider not in GRAPHITI_EMBEDDER_PROVIDER_SET:
+            if self.provider not in EMBEDDER_PROVIDER_SET:
                 raise ValueError('')
 
             if self.graph_embedding_config.batch != None and self.provider != 'openai':
                 raise ValueError('')
         
         return self
-
 
     @model_validator(mode='after')
     def max_tokens_validation(self: Self) -> Self:

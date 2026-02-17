@@ -3,7 +3,7 @@ from aiohttp_retry import Any
 from pydantic import SecretStr
 from app.definition import _service
 from app.models.agents_model import AgentModel
-from app.models.llm_model import GRAPHITI_EMBEDDER_PROVIDER_SET, LLMProfileModel
+from app.models.llm_model import EMBEDDER_PROVIDER_SET, LLMProfileModel
 from app.services.profile_service import ProfileMiniService, ProfileService
 from ..config_service import ConfigService
 from app.definition._service import BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
@@ -14,7 +14,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_cohere import ChatCohere
 from langchain_groq import ChatGroq
 from langchain_core.language_models import BaseChatModel
-from llama_index.embeddings.openai import OpenAIEmbedding
+
 
 class GraphitiConfig(TypedDict):
     client:Any
@@ -22,8 +22,8 @@ class GraphitiConfig(TypedDict):
     reranker:Any
 
 class VectorConfig(TypedDict):
-    ...
-
+    embedding:Any
+    
 
 @MiniService(links=[LinkDep(ProfileMiniService,to_build=True)])
 class LLMProviderMiniService(BaseMiniService):
@@ -39,22 +39,6 @@ class LLMProviderMiniService(BaseMiniService):
     
     def build(self, build_state = ...):
         ...
-
-    def _create_embedding(self):
-        api_key =self.depService.credentials.to_plain()
-
-        embedding_search = self.model.embedding_search.model_dump()
-        embedding_parse = self.model.embedding_parse.model_dump()
-
-        match self.model.provider:            
-            case 'gemini':
-                ...
-            
-            case 'ollama':
-                ...
-            case 'openai' | 'deepseek':
-                embedding_search_model = OpenAIEmbedding(api_key=api_key,**embedding_search)
-                embedding_parse_model= OpenAIEmbedding(api_key=api_key,**embedding_parse)
     
     def ChatAgentFactory(self,agentModel:AgentModel)->BaseChatModel:
         api_key =lambda: self.depService.credentials.to_plain()
@@ -76,7 +60,8 @@ class LLMProviderMiniService(BaseMiniService):
                     top_k=agentModel.top_k,
                     timeout=agentModel.timeout,
                     effort=agentModel.effort,
-                    anthropic_proxy=agentModel.proxy_url
+                    anthropic_proxy=agentModel.proxy_url,
+                    base_url=self.model.base_url
                 )
             
             case 'cohere': 
@@ -86,17 +71,19 @@ class LLMProviderMiniService(BaseMiniService):
                     model=agentModel.model,
                     cohere_api_key=SecretStr(api_key()),
                     timeout_seconds=agentModel.timeout, 
+                    base_url=self.model.base_url
+
                 )
 
             case 'deepseek'| 'openai' | 'gemini':
 
                 match provider:
                     case 'deepseek':
-                        base_url = "https://api.deepseek.com"
+                        base_url = self.model.base_url or "https://api.deepseek.com"
                     case 'gemini':
-                        base_url= "https://generativelanguage.googleapis.com/v1beta"
+                        base_url= self.model.base_url or "https://generativelanguage.googleapis.com/v1beta"
                     case _:
-                        base_url = None
+                        base_url = self.model.base_url or None
 
                 return ChatOpenAI(
                     streaming=True,
@@ -127,7 +114,8 @@ class LLMProviderMiniService(BaseMiniService):
                     temperature=agentModel.temperature,
                     groq_proxy=agentModel.proxy_url,
                     reasoning_effort=agentModel.effort,
-                    reasoning_format=agentModel.reasoning_format
+                    reasoning_format=agentModel.reasoning_format,
+                    base_url=self.model.base_url
                 )
             
             case 'ollama': raise NotImplementedError()
@@ -148,7 +136,7 @@ class LLMProviderService(BaseMiniServiceManager):
         self.graphiti_config:GraphitiConfig = {}
         self.vector_config:VectorConfig = {}
         
-        current_id = None
+        graphiti_current_id = None
         
         count = self.profileService.MiniServiceStore.filter_count(lambda p: p.model.__class__ == LLMProfileModel )
         state_counter = self.StatusCounter(count)
@@ -168,26 +156,29 @@ class LLMProviderService(BaseMiniServiceManager):
 
             if provider.service_status != ServiceStatus.AVAILABLE:
                 continue
+
+            if provider.model.vector_embedding_config != None and not self.vector_config.get('embedding',None):
+                if provider.model.provider in EMBEDDER_PROVIDER_SET:
+                    self.vector_config['embedding'] = provider.miniService_id
             
-            
-            if provider.model.graph_config != None:
-                if provider.model.provider in GRAPHITI_EMBEDDER_PROVIDER_SET:
-                    current_id = provider.miniService_id
+            if provider.model.graph_config != None and not self.graphiti_config.get('client',None):
+                if provider.model.provider in EMBEDDER_PROVIDER_SET:
+                    graphiti_current_id = provider.miniService_id
 
                 self.graphiti_config['client'] = provider.miniService_id
             
-            if provider.model.graph_embedding_config != None:
+            if provider.model.graph_embedding_config != None and not self.graphiti_config.get('embedding',None):
                 self.graphiti_config['embedding'] = provider.miniService_id
             
-            if provider.model.graph_reranker_config != None:
+            if provider.model.graph_reranker_config != None and not self.graphiti_config.get('reranker',None): 
                 self.graphiti_config['reranker'] = provider.miniService_id
 
-        if current_id != None:
+        if graphiti_current_id != None:
             if self.graphiti_config.get('embedding',None) == None:
-                self.graphiti_config['embedding'] = current_id
+                self.graphiti_config['embedding'] = graphiti_current_id
             
             if self.graphiti_config.get('reranker',None) == None:
-                self.graphiti_config['reranker'] = current_id
+                self.graphiti_config['reranker'] = graphiti_current_id
 
 
         super().build(state_counter)

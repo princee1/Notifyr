@@ -31,7 +31,7 @@ from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.ntfr_tasks import TASK_REGISTRY, task_name
 from app.services.worker.arq_service import ArqDataTaskService
-from app.utils.constant import SpecialKeyAttributesConstant
+from app.utils.constant import GraphitiConstant, SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of, parseToBool
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
@@ -764,3 +764,7 @@ class MerchantPipe(Pipe):
     def pipe(self,cost:Cost,merchant:Merchant):
         merchant.inject_cost(cost,self.factor)
         return {}
+
+
+async def domain_pipe(domain:str): 
+    return {'domain':f'{GraphitiConstant.DOMAIN_PREFIX}{domain}'}
