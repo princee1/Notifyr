@@ -527,13 +527,11 @@ services:
     image: neo4j:2026-community
     container_name: neo4j
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:7474:7474"
     networks:
       - data_net
     environment:
       NEO4J_AUTH: ${NEO4J_USER:?Neo4j user must be set}/${NEO4J_PASSWORD:?Neo4j password must be set}
-      NEO4J_initial.dbms.default_database: notifyr
+      NEO4J_initial_dbms_default__database: notifyr
       NEO4J_PLUGINS: '["apoc"]'
     volumes:
       - neo4j_data:/data

@@ -394,5 +394,5 @@ class GraphitiService(BaseService):
         
     @property
     def uri(self):
-        return f'{self.configService.GRAPHITI_PROTOCOL}://{self.configService.GRAPHITI_HOST}:7687?database=?database={GraphitiConstant.DATABASE_NAME}'
+        return f'{self.configService.GRAPHITI_PROTOCOL}://{self.configService.GRAPHITI_HOST}:7687?database={GraphitiConstant.DATABASE_NAME}'
     

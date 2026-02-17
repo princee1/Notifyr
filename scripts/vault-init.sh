@@ -472,6 +472,30 @@ setup_database_config(){
       }'
     setup_config_kv2 "rabbitmq_roles" "set"
   fi
+
+  # --- NEO4J ROLES ---
+  if ! setup_config_kv2 "neo4j_roles" "check"; then
+
+    vault write notifyr-database/roles/app-neo4j-ntfr-role \
+      db_name="neo4j" \
+      default_ttl="12h" \
+      max_ttl="16h" \
+      creation_statements='
+          CREATE USER {{name}} SET PASSWORD "{{password}}" CHANGE NOT REQUIRED;
+          // GRANT ROLE notifyr-app TO {{name}};
+      '
+    
+    vault write notifyr-database/roles/admin-neo4j-ntfr-role \
+        db_name="neo4j" \
+        default_ttl="30m" \
+        max_ttl="1h" \
+        creation_statements='
+          CREATE USER {{name}} SET PASSWORD "{{password}}" CHANGE NOT REQUIRED;
+          // GRANT ROLE notifyr-admin TO {{name}};
+        '
+    setup_config_kv2 "mongo_roles" "set"
+  fi
+
 }
 
 create_database_config(){
@@ -556,6 +580,21 @@ create_database_config(){
       verify_connection=true
     setup_config_kv2 "rabbitmq_connection" "set"
   fi
+
+  # --- NEO4J CONNECTION ---
+  if ! setup_config_kv2 "neo4j_connection" "check"; then
+    echo "Configuring Neo4J Connection..."
+    vault write notifyr-database/config/neo4j \
+      plugin_name="neo4j-vault-database-plugin" \
+      allowed_roles="admin-neo4j-ntfr-role, app-neo4j-ntfr-role" \
+      connection_url="$GRAPHITI_PROTOCOL://{{username}}:{{password}}@$GRAPHITI_HOST:7687?database=notifyr" \
+      username="$NEO4J_USER" \
+      password="$NEO4J_PASSWORD"
+    
+    vault write -f notifyr-database/rotate-root/neo4j
+    setup_config_kv2 "neo4j_connection" "set"
+  fi
+    
 }
 
 create_aws_engine(){

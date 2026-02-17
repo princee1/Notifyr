@@ -21,7 +21,7 @@ from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
-from app.services.worker.arq_service import ArqDataTaskService, JobAlreadyExistsError,JobStatus, UnexpectedJobStatusError
+from app.services.worker.arq_service import ArqDataTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import (
     AbortedJobResponse,
     IngestDataUriMetadata,
@@ -33,7 +33,7 @@ from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_tasks import DATA_TASK_REGISTRY_NAME
 from app.utils.constant import ArqDataTaskConstant, CostConstant
 from app.utils.tools import RunInThreadPool
-
+from app.depends.variables import force_update_query
 
 
 @UseHandler(ArqHandler,ServiceAvailabilityHandler)
@@ -90,7 +90,7 @@ class JobArqRessource(BaseHTTPRessource):
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{job_id}/', methods=[HTTPMethod.DELETE],response_model=AbortedJobResponse)
-    async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],force:bool = Depends(force_update_query),autPermission:AuthPermission=Depends(get_auth_permission)):
         job,status = await self.arqService.exists(job_id, raise_on_exist=False,return_status=True)
 
         match status:
@@ -107,7 +107,10 @@ class JobArqRessource(BaseHTTPRessource):
             case JobStatus.complete:
                 return AbortedJobResponse(metadata=[],aborted=False,status=status)
             
-            case JobStatus.in_progress:        
+            case JobStatus.in_progress:
+                if not force:   
+                    raise JobInProgressError(job_id)    
+                    
                 result = await self.arqService.abort(job)
                 return AbortedJobResponse(metadata=[],aborted=bool(result),status=status)
             

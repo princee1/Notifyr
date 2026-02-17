@@ -4,13 +4,14 @@ from app.classes.auth_permission import AuthPermission
 from app.container import InjectInMethod
 from app.cost.file_cost import FileCost
 from app.decorators.guards import ArqDataTaskGuard
-from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import update_status_upon_no_metadata_pipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe,UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe,UseServiceLock
 from app.depends.dependencies import get_auth_permission
 from app.depends.variables import DeleteMode,delete_mode_query
+from app.errors.ingest_error import IngestConfigNotPresentError
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.models.ingest_model import IngestDataUriMetadata
@@ -69,17 +70,18 @@ class VectorDBRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.GET])
     async def get_collection(self, request:Request,response:Response,collection_name:str,autPermission:AuthPermission=Depends(get_auth_permission)):
         
-        async with ( self.session.get(f'/all') if not collection_name else self.session.get(f'/{collection_name}') )as res:
+        async with ( self.session.get(f'/') if not collection_name else self.session.get(f'/s/{collection_name}') )as res:
             res_body = await res.json()
             response.status_code = res.status
             return res_body
     
     @UseLimiter('1/minutes')
+    @Throttle(uniform=(800,1500))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @PingService([RemoteAgentService,ArqDataTaskService])
     @UseServiceLock(ArqDataTaskService,lockType='reader')
-    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler)
+    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(delete_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
@@ -90,7 +92,7 @@ class VectorDBRessource(BaseHTTPRessource):
         meta = []
 
         for job in [*await self.arqService.get_queued_jobs(),*await self.arqService.get_jobs_results()]:
-            if job.kwargs.get('collection_name',None) == collection_name:
+            if job.kwargs.get('vector_config',None) != None and job.kwargs.get('vector_config',{}).get('collection_name',None) == collection_name:
                 size,sha,uri = job.kwargs.get('size',0),job.kwargs('sha','unknown'),job.kwargs.get('uri',None)
                 if not hasattr(job,'result'):
                     jobs_queue.append(job.job_id)
@@ -107,21 +109,25 @@ class VectorDBRessource(BaseHTTPRessource):
             merchant.payment(
                 self.arqService.abort,
                 j,
+                'vector_config'
                 )
+            
             merchant.wait(1)
     
         for j in jobs_done:
             merchant.payment(
                 self.arqService.delete,
                 j,
+                'vector_config'
                 )
         return DeleteCollectionModel(metadata=meta,gateway_body=res_body,job_dequeued=jobs_queue,jod_deleted=jobs_done)
             
     @UseLimiter('1/minutes')
+    @Throttle(uniform=(800,1500))
     @PingService([RemoteAgentService,ArqDataTaskService])
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseServiceLock(ArqDataTaskService,lockType='reader')
-    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler)
+    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE])
@@ -134,7 +140,12 @@ class VectorDBRessource(BaseHTTPRessource):
             raise JobStatusNotValidError(job_id,state)
         
         info = await self.arqService.info(job)
-        collection_name = info.kwargs['collection_name']
+        vector_config:dict = info.kwargs.get('vector_config',None)
+
+        if not vector_config:
+            raise IngestConfigNotPresentError('vector_config','vector')
+        
+        collection_name = vector_config.get('collection_name',None)
         meta = UriMetadata(uri = info.kwargs['uri'],size = info.kwargs.get('size',0))
 
         async with self.session.delete(f'/docs/{collection_name}/{job_id}') as res:
@@ -144,7 +155,8 @@ class VectorDBRessource(BaseHTTPRessource):
         
         merchant.payment(
             self.arqService.delete,
-            job_id
+            job_id,
+            'vector_config'
             )
         return DeleteCollectionModel(metadata=[meta],gateway_body=res_body,job_dequeued=[],jod_deleted=[job_id])
        

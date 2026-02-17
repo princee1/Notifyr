@@ -59,7 +59,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                 await refund()
                 raise e
             except Retry as e:
-                await arqService.update_step(uri,step,5)
+                await arqService.update_job_kwargs(uri,{'step':step},5)
                 raise e
 
         if active:

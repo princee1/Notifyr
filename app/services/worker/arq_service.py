@@ -15,6 +15,8 @@ from app.services.database.redis_service import RedisService
 from app.utils.globals import APP_MODE,ApplicationMode
 
 Time = Union[int | float | timedelta | None]
+Config = Literal['vector_config','graph_config']
+
 QUEUE_NAME = 'arq:data_loader_task'
 
 class DataTaskNotFoundError(BaseError):
@@ -53,6 +55,12 @@ class UnexpectedJobStatusError(BaseError):
         self.job_id = job_id
         self.job_status = job_status
 
+class JobInProgressError(BaseError):
+    def __init__(self, job_id:str):
+        super().__init__(job_id)
+        self.job_id = job_id
+
+
 @Service()
 class ArqDataTaskService(BaseService):
 
@@ -63,9 +71,10 @@ class ArqDataTaskService(BaseService):
             host = self.configService.REDIS_HOST
             self.arq_url = f"redis://{user}:{password}@redis:6379/{RedisConstant.EVENT_DB}"
 
-    def __init__(self,redisService:RedisService,configService:ConfigService,UvicornWorkerService:UvicornWorkerService):
+    def __init__(self,redisService:RedisService,configService:ConfigService,UvicornWorkerService:UvicornWorkerService,fileService:FileService):
         self.redisService = redisService
         self.configService = configService
+        self.fileService = fileService
         self.uvicornWorkerService = UvicornWorkerService      
         super().__init__()  
 
@@ -100,15 +109,33 @@ class ArqDataTaskService(BaseService):
             
             return await job_id.info()
         
-        async def abort(self,job_id:str|Job)->bool:
+        async def abort(self,job_id:str|Job,config:Config|None=None,timeout=2)->bool:
+            if config != None:
+                kwargs = await self.update_job_kwargs(job_id,{config:None},3)
+                if  kwargs.get('vector_config',None) or kwargs.get('graph_config',None):
+                    return False
+                
             if isinstance(job_id,str):
                 job_id = await self.fetch(job_id)
-            try:
-                return await job_id.abort(timeout=0.5)
+            try:                
+                return await job_id.abort(timeout=timeout)
+                    
             except asyncio.TimeoutError:
                 return False
+                    
+        async def delete(self, job_id:str,config:Config|None=None):
+            if config != None:
+                kwargs = await self.update_job_kwargs(job_id,{config:None},3)
+                if kwargs.get('vector_config',None) or kwargs.get('graph_config',None):
+                    return None,None
+                            
+            job_key = job_key_prefix+job_id
+            j_del = await self.redisService.delete(RedisConstant.EVENT_DB,job_key)
+            result_key = f"{result_key_prefix}{job_id}"
+            r_del = await self.redisService.delete(RedisConstant.EVENT_DB,result_key)
+            return j_del,r_del
             
-        async def update_step(self,job_id:str|Job,step:Step,max_retries=3):
+        async def update_job_kwargs(self,job_id:str|Job,data:dict[str,Any],max_retries=3):
             retry = 0
             async with self.redisService.db[RedisConstant.EVENT_DB].pipeline(transaction=True) as pipe:
                 while retry<max_retries:
@@ -118,27 +145,20 @@ class ArqDataTaskService(BaseService):
                         info_fetched:dict = await self.redisService.retrieve(RedisConstant.EVENT_DB,job_key,redis=pipe)
                         print(info_fetched)
                         kwargs:dict = info_fetched.get('kwargs',{})
-                        kwargs.update({'step':step})
+                        kwargs.update(data)
                         pipe.multi()
                         await self.redisService.store(RedisConstant.EVENT_DB,job_key,info_fetched,redis=pipe)
                         await pipe.execute()
-                        return
+                        return kwargs.copy()
                     except WatchError as e:
                         retry+=1
                     
-                return WatchError('Could not commit the change')
+                raise WatchError('Could not commit the change')
   
         async def dequeue_task(self,job_id:str):
             q_val = await self.redisService.rem(RedisConstant.EVENT_DB,QUEUE_NAME,job_id)
             j_val,r_del = await self.delete(job_id)
             return
-
-        async def delete(self, job_id):
-            job_key = job_key_prefix+job_id
-            j_del = await self.redisService.delete(RedisConstant.EVENT_DB,job_key)
-            result_key = f"{result_key_prefix}{job_id}"
-            r_del = await self.redisService.delete(RedisConstant.EVENT_DB,result_key)
-            return j_del,r_del
 
         async def get_result(self,job_id:str|Job,_raise=True):
             if isinstance(job_id,str):

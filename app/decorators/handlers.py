@@ -9,9 +9,9 @@ from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
-from app.errors.ingest_error import AgenticDatabaseNotAllowedError
+from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError
 from app.errors.llm_error import LLMProviderDoesNotExistError
-from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
+from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
@@ -37,6 +37,8 @@ from twilio.base.exceptions import TwilioRestException
 
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
 from requests.exceptions import SSLError, Timeout
+
+from redis import WatchError
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
@@ -804,6 +806,12 @@ class RedisHandler(Handler):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Redis Lua script not found"
             )
+    
+        except WatchError |redis.exceptions.WatchError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail='Could not commit change to a key'
+            )
 
         except redis.exceptions.DataError:
             raise HTTPException(
@@ -981,6 +989,12 @@ class ArqHandler(Handler):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={'job_id': e.job_id,'status':e.job_status}
             )
+    
+        except JobInProgressError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message':f'Cannot abort job {e.job_id} in progress','hint':'send request with query force=True'}
+            )
 
 class APSSchedulerHandler(Handler):
 
@@ -1083,6 +1097,15 @@ class DataIngestHandler(Handler):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "message": f"Database '{e.database}' is not allowed for this operation.",
+                    "database": e.database
+                }
+            )
+
+        except IngestConfigNotPresentError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": f"'{e.config_name}' Ingest configuration is not present for this operation.",
                     "database": e.database
                 }
             )

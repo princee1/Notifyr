@@ -40,7 +40,7 @@ def VectorDBRouter(depends:list=None):
             )
         return 
 
-    @router.get('/{collection_name}',status_code=status.HTTP_200_OK)
+    @router.get('/s/{collection_name}',status_code=status.HTTP_200_OK)
     async def get_collection(collection_name:str,request:Request,response:Response):
         collection = await qdrantService.get_collection(
             collection_name
@@ -60,7 +60,7 @@ def VectorDBRouter(depends:list=None):
             res = await qdrantService.clear_collections(collection_name)
             return res.model_dump()
 
-    @router.get('/all/',status_code=status.HTTP_200_OK)
+    @router.get('/',status_code=status.HTTP_200_OK)
     async def get_all_collection(collection_name:str,request:Request,response:Response):
         collections = await qdrantService.get_collections()
         return collections.model_dump()

@@ -30,6 +30,7 @@ define COMPOSE_RUN
 	@echo "--- 🛠️  $(1): Running $(2) $3..."
 	$(DOCKER_COMPOSE_BASE) $(2) $3
 	@echo "--- ✅  $(1): Completed."
+	@echo ""
 	@sleep 1 
 endef
 
@@ -38,6 +39,7 @@ define COMPOSE_SCALE
 	@echo "--- 🛠️  Scaling and deploying $(1)..."
 	$(DOCKER_COMPOSE_BASE) up -d --scale $(1)=$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.$(1)') $(1)
 	@echo "--- ✅  $(1): Deployed and scaled."
+	@echo ""
 	@sleep 3
 endef
 
@@ -54,14 +56,24 @@ notifyr-app:
 deploy-beat:
 	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.scaling.worker')" -gt 0 ]; then \
 		echo "--- 🛠️ Creating the beat server because at least one worker will be deployed"; \
-		docker compose up -d beat; \
+		$(DOCKER_COMPOSE_BASE) up -d beat; \
 		echo "--- ✅ Beat service is deployed"; \
 	else \
 		echo "--- ⏭️ No workers is expected no need for the beat service"; \
 	fi
 
-
 deploy-agentic:
+	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.capabilities.agentic')" = "true" ]; then \
+		echo "================================================="; \
+		echo "🛠️ Creating the agentic service because the ai functionality is required"; \
+		echo "================================================="; \
+		$(DOCKER_COMPOSE_BASE) up -d agentic; \
+		echo "--- ✅ agentic service is deployed"; \
+	else \
+		echo "--- ⏭️ Agentic Service: Skipped (value = False)"; \
+	fi
+
+deploy-agentic-data:
 	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.capabilities.agentic')" = "true" ]; then \
 		if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.database.qdrant')" = "true" ]; then \
 			echo "--- 🛠️ Creating the vector database Qdrant"; \
@@ -73,13 +85,10 @@ deploy-agentic:
 			docker compose up -d neo4j; \
 			echo "--- ✅ Neo4j service is deployed"; \
 		fi; \
-		sleep 10; \
-		echo "--- 🛠️ Creating the agentic service because the ai functionality is required"; \
-		docker compose up -d agentic; \
-		echo "--- ✅ agentic service is deployed"; \
 	else \
 		echo "--- ⏭️ Agentic Service: Skipped (value = False)"; \
 	fi
+	@echo ""
 	
 build:
 	@echo "================================================="
@@ -152,7 +161,10 @@ deploy-data:
 	@sleep 3 && clear
 
 	$(call COMPOSE_RUN, MongoDB Setup, up -d, mongodb)
-	@echo "waiting for mongodb to setup... " && sleep 20
+	@echo "waiting for mongodb to setup... " && sleep 5 && clear
+	$(MAKE) deploy-agentic-data
+	
+
 
 # 	# 2. Vault Initialization
 	$(call COMPOSE_RUN, Vault Init, up, vault-init)
@@ -173,7 +185,6 @@ deploy-data:
 	$(call COMPOSE_RUN, NCS Setup, run -e ALLOWED_INIT=on --rm , ncs /ncs-utils.sh initialize)
 	$(call COMPOSE_RUN, NCS Always On, up -d, ncs)
 	@echo "--- ✅ Initial NCS Setup (Hard Reset) complete."
-	@$(MAKE) deploy-agentic
 	@sleep 3 && clear
 	@echo "================================================="
 	@echo "✅ Data & Secrets Setup Complete"
@@ -193,10 +204,10 @@ agentic: deploy-data deploy-agentic
 	@echo "================================================="
 	@echo "--- 🛠️  Stopping dependent services for AGENTIC deployment..."
 	@sleep 30 && clear
-	docker compose down postgres
-	docker compose down rabbitmq
-	docker compose down minio
-	docker compose down ncs
+	$(DOCKER_COMPOSE_BASE) down postgres
+	$(DOCKER_COMPOSE_BASE) down rabbitmq
+	$(DOCKER_COMPOSE_BASE) down minio
+	$(DOCKER_COMPOSE_BASE) down ncs
 	@echo "\n================================================="
 	@echo "🟢 AGENTIC DEPLOYMENT COMPLETE 🟢"
 	@echo "================================================="
