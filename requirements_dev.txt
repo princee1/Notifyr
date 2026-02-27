@@ -10,6 +10,7 @@ aiomcache==0.8.2
 aiorwlock==1.5.0
 aiosignal==1.3.2
 aiosqlite==0.20.0
+alphashape==1.3.1
 amqp==5.3.1
 annotated-types==0.7.0
 anthropic==0.75.0
@@ -26,6 +27,7 @@ asyncpg==0.30.0
 atlastk==0.13.3
 attrs==25.1.0
 backcall==0.2.0
+backoff==2.2.1
 banks==2.2.0
 bcrypt==4.3.0
 beanie==2.0.0
@@ -35,6 +37,7 @@ bleach==6.3.0
 blis==1.3.3
 boto3==1.40.70
 botocore==1.40.70
+brotli==1.2.0
 CacheControl==0.14.2
 cachetools==5.5.2
 catalogue==2.0.10
@@ -42,11 +45,12 @@ celery==5.5.2
 celery-redbeat==2.2.0
 Cerberus==1.3.5
 certifi==2025.1.31
-cffi==1.17.1
-chardet==3.0.4
+cffi==2.0.0
+chardet==6.0.0.post1
 charset-normalizer==3.4.1
 click==8.1.8
 click-didyoumean==0.3.1
+click-log==0.4.0
 click-plugins==1.1.1
 click-repl==0.3.0
 cloudpathlib==0.23.0
@@ -55,8 +59,10 @@ colorama==0.4.6
 colorlog==6.10.1
 confection==0.1.5
 confluent-kafka==2.12.2
+Crawl4AI==0.8.0
 croniter==6.0.0
-cryptography==41.0.4
+cryptography==46.0.5
+cssselect==1.4.0
 cymem==2.0.13
 dataclasses-json==0.6.7
 decorator==5.2.1
@@ -67,6 +73,7 @@ dill==0.4.0
 dirtyjson==1.0.8
 discord-webhook==1.3.1
 discord.py==2.6.4
+diskcache==5.6.3
 distro==1.9.0
 dnspython==2.7.0
 docling==2.66.0
@@ -79,11 +86,14 @@ email-validator==2.3.0
 emoji==2.14.0
 et_xmlfile==2.0.0
 executing==2.2.1
+fake-http-header==0.3.5
+fake-useragent==2.2.0
 Faker==40.1.0
 fastapi==0.115.8
 fastapi-cache2==0.2.2
 fastavro==1.12.1
 fastjsonschema==2.21.2
+fastuuid==0.14.0
 filelock==3.20.1
 filetype==1.2.0
 firebase-admin==6.6.0
@@ -94,6 +104,7 @@ gensim==4.4.0
 geographiclib==2.0
 geopy==2.4.1
 git-clone==1.0.6
+google-ai-generativelanguage==0.6.15
 google-api-core==2.24.1
 google-api-python-client==2.156.0
 google-auth==2.38.0
@@ -103,8 +114,10 @@ google-cloud-core==2.4.2
 google-cloud-firestore==2.20.0
 google-cloud-storage==3.0.0
 google-crc32c==1.6.0
+google-generativeai==0.8.6
 google-resumable-media==2.7.2
 googleapis-common-protos==1.68.0
+graphiti-core==0.26.3
 greenlet==3.2.4
 griffe==1.15.0
 groq==0.37.1
@@ -126,6 +139,7 @@ humanize==4.12.2
 hvac==2.3.0
 hyperframe==5.2.0
 idna==2.10
+importlib_metadata==8.7.1
 injector==0.21.0
 inngest==0.5.13
 inquirerpy==0.3.4
@@ -166,10 +180,13 @@ langgraph-prebuilt==1.0.5
 langgraph-sdk==0.2.9
 langsmith==0.4.45
 language_data==1.3.0
+lark==1.3.1
 latex2mathml==3.78.1
 lazy-model==0.3.0
 limits==4.0.1
+litellm==1.81.14
 llama-index-core==0.14.10
+llama-index-embeddings-gemini==0.4.2
 llama-index-embeddings-huggingface==0.6.1
 llama-index-embeddings-openai==0.5.1
 llama-index-instrumentation==0.4.2
@@ -218,6 +235,7 @@ packaging==24.2
 pandas==2.2.3
 pandocfilters==1.5.1
 parso==0.8.5
+patchright==1.58.0
 pendulum==3.1.0
 pfzy==0.3.4
 phonenumbers==8.13.43
@@ -226,15 +244,17 @@ pika==1.3.2
 pillow==11.3.0
 pipreqs==0.5.0
 platformdirs==4.5.0
+playwright==1.58.0
 pluggy==1.6.0
 polyfactory==3.2.0
 portalocker==3.2.0
+posthog==7.6.0
 preshed==3.0.12
 prometheus_client==0.21.1
 prompt-toolkit==3.0.43
 propcache==0.3.0
 proto-plus==1.26.0
-protobuf==6.33.2
+protobuf==5.29.6
 psutil==7.0.0
 psycopg2-binary==2.9.10
 pure_eval==0.2.3
@@ -247,6 +267,7 @@ pycryptodome==3.23.0
 pydantic==2.12.5
 pydantic-settings==2.12.0
 pydantic_core==2.41.5
+pyee==13.0.1
 pyfiglet==0.7
 Pygments==2.19.1
 pyhcl==0.4.5
@@ -254,6 +275,7 @@ PyJWT==2.10.1
 pylatexenc==2.10
 pymemcache==4.0.0
 pymongo==4.11.3
+pyOpenSSL==25.3.0
 pyparsing==3.2.1
 pypdf==6.5.0
 pypdfium2==4.30.0
@@ -270,6 +292,7 @@ PyYAML==6.0.2
 pyzmq==27.1.0
 qdrant-client==1.16.2
 qrcode==8.1
+rank-bm25==0.2.2
 rapidocr==3.4.5
 reactivex==4.0.4
 redis==4.6.0
@@ -296,6 +319,7 @@ six==1.17.0
 slowapi==0.1.9
 smart_open==7.5.0
 sniffio==1.3.1
+snowballstemmer==2.2.0
 soupsieve==2.6
 spacy==3.8.11
 spacy-legacy==3.0.12
@@ -309,6 +333,7 @@ striprtf==0.0.26
 sympy==1.14.0
 tabulate==0.9.0
 tenacity==9.0.0
+tf-playwright-stealth==1.2.0
 thinc==8.3.10
 threadpoolctl==3.6.0
 tiktoken==0.12.0
@@ -327,6 +352,7 @@ tree-sitter-java==0.23.5
 tree-sitter-javascript==0.25.0
 tree-sitter-python==0.25.0
 tree-sitter-typescript==0.23.2
+trimesh==4.11.2
 twilio==9.4.6
 typer==0.19.2
 typer-slim==0.21.0
@@ -354,4 +380,5 @@ xxhash==3.6.0
 yake==0.6.0
 yarg==0.1.9
 yarl==1.18.3
+zipp==3.23.0
 zstandard==0.25.0

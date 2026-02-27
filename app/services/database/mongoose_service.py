@@ -129,7 +129,7 @@ class MongooseService(TempCredentialsDatabaseService):
                 raise DocumentConditionWrongMethodError
 
             if simple_number_validation(count,mc['rule']):
-                raise DocumentAddConditionError()
+                raise DocumentAddConditionError(message =mc.get('message',None), detail=mc.get('detail',None))
             
             if not mc.get('force',False):
                 return

@@ -1,4 +1,4 @@
-from typing import Any, List, Type
+from typing import Any, List, Literal, Type
 from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPermission
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
@@ -12,7 +12,7 @@ from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermi
 from app.manager.task_manager import TaskManager
 from app.models.agents_model import AgentModel
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
-from app.models.ingest_model import DataIngestModel
+from app.models.ingest_model import DataIngestModel, DataIngestWebCrawlingModel
 from app.models.link_model import LinkORM
 from app.models.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
@@ -408,19 +408,25 @@ class CreditPlanGuard(Guard):
 
 class LLMProviderGuard(Guard):
 
-    def __init__(self):
+    def __init__(self,mode:Literal['']):
         super().__init__()
         self.mongooseService = Get(MongooseService)
         self.configService = Get(ConfigService)
+        self.mode = ...
 
     async def guard(self, ingestTask:DataIngestModel=None,agentModel:AgentModel=None):
 
-        provider = ingestTask.provider if ingestTask != None else agentModel.provider
+        if ingestTask != None:
+            if isinstance(ingestTask,DataIngestWebCrawlingModel):
+                ...
+        else:
+            provider = agentModel.provider
 
         llm_model:LLMProfileModel =  await self.mongooseService.find_one(LLMProfileModel,{'_id':provider})
+
         if llm_model == None:
             raise LLMProviderDoesNotExistError(provider)
-
+        
         if agentModel != None:
             
             if llm_model.models:

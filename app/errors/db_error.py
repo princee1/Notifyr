@@ -40,8 +40,8 @@ class DocumentDoesNotExistsError(BaseError):
         self.id = id
 
 class DocumentAddConditionError(BaseError):
-    def __init__(self,message:str = 'Document does not satisfy the condition to be added',detail:Optional[Any] = None):
-        self.message = message
+    def __init__(self,message:str = None,detail:Optional[Any] = None):
+        self.message = message or 'Document does not satisfy the condition to be added'
         self.detail = detail
         super().__init__()
 

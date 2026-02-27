@@ -65,5 +65,5 @@ class DataPontsPayload(TypedDict):
     ...
 
 
-class QdrantCollectionDoesNotExist(BaseError):
+class QdrantCollectionDoesNotExistError(BaseError):
     ...

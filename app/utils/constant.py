@@ -379,7 +379,7 @@ class CostConstant:
     
 
 class LLMProviderConstant:
-    OPENAI='openAI'
+    OPENAI='openai'
     DEEPSEEK='deepseek'
     ANTHROPIC='anthropic'
     #GEMINI='gemini'

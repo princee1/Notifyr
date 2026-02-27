@@ -124,6 +124,10 @@ class CustomService(BaseService):
             if self.models[e2].model_type != 'Entity':
                 raise ValueError(f"Model '{e2}' is not of type 'Entity'.")
     
-
+    def to_schemas(self,schema:List[str]):
+        entities = self.to_entities(schema)
+        edge = self.to_edge(schema)
+        entities.update(edge)
+        return entities.values()
 
     

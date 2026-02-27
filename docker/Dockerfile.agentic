@@ -2,15 +2,15 @@ FROM notifyr/fastapi:community
 
 ARG INSTALL_DOCLING=false
 
-COPY --chown=notifyr:notifyr ./scripts/docling.sh .
+COPY ./requirements_agentic.txt ./requirements_agentic.txt
 
-RUN pip install langchain qdrant-client neo4j graphiti-core google-genai
+RUN pip install --no-cache-dir --no-build-isolation -r requirements_agentic.txt
 
-RUN pip install llama-index-core llama-index-embeddings-openai llama-index-readers-file yake gensim 
+COPY --chown=notifyr:notifyr ./scripts/agentic_installation.sh .
 
-RUN pip install langchain-anthropic  langchain-cohere langchain-groq langchain-openai
+RUN chmod +x ./agentic_installation.sh
 
-RUN ./docling.sh ${INSTALL_DOCLING}
+RUN ./agentic_installation.sh ${INSTALL_DOCLING}
 
 COPY ./agentic_main.py ./agentic_main.py
 

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List
 from fastapi import HTTPException
 from app.classes.chunk import Chunk
 from app.definition._service import BaseService, LinkDep, Service
@@ -7,11 +7,11 @@ from app.services.agent.llm_provider_service import LLMProviderService
 from app.services.file.file_service import FileService
 from app.services.config_service import ConfigService
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import VectorParams, Distance,PointStruct, HnswConfig,SearchParams,Filter, FieldCondition, MatchValue,FilterSelector
+from qdrant_client.models import VectorParams, Distance,PointStruct, HnswConfig,SearchParams,Filter, FieldCondition, MatchValue,FilterSelector,QueryResponse
 from app.services.setting_service import DEFAULT_BUILD_STATE
 from app.services.vault_service import VaultService
 from app.utils.constant import QdrantConstant
-from app.classes.qdrant import SearchParamsModel
+from app.classes.qdrant import QdrantCollectionDoesNotExistError, SearchParamsModel
 from app.utils.tools import RunAsync
 from app.utils.globals import APP_MODE,ApplicationMode
 
@@ -41,12 +41,13 @@ class QdrantService(BaseService):
             except  Exception as e:
                 raise BuildFailureError(f"Failed to connect to Qdrant: {e}")
 
-        if APP_MODE == ApplicationMode.arq:
-            self._create_embedding()
+            if APP_MODE == ApplicationMode.arq:
+                self._create_embedding_object()
             
-    def _create_embedding(self):
+    def _create_embedding_object(self):
         from llama_index.embeddings.openai import OpenAIEmbedding,OpenAIEmbeddingMode
-        from llama_index.embeddings.gemini import GeminiEmbedding
+        if False:
+            from llama_index.embeddings.gemini import GeminiEmbedding
         
         embedding_provider_id = self.llmProviderService.vector_config.get('embedding',None)
         if not embedding_provider_id:
@@ -59,6 +60,7 @@ class QdrantService(BaseService):
 
         match embedding_provider.model.provider:
             case 'gemini':
+                raise BuildFailureError('Gemini not supported')
                 embedding = GeminiEmbedding(
                     api_key=api_key,
                     model_name=vector_config.model,
@@ -90,13 +92,19 @@ class QdrantService(BaseService):
                     api_base=vector_config.base_url,
                     api_version=vector_config.api_version,
                 )
-
             case _:
                 raise BuildFailureError(f"Unsupported embedding provider: {embedding_provider.model.provider}")
 
     async def create_cache_db(self):
         try:
-            return await self.create_collection(QdrantConstant.CACHE_COLLECTION)
+            if not await self.collection_exists(QdrantConstant.CACHE_COLLECTION,None):
+                await self.client.create_collection(collection_name=QdrantConstant.CACHE_COLLECTION,
+                                      vectors_config=VectorParams(512,distance=Distance.COSINE),
+                                      on_disk_payload=False,
+                                      #hnsw_config=HnswConfig()
+                                      )
+            else:
+                True
         except:
             return False
     
@@ -219,6 +227,35 @@ class QdrantService(BaseService):
                 contexts.append(text)
 
         return contexts, sources
+
+    async def get_points(self,collection_name:str,point_uuid:str,timeout=2):
+        exist = await self.collection_exists(collection_name,None)
+        if not exist:
+            raise QdrantCollectionDoesNotExistError(collection_name)
+
+        await self.client.retrieve(
+            ids=[point_uuid],
+            with_payload=True,
+            with_vectors=False,
+            timeout=timeout
+        )
+    
+    async def embed_query(self,query:str)->List[float]:
+        return await self.embedding_search.aget_query_embedding(
+            query
+        )
+
+    async def search_query(self,query:str,top_k:int,filter:Filter):
+        resp:QueryResponse = await self.client.query(
+            query_text=query,
+            limit=top_k,
+            query_filter=filter
+        )
+        for r in resp:
+            ...
+
+    async def cache_lookup(self,):
+        ...
 
     @property
     def qdrant_url(self) -> str:

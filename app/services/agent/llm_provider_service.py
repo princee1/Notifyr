@@ -23,6 +23,9 @@ class GraphitiConfig(TypedDict):
 
 class VectorConfig(TypedDict):
     embedding:Any
+
+class CrawlConfig(TypedDict):
+    llmConfig:Any
     
 
 @MiniService(links=[LinkDep(ProfileMiniService,to_build=True)])
@@ -135,6 +138,8 @@ class LLMProviderService(BaseMiniServiceManager):
 
         self.graphiti_config:GraphitiConfig = {}
         self.vector_config:VectorConfig = {}
+        self.crawl_config:CrawlConfig = {}
+
         
         graphiti_current_id = None
         
@@ -156,6 +161,9 @@ class LLMProviderService(BaseMiniServiceManager):
 
             if provider.service_status != ServiceStatus.AVAILABLE:
                 continue
+
+            if provider.model.crawl_config != None and not self.crawl_config.get('llmConfig',None):
+                self.crawl_config['llmConfig'] = provider.miniService_id
 
             if provider.model.vector_embedding_config != None and not self.vector_config.get('embedding',None):
                 if provider.model.provider in EMBEDDER_PROVIDER_SET:

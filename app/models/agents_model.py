@@ -20,6 +20,21 @@ class ToolModel(BaseDocument):
     outbound_service:str
 
 
+class VectorPipelineModel(ToolModel):
+    enabled_cache:Optional[bool] = True
+
+class KGraphPipelineModel(ToolModel):
+    ...
+
+class ApiTool(ToolModel):
+    ...
+
+class MCPTool(ToolModel):
+    ...
+
+class WebSearchTool(ToolModel):
+    ...
+
 class System(BaseModel):
     persona:str
     behaviors:list[str] = []
@@ -27,13 +42,13 @@ class System(BaseModel):
 
 class AgentModel(BaseDocument):
     
-    _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION 
-
+    _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
+    
     memory:List[str] = []
     model: str
-    tools: list[str] = []
+    tools: List[VectorPipelineModel | KGraphPipelineModel | ApiTool | MCPTool | WebSearchTool] = []
 
-    provider: LLMProviderConstant.LLMProvider
+    provider: str
     temperature: float = 0.7
     timeout:float = 20
     max_retries:int = 5

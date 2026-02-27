@@ -1,8 +1,9 @@
 import functools
 from typing import Any, Callable
-from app.classes.qdrant import QdrantCollectionDoesNotExist
+from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.classes.step import SkipStep, Step, StepRunner
 from app.models.file_model import FileResponseUploadModel, UriMetadata
+from app.services.custom_service import CustomService
 from app.utils.constant import CostConstant,ArqDataTaskConstant, ParseStrategy
 from app.utils.globals import APP_MODE,ApplicationMode
 from app.utils.tools import RunAsync
@@ -75,7 +76,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
 
 
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
-async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,lang:str='en',uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None):
+async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,lang:str='en',uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None,state:dict=None):
 
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
@@ -93,7 +94,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
         skip()
         if vector_config != None:
             if not await qdrantService.collection_exists(vector_config.collection_name,reverse=None):
-                raise QdrantCollectionDoesNotExist(vector_config.collection_name)
+                raise QdrantCollectionDoesNotExistError(vector_config.collection_name)
             
     async with StepRunner(step,DataLoaderStepIndex.TOKEN_VERIFY) as skip:
         skip()
@@ -131,7 +132,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
 
 
 @RegisterTask(ArqDataTaskConstant.WEB_DATA_TASK,False)
-async def process_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None):
+async def process_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None,state:dict=None):
 
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
@@ -140,7 +141,7 @@ async def process_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',ve
 
 
 @RegisterTask(ArqDataTaskConstant.API_DATA_TASK,False)
-async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None):
+async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None,state:dict=None):
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
     costService:CostService = Get(CostService)
@@ -148,11 +149,14 @@ async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorC
 
 
 @RegisterTask(ArqDataTaskConstant.WEB_DATA_TASK,False)
-async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None):
+async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None,state:dict=None):
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
     costService:CostService = Get(CostService)
     arqService:ArqDataTaskService = Get(ArqDataTaskService)
+    customService:CustomService = Get(CustomService)
+    redisService:RedisService = Get(RedisService)
+    
 
 
 

@@ -49,6 +49,7 @@ class DataLoaderStepIndex(int, Enum):
     PROCESS = 3
     TOKEN_COST = 4
     CLEANUP = 5
+
 class BaseDataLoader:
     def __init__(self,embedding_model:BaseEmbedding ,file_path: str, lang: str, extension: str,category:str):
         self.file_path = file_path

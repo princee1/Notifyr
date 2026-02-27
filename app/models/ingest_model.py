@@ -16,6 +16,11 @@ class KGraphConfig(BaseModel):
 	description:Optional[str] = None
 	instruction:Optional[str] = None
 
+
+###################################################################################################
+###########################										     ##############################
+###################################################################################################
+
 class DataIngestModel(BaseModel):
 	vector_config: Optional[VectorConfig] =  None
 	graph_config: Optional[KGraphConfig] = None
@@ -42,10 +47,24 @@ class DataIngestModel(BaseModel):
 			raise ValueError('You must define at least one ')
 
 		return self
-			
+
 class DataIngestFileModel(DataIngestModel):
 	strategy: ParseStrategy
 	use_docling:bool = False
+
+class DigestStrategy(BaseModel):
+	query:str
+
+class DataIngestWebCrawlingModel(DataIngestModel):
+	extraction_type:str
+	schemas:Optional[List[str]] = None
+	instruction:Optional[str] = None	
+	digest_strategy: ...
+	url:str
+
+###################################################################################################
+###########################										     ##############################
+###################################################################################################
 
 class IngestDataUriMetadata(UriMetadata):
 	sha:str

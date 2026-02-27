@@ -185,6 +185,7 @@ class DataIngestRessource(BaseHTTPRessource):
                             **meta.model_dump(),
                             'request_id':request_id,
                             '_nickname':ArqDataTaskConstant.FILE_DATA_TASK,
+                            'state':dict(),
                             'step':None
                             }
                 )
@@ -201,11 +202,11 @@ class DataIngestRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseServiceLock(ArqDataTaskService,lockType='reader')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseHandler(ArqHandler,AsyncIOHandler,AgenticHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
+    @UseHandler(ArqHandler,AsyncIOHandler,AgenticHandler,RedisHandler,MiniServiceHandler,VaultHandler)
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_web(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_web_crawling(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing a `WebCrawlTask` and enqueues it.
         """
@@ -220,12 +221,13 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,AgenticHandler,RedisHandler)
     @UseServiceLock(ArqDataTaskService,ProfileService,lockType='reader',as_manager=True)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),LLMProviderGuard,DataIngestDatabaseGuard(False))
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
     @BaseHTTPRessource.HTTPRoute('/api/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing an `APIFetchTask` and enqueues it.
         """
+
 
     @Throttle(normal=(300,150))
     @UsePipe(MerchantPipe())

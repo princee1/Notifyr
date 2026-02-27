@@ -35,7 +35,9 @@ class MongoCondition(TypedDict):
     force:bool # if the document does not have the filter value, force it
     rule:dict |Any # rule to respect in regards of how many document have 
     filter:dict # value to filter the search
-    method:Method # method to compare the rule too
+    method:Method # method to compare the rule to
+    detail:dict # detail of the error
+    message:str # definition of the error
 
 
 def validate_filter(mc:MongoCondition,p_dump):

@@ -37,6 +37,22 @@ class VectorEmbeddingConfig(BaseModel):
     api_version: str | None = None
     batch_size: int = Field(default=100, ge=10, le=500)
 
+
+class CrawlLLMConfig(BaseModel):
+    model: Optional[str] = None
+    base_url: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    top_p: float | None = None,
+    frequency_penalty: float | None = None,
+    presence_penalty: float | None = None,
+    stop: List[str] | None = None,
+    n: int | None = None,
+
+class ResearchConfig(BaseModel):
+    model:Optional[str] = None
+
+
 class GraphitiLLMConfig(BaseModel):
     model: Optional[str] = None
     base_url: Optional[str] = None
@@ -81,6 +97,9 @@ class LLMProfileModel(BaseProfileModel):
     graph_embedding_config: Optional[GraphitiEmbeddingConfig] = None
     graph_reranker_config: Optional[GraphitiLLMConfig] =  None
 
+    crawl_config: Optional[CrawlLLMConfig] = None
+    research_config: Optional[ResearchConfig] = None
+
     max_input_tokens:Optional[int] = None
     max_output_tokens:Optional[int] = None
 
@@ -88,6 +107,7 @@ class LLMProfileModel(BaseProfileModel):
     api_name:str = 'default'
     api_version:Optional[str]=None
     base_url:Optional[str] = None
+    default_model:Optional[str] = None
 
     _secrets_keys:ClassVar[List[str]] = ['api_key']
     _unique_indexes: ClassVar[list[str]] = ['provider','api_name']
@@ -124,7 +144,27 @@ class LLMProfileModel(BaseProfileModel):
             method='simple-number-validation',
             rule={"$ge":1}
         ),
-
+        MongoCondition(
+            validation='exist',
+            force=False,
+            filter={'graph_config':{"$ne":None}},
+            method='simple-number-validation',
+            rule={"$ge":1}
+        ),
+        MongoCondition(
+            validation='exist',
+            force=False,
+            filter={'crawl_config':{"$ne":None}},
+            method='simple-number-validation',
+            rule={"$ge":1}
+        ),
+        MongoCondition(
+            validation='exist',
+            force=False,
+            filter={'research_config':{"$ne":None}},
+            method='simple-number-validation',
+            rule={"$ge":1}
+        ),
     ]
 
     class Settings:
@@ -215,6 +255,30 @@ class LLMProfileModel(BaseProfileModel):
         if self.graph_reranker_config is not None and self.max_output_tokens is not None:
             if self.graph_reranker_config.max_tokens is not None and self.graph_reranker_config.max_tokens > self.max_output_tokens:
                 self.graph_reranker_config.max_tokens = self.max_output_tokens
+
+        return self
+
+    @model_validator(mode='after')
+    def default_model_validation(self:Self)->Self:
+        
+        if not self.default_model:
+            match self.provider:
+                case 'openai':
+                    self.default_model = 'gpt-4'
+                case 'gemini':
+                    self.default_model = 'gemini-1.5-pro'
+                case 'azure':
+                    self.default_model = 'gpt-4'
+                case 'deepseek':
+                    self.default_model = 'deepseek-pro'
+                case 'cohere':
+                    self.default_model = 'command-xlarge-20221108'
+                case 'groq':
+                    self.default_model = 'groq-1b'
+                case 'anthropic':
+                    self.default_model = 'claude-3-opus'
+                case _:
+                    raise ValueError(f"Provider '{self.provider}' does not support default model selection.")
 
         return self
 
