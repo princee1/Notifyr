@@ -14,6 +14,7 @@ from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_profile
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
+from app.services.agent.llm_provider_service import LLMProviderService
 from app.services.config_service import ConfigService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileMiniService, ProfileService
@@ -146,12 +147,13 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseLimiter('10/hour')
     @Throttle(normal=(300,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @PingService([LLMProviderService])
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @UseServiceLock(ArqDataTaskService,LLMProviderService,lockType='reader')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,AgenticHandler,RedisHandler)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),LLMProviderGuard,UploadFilesGuard(),docling_guard)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),LLMProviderGuard(),UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=IngestFileEnqueueResponse)
     async def ingest_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestFileCost,Depends(IngestFileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
         _response = IngestFileEnqueueResponse()
@@ -200,9 +202,10 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe())
     @Throttle(normal=(300,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @PingService([LLMProviderService])
+    @UseServiceLock(ArqDataTaskService,LLMProviderService,lockType='reader')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard(crawl=True))
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,AgenticHandler,RedisHandler,MiniServiceHandler,VaultHandler)
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
@@ -220,9 +223,9 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,AgenticHandler,RedisHandler)
-    @UseServiceLock(ArqDataTaskService,ProfileService,lockType='reader',as_manager=True)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
-    @BaseHTTPRessource.HTTPRoute('/api/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
+    @UseServiceLock(ArqDataTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False),LLMProviderGuard(vector=False))
+    @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing an `APIFetchTask` and enqueues it.
@@ -231,10 +234,12 @@ class DataIngestRessource(BaseHTTPRessource):
 
     @Throttle(normal=(300,150))
     @UsePipe(MerchantPipe())
+    @PingService([LLMProviderService])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK))
+    @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler,AgenticHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
+    @UseServiceLock(ArqDataTaskService,LLMProviderService,lockType='reader')
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),LLMProviderGuard(research=True))
     @BaseHTTPRessource.HTTPRoute('/research/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         ...

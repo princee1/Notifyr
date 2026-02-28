@@ -1,6 +1,6 @@
 import asyncio
 import functools
-from typing import Any, Callable, Dict, List, Self
+from typing import Any, Callable, Dict, List, Self,Any
 from fastapi import HTTPException
 from pydantic import ValidationError
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
@@ -8,7 +8,7 @@ from app.classes.prompt import PromptToken
 from app.definition import _service
 from app.errors.service_error import BuildFailureError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
-from app.models.agents_model import AgentModel
+from app.models.agents_model import AgentModel, AgentValidationModel
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.custom_service import CustomService
@@ -23,18 +23,21 @@ from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
 from app.utils.constant import CostConstant, MongooseDBConstant
 from app.utils.helper import subset_model
+from pydantic import SecretStr
 from .llm_provider_service import LLMProviderMiniService, LLMProviderService
 from .remote_agent_service import  RemoteAgentMiniService, RemoteAgentService
 from concurrent import futures
 import grpc
 from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
-
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_cohere import ChatCohere
+from langchain_groq import ChatGroq
+from langchain_core.language_models import BaseChatModel
 from langchain.agents.factory import create_agent
 from langchain.tools import tool, ToolRuntime
 from langgraph.graph.state import CompiledStateGraph
 
-
-agent_validation_model = subset_model(AgentModel,'ValidationAgentModel')
 
 AVOID_RE_VALIDATE_BUILD_STATE = -100
 AVOID_RECREATE_AGENT_BUILD_STATE = -435
@@ -60,7 +63,7 @@ class AgentMiniService(BaseMiniService):
                 llmProviderMService:LLMProviderMiniService,
                 customService:CustomService,
                 memcachedService:MemCachedService,
-                agent_model:AgentModel,
+                agent_model:dict,
                 outboundServices:Dict[str,HTTPOutboundMiniService]={}):
             
             self.depService = llmProviderMService
@@ -86,10 +89,10 @@ class AgentMiniService(BaseMiniService):
     def build(self, build_state = ...):
         try:
             if build_state == DEFAULT_BUILD_STATE:
-                m = agent_validation_model.model_validate(self.agent_model).model_dump()
-                self.agent_model = agent_validation_model.model_construct(**m)
+                m = AgentValidationModel.model_validate(self.agent_model).model_dump()
+                self.agent_model = AgentValidationModel.model_construct(**m)
             
-            self.chat = self.depService.ChatAgentFactory(self.agent_model)
+            self.base_chat = self.ChatAgentFactory(self.agent_model)
 
             self._init_tools()
             self._init_middleware()
@@ -124,7 +127,7 @@ class AgentMiniService(BaseMiniService):
 
     def create_agent(self,ref_id=None,memory=None):
         agent = create_agent(
-                model=self.chat,
+                model=self.base_chat,
             )
 
         return agent
@@ -134,6 +137,86 @@ class AgentMiniService(BaseMiniService):
     
     async def fetch_contact_memory(self):
         ...
+
+    def ChatAgentFactory(self,agentModel:AgentModel)->BaseChatModel:
+        api_key =lambda: self.depService.depService.credentials.to_plain()
+
+        max_output_token = self.depService.model.max_output_tokens
+        max_tokens = agentModel.max_tokens
+        if max_output_token:
+            max_tokens = max_output_token
+
+        provider = self.depService.model.provider
+        match provider:
+            case 'anthropic': 
+                return ChatAnthropic(
+                    streaming=True,
+                    model_name=agentModel.model,
+                    max_retries=agentModel.max_retries,
+                    temperature=agentModel.temperature,
+                    top_p=agentModel.top_p,
+                    top_k=agentModel.top_k,
+                    timeout=agentModel.timeout,
+                    effort=agentModel.effort,
+                    anthropic_proxy=agentModel.proxy_url,
+                    base_url=self.depService.model.base_url
+                )
+            
+            case 'cohere': 
+                return ChatCohere(
+                    streaming=True,
+                    temperature=agentModel.temperature,
+                    model=agentModel.model,
+                    cohere_api_key=SecretStr(api_key()),
+                    timeout_seconds=agentModel.timeout, 
+                    base_url=self.depService.model.base_url
+
+                )
+
+            case 'deepseek'| 'openai' | 'gemini':
+
+                match provider:
+                    case 'deepseek':
+                        base_url = self.depService.model.base_url or "https://api.deepseek.com"
+                    case 'gemini':
+                        base_url= self.depService.model.base_url or "https://generativelanguage.googleapis.com/v1beta"
+                    case _:
+                        base_url = self.depService.model.base_url or None
+
+                return ChatOpenAI(
+                    streaming=True,
+                    max_completion_tokens=max_tokens,
+                    api_key=api_key,
+                    base_url= base_url,
+                    temperature=agentModel.temperature,
+                    max_retries=agentModel.max_retries,
+                    timeout=agentModel.timeout,
+                    top_p=agentModel.top_p,
+                    model=agentModel.model,
+                    frequency_penalty=agentModel.frequency_penalty,
+                    presence_penalty=agentModel.presence_penalty,
+                    n=agentModel.n,
+                    reasoning_effort=agentModel.effort,
+                    openai_proxy=agentModel.proxy_url
+            )
+            
+            case 'groq': 
+                return ChatGroq(
+                    streaming=True,
+                    max_tokens=max_tokens,
+                    max_retries=agentModel.max_retries,
+                    timeout=agentModel.timeout,
+                    n=agentModel.n,
+                    api_key=api_key,
+                    model=agentModel.model,
+                    temperature=agentModel.temperature,
+                    groq_proxy=agentModel.proxy_url,
+                    reasoning_effort=agentModel.effort,
+                    reasoning_format=agentModel.reasoning_format,
+                    base_url=self.depService.model.base_url
+                )
+            
+            case 'ollama': raise NotImplementedError()
     
     @staticmethod
     def Base_Agent(function:Callable):
@@ -323,13 +406,13 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                 sid_type='message'
             )
 
-        models = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
+        models:list[dict] = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
         counter = self.StatusCounter(len(models))
         self.MiniServiceStore.clear()
 
         for model in models:
             try:
-                provider_id = model.provider
+                provider_id = model['provider']
                 provider = self.llmProviderService.MiniServiceStore.get(provider_id)
 
                 agent = AgentMiniService(
@@ -363,5 +446,5 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         await self.server.start()
         await self.server.wait_for_termination()
     
-    async def stop(self):
+    async def stop_grpc(self):
         await self.server.stop()

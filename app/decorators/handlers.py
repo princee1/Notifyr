@@ -10,7 +10,7 @@ import hvac
 from minio import S3Error, ServerError
 import requests
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError
-from app.errors.llm_error import LLMProviderDoesNotExistError
+from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
 from app.classes.auth_permission import WSPathNotFoundError
 from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
@@ -1073,11 +1073,54 @@ class AgenticHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
         try:
-            return await super().handle(function, *args, **kwargs)
+            return await function(*args, **kwargs)
+        
         except LLMProviderDoesNotExistError as e:
             raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    'message': f"LLM provider '{e.provider}' does not exist",
+                    'provider': e.provider
+                }
+            )
+        
+        except LLMModelNotPermittedError as e:
+            raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f'LLM provider with id {e.provider} does not exist'
+                detail={
+                    'message': f"Model '{e.model}' not permitted for provider '{e.provider}'",
+                    'provider': e.provider,
+                    'model': e.model,
+                    'available_models': e.models
+                }
+            )
+        
+        except LLMModelMaxTokenExceededError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    'message': f"Agent max tokens ({e.agentMaxToken}) exceeds LLM limit ({e.llm_max_token})",
+                    'provider': e.provider,
+                    'agent_max_tokens': e.agentMaxToken,
+                    'llm_max_tokens': e.llm_max_token
+                }
+            )
+        
+        except LLMRateLimiterError as e:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    'message': 'LLM provider rate limit exceeded. Please retry after some time.'
+                }
+            )
+        
+        except LLMConfigNotConfiguredError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    'message': f"LLM '{e.config}' configuration is not available",
+                    'config': e.config
+                }
             )
 
 class GrpcHandler(Handler):

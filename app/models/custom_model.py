@@ -45,6 +45,8 @@ class CustomModel(BaseDocument):
 
 UpdateCustomModelFactory:Type[CustomModel] = subset_model(CustomModel,f'Update{CustomModel.__name__}',__config__=ConfigDict(extra="forbid"),exclude=('model_type'))
 
+CustomValidationModel = subset_model(CustomModel,'CustomValidationModel')
+
 
 class UpdateCustomModel(UpdateCustomModelFactory):
     ...

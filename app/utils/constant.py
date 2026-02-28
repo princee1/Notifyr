@@ -390,49 +390,99 @@ class LLMProviderConstant:
 
     LLMProvider = Literal['openai','anthropic','cohere','groq','deepseek']
     
-    MODELS: dict[str, set[str]] = {
+    MODELS: dict[str, dict[Literal['models','default'], list[str]]] = {
         "openai": {
-            "gpt-5.2", "gpt-5.2-pro", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano",
-            "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
-            "o3-deep-research", "o4-mini-deep-research", "o3-pro",
-            "gpt-oss-120b", "gpt-oss-20b",
-            "gpt-realtime", "gpt-realtime-mini", "gpt-audio", "gpt-audio-mini",
-            # legacy / historical (if still supported in API):
-            "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo",
-            # embedding & auxiliary models (optional):
-            "text-embedding-3-large", "text-embedding-3-small", "whisper"
+            "models": [
+                "gpt-5.2", "gpt-5.2-pro", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano",
+                "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
+                "o3-deep-research", "o4-mini-deep-research", "o3-pro",
+                "gpt-oss-120b", "gpt-oss-20b",
+                "gpt-realtime", "gpt-realtime-mini", "gpt-audio", "gpt-audio-mini",
+                "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo",
+                "gpt-4o-mini", "gpt-4o", "o1-mini", "o1-preview", "o3-mini", "o3-mini-high"
+            ],
+            "default": "gpt-4o"
         },
         "anthropic": {
-            "claude-opus-4.5-20251101", "claude-sonnet-4.5-20251022", "claude-haiku-4.5-20251015",
-            "claude-opus-4-1-20250805", "claude-sonnet-4-20250514", 
-            # Still often supported:
-            "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022",
+            "models": [
+                "claude-opus-4.5-20251101", "claude-sonnet-4.5-20251022", "claude-haiku-4.5-20251015",
+                "claude-opus-4-1-20250805", "claude-sonnet-4-20250514",
+                "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022",
+                "claude-3-haiku-20240307", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-5-sonnet-20240620"
+            ],
+            "default": "claude-3-5-sonnet-20240620"
         },
         "cohere": {
-            "command", "command-r", "command-r-plus",
-            # variants:
-            "command-r-08-2024", "command-r-plus-v1", "command-text-v14",
-            # often seen in tooling:
-            "command-a-03-2025", "command-r7b"
+            "models": [
+                "command", "command-r", "command-r-plus",
+                "command-r-08-2024", "command-r-plus-v1", "command-text-v14",
+                "command-a-03-2025", "command-r7b"
+            ],
+            "default": "command-r-plus"
         },
         "groq": {
-            # Groq inference provider often mirrors open-weight model IDs from HF ecosystem:
-            "llama-3.1-8b-instant", "llama-3.3-70b-versatile",
-            "gemma-2-9b-it", "mixtral-8x7b",
-            # Qwen and distilled variants (commonly exposed on GroqCloud):
-            "qwen3-32b", "deepseek-r1-distill-llama-70b",
-            # second-tier auxiliary models (may appear via API):
-            "whisper-large-v3"
+            "models": [
+                "llama-3.1-8b-instant", "llama-3.3-70b-versatile",
+                "gemma-2-9b-it", "mixtral-8x7b",
+                "qwen3-32b", "deepseek-r1-distill-llama-70b",
+                "whisper-large-v3",
+                "llama3-70b-8192", "llama3-8b-8192"
+            ],
+            "default": "llama3-70b-8192"
         },
         "deepseek": {
-            "DeepSeek-R1", "DeepSeek-R1-Zero",
-            # dense distilled variants:
-            "deepseek-r1-distill-llama-70b",
-            # historical or researcher releases:
-            "DeepSeek-V3", "DeepSeek-V3-0324"
+            "models": [
+                "DeepSeek-R1", "DeepSeek-R1-Zero",
+                "deepseek-r1-distill-llama-70b",
+                "DeepSeek-V3", "DeepSeek-V3-0324",
+                "deepseek-chat"
+            ],
+            "default": "deepseek-chat"
+        },
+        "gemini": {
+            "models": [
+                "gemini-pro",
+                "gemini-1.5-pro",
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-exp",
+                "gemini-2.0-flash-lite-preview-02-05"
+            ],
+            "default": "gemini-pro"
+        },
+        "ollama": {
+            "models": [
+                "llama3"
+            ],
+            "default": "llama3"
         }
     }
 
+    CRAWL4AI_MODELS:dict[str,list[str]]={
+    "ollama": ["llama3"],
+    "groq": ["llama3-70b-8192", "llama3-8b-8192"],
+    "openai": [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "o1-mini",
+        "o1-preview",
+        "o3-mini",
+        "o3-mini-high"
+    ],
+    "anthropic": [
+        "claude-3-haiku-20240307",
+        "claude-3-opus-20240229",
+        "claude-3-sonnet-20240229",
+        "claude-3-5-sonnet-20240620"
+    ],
+    "gemini": [
+        "gemini-pro",
+        "gemini-1.5-pro",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-flash-lite-preview-02-05"
+    ],
+    "deepseek": ["deepseek-chat"]
+}
 
 class CeleryConstant:
     REFRESH_PROFILE_WORKER_STATE_COMMAND='refresh_profile'

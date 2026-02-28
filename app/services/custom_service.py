@@ -2,7 +2,7 @@ from typing import Dict, List, Tuple
 
 from pydantic import BaseModel
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service
-from app.models.custom_model import CustomModel
+from app.models.custom_model import CustomModel, CustomValidationModel
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.constant import MongooseDBConstant
@@ -21,17 +21,19 @@ class CustomService(BaseService):
    
     def build(self, build_state = DEFAULT_BUILD_STATE):
         self._initialize()
-        models = self.mongooseService.sync_find(MongooseDBConstant.CUSTOM_MODEL_COLLECTION,CustomModel,return_model=True)
+        models = self.mongooseService.sync_find(MongooseDBConstant.CUSTOM_MODEL_COLLECTION,CustomModel)
         self._create_models(models)
 
     def _initialize(self):
         self.models_registry:Dict[str,BaseModel] = {}
         self.models:Dict[str,CustomModel] = {}
 
-    def _create_models(self,models:List[CustomModel]):
+    def _create_models(self,models:List[dict]):
 
         for m in models:
             try:
+                m = CustomValidationModel.model_validate(m).model_dump()
+                m = CustomValidationModel.model_construct(**m)
                 cerberus_schema_to_pydantic(m.schema,m.alias)
                 self.models[m.alias] = m 
             except:

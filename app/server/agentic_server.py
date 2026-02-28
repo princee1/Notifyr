@@ -77,7 +77,7 @@ def bootstrap_agent_app()->FastAPI:
         await RunInThreadPool(mongooseService.revoke_lease)()
 
         await RunInThreadPool(vaultService.revoke_auth_token)()
-        await agentService.stop()
+        await agentService.stop_grpc()
         grpcTask.cancel_task()
 
         agentService.complete_purchase()

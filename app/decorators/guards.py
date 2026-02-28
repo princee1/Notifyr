@@ -8,7 +8,7 @@ from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
 from app.errors.db_error import CollectionHardLimitReachedError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError
-from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
+from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
 from app.manager.task_manager import TaskManager
 from app.models.agents_model import AgentModel
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
@@ -39,6 +39,7 @@ from app.errors.upload_error import (
     InvalidExtensionError,
 )
 from app.utils.globals import CAPABILITIES
+from app.services.agent.llm_provider_service import LLMProviderService
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
@@ -408,41 +409,51 @@ class CreditPlanGuard(Guard):
 
 class LLMProviderGuard(Guard):
 
-    def __init__(self,mode:Literal['']):
+    def __init__(self,graphiti=True,vector=True,crawl=False,research=False):
         super().__init__()
         self.mongooseService = Get(MongooseService)
         self.configService = Get(ConfigService)
-        self.mode = ...
+        self.llmProviderService = Get(LLMProviderService)
 
-    async def guard(self, ingestTask:DataIngestModel=None,agentModel:AgentModel=None):
+        self.graphiti_config = graphiti
+        self.vector_config = vector
+        self.crawl_config = crawl
+        self.research_config = research
 
-        if ingestTask != None:
-            if isinstance(ingestTask,DataIngestWebCrawlingModel):
-                ...
-        else:
-            provider = agentModel.provider
+    async def guard(self, agentModel:AgentModel=None):
 
-        llm_model:LLMProfileModel =  await self.mongooseService.find_one(LLMProfileModel,{'_id':provider})
+        if self.graphiti_config and len(self.llmProviderService.graphiti_config) < 1:
+            raise LLMConfigNotConfiguredError('graphiti')
 
-        if llm_model == None:
-            raise LLMProviderDoesNotExistError(provider)
+        if self.vector_config and len(self.llmProviderService.vector_config) < 1:
+            raise LLMConfigNotConfiguredError('vector')
+
+        if self.crawl_config and len(self.llmProviderService.crawl_config) < 1:
+            raise LLMConfigNotConfiguredError('crawl')
+        
+        if self.research_config and len(self.llmProviderService.research_config) < 1:
+            raise LLMConfigNotConfiguredError('research')
         
         if agentModel != None:
+
+            provider = agentModel.provider
+
+            llm_model:LLMProfileModel = await self.mongooseService.find_one(LLMProfileModel,{'_id':provider})
+
+            if llm_model == None:
+                raise LLMProviderDoesNotExistError(provider)
             
-            if llm_model.models:
-                if agentModel.model in llm_model.models:
-                    raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
-            else:
-                models = LLMProviderConstant.MODELS[llm_model.provider]
-                if agentModel.model not in models:
-                    raise LLMModelNotPermittedError(llm_model.provider,agentModel.model,list(models))
-            
-            if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
-                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
-        
-        if ingestTask!=None:
-            ...
-        
+                if llm_model.models:
+                    if agentModel.model not in llm_model.models:
+                        raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
+                else:
+                    models = LLMProviderConstant.MODELS[llm_model.provider]
+                    if agentModel.model not in models:
+                        raise LLMModelNotPermittedError(llm_model.provider,agentModel.model,list(models))
+                
+                if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
+                    raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
+                    
         return True,""
             
 

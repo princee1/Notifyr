@@ -4,6 +4,8 @@ from app.classes.mongo import BaseDocument
 from app.utils.constant import LLMProviderConstant, MongooseDBConstant
 from enum import Enum
 
+from app.utils.helper import subset_model
+
 class GraphitiSearchConfig(str, Enum):
     PERSONALIZED_MEMORY = "personalized_memory"
     PRECISE_QA = "precise_qa"
@@ -66,3 +68,6 @@ class AgentModel(BaseDocument):
 
     class Settings:
         name = MongooseDBConstant.AGENT_COLLECTION
+
+
+AgentValidationModel = subset_model(AgentModel,f'Validation{AgentModel.__class__.__name__}')

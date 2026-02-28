@@ -21,3 +21,9 @@ class LLMModelMaxTokenExceededError(BaseError):
 
 class  LLMRateLimiterError(BaseError):
     ...
+
+class LLMConfigNotConfiguredError(BaseError):
+
+    def __init__(self, config:str):
+        super().__init__(config)
+        self.config = config

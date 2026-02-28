@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from app.classes.mongo import MongoCondition
 from app.classes.profiles import BaseProfileModel, ProfilModelValues
 from app.utils.constant import MongooseDBConstant, VaultConstant,LLMProviderConstant
+from app.utils.helper import subset_model
 
 DEFAULT_MAX_TOKENS = 8192
 DEFAULT_TEMPERATURE = 1
@@ -37,17 +38,29 @@ class VectorEmbeddingConfig(BaseModel):
     api_version: str | None = None
     batch_size: int = Field(default=100, ge=10, le=500)
 
-
 class CrawlLLMConfig(BaseModel):
     model: Optional[str] = None
-    base_url: str | None = None,
-    temperature: float | None = None,
-    max_tokens: int | None = None,
+    base_url: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
     top_p: float | None = None,
-    frequency_penalty: float | None = None,
-    presence_penalty: float | None = None,
-    stop: List[str] | None = None,
-    n: int | None = None,
+    frequency_penalty: float | None = None
+    presence_penalty: float | None = None
+    stop: List[str] | None = None
+    n: int | None = None
+
+    @field_validator('temperature')
+    def validate_temperature(cls, v):
+        if v is not None and not (0 <= v <= 2):
+            raise ValueError("Temperature must be between 0 and 2")
+        return v
+
+    @field_validator('max_tokens')
+    def validate_max_tokens(cls, v):
+        if v is not None and v < 1:
+            raise ValueError("max_tokens must be a positive integer")
+        return v
+
 
 class ResearchConfig(BaseModel):
     model:Optional[str] = None
@@ -188,7 +201,7 @@ class LLMProfileModel(BaseProfileModel):
     def models_validation(self: Self) -> Self:
         # Validate base models
         if self.models:
-            diff = set(self.models).difference(LLMProviderConstant.MODELS[self.provider])
+            diff = set(self.models).difference(LLMProviderConstant.MODELS[self.provider]['models'])
             if len(diff) > 0:
                 raise ValueError(f'Those models: {list(diff)} are not associated with the provider:{self.provider}')
             
@@ -256,6 +269,10 @@ class LLMProfileModel(BaseProfileModel):
             if self.graph_reranker_config.max_tokens is not None and self.graph_reranker_config.max_tokens > self.max_output_tokens:
                 self.graph_reranker_config.max_tokens = self.max_output_tokens
 
+        if self.crawl_config is not None and self.max_output_tokens is not None:
+            if self.crawl_config.max_tokens is not None and self.crawl_config.max_tokens > self.max_output_tokens:
+                self.crawl_config.max_tokens = self.max_output_tokens
+
         return self
 
     @model_validator(mode='after')
@@ -283,3 +300,5 @@ class LLMProfileModel(BaseProfileModel):
         return self
 
 ProfilModelValues.update({'llm':LLMProfileModel})
+
+LLMProviderValidationModel = subset_model(LLMProfileModel,'LLMProviderValidationModel')

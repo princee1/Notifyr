@@ -3,7 +3,6 @@ from app.utils.globals import APP_MODE,ApplicationMode,CAPABILITIES
 from app.services.config_service import ConfigService,UvicornWorkerService
 from app.services.logger_service import LoggerService
 
-
 if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.worker:
     from app.services.vault_service import VaultService
     from app.services.database.redis_service import RedisService
@@ -15,10 +14,12 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     from app.services.cost_service import CostService
     from app.services.monitoring_service import MonitoringService
     from app.services.database.rabbitmq_service import RabbitMQService
-    
     from app.services.workflow_service import WorkflowService
     from app.services.ntfr.webhook_service import WebhookService
-    from app.services.agent.remote_agent_service import RemoteAgentService
+
+    if CAPABILITIES['agentic']:
+        from app.services.agent.llm_provider_service import LLMProviderService
+        from app.services.agent.remote_agent_service import RemoteAgentService
 
     if CAPABILITIES['twilio']:
         from app.services.ntfr.twilio_service import TwilioService,CallService,SMSService

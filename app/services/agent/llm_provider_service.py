@@ -1,32 +1,36 @@
-from typing import TypedDict
-from aiohttp_retry import Any
-from pydantic import SecretStr
+from typing import Literal, TypedDict
 from app.definition import _service
-from app.models.agents_model import AgentModel
-from app.models.llm_model import EMBEDDER_PROVIDER_SET, LLMProfileModel
+from app.errors.service_error import BuildFailureError
+from app.models.llm_model import (
+    EMBEDDER_PROVIDER_SET, LLMProfileModel, 
+    VectorEmbeddingConfig, CrawlLLMConfig, ResearchConfig, 
+    GraphitiLLMConfig, GraphitiEmbeddingConfig,
+    VALID_EMBEDDING_MODELS, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
+)
 from app.services.profile_service import ProfileMiniService, ProfileService
+from app.utils.constant import LLMProviderConstant
 from ..config_service import ConfigService
-from app.definition._service import BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_cohere import ChatCohere
-from langchain_groq import ChatGroq
-from langchain_core.language_models import BaseChatModel
 
 
 class GraphitiConfig(TypedDict):
-    client:Any
-    embedding:Any
-    reranker:Any
+    client:str
+    embedding:str
+    reranker:str
 
 class VectorConfig(TypedDict):
-    embedding:Any
+    embedding:str
 
 class CrawlConfig(TypedDict):
-    llmConfig:Any
+    llmConfig:str
+
+
+class ResearchConfig(TypedDict):
+    llmConfig:str
     
+
 
 @MiniService(links=[LinkDep(ProfileMiniService,to_build=True)])
 class LLMProviderMiniService(BaseMiniService):
@@ -42,86 +46,74 @@ class LLMProviderMiniService(BaseMiniService):
     
     def build(self, build_state = ...):
         ...
-    
-    def ChatAgentFactory(self,agentModel:AgentModel)->BaseChatModel:
-        api_key =lambda: self.depService.credentials.to_plain()
 
-        max_output_token = self.model.max_output_tokens
-        max_tokens = agentModel.max_tokens
-        if max_output_token:
-            max_tokens = max_output_token
+    def create_default_configs(self, variable: Literal['vector_embedding_config', 'crawl_config', 'research_config','graph_config',
+                                                       'graph_embedding_config', 'graph_reranker_config']) -> LLMProfileModel:
+        """
+        Create a copy of the current model with missing configs populated with defaults.
+        Validates the new model before returning.
+        Uses the appropriate Config model instead of dicts.
+        """
+        model_data = self.model.model_dump()
 
-        provider = self.model.provider
-        match provider:
-            case 'anthropic': 
-                return ChatAnthropic(
-                    streaming=True,
-                    model_name=agentModel.model,
-                    max_retries=agentModel.max_retries,
-                    temperature=agentModel.temperature,
-                    top_p=agentModel.top_p,
-                    top_k=agentModel.top_k,
-                    timeout=agentModel.timeout,
-                    effort=agentModel.effort,
-                    anthropic_proxy=agentModel.proxy_url,
-                    base_url=self.model.base_url
-                )
+        match variable:
+            case 'vector_embedding_config':
+                if model_data.get('vector_embedding_config') is None and self.model.provider in EMBEDDER_PROVIDER_SET:
+                    embedding_models = VALID_EMBEDDING_MODELS.get(self.model.provider, [])
+                    if embedding_models:
+                        model_data['vector_embedding_config'] = VectorEmbeddingConfig(
+                            model=embedding_models[0],
+                            max_retries=10,
+                            timeout=60.0,
+                            batch_size=100
+                        ).model_dump()
+                    
+            case 'crawl_config':
+                crawl_models = LLMProviderConstant.CRAWL4AI_MODELS.get(self.model.provider, [])
+                if model_data.get('crawl_config') is None and crawl_models:
+                    model_data['crawl_config'] = CrawlLLMConfig(
+                        model=self.model.default_model or crawl_models[0],
+                        temperature=0.7,
+                        max_tokens=2048,
+                        top_p=0.9
+                    ).model_dump()
+
+            case 'research_config':
+                if model_data.get('research_config') is None:
+                    model_data['research_config'] = ResearchConfig(model=self.model.default_model or LLMProviderConstant.MODELS[self.model.provider]['default'])
+
+            case 'graph_config':
+                if model_data.get('graph_config') is None:
+                    model_data['graph_config'] = GraphitiLLMConfig(
+                        model=self.model.default_model or LLMProviderConstant.MODELS[self.model.provider]['default'],
+                        temperature=DEFAULT_TEMPERATURE,
+                        max_tokens=DEFAULT_MAX_TOKENS,
+                        cache=False
+                    ).model_dump()
+
+            case 'graph_embedding_config':
+                if model_data.get('graph_embedding_config') is None and self.model.provider in EMBEDDER_PROVIDER_SET:
+                    embedding_models = VALID_EMBEDDING_MODELS.get(self.model.provider, [])
+                    if embedding_models:
+                        model_data['graph_embedding_config'] = GraphitiEmbeddingConfig(
+                            embedding_model=embedding_models[0],
+                            embedding_dim=1024,
+                            batch=100
+                        ).model_dump()
+
+            case 'graph_reranker_config':
+                if model_data.get('graph_reranker_config') is None:
+                    model_data['graph_reranker_config'] = GraphitiLLMConfig(
+                        model=self.model.default_model or LLMProviderConstant.MODELS[self.model.provider]['default'],
+                        temperature=0.5,
+                        max_tokens=512,
+                        cache=False
+                    ).model_dump()
             
-            case 'cohere': 
-                return ChatCohere(
-                    streaming=True,
-                    temperature=agentModel.temperature,
-                    model=agentModel.model,
-                    cohere_api_key=SecretStr(api_key()),
-                    timeout_seconds=agentModel.timeout, 
-                    base_url=self.model.base_url
+            case _:
+                pass
 
-                )
-
-            case 'deepseek'| 'openai' | 'gemini':
-
-                match provider:
-                    case 'deepseek':
-                        base_url = self.model.base_url or "https://api.deepseek.com"
-                    case 'gemini':
-                        base_url= self.model.base_url or "https://generativelanguage.googleapis.com/v1beta"
-                    case _:
-                        base_url = self.model.base_url or None
-
-                return ChatOpenAI(
-                    streaming=True,
-                    max_completion_tokens=max_tokens,
-                    api_key=api_key,
-                    base_url= base_url,
-                    temperature=agentModel.temperature,
-                    max_retries=agentModel.max_retries,
-                    timeout=agentModel.timeout,
-                    top_p=agentModel.top_p,
-                    model=agentModel.model,
-                    frequency_penalty=agentModel.frequency_penalty,
-                    presence_penalty=agentModel.presence_penalty,
-                    n=agentModel.n,
-                    reasoning_effort=agentModel.effort,
-                    openai_proxy=agentModel.proxy_url
-            )
-            
-            case 'groq': 
-                return ChatGroq(
-                    streaming=True,
-                    max_tokens=max_tokens,
-                    max_retries=agentModel.max_retries,
-                    timeout=agentModel.timeout,
-                    n=agentModel.n,
-                    api_key=api_key,
-                    model=agentModel.model,
-                    temperature=agentModel.temperature,
-                    groq_proxy=agentModel.proxy_url,
-                    reasoning_effort=agentModel.effort,
-                    reasoning_format=agentModel.reasoning_format,
-                    base_url=self.model.base_url
-                )
-            
-            case 'ollama': raise NotImplementedError()
+        self.depService.update_model(model_data)
 
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
 class LLMProviderService(BaseMiniServiceManager):
@@ -136,12 +128,18 @@ class LLMProviderService(BaseMiniServiceManager):
 
     def build(self, build_state=...):
 
-        self.graphiti_config:GraphitiConfig = {}
-        self.vector_config:VectorConfig = {}
-        self.crawl_config:CrawlConfig = {}
+        self.graphiti_config: GraphitiConfig = {}
+        self.vector_config: VectorConfig = {}
+        self.crawl_config: CrawlConfig = {}
+        self.research_config: ResearchConfig = {}
 
-        
-        graphiti_current_id = None
+
+        fallback_providers = {
+            'graphiti': None,
+            'vector': None,
+            'crawl': None,
+            'research': None
+        }
         
         count = self.profileService.MiniServiceStore.filter_count(lambda p: p.model.__class__ == LLMProfileModel )
         state_counter = self.StatusCounter(count)
@@ -151,43 +149,99 @@ class LLMProviderService(BaseMiniServiceManager):
         for i,p in self.profileService.MiniServiceStore:
             if p.model.__class__ != LLMProfileModel:
                 continue
-            provider = LLMProviderMiniService(
+            llm_provider = LLMProviderMiniService(
                 self.configService,
                 p
             )
-            provider._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
-            state_counter.count(provider)
-            self.MiniServiceStore.add(provider)
+            llm_provider._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
+            state_counter.count(llm_provider)
+            self.MiniServiceStore.add(llm_provider)
 
-            if provider.service_status != ServiceStatus.AVAILABLE:
+            if llm_provider.service_status != ServiceStatus.AVAILABLE:
                 continue
 
-            if provider.model.crawl_config != None and not self.crawl_config.get('llmConfig',None):
-                self.crawl_config['llmConfig'] = provider.miniService_id
+            if llm_provider.model.crawl_config != None and not self.crawl_config.get('llmConfig',None):
+                self.crawl_config['llmConfig'] = llm_provider.miniService_id
+            elif not fallback_providers['crawl']:
+                if LLMProviderConstant.CRAWL4AI_MODELS.get(llm_provider.model.provider,None):
+                    fallback_providers['crawl'] = llm_provider.miniService_id
 
-            if provider.model.vector_embedding_config != None and not self.vector_config.get('embedding',None):
-                if provider.model.provider in EMBEDDER_PROVIDER_SET:
-                    self.vector_config['embedding'] = provider.miniService_id
+            if llm_provider.model.research_config != None and not self.research_config.get('llmConfig',None):
+                self.research_config['llmConfig'] = llm_provider.miniService_id
+            elif not fallback_providers['research']:
+                fallback_providers['research'] = llm_provider.miniService_id
+
+            if llm_provider.model.vector_embedding_config != None and not self.vector_config.get('embedding',None):
+                if llm_provider.model.provider in EMBEDDER_PROVIDER_SET:
+                    self.vector_config['embedding'] = llm_provider.miniService_id
+
+            elif not fallback_providers['vector']:
+                if llm_provider.model.provider in EMBEDDER_PROVIDER_SET:
+                    fallback_providers['vector'] = llm_provider.miniService_id
+
+            if llm_provider.model.graph_config != None and not self.graphiti_config.get('client',None):
+                if llm_provider.model.provider in EMBEDDER_PROVIDER_SET:
+                    fallback_providers['graphiti'] = llm_provider.miniService_id
+
+                self.graphiti_config['client'] = llm_provider.miniService_id
+            elif not fallback_providers['graphiti']:
+                if llm_provider.model.provider in EMBEDDER_PROVIDER_SET:
+                    fallback_providers['graphiti'] = llm_provider.miniService_id
             
-            if provider.model.graph_config != None and not self.graphiti_config.get('client',None):
-                if provider.model.provider in EMBEDDER_PROVIDER_SET:
-                    graphiti_current_id = provider.miniService_id
-
-                self.graphiti_config['client'] = provider.miniService_id
+            if llm_provider.model.graph_embedding_config != None and not self.graphiti_config.get('embedding',None):
+                self.graphiti_config['embedding'] = llm_provider.miniService_id
             
-            if provider.model.graph_embedding_config != None and not self.graphiti_config.get('embedding',None):
-                self.graphiti_config['embedding'] = provider.miniService_id
-            
-            if provider.model.graph_reranker_config != None and not self.graphiti_config.get('reranker',None): 
-                self.graphiti_config['reranker'] = provider.miniService_id
+            if llm_provider.model.graph_reranker_config != None and not self.graphiti_config.get('reranker',None): 
+                self.graphiti_config['reranker'] = llm_provider.miniService_id
 
-        if graphiti_current_id != None:
-            if self.graphiti_config.get('embedding',None) == None:
-                self.graphiti_config['embedding'] = graphiti_current_id
-            
-            if self.graphiti_config.get('reranker',None) == None:
-                self.graphiti_config['reranker'] = graphiti_current_id
-
-
+        # Ensure all required configs are populated
+        self._ensure_config(fallback_providers)
+        
         super().build(state_counter)
     
+    def _ensure_config(self, fallback_providers: dict[Literal['graphiti','vector','crawl','research'], str]):
+        """
+        Ensure all required configs are populated. If missing, use fallback provider
+        or create default configs from a provider with all configs defined.
+        """
+
+        error = []
+        
+        # Graphiti config (client, embedding, reranker)
+        if not self.graphiti_config.get('embedding',None):
+            if fallback_providers['graphiti']:
+                self.graphiti_config['embedding'] = fallback_providers['graphiti']
+                self.MiniServiceStore.get(fallback_providers['graphiti']).create_default_configs('graph_embedding_config')
+            else:
+                error.append('No provider available for graphiti embedding config')
+        
+        if not self.graphiti_config.get('reranker',None):
+            if fallback_providers['graphiti']:
+                self.graphiti_config['reranker'] = fallback_providers['graphiti']
+                self.MiniServiceStore.get(fallback_providers['graphiti']).create_default_configs('graph_reranker_config')
+            else:
+                error.append('No provider available for graphiti reranker config')
+    
+        # Vector config
+        if not self.vector_config.get('embedding',None):
+            if fallback_providers['vector']:
+                self.vector_config['embedding'] = fallback_providers['vector']
+                self.MiniServiceStore.get(fallback_providers['vector']).create_default_configs('vector_embedding_config')
+            else:
+                error.append('No provider available for vector embedding config')
+        
+        # Crawl config
+        if not self.crawl_config.get('llmConfig',None):
+            if fallback_providers['crawl']:
+                self.crawl_config['llmConfig'] = fallback_providers['crawl']
+                self.MiniServiceStore.get(fallback_providers['crawl']).create_default_configs('crawl_config')
+            else:
+                error.append('No provider available for crawl config')
+        
+        # Research config
+        if not self.research_config.get('llmConfig',None):
+            if fallback_providers['research']:
+                self.research_config['llmConfig'] = fallback_providers['research']
+                self.MiniServiceStore.get(fallback_providers['research']).create_default_configs('research_config')
+            else:
+                error.append('No provider available for research config')

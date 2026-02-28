@@ -64,7 +64,7 @@ class MongooseService(TempCredentialsDatabaseService):
     async def count(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).count()
     
-    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={},return_model=False)->list[D]:
+    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={},return_model=False)->list[D | dict]:
         
         filter['_class_id'] = {"$regex": f"{model.__name__}$" }
     

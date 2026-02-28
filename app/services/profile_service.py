@@ -43,6 +43,10 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         self.mongooseService = mongooseService
         self.redisService = redisService
         
+    def update_model(self,model:TModel):
+        m = self.validationModel.model_validate(model).model_dump()
+        self.model = self.model_type.model_construct(**m)
+    
     def build(self, build_state = ...):
         try:
             if self.model_type != None:

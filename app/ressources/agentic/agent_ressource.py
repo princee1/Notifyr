@@ -11,7 +11,7 @@ from app.decorators.permissions import AdminPermission, AgentPermission, JWTRout
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
-from app.definition._service import StateProtocol
+from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.funcs_dep import get_profile
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
 from app.manager.broker_manager import Broker
@@ -55,12 +55,12 @@ class AgentsRessource(BaseHTTPRessource):
         super().__init__()
         self.remoteAgentService = remoteAgentService
         self.mongooseService = mongooseService
-        self.provider_guard = LLMProviderGuard()
+        self.provider_guard = LLMProviderGuard(False,False)
     
     @UsePermission(AdminPermission) 
     @Throttle(normal=(200,80))
     @UsePipe(MerchantPipe())
-    @UseGuard(LLMProviderGuard())
+    @UseGuard(LLMProviderGuard(False,False))
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
     @UseHandler(AgenticHandler,RedisHandler,CostHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
@@ -123,7 +123,7 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(agentModel,True)
         await agentModel.update_meta()
 
-        broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
+        broker.propagate(MiniStateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True,id=agent))
         return agentModel
 
     @UseRoles([Role.PUBLIC])        

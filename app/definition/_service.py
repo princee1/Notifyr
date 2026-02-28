@@ -392,7 +392,7 @@ class BaseMiniService(BaseService,):
         ...
 
     @overload
-    def register(self,service:Self):
+    def register(self,service:'BaseMiniService'):
         ...
     
     def register(self,*args):
@@ -403,14 +403,6 @@ class BaseMiniService(BaseService,):
         else:
             if self.depService != None:
                 self.depService.add_used_services(self)
-
-    @property
-    def write_lock(self):
-        ...
-    
-    @property
-    def read_lock(self):
-        ...
 
     @property
     def name(self):
