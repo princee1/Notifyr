@@ -30,6 +30,10 @@ class QdrantService(BaseService):
         self.vaultService = vaultService
         self.llmProviderService = llmProviderService
     
+    def verify_dependency(self):
+        if self.llmProviderService.vector_config.get('embedding',None) == None:
+            raise BuildFailureError('Qdrant Vector config is not specified in the configuration')
+
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
 
         if build_state == DEFAULT_BUILD_STATE:

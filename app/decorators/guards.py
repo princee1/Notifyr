@@ -9,6 +9,7 @@ from app.depends.class_dep import TrackerInterface
 from app.errors.db_error import CollectionHardLimitReachedError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
+from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.manager.task_manager import TaskManager
 from app.models.agents_model import AgentModel
 from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
@@ -437,23 +438,23 @@ class LLMProviderGuard(Guard):
         if agentModel != None:
 
             provider = agentModel.provider
-
-            llm_model:LLMProfileModel = await self.mongooseService.find_one(LLMProfileModel,{'_id':provider})
-
-            if llm_model == None:
-                raise LLMProviderDoesNotExistError(provider)
+            try:
+                llm_model_provider = self.llmProviderService.MiniServiceStore.get(provider)
+                llm_model = llm_model_provider.model
+            except MiniServiceDoesNotExistsError as e:
+                raise  LLMProviderDoesNotExistError(provider)
             
-                if llm_model.models:
-                    if agentModel.model not in llm_model.models:
-                        raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
-                else:
-                    models = LLMProviderConstant.MODELS[llm_model.provider]
-                    if agentModel.model not in models:
-                        raise LLMModelNotPermittedError(llm_model.provider,agentModel.model,list(models))
+            if llm_model.models:
+                if agentModel.model not in llm_model.models:
+                    raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
+            else:
+                models = LLMProviderConstant.MODELS[llm_model.provider]
+                if agentModel.model not in models:
+                    raise LLMModelNotPermittedError(llm_model.provider,agentModel.model,list(models))
+            
+            if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
+                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
                 
-                if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
-                    raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
-                    
         return True,""
             
 

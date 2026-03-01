@@ -8,12 +8,12 @@ from app.utils.validation import Validator
 
 
 class CustomModel(BaseDocument):
-    schema: Dict
+    schemas: Dict
     model_type: Literal['Entity', 'Edge'] = 'Entity'
     edge_map: List[List[str]] = []
 
     _collection: ClassVar[str] = MongooseDBConstant.CUSTOM_MODEL_COLLECTION
-    _unique_indexes: ClassVar[List[str]] = ['schema']
+    _unique_indexes: ClassVar[List[str]] = ['schemas']
 
     @field_validator('alias')
     def alias_no_validation(cls, alias):
@@ -23,12 +23,12 @@ class CustomModel(BaseDocument):
             raise ValueError("Alias cannot contain spaces")
         return alias
 
-    @field_validator('schema')
-    def schema_validation(cls, schema):
-        if not schema:
-            raise ValueError("Schema cannot be empty")
-        Validator(schema)
-        return schema
+    @field_validator('schemas')
+    def schemas_validation(cls, schemas):
+        if not schemas:
+            raise ValueError("schemas cannot be empty")
+        Validator(schemas)
+        return schemas
     
     @model_validator(mode='after')
     def edge_map_pairs(self:Self)->Self:

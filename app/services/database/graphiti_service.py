@@ -60,14 +60,31 @@ class GraphitiService(BaseService):
         self.llmProviderService = llmProviderService
         self.customService = customService
     
+    def verify_dependency(self):
+        provider_config = self.llmProviderService.graphiti_config
+
+        llm_client_provider = provider_config.get('client', None)
+        embedding_provider = provider_config.get('embedding', None)
+        reranker_provider = provider_config.get('reranker', None)
+
+        if llm_client_provider is None:
+            raise BuildFailureError('Graphiti LLM client provider is not specified in the configuration.')
+        
+        if embedding_provider is None:
+            raise BuildFailureError('Graphiti Embedding provider is not specified in the configuration.')
+        
+        if reranker_provider is None:
+            raise BuildFailureError('Graphiti Reranker provider is not specified in the configuration.')
+    
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
+            client = None
             if build_state == DEFAULT_BUILD_STATE:
                 self.client = AsyncGraphDatabase().driver(self.uri,auth=('neo4j','password'))
                 client = GraphDatabase.driver(self.uri,auth=('neo4j','password'),user_agent=self.uvicornWorkerService.INSTANCE_ID)
                 client.verify_connectivity()
                 client.verify_authentication()
-            
+
             providers = self._setup_llm_provider()
             llm_client,embedding,cross_encoder = self._initialize_graphiti_llm(*providers)
             self.graphiti = Graphiti(self.uri,'neo4j','password',llm_client=llm_client,embedder=embedding,cross_encoder=cross_encoder,max_coroutines=self.configService.GRAPHITI_MAX_COROUTINES)
@@ -77,7 +94,8 @@ class GraphitiService(BaseService):
         except Exception as e:
             raise BuildFailureError(str(e))
         finally:
-            client.close()
+            if client != None:
+                client.close()
 
     async def close(self):
         await self.graphiti.close()
@@ -89,7 +107,7 @@ class GraphitiService(BaseService):
 
         filtered_group_ids = []
         for grp in groups_ids:
-            grp = f'{GraphitiConstant.DOMAIN_PREFIX if group_type =='domain' else GraphitiConstant.CONTACT_PREFIX}{grp}'
+            grp = f"{GraphitiConstant.DOMAIN_PREFIX if group_type =='domain' else GraphitiConstant.CONTACT_PREFIX}{grp}"
             filtered_group_ids.append(grp)
 
         search_filter = SearchFilters(
@@ -156,7 +174,7 @@ class GraphitiService(BaseService):
     async def add_content_episode(self,name:str,body:dict|str,source:str,description:str,instruction:str=None,domain:str=None,entities:list[str]=None,edges:list[str]=None,uuid:str|None=None):
         
         if not isinstance(body,dict) or not isinstance(body,str):
-            raise ...
+            raise ValueError('Content is either a dict or a str')
 
         episode_type = EpisodeType.json if isinstance(body,dict) else EpisodeType.text
 
@@ -309,15 +327,6 @@ class GraphitiService(BaseService):
         embedding_provider = provider_config.get('embedding', None)
         reranker_provider = provider_config.get('reranker', None)
 
-        if llm_client_provider is None:
-            raise BuildFailureError('Graphiti LLM client provider is not specified in the configuration.')
-        
-        if embedding_provider is None:
-            raise BuildFailureError('Graphiti Embedding provider is not specified in the configuration.')
-        
-        if reranker_provider is None:
-            raise BuildFailureError('Graphiti Reranker provider is not specified in the configuration.')
-        
         llm_client_provider = self.llmProviderService.MiniServiceStore.get(llm_client_provider)
         if llm_client_provider.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError(f'Graphiti LLM client provider MiniService is not available.: {llm_client_provider.miniService_id}')

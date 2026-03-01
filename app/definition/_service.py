@@ -291,7 +291,7 @@ class BaseService():
 
         except BuildOkError as e:
             if not quiet:
-                self.prettyPrinter.message(f'{is_mini_service}[{now}] {self.__class__.__name__}',saveable=True)
+                self.prettyPrinter.message(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e}',saveable=True)
             
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
@@ -306,7 +306,7 @@ class BaseService():
         
         except BuildSkipError as e: # TODO change color
             if not quiet:
-                self.prettyPrinter.info(f'{is_mini_service}[{now}] {self.__class__.__name__}', saveable=True)
+                self.prettyPrinter.info(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e}', saveable=True)
             self.service_status = ServiceStatus.WORKS_ALMOST_ATT
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             pass

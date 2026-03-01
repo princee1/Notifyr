@@ -30,7 +30,7 @@ class KGraphDBRessource(BaseHTTPRessource):
 
     async def on_startup(self):
         headers = {"Authorization": f"Bearer {self.remoteAgentService.auth_header}"}
-        base_url = f"http://{self.remoteAgentService.agentic_http_host}/k-graph"
+        base_url = f"http://{self.remoteAgentService.agentic_http_host}/k-graph/"
 
         async with aiohttp.ClientSession(base_url=base_url,headers=headers) as session:
             self.session = session

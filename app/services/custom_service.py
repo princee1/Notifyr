@@ -34,7 +34,7 @@ class CustomService(BaseService):
             try:
                 m = CustomValidationModel.model_validate(m).model_dump()
                 m = CustomValidationModel.model_construct(**m)
-                cerberus_schema_to_pydantic(m.schema,m.alias)
+                cerberus_schema_to_pydantic(m.schemas,m.alias)
                 self.models[m.alias] = m 
             except:
                 continue

@@ -59,7 +59,7 @@ class DataIngestWebCrawlingModel(DataIngestModel):
 	extraction_type:str
 	schemas:Optional[List[str]] = None
 	instruction:Optional[str] = None	
-	digest_strategy: ...
+	# digest_strategy: ...
 	url:str
 
 ###################################################################################################

@@ -107,13 +107,14 @@ git-clone==1.0.6
 google-ai-generativelanguage==0.6.15
 google-api-core==2.24.1
 google-api-python-client==2.156.0
-google-auth==2.38.0
+google-auth==2.48.0
 google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.1
 google-cloud-core==2.4.2
 google-cloud-firestore==2.20.0
 google-cloud-storage==3.0.0
 google-crc32c==1.6.0
+google-genai==1.65.0
 google-generativeai==0.8.6
 google-resumable-media==2.7.2
 googleapis-common-protos==1.68.0
@@ -121,9 +122,8 @@ graphiti-core==0.26.3
 greenlet==3.2.4
 griffe==1.15.0
 groq==0.37.1
-grpcio==1.76.0
-grpcio-status==1.70.0
-grpcio-tools==1.76.0
+grpcio==1.62.0
+grpcio-tools==1.62.0
 h11==0.16.0
 h2==3.2.0
 hiredis==3.3.0
@@ -254,7 +254,7 @@ prometheus_client==0.21.1
 prompt-toolkit==3.0.43
 propcache==0.3.0
 proto-plus==1.26.0
-protobuf==5.29.6
+protobuf==4.25.8
 psutil==7.0.0
 psycopg2-binary==2.9.10
 pure_eval==0.2.3

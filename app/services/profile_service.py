@@ -101,7 +101,7 @@ class ProfileService(BaseMiniServiceManager):
                 self.MiniServiceStore.add(p)
         
         if len(self.MiniServiceStore) == 0:
-            raise BuildOkError
+            raise BuildOkError('No Profile Found...')
              
     def verify_dependency(self):
         if self.vaultService.service_status not in VaultService._ping_available_state:

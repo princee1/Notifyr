@@ -15,7 +15,7 @@ class MonitoringService(BaseService):
 
     def verify_dependency(self):
         if self.configService.MODE not in [MODE.MONITOR_MODE,MODE.TEST_MODE]:
-            raise BuildSkipError
+            raise BuildSkipError('Process is not running in a valid monitor mode')
     
 
     def build(self, build_state = ...):

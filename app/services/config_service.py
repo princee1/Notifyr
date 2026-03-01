@@ -220,7 +220,7 @@ class ConfigService(_service.BaseService):
 
         self.GRAPH_SERVICE:Literal['neo4j','memgraph'] = 'neo4j'
 
-        self.GRAPHITI_PROTOCOL:str = self.getenv('GRAPHITI_PROTOCOL','bolt')
+        self.GRAPHITI_PROTOCOL:str = self.getenv('GRAPHITI_PROTOCOL','neo4j')
 
         # CELERY CONFIG #
         self.BROKER_PROVIDER:Literal['redis','rabbitmq'] = self.getenv('BROKER_PROVIDER','rabbitmq')
@@ -289,4 +289,4 @@ class UvicornWorkerService(_service.BaseService):
      
     def build(self, build_state = ...):
         self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PROCESS_PID}@{socket.gethostname()}:{APP_MODE.value}/"        
-        raise BuildOkError
+        raise BuildOkError()
