@@ -1,6 +1,7 @@
 from typing import Dict, Literal
 from fastapi import APIRouter, Query, Request, Response, status, Body,HTTPException
 from app.container import Get
+from app.definition._router import service_lock_decorator
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.qdrant_service import QdrantService
 from app.services.database.redis_service import RedisService
@@ -25,6 +26,7 @@ def VectorDBRouter(depends:list=None):
     router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
 
     @router.post('/',status_code=status.HTTP_201_CREATED)
+    @service_lock_decorator(QdrantService)
     async def create_collection(request:Request,response:Response,collection:Dict = Body()):
         if not isinstance(collection,dict):
             raise HTTPException(
@@ -41,14 +43,16 @@ def VectorDBRouter(depends:list=None):
         return 
 
     @router.get('/s/{collection_name}',status_code=status.HTTP_200_OK)
-    async def get_collection(collection_name:str,request:Request,response:Response):
+    @service_lock_decorator(QdrantService)
+    async def get_collection(request:Request,response:Response,collection_name:str):
         collection = await qdrantService.get_collection(
             collection_name
             )
         return collection.model_dump()
        
     @router.delete('/',status_code=status.HTTP_200_OK)
-    async def delete_collection(collection_name:str,request:Request,response:Response,mode:Literal['hard','soft']=Query('soft')):
+    @service_lock_decorator(QdrantService)
+    async def delete_collection(request:Request,response:Response,collection_name:str,mode:Literal['hard','soft']=Query('soft')):
         if mode =='hard':
             res = await qdrantService.delete_collections(collection_name)
             if not res:
@@ -61,12 +65,14 @@ def VectorDBRouter(depends:list=None):
             return res.model_dump()
 
     @router.get('/',status_code=status.HTTP_200_OK)
-    async def get_all_collection(collection_name:str,request:Request,response:Response):
+    @service_lock_decorator(QdrantService)
+    async def get_all_collection(request:Request,response:Response,collection_name:str):
         collections = await qdrantService.get_collections()
         return collections.model_dump()
 
     @router.delete('/docs/{collection_name}/{job_id}',status_code=status.HTTP_200_OK)
-    async def delete_document(collection_name:str,job_id:str,request:Request,response:Response):
+    @service_lock_decorator(QdrantService)
+    async def delete_document(job_id:str,request:Request,response:Response,collection_name:str):
         document_name = job_id
         res = await qdrantService.delete_document(
             document_name=document_name,

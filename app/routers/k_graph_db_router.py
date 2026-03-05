@@ -1,18 +1,19 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, Response
 from app.container import Get
+from app.definition._router import service_lock_decorator
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.graphiti_service import GraphitiService
 from app.services.database.redis_service import RedisService
+from app.services.worker.arq_service import ArqDataTaskService
 
 prefix='/k-graph'
-
 
 def KnowledgeGraphDBRouter(depends:list=None):
     if depends == None:
         depends =[]
 
     memcachedService= Get(MemCachedService)
-    redisService = Get(RedisService)
+    arqService = Get(ArqDataTaskService)
     graphitiService = Get(GraphitiService)
 
     async def on_startup():
@@ -28,29 +29,34 @@ def KnowledgeGraphDBRouter(depends:list=None):
     ########################         #######################
 
     @router.get('/document/{document_id}/')
-    async def get_document_graph(self,document_id:str):
+    @service_lock_decorator(GraphitiService)
+    async def get_document_graph(response:Response,request:Request,document_id:str):
         ...
 
     @router.delete('/document/{document_id}/')
-    async def delete_document(self,document_id:str):
+    @service_lock_decorator(GraphitiService)
+    async def delete_document(response:Response,request:Request,document_id:str):
         ...
 
     ########################         #######################
     ########################         #######################
 
     @router.get('/domain/{domain}/')
-    async def get_domain_graph(self,domain:str):
+    @service_lock_decorator(GraphitiService)
+    async def get_domain_graph(response:Response,request:Request,domain:str):
         ...
     
     @router.delete('/domain/{domain}/')
-    async def delete_domain(self,domain:str):
+    @service_lock_decorator(GraphitiService)
+    async def delete_domain(response:Response,request:Request,domain:str,):
         ...
     
     ########################         #######################
     ########################         #######################
 
     @router.post('/playground/')
-    async def graphiti_playground(self,):
+    @service_lock_decorator(GraphitiService)
+    async def graphiti_playground(response:Response,request:Request):
         await graphitiService.search(
             "",
             group_type='domain',

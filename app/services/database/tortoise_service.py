@@ -1,9 +1,10 @@
 import psycopg2
 from tortoise import Tortoise
-from app.definition._service import LinkDep, Service
+from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
+from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import VaultConstant, VaultTTLSyncConstant
 
@@ -12,8 +13,8 @@ from app.utils.constant import VaultConstant, VaultTTLSyncConstant
 class TortoiseConnectionService(TempCredentialsDatabaseService):
     DATABASE_NAME = 'notifyr'
 
-    def __init__(self, configService: ConfigService,vaultService:VaultService):
-        super().__init__(configService, None,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
+    def __init__(self, configService: ConfigService,vaultService:VaultService,fileService:FileService):
+        super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
 
     def build(self,build_state=-1):
         try:
@@ -25,7 +26,8 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 host=self.configService.POSTGRES_HOST,
                 port=5432
             )
-            super().build()
+            if build_state == DEFAULT_BUILD_STATE:
+                super().build(build_state)
             self.generate_creds()
         except Exception as e:
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")

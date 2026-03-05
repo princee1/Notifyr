@@ -15,7 +15,7 @@ from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import MinioConstant, VaultTTLSyncConstant
 from app.utils.tools import RunInThreadPool
-from ..config_service import  ConfigService
+from ..config_service import  ConfigService, UvicornWorkerService
 from typing import List, Dict
 #from aiobotocore import client
 
@@ -38,7 +38,9 @@ class ObjectS3Service(TempCredentialsDatabaseService):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
             self.client_init()
-            super().build()
+            if build_state == DEFAULT_BUILD_STATE:
+                super().build(build_state)
+            
         except ServerError as e:
             raise BuildFailureError(f'Failed to build objectS3Service due to server error: {str(e)}') from e
         except InvalidResponseError as e:

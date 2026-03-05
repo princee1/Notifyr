@@ -150,6 +150,22 @@ setup_engine(){
     fi
   }
   
+  # Minio plugin registration
+  local MINIO_CHECKSUM=$( sha256sum /etc/vault/plugins/vault-plugin-secrets-minio 2>/dev/null | cut -d " " -f 1 )
+  [[ -n "$MINIO_CHECKSUM" ]] || die "Could not calculate vault-plugin-secrets-minio plugin sha256 sum"
+
+  vault plugin register -sha256="$MINIO_CHECKSUM" -command="vault-plugin-secrets-minio" secret vault-plugin-secrets-minio
+
+  local NEO4J_CHECKSUM=$( sha256sum /etc/vault/plugins/neo4j-vault-database-plugin 2>/dev/null | cut -d " " -f 1 )
+  [[ -n "$NEO4J_CHECKSUM" ]] || die "Could not calculate neo4j-vault-database-plugin plugin sha256 sum"
+
+  echo "Neo4j Checksum $NEO4J_CHECKSUM"
+
+  # Neo4j database engine addition
+  vault write sys/plugins/catalog/database/neo4j-vault-database-plugin \
+    sha256="$NEO4J_CHECKSUM" \
+    command="neo4j-vault-database-plugin"
+
   echo "Enabling secrets engines..."
 
   # Enable core KV, Transit, Database, RabbitMQ, AWS engines
@@ -159,17 +175,6 @@ setup_engine(){
   vault secrets enable -path=notifyr-database -seal-wrap database
   vault secrets enable -path=notifyr-rabbitmq -seal-wrap rabbitmq
   vault secrets enable -path=notifyr-aws -seal-wrap aws
-
-  # Minio plugin registration
-  local MINIO_CHECKSUM=$( sha256sum /etc/vault/plugins/vault-plugin-secrets-minio 2>/dev/null | cut -d " " -f 1 )
-  [[ -n "$MINIO_CHECKSUM" ]] || die "Could not calculate vault-plugin-secrets-minio plugin sha256 sum"
-  vault plugin register -sha256="$MINIO_CHECKSUM" -command="vault-plugin-secrets-minio" secret vault-plugin-secrets-minio
-
-  local NEO4J_CHECKSUM=$( sha256sum /etc/vault/plugins/neo4j-vault-database-plugin 2>/dev/null | cut -d " " -f 1 )
-  [[ -n "$NEO4J_CHECKSUM" ]] || die "Could not calculate neo4j-vault-database-plugin plugin sha256 sum"
-
-  # Neo4j database engine addition
-  vault write sys/plugins/catalog/notifyr-database/neo4j-vault-database-plugin sha256=$NEO4J_CHECKSUM  command="neo4j-vault-database-plugin"
 
   # Minio secrets engine enablement
   vault secrets enable \
@@ -478,22 +483,20 @@ setup_database_config(){
 
     vault write notifyr-database/roles/app-neo4j-ntfr-role \
       db_name="neo4j" \
-      default_ttl="12h" \
-      max_ttl="16h" \
-      creation_statements='
-          CREATE USER {{name}} SET PASSWORD "{{password}}" CHANGE NOT REQUIRED;
-          // GRANT ROLE notifyr-app TO {{name}};
-      '
-    
+      default_ttl="1d" \
+      max_ttl="2d" \
+      creation_statements='{ "db": "notifyr", "roles": [{ "role": "publisher" }, {"role": "architect" }] }'
+      # creation_statements='{ "db": "notifyr", "roles": [{ "role": "notifyr-app"}] }'
+
+
     vault write notifyr-database/roles/admin-neo4j-ntfr-role \
         db_name="neo4j" \
         default_ttl="30m" \
         max_ttl="1h" \
-        creation_statements='
-          CREATE USER {{name}} SET PASSWORD "{{password}}" CHANGE NOT REQUIRED;
-          // GRANT ROLE notifyr-admin TO {{name}};
-        '
-    setup_config_kv2 "mongo_roles" "set"
+        creation_statements='{ "db": "notifyr", "roles": [{ "role": "admin" }] }'
+        #creation_statements='{ "db": "notifyr", "roles": [{ "role": "notifyr-admin" }] }'
+      
+    setup_config_kv2 "neo4j_roles" "set"
   fi
 
 }
@@ -517,7 +520,7 @@ create_database_config(){
     setup_config_kv2 "postgres_connection" "set"
   fi
 
-  echo "waiting for mongodb server" && sleep 20
+  echo "waiting for mongodb server" && sleep 10
 
   # --- MONGODB CONNECTION ---
   if ! setup_config_kv2 "mongodb_connection" "check"; then
@@ -581,23 +584,27 @@ create_database_config(){
     setup_config_kv2 "rabbitmq_connection" "set"
   fi
 
+  echo "waiting for neo4j server" && sleep 15
+
   # --- NEO4J CONNECTION ---
   if ! setup_config_kv2 "neo4j_connection" "check"; then
     echo "Configuring Neo4J Connection..."
     vault write notifyr-database/config/neo4j \
       plugin_name="neo4j-vault-database-plugin" \
       allowed_roles="admin-neo4j-ntfr-role, app-neo4j-ntfr-role" \
-      connection_url="$GRAPHITI_PROTOCOL://{{username}}:{{password}}@$GRAPHITI_HOST:7687?database=notifyr" \
+      connection_url="$GRAPHITI_PROTOCOL://@$GRAPHITI_HOST:7687" \
       username="$NEO4J_USER" \
-      password="$NEO4J_PASSWORD"
-    
+      password="$NEO4J_PASSWORD" \
+      database="notifyr" \
+      edition="$NEO4J_EDITION"
+      
     vault write -f notifyr-database/rotate-root/neo4j
     setup_config_kv2 "neo4j_connection" "set"
   fi
     
 }
 
-create_aws_engine(){
+create_aws_config(){
   if setup_config_kv2 "aws_engine" "check"; then
     return
   fi
@@ -666,14 +673,14 @@ set_credit_topup_token
 echo "*************************** CREATE DEFAULT TOKEN/KEYS *********************"
 create_default_token
 
-echo "*************************** SETUP DATABASE ROLES (Checkpoints: postgres_roles, mongo_roles, redis_roles, minio_roles, rabbitmq_roles) *********************"
+echo "*************************** SETUP DATABASE ROLES (Checkpoints: postgres_roles, mongo_roles, redis_roles, minio_roles, rabbitmq_roles, neo4j_roles) *********************"
 setup_database_config
 
-echo "*************************** CREATE DATABASE CONNECTIONS (Checkpoints: postgres_connection, mongodb_connection, redis_connection, minio_connection, rabbitmq_connection) *********************"
+echo "*************************** CREATE DATABASE CONNECTIONS (Checkpoints: postgres_connection, mongodb_connection, redis_connection, minio_connection, rabbitmq_connection, neo4j_connection) *********************"
 create_database_config
 
 echo "*************************** CREATE AWS ENGINE *********************"
-# create_aws_engine
+# create_aws_config
 
 echo "*************************** FINISHING UP VAULT CONFIG *********************"
 

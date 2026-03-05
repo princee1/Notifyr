@@ -258,10 +258,11 @@ class VaultConstant:
     CHAT_KEY='chat-key'
     S3_REST_KEY='s3-rest-key'
 
-    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis','redis-celery-broker','redis-celery-backend']
+    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis','neo4j','redis-celery-broker','redis-celery-backend']
     MONGO_ROLE='mongo'
     POSTGRES_ROLE='postgres'
     REDIS_ROLE='redis'
+    NEO4J_ROLE='neo4j'
     CELERY_BROKER_ROLE='redis-celery-broker'
     CELERY_BACKEND_ROLE='redis-celery-backend'
 
@@ -304,6 +305,9 @@ class VaultTTLSyncConstant:
 
     MINIO_TTL=SECONDS_IN_AN_HOUR*12
     MINIO_MAX_TTL= SECONDS_IN_AN_HOUR *16
+
+    NEO4J_TTL = SECONDS_IN_AN_HOUR * 24 * 1
+    NEO4J_MAX_TTL = SECONDS_IN_AN_HOUR * 24 * 2
 
 ########################                     ########################################
 

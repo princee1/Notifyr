@@ -11,6 +11,7 @@ from app.interface.timers import IntervalParams, SchedulerInterface
 from app.services.config_service import ConfigService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
+from app.utils.globals import APP_MODE
 
 
 @AbstractServiceClass()
@@ -34,10 +35,14 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         self.b = b
         self.last_rotated = None
         self.auth_ttl = ttl
+        self.interval_built = False
 
     def build(self, build_state = ...):
-        delay = IntervalParams( seconds=self.random_buffer_interval(self.auth_ttl) )
-        self.interval_schedule(delay, self.creds_rotation,tuple(),{},f"{self.name}-creds_rotation")
+        if not self.interval_built:
+            delay = IntervalParams( seconds=self.random_buffer_interval(self.auth_ttl) )
+            self.interval_schedule(delay, self.creds_rotation,tuple(),{},f"{self.name}-[{APP_MODE}]-creds_rotation")
+            self.interval_built = True
+        
 
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:

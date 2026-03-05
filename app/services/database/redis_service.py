@@ -7,12 +7,13 @@ from typing_extensions import Literal
 from redis import Redis, ResponseError
 from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.callbacks import CALLBACKS_CONFIG
-from app.definition._service import Service
+from app.definition._service import DEFAULT_BUILD_STATE, Service
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.errors.db_error import RedisDatabaseDoesNotExistsError, RedisStreamDoesNotExistsError
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.database.base_db_service import BrokerService, ResultBackendService, TempCredentialsDatabaseService
+from app.services.file.file_service import FileService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
 from app.utils.constant import RedisConstant, SubConstant, VaultConstant
@@ -33,8 +34,8 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
     GROUP = 'NOTIFYR-GROUP'
     
-    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,uvicornWorkerService:UvicornWorkerService):
-        super().__init__(configService,None,vaultService,60*60*24*29,)
+    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,uvicornWorkerService:UvicornWorkerService,fileService:FileService):
+        super().__init__(configService,fileService,vaultService,60*60*24*29,)
         self.configService = configService
         self.reactiveService = reactiveService
         self.uvicornWorkerService = uvicornWorkerService
@@ -213,7 +214,8 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         else :
             self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         
-        super().build()
+        if build_state == DEFAULT_BUILD_STATE:
+            super().build(build_state)
 
         self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
             RedisConstant.CELERY_DB:self.redis_celery,

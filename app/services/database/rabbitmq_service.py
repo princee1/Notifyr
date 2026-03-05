@@ -1,4 +1,4 @@
-from app.definition._service import LinkDep, Service
+from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service
 from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import BrokerService, TempCredentialsDatabaseService
@@ -11,7 +11,7 @@ from app.utils.constant import RabbitMQConstant
 class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
     
     def __init__(self, configService:ConfigService, fileService:FileService, vaultService:VaultService):
-        super().__init__(configService, fileService, vaultService, 60*60*24*29)
+        super().__init__(configService, fileService, vaultService,60*60*24*29)
     
     def verify_dependency(self):
         if self.configService.BROKER_PROVIDER == 'redis':
@@ -35,7 +35,9 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
         try:
             connection = pika.BlockingConnection(params)
             connection.close()
-            super().build()
+            
+            if build_state == DEFAULT_BUILD_STATE:
+                super().build(build_state)
 
         except Exception as e:
             self.configService.BROKER_PROVIDER = 'redis'
@@ -46,3 +48,6 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
         if self.configService.BROKER_PROVIDER == 'redis':
             return None
         return f"amqp://{self.db_user}:{self.db_password}@{self.configService.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}"
+    
+    async def _creds_rotator(self):
+        self.creds = self.vaultService.rabbitmq_engine.generate_credentials()

@@ -356,6 +356,7 @@ services:
 
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_EDITION: ${NEO4J_EDITION:-community}
 
       AWS_VAULT_USER: set_user_in_container_start
       AWS_VAULT_PASSWORD: set_password_in_container_start

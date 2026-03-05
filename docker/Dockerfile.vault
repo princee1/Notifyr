@@ -18,7 +18,9 @@ WORKDIR /build
 
 RUN git clone https://github.com/princee1/vault-plugin-secrets-minio.git
 
-RUN git clone https://github.com/HomaiLabs/neo4j-vault-database-plugin.git
+# RUN git clone https://github.com/HomaiLabs/neo4j-vault-database-plugin.git
+
+RUN  git clone https://github.com/princee1/neo4j-vault-database-plugin.git
 
 WORKDIR /build/vault-plugin-secrets-minio/
 

@@ -9,8 +9,7 @@ CREATE ROLE notifyr-app;
 GRANT ACCESS ON DATABASE notifyr TO notifyr-app;
 
 // Graph-level privileges
-GRANT MATCH, CREATE, DELETE, SET PROPERTY, REMOVE PROPERTY
-  ON GRAPH notifyr TO notifyr-app;
+GRANT MATCH, CREATE, DELETE, SET PROPERTY, REMOVE PROPERTY ON GRAPH notifyr TO notifyr-app;
 
 // Schema privileges
 GRANT CREATE INDEX ON DATABASE notifyr TO notifyr-app;

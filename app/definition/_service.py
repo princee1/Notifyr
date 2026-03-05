@@ -214,7 +214,7 @@ class BaseService():
     def build(self,build_state:int=DEFAULT_BUILD_STATE):
         # warnings.warn(
         #     f"This method from the service class {self.__class__.__name__} has not been implemented yet.", UserWarning, 2)
-        raise BuildNotImplementedError(f"{self.name} not implemented")
+        raise BuildNotImplementedError(f"Service not implemented yet")
 
     def destroy(self,destroy_state:int=DEFAULT_DESTROY_STATE):
         warnings.warn(
@@ -314,7 +314,6 @@ class BaseService():
         except BuildNotImplementedError as e:
             if not quiet:
                 self.prettyPrinter.warning(f'{is_mini_service}[{now}] {self.__class__.__name__}: Service Not Implemented Yet', saveable=True)
-                self.prettyPrinter.wait(WAIT_TIME, False)
                 
             self.service_status = ServiceStatus.NOT_AVAILABLE
             reason = 'Service not Built' if len(e.args) == 0 else e.args[0]

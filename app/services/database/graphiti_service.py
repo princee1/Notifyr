@@ -7,7 +7,9 @@ from app.errors.service_error import BuildError, BuildFailureError, BuildNotImpl
 from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.custom_service import CustomService
+from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.database.mongoose_service import MongooseService
+from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from neo4j import AsyncGraphDatabase,GraphDatabase
 
@@ -29,11 +31,13 @@ from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT,SearchConfig,SearchResults
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.nodes import Node
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
 
 from app.utils.helper import uuid_v1_mc
-from app.utils.constant import GraphitiConstant, LLMProviderConstant
+from app.utils.constant import GraphitiConstant, LLMProviderConstant, VaultConstant, VaultTTLSyncConstant
 import app.prompt.graphiti_prompt as graphiti_prompt
+from app.utils.globals import APP_MODE, ApplicationMode
 
 
 CLIENT_MAP:Dict[LLMProviderConstant.LLMProvider,Type[LLMClient]] = {
@@ -49,13 +53,11 @@ GRAPHITI_BUILD_STATE = 421
 @Service(
     links=[LinkDep(service=LLMProviderService,to_build=True,build_state=GRAPHITI_BUILD_STATE)]
 )
-class GraphitiService(BaseService):
+class GraphitiService(TempCredentialsDatabaseService):
       
-    def __init__(self,configService:ConfigService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMProviderService,customService:CustomService):
-        super().__init__()
-        self.configService = configService
+    def __init__(self,configService:ConfigService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMProviderService,customService:CustomService,fileService:FileService):
+        super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.VAULT_TOKEN_TTL)
         self.uvicornWorkerService = uvicornWorkerService
-        self.vaultService = vaultService
         self.mongooseService = mongooseService
         self.llmProviderService = llmProviderService
         self.customService = customService
@@ -79,15 +81,24 @@ class GraphitiService(BaseService):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
             client = None
+            self.creds = self.vaultService.database_engine.generate_credentials(role='neo4j')
             if build_state == DEFAULT_BUILD_STATE:
-                self.client = AsyncGraphDatabase().driver(self.uri,auth=('neo4j','password'))
-                client = GraphDatabase.driver(self.uri,auth=('neo4j','password'),user_agent=self.uvicornWorkerService.INSTANCE_ID)
+                self.client = AsyncGraphDatabase().driver(self.uri,auth=(self.db_user,self.db_password))
+                client = GraphDatabase.driver(self.uri,auth=(self.db_user,self.db_password),user_agent=self.uvicornWorkerService.INSTANCE_ID)
                 client.verify_connectivity()
                 client.verify_authentication()
+            
+            if build_state == DEFAULT_BUILD_STATE and APP_MODE == ApplicationMode.agentic:
+                super().build(build_state)
 
             providers = self._setup_llm_provider()
             llm_client,embedding,cross_encoder = self._initialize_graphiti_llm(*providers)
-            self.graphiti = Graphiti(self.uri,'neo4j','password',llm_client=llm_client,embedder=embedding,cross_encoder=cross_encoder,max_coroutines=self.configService.GRAPHITI_MAX_COROUTINES)
+            self.graphiti = Graphiti(graph_driver=Neo4jDriver(
+                self.uri,
+                self.db_user,
+                self.db_password,
+                GraphitiConstant.DATABASE_NAME
+            ),llm_client=llm_client,embedder=embedding,cross_encoder=cross_encoder,max_coroutines=self.configService.GRAPHITI_MAX_COROUTINES)
 
         except BuildError as e:
             raise e
@@ -237,7 +248,7 @@ class GraphitiService(BaseService):
     async def get_domain_nodes(self, domain: str, domain_type: Literal['domain', 'contact']) -> list[dict]:
         formatted_domain_id = f'{GraphitiConstant.DOMAIN_PREFIX if domain_type == "domain" else GraphitiConstant.CONTACT_PREFIX}{domain}'
         
-        async with self.client.session() as session:
+        async with self.client.session(database=GraphitiConstant.DATABASE_NAME) as session:
             result = await session.run(
                 """
                 MATCH (n:Entity|Episode|Community) 
@@ -258,7 +269,7 @@ class GraphitiService(BaseService):
         Returns:
             List of node dictionaries with matching UUIDs
         """
-        async with self.client.session() as session:
+        async with self.client.session(database=GraphitiConstant.DATABASE_NAME) as session:
             result = await session.run(
                 """
                 MATCH (n:Entity|Episode|Community) 
@@ -279,7 +290,7 @@ class GraphitiService(BaseService):
         Returns:
             Number of nodes deleted
         """
-        async with self.client.session() as session:
+        async with self.client.session(database=GraphitiConstant.DATABASE_NAME) as session:
             result = await session.run(
                 """
                 MATCH (n:Entity|Episode|Community) 
@@ -403,5 +414,5 @@ class GraphitiService(BaseService):
         
     @property
     def uri(self):
-        return f'{self.configService.GRAPHITI_PROTOCOL}://{self.configService.GRAPHITI_HOST}:7687?database={GraphitiConstant.DATABASE_NAME}'
+        return f'{self.configService.GRAPHITI_PROTOCOL}://{self.configService.GRAPHITI_HOST}:7687'
     

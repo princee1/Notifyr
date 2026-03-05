@@ -25,6 +25,7 @@ from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqDataTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import (
     AbortedJobResponse,
+    DataIngestWebCrawlingModel,
     IngestDataUriMetadata,
     EnqueueResponse,
     IngestFileEnqueueResponse,
@@ -209,7 +210,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,AgenticHandler,RedisHandler,MiniServiceHandler,VaultHandler)
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_web_crawling(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:DataIngestWebCrawlingModel,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing a `WebCrawlTask` and enqueues it.
         """

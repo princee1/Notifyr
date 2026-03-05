@@ -27,7 +27,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
         """
     
         @functools.wraps(func)
-        async def wrapper(ctx:dict[str,Any],*args,uri:str=None,request_id:str=None,step:Step = None,_nickname:str=nickname,size:int=None,**kwargs):
+        async def wrapper(ctx:dict[str,Any],*args,uri:str=None,request_id:str=None,step:Step = None,state:dict=None,_nickname:str=nickname,size:int=None,**kwargs):
 
             async def refund():
                 if step["current_step"] < DataLoaderStepIndex.PROCESS:
@@ -38,7 +38,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                 
                 if step['current_step'] < DataLoaderStepIndex.CLEANUP and nickname == ArqDataTaskConstant.FILE_DATA_TASK:
                     _step = Step(current_step=DataLoaderStepIndex.CLEANUP-1,steps={},current_params=None)
-                    await func(ctx,*args,**kwargs,step=_step,uri=uri,request_id=request_id,size=size)
+                    await func(ctx,*args,**kwargs,step=_step,uri=uri,request_id=request_id,size=size,state=state)
       
             if step==None:
                 step = Step(current_step=0,steps={},current_params=None)
@@ -55,7 +55,7 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                 if graph_config != None:
                     graph_config = KGraphConfig(**graph_config)
 
-                return await func(ctx,*args,**kwargs,vector_config=vector_config,graph_config=graph_config,step=step,uri=uri,request_id=request_id,size=size)
+                return await func(ctx,*args,**kwargs,vector_config=vector_config,graph_config=graph_config,step=step,uri=uri,request_id=request_id,size=size,state=state)
             except (asyncio.CancelledError,Exception) as e:
                 await refund()
                 raise e
@@ -218,13 +218,14 @@ if APP_MODE == ApplicationMode.arq:
     @staticmethod
     async def shutdown(ctx:dict[str,Any]):
         mongooseService = Get(MongooseService)
-        graphitiService = Get(graphitiService)
+        graphitiService = Get(GraphitiService)
         redisService = Get(RedisService)
-
         qdrantService = Get(QdrantService)
+        
         vaultService = Get(VaultService)
 
         redisService.revoke_lease()
         mongooseService.revoke_lease()
+        graphitiService.revoke_lease()
         
         vaultService.revoke_auth_token()
