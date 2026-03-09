@@ -28,7 +28,7 @@ from app.services.worker.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.classes.celery import CeleryRedisVisibilityTimeoutError, CelerySchedulerOptionError, TaskHeaviness, TaskType,SchedulerModel
-from app.services.worker.arq_service import ArqDataTaskService, DataTaskNotFoundError
+from app.services.worker.arq_service import ArqIngestTaskService, DataTaskNotFoundError
 from app.utils.constant import CostConstant, LLMProviderConstant
 from app.utils.helper import APIFilterInject, flatten_dict,b64_encode
 from fastapi import HTTPException, Request, UploadFile, status
@@ -385,7 +385,7 @@ class ArqDataTaskGuard(Guard):
     def __init__(self,data_task_name:str):
         super().__init__()
         self.data_task_name = data_task_name
-        self.arqService = Get(ArqDataTaskService)
+        self.arqService = Get(ArqIngestTaskService)
 
     async def guard(self):
         if self.data_task_name not in self.arqService.task_registry:

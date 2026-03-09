@@ -82,7 +82,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
     fileService:FileService = Get(FileService)
     graphitiService:GraphitiService = Get(GraphitiService)
     costService:CostService = Get(CostService)
-    arqService:ArqDataTaskService = Get(ArqDataTaskService)
+    arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
 
     file_path = arqService.compute_data_file_upload_path(uri)
 
@@ -137,7 +137,7 @@ async def process_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',ve
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
     costService:CostService = Get(CostService)
-    arqService:ArqDataTaskService = Get(ArqDataTaskService)
+    arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
 
 
 @RegisterTask(ArqDataTaskConstant.API_DATA_TASK,False)
@@ -145,7 +145,7 @@ async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorC
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
     costService:CostService = Get(CostService)
-    arqService:ArqDataTaskService = Get(ArqDataTaskService)
+    arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
 
 
 @RegisterTask(ArqDataTaskConstant.WEB_DATA_TASK,False)
@@ -153,7 +153,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
     costService:CostService = Get(CostService)
-    arqService:ArqDataTaskService = Get(ArqDataTaskService)
+    arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
     customService:CustomService = Get(CustomService)
     redisService:RedisService = Get(RedisService)
     
@@ -172,14 +172,14 @@ if APP_MODE == ApplicationMode.arq:
     from app.services import RedisService
     from app.services import VaultService
     from app.services import CostService
-    from app.services.worker.arq_service import ArqDataTaskService,QUEUE_NAME
+    from app.services.worker.arq_service import ArqIngestTaskService,QUEUE_NAME
     from app.container import Get,build_container
     import asyncio
     from arq import Retry
 
     build_container(quiet=True)
 
-    arqService = Get(ArqDataTaskService)
+    arqService = Get(ArqIngestTaskService)
     arqService.register_task(DATA_TASK_REGISTRY_NAME)
 
     from app.cost.file_cost import FileCost

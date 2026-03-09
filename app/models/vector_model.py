@@ -4,6 +4,7 @@ from app.models.file_model import FileResponseUploadModel
 
 class DeleteCollectionModel(FileResponseUploadModel):
     gateway_body:dict
+    collection_name:str
     job_dequeued:list[str]
     jod_deleted:list[str]
 

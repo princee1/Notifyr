@@ -19,7 +19,8 @@ from app.models.file_model import UriMetadata
 from app.models.vector_model import DeleteCollectionModel, QdrantCollectionModel
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.config_service import ConfigService
-from app.services.worker.arq_service import ArqDataTaskService, JobStatus, JobStatusNotValidError
+from app.services.database.redis_service import RedisService
+from app.services.worker.arq_service import ArqIngestTaskService, JobStatus, JobStatusNotValidError
 from app.utils.constant import ArqDataTaskConstant, CostConstant
 import aiohttp
 
@@ -30,7 +31,7 @@ import aiohttp
 class VectorDBRessource(BaseHTTPRessource):
     
     @InjectInMethod()
-    def __init__(self,arqService:ArqDataTaskService,remoteAgentService:RemoteAgentService,configService:ConfigService):
+    def __init__(self,arqService:ArqIngestTaskService,remoteAgentService:RemoteAgentService,configService:ConfigService):
         super().__init__(None,None)
         self.arqService = arqService
         self.remoteAgentService = remoteAgentService
@@ -79,8 +80,8 @@ class VectorDBRessource(BaseHTTPRessource):
     @Throttle(uniform=(800,1500))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @PingService([RemoteAgentService,ArqDataTaskService])
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
+    @UseServiceLock(RedisService,ArqIngestTaskService,lockType='reader')
     @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
@@ -104,7 +105,7 @@ class VectorDBRessource(BaseHTTPRessource):
             res_body = await res.json()
             if res.status != status.HTTP_200_OK:
                raise aiohttp.ClientPayloadError(res_body,res.status)
-    
+
         for j in jobs_queue:
             merchant.payment(
                 self.arqService.abort,
@@ -120,17 +121,18 @@ class VectorDBRessource(BaseHTTPRessource):
                 j,
                 'vector_config'
                 )
-        return DeleteCollectionModel(metadata=meta,gateway_body=res_body,job_dequeued=jobs_queue,jod_deleted=jobs_done)
+        
+        return DeleteCollectionModel(metadata=meta,gateway_body=res_body,job_dequeued=jobs_queue,jod_deleted=jobs_done,collection_name=collection_name)
             
     @UseLimiter('1/minutes')
     @Throttle(uniform=(800,1500))
-    @PingService([RemoteAgentService,ArqDataTaskService])
+    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @UseServiceLock(RedisService,ArqIngestTaskService,lockType='reader')
     @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
-    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE])
+    @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete result and the point associated with the job_id filtered by the task_name """
 
@@ -145,8 +147,10 @@ class VectorDBRessource(BaseHTTPRessource):
         if not vector_config:
             raise IngestConfigNotPresentError('vector_config','vector')
         
+        size = info.kwargs.get('size',0) /2 if info.kwargs.get('graph_config',None) != None else info.kwargs.get('size',0)
+        
         collection_name = vector_config.get('collection_name',None)
-        meta = UriMetadata(uri = info.kwargs['uri'],size = info.kwargs.get('size',0))
+        meta = IngestDataUriMetadata(uri = info.kwargs['uri'],size = size,sha=info.kwargs.get('sha',None)  )
 
         async with self.session.delete(f'/docs/{collection_name}/{job_id}') as res:
             res_body = await res.json()
@@ -158,5 +162,5 @@ class VectorDBRessource(BaseHTTPRessource):
             job_id,
             'vector_config'
             )
-        return DeleteCollectionModel(metadata=[meta],gateway_body=res_body,job_dequeued=[],jod_deleted=[job_id])
+        return DeleteCollectionModel(metadata=[meta],gateway_body=res_body,job_dequeued=[],jod_deleted=[job_id],collection_name=collection_name)
        

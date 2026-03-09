@@ -16,13 +16,14 @@ from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.services.agent.llm_provider_service import LLMProviderService
 from app.services.config_service import ConfigService
+from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
-from app.services.worker.arq_service import ArqDataTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
+from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import (
     AbortedJobResponse,
     DataIngestWebCrawlingModel,
@@ -44,7 +45,7 @@ from app.depends.variables import force_update_query
 class JobArqRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self,configService:ConfigService,arqService:ArqDataTaskService,fileService:FileService,settingService:SettingService):
+    def __init__(self,configService:ConfigService,arqService:ArqIngestTaskService,fileService:FileService,settingService:SettingService):
         super().__init__(None,None)
         self.arqService = arqService
         self.configService = configService
@@ -52,24 +53,24 @@ class JobArqRessource(BaseHTTPRessource):
         self.settingService = settingService
     
     @UseHandler(AsyncIOHandler)
-    @PingService([ArqDataTaskService])
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @PingService([ArqIngestTaskService])
+    @UseServiceLock(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
     async def get_queued_jobs(self, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.arqService.get_queued_jobs()
         
     @UseHandler(AsyncIOHandler)
-    @PingService([ArqDataTaskService])
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @PingService([ArqIngestTaskService])
+    @UseServiceLock(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
     @BaseHTTPRessource.HTTPRoute('/results/', methods=[HTTPMethod.GET])
     async def get_jobs_result(self, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.arqService.get_jobs_results()
         
     @UseHandler(AsyncIOHandler)    
-    @PingService([ArqDataTaskService])
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @PingService([ArqIngestTaskService])
+    @UseServiceLock(ArqIngestTaskService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/info/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_info(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
@@ -77,8 +78,8 @@ class JobArqRessource(BaseHTTPRessource):
         return info
 
     @UseHandler(AsyncIOHandler)
-    @PingService([ArqDataTaskService])
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @PingService([ArqIngestTaskService])
+    @UseServiceLock(ArqIngestTaskService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/result/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_result(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
@@ -87,8 +88,8 @@ class JobArqRessource(BaseHTTPRessource):
 
     @UseLimiter('5/hour')
     @Throttle(uniform=(100,300))
-    @PingService([ArqDataTaskService])
-    @UseServiceLock(ArqDataTaskService,lockType='reader')
+    @PingService([ArqIngestTaskService])
+    @UseServiceLock(ArqIngestTaskService,lockType='reader')
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{job_id}/', methods=[HTTPMethod.DELETE],response_model=AbortedJobResponse)
@@ -123,7 +124,7 @@ class JobArqRessource(BaseHTTPRessource):
                 )
 
 @UseRoles([Role.ADMIN])
-@PingService([ArqDataTaskService])
+@PingService([ArqIngestTaskService])
 @IncludeRessource(JobArqRessource)
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,CostHandler,DataIngestHandler)
@@ -138,7 +139,7 @@ class DataIngestRessource(BaseHTTPRessource):
         return True,""
 
     @InjectInMethod()
-    def __init__(self,configService:ConfigService,vaultService:VaultService,fileService:FileService,arqService:ArqDataTaskService):
+    def __init__(self,configService:ConfigService,vaultService:VaultService,fileService:FileService,arqService:ArqIngestTaskService):
         super().__init__(None,None)
         self.configService = configService
         self.vaultService = vaultService
@@ -148,9 +149,9 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseLimiter('10/hour')
     @Throttle(normal=(300,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @PingService([LLMProviderService])
+    @PingService([RedisService,LLMProviderService])
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
-    @UseServiceLock(ArqDataTaskService,LLMProviderService,lockType='reader')
+    @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,AgenticHandler,RedisHandler)
@@ -203,8 +204,8 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe())
     @Throttle(normal=(300,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @PingService([LLMProviderService])
-    @UseServiceLock(ArqDataTaskService,LLMProviderService,lockType='reader')
+    @PingService([RedisService,LLMProviderService])
+    @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard(crawl=True))
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
@@ -219,12 +220,13 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe())
     @Throttle(normal=(300,150))
     @UsePermission(ProfilePermission)
+    @PingService([RedisService,LLMProviderService])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(MiniServiceInjectorPipe(ProfileService))
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,AgenticHandler,RedisHandler)
-    @UseServiceLock(ArqDataTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
+    @UseServiceLock(RedisService,ArqIngestTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False),LLMProviderGuard(vector=False))
     @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -235,11 +237,11 @@ class DataIngestRessource(BaseHTTPRessource):
 
     @Throttle(normal=(300,150))
     @UsePipe(MerchantPipe())
-    @PingService([LLMProviderService])
+    @PingService([RedisService,LLMProviderService])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler,AgenticHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
-    @UseServiceLock(ArqDataTaskService,LLMProviderService,lockType='reader')
+    @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),LLMProviderGuard(research=True))
     @BaseHTTPRessource.HTTPRoute('/research/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):

@@ -198,7 +198,10 @@ class LLMProviderService(BaseMiniServiceManager):
         self._ensure_config(fallback_providers)
         
         super().build(state_counter)
-    
+
+    async def pingService(self, infinite_wait, data, profile = None, as_manager = False, **kwargs):
+        ...
+        
     def _ensure_config(self, fallback_providers: dict[Literal['graphiti','vector','crawl','research'], str]):
         """
         Ensure all required configs are populated. If missing, use fallback provider

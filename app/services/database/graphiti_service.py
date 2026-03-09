@@ -9,6 +9,7 @@ from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.custom_service import CustomService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.database.mongoose_service import MongooseService
+from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from neo4j import AsyncGraphDatabase,GraphDatabase
@@ -55,12 +56,13 @@ GRAPHITI_BUILD_STATE = 421
 )
 class GraphitiService(TempCredentialsDatabaseService):
       
-    def __init__(self,configService:ConfigService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMProviderService,customService:CustomService,fileService:FileService):
+    def __init__(self,configService:ConfigService,redisService:RedisService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMProviderService,customService:CustomService,fileService:FileService):
         super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.VAULT_TOKEN_TTL)
         self.uvicornWorkerService = uvicornWorkerService
         self.mongooseService = mongooseService
         self.llmProviderService = llmProviderService
         self.customService = customService
+        self.redisService = redisService
     
     def verify_dependency(self):
         provider_config = self.llmProviderService.graphiti_config
@@ -303,10 +305,12 @@ class GraphitiService(TempCredentialsDatabaseService):
             record = await result.single()
             return record['deleted_count'] if record else 0
 
-    async def delete_domain(self,domain:str,batch:int=100):
+    async def delete_domain(self,domain:str,domain_type: Literal['domain', 'contact'],batch:int=100):
+        formatted_domain_id = f'{GraphitiConstant.DOMAIN_PREFIX if domain_type == "domain" else GraphitiConstant.CONTACT_PREFIX}{domain}'
+
         await Node.delete_by_group_id(
             self.client,
-            group_id=domain,
+            group_id=formatted_domain_id,
             batch_size=batch
         )
 

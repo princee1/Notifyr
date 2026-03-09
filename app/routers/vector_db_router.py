@@ -5,7 +5,7 @@ from app.definition._router import service_lock_decorator
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.qdrant_service import QdrantService
 from app.services.database.redis_service import RedisService
-from app.services.worker.arq_service import ArqDataTaskService
+from app.services.worker.arq_service import ArqIngestTaskService
 
 prefix='/vector'
 
@@ -15,7 +15,7 @@ def VectorDBRouter(depends:list=None):
 
     qdrantService = Get(QdrantService)
     memcachedService= Get(MemCachedService)
-    arqService = Get(ArqDataTaskService)
+    arqService = Get(ArqIngestTaskService)
 
     async def on_startup():
         ...

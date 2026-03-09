@@ -62,7 +62,7 @@ class JobInProgressError(BaseError):
 
 
 @Service()
-class ArqDataTaskService(BaseService):
+class ArqIngestTaskService(BaseService):
 
     def build(self, build_state = ...):
         if APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.arq:
