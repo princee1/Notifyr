@@ -44,7 +44,7 @@ class WebhookService(BaseMiniServiceManager):
 
     def verify_dependency(self):
         if not CAPABILITIES['webhook']:
-            raise BuildWarningError
+            raise BuildWarningError('Webhook not activated, see the deploy configuration...')
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
         count = self.profilesService.MiniServiceStore.filter_count(lambda p: issubclass_of(WebhookProfileModel,p.model.__class__)  )

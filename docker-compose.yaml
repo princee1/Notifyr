@@ -170,6 +170,7 @@ services:
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
+      - INSTALL_CRAWL4AI=${INSTALL_CRAWL4AI:-false}
     networks:
       - app_net
       - data_net
@@ -201,6 +202,7 @@ services:
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - QDRANT_HOST=${QDRANT_HOST-qdrant}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
+      - INSTALL_CRAWL4AI=${INSTALL_CRAWL4AI:-false}
       - GRAPHITI_MAX_COROUTINES=${GRAPHITI_MAX_COROUTINES:-10}
       - GRAPHITI_PROTOCOL=${GRAPHITI_PROTOCOL:-neo4j}
       - GRAPHITI_SERVICE=${GRAPHITI_SERVICE:-neo4j}
@@ -216,6 +218,7 @@ services:
     build:
       args:
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
+      - INSTALL_CRAWL4AI=${INSTALL_CRAWL4AI:-false}
       context: ./
       dockerfile: ./docker/Dockerfile.agentic
     secrets:

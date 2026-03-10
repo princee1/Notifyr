@@ -23,7 +23,7 @@ class EmailService(_service.BaseMiniServiceManager):
 
     def verify_dependency(self):
         if self.profilesService.service_status not in _service.ACCEPTABLE_STATES:
-            raise _service.BuildFailureError
+            raise _service.BuildFailureError('No email profile found')
 
     async def async_verify_dependency(self):
         async with self.profilesService.statusLock.reader:

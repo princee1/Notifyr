@@ -19,4 +19,4 @@ class WorkflowService(BaseService):
 
     def verify_dependency(self):
         if not CAPABILITIES['workflow']:
-            raise BuildWarningError
+            raise BuildWarningError('Workflow not activated, see deploy configuration...')

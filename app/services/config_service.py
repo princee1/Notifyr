@@ -179,7 +179,8 @@ class ConfigService(_service.BaseService):
         self.ASSET_MODE = AssetMode(self.getenv("ASSET_MODE",'local' if self.MODE == MODE.DEV_MODE else 's3').lower())
 
         self.INSTALL_DOCLING:bool = ConfigService.parseToBool(self.getenv('INSTALL_DOCLING','false'),False)
-        
+        self.INSTALL_CRAWL4AI:bool = ConfigService.parseToBool(self.getenv('INSTALL_CRAWL4AI','false'),False)
+
         # S3 STORAGE CONFIG #
         self.S3_CRED_TYPE:Literal['MINIO','AWS'] = self.getenv('S3_CRED_TYPE','MINIO').upper()
         self.S3_ENDPOINT:str= self.getenv('S3_ENDPOINT','127.0.0.1:9000' if self.MODE == MODE.DEV_MODE else 'minio:9000')

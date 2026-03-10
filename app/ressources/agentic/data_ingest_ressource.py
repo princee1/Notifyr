@@ -1,5 +1,5 @@
 from typing import Annotated, List
-from fastapi import Depends, File, Request, Response, UploadFile,status
+from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
@@ -138,6 +138,16 @@ class DataIngestRessource(BaseHTTPRessource):
             return False,"Docling is not installed"
         return True,""
 
+    @staticmethod
+    async def crawl4ai_guard():
+        configService = Get(ConfigService)
+        if not configService.INSTALL_CRAWL4AI:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Crawl4ai is not installed"
+            )
+        
+
     @InjectInMethod()
     def __init__(self,configService:ConfigService,vaultService:VaultService,fileService:FileService,arqService:ArqIngestTaskService):
         super().__init__(None,None)
@@ -202,13 +212,13 @@ class DataIngestRessource(BaseHTTPRessource):
 
     @UseLimiter('5/hour')
     @UsePipe(MerchantPipe())
-    @Throttle(normal=(300,150))
+    @Throttle(normal=(700,1500))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @PingService([RedisService,LLMProviderService])
-    @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard(crawl=True))
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
+    @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard(crawl=True),crawl4ai_guard)
     @UseHandler(ArqHandler,AsyncIOHandler,AgenticHandler,RedisHandler,MiniServiceHandler,VaultHandler)
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:DataIngestWebCrawlingModel,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):

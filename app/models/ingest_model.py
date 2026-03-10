@@ -5,6 +5,11 @@ from .file_model import FileResponseUploadModel, UriMetadata
 from app.classes.scheduler import TimedeltaSchedulerModel
 
 
+###################################################################################################
+###########################	          Base Ingest Model				 ##############################
+###################################################################################################
+
+
 class VectorConfig(BaseModel):
 	collection_name: str
 	category: str
@@ -15,11 +20,6 @@ class KGraphConfig(BaseModel):
 	edges:Optional[list[str]] = []
 	description:Optional[str] = None
 	instruction:Optional[str] = None
-
-
-###################################################################################################
-###########################										     ##############################
-###################################################################################################
 
 class DataIngestModel(BaseModel):
 	vector_config: Optional[VectorConfig] =  None
@@ -48,9 +48,21 @@ class DataIngestModel(BaseModel):
 
 		return self
 
+
+###################################################################################################
+###########################		    File Ingest Model			     ##############################
+###################################################################################################
+
+
 class DataIngestFileModel(DataIngestModel):
 	strategy: ParseStrategy
 	use_docling:bool = False
+
+
+###################################################################################################
+###########################										     ##############################
+###################################################################################################
+
 
 class DigestStrategy(BaseModel):
 	query:str

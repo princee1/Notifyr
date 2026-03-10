@@ -2,6 +2,8 @@ FROM notifyr/fastapi:community
 
 ARG INSTALL_DOCLING=false
 
+ARG INSTALL_CRAWL4AI=false
+
 COPY ./requirements_agentic.txt ./requirements_agentic.txt
 
 RUN pip install --no-cache-dir --no-build-isolation -r requirements_agentic.txt
@@ -10,7 +12,7 @@ COPY --chown=notifyr:notifyr ./scripts/agentic_installation.sh .
 
 RUN chmod +x ./agentic_installation.sh
 
-RUN ./agentic_installation.sh ${INSTALL_DOCLING}
+RUN ./agentic_installation.sh ${INSTALL_DOCLING} ${INSTALL_CRAWL4AI}
 
 COPY ./agentic_main.py ./agentic_main.py
 
