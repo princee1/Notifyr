@@ -187,49 +187,37 @@ class LLMProfileModel(BaseProfileModel):
             if len(diff) > 0:
                 raise ValueError(f'Those models: {list(diff)} are not associated with the provider:{self.provider}')
             
-            # Validate graph_config models
-            if self.graph_config is not None:
-                if self.graph_config.model and self.graph_config.model not in self.models:
-                    raise ValueError(f"Graph client config model '{self.graph_config.model}' is not listed in models for provider '{self.provider}'.")
-                
-                if self.graph_config.small_model and self.graph_config.small_model not in self.models:
-                    raise ValueError(f"Graph client config small_model '{self.graph_config.small_model}' is not listed in models for provider '{self.provider}'.")
+            # Validate config models against available models list
+            config_validations = [
+                (self.graph_config, 'Graph client config', [('model', 'model'), ('small_model', 'small_model')]),
+                (self.graph_reranker_config, 'Graph reranker config', [('model', 'model')]),
+                (self.crawl_config, 'Crawl config', [('model', 'model')]),
+            ]
             
-            # Validate graph_reranker_config models
-            if self.graph_reranker_config is not None:
-                if self.graph_reranker_config.model and self.graph_reranker_config.model not in self.models:
-                    raise ValueError(f"Graph reranker config model '{self.graph_reranker_config.model}' is not listed in models for provider '{self.provider}'.")
+            for config, config_name, model_fields in config_validations:
+                if config is not None:
+                    for field_name, attr_name in model_fields:
+                        model_value = getattr(config, attr_name, None)
+                        if model_value and model_value not in self.models:
+                            raise ValueError(f"{config_name} {field_name} '{model_value}' is not listed in models for provider '{self.provider}'.")
         
-            if self.crawl_config is not None:
-                if self.crawl_config.model and self.crawl_config.model not in self.models:
-                    raise ValueError(f"Crawl config model '{self.crawl_config.model}' is not listed in models for provider '{self.provider}'.")
-
-        # Validate vector_embedding_config
-        if self.vector_embedding_config is not None:
-            valid_embedding_models = VALID_EMBEDDING_MODELS.get(self.provider, [])
+        # Validate embedding configs
+        valid_embedding_models = VALID_EMBEDDING_MODELS.get(self.provider, [])
+        if self.vector_embedding_config or self.graph_embedding_config or self.research_config:
             if not valid_embedding_models:
-                raise ValueError(f"Provider '{self.provider}' does not support vector embeddings.")
-            
-            if self.vector_embedding_config.model not in valid_embedding_models:
-                raise ValueError(f"Embedding model '{self.vector_embedding_config.model}' is not valid for provider '{self.provider}'. Valid models: {valid_embedding_models}")
+                raise ValueError(f"Provider '{self.provider}' does not support embeddings.")
         
-        # Validate graph_embedding_config
-        if self.graph_embedding_config is not None:
-            valid_embedding_models = VALID_EMBEDDING_MODELS.get(self.provider, [])
-            if not valid_embedding_models:
-                raise ValueError(f"Provider '{self.provider}' does not support graph embeddings.")
-            
-            if self.graph_embedding_config.embedding_model not in valid_embedding_models:
-                raise ValueError(f"Graph embedding model '{self.graph_embedding_config.embedding_model}' is not valid for provider '{self.provider}'. Valid models: {valid_embedding_models}")
+        embedding_validations = [
+            (self.vector_embedding_config, 'model', 'Vector embedding'),
+            (self.graph_embedding_config, 'embedding_model', 'Graph embedding'),
+            (self.research_config, 'embedding_model', 'Research embedding'),
+        ]
         
-        # Validate research_config
-        if self.research_config is not None:
-            valid_embedding_models = VALID_EMBEDDING_MODELS.get(self.provider, [])
-            if not valid_embedding_models:
-                raise ValueError(f"Provider '{self.provider}' does not support graph embeddings.")
-            
-            if self.research_config.embedding_model not in valid_embedding_models:
-                raise ValueError(f"Graph embedding model '{self.research_config.embedding_model }' is not valid for provider '{self.provider}'. Valid models: {valid_embedding_models}")
+        for config, field_name, config_type in embedding_validations:
+            if config is not None:
+                model_value = getattr(config, field_name, None)
+                if model_value and model_value not in valid_embedding_models:
+                    raise ValueError(f"{config_type} model '{model_value}' is not valid for provider '{self.provider}'. Valid models: {valid_embedding_models}")
 
         return self
     
@@ -245,21 +233,13 @@ class LLMProfileModel(BaseProfileModel):
 
     @model_validator(mode='after')
     def max_tokens_validation(self: Self) -> Self:
-        if self.graph_config is not None and self.max_output_tokens is not None:
-            if self.graph_config.max_tokens is not None and self.graph_config.max_tokens > self.max_output_tokens:
-                self.graph_config.max_tokens = self.max_output_tokens
-
-        if self.graph_reranker_config is not None and self.max_output_tokens is not None:
-            if self.graph_reranker_config.max_tokens is not None and self.graph_reranker_config.max_tokens > self.max_output_tokens:
-                self.graph_reranker_config.max_tokens = self.max_output_tokens
-
-        if self.crawl_config is not None and self.max_output_tokens is not None:
-            if self.crawl_config.max_tokens is not None and self.crawl_config.max_tokens > self.max_output_tokens:
-                self.crawl_config.max_tokens = self.max_output_tokens
-
-        if self.research_config is not None and self.max_output_tokens is not None:
-            if self.research_config.max_tokens is not None and self.research_config.max_tokens > self.max_output_tokens:
-                self.research_config.max_tokens = self.max_output_tokens
+        if self.max_output_tokens is None:
+            return self
+        
+        # Apply max_output_tokens cap to all configs that have max_tokens
+        for config in [self.graph_config, self.graph_reranker_config, self.crawl_config, self.research_config]:
+            if config is not None and config.max_tokens is not None and config.max_tokens > self.max_output_tokens:
+                config.max_tokens = self.max_output_tokens
 
         return self
 
