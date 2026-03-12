@@ -410,31 +410,14 @@ class CreditPlanGuard(Guard):
 
 class LLMProviderGuard(Guard):
 
-    def __init__(self,graphiti=True,vector=True,crawl=False,research=False):
+    def __init__(self):
         super().__init__()
         self.mongooseService = Get(MongooseService)
         self.configService = Get(ConfigService)
         self.llmProviderService = Get(LLMProviderService)
 
-        self.graphiti_config = graphiti
-        self.vector_config = vector
-        self.crawl_config = crawl
-        self.research_config = research
-
     async def guard(self, agentModel:AgentModel=None):
 
-        if self.graphiti_config and len(self.llmProviderService.graphiti_config) < 1:
-            raise LLMConfigNotConfiguredError('graphiti')
-
-        if self.vector_config and len(self.llmProviderService.vector_config) < 1:
-            raise LLMConfigNotConfiguredError('vector')
-
-        if self.crawl_config and len(self.llmProviderService.crawl_config) < 1:
-            raise LLMConfigNotConfiguredError('crawl')
-        
-        if self.research_config and len(self.llmProviderService.research_config) < 1:
-            raise LLMConfigNotConfiguredError('research')
-        
         if agentModel != None:
 
             provider = agentModel.provider

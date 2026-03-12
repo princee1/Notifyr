@@ -8,6 +8,24 @@ from app.utils.helper import subset_model
 DEFAULT_MAX_TOKENS = 8192
 DEFAULT_TEMPERATURE = 1
 
+class BaseTemperatureMaxTokenModel(BaseModel):
+    base_url: Optional[str] = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+
+    @field_validator('temperature')
+    def validate_temperature(cls, v):
+        if v is not None and not (0 <= v <= 2):
+            raise ValueError("Temperature must be between 0 and 2")
+        return v
+
+    @field_validator('max_tokens')
+    def validate_max_tokens(cls, v):
+        if v is not None and v < 1:
+            raise ValueError("max_tokens must be a positive integer")
+        return v
+
+
 openai_embedding = [
     "text-embedding-ada-002",
     "text-embedding-3-small",
@@ -38,55 +56,26 @@ class VectorEmbeddingConfig(BaseModel):
     api_version: str | None = None
     batch_size: int = Field(default=100, ge=10, le=500)
 
-class CrawlLLMConfig(BaseModel):
+
+class CrawlLLMConfig(BaseTemperatureMaxTokenModel):
     model: Optional[str] = None
-    base_url: str | None = None
-    temperature: float | None = None
-    max_tokens: int | None = None
     top_p: float | None = None,
     frequency_penalty: float | None = None
     presence_penalty: float | None = None
     stop: List[str] | None = None
     n: int | None = None
 
-    @field_validator('temperature')
-    def validate_temperature(cls, v):
-        if v is not None and not (0 <= v <= 2):
-            raise ValueError("Temperature must be between 0 and 2")
-        return v
-
-    @field_validator('max_tokens')
-    def validate_max_tokens(cls, v):
-        if v is not None and v < 1:
-            raise ValueError("max_tokens must be a positive integer")
-        return v
-
-
-class ResearchConfig(BaseModel):
-    model:Optional[str] = None
-
-
-class GraphitiLLMConfig(BaseModel):
+class WebResearchConfig(BaseTemperatureMaxTokenModel):
+    embedding_model:Optional[str] = None
+    
+class GraphitiLLMConfig(BaseTemperatureMaxTokenModel):
     model: Optional[str] = None
-    base_url: Optional[str] = None
     temperature: Optional[float] = DEFAULT_TEMPERATURE
     max_tokens: Optional[int] = DEFAULT_MAX_TOKENS
     small_model: Optional[str] = None
     cache:Optional[bool] = False
     reasoning: Optional[Literal['minimal']] = None
     verbosity:Optional[Literal['low']] = None
-
-    @field_validator('temperature')
-    def validate_temperature(cls, v):
-        if v is not None and not (0 <= v <= 2):
-            raise ValueError("Temperature must be between 0 and 2")
-        return v
-
-    @field_validator('max_tokens')
-    def validate_max_tokens(cls, v):
-        if v is not None and v < 1:
-            raise ValueError("max_tokens must be a positive integer")
-        return v
 
 class GraphitiEmbeddingConfig(BaseModel):
     embedding_model:str
@@ -111,7 +100,8 @@ class LLMProfileModel(BaseProfileModel):
     graph_reranker_config: Optional[GraphitiLLMConfig] =  None
 
     crawl_config: Optional[CrawlLLMConfig] = None
-    research_config: Optional[ResearchConfig] = None
+
+    research_config: Optional[WebResearchConfig] = None
 
     max_input_tokens:Optional[int] = None
     max_output_tokens:Optional[int] = None
@@ -188,15 +178,7 @@ class LLMProfileModel(BaseProfileModel):
         if token is not None and token < 0:
             raise ValueError("Token count cannot be negative")
         return token
-    
-    @model_validator(mode='after')
-    def graphiti_validation(self:Self)->Self:
-        if self.graph_embedding_config != None and self.provider not in EMBEDDER_PROVIDER_SET:
-            raise ValueError('We can only use the openai or gemini embedding')
-
-        if self.graph_reranker_config != None and self.provider not in EMBEDDER_PROVIDER_SET:
-            raise ValueError('We can only use the openai or gemini reranker')
-    
+        
     @model_validator(mode='after')
     def models_validation(self: Self) -> Self:
         # Validate base models
@@ -218,6 +200,10 @@ class LLMProfileModel(BaseProfileModel):
                 if self.graph_reranker_config.model and self.graph_reranker_config.model not in self.models:
                     raise ValueError(f"Graph reranker config model '{self.graph_reranker_config.model}' is not listed in models for provider '{self.provider}'.")
         
+            if self.crawl_config is not None:
+                if self.crawl_config.model and self.crawl_config.model not in self.models:
+                    raise ValueError(f"Crawl config model '{self.crawl_config.model}' is not listed in models for provider '{self.provider}'.")
+
         # Validate vector_embedding_config
         if self.vector_embedding_config is not None:
             valid_embedding_models = VALID_EMBEDDING_MODELS.get(self.provider, [])
@@ -236,6 +222,15 @@ class LLMProfileModel(BaseProfileModel):
             if self.graph_embedding_config.embedding_model not in valid_embedding_models:
                 raise ValueError(f"Graph embedding model '{self.graph_embedding_config.embedding_model}' is not valid for provider '{self.provider}'. Valid models: {valid_embedding_models}")
         
+        # Validate research_config
+        if self.research_config is not None:
+            valid_embedding_models = VALID_EMBEDDING_MODELS.get(self.provider, [])
+            if not valid_embedding_models:
+                raise ValueError(f"Provider '{self.provider}' does not support graph embeddings.")
+            
+            if self.research_config.embedding_model not in valid_embedding_models:
+                raise ValueError(f"Graph embedding model '{self.research_config.embedding_model }' is not valid for provider '{self.provider}'. Valid models: {valid_embedding_models}")
+
         return self
     
     @model_validator(mode='after')
@@ -246,17 +241,6 @@ class LLMProfileModel(BaseProfileModel):
                     raise ValueError("Reasoning must be None unless provider is 'openai'")
                 if self.graph_config.verbosity is not None:
                     raise ValueError("Verbosity must be None unless provider is 'openai'")
-        return self
-
-    @model_validator(mode='after')
-    def graph_embedding_config_validation(self:Self) -> Self:
-        if self.graph_embedding_config != None:
-            if self.provider not in EMBEDDER_PROVIDER_SET:
-                raise ValueError('')
-
-            if self.graph_embedding_config.batch != None and self.provider != 'openai':
-                raise ValueError('')
-        
         return self
 
     @model_validator(mode='after')
@@ -273,29 +257,20 @@ class LLMProfileModel(BaseProfileModel):
             if self.crawl_config.max_tokens is not None and self.crawl_config.max_tokens > self.max_output_tokens:
                 self.crawl_config.max_tokens = self.max_output_tokens
 
+        if self.research_config is not None and self.max_output_tokens is not None:
+            if self.research_config.max_tokens is not None and self.research_config.max_tokens > self.max_output_tokens:
+                self.research_config.max_tokens = self.max_output_tokens
+
         return self
 
     @model_validator(mode='after')
     def default_model_validation(self:Self)->Self:
         
         if not self.default_model:
-            match self.provider:
-                case 'openai':
-                    self.default_model = 'gpt-4'
-                case 'gemini':
-                    self.default_model = 'gemini-1.5-pro'
-                case 'azure':
-                    self.default_model = 'gpt-4'
-                case 'deepseek':
-                    self.default_model = 'deepseek-pro'
-                case 'cohere':
-                    self.default_model = 'command-xlarge-20221108'
-                case 'groq':
-                    self.default_model = 'groq-1b'
-                case 'anthropic':
-                    self.default_model = 'claude-3-opus'
-                case _:
-                    raise ValueError(f"Provider '{self.provider}' does not support default model selection.")
+            if self.provider not in LLMProviderConstant.MODELS:
+                raise ValueError(f"Provider '{self.provider}' does not support default model selection.")
+
+            self.default_model = LLMProviderConstant.MODELS[self.provider]['models']
 
         return self
 

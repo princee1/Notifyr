@@ -41,7 +41,7 @@ class CustomService(BaseService):
         
         self.models_registry = MODEL_REGISTRY
 
-    def to_entities(self,entities:List[str]):
+    def to_entities(self,entities:List[str])->Dict[str,BaseModel]:
         if not entities:
             return None
         
@@ -60,7 +60,7 @@ class CustomService(BaseService):
         
         return entities_map
         
-    def to_edge(self,edges:List[str]):
+    def to_edge(self,edges:List[str])->Dict[str,BaseModel]:
         if not edges:
             return None
 
@@ -126,7 +126,7 @@ class CustomService(BaseService):
             if self.models[e2].model_type != 'Entity':
                 raise ValueError(f"Model '{e2}' is not of type 'Entity'.")
     
-    def to_schemas(self,schema:List[str]):
+    def to_schemas(self,schema:List[str])->Dict[str,BaseModel]:
         entities = self.to_entities(schema)
         edge = self.to_edge(schema)
         entities.update(edge)

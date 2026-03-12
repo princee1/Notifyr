@@ -1,5 +1,7 @@
-from typing import List, Optional, Self
-from pydantic import BaseModel, field_serializer, field_validator, model_validator
+import math
+from typing import Dict, List, Literal, Optional, Self, Tuple
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
+from app.models.crawal4ai_model import DeepCrawlingStrategyModel, DigestConfigModel, ExtractionStrategyModel, SeedingURLModel, URLGeneratorModel
 from app.utils.constant import ParseStrategy
 from .file_model import FileResponseUploadModel, UriMetadata
 from app.classes.scheduler import TimedeltaSchedulerModel
@@ -8,7 +10,6 @@ from app.classes.scheduler import TimedeltaSchedulerModel
 ###################################################################################################
 ###########################	          Base Ingest Model				 ##############################
 ###################################################################################################
-
 
 class VectorConfig(BaseModel):
 	collection_name: str
@@ -58,26 +59,6 @@ class DataIngestFileModel(DataIngestModel):
 	strategy: ParseStrategy
 	use_docling:bool = False
 
-
-###################################################################################################
-###########################										     ##############################
-###################################################################################################
-
-
-class DigestStrategy(BaseModel):
-	query:str
-
-class DataIngestWebCrawlingModel(DataIngestModel):
-	extraction_type:str
-	schemas:Optional[List[str]] = None
-	instruction:Optional[str] = None	
-	# digest_strategy: ...
-	url:str
-
-###################################################################################################
-###########################										     ##############################
-###################################################################################################
-
 class IngestDataUriMetadata(UriMetadata):
 	sha:str
 
@@ -88,5 +69,33 @@ class AbortedJobResponse(FileResponseUploadModel):
 	aborted:bool
 	status:str
 	
+###################################################################################################
+###########################										     ##############################
+###################################################################################################
+
+class DigestStrategyModel(BaseModel):
+	start_url:str
+	query:List[str]
+	config:DigestConfigModel
+
+class DataIngestWebCrawlingModel(DataIngestModel):
+	deep_crawling: Optional[DeepCrawlingStrategyModel] = None
+	extraction:Optional[ExtractionStrategyModel] = None
+	urls: List[str] | SeedingURLModel | URLGeneratorModel
+
+	@field_validator("urls", mode="before")
+	def parse_urls(cls, v):
+		if isinstance(v,str):
+			return [v]
+		return v
+	
+class IngestDataWebCrawlingResponse:
+	...
+
+###################################################################################################
+###########################										     ##############################
+###################################################################################################
+
+
 class EnqueueResponse(FileResponseUploadModel):
 	...

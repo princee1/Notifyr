@@ -183,3 +183,4 @@ TODO
 .notifyr/secrets/
 .secrets/
 .certificates/
+.help/

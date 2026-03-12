@@ -5,7 +5,7 @@ import grpc
 from pydantic import ValidationError
 from app.definition import _service
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
-from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError, MiniServiceDoesNotExistsError, ServiceNotAvailableError
+from app.errors.service_error import BuildFailureError, BuildOkError, BuildSkipError, BuildWarningError, MiniServiceDoesNotExistsError, ServiceNotAvailableError
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
 from app.models.agents_model import AgentModel, AgentValidationModel
 from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
@@ -50,7 +50,7 @@ class RemoteAgentService(BaseMiniServiceManager):
         
     def build(self, build_state=DEFAULT_BUILD_STATE):
         if APP_MODE == ApplicationMode.agentic:
-            raise BuildOkError("Running in Agentic mode; RemoteAgentService not required.")
+            raise BuildSkipError("Running in Agentic mode; RemoteAgentService not required.")
         
         if build_state == DEFAULT_BUILD_STATE:
             self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
@@ -154,11 +154,12 @@ class RemoteAgentMiniService(BaseMiniService):
             return agent_message.PromptAnswer.from_proto(reply)
 
         @SilentFail
-        async def PromptStream(self, request:agent_message.PromptRequest)->None:
+        async def PromptStream(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             replies = self.remoteAgentService.stub.PromptStream(request)
             for reply in replies:
                 reply = agent_message.PromptAnswer.from_proto(reply)
+                yield reply
 
         @SilentFail
         async def StreamPrompt(self, callback:Callable[[],agent_message.PromptRequest]):
@@ -172,4 +173,4 @@ class RemoteAgentMiniService(BaseMiniService):
             replies = self.remoteAgentService.stub.S2SPrompt(request_generator)
             for reply in replies:
                 reply = agent_message.PromptAnswer.from_proto(reply)
-        
+                yield reply

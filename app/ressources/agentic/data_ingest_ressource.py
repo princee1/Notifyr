@@ -4,7 +4,7 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
 from app.cost.ingest_cost import IngestFileCost, IngestWebCost
-from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, LLMProviderGuard, UploadFilesGuard
+from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
@@ -14,8 +14,9 @@ from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_profile
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
-from app.services.agent.llm_provider_service import LLMProviderService
+from app.services.agent.llm_provider_service import LLMProviderService, VerifyLLMConfig
 from app.services.config_service import ConfigService
+from app.services.custom_service import CustomService
 from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileMiniService, ProfileService
@@ -146,26 +147,26 @@ class DataIngestRessource(BaseHTTPRessource):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Crawl4ai is not installed"
             )
-        
-
+    
     @InjectInMethod()
-    def __init__(self,configService:ConfigService,vaultService:VaultService,fileService:FileService,arqService:ArqIngestTaskService):
+    def __init__(self,configService:ConfigService,vaultService:VaultService,fileService:FileService,arqService:ArqIngestTaskService,customService:CustomService):
         super().__init__(None,None)
         self.configService = configService
         self.vaultService = vaultService
         self.fileService = fileService
         self.arqService = arqService
+        self.customService = customService
 
     @UseLimiter('10/hour')
     @Throttle(normal=(300,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @PingService([RedisService,LLMProviderService])
+    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig()}])
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
     @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,AgenticHandler,RedisHandler)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),LLMProviderGuard(),UploadFilesGuard(),docling_guard)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=IngestFileEnqueueResponse)
     async def ingest_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestFileCost,Depends(IngestFileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
         _response = IngestFileEnqueueResponse()
@@ -199,7 +200,7 @@ class DataIngestRessource(BaseHTTPRessource):
                             **meta.model_dump(),
                             'request_id':request_id,
                             '_nickname':ArqDataTaskConstant.FILE_DATA_TASK,
-                            'state':dict(),
+                            'state':None,
                             'step':None
                             }
                 )
@@ -214,48 +215,49 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe())
     @Throttle(normal=(700,1500))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @PingService([RedisService,LLMProviderService])
+    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(crawl=True)}])
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
-    @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),LLMProviderGuard(crawl=True),crawl4ai_guard)
+    @UseServiceLock(RedisService,ArqIngestTaskService,CustomService,LLMProviderService,lockType='reader')
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),crawl4ai_guard)
     @UseHandler(ArqHandler,AsyncIOHandler,AgenticHandler,RedisHandler,MiniServiceHandler,VaultHandler)
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:DataIngestWebCrawlingModel,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
-        Accepts a JSON body describing a `WebCrawlTask` and enqueues it.
+        Web crawl the web and extract meaningful information
         """
     
     @UseLimiter('5/hour')
     @UsePipe(MerchantPipe())
     @Throttle(normal=(300,150))
     @UsePermission(ProfilePermission)
-    @PingService([RedisService,LLMProviderService])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(MiniServiceInjectorPipe(ProfileService))
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,AgenticHandler,RedisHandler)
+    @PingService([RedisService,{'cls':LLMProlviderService,'kwargs':VerifyLLMConfig(vector=False)}])
     @UseServiceLock(RedisService,ArqIngestTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False),LLMProviderGuard(vector=False))
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
     @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing an `APIFetchTask` and enqueues it.
         """
 
-
     @Throttle(normal=(300,150))
     @UsePipe(MerchantPipe())
-    @PingService([RedisService,LLMProviderService])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler,AgenticHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),LLMProviderGuard(research=True))
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard)
+    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(research=True)}])
     @BaseHTTPRessource.HTTPRoute('/research/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
+        """
+        Engage a broad research by crawling page
+        """
 
 
     async def on_startup(self):

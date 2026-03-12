@@ -220,6 +220,7 @@ class AgentMiniService(BaseMiniService):
     
     @staticmethod
     def Base_Agent(function:Callable):
+        @functools.wraps(function)
         async def wrapper(self:Self,agent:CompiledStateGraph=None):
             if agent == None:
                 agent = self.agent
@@ -236,6 +237,7 @@ class AgentMiniService(BaseMiniService):
     async def stream(self,agent:CompiledStateGraph):
         ...
 
+    
 @Service(is_manager=True,links=[LinkDep(LLMProviderService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)],mirror=RemoteAgentService)
 class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
