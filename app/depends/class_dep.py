@@ -9,7 +9,7 @@ from app.definition._error import ServerFileError
 from app.definition._interface import Interface
 from app.interface.email import EmailInterface, EmailSendInterface
 from app.models.call_model import BaseVoiceCallModel
-from app.models.ingest_model import DataIngestFileModel
+from app.models.ingest_model import FileUploadDataIngestModel
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
 from app.models.link_model import LinkORM
 from app.models.sms_model import OnGoingBaseSMSModel
@@ -407,7 +407,7 @@ class FileDataIngestQuery(ToPydanticModelInterface):
         return f'FileDataIngestQuery(collection_name={self.collection_name},expires={self.expires})'
 
     def to_model(self):
-        return DataIngestFileModel(
+        return FileUploadDataIngestModel(
             collection_name=self.collection_name,
             lang=self.lang,
             category=self.content_type,

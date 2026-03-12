@@ -55,14 +55,14 @@ class DataIngestModel(BaseModel):
 ###################################################################################################
 
 
-class DataIngestFileModel(DataIngestModel):
+class FileUploadDataIngestModel(DataIngestModel):
 	strategy: ParseStrategy
 	use_docling:bool = False
 
 class IngestDataUriMetadata(UriMetadata):
 	sha:str
 
-class IngestFileEnqueueResponse(FileResponseUploadModel):
+class FileUploadIngestEnqueueResponse(FileResponseUploadModel):
     metadata: List[IngestDataUriMetadata] = []
 	
 class AbortedJobResponse(FileResponseUploadModel):
@@ -70,15 +70,10 @@ class AbortedJobResponse(FileResponseUploadModel):
 	status:str
 	
 ###################################################################################################
-###########################										     ##############################
+###########################		           Web Crawling			     ##############################
 ###################################################################################################
 
-class DigestStrategyModel(BaseModel):
-	start_url:str
-	query:List[str]
-	config:DigestConfigModel
-
-class DataIngestWebCrawlingModel(DataIngestModel):
+class WebCrawlingDataIngestModel(DataIngestModel):
 	deep_crawling: Optional[DeepCrawlingStrategyModel] = None
 	extraction:Optional[ExtractionStrategyModel] = None
 	urls: List[str] | SeedingURLModel | URLGeneratorModel
@@ -88,9 +83,26 @@ class DataIngestWebCrawlingModel(DataIngestModel):
 		if isinstance(v,str):
 			return [v]
 		return v
+
+	@model_validator(mode='after')
+	def invalidate_deep_crawling(self:Self)->Self:
+		if isinstance(self.urls, URLGeneratorModel) and self.deep_crawling != None:
+			raise ValueError('If the urls are generated you cannot use deep crawling as it will use too much ressource')
+
+		return self
 	
 class IngestDataWebCrawlingResponse:
 	...
+
+###################################################################################################
+###########################										     ##############################
+###################################################################################################
+
+class ResearchDataIngestModel(DataIngestModel):
+	start_url:str
+	query:List[str]
+	config:DigestConfigModel
+
 
 ###################################################################################################
 ###########################										     ##############################

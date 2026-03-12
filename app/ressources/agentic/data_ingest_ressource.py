@@ -3,7 +3,7 @@ from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
-from app.cost.ingest_cost import IngestFileCost, IngestWebCost
+from app.cost.ingest_cost import FileIngestCost, WebIngestCost
 from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
@@ -27,11 +27,11 @@ from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import (
     AbortedJobResponse,
-    DataIngestWebCrawlingModel,
+    WebCrawlingDataIngestModel,
     IngestDataUriMetadata,
     EnqueueResponse,
-    IngestFileEnqueueResponse,
-    DataIngestFileModel,
+    FileUploadIngestEnqueueResponse,
+    FileUploadDataIngestModel,
 )
 from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_tasks import DATA_TASK_REGISTRY_NAME
@@ -133,7 +133,7 @@ class JobArqRessource(BaseHTTPRessource):
 class DataIngestRessource(BaseHTTPRessource):
     
     @staticmethod
-    async def docling_guard(ingestTask:DataIngestFileModel):
+    async def docling_guard(ingestTask:FileUploadDataIngestModel):
         configService = Get(ConfigService)
         if not configService.INSTALL_DOCLING and ingestTask.use_docling:
             return False,"Docling is not installed"
@@ -167,9 +167,9 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,AgenticHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
-    @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=IngestFileEnqueueResponse)
-    async def ingest_files(self,ingestTask:Annotated[DataIngestFileModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestFileCost,Depends(IngestFileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
-        _response = IngestFileEnqueueResponse()
+    @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=FileUploadIngestEnqueueResponse)
+    async def ingest_files(self,ingestTask:Annotated[FileUploadDataIngestModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileIngestCost,Depends(FileIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
+        _response = FileUploadIngestEnqueueResponse()
         ingest_sha = set()
         for file in files:
             try:
@@ -222,7 +222,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.WEB_DATA_TASK),crawl4ai_guard)
     @UseHandler(ArqHandler,AsyncIOHandler,AgenticHandler,RedisHandler,MiniServiceHandler,VaultHandler)
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:DataIngestWebCrawlingModel,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[WebIngestCost,Depends(WebIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Web crawl the web and extract meaningful information
         """
@@ -240,7 +240,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseServiceLock(RedisService,ArqIngestTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
     @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[IngestWebCost,Depends(IngestWebCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[WebIngestCost,Depends(WebIngestCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Accepts a JSON body describing an `APIFetchTask` and enqueues it.
         """
@@ -256,7 +256,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/research/{profile}',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
-        Engage a broad research by crawling page
+        Engage a broad research by fetching url concept and crawling those pages
         """
 
 

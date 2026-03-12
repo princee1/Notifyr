@@ -147,22 +147,35 @@ class ExtractionStrategyModel(BaseModel):
 class SeedingURLModel(BaseModel):
 	domain:List[str]
 	source:Literal['cc','sitemap','sitemap+cc'] = 'sitemap'
-	max_url:int =  Field(default=50,ge=1,allow_inf_nan=True,description="Max url for each domain")
+	max_urls:int =  Field(default=50,ge=-1,description="Max url for each domain")
 	score_threshold: Optional[float] = Field(default=0.4,gt=0,lt=1)
-	query:Optional[List[str]] = None
-	keywords = Optional[List[str]] = None
+	queries:Optional[List[str]] = []
 	pattern: Optional[str] =  None
-	speed: Literal['normal','fast','ultra-fast'] = 'fast'
-	top: int 
+	#speed: Literal['normal','fast','ultra-fast'] = 'fast'
+	top: Optional[int] = None 
+
+
+	@field_validator('queries',mode='after')
+	def validate_queries(cls,q:list):
+		if len(q) == 0:
+			q.append('')
+		
+		return list(set(q))
 
 	@field_validator("max_url", mode="before")
 	def parse_unlimited(cls, v):
 		if v in ("inf", "infinity", -1, None):
-			return math.inf
+			return -1
+		return v
+	
+	@field_validator("max_url", mode="after")
+	def validate_max_url(cls,v):
+		if v ==0:
+			raise ValueError('max_url must be inf or >= 1')
 		return v
 	
 	@field_validator("domain", mode="before")
-	def parse_unlimited(cls, v):
+	def parse_domain(cls, v):
 		if isinstance(v,str):
 			return [v]
 		return v
@@ -179,19 +192,28 @@ class SeedingURLModel(BaseModel):
 
 	@field_validator("domain", mode="after")
 	def validate_domain(cls,d:list):
-		if len(d) == 0:
+		len_domain = len(d)
+
+		if len_domain == 0:
 			raise ValueError('At least one domain must be define')
-		return d
+		
+		if len_domain > 100:
+			raise ValueError(f'Maximum domain reached: max:200 got {len_domain}')
+		
+		return list(set(d))
 
 	@model_validator(mode='after')
 	def validate_top(self:Self)->Self:
-		if not self.query:
-			return self
 		
-		all_url = len(self.query) * self.max_url
+		if self.top != None and self.top <1:
+			raise ValueError('Top urls cannot be less than 1')
 
-		if self.top > all_url:
-			self.top = all_url
+		if self.max_urls != -1:
+			
+			all_url = len(self.queries) * self.max_urls
+
+			if  self.top != None and self.top > all_url:
+				self.top = all_url
 
 		return self
 

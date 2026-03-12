@@ -3,12 +3,12 @@ from fastapi import UploadFile
 from app.cost.file_cost import FileCost
 from app.definition._cost import DataCost
 from app.models.file_model import FileResponseUploadModel
-from app.models.ingest_model import DataIngestFileModel
+from app.models.ingest_model import FileUploadDataIngestModel
 
 
-class IngestFileCost(FileCost):
+class FileIngestCost(FileCost):
 
-    def pre_purchase(self, files: List[UploadFile],ingestTask:DataIngestFileModel):
+    def pre_purchase(self, files: List[UploadFile],ingestTask:FileUploadDataIngestModel):
             for file in files:
                 prices = []
                 if ingestTask.vector_config:
@@ -20,7 +20,7 @@ class IngestFileCost(FileCost):
                 for d,c,q in prices:
                     self.purchase(d,c,q) 
 
-    def post_purchase(self, result: FileResponseUploadModel,ingestTask:DataIngestFileModel):
+    def post_purchase(self, result: FileResponseUploadModel,ingestTask:FileUploadDataIngestModel):
         for i,metadata in enumerate(result.metadata):
             
             filename,file_size_mb = metadata.uri,metadata.size
@@ -34,5 +34,5 @@ class IngestFileCost(FileCost):
             for d,c,q in prices:
                 self.purchase(d,c,q) 
 
-class IngestWebCost(DataCost):
+class WebIngestCost(DataCost):
     ...

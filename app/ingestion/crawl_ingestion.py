@@ -8,8 +8,8 @@ from crawl4ai.deep_crawling.scorers import KeywordRelevanceScorer,DomainAuthorit
 from crawl4ai.deep_crawling.filters import URLPatternFilter, DomainFilter, ContentTypeFilter, ContentRelevanceFilter, SEOFilter,FilterChain
 
 from app.definition._error import BaseError
-from app.models.crawal4ai_model import DeepCrawlingAlgorithm
-from app.models.ingest_model import DataIngestWebCrawlingModel, DeepCrawlingStrategyModel
+from app.models.crawal4ai_model import DeepCrawlingAlgorithm, SeedingURLModel
+from app.models.ingest_model import WebCrawlingDataIngestModel, DeepCrawlingStrategyModel
 from app.models.llm_model import CrawlLLMConfig, BaseTemperatureMaxTokenModel
 
 
@@ -33,7 +33,7 @@ DEEP_CRAWL_MAP:Dict[DeepCrawlingAlgorithm,Type[DeepCrawlStrategy]] = {
 
 class WebCrawlerIngestion:
     
-    def __init__(self,ingestTask:DataIngestWebCrawlingModel,crawl_provider:str,llm_model:CrawlLLMConfig,digest_provider:str,digest_model:BaseTemperatureMaxTokenModel,embedding_api_token:str,llm_api_token:str,deep_crawl_state:Dict[str|Any]|None,extra_headers:dict=lambda:dict(),dc_state_callback:Callable[[Dict[str, Any]],None]|None=None,base_dir=None):
+    def __init__(self,ingestTask:WebCrawlingDataIngestModel,crawl_provider:str,llm_model:CrawlLLMConfig,digest_provider:str,digest_model:BaseTemperatureMaxTokenModel,embedding_api_token:str,llm_api_token:str,deep_crawl_state:Dict[str|Any]|None,extra_headers:dict=lambda:dict(),dc_state_callback:Callable[[Dict[str, Any]],None]|None=None,base_dir=None):
         self.session_id:str|Callable[[],str] = ...
         self.user_agent:str|Callable[[],str] = ...
         self.crawl_llm_model = llm_model
@@ -206,15 +206,47 @@ class WebCrawlerIngestion:
 
     async def _build_urls(self):
         
-        if isinstance(self.)
+        if isinstance(self.ingestTask.urls, list):
+            return self.ingestTask.urls
         
-        seeder = AsyncUrlSeeder()
+        if isinstance(self.ingestTask.urls,SeedingURLModel):
+            urls_config = self.ingestTask.urls
+            seeder = AsyncUrlSeeder()
+            
+            all_urls = []
+            seen = set()
+            
+            for q in urls_config.queries:
 
-        config = SeedingConfig(
-            extract_head=True,
-            live_check=True,
-            hits_per_sec=10,
-            force=True,
-            pattern=...,
-            validate_sitemap_lastmod=True
-        )
+                config = SeedingConfig(
+                    **urls_config.model_dump(exclude=('domain','queries','speed','top')),
+                    extract_head=bool(q),
+                    live_check=True,
+                    query=q if q else None,
+                    force=True,
+                )
+
+                fetched_urls = await seeder.many_urls(
+                    urls_config.domain,
+                    config
+                    )
+                for _, urls in fetched_urls.items():
+
+                    for url in urls:
+                        if url.get('status','unknown') != 'valid':
+                            continue
+                        if url['url'] in seen:
+                            continue
+                            
+                        seen.add(url['url'])
+                        all_urls.append(url)
+
+            await seeder.close()
+                            
+            all_urls.sort(key=lambda x: x.get('relevance_score',0), reverse=True)
+
+            if urls_config.top != None:
+                all_urls = all_urls[:urls_config.top]
+
+            return [ u['url'] for u in all_urls]
+        
