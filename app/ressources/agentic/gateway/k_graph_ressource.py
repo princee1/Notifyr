@@ -3,7 +3,7 @@ import aiohttp
 from fastapi import Depends, Request, Response
 from app.classes.auth_permission import AuthPermission
 from app.container import InjectInMethod
-from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GraphitiHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GraphitiHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe, domain_pipe, update_status_upon_no_metadata_pipe
@@ -45,6 +45,9 @@ class KGraphDBRessource(BaseHTTPRessource):
 
     @Throttle(normal=(300,40))
     @UseHandler(GraphitiHandler,ProxyRestGatewayHandler)
+    @UseHandler(AgenticHandler)
+    @PingService([RemoteAgentService])
+    @UseServiceLock(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/document/{document_id}/',methods=[HTTPMethod.GET])
     async def get_document_graph(self,document_id:str,response:Response,request:Request,authPermission:AuthPermission = Depends(get_auth_permission)):
 
@@ -57,6 +60,9 @@ class KGraphDBRessource(BaseHTTPRessource):
 
     @UsePipe(domain_pipe)
     @UseHandler(GraphitiHandler,ProxyRestGatewayHandler)
+    @UseHandler(AgenticHandler)
+    @PingService([RemoteAgentService])
+    @UseServiceLock(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/domain/{domain}/',methods=[HTTPMethod.GET])
     async def get_domain_graph(self,domain:str,response:Response,request:Request,authPermission:AuthPermission = Depends(get_auth_permission)):
         
@@ -69,12 +75,12 @@ class KGraphDBRessource(BaseHTTPRessource):
 
     @UsePipe(MerchantPipe(-1))
     @Throttle(uniform=(1000,1800))
-    @PingService([RedisService,ArqIngestTaskService])
+    @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseServiceLock(RedisService,ArqIngestTaskService,lockType='reader')
+    @UseServiceLock(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
-    @UseHandler(GraphitiHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
+    @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/document/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteDomainModel)
     async def delete_document(self,job_id:str,response:Response,request:Request,merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission)):
         
@@ -111,11 +117,11 @@ class KGraphDBRessource(BaseHTTPRessource):
     @Throttle(uniform=(1500,2500))
     @UsePipe(domain_pipe,MerchantPipe(-1))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @PingService([RedisService,ArqIngestTaskService])
+    @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseServiceLock(RedisService,ArqIngestTaskService,lockType='reader')
+    @UseServiceLock(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
-    @UseHandler(GraphitiHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
+    @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/domain/{domain}/',methods=[HTTPMethod.DELETE],response_model=DeleteDomainModel)
     async def delete_domain(self,domain:str,response:Response,request:Request,merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission)):
         
@@ -155,20 +161,12 @@ class KGraphDBRessource(BaseHTTPRessource):
         
         return DeleteDomainModel(metadata=meta,gateway_body=res_body,job_dequeued=jobs_queue,jod_deleted=jobs_done,domain=domain)
 
-
     @UseLimiter('20/hour')
     @Throttle(uniform=(200,500))
     @HTTPStatusCode(status.HTTP_200_OK)
-    @UseHandler(GraphitiHandler,ProxyRestGatewayHandler)
+    @PingService([RemoteAgentService])
+    @UseHandler(AgenticHandler,GraphitiHandler,ProxyRestGatewayHandler)
+    @UseServiceLock(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/playground/',methods=[HTTPMethod.POST])
     async def playground(self,response:Response,request:Request,search:GraphitiSearchModel,authPermission:AuthPermission= Depends(get_auth_permission)):
         ...
-
-
-    # @BaseHTTPRessource.HTTPRoute('/document/{}/')
-    # async def get_node(self,uuid:str):
-    #     ...
-    
-    # @BaseHTTPRessource.HTTPRoute('/document/{}/')
-    # async def delete_node(self,uuid:str):
-    #     ...

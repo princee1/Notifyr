@@ -78,14 +78,20 @@ class AppServer(EventInterface):
     def __init__(self,port:int=None,log_level:str=None,host:str=None):
         self.log_level = log_level
         self.host = host
-        self.port =port
+        self.port = port
 
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
         self.costService: CostService = Get(CostService)
         
-        self.app = FastAPI(title=TITLE, summary=SUMMARY, description=DESCRIPTION,version=VERSION,
-                           on_shutdown=self.shutdown_hooks, on_startup=self.startup_hooks,)
+        self.app = FastAPI(title=TITLE,
+                           summary=SUMMARY,
+                           description=DESCRIPTION,
+                           version=VERSION,
+                           on_shutdown=self.shutdown_hooks,
+                           on_startup=self.startup_hooks,
+                           )
+        
         self.app.state.limiter = self.costService.GlobalLimiter
 
         self.add_exception_handlers()
@@ -188,7 +194,7 @@ class AppServer(EventInterface):
         # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
         # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
         remoteAgentService = Get(RemoteAgentService)
-        remoteAgentService.register_channel()
+        await RunInThreadPool(remoteAgentService.connect_channel)()
         
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):

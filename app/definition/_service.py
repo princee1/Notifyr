@@ -497,9 +497,10 @@ class BaseMiniServiceManager(BaseService):
         super().__init__()
         self.MiniServiceStore = ...
 
-    def build(self,counter:StatusCounter, build_state = DEFAULT_BUILD_STATE):
+    def build(self,counter:StatusCounter, build_state = DEFAULT_BUILD_STATE,no_service_as_ok=False):
         if counter.total_service <1:
-            raise BuildFailureError('No mini service to build')
+            error = BuildFailureError if not no_service_as_ok else BuildOkError 
+            raise error('No mini service to build')
         
         if counter.available_service == counter.total_service:
             return

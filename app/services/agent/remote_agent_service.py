@@ -1,11 +1,14 @@
 import asyncio
+from enum import Enum
 import functools
-from typing import Callable, Generator, Self
+from typing import Callable, Generator, Literal, Self
 import grpc
+import aiohttp
 from pydantic import ValidationError
 from app.definition import _service
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildSkipError, BuildWarningError, MiniServiceDoesNotExistsError, ServiceNotAvailableError
+from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStreamDoneError, AgenticBadResponseError, AgenticGrpcIdleError, AgenticGrpcShutdownError
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
 from app.models.agents_model import AgentModel, AgentValidationModel
 from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
@@ -20,6 +23,21 @@ from app.grpc import agent_pb2_grpc,agent_message
 CREATE_AGENT_BUILD_STATE = -124
 AVOID_RE_VALIDATE_BUILD_STATE = -100
 
+PingMode = Literal['http-only','grpc']
+
+_GRPC_RECONNECT_OPTIONS = options = [
+    ("grpc.keepalive_time_ms", 10000),       # ping every 10s
+    ("grpc.keepalive_timeout_ms", 5000),     # wait 5s
+    ("grpc.keepalive_permit_without_calls", 1),
+]
+
+_HTTP_HEALTH_CHECK_TIMEOUT = 15  # seconds - timeout per read operation
+_HTTP_HEALTH_CHECK_RECONNECT_INTERVAL = 5  # seconds - base interval before reconnect attempt
+_HTTP_HEALTH_CHECK_MAX_BACKOFF = 300  # seconds - max backoff (5 minutes)
+_HTTP_HEALTH_CHECK_BACKOFF_MULTIPLIER = 2  # exponential backoff factor
+
+
+
 def iterator_factory(callback:Callable,wait=0.5):
     async def request_generator():
         while True:
@@ -32,6 +50,14 @@ def iterator_factory(callback:Callable,wait=0.5):
 
     return request_generator
 
+
+class AgenticHTTPState(Enum):
+    BAD_RESPONSE = 'Bad Response'
+    CONNECTED = 'Connected'
+    DISCONNECTED = 'Disconnected'
+    STREAM_DONE = 'Stream Done'
+
+
 @Service(is_manager=True,links=[LinkDep(LLMProviderService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class RemoteAgentService(BaseMiniServiceManager):
     
@@ -43,6 +69,38 @@ class RemoteAgentService(BaseMiniServiceManager):
         self.llmProviderService = llmProviderService
         self.mongooseService = mongooseService
         self.MiniServiceStore = MiniServiceStore[RemoteAgentMiniService](self.name)
+        
+        # HTTP health check state
+        self.http_state: AgenticHTTPState = AgenticHTTPState.DISCONNECTED
+        self.grpc_state: grpc.ChannelConnectivity = grpc.ChannelConnectivity.IDLE
+
+        self.http_health_task: asyncio.Task | None = None
+
+    async def pingService(self, infinite_wait:bool, data:dict, profile:str = None, as_manager:bool = False, **kwargs):
+        match self.http_state:
+            case AgenticHTTPState.DISCONNECTED:
+                raise AgenticServerDisconnectedError('Agentic HTTP server is disconnected')
+            case AgenticHTTPState.STREAM_DONE:
+                raise AgenticStreamDoneError('Agentic HTTP stream ended unexpectedly')
+            case AgenticHTTPState.BAD_RESPONSE:
+                await asyncio.sleep(0.15)
+            case AgenticHTTPState.CONNECTED:
+                ...
+            case _:
+                raise AgenticServerDisconnectedError('Agentic HTTP server state unknown')
+    
+        if kwargs.get('grpc',False):
+            match self.grpc_state:
+                case grpc.ChannelConnectivity.READY:
+                    ...
+                case grpc.ChannelConnectivity.CONNECTING | grpc.ChannelConnectivity.TRANSIENT_FAILURE:
+                    await asyncio.sleep(0.2)
+                case grpc.ChannelConnectivity.IDLE:
+                    raise AgenticGrpcIdleError('Agentic gRPC channel is idle')
+                case grpc.ChannelConnectivity.SHUTDOWN:
+                    raise AgenticGrpcShutdownError('Agentic gRPC channel is shutdown')
+                
+        return await super().pingService(infinite_wait, data, profile, as_manager, **kwargs)
     
     def verify_dependency(self):
         if not CAPABILITIES['agentic']:
@@ -51,7 +109,7 @@ class RemoteAgentService(BaseMiniServiceManager):
     def build(self, build_state=DEFAULT_BUILD_STATE):
         if APP_MODE == ApplicationMode.agentic:
             raise BuildSkipError("Running in Agentic mode; RemoteAgentService not required.")
-        
+                
         if build_state == DEFAULT_BUILD_STATE:
             self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
         
@@ -75,26 +133,102 @@ class RemoteAgentService(BaseMiniServiceManager):
             except MiniServiceDoesNotExistsError as e:
                 continue
 
-        return super().build(counter, build_state)
+        return super().build(counter, build_state,True)
 
-    def register_channel(self):
+    def connect_channel(self):
         
         if APP_MODE == ApplicationMode.worker:
-            self.channel = grpc.insecure_channel(self.agentic_grpc_host)
+            self.channel = grpc.insecure_channel(self.agentic_grpc_host,options=_GRPC_RECONNECT_OPTIONS)
             clientInterceptor = AgentClientInterceptor(self.auth_header)
             self.channel = grpc.intercept_channel(self.channel,clientInterceptor)
         else:
             clientInterceptor = AgentClientAsyncInterceptor(self.auth_header)
-            self.channel = grpc.aio.insecure_channel(self.agentic_grpc_host,interceptors=[clientInterceptor])
+            self.channel = grpc.aio.insecure_channel(self.agentic_grpc_host,interceptors=[clientInterceptor],options=_GRPC_RECONNECT_OPTIONS)
 
         self.stub = agent_pb2_grpc.AgentStub(self.channel)
-    
+        try:
+            grpc.channel_ready_future(self.channel).result(timeout=5)
+            self.channel.subscribe(self.grpc_state_callback,True)
+
+        except grpc.FutureTimeoutError as e:
+            self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
+                 
     async def disconnect_channel(self):
         if self.channel:
             await self.channel.close()
             self.channel = None
             self.stub = None
+        
+    async def grpc_state_callback(self,state:grpc.ChannelConnectivity):
+        print('State:',state)
+        async with self.statusLock.writer:
+           self.grpc_state = state
+                
+    def start_agentic_healthcheck(self):
+        """Create and start the HTTP health check task."""
+        if self.http_health_task and not self.http_health_task.done():
+            return 
+        
+        health_url = f"http://{self.agentic_http_host}/health/"
+        headers = {"Authorization": f"Bearer {self.auth_header}"}
 
+        async def _http_health_check():
+            http_reconnect_backoff = _HTTP_HEALTH_CHECK_RECONNECT_INTERVAL
+
+            while True:
+                try:
+                    timeout = aiohttp.ClientTimeout(sock_read=_HTTP_HEALTH_CHECK_TIMEOUT)
+                    http_session = aiohttp.ClientSession(timeout=timeout)
+
+                    async with http_session.get(health_url, headers=headers) as response:
+
+                        if response.status != 200:
+                            async with self.statusLock.writer:
+                                self.http_state = AgenticHTTPState.BAD_RESPONSE
+                            
+                            await asyncio.sleep(http_reconnect_backoff)
+                            continue
+                        
+                        async with self.statusLock.writer:
+                            self.http_state = AgenticHTTPState.CONNECTED
+
+                        http_reconnect_backoff = _HTTP_HEALTH_CHECK_RECONNECT_INTERVAL
+                        
+                        async for line in response.content:
+                            ...
+
+                        async with self.statusLock.writer:
+                            self.http_state = AgenticHTTPState.STREAM_DONE
+
+                        await asyncio.sleep(http_reconnect_backoff)
+                        continue
+                        
+                except Exception as e:
+                    async with self.statusLock.writer:
+                        self.http_state = AgenticHTTPState.DISCONNECTED
+
+                    await http_session.close()
+                    await asyncio.sleep(http_reconnect_backoff)
+                    http_reconnect_backoff = min(
+                        int(http_reconnect_backoff * _HTTP_HEALTH_CHECK_BACKOFF_MULTIPLIER),
+                        _HTTP_HEALTH_CHECK_MAX_BACKOFF
+                        )
+        
+        self.http_health_task = asyncio.create_task(_http_health_check())
+    
+    async def cancel_agentic_health_task(self):
+        """Cancel the HTTP health check task and cleanup."""
+        if self.http_health_task:
+            self.http_health_task.cancel()
+            try:
+                await self.http_health_task
+            except asyncio.CancelledError:
+                pass
+            self.http_health_task = None
+
+        async with self.statusLock.writer:
+            self.http_state = False
+                 
     @property
     def agentic_grpc_host(self):
         return f"{self.configService.AGENTIC_HOST}:50051"

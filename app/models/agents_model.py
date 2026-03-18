@@ -3,7 +3,6 @@ from pydantic import BaseModel
 from app.classes.mongo import BaseDocument
 from app.utils.constant import LLMProviderConstant, MongooseDBConstant
 from enum import Enum
-
 from app.utils.helper import subset_model
 
 class GraphitiSearchConfig(str, Enum):
@@ -21,7 +20,6 @@ class ToolModel(BaseDocument):
     tool:str
     outbound_service:str
 
-
 class VectorPipelineModel(ToolModel):
     enabled_cache:Optional[bool] = True
 
@@ -34,7 +32,7 @@ class ApiTool(ToolModel):
 class MCPTool(ToolModel):
     ...
 
-class WebSearchTool(ToolModel):
+class SearchTool(ToolModel):
     ...
 
 class System(BaseModel):
@@ -48,7 +46,7 @@ class AgentModel(BaseDocument):
     
     memory:List[str] = []
     model: str
-    tools: List[VectorPipelineModel | KGraphPipelineModel | ApiTool | MCPTool | WebSearchTool] = []
+    tools: List[VectorPipelineModel | KGraphPipelineModel | ApiTool | MCPTool | SearchTool] = []
 
     provider: str
     temperature: float = 0.7

@@ -10,6 +10,7 @@ import hvac
 from minio import S3Error, ServerError
 import requests
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError
+from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStreamDoneError, AgenticBadResponseError, AgenticGrpcIdleError, AgenticGrpcShutdownError
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
 from app.classes.auth_permission import WSPathNotFoundError
@@ -1069,7 +1070,7 @@ class ProxyRestGatewayHandler(Handler):
             body = e.args[0]
             status = e.args[1]
 
-class AgenticHandler(Handler):
+class LLMHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
         try:
@@ -1120,6 +1121,57 @@ class AgenticHandler(Handler):
                 detail={
                     'message': f"LLM '{e.config}' configuration is not available",
                     'config': e.config
+                }
+            )
+
+class AgenticHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        
+        except AgenticServerDisconnectedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_server_disconnected"
+                }
+            )
+        
+        except AgenticStreamDoneError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_stream_done"
+                }
+            )
+        
+        except AgenticBadResponseError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_bad_response"
+                }
+            )
+        
+        except AgenticGrpcIdleError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_grpc_idle"
+                }
+            )
+        
+        except AgenticGrpcShutdownError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_grpc_shutdown"
                 }
             )
 

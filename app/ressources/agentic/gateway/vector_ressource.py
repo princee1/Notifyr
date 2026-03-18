@@ -4,7 +4,7 @@ from app.classes.auth_permission import AuthPermission
 from app.container import InjectInMethod
 from app.cost.file_cost import FileCost
 from app.decorators.guards import ArqDataTaskGuard
-from app.decorators.handlers import ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import update_status_upon_no_metadata_pipe
@@ -25,7 +25,6 @@ from app.utils.constant import ArqDataTaskConstant, CostConstant
 import aiohttp
 
 @UseHandler(AsyncIOHandler,ServiceAvailabilityHandler)
-@UseServiceLock(RemoteAgentService,lockType='reader')
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('vector')
 class VectorDBRessource(BaseHTTPRessource):
@@ -51,7 +50,8 @@ class VectorDBRessource(BaseHTTPRessource):
     
     @UseLimiter('1/minutes')
     @PingService([RemoteAgentService])
-    @UseHandler(ProxyRestGatewayHandler)
+    @UseHandler(AgenticHandler,ProxyRestGatewayHandler)
+    @UseServiceLock(RemoteAgentService,lockType='reader')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_collection(self, request:Request,response:Response,collection:QdrantCollectionModel, autPermission:AuthPermission=Depends(get_auth_permission)):
@@ -67,7 +67,8 @@ class VectorDBRessource(BaseHTTPRessource):
     @UseLimiter('30/minutes')
     @HTTPStatusCode(status.HTTP_200_OK)
     @PingService([RemoteAgentService])
-    @UseHandler(ProxyRestGatewayHandler)
+    @UseHandler(AgenticHandler,ProxyRestGatewayHandler)
+    @UseServiceLock(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.GET])
     async def get_collection(self, request:Request,response:Response,collection_name:str,autPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -81,8 +82,8 @@ class VectorDBRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
-    @UseServiceLock(RedisService,ArqIngestTaskService,lockType='reader')
-    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
+    @UseServiceLock(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
+    @UseHandler(AgenticHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(delete_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
@@ -129,9 +130,9 @@ class VectorDBRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseServiceLock(RedisService,ArqIngestTaskService,lockType='reader')
-    @UseHandler(CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
+    @UseServiceLock(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
+    @UseHandler(AgenticHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete result and the point associated with the job_id filtered by the task_name """

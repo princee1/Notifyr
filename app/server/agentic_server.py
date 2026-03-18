@@ -1,4 +1,6 @@
 import asyncio
+
+from fastapi.responses import StreamingResponse
 from app.classes.prompt import PromptToken
 from app.utils.constant import CostConstant
 from app.utils.tools import RunInThreadPool
@@ -12,7 +14,7 @@ from app.services import QdrantService
 from app.services import CostService
 from app.services import ReactiveService
 from app.depends.dependencies import get_bearer_token
-from fastapi import FastAPI,Depends
+from fastapi import FastAPI,Depends, Request
 from app.routers import Routers
 from app.cost.token_cost import TokenCost
 
@@ -67,7 +69,6 @@ def bootstrap_agent_app()->FastAPI:
             on_complete=on_purchase_token_complete
             )
 
-        
     async def on_shutdown():
         mongooseService.shutdown()
 
@@ -86,6 +87,25 @@ def bootstrap_agent_app()->FastAPI:
                   on_startup=[on_startup],
                   dependencies=[Depends(auth_depends)]
                   )
+    
+    @app.get('/health/',dependencies=[Depends(auth_depends)],)
+    async def health(response:StreamingResponse,request:Request):
+        
+        async def health_stream():
+            while True:
+                if await request.is_disconnected():
+                    break
+                yield 'pong'
+                asyncio.sleep(2)
+ 
+        return StreamingResponse(
+            content=health_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive"
+                }
+        )
 
     for r in Routers:
         app.include_router(r)

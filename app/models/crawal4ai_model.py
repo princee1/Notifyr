@@ -2,6 +2,8 @@ import math
 from typing import Dict, List, Literal, Optional, Self, Tuple
 from pydantic import BaseModel, Field, model_validator,field_validator, model_validator
 
+from app.classes.crawl import JSONLDFilterGroup, URLConfigModel
+
 DeepCrawlingAlgorithm = Literal['bfs','dfs','best-first']
 
 class ScorerModel(BaseModel):
@@ -153,6 +155,7 @@ class SeedingURLModel(BaseModel):
 	pattern: Optional[str] =  None
 	#speed: Literal['normal','fast','ultra-fast'] = 'fast'
 	top: Optional[int] = None 
+	jsonld:Optional[JSONLDFilterGroup] = None
 
 
 	@field_validator('queries',mode='after')
@@ -217,11 +220,5 @@ class SeedingURLModel(BaseModel):
 
 		return self
 
-class ParamIterator(BaseModel):
-	name:str
-	iterator:List[str] | List[int] | Tuple[bool,int,int,int,bool]
-
-class URLGeneratorModel(BaseModel):
-	base_url:str
-	params:List[ParamIterator]
-	query_params:List[ParamIterator]
+class URLGeneratorModel(URLConfigModel):
+	jsonld:Optional[JSONLDFilterGroup] = None

@@ -5,7 +5,7 @@ from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
-from app.decorators.handlers import AgenticHandler, AsyncIOHandler, CostHandler, GrpcHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgenticHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
@@ -62,7 +62,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe())
     @UseGuard(LLMProviderGuard(False,False))
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
-    @UseHandler(AgenticHandler,RedisHandler,CostHandler)
+    @UseHandler(LLMHandler,RedisHandler,CostHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
@@ -87,12 +87,12 @@ class AgentsRessource(BaseHTTPRessource):
     async def read_agent(self,agent:str,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         return  await self.mongooseService.get(AgentModel,agent,True)
          
-    @UsePermission(AdminPermission)
     @UsePipe(MerchantPipe(-1))
-    @UseHandler(CostHandler,RedisHandler)
     @Throttle(normal=(200,80))
-    @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
+    @UsePermission(AdminPermission)
+    @UseHandler(CostHandler,RedisHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/s/{agent}/',methods=[HTTPMethod.DELETE])
     async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
@@ -108,7 +108,7 @@ class AgentsRessource(BaseHTTPRessource):
 
     @Throttle(uniform=(100,200))
     @UsePermission(AdminPermission)
-    @UseHandler(PydanticHandler,AgenticHandler)
+    @UseHandler(PydanticHandler,LLMHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
     async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],body: dict = Body(...),authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -134,11 +134,11 @@ class AgentsRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])        
     @UseLimiter('100/hour')
-    @UseHandler(AgenticHandler,GrpcHandler)
     @Throttle(uniform=(30,60))
     @UsePermission(AgentPermission)
+    @UseHandler(LLMHandler,AgenticHandler,GrpcHandler)
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
-    @PingService([RemoteAgentService],is_manager=True,infinite_wait=True)
+    @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @UseServiceLock(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_profile)], response:Response,profile:str=Depends(get_agent), authPermission:AuthPermission= Depends(get_auth_permission)):
@@ -146,8 +146,18 @@ class AgentsRessource(BaseHTTPRessource):
         if not stream:
             return await agent.Prompt()
         else:
-            await agent.PromptStream()
+            async def response_stream():
+                replies = await agent.PromptStream()
+                async for reply in replies:
+                    ...
+                    yield reply
+            
             return StreamingResponse(
-
+                content=response_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive"
+                    }
             )
             

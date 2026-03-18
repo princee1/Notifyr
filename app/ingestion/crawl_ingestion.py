@@ -1,14 +1,16 @@
 from typing import Any, Callable, Dict, List, Literal, Optional, Type
+import aiohttp
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlStrategy, CrawlerRunConfig, CacheMode, AdaptiveCrawler,AdaptiveConfig
-from crawl4ai import LLMConfig, LLMExtractionStrategy, JsonCssExtractionStrategy, PruningContentFilter
+from crawl4ai import LLMConfig, LLMExtractionStrategy, JsonCssExtractionStrategy, PruningContentFilter,LLMContentFilter
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy, DFSDeepCrawlStrategy,BestFirstCrawlingStrategy,DeepCrawlStrategy
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai import AsyncUrlSeeder, SeedingConfig
 from crawl4ai.deep_crawling.scorers import KeywordRelevanceScorer,DomainAuthorityScorer,PathDepthScorer,ContentTypeScorer,CompositeScorer,FreshnessScorer
 from crawl4ai.deep_crawling.filters import URLPatternFilter, DomainFilter, ContentTypeFilter, ContentRelevanceFilter, SEOFilter,FilterChain
 
+from app.classes.crawl import fetch_jsonld, generate_urls
 from app.definition._error import BaseError
-from app.models.crawal4ai_model import DeepCrawlingAlgorithm, SeedingURLModel
+from app.models.crawal4ai_model import DeepCrawlingAlgorithm, SeedingURLModel, URLGeneratorModel
 from app.models.ingest_model import WebCrawlingDataIngestModel, DeepCrawlingStrategyModel
 from app.models.llm_model import CrawlLLMConfig, BaseTemperatureMaxTokenModel
 
@@ -67,7 +69,7 @@ class WebCrawlerIngestion:
     async def crawl(self,):
         
         self.deep_crawl_strategy = self._build_deep_crawl_strategy()
-        urls = self._build_urls()
+        urls = self.generate_urls()
         extraction_strategy = self._build_extraction_strategy()
         generation_strategy = self._build_generation_strategy()
 
@@ -83,9 +85,9 @@ class WebCrawlerIngestion:
         results = await self.crawler.arun_many(
             urls,
             crawl_config,
-
         )
 
+    
     async def start(self):
         await self.crawler.start()
     
@@ -96,6 +98,87 @@ class WebCrawlerIngestion:
         if self.deep_crawl_strategy:
             await self.deep_crawl_strategy.shutdown()
         
+    async def generate_urls(self):
+        
+        if isinstance(self.ingestTask.urls, list):
+            return self.ingestTask.urls
+        
+        if isinstance(self.ingestTask.urls,SeedingURLModel):
+            seeding_config = self.ingestTask.urls
+            seeder = AsyncUrlSeeder()
+            
+            all_urls = []
+            seen = set()
+            
+            for q in seeding_config.queries:
+                extract_head = bool(seeding_config.jsonld) or bool(q)
+
+                config = SeedingConfig(
+                    **seeding_config.model_dump(exclude=('domain','queries','speed','top')),
+                    extract_head=extract_head,
+                    live_check=True,
+                    query=q if q else None,
+                    force=True,
+                )
+
+                fetched_urls = await seeder.many_urls(
+                    seeding_config.domain,
+                    config
+                    )
+                for _, urls in fetched_urls.items():
+
+                    for url in urls:
+                        if url.get('status','unknown') != 'valid':
+                            continue
+                        if url['url'] in seen:
+                            continue
+                            
+                        seen.add(url['url'])
+                        all_urls.append(url)
+
+            await seeder.close()      
+            all_urls.sort(key=lambda x: x.get('relevance_score',0), reverse=True)
+
+            if seeding_config.top != None:
+                all_urls = all_urls[:seeding_config.top]
+
+            filtered_url = []
+
+            if seeding_config.jsonld != None:
+                for url in all_urls:
+                    jsonld = url.get('json_ld',[])
+                    if not jsonld:
+                        continue
+                    matches = []
+                    for jsld in jsonld[:5]:
+                        m = seeding_config.jsonld.match(jsld)
+                        matches.append(m)
+                    if any(matches):
+                        filtered_url.append(url['url'])
+                
+                return filtered_url
+            else:
+                return[ u['url'] for u in all_urls]
+        
+        if isinstance(self.ingestTask.urls,URLGeneratorModel):
+            generator_config = self.ingestTask.urls
+
+            if generator_config.jsonld:
+                async with aiohttp.ClientSession(url) as session:
+                    for url in generate_urls(generator_config):
+                        jsonld = await fetch_jsonld(session,url)
+                        matches = []
+
+                        for jsld in jsonld[:5]:
+                            m = generator_config.jsonld.match(jsld)
+                            matches.append(m)
+                        if any(matches):
+                            yield url
+            else:
+                yield generate_urls(generator_config)
+
+        raise ValueError('Bad value for the url')
+
     def _build_deep_crawl_strategy(self):
         
         deep_crawl_model: DeepCrawlingStrategyModel = self.ingestTask.deep_crawling
@@ -114,7 +197,6 @@ class WebCrawlerIngestion:
                 return None
             
             filters = []
-            
             for filter_model in deep_crawl_model.url_filters:
                 match filter_model.mode:
                     case 'url_pattern':
@@ -122,25 +204,21 @@ class WebCrawlerIngestion:
                             patterns=filter_model.patterns,
                             threshold=filter_model.threshold
                         ))
-                    
                     case 'domain':
                         filters.append(DomainFilter(
                             include_domains=filter_model.include_domains,
                             blocked_domains=filter_model.blocked_domains,
                         ))
-                    
                     case 'content_type':
                         filters.append(ContentTypeFilter(
                             allowed_types=filter_model.allowed_types,
                         ))
-                    
                     case 'content_relevance':
                         filters.append(ContentRelevanceFilter(
                             query=filter_model.query,
                             similarity_threshold=filter_model.similarity_threshold or 0.5,
                             threshold=filter_model.threshold
                         ))
-                    
                     case 'seo':
                         filters.append(SEOFilter(
                             threshold=filter_model.threshold,
@@ -160,25 +238,21 @@ class WebCrawlerIngestion:
                                 keywords=scorer_model.keyword,
                                 weight=scorer_model.weight
                             ))
-                        
                         case 'domain_authority':
                             scorers.append(DomainAuthorityScorer(
                                 domain_weights=scorer_model.domain_weights,
                                 default_weight=scorer_model.default_weight or 0.5,
                                 weight=scorer_model.weight
                             ))
-                        
                         case 'path_depth':
                             scorers.append(PathDepthScorer(
                                 weight=scorer_model.weight
                             ))
-                        
                         case 'content_type':
                             scorers.append(ContentTypeScorer(
                                 type_weights=scorer_model.type_weights,
                                 weight=scorer_model.weight
                             ))
-                        
                         case 'freshness':
                             scorers.append(FreshnessScorer(
                                 current_year=scorer_model.current_year,
@@ -200,53 +274,10 @@ class WebCrawlerIngestion:
 
     def _build_extraction_strategy(self):
         ...
-
+    
     def _build_generation_strategy(self):
         ...
-
-    async def _build_urls(self):
         
-        if isinstance(self.ingestTask.urls, list):
-            return self.ingestTask.urls
-        
-        if isinstance(self.ingestTask.urls,SeedingURLModel):
-            urls_config = self.ingestTask.urls
-            seeder = AsyncUrlSeeder()
-            
-            all_urls = []
-            seen = set()
-            
-            for q in urls_config.queries:
 
-                config = SeedingConfig(
-                    **urls_config.model_dump(exclude=('domain','queries','speed','top')),
-                    extract_head=bool(q),
-                    live_check=True,
-                    query=q if q else None,
-                    force=True,
-                )
-
-                fetched_urls = await seeder.many_urls(
-                    urls_config.domain,
-                    config
-                    )
-                for _, urls in fetched_urls.items():
-
-                    for url in urls:
-                        if url.get('status','unknown') != 'valid':
-                            continue
-                        if url['url'] in seen:
-                            continue
-                            
-                        seen.add(url['url'])
-                        all_urls.append(url)
-
-            await seeder.close()
-                            
-            all_urls.sort(key=lambda x: x.get('relevance_score',0), reverse=True)
-
-            if urls_config.top != None:
-                all_urls = all_urls[:urls_config.top]
-
-            return [ u['url'] for u in all_urls]
-        
+                
+                        

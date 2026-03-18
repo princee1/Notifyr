@@ -105,8 +105,10 @@ class AgentMiniService(BaseMiniService):
             raise BuildFailureError('Could not validate the agent model')
 
     def _init_tools(self)->list:
-        ...
-    
+        tools = []
+        for tool_model in self.agent_model.tools:
+            ...
+        
     def _init_middleware(self):
         ...
         
@@ -397,7 +399,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             secrets = self.vaultService.secrets_engine.read('internal-api','AGENTIC')
 
             if 'API_KEY' not in secrets:
-                raise BuildFailureError()
+                raise BuildFailureError('No Internal API_KEY between the agentic server and the worker process found, cannot connect')
             
             self.auth_header = secrets['API_KEY']
 
@@ -436,6 +438,9 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         return super().build(counter, build_state)
     
     async def serve(self):
+        if self.service_status != ServiceStatus.AVAILABLE:
+            return
+
         interceptor = AgentServerInterceptor(self.auth_header, {
             '/agent.Agent/Prompt': HandlerType.ONE_ONE,
             '/agent.Agent/PromptStream': HandlerType.ONE_MANY,

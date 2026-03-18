@@ -74,6 +74,7 @@ class AbortedJobResponse(FileResponseUploadModel):
 ###################################################################################################
 
 class WebCrawlingDataIngestModel(DataIngestModel):
+	generation:Optional[str] = None
 	deep_crawling: Optional[DeepCrawlingStrategyModel] = None
 	extraction:Optional[ExtractionStrategyModel] = None
 	urls: List[str] | SeedingURLModel | URLGeneratorModel

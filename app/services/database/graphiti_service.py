@@ -22,6 +22,9 @@ from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerCli
 from graphiti_core.embedder.gemini import GeminiEmbedder,GeminiEmbedderConfig
 from graphiti_core.embedder.openai import OpenAIEmbedder,OpenAIEmbedderConfig
 
+from graphiti_core.nodes import EntityNode
+from graphiti_core.edges import EntityEdge
+
 from graphiti_core.llm_client.anthropic_client import AnthropicClient
 from graphiti_core.llm_client.groq_client import GroqClient
 from graphiti_core.llm_client.gemini_client import GeminiClient
@@ -241,6 +244,11 @@ class GraphitiService(TempCredentialsDatabaseService):
         )
 
         return result
+
+    async def add_fact_triplet(self,domain:str=None):
+        """"""
+        # EntityNode()
+        # EntityEdge()
 
     ##########################################################################
     #######################                             ######################
