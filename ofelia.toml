@@ -9,9 +9,9 @@ container = "credit-system"
 command= "/ncs-utils.sh squash"
 no-overlap = "true"
 
-[job-exec "daily_data_loader"]
+[job-exec "daily_data_ingestion"]
 schedule = "0 */8 * * *"
-container = "data-loader"
+container = "data-ingestion"
 command= "arq app.data_tasks.WorkerSettings"
 
 [job-local "beat.twoweekly-restart"]

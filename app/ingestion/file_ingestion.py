@@ -100,7 +100,7 @@ class TextDataLoader(BaseDataLoader):
         super().__init__(embedding_model, file_path, lang, extension,category)
         self.chunks = []
         self.tokens = []
-        if use_docling and DOCLING_INSTALLED:
+        if use_docling and not DOCLING_INSTALLED:
             raise TypeError('Docling must be installed to use it')
 
         self.strategy = strategy

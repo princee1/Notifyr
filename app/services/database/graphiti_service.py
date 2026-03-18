@@ -247,6 +247,8 @@ class GraphitiService(TempCredentialsDatabaseService):
 
     async def add_fact_triplet(self,domain:str=None):
         """"""
+        return
+        await self.graphiti.add_triplet(...,...,...)
         # EntityNode()
         # EntityEdge()
 

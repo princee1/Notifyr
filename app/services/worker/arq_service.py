@@ -17,7 +17,7 @@ from app.utils.globals import APP_MODE,ApplicationMode
 Time = Union[int | float | timedelta | None]
 Config = Literal['vector_config','graph_config']
 
-QUEUE_NAME = 'arq:data_loader_task'
+QUEUE_NAME = 'arq:data_ingestion_task'
 
 class DataTaskNotFoundError(BaseError):
     def __init__(self, job_id:str,reason:str):
@@ -219,5 +219,5 @@ class ArqIngestTaskService(BaseService):
             return job
                
     def compute_data_file_upload_path(self,filename:str):
-        return f"{self.configService.DATA_LOADER_DIR}uploads/{filename}"
+        return f"{self.configService.DATA_INGESTION_DIR}uploads/{filename}"
     

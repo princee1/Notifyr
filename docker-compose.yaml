@@ -138,7 +138,7 @@ services:
         target: /run/secrets/deploy.json
     volumes:
       - vault-shared:/vault/shared:ro
-      - data-loader:/data-loader/
+      - data-ingestion:/data-ingestion/
 
     build:
       context: ./
@@ -182,12 +182,12 @@ services:
   # ==========================================
   data:
     image: notifyr/agentic:community 
-    container_name: data-loader
+    container_name: data-ingestion
     entrypoint: ["arq", "app.data_tasks.WorkerSettings"]
     #command: ["tail", "-f" ,"/dev/null"]
     volumes:
       - vault-shared:/vault/shared:ro
-      - data-loader:/data-loader/
+      - data-ingestion:/data-ingestion/
     secrets:
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
@@ -555,7 +555,7 @@ volumes:
   minio-data: {}
   rabbitmq_data:
   memgraph_data:
-  data-loader:
+  data-ingestion:
   neo4j_data:
 
 secrets:

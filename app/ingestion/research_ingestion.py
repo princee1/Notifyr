@@ -6,7 +6,7 @@ research_site= [
 ]
 
 class ResearchIngestion(WebCrawlerIngestion):
-    ...
+    
 
     async def digest(self):
         digest_provider = f"{self.digest_provider}/{self.digest_embedding_model.model}"

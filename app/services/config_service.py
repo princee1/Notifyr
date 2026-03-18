@@ -151,7 +151,7 @@ class ConfigService(_service.BaseService):
         self.BASE_DIR:str = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
         self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')
-        self.DATA_LOADER_DIR:str = self.getenv('DATA_LOADER_DIR', '/data-loader/' if self.MODE != MODE.DEV_MODE else './data-loader/')
+        self.DATA_INGESTION_DIR:str = self.getenv('DATA_INGESTION_DIR', '/data-ingestion/' if self.MODE != MODE.DEV_MODE else './data-ingestion/')
 
 
         # GRAPHITI CONFIG #

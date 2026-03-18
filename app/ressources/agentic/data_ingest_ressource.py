@@ -34,7 +34,7 @@ from app.models.ingest_model import (
     FileUploadDataIngestModel,
 )
 from app.models.file_model import  FileResponseUploadModel, UploadError
-from app.data_tasks import DATA_TASK_REGISTRY_NAME
+from app.data_ingest_tasks import DATA_TASK_REGISTRY_NAME
 from app.utils.constant import ArqDataTaskConstant, CostConstant
 from app.utils.tools import RunInThreadPool
 from app.depends.variables import force_update_query

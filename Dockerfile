@@ -8,8 +8,8 @@ FROM python:3.11.4-slim
 
 RUN useradd -m notifyr
 
-RUN mkdir -p /data-loader \
- && chown -R notifyr:notifyr /data-loader
+RUN mkdir -p /data-ingestion \
+ && chown -R notifyr:notifyr /data-ingestion
 
 USER notifyr
 
