@@ -1,9 +1,10 @@
+import sys
 from typing import List
 from fastapi import UploadFile
 from app.cost.file_cost import FileCost
 from app.definition._cost import DataCost
 from app.models.file_model import FileResponseUploadModel
-from app.models.ingest_model import FileUploadDataIngestModel
+from app.models.ingest_model import FileUploadDataIngestModel, WebCrawlingDataIngestModel
 
 
 class FileIngestCost(FileCost):
@@ -34,5 +35,8 @@ class FileIngestCost(FileCost):
             for d,c,q in prices:
                 self.purchase(d,c,q) 
 
-class WebIngestCost(DataCost):
-    ...
+class CrawlMarkdownIngestCost(FileCost):
+    
+    async def pre_purchase(self, ingestTask:WebCrawlingDataIngestModel):
+        ...
+  

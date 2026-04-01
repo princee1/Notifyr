@@ -1,13 +1,7 @@
 from random import randint
-import re, nltk, yake, json
+import re
 from typing import Any, List, Generator
 from enum import Enum
-
-# NLTK & Text Processing
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize, sent_tokenize
-from nltk import FreqDist
-from gensim import corpora, models
 
 from llama_index.core.node_parser import SentenceSplitter, SemanticSplitterNodeParser
 from llama_index.core.schema import TextNode
@@ -26,13 +20,9 @@ try:
 except ImportError as e:
     DOCLING_INSTALLED = False
 
-from app.classes.chunk import Chunk, ChunkPayload
+from app.classes.chunk import Chunk, ChunkPayload, TextDetector
 from app.utils.constant import ParseStrategy
 from app.utils.tools import Mock, RunAsync
-
-nltk.download(['stopwords', 'punkt', 'wordnet'], quiet=True)
-STOP_WORDS = set(stopwords.words('english'))
-KW_EXTRACTOR = yake.KeywordExtractor(lan="en", n=1, top=10)
 
 TEXT_READERS: dict[str, type[BaseReader]] = {
     "pdf": PDFReader,
@@ -43,7 +33,7 @@ TEXT_READERS: dict[str, type[BaseReader]] = {
     "xml":XMLReader
 }
 
-class DataLoaderStepIndex(int, Enum):
+class FileIngestionStepIndex(int, Enum):
     CHECK = 1
     TOKEN_VERIFY = 2
     PROCESS = 3
@@ -70,31 +60,6 @@ class BaseDataLoader:
 
 class TextDataLoader(BaseDataLoader):
     
-    class TextDetector:
-        def __init__(self, text: str):
-            self.text = text
-            self.tokens = [t.lower() for t in word_tokenize(text) if t.isalnum()]
-            self.clean_tokens = [t for t in self.tokens if t not in STOP_WORDS]
-            self.freq_dist = FreqDist(self.clean_tokens)
-            self.sentence_count = len(sent_tokenize(text))
-
-        @RunAsync
-        def extract_keywords(self) -> List[str]:
-            return [kw for kw, _ in KW_EXTRACTOR.extract_keywords(self.text)]
-
-        @RunAsync
-        def extract_topics(self, num_topics=3) -> List[str]:
-            if len(self.clean_tokens) < 5: return []
-            dict_ = corpora.Dictionary([self.clean_tokens])
-            corpus = [dict_.doc2bow(self.clean_tokens)]
-            lda = models.LdaModel(corpus, num_topics=num_topics, id2word=dict_, passes=10)
-            topics = lda.show_topics(formatted=False)
-            return [word for _, top in topics for word, prob in top[:2]]
-
-        def density_label(self) -> str:
-            count = self.freq_dist.N()
-            return "low" if count < 80 else "medium" if count < 160 else "high"
-
     def __init__(self,embedding_model:BaseEmbedding , file_path: str, lang: str, extension: str,category:str,
                  strategy: ParseStrategy = ParseStrategy.SEMANTIC, use_docling: bool = False):
         super().__init__(embedding_model, file_path, lang, extension,category)
@@ -137,7 +102,7 @@ class TextDataLoader(BaseDataLoader):
         
         current_section = "General"
         for i, node in enumerate(nodes):
-            detector = self.TextDetector(node.text)
+            detector = TextDetector(node.text,extract_topics=True,extract_keyword=True,extract_type=True)
             
             rel_ids = []
             for rel in node.relationships.values():
@@ -147,9 +112,10 @@ class TextDataLoader(BaseDataLoader):
             if self.use_docling and self.strategy == ParseStrategy.STRUCTURED:
                 current_section = node.metadata.get("heading", current_section)
             else:
-                new_section = self.extract_section(node.text)
+                new_section = TextDetector.extract_sections(node.text)
                 if new_section: current_section = new_section
-
+            
+            stats = await detector.analyze()
             payload = ChunkPayload(**{
                 "text": node.text,
                 "document_name": self.file_path,
@@ -159,29 +125,17 @@ class TextDataLoader(BaseDataLoader):
                 "extension": self.extension,
                 "strategy": self.strategy.value,
                 "parser": "docling" if self.use_docling else "llama",
-                
                 "page": node.metadata.get("page_label"),
                 "bbox": node.metadata.get("bbox", None),
-                
                 "chunk_id": f"{node.ref_doc_id}_{i}",
                 "chunk_index": i,
                 "title": node.metadata.get("title", ""),
                 "section": current_section,
                 "language": self.lang,
-                "content_type": self.detect_type(node.text),
-
                 "document_type":"textfile",
-                "category":self.category,
-                
-                "token_count": detector.freq_dist.N(),
-                "full_token_count": len(detector.tokens),
-                "word_count": detector.freq_dist.B(),
-                "most_common": detector.freq_dist.most_common(5),
-                "sentence_count": detector.sentence_count,
-                "keywords": await detector.extract_keywords(),
-                "topics": await detector.extract_topics(),
-                "density": detector.density_label(),
-                "relationship": rel_ids
+                "category":self.category, 
+                "relationship": rel_ids,
+                **stats
             })
 
             self.chunks.append(Chunk(
@@ -194,29 +148,6 @@ class TextDataLoader(BaseDataLoader):
 
     def compute_token(self):
         return randint(2000,30000)
-
-    @classmethod
-    def extract_section(cls, text: str) -> str:
-        patterns = [
-            r"^(#+)\s+(.*)",                      # Markdown
-            r"^(?:\d+\.)+\d*\s+(.*)",             # Numbered: 1.1.2
-            r"^(Chapter\s+\d+[:\-]?)\s*(.*)",     # Chapters
-            r"^[A-Z][A-Z\s]{5,20}$"               # ALL CAPS short lines
-        ]
-        for p in patterns:
-            match = re.search(p, text, re.MULTILINE)
-            if match:
-                return next((g for g in match.groups() if g), "").strip()
-        return None
-
-    @classmethod
-    def detect_type(cls, text: str) -> str:
-        text_s = text.strip()
-        if cls.extract_section(text_s): return "heading"
-        if "|" in text_s or re.search(r"{3,}.*{3,}", text_s): return "table"
-        if re.search(r"\b(def|class|import|return|void|public)\b", text_s): return "code"
-        if any(x in text_s for x in ["∑", "∫", "λ", "δ", "=="]): return "equation"
-        return "paragraph"
 
 class VideoDataLoader(BaseDataLoader):
 

@@ -1,7 +1,7 @@
-import math
 from typing import Dict, List, Literal, Optional, Self, Tuple
-from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
-from app.models.crawal4ai_model import DeepCrawlingStrategyModel, DigestConfigModel, ExtractionStrategyModel, SeedingURLModel, URLGeneratorModel
+from aiohttp_retry import Union
+from pydantic import BaseModel, Field, HttpUrl, field_serializer, field_validator, model_validator
+from app.models.crawal4ai_model import MAX_URLS, DeepCrawlingStrategyModel, DigestConfigModel,KnowledgeGraphExtractionConfig, PDFLinkPreviewModel, SchemaExtractionConfig, SeedingURLModel, TextsExtractionConfig, URLGeneratorModel
 from app.utils.constant import ParseStrategy
 from .file_model import FileResponseUploadModel, UriMetadata
 from app.classes.scheduler import TimedeltaSchedulerModel
@@ -10,7 +10,6 @@ from app.classes.scheduler import TimedeltaSchedulerModel
 ###################################################################################################
 ###########################	          Base Ingest Model				 ##############################
 ###################################################################################################
-
 class VectorConfig(BaseModel):
 	collection_name: str
 	category: str
@@ -53,8 +52,6 @@ class DataIngestModel(BaseModel):
 ###################################################################################################
 ###########################		    File Ingest Model			     ##############################
 ###################################################################################################
-
-
 class FileUploadDataIngestModel(DataIngestModel):
 	strategy: ParseStrategy
 	use_docling:bool = False
@@ -74,10 +71,11 @@ class AbortedJobResponse(FileResponseUploadModel):
 ###################################################################################################
 
 class WebCrawlingDataIngestModel(DataIngestModel):
-	generation:Optional[str] = None
+	extraction:Union[SchemaExtractionConfig | TextsExtractionConfig | KnowledgeGraphExtractionConfig]
+	urls: List[HttpUrl] | SeedingURLModel | URLGeneratorModel
+	pdf: Optional[PDFLinkPreviewModel] = None
+	exclude_external_links:bool = True
 	deep_crawling: Optional[DeepCrawlingStrategyModel] = None
-	extraction:Optional[ExtractionStrategyModel] = None
-	urls: List[str] | SeedingURLModel | URLGeneratorModel
 
 	@field_validator("urls", mode="before")
 	def parse_urls(cls, v):
@@ -85,14 +83,21 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 			return [v]
 		return v
 
+	@field_validator("urls", mode="after")
+	def parse_urls(cls, v):
+		if isinstance(v,list):
+			if len(v) > MAX_URLS *2:
+				raise ValueError(f"You cannot provide more than {MAX_URLS *2} urls, you provided {len(v)}")
+		return v
+		
 	@model_validator(mode='after')
 	def invalidate_deep_crawling(self:Self)->Self:
 		if isinstance(self.urls, URLGeneratorModel) and self.deep_crawling != None:
 			raise ValueError('If the urls are generated you cannot use deep crawling as it will use too much ressource')
 
 		return self
-	
-class IngestDataWebCrawlingResponse:
+
+class IngestDataWebCrawlingResponse():
 	...
 
 ###################################################################################################
@@ -100,8 +105,9 @@ class IngestDataWebCrawlingResponse:
 ###################################################################################################
 
 class ResearchDataIngestModel(DataIngestModel):
-	start_url:str
-	query:List[str]
+	engine:Literal['google','bing','duckduckgo','google-scholar'] = 'google'
+	max_pages: int = Field(default=10, gt=0, le=10)
+	query:str
 	config:DigestConfigModel
 
 

@@ -1,10 +1,21 @@
 import math
-from typing import Dict, List, Literal, Optional, Self, Tuple
-from pydantic import BaseModel, Field, model_validator,field_validator, model_validator
+from typing import Any, Dict, List, Literal, Optional, Self, Tuple
+from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import HttpUrl
 
 from app.classes.crawl import JSONLDFilterGroup, URLConfigModel
 
 DeepCrawlingAlgorithm = Literal['bfs','dfs','best-first']
+ExtractionMode = Literal['markdown', 'structured']
+StructuredExtractionFormat = Literal['text_list', 'dictionary', 'list_of_dictionaries', 'knowledge_graph']
+StructuredExtractionStrategy = Literal['llm', 'json'] #'regex'
+
+
+MAX_URLS = 10
+
+###################################################################################################
+###########################		  DeepCrawling Models			     	 ##########################
+###################################################################################################
 
 class ScorerModel(BaseModel):
 	mode: Literal['keyword', 'domain_authority', 'path_depth', 'content_type', 'freshness']
@@ -90,42 +101,15 @@ class FilterModel(BaseModel):
 		
 		return self
 
-class DigestConfigModel(BaseModel):
-	strategy: Literal["embedding", "statistical"] = Field(default="embedding", description="Strategy type")
-	confidence_threshold: float = Field(default=0.7, ge=0, le=1, description="Confidence threshold between 0 and 1")
-	max_depth: int = Field(default=3, ge=1, description="Maximum depth, must be at least 1")
-	max_pages: int = Field(default=20, ge=1, description="Maximum number of pages, must be at least 1")
-	top_k_links: int = Field(default=3, ge=1, description="Top K links to consider, must be at least 1")
-	min_gain_threshold: float = Field(default=0.1, ge=0, le=1, description="Minimum gain threshold between 0 and 1")
-
-	relevance_weight: float = Field(default=0.5, ge=0, le=1, description="Relevance weight between 0 and 1")
-	novelty_weight: float = Field(default=0.3, ge=0, le=1, description="Novelty weight between 0 and 1")
-	authority_weight: float = Field(default=0.2, ge=0, le=1, description="Authority weight between 0 and 1")
-
-	n_query_variations: int = Field(default=10, ge=1, description="Number of query variations, must be at least 1")
-	coverage_threshold: float = Field(default=0.85, ge=0, le=1, description="Coverage threshold between 0 and 1")
-	embedding_overlap_threshold: float = Field(default=0.85, ge=0, le=1, description="Embedding overlap threshold between 0 and 1")
-	embedding_k_exp: float = Field(default=3.0, ge=0, le=12,description="Exponential decay factor for embedding overlap (higher = stricter)")
-
-	# Stopping criteria
-	embedding_min_relative_improvement: float = Field(default=0.1, ge=0, le=1, description="Minimum relative improvement in embedding overlap to continue")
-	embedding_validation_min_score: float = Field(default=0.3, ge=0, le=1, description="Minimum validation score for embeddings")
-	embedding_min_confidence_threshold: float = Field(default=0.1, ge=0, le=1, description="Minimum confidence threshold below which results are considered irrelevant")
-
 class DeepCrawlingStrategyModel(BaseModel):
 	algorithm: DeepCrawlingAlgorithm = 'best-first'
-	max_pages: float = Field(ge=1, default=50, allow_inf_nan=True)
-	max_depth: float = Field(ge=0, default=2, allow_inf_nan=True)
+	max_pages: float = Field(ge=1, le=100, default=50)
+	max_depth: float = Field(ge=0, le=10, default=2)
 	include_external: bool = False
 	score_threshold: Optional[float] = None
 	url_scorers: Optional[List[ScorerModel]] = None
 	url_filters: Optional[List[FilterModel]] = None
 
-	@field_validator("max_pages", "max_depth", mode="before")
-	def parse_unlimited(cls, v):
-		if v in ("inf", "infinity", -1, None):
-			return math.inf
-		return v
 	
 	@field_validator("max_pages", mode="after")
 	def check_pages(cls, v):
@@ -141,15 +125,15 @@ class DeepCrawlingStrategyModel(BaseModel):
 			raise ValueError("score_threshold must be between 0 and 1")
 		return v
 
-class ExtractionStrategyModel(BaseModel):
-	mode:Literal['']
-	recursive:str
-	schema_url:str
+
+###################################################################################################
+###########################		  URL Models			     			 ##########################
+###################################################################################################
 
 class SeedingURLModel(BaseModel):
-	domain:List[str]
+	domain:List[HttpUrl] = Field(description="List of domains to seed the crawl (e.g., ['example.com', 'anotherdomain.com'])",max_length=MAX_URLS,min_length=1)
 	source:Literal['cc','sitemap','sitemap+cc'] = 'sitemap'
-	max_urls:int =  Field(default=50,ge=-1,description="Max url for each domain")
+	max_urls:int =  Field(default=25,ge=1, le=50, description="Max url for each domain")
 	score_threshold: Optional[float] = Field(default=0.4,gt=0,lt=1)
 	queries:Optional[List[str]] = []
 	pattern: Optional[str] =  None
@@ -164,18 +148,6 @@ class SeedingURLModel(BaseModel):
 			q.append('')
 		
 		return list(set(q))
-
-	@field_validator("max_url", mode="before")
-	def parse_unlimited(cls, v):
-		if v in ("inf", "infinity", -1, None):
-			return -1
-		return v
-	
-	@field_validator("max_url", mode="after")
-	def validate_max_url(cls,v):
-		if v ==0:
-			raise ValueError('max_url must be inf or >= 1')
-		return v
 	
 	@field_validator("domain", mode="before")
 	def parse_domain(cls, v):
@@ -201,7 +173,7 @@ class SeedingURLModel(BaseModel):
 			raise ValueError('At least one domain must be define')
 		
 		if len_domain > 100:
-			raise ValueError(f'Maximum domain reached: max:200 got {len_domain}')
+			raise ValueError(f'Maximum domain reached: max:100 got {len_domain}')
 		
 		return list(set(d))
 
@@ -222,3 +194,73 @@ class SeedingURLModel(BaseModel):
 
 class URLGeneratorModel(URLConfigModel):
 	jsonld:Optional[JSONLDFilterGroup] = None
+
+	@field_validator("path_params","query_params",mode="after")
+	def validate_path_params(cls, v):
+		if len(v) > 5:
+			raise ValueError("You cannot have more than 5 path or query parameters for url generation")
+		if len(v) == 0:
+			raise ValueError("You must have at least one path or query parameter for url generation")
+		return v
+
+###################################################################################################
+###########################		  Research Models			     		 ##########################
+###################################################################################################
+
+class DigestConfigModel(BaseModel):
+	strategy: Literal["embedding", "statistical"] = Field(default="embedding", description="Strategy type")
+	confidence_threshold: float = Field(default=0.7, ge=0, le=1, description="Confidence threshold between 0 and 1")
+	max_depth: int = Field(default=3, ge=1, description="Maximum depth, must be at least 1")
+	max_pages: int = Field(default=20, ge=1, description="Maximum number of pages, must be at least 1")
+	top_k_links: int = Field(default=3, ge=1, description="Top K links to consider, must be at least 1")
+	min_gain_threshold: float = Field(default=0.1, ge=0, le=1, description="Minimum gain threshold between 0 and 1")
+
+	relevance_weight: float = Field(default=0.5, ge=0, le=1, description="Relevance weight between 0 and 1")
+	novelty_weight: float = Field(default=0.3, ge=0, le=1, description="Novelty weight between 0 and 1")
+	authority_weight: float = Field(default=0.2, ge=0, le=1, description="Authority weight between 0 and 1")
+
+	n_query_variations: int = Field(default=10, ge=1, description="Number of query variations, must be at least 1")
+	coverage_threshold: float = Field(default=0.85, ge=0, le=1, description="Coverage threshold between 0 and 1")
+	embedding_overlap_threshold: float = Field(default=0.85, ge=0, le=1, description="Embedding overlap threshold between 0 and 1")
+	embedding_k_exp: float = Field(default=3.0, ge=0, le=12,description="Exponential decay factor for embedding overlap (higher = stricter)")
+
+	# Stopping criteria
+	embedding_min_relative_improvement: float = Field(default=0.1, ge=0, le=1, description="Minimum relative improvement in embedding overlap to continue")
+	embedding_validation_min_score: float = Field(default=0.3, ge=0, le=1, description="Minimum validation score for embeddings")
+	embedding_min_confidence_threshold: float = Field(default=0.1, ge=0, le=1, description="Minimum confidence threshold below which results are considered irrelevant")
+
+###################################################################################################
+###########################		  Extraction Mode Models			     ##########################
+###################################################################################################
+
+class BaseExtractionConfig(BaseModel):
+    """Common fields shared across all extraction configurations."""
+    strategy: StructuredExtractionStrategy = 'llm'
+    instruction: Optional[str] = Field(default=None, description="LLM instruction for extraction")
+
+class BaseSchemaExtractionConfig(BaseExtractionConfig):
+    schema_name: Optional[str] = Field(default=None, description="Schema name for json_css/regex strategy")
+    schema_url: Optional[str] = Field(default=None, description="Example URL to generate schema from")
+
+class TextsExtractionConfig(BaseSchemaExtractionConfig):
+    """Configuration for extracting list of text items (id, name, text)."""
+    focus: str
+
+class SchemaExtractionConfig(BaseSchemaExtractionConfig):
+    """Configuration for extracting list of dictionary objects."""
+    schema: Optional[str] = Field(default=None, description="Name of the predefined schema to use (e.g., 'product', 'article')")
+
+class KnowledgeGraphExtractionConfig(BaseExtractionConfig):
+    """Configuration for extracting knowledge graph (entities and relationships)."""
+    strategy: Literal['kg-llm'] = 'kg-llm' 
+
+
+###################################################################################################
+###########################		   PDF Link Preview  Model 			     ##########################
+###################################################################################################
+
+class PDFLinkPreviewModel(BaseModel):
+	max_links: int = Field(default=5, ge=1, le=1000, description="Maximum number of PDF links to preview")
+	score_threshold: Optional[float] = Field(default=0.6, ge=0, le=1, description="Score threshold for including PDF links in the preview")
+	query: Optional[str] = Field(default=None, description="Optional query to evaluate relevance of PDF links",max_length=250,min_length=2)
+

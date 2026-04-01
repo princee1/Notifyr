@@ -533,7 +533,7 @@ class BoltConstant:
 
 class ArqDataTaskConstant:
     FILE_DATA_TASK = 'file'
-    WEB_DATA_TASK = 'web'
+    CRAWL_DATA_TASK = 'crawl'
     API_DATA_TASK='api'
     RESEARCH_DATA_TASK='research'
 

@@ -148,7 +148,7 @@ class GraphitiService(TempCredentialsDatabaseService):
     #######################                             ######################
     ##########################################################################
 
-    async def add_chunk_episode(self,chunk:Chunk,instruction:str=None,entities:list[str]=None,edges:list[str]=None):
+    async def add_chunk_episode(self,chunk:Chunk,instruction:str=None,entities:list[str]=None,edges:list[str]=None,description:str=None ):
         name = f"{chunk.payload['document_name']} - {chunk.payload['chunk_id']} - {chunk.payload['title']}"
         source = chunk.payload['source']
 

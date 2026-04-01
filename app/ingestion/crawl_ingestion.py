@@ -1,319 +1,727 @@
-from dataclasses import dataclass
+"""
+Complete Web Crawler Ingestion with support for multiple extraction modes.
+Handles URL generation, content extraction, chunk splitting, and token tracking.
+"""
+import asyncio
+from enum import Enum
+import json
+from pathlib import Path
+import sys
 from typing import Any, AsyncGenerator, Callable, Dict, List, Literal, Optional, Type, TypedDict
+from dataclasses import dataclass, field as dataclass_field
+
 import aiohttp
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlStrategy, CrawlerRunConfig, CacheMode, AdaptiveCrawler,AdaptiveConfig
-from crawl4ai import LLMConfig, LLMExtractionStrategy, JsonCssExtractionStrategy, PruningContentFilter,LLMContentFilter
-from crawl4ai.deep_crawling import BFSDeepCrawlStrategy, DFSDeepCrawlStrategy,BestFirstCrawlingStrategy,DeepCrawlStrategy
-from crawl4ai import AsyncUrlSeeder, SeedingConfig
+from bs4 import BeautifulSoup
+from crawl4ai import AsyncUrlSeeder, AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, AdaptiveCrawler, LinkPreviewConfig, PruningContentFilter, SeedingConfig
+from crawl4ai import LLMConfig, LLMExtractionStrategy, JsonCssExtractionStrategy, LLMContentFilter,RegexExtractionStrategy,ExtractionStrategy
+from crawl4ai.deep_crawling import BFSDeepCrawlStrategy, DFSDeepCrawlStrategy, BestFirstCrawlingStrategy, DeepCrawlStrategy
+from crawl4ai.processors.pdf import PDFCrawlerStrategy, PDFContentScrapingStrategy
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.deep_crawling.scorers import KeywordRelevanceScorer,DomainAuthorityScorer,PathDepthScorer,ContentTypeScorer,CompositeScorer,FreshnessScorer
-from crawl4ai.deep_crawling.filters import URLPatternFilter, DomainFilter, ContentTypeFilter, ContentRelevanceFilter, SEOFilter,FilterChain
+from crawl4ai.deep_crawling.scorers import (
+	KeywordRelevanceScorer, DomainAuthorityScorer, PathDepthScorer, 
+	ContentTypeScorer, CompositeScorer, FreshnessScorer, urlparse
+)
+from crawl4ai.deep_crawling.filters import (
+	URLPatternFilter, DomainFilter, ContentTypeFilter, 
+	ContentRelevanceFilter, SEOFilter, FilterChain
+)
+from crawl4ai.models import TokenUsage
 
-from app.classes.crawl import fetch_jsonld, generate_urls
+from pydantic import BaseModel
+from app.classes.chunk import ChunkPayload, Chunk, TextDetector
+from app.classes.crawl import BadSchemaGenerationStrategyError, Crawl4AIModeConfigMissingError, CrawlDocumentSize, CrawlError, CrawlResultMetadata, CrawlState, CrawlTextModel, CrawlTokenUsageReport, NoInputHtmlSchemaError, NoURLToCrawlError, SchemaCouldNotBeGeneratedError, SchemaFetchError, SchemaHTMLExampleNotFoundError, SchemaHasNoContentError, CrawlTokenUsage, URLDescription, UrlDescriptionNotFoundError, fetch_jsonld, generate_urls
 from app.definition._error import BaseError
-from app.models.crawal4ai_model import DeepCrawlingAlgorithm, SeedingURLModel, URLGeneratorModel
-from app.models.ingest_model import WebCrawlingDataIngestModel, DeepCrawlingStrategyModel
-from app.models.llm_model import CrawlLLMConfig, BaseTemperatureMaxTokenModel, WebResearchConfig
-from app.classes.chunk import ChunkPayload,Chunk
+from app.models.crawal4ai_model import (
+	DeepCrawlingAlgorithm, DeepCrawlingStrategyModel,
+	TextsExtractionConfig, SchemaExtractionConfig, SchemaExtractionConfig,
+	KnowledgeGraphExtractionConfig,
+	SeedingURLModel, URLGeneratorModel
+)
+from app.models.ingest_model import WebCrawlingDataIngestModel
+from app.models.llm_model import CrawlLLMConfig, WebResearchConfig
+from app.prompt import crawl_prompt
+from app.utils.helper import uuid_v1_mc
+from app.utils.tools import RunAsync
 
 
-class CrawlNotSucceededError(BaseError):
-    def __init__(self, url:str):
-        super().__init__(url)
-        self.url = url
+###################################################################################################
+###########################		  DEEP_CRAWL_MAP					     ##############################
+###################################################################################################
 
-class Crawl4AIModeConfigMissingError(BaseError):
-    def __init__(self, config:Literal['crawl','digest']):
-        super().__init__(config)
-        self.config=config
-
-
-DEEP_CRAWL_MAP:Dict[DeepCrawlingAlgorithm,Type[DeepCrawlStrategy]] = {
-    'bfs':BFSDeepCrawlStrategy,
-    'dfs':DFSDeepCrawlStrategy,
-    'best-first':BestFirstCrawlingStrategy,
+DEEP_CRAWL_MAP: Dict[DeepCrawlingAlgorithm, Type[DeepCrawlStrategy]] = {
+	'bfs': BFSDeepCrawlStrategy,
+	'dfs': DFSDeepCrawlStrategy,
+	'best-first': BestFirstCrawlingStrategy,
 }
 
+EXTRACTION_STRATEGY_MAP :Dict[Literal['json','regex'],type[ExtractionStrategy]] = {
+	'json': JsonCssExtractionStrategy,
+	'regex':RegexExtractionStrategy
+}
 
-class CrawlError(TypedDict):
-    url:str
-    message:str
-
-
+###################################################################################################
+###########################		  WebCrawlerIngestion Class			     ##############################
+###################################################################################################
 @dataclass
 class LLMGeneralConfig:
-    provider:str
-    model:CrawlLLMConfig|WebResearchConfig
-    api_token:str
+	provider_id:str
+	provider: str
+	model: CrawlLLMConfig | WebResearchConfig
+	api_token: str
 
-    def formatted_provider(self):
-        return f"{self.provider}/{self.model.model}"
+	def formatted_provider(self) -> str:
+		return f"{self.provider}/{self.model.model}"
+
+	@property
+	def _model(self)->str:
+		return self.model.model
+
+
+MS = 1000
+
+# A list of the most frequent ad, tracking, and spam-heavy domains
+AD_AND_SPAM_DOMAINS = [
+    "doubleclick.net",
+    "googleadservices.com",
+    "googlesyndication.com",
+    "adnxs.com",
+    "advertising.com",
+    "adtech.com",
+    "taboola.com",
+    "outbrain.com",
+    "openx.net",
+    "pubmatic.com",
+    "rubiconproject.com",
+    "casalemedia.com",
+    "yieldmo.com",
+    "media.net",
+    
+    "scorecardresearch.com",
+    "quantserve.com",
+    "fullstory.com",
+    "hotjar.com",
+    "crazyegg.com",
+    "mixpanel.com",
+    "segment.io",
+    "intercom.io",
+    
+    "bit.ly",
+    "tinyurl.com",
+    "t.co",
+    "clickbank.net",
+    "revenuehits.com",
+    "bidvertiser.com",
+    "popads.net",
+    "propellerads.com"
+]
+
+
+
+class CrawlIngestionStepIndex(int, Enum):
+	CHECK = 1
+	TOKEN_VERIFY = 2
+	INITIALIZE = 3
+	CRAWL = 4
+	TOTAL_COST = 6
+	CLEANUP = 7
 
 
 class WebCrawlerIngestion:
-    
-    def __init__(self,ingestTask:WebCrawlingDataIngestModel,crawl_llm_config:LLMGeneralConfig,deep_crawl_state:Dict[str|Any]|None,extra_headers:dict=lambda:dict(),dc_state_callback:Callable[[Dict[str, Any]],None]|None=None,base_dir=None):
-        self.session_id:str|Callable[[],str] = ...
-        self.user_agent:str|Callable[[],str] = ...
+	"""
+	Comprehensive web crawler ingestion system with support for:
+	- Multiple extraction modes (markdown, structured)
+	- Deep crawling with scoring and filtering
+	- Schema generation and caching
+	- Token usage tracking
+	- Chunk splitting and semantic preservation
+	"""
+	
+	def __init__(
+		self,
+		ingestTask: WebCrawlingDataIngestModel,
+		crawl_llm_config: LLMGeneralConfig,
+		crawl_state: Optional[CrawlState] = None,
+		extra_headers: Optional[Dict] = None,
+		dc_state_callback: Optional[Callable[[CrawlState], None]] = None,
+		base_dir: Optional[str] = None,
+		schema:Optional[BaseModel] = None,
+	):
+		self.session_id: str | Callable[[], str] = ...
+		self.extra_headers = extra_headers
 
-        self.dc_state_callback = dc_state_callback
-        self.deep_crawl_state = deep_crawl_state
-        self.ingestTask = ingestTask
-        self.base_dir = base_dir
-        self.crawl_llm_config = crawl_llm_config
+		self.ingestTask = ingestTask
+		self.crawlLlmConfig = crawl_llm_config
+		self.dc_state_callback = dc_state_callback
+		self.crawlState = crawl_state
+		self.schema = schema
+		
+		self.base_dir = Path(base_dir) if base_dir else Path.cwd() / ".crawl_cache"
+		
+		self.errors: list[CrawlError]  = []
+		self.crawler: Optional[AsyncWebCrawler] = None
+		self.llm_config: Optional[LLMConfig] = None
+		self.deep_crawl_strategy: Optional[DeepCrawlStrategy] = None
+		
+		self.urls: List[str] = []
+		self.documents:List[CrawlDocumentSize] = []
+	
+	def initialize_folders(self):
+	    # Create cache and schema directories
+		self.cache_dir = self.base_dir / "cache"
+		self.schema_dir = self.base_dir / "schemas"
+		self.cache_dir.mkdir(parents=True, exist_ok=True)
+		self.schema_dir.mkdir(parents=True, exist_ok=True)
 
-        self.deepCrawlStrategy = None
-        self.urls:dict[str,str] = {}
+	async def initialize_config(self):
+		"""Build crawler and LLM configuration."""
+		
+		provider_str = self.crawlLlmConfig.formatted_provider()
 
-        self.build_configuration()
+		self.llm_config = LLMConfig(
+			provider=provider_str,
+			**self.crawlLlmConfig.model.model_dump(exclude={'model'}),
+			api_token=self.crawlLlmConfig.api_token
+		)
 
-    def build_configuration(self):
-        llm_config_provider = f"{self.crawl_llm_config.provider}/{self.crawl_llm_config.model.model}"
-        self.llm_config = LLMConfig(provider=llm_config_provider,
-                                    **self.crawl_llm_config.model.model_dump(exclude=('model',)),
-                                    api_token=self.crawl_llm_config.api_token
-                                    )
-        
-        self.crawler = AsyncWebCrawler(
-            config=BrowserConfig(
-                headless=True,
-                use_managed_browser=False,
-            ),
-            session_id=self.session_id() if callable(self.session_id) else self.session_id,
-        )
-        
-    async def crawl(self,):
-        
-        self.build_deepCrawl_strategy()
-        await self.generate_urls()
-        extraction_strategy = self.build_extraction_strategy()
+		self.crawler = AsyncWebCrawler(
+			config=BrowserConfig(
+				headless=True,
+				use_managed_browser=False,
+				accept_downloads=False,
+				user_agent_mode='random',
+			),
+			session_id=self.session_id() if callable(self.session_id) else self.session_id,
+			#base_directory=self.base_dir
+		)	
 
-        llm_filter = LLMContentFilter(
-            llm_config=self.llm_config,
-            instruction="",
-            ignore_cache=False
-        )
+		self.urls = await self.generate_urls()
 
-        crawl_config = CrawlerRunConfig(
-            stream=True,
-            deep_crawl_strategy=self.deepCrawlStrategy,
-            extraction_strategy=extraction_strategy,
-            exclude_external_images=True,
-            wait_for_images=True,
-            scan_full_page=True,
-            scroll_delay=0.5,
-            remove_forms=True,
-            js_only=True
-        )
+		if self.ingestTask.deep_crawling:
+			self._build_deepCrawl_strategy()
+		
+		self.schema_tokenUsage = TokenUsage()
+		markdown_generator,strategy  = await self.build_strategy(self.ingestTask.extraction)
+	
+		self.strategy: LLMExtractionStrategy | JsonCssExtractionStrategy | RegexExtractionStrategy | None = strategy
 
-        not_succeded_crawl = []
+		pdfLinkPreview = LinkPreviewConfig(
+			include_external=True,
+			include_patterns=['*.pdf'],
+			timeout=3,
+			**self.ingestTask.pdf.model_dump(exclude_none=True)
+		) if self.ingestTask.pdf else None
+		
+		self.crawl_config = CrawlerRunConfig(
+			link_preview_config=pdfLinkPreview,
+			preserve_https_for_internal_links=True,
+			deep_crawl_strategy=self.deep_crawl_strategy,
+			markdown_generator=strategy,
+			extraction_strategy=markdown_generator,
+			cache_mode=CacheMode.BYPASS,
+			exclude_external_images=True,
+			wait_for_images=False,
+			scan_full_page=True,
+			max_scroll_steps=1000,
+			score_links=True,
+			remove_forms=True,
+			exclude_all_images=True,
+			excluded_tags=['script', 'style','header'], # Could be used to exclude scripts, styles, etc. if needed
+			simulate_user=True,
+			exclude_social_media_links=True,
+			page_timeout=30*MS,
+			exclude_domains=AD_AND_SPAM_DOMAINS,
+			exclude_external_links=self.ingestTask.exclude_external_links,
+			wait_until='load',
+		)
+		
+	async def generate_urls(self) -> List[str]:
+		"""
+		Generate URLs with metadata (title, description) from jsonld or HTML head.
+		
+		Supports:
+		- Static URL list
+		- URL seeding (CommonCrawl + Sitemap + Queries)
+		- URL generation via patterns
+		"""
+		urls_config = self.ingestTask.urls
+		result = []
+		seen_urls = set()
+		if isinstance(urls_config, list):
+			for url in urls_config:
+				url_str = str(url)
+				if url_str not in seen_urls:
+					result.append(url_str)
+					seen_urls.add(url_str)
 
-        results:AsyncGenerator[CrawlResult,None] = await self.crawler.arun_many(
-            self.urls.keys(),
-            crawl_config,
-        )
-        async for result in results: 
-            if not result.success:
-                not_succeded_crawl.append(
-                    CrawlError(url=result.url,message=result.error_message)
-                )
-                continue
+		elif isinstance(urls_config, SeedingURLModel):
+			all_urls = await self._generate_from_seeding()
+			if urls_config.jsonld != None:
+				for url in all_urls:
+					jsonld = url.get('json_ld',[])
+					if not jsonld:
+						continue
+					if urls_config.jsonld.match(jsonld):
+						result.append(url['url'])	
 
-            if ...:
-                ...
-                
-            else:
-                ...
+		elif isinstance(urls_config, URLGeneratorModel):
+			async with aiohttp.ClientSession(url) as session:
+				for url in generate_urls(urls_config):
+					if urls_config.jsonld:
+						jsonld = await fetch_jsonld(session,url)
+						if not urls_config.jsonld.match(jsonld):
+							continue
+					result.append(url)
+		
+		if not result:
+			raise NoURLToCrawlError('No valid URLs to crawl after generation and filtering')
+		
+		return result
 
-    async def start(self):
-        await self.crawler.start()
-    
-    async def close(self):
-        await self.crawler.close()
+	async def build_strategy(self):
+		"""Build extraction strategy based on configuration."""
+		config = self.ingestTask.extraction
+		markdown_generator = DefaultMarkdownGenerator(
+			content_filter=PruningContentFilter(
+				
+			),
+			options={
+			}
+		)
+		if config.strategy != 'llm':
+			strategy = await self.fetch_schema(...)
+			return markdown_generator,strategy
+		
+		if self.schema:
+			schema=self.schema.model_json_schema()
+			
+		extraction_type='schema'
+		apply_chunking=False
 
-    async def shutdown_deep_crawl(self):
-        if self.deepCrawlStrategy:
-            await self.deepCrawlStrategy.shutdown()
-        
-    async def generate_urls(self):
-        
-        if isinstance(self.ingestTask.urls, list):
-            return self.ingestTask.urls
-        
-        if isinstance(self.ingestTask.urls,SeedingURLModel):
-            seeding_config = self.ingestTask.urls
-            seeder = AsyncUrlSeeder()
-            
-            all_urls = []
-            seen = set()
-            
-            for q in seeding_config.queries:
-                extract_head = bool(seeding_config.jsonld) or bool(q)
+		if isinstance(config, TextsExtractionConfig):
+			instruction = crawl_prompt.SEMANTIC_TEXT_EXTRACTION_PROMPT_TEMPLATE(
+				config.focus,
+				config.instruction,
+			)
+			apply_chunking=True
+			schema = CrawlTextModel.model_json_schema(),
+			extraction_type = 'block'
 
-                config = SeedingConfig(
-                    **seeding_config.model_dump(exclude=('domain','queries','speed','top')),
-                    extract_head=extract_head,
-                    live_check=True,
-                    query=q if q else None,
-                    force=True,
-                )
+		elif isinstance(config, SchemaExtractionConfig):
+			instruction = crawl_prompt.SCHEMA_EXTRACTION_PROMPT(
+				target_format='JSON',
+				special_instructions=config.instruction
+			)
+			
+		elif isinstance(config, KnowledgeGraphExtractionConfig):
+			return markdown_generator,None
+		
+		strategy = LLMExtractionStrategy(
+			llm_config=self.llm_config,
+			instruction=instruction,
+			extraction_type=extraction_type,
+			schema=schema,
+			apply_chunking=apply_chunking,
+			input_format='fit_markdown',
+			force_json_response=True,
+			overlap_rate=0.2
+		)	
 
-                fetched_urls = await seeder.many_urls(
-                    seeding_config.domain,
-                    config
-                    )
-                for _, urls in fetched_urls.items():
+		return markdown_generator,strategy
 
-                    for url in urls:
-                        if url.get('status','unknown') != 'valid':
-                            continue
-                        if url['url'] in seen:
-                            continue
-                            
-                        seen.add(url['url'])
-                        all_urls.append(url)
+	async def fetch_schema(self,session: aiohttp.ClientSession) -> ExtractionStrategy:
+		"""Get cached schema or generate new one."""
+		config = self.ingestTask.extraction
 
-            await seeder.close()      
-            all_urls.sort(key=lambda x: x.get('relevance_score',0), reverse=True)
+		if not config.schema_name or not config.schema_url:
+			raise Crawl4AIModeConfigMissingError("schema_name and schema_url required for json_css/regex strategies")
+		
+		# Check cache
+		schema_path = self.schema_dir / f"{config.schema_name}_{config.strategy}.json"
+		raw_schema = None
+		if schema_path.exists():
+			with open(schema_path, 'r') as f:
+				raw_schema = json.load(f)
+			
+		instruction = self.ingestTask.extraction.instruction
+		schema_html= ""
+		bodies = {}
+		requests = []
+		if not raw_schema:
 
-            if seeding_config.top != None:
-                all_urls = all_urls[:seeding_config.top]
+			# Generate new schema
+			for url in config.schema_url:
+				async def fetch_example():
+					try:
+						async with session.get(config.schema_url, timeout=10) as response:
+							if response.status == 404:
+								raise SchemaHTMLExampleNotFoundError(config.schema_name,url,"Page does not exist")
+							if response.status == 204:
+								raise SchemaHasNoContentError(config.schema_name,url,'Page has no content')
+							if response.status != 200:
+								SchemaFetchError(response.status,config.schema_name,url,response.reason)
 
-            filtered_url = []
+							html= await response.text()
+							body = BeautifulSoup(html).find('body')
+							bodies[url]=body
 
-            if seeding_config.jsonld != None:
-                for url in all_urls:
-                    jsonld = url.get('json_ld',[])
-                    if not jsonld:
-                        continue
-                    matches = []
-                    for jsld in jsonld[:5]:
-                        m = seeding_config.jsonld.match(jsld)
-                        matches.append(m)
-                    if any(matches):
-                        filtered_url.append(url['url'])
-                
-                return filtered_url
-            else:
-                return[ u['url'] for u in all_urls]
-        
-        if isinstance(self.ingestTask.urls,URLGeneratorModel):
-            generator_config = self.ingestTask.urls
+					except SchemaFetchError | SchemaHasNoContentError |SchemaHTMLExampleNotFoundError as e:	
+						self.errors.append(
+							CrawlError(name=config.schema_name,url=url,message=e.reason)
+						)
+				requests.append(fetch_example)
 
-            if generator_config.jsonld:
-                async with aiohttp.ClientSession(url) as session:
-                    for url in generate_urls(generator_config):
-                        jsonld = await fetch_jsonld(session,url)
-                        matches = []
+			await asyncio.gather(requests)
 
-                        for jsld in jsonld[:5]:
-                            m = generator_config.jsonld.match(jsld)
-                            matches.append(m)
-                        if any(matches):
-                            yield url
-            else:
-                yield generate_urls(generator_config)
+			for u,body in bodies.items():
+				schema_html+=body
 
-        raise ValueError('Bad value for the url')
+			if not schema_html:
+				raise NoInputHtmlSchemaError(config.schema_name,config.schema_url)
 
-    def build_deepCrawl_strategy(self):
-        
-        deep_crawl_model: DeepCrawlingStrategyModel = self.ingestTask.deep_crawling
-        
-        if not deep_crawl_model:
-            return
-        
-        extra_args = {}
-        Strategy = DEEP_CRAWL_MAP[deep_crawl_model.algorithm]
+			instruction = crawl_prompt.CRAWL4AI_GENERATION_PROMPT(
+				self.schema.model_json_schema() if self.schema else None,
+				config.instruction
+			)
 
-        if deep_crawl_model.algorithm in ('bfs', 'dfs'):
-            extra_args['score_threshold'] = deep_crawl_model.score_threshold
+			match config.strategy:
+				case 'json':
+					raw_schema = await JsonCssExtractionStrategy.agenerate_schema(
+						html=schema_html,
+						llm_config=self.llm_config,
+						query=instruction,
+						usage=self.schema_tokenUsage
+					)	
+				case 'regex':
+					raw_schema = await RunAsync(RegexExtractionStrategy.generate_pattern)(
+						label=...,
+						html=schema_html,
+						query=instruction,
+						llm_config=self.llm_config,
+						usage=self.schema_tokenUsage
+					)
+				case _:
+					raise BadSchemaGenerationStrategyError(config.strategy)
+		if not raw_schema:
+			raise SchemaCouldNotBeGeneratedError(config.schema_name,config.schema_url,config.strategy)
 
-        self.deepCrawlStrategy  = Strategy(
-            max_depth=deep_crawl_model.max_depth,
-            max_pages=deep_crawl_model.max_pages,
-            url_scorer=_build_scorer(),
-            filter_chain=_build_filters(),
-            resume_state=self.deep_crawl_state,
-            on_state_change=self.dc_state_callback,
-            include_external_links=deep_crawl_model.include_external,
-            **extra_args
-        )
+		if config.strategy == 'regex':
+			strategy = RegexExtractionStrategy(custom=raw_schema)  
+		else: 
+			strategy = JsonCssExtractionStrategy(raw_schema)
+		
+		with open(schema_path, 'w') as f:
+			json.dump(raw_schema, f, indent=2)
+		
+		return strategy
+			
+	async def crawl(self):
+		"""
+		Main crawl method: generate URLs, extract content, split into chunks.
+		"""
+		# Crawl all URLs
+		results: AsyncGenerator[CrawlResult, None] = await self.crawler.arun_many(
+			self.urls,
+			self.crawl_config,
+		)
 
-        return 
+		pdf_links = []
+		async for result in results:
+			metadata = await self.process_result(pdf_links,result)
+			if metadata:
+				yield metadata
+		
+		if not pdf_links:
+			return 
 
-    def build_extraction_strategy(self):
-        ...
-    
-        
-def _build_filters(deepCrawlModel:DeepCrawlingStrategyModel):
-    if not deepCrawlModel.url_filters:
-        return None
-    
-    filters = []
-    for filter_model in deepCrawlModel.url_filters:
-        match filter_model.mode:
-            case 'url_pattern':
-                filters.append(URLPatternFilter(
-                    patterns=filter_model.patterns,
-                    threshold=filter_model.threshold
-                ))
-            case 'domain':
-                filters.append(DomainFilter(
-                    include_domains=filter_model.include_domains,
-                    blocked_domains=filter_model.blocked_domains,
-                ))
-            case 'content_type':
-                filters.append(ContentTypeFilter(
-                    allowed_types=filter_model.allowed_types,
-                ))
-            case 'content_relevance':
-                filters.append(ContentRelevanceFilter(
-                    query=filter_model.query,
-                    similarity_threshold=filter_model.similarity_threshold or 0.5,
-                    threshold=filter_model.threshold
-                ))
-            case 'seo':
-                filters.append(SEOFilter(
-                    threshold=filter_model.threshold,
-                    keywords=filter_model.keywords
-                ))
-    
-    return FilterChain(filters) if filters else None 
+		pdf_links = list(set(pdf_links))
 
-def _build_scorer(deepCrawlModel:DeepCrawlingStrategyModel):
-    scorers = []
+		pdf_crawler_strategy = PDFCrawlerStrategy()
+		pdf_scraping_strategy = PDFContentScrapingStrategy()
+		self.crawl_config.scraping_strategy = pdf_scraping_strategy
+		self.crawler.crawler_strategy = pdf_crawler_strategy
 
-    if deepCrawlModel.url_scorers:
-        for scorer_model in deepCrawlModel.url_scorers:
-            match scorer_model.mode:
-                case 'keyword':
-                    scorers.append(KeywordRelevanceScorer(
-                        keywords=scorer_model.keyword,
-                        weight=scorer_model.weight
-                    ))
-                case 'domain_authority':
-                    scorers.append(DomainAuthorityScorer(
-                        domain_weights=scorer_model.domain_weights,
-                        default_weight=scorer_model.default_weight or 0.5,
-                        weight=scorer_model.weight
-                    ))
-                case 'path_depth':
-                    scorers.append(PathDepthScorer(
-                        weight=scorer_model.weight
-                    ))
-                case 'content_type':
-                    scorers.append(ContentTypeScorer(
-                        type_weights=scorer_model.type_weights,
-                        weight=scorer_model.weight
-                    ))
-                case 'freshness':
-                    scorers.append(FreshnessScorer(
-                        current_year=scorer_model.current_year,
-                        weight=scorer_model.weight
-                    ))
-    
-    return CompositeScorer(scorers=scorers) if scorers else None
+		results = await self.crawler.arun_many(
+			pdf_links,
+			self.crawl_config
+		)
 
-        
-                    
+		async for result in results:
+			metadata = await self.process_result(None,result)
+			if metadata:
+				yield metadata
+	
+	async def start(self):
+		"""Start the crawler."""
+		await self.crawler.start()
+
+	async def close(self):
+		"""Close the crawler and cleanup."""
+		await self.crawler.close()
+
+	async def shutdown_deep_crawl(self):
+		"""Shutdown deep crawl strategy."""
+		if self.deep_crawl_strategy:
+			await self.deep_crawl_strategy.shutdown()
+
+	def token_usage(self) -> CrawlTokenUsageReport:
+		"""Get total aggregated token usage."""
+		usages = []
+		
+		if self.schema_tokenUsage:
+			usage = CrawlTokenUsage(
+					step='schema_generation',
+					input_tokens=self.schema_tokenUsage.prompt_tokens,
+					output_tokens=self.schema_tokenUsage.completion_tokens,
+				)
+			usages.append(usage)
+
+		if self.strategy and isinstance(self.strategy, LLMExtractionStrategy) and self.strategy.usages:
+			for i,usage in enumerate(self.strategy.usages):
+				usage: TokenUsage
+				usage = CrawlTokenUsage(
+						step=f'extraction_{i}',
+						input_tokens=usage.prompt_tokens,
+						output_tokens=usage.completion_tokens,
+					)
+				usages.append(usage)
+		
+		return CrawlTokenUsageReport(
+			model=self.crawlLlmConfig._model,
+			provider=self.crawlLlmConfig.provider,
+			tokens=usages,
+			provider_id=self.crawlLlmConfig.provider_id
+		)
+
+	async def process_result(self,pdf_links:list[str] | None,result:CrawlResult) -> CrawlResultMetadata:
+		url = result.url
+		metadata = CrawlResultMetadata(url=url, success=result.success)
+
+		if not result.success:
+			metadata.error = result.error_message or "Unknown error"
+			return metadata
+		try:
+			url_data = urlparse(url)
+			metadata.title = result.metadata.get('title', url)
+			metadata.description = result.metadata.get('description', "")
+			metadata.source = f"{url_data.scheme}://{url_data.netloc}"
+
+			await self.process_content(result, metadata)
+
+			if pdf_links is not None and self.ingestTask.pdf and result.links:
+				internal_links = result.links.get("internal", [])
+				external_links = result.links.get("external", [])
+
+				for link in (internal_links+external_links):
+					pdf_links.append(link['href'])
+				
+			return metadata
+		except Exception as e:
+			metadata.error = str(e)
+			metadata.success = False
+			return metadata
+
+	async def process_content(self, result: CrawlResult, metadata: CrawlResultMetadata):
+		"""Process extracted content based on extraction mode."""
+		extraction_config = self.ingestTask.extraction
+
+		if not result.markdown or not hasattr(result.markdown,'fit_markdown') or not result.markdown.fit_markdown:
+			metadata.success = False
+			metadata.error = result.error_message or "No markdown content extracted"
+			return 
+
+		markdown = result.markdown.fit_markdown
+		
+		if isinstance(extraction_config, TextsExtractionConfig): 
+			semanticsTexts = result.extracted_content
+			semanticsTexts = json.loads(semanticsTexts)
+
+			if not semanticsTexts:
+				return
+			
+			model = CrawlTextModel.model_validate(**semanticsTexts)
+			for i,chunk in enumerate(model.texts):
+				node_id = f""
+				detector = TextDetector(chunk.text)
+				stats  = await detector.analyze()
+				chunk_meta = chunk.model_dump(exclude=('id',))
+				chunk = Chunk(chunk_id=node_id,
+							lang=self.ingestTask.lang,
+							payload=ChunkPayload(
+								document_id=metadata.url,
+								document_name=metadata.title or metadata.url,
+								document_type="webpage",
+								page=0,
+								bbox=None,
+								**chunk_meta,
+								**stats,
+								node_id=node_id,
+								chunk_index=i,
+								extension="md",
+								strategy=extraction_config.strategy,
+								parser="crawl4ai",
+								language=self.ingestTask.lang,
+								source=metadata.source,
+								category=...,
+							))
+				metadata.chunks.append(chunk)
+
+		elif isinstance(extraction_config, SchemaExtractionConfig):
+			schema_content = result.extracted_content
+			if not schema_content:
+				return
+			metadata.extracted_content = []
+			schema_content = json.loads(schema_content)
+			for item in schema_content:
+				item = self.schema.model_validate(item)
+				metadata.extracted_content.append(item)
+
+		elif isinstance(extraction_config, KnowledgeGraphExtractionConfig):
+			metadata.markdown_content = markdown
+
+		self.documents.append(
+			CrawlDocumentSize(
+				size=sys.getsizeof(markdown),
+				url=metadata.url,
+				description=f"Markdown size of {metadata.url} with title {metadata.title}"
+				)
+			)
+
+	def _build_deepCrawl_strategy(self):
+		"""Build deep crawl strategy with scorers and filters."""
+		if not self.ingestTask.deep_crawling:
+			return
+		
+		async def should_cancel():
+			return self.crawlState.get('cancelled', False)
+		
+		model = self.ingestTask.deep_crawling
+		Strategy = DEEP_CRAWL_MAP[model.algorithm]
+		extra_args = {}
+		
+		if model.algorithm in ('bfs', 'dfs'):
+			extra_args['score_threshold'] = model.score_threshold
+		
+		# Build scorers
+		scorers = _build_scorers(model)
+		url_scorer = CompositeScorer(scorers=scorers) if scorers else None
+		
+		# Build filters
+		filter_chain = _build_filters(model)
+		
+		self.deep_crawl_strategy = Strategy(
+			max_depth=model.max_depth,
+			max_pages=model.max_pages,
+			url_scorer=url_scorer,
+			filter_chain=filter_chain,
+			resume_state=self.crawlState.get('deep_crawl',None),
+			on_state_change=self.dc_state_callback,
+			should_cancel=should_cancel,
+			include_external_links=model.include_external,
+			**extra_args
+		)
+	
+	async def _generate_from_seeding(self):
+		seeding_config = self.ingestTask.urls
+		seeder = AsyncUrlSeeder()
+		all_urls = []
+		seen = set()
+					
+		for q in seeding_config.queries:
+			config = SeedingConfig(
+				**seeding_config.model_dump(exclude=('domain','queries','speed','top')),
+				extract_head=True,
+				live_check=True,
+				query=q if q else None,
+				force=True,
+			)
+			fetched_urls = await seeder.many_urls(
+								seeding_config.domain,
+								config
+								)
+			for _, urls in fetched_urls.items():
+				for url in urls:
+					if url.get('status','unknown') != 'valid':
+						continue
+					if url['url'] in seen:
+						continue
+					seen.add(url['url'])
+					all_urls.append(url)
+
+		await seeder.close()      
+		all_urls.sort(key=lambda x: x.get('relevance_score',0), reverse=True)
+
+		if seeding_config.top != None:
+			all_urls = all_urls[:seeding_config.top]
+					
+		return all_urls
+
+
+def _build_scorers(self, model: DeepCrawlingStrategyModel) -> List:
+	"""Build list of scorers from model."""
+	scorers = []
+	
+	if not model.url_scorers:
+		return scorers
+	
+	for scorer_model in model.url_scorers:
+		if scorer_model.mode == 'keyword':
+			scorers.append(KeywordRelevanceScorer(
+				keywords=scorer_model.keyword,
+				weight=scorer_model.weight
+			))
+		elif scorer_model.mode == 'domain_authority':
+			scorers.append(DomainAuthorityScorer(
+				domain_weights=scorer_model.domain_weights,
+				default_weight=scorer_model.default_weight or 0.5,
+				weight=scorer_model.weight
+			))
+		elif scorer_model.mode == 'path_depth':
+			scorers.append(PathDepthScorer(weight=scorer_model.weight))
+		elif scorer_model.mode == 'content_type':
+			scorers.append(ContentTypeScorer(
+				type_weights=scorer_model.type_weights,
+				weight=scorer_model.weight
+			))
+		elif scorer_model.mode == 'freshness':
+			scorers.append(FreshnessScorer(
+				current_year=scorer_model.current_year,
+				weight=scorer_model.weight
+			))
+	
+	return scorers
+
+def _build_filters(self, model: DeepCrawlingStrategyModel) -> Optional[FilterChain]:
+	"""Build filter chain from model."""
+	if not model.url_filters:
+		return None
+	
+	filters = []
+	
+	for filter_model in model.url_filters:
+		if filter_model.mode == 'url_pattern':
+			filters.append(URLPatternFilter(
+				patterns=filter_model.patterns,
+				threshold=filter_model.threshold
+			))
+		elif filter_model.mode == 'domain':
+			filters.append(DomainFilter(
+				include_domains=filter_model.include_domains,
+				blocked_domains=filter_model.blocked_domains,
+			))
+		elif filter_model.mode == 'content_type':
+			filters.append(ContentTypeFilter(
+				allowed_types=filter_model.allowed_types,
+			))
+		elif filter_model.mode == 'content_relevance':
+			filters.append(ContentRelevanceFilter(
+				query=filter_model.query,
+				similarity_threshold=filter_model.similarity_threshold or 0.5,
+				threshold=filter_model.threshold
+			))
+		elif filter_model.mode == 'seo':
+			filters.append(SEOFilter(
+				threshold=filter_model.threshold,
+				keywords=filter_model.keywords
+			))
+	
+	return FilterChain(filters) if filters else None
