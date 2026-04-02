@@ -33,8 +33,6 @@ class ResearchIngestion(WebCrawlerIngestion):
         self.create_research_config()
         super().__init__(None, crawl_llm_config,None, extra_headers, None, base_dir, ...)
 
-        
-    
     def create_research_config(self):
         ... 
 
@@ -58,8 +56,6 @@ class ResearchIngestion(WebCrawlerIngestion):
                 start_url=self,
                 query=q
             )
-
-
 
     async def expand_query(self,query:str)->List[str]:
         ...

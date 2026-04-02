@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Literal, Optional, Self, Tuple
 from pydantic import BaseModel, Field, model_validator, field_validator
 from pydantic import HttpUrl
 
-from app.classes.crawl import JSONLDFilterGroup, URLConfigModel
+from app.classes.url import JSONLDFilterGroup, URLConfigModel
 
 DeepCrawlingAlgorithm = Literal['bfs','dfs','best-first']
 ExtractionMode = Literal['markdown', 'structured']

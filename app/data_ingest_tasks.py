@@ -5,8 +5,6 @@ from app.classes.crawl import CrawlState, CrawlTokenUsageReport, DigestState
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.classes.step import SkipStep, Step, StepRunner
 from app.errors.llm_error import LLMConfigNotConfiguredError
-from app.ingestion.crawl_ingestion import CrawlIngestionStepIndex, LLMGeneralConfig, WebCrawlerIngestion
-from app.ingestion.research_ingestion import ResearchIngestion, ResearchIngestionStepIndex
 from app.models.crawal4ai_model import KnowledgeGraphExtractionConfig, SchemaExtractionConfig, TextsExtractionConfig
 from app.models.file_model import FileResponseUploadModel, UriMetadata
 from app.services.config_service import ConfigService
@@ -24,6 +22,24 @@ DATA_TASK_REGISTRY_NAME = {}
 
 def RegisterTask(nickname:str,active:bool=True,wrap=True):
 
+
+    match nickname:
+        case ArqDataTaskConstant.FILE_DATA_TASK:
+            async def refund(step:Step,uri:str,request_id:str,size:int,state:dict,func:Callable,ctx:dict[str,Any],*args,**kwargs):
+                costService = Get(CostService)
+                redisService = Get(RedisService)
+
+                if step["current_step"] < FileIngestionStepIndex.PROCESS:
+                    cost = FileCost(request_id,f"arq-job@{uri}").init(1,CostConstant.DOCUMENT_CREDIT)
+                    cost.post_refund(FileResponseUploadModel(metadata=[UriMetadata(uri=uri,size=size)]))
+                    bill = cost.generate_bill()
+                    await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,cost.refund_cost,bill)
+                
+                if step['current_step'] < FileIngestionStepIndex.CLEANUP and nickname == ArqDataTaskConstant.FILE_DATA_TASK:
+                    _step = Step(current_step=FileIngestionStepIndex.CLEANUP-1,steps={},current_params=None)
+                    await func(ctx,*args,**kwargs,step=_step,uri=uri,request_id=request_id,size=size,state=state)
+        
+
     def decorator(func:Callable):
         """
         The `RegisterTask` function adds the name of a given function to a list called `DATA_TASK_REGISTRY`.
@@ -37,23 +53,9 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
     
         @functools.wraps(func)
         async def wrapper(ctx:dict[str,Any],*args,uri:str=None,request_id:str=None,step:Step = None,state:dict=None,_nickname:str=nickname,size:int=None,**kwargs):
-
-            async def refund():
-                if step["current_step"] < FileIngestionStepIndex.PROCESS:
-                    cost = FileCost(request_id,f"arq-job@{uri}").init(1,CostConstant.DOCUMENT_CREDIT)
-                    cost.post_refund(FileResponseUploadModel(metadata=[UriMetadata(uri=uri,size=size)]))
-                    bill = cost.generate_bill()
-                    await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,cost.refund_cost,bill)
-                
-                if step['current_step'] < FileIngestionStepIndex.CLEANUP and nickname == ArqDataTaskConstant.FILE_DATA_TASK:
-                    _step = Step(current_step=FileIngestionStepIndex.CLEANUP-1,steps={},current_params=None)
-                    await func(ctx,*args,**kwargs,step=_step,uri=uri,request_id=request_id,size=size,state=state)
       
             if step==None:
-                step = Step(current_step=0,steps={},current_params=None)
-            
-            costService = Get(CostService)
-            redisService = Get(RedisService)
+                step = Step(current_step=0,steps={},current_params=None)            
             try:
                 vector_config = kwargs.get('vector_config',None)
                 graph_config = kwargs.get('graph_config',None)
@@ -65,11 +67,14 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                     graph_config = KGraphConfig(**graph_config)
 
                 return await func(ctx,*args,**kwargs,vector_config=vector_config,graph_config=graph_config,step=step,uri=uri,request_id=request_id,size=size,state=state)
-            except (asyncio.CancelledError,Exception) as e:
-                await refund()
-                raise e
+            
             except Retry as e:
                 await arqService.update_job_kwargs(uri,{'step':step},5)
+                await arqService.update_job_kwargs(uri,{'state':state},5)
+                raise e
+            
+            except (asyncio.CancelledError,Exception) as e:
+                await refund()
                 raise e
 
         if active:
@@ -81,7 +86,6 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
             return func
 
     return decorator
-
 
 
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
@@ -140,8 +144,8 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
     return {"size":size,"collection_name":vector_config.collection_name,"tokens":step['current_params']}
 
 
-@RegisterTask(ArqDataTaskConstant.RESEARCH_DATA_TASK,False)
-async def process_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None,state:dict=None):
+@RegisterTask(ArqDataTaskConstant.API_DATA_TASK,False)
+async def process_api_data(ctx:dict[str,Any],lang:str='en',vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None,state:dict=None,**kwargs):
 
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
@@ -149,8 +153,9 @@ async def process_research_task(ctx:dict[str,Any],url:list[str],lang:str='en',ve
     arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
 
 
-@RegisterTask(ArqDataTaskConstant.API_DATA_TASK,False)
-async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,lang:str='en',step:Step = None,request_id:str=None,state:dict=None,uri:str=None,**kwargs):
+@RegisterTask(ArqDataTaskConstant.RESEARCH_DATA_TASK,False)
+async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,lang:str='en',step:Step = None,request_id:str=None,state:dict=None,uri:str=None,**kwargs):
+
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
     llMProviderService:LLMProviderService = Get(LLMProviderService)
@@ -171,21 +176,10 @@ async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorC
     crawlLLMProvider = llMProviderService.MiniServiceStore.get(crawlLLMProvider)
     researchLLMProvider = llMProviderService.MiniServiceStore.get(researchLLMProvider)
 
-    crawlLLMConfig = LLMGeneralConfig(provider=crawlLLMProvider.model.provider,model=crawlLLMProvider.model,
-                                      api_token=crawlLLMProvider.depService.credentials.to_plain()
-                                      )
-
-    researchLLMConfig = LLMGeneralConfig(provider=researchLLMProvider.model.provider,model=researchLLMProvider.model,
-                                        api_token=researchLLMProvider.depService.credentials.to_plain()
-                                        )
-
     async def digest_callback(digest_state:DigestState):
         state.clear()
         state.update(digest_state)
-        await arqService.update_job_kwargs(
-            uri,
-            {'state':state},
-            5)
+        await arqService.update_job_kwargs(uri,{'state':state},5)
 
     researcher =  ResearchIngestion(
         researchTask=ResearchDataIngestModel(
@@ -195,10 +189,13 @@ async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorC
             **kwargs
         ),
         digest_callback=digest_callback,
-        research_llm_config=researchLLMConfig,
-        crawl_llm_config=crawlLLMConfig,
+        research_llm_config=researchLLMProvider.crawl_llm,
+        crawl_llm_config=crawlLLMProvider.crawl_llm,
         base_dir=f"{configService.DATA_INGESTION_DIR}crawl4ai/",
     )
+
+    await researcher.initialize_folders()
+    await researcher.initialize_config()
 
     async with StepRunner(step,ResearchIngestionStepIndex.CHECK) as skip:
         skip()
@@ -218,6 +215,9 @@ async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorC
     
     async with StepRunner(step,ResearchIngestionStepIndex.LINKS_LOOKUP) as skip:
         skip()
+        await researcher.start()
+        await researcher.crawl()
+        await researcher.close()
         ... # lookup for relevant links in vector db
     
     async with StepRunner(step,ResearchIngestionStepIndex.LOOKUP_COST) as skip:
@@ -226,11 +226,9 @@ async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorC
     
     async with StepRunner(step,ResearchIngestionStepIndex.RESEARCH) as skip:
         skip()
-        await researcher.initialize_folders()
-        await researcher.initialize_config()
-
         await researcher.start()
         await researcher.research()
+        
         await researcher.close()
     
     async with StepRunner(step,ResearchIngestionStepIndex.RESULT_COST) as skip:
@@ -240,7 +238,6 @@ async def process_api_data(ctx:dict[str,Any],url:list[str],vector_config:VectorC
     async with StepRunner(step,ResearchIngestionStepIndex.CLEANUP) as skip:
         skip()
         
-
 
 @RegisterTask(ArqDataTaskConstant.CRAWL_DATA_TASK,False)
 async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,sha:str=None,step:Step = None,request_id:str=None,uri:str=None,state:CrawlState=None,**kwargs):
@@ -253,32 +250,20 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
     customService:CustomService = Get(CustomService)
  
+    schema = None
+    results = []
+
     async def deep_crawl_callback(dc_state:dict):
         state['deep_crawl'] = dc_state
-        await arqService.update_job_kwargs(
-            uri,
-            {'state':state},
-            5)
+        await arqService.update_job_kwargs(uri,{'state':state},5)
     
     crawlLLMProvider = llMProviderService.crawl_config.get('llmConfig',None)
     if not crawlLLMProvider:
         raise LLMConfigNotConfiguredError('crawl_config')
 
     llmProvider = llMProviderService.MiniServiceStore.get(crawlLLMProvider)
-
-    llmConfig = LLMGeneralConfig(
-        provider=llmProvider.model.provider,
-        model=llmProvider.model,
-        api_token=llmProvider.depService.credentials.to_plain()
-    )
-
-    ingestTask = WebCrawlingDataIngestModel(
-            vector_config=vector_config,
-            graph_config=graph_config,
-            **kwargs
-        )
+    ingestTask = WebCrawlingDataIngestModel(vector_config=vector_config,graph_config=graph_config,**kwargs)
     
-    schema = None
     if isinstance(ingestTask.extraction,SchemaExtractionConfig):
         schema = ingestTask.extraction.schema
         schema = customService.to_schemas([schema])[schema]
@@ -286,13 +271,11 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     crawler = WebCrawlerIngestion(
         ingestTask=ingestTask,
         crawl_state=state,
-        crawl_llm_config=llmConfig,
+        crawl_llm_config=llmProvider.crawl_llm,
         dc_state_callback=deep_crawl_callback,
         base_dir=f"{configService.DATA_INGESTION_DIR}crawl4ai/",
         schema=schema
     )
-
-    results = None
 
     async with StepRunner(step,CrawlIngestionStepIndex.CHECK) as skip:
         skip()
@@ -324,14 +307,8 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
 
                 if vector_config != None:
                     for chunk in result.chunks:
-                        chunk.vector = await qdrantService.embed_query(
-                            chunk.payload['text']
-                        )
-                    await qdrantService.upload_points(
-                        vector_config.collection_name,
-                        result.chunks,
-                        True,
-                        )
+                        chunk.vector = await qdrantService.embed_query(chunk.payload['text'])
+                    await qdrantService.upload_points(vector_config.collection_name,result.chunks,True,)
                     
                 if graph_config != None:
                     for chunk in result.chunks:
@@ -343,6 +320,10 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                             description=result.description
                         )
             elif isinstance(crawler.ingestTask.extraction,SchemaExtractionConfig):
+
+                if graph_config == None:
+                    continue
+
                 if not result.extracted_content:
                     continue
 
@@ -364,6 +345,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
             elif isinstance(crawler.ingestTask.extraction,KnowledgeGraphExtractionConfig):
                 if not result.markdown_content:
                     continue
+
                 uuid = f"{uuid_v1_mc()}"
                 await graphitiService.add_content_episode(
                     name=result.title,
@@ -383,8 +365,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
             'document':crawler.documents
         }
         await crawler.close()
-    
-        
+      
     async with StepRunner(step,CrawlIngestionStepIndex.TOTAL_COST) as skip:
         skip()
         tokens = step['current_params']['token']
@@ -411,7 +392,11 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
 if APP_MODE == ApplicationMode.arq:
     
     from arq.connections import RedisSettings
+
     from app.ingestion.file_ingestion import TextDataLoader, FileIngestionStepIndex
+    from app.ingestion.crawl_ingestion import CrawlIngestionStepIndex, WebCrawlerIngestion
+    from app.ingestion.research_ingestion import ResearchIngestion, ResearchIngestionStepIndex
+
     from app.services import QdrantService
     from app.services import GraphitiService
     from app.services import LLMProviderService
@@ -421,6 +406,7 @@ if APP_MODE == ApplicationMode.arq:
     from app.services import VaultService
     from app.services import CostService
     from app.services.worker.arq_service import ArqIngestTaskService,QUEUE_NAME
+
     from app.container import Get,build_container
     import asyncio
     from arq import Retry

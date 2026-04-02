@@ -57,7 +57,7 @@ class VectorEmbeddingConfig(BaseModel):
     batch_size: int = Field(default=100, ge=10, le=500)
 
 
-class CrawlLLMConfig(BaseTemperatureMaxTokenModel):
+class CrawlLLMConfigModel(BaseTemperatureMaxTokenModel):
     model: Optional[str] = None
     top_p: float | None = None,
     frequency_penalty: float | None = None
@@ -65,7 +65,7 @@ class CrawlLLMConfig(BaseTemperatureMaxTokenModel):
     stop: List[str] | None = None
     n: int | None = None
 
-class WebResearchConfig(BaseTemperatureMaxTokenModel):
+class WebResearchConfigModel(BaseTemperatureMaxTokenModel):
     embedding_model:Optional[str] = None
     
 class GraphitiLLMConfig(BaseTemperatureMaxTokenModel):
@@ -99,9 +99,9 @@ class LLMProfileModel(BaseProfileModel):
     graph_embedding_config: Optional[GraphitiEmbeddingConfig] = None
     graph_reranker_config: Optional[GraphitiLLMConfig] =  None
 
-    crawl_config: Optional[CrawlLLMConfig] = None
+    crawl_config: Optional[CrawlLLMConfigModel] = None
 
-    research_config: Optional[WebResearchConfig] = None
+    research_config: Optional[WebResearchConfigModel] = None
 
     max_input_tokens:Optional[int] = None
     max_output_tokens:Optional[int] = None

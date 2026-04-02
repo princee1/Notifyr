@@ -4,7 +4,7 @@ from fastapi import UploadFile
 from app.cost.file_cost import FileCost
 from app.definition._cost import DataCost
 from app.models.file_model import FileResponseUploadModel
-from app.models.ingest_model import FileUploadDataIngestModel, WebCrawlingDataIngestModel
+from app.models.ingest_model import FileUploadDataIngestModel, IngestDataWebCrawlingResponse, WebCrawlingDataIngestModel
 
 
 class FileIngestCost(FileCost):
@@ -36,7 +36,13 @@ class FileIngestCost(FileCost):
                 self.purchase(d,c,q) 
 
 class CrawlMarkdownIngestCost(FileCost):
+
+    async def fetch_estimate_size(self, ingestTask:WebCrawlingDataIngestModel) -> float:
+        ...
     
-    async def pre_purchase(self, ingestTask:WebCrawlingDataIngestModel):
+    def pre_purchase(self, ingestTask:WebCrawlingDataIngestModel):
         ...
   
+    def post_purchase(self, result: IngestDataWebCrawlingResponse, ingestTask:WebCrawlingDataIngestModel):
+        ...
+

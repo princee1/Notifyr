@@ -1,12 +1,13 @@
 from typing import Literal, TypedDict
 
 import requests
+from app.classes.crawl import CrawlLLMConfig
 from app.definition import _service
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError
 from app.models.llm_model import (
     EMBEDDER_PROVIDER_SET, LLMProfileModel, 
-    VectorEmbeddingConfig, CrawlLLMConfig, WebResearchConfig, 
+    VectorEmbeddingConfig, CrawlLLMConfigModel, WebResearchConfigModel, 
     GraphitiLLMConfig, GraphitiEmbeddingConfig,
     VALID_EMBEDDING_MODELS, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 )
@@ -132,7 +133,7 @@ class LLMProviderMiniService(BaseMiniService):
             case 'crawl_config':
                 crawl_models = LLMProviderConstant.CRAWL4AI_MODELS.get(self.model.provider, [])
                 if model_data.get('crawl_config') is None and crawl_models:
-                    model_data['crawl_config'] = CrawlLLMConfig(
+                    model_data['crawl_config'] = CrawlLLMConfigModel(
                         model=self.model.default_model or crawl_models[0],
                         temperature=0.7,
                         max_tokens=2048,
@@ -143,7 +144,7 @@ class LLMProviderMiniService(BaseMiniService):
                 if model_data.get('research_config') is None and self.model.provider in EMBEDDER_PROVIDER_SET:
                     embedding_models = VALID_EMBEDDING_MODELS.get(self.model.provider, [])
                     if embedding_models:
-                        model_data['research_config'] = WebResearchConfig(
+                        model_data['research_config'] = WebResearchConfigModel(
                                 embedding_model=embedding_models[0],
                                 max_tokens=self.model.max_output_tokens,
                             )
@@ -180,6 +181,16 @@ class LLMProviderMiniService(BaseMiniService):
                 pass
 
         self.depService.update_model(model_data)
+
+    @property
+    def crawl_llm(self):
+        if not self.model.crawl_config:
+            raise LLMConfigNotConfiguredError('crawl')
+    
+        return CrawlLLMConfig(provider=self.model.provider,
+                                      model=self.model,
+                                      api_token=self.depService.credentials.to_plain()
+                                      )
 
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
 class LLMProviderService(BaseMiniServiceManager):
@@ -291,6 +302,8 @@ class LLMProviderService(BaseMiniServiceManager):
         
         if kwargs.get('research',True) and len(self.research_config) < 1:
             raise LLMConfigNotConfiguredError('research')
+
+        await super().pingService(infinite_wait, data, profile, as_manager, **kwargs)
 
     def _ensure_config(self, fallback_providers: dict[Literal['graphiti','vector','crawl','research'], str]):
         """

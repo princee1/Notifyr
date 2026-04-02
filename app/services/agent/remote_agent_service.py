@@ -284,27 +284,27 @@ class RemoteAgentMiniService(BaseMiniService):
         @SilentFail
         async def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
-            reply = self.remoteAgentService.stub.Prompt(request)
+            reply = await self.remoteAgentService.stub.Prompt(request)
             return agent_message.PromptAnswer.from_proto(reply)
 
         @SilentFail
         async def PromptStream(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             replies = self.remoteAgentService.stub.PromptStream(request)
-            for reply in replies:
+            async for reply in replies:
                 reply = agent_message.PromptAnswer.from_proto(reply)
                 yield reply
 
         @SilentFail
         async def StreamPrompt(self, callback:Callable[[],agent_message.PromptRequest]):
             request_generator=iterator_factory(callback=callback)
-            reply = self.remoteAgentService.stub.StreamPrompt(request_generator)
+            reply = await self.remoteAgentService.stub.StreamPrompt(request_generator)
             return agent_message.PromptAnswer.from_proto(reply)
         
         @SilentFail
         async def S2SPrompt(self, callback:Callable[[],agent_message.PromptRequest]):
             request_generator=iterator_factory(callback=callback)
             replies = self.remoteAgentService.stub.S2SPrompt(request_generator)
-            for reply in replies:
+            async for reply in replies:
                 reply = agent_message.PromptAnswer.from_proto(reply)
                 yield reply

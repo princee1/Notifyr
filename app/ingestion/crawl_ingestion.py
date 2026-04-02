@@ -29,7 +29,8 @@ from crawl4ai.models import TokenUsage
 
 from pydantic import BaseModel
 from app.classes.chunk import ChunkPayload, Chunk, TextDetector
-from app.classes.crawl import BadSchemaGenerationStrategyError, Crawl4AIModeConfigMissingError, CrawlDocumentSize, CrawlError, CrawlResultMetadata, CrawlState, CrawlTextModel, CrawlTokenUsageReport, NoInputHtmlSchemaError, NoURLToCrawlError, SchemaCouldNotBeGeneratedError, SchemaFetchError, SchemaHTMLExampleNotFoundError, SchemaHasNoContentError, CrawlTokenUsage, URLDescription, UrlDescriptionNotFoundError, fetch_jsonld, generate_urls
+from app.classes.crawl import *
+from app.classes.url import fetch_jsonld, generate_urls
 from app.definition._error import BaseError
 from app.models.crawal4ai_model import (
 	DeepCrawlingAlgorithm, DeepCrawlingStrategyModel,
@@ -38,9 +39,7 @@ from app.models.crawal4ai_model import (
 	SeedingURLModel, URLGeneratorModel
 )
 from app.models.ingest_model import WebCrawlingDataIngestModel
-from app.models.llm_model import CrawlLLMConfig, WebResearchConfig
 from app.prompt import crawl_prompt
-from app.utils.helper import uuid_v1_mc
 from app.utils.tools import RunAsync
 
 
@@ -62,20 +61,6 @@ EXTRACTION_STRATEGY_MAP :Dict[Literal['json','regex'],type[ExtractionStrategy]] 
 ###################################################################################################
 ###########################		  WebCrawlerIngestion Class			     ##############################
 ###################################################################################################
-@dataclass
-class LLMGeneralConfig:
-	provider_id:str
-	provider: str
-	model: CrawlLLMConfig | WebResearchConfig
-	api_token: str
-
-	def formatted_provider(self) -> str:
-		return f"{self.provider}/{self.model.model}"
-
-	@property
-	def _model(self)->str:
-		return self.model.model
-
 
 MS = 1000
 
@@ -139,7 +124,7 @@ class WebCrawlerIngestion:
 	def __init__(
 		self,
 		ingestTask: WebCrawlingDataIngestModel,
-		crawl_llm_config: LLMGeneralConfig,
+		crawl_llm_config: CrawlLLMConfig,
 		crawl_state: Optional[CrawlState] = None,
 		extra_headers: Optional[Dict] = None,
 		dc_state_callback: Optional[Callable[[CrawlState], None]] = None,
@@ -288,8 +273,9 @@ class WebCrawlerIngestion:
 			}
 		)
 		if config.strategy != 'llm':
-			strategy = await self.fetch_schema(...)
-			return markdown_generator,strategy
+			async with aiohttp.ClientSession() as session:
+				strategy = await self.fetch_schema(session)
+				return markdown_generator,strategy
 		
 		if self.schema:
 			schema=self.schema.model_json_schema()

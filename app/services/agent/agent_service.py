@@ -96,7 +96,7 @@ class AgentMiniService(BaseMiniService):
 
             self._init_tools()
             self._init_middleware()
-            self._init_prompt()
+            self._init_system_prompt()
             self._init_response_format()
             self.init_long_term_memory()
             self.agent = self.create_agent()
@@ -112,7 +112,7 @@ class AgentMiniService(BaseMiniService):
     def _init_middleware(self):
         ...
         
-    def _init_prompt(self):
+    def _init_system_prompt(self)->str:
         ...
     
     def _init_response_format(self):
@@ -306,7 +306,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
     async def StreamPrompt(self, request_iterator, context):
         
         streams = []
-        for request in request_iterator:
+        async for request in request_iterator:
             request = agent_message.PromptRequest.from_proto(request)
             streams.append(streams)
 
@@ -323,7 +323,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
     @Error_Handler
     async def S2SPrompt(self, request_iterator, context):
-        for request in request_iterator:
+        async for request in request_iterator:
             request = agent_message.PromptRequest.from_proto(request)
 
             async with self.statusLock.reader as lock:

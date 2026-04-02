@@ -1,5 +1,6 @@
 from typing import Annotated, List
 from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
+from validators.uri import uri
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
@@ -28,6 +29,8 @@ from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import (
     AbortedJobResponse,
+    ComparableInstruction,
+    ComparableURL,
     IngestDataWebCrawlingResponse,
     WebCrawlingDataIngestModel,
     IngestDataUriMetadata,
@@ -39,7 +42,7 @@ from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_ingest_tasks import DATA_TASK_REGISTRY_NAME
 from app.utils.constant import ArqDataTaskConstant, CostConstant
 from app.utils.tools import RunInThreadPool
-from app.depends.variables import force_update_query
+from app.depends.variables import DeleteMode, force_update_query, delete_mode_query
 
 
 @UseHandler(ArqHandler,ServiceAvailabilityHandler)
@@ -108,6 +111,7 @@ class JobArqRessource(BaseHTTPRessource):
                     size,uri,sha = info.kwargs.get('size',0), info.kwargs.get('uri',None),info.kwargs.get('sha','unknown')
                     file_path = self.arqService.compute_data_file_upload_path(uri)
                     await RunInThreadPool(self.fileService.delete_file)(file_path)
+
                 return AbortedJobResponse(aborted= True, metadata=[IngestDataUriMetadata(uri=uri,size=size,sha=sha)],status=status)
                 
             case JobStatus.complete:
@@ -121,10 +125,7 @@ class JobArqRessource(BaseHTTPRessource):
                 return AbortedJobResponse(metadata=[],aborted=bool(result),status=status)
             
             case _:
-                raise UnexpectedJobStatusError(
-                    job_id,
-                    status
-                )
+                raise UnexpectedJobStatusError(job_id,status)
 
 @UseRoles([Role.ADMIN])
 @PingService([ArqIngestTaskService])
@@ -223,27 +224,37 @@ class DataIngestRessource(BaseHTTPRessource):
     @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(crawl=True)}])
     @UseServiceLock(RedisService,ArqIngestTaskService,CustomService,LLMProviderService,lockType='reader')
     @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler)
-    @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=IngestDataWebCrawlingResponse,mount=False)
+    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],mode:DeleteMode = Depends(delete_mode_query),request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Web crawl the web and extract meaningful information
         """
-        _response = IngestDataWebCrawlingResponse()
         if  isinstance(ingestTask.extraction, SchemaExtractionConfig):
             schema = self.customService.to_schemas([ingestTask.extraction.schema])
             if not schema:
-                ...    
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f"Schema {ingestTask.extraction.schema} not found")
         
-        uri = f"crawl-{request_id}"
+        uri = ingestTask.name
+        await self.arqService.exists(uri, True,True)
+
+        if mode == 'soft':
+            comparable_urls = ComparableURL(ingestTask=ingestTask)
+            comparable_instruction = ComparableInstruction(ingestTask=ingestTask)
+            await self.arqService.search(ArqDataTaskConstant.FILE_DATA_TASK,{'urls': comparable_urls},True)
+            await comparable_instruction.search()
+        
+        size = await cost.fetch_estimate_size(ingestTask)
+        _response = IngestDataWebCrawlingResponse(uri=uri,size=size)
 
         merchant.safe_payment(
             None,
-            None,
+            _response,
             self.arqService.enqueue_task,ArqDataTaskConstant.CRAWL_DATA_TASK,
-            uri=uri,
+            job_id=uri,
             expires=ingestTask.expires,
             defer_by=ingestTask.defer_by,
-            kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by')),
+            kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by','name')),
+                    **_response.model_dump(),
                     'request_id':request_id,
                     '_nickname':ArqDataTaskConstant.CRAWL_DATA_TASK,
                     'state':dict(),
@@ -277,7 +288,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler,LLMHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseServiceLock(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard)
+    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard,DataIngestDatabaseGuard(False))
     @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(research=True)}])
     @BaseHTTPRessource.HTTPRoute('/research/{profile}/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
     async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
