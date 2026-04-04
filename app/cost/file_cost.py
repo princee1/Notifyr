@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Literal
 from app.classes.cost_definition import FileCostDefinition
 from app.container import Get
 from app.definition._cost import DataCost
@@ -13,9 +13,9 @@ if APP_MODE == ApplicationMode.server:
 
 class FileCost(DataCost):
 
-    PRE_NAME =  "File upload:"
-    POST_NAME = "File processing:"
-    REFUND_NAME = "File refund:"
+    PRE_NAME =  lambda x: f"{'File' if x == 'object' else 'Document'} upload:"
+    POST_NAME = lambda x: f"{'File' if x == 'object' else 'Document'} processing:"
+    REFUND_NAME = lambda x: f"{'File' if x == 'object' else 'Document'} refund:"
 
     DEFAULT_DEF = FileCostDefinition(max_file_size=10,max_file_size_extra_per_mb=1)
 
@@ -23,10 +23,10 @@ class FileCost(DataCost):
         super().init(default_price, credit_key)
         self.fileService = Get(FileService)
         self.definition:FileCostDefinition = self.costService.costs_definition.get(credit_key,FileCost.DEFAULT_DEF)
-        self.max_file_size = self.definition.get('max_file_size') * 1024
+        self.max_file_size = self.fileService.bytes_conversion(self.definition.get('max_file_size'),'mb','kb')
         self.cost_per_extra_mb = self.definition.get('max_file_size_extra_per_mb')
+        self.definition_name = "Object File" if self.credit_key == 'object' else 'Document Ingestion'
 
-        self.definition_name = f"File@{self.credit_key}"
         return self
 
     if  APP_MODE == ApplicationMode.server:
@@ -39,7 +39,7 @@ class FileCost(DataCost):
             """
             for file in files:
 
-                prices = self.compute_prices(self.PRE_NAME, file.filename,file.size)
+                prices = self.compute_prices(self.PRE_NAME(self.credit_key), file.filename,file.size)
                 for d,c,q in prices:
                     self.purchase(d,c,q) 
 
@@ -51,8 +51,8 @@ class FileCost(DataCost):
             """
             for i,metadata in enumerate(result.metadata):
                 
-                filename,file_size_mb = metadata.uri,metadata.size
-                prices = self.compute_prices(self.POST_NAME, filename,file_size_mb)
+                filename,file_size_kb = metadata.uri,metadata.size
+                prices = self.compute_prices(self.POST_NAME(self.credit_key), filename,file_size_kb)
                 for d,c,q in prices:
                     self.purchase(d,c,q) 
 
@@ -60,15 +60,15 @@ class FileCost(DataCost):
         for  metadata in result.metadata:
 
             filename,size = metadata.uri,metadata.size
-            prices = self.compute_prices(self.REFUND_NAME,filename,size)
+            prices = self.compute_prices(self.REFUND_NAME(self.credit_key),filename,size)
             for d,c,q in prices:
                 self.refund(d,c,q)
  
     def compute_prices(self,name, filename:str|None,size:float |None):
-        file_size_kb = self.fileService.file_size_converter(size,'kb')
+        file_size_kb = self.fileService.bytes_conversion(size,'b','kb')
         filename = filename or "unknown"
         delta = self.max_file_size - file_size_kb
-        purchase:list[tuple[str,int]] = [] 
+        purchase:list[tuple[str,int,int]] = [] 
 
         if delta < 0:
             c = self.cost_per_extra_mb

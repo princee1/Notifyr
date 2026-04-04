@@ -1,9 +1,9 @@
 from typing import Any, Dict, List, Literal, Optional, Self, Tuple
 from aiohttp_retry import Union
-from pydantic import BaseModel, Field, HttpUrl, field_serializer, field_validator, model_validator
-from app.classes.url import URLParam
+from pydantic import BaseModel, Field, HttpUrl, PrivateAttr, field_serializer, field_validator, model_validator
+from app.classes.url import ComparableURL, URLParam
 from app.models.crawal4ai_model import MAX_URLS, DeepCrawlingStrategyModel, DigestConfigModel,KnowledgeGraphExtractionConfig, PDFLinkPreviewModel, SchemaExtractionConfig, SeedingURLModel, TextsExtractionConfig, URLGeneratorModel
-from app.utils.constant import ParseStrategy
+from app.utils.constant import ArqDataTaskConstant, ParseStrategy
 from .file_model import FileResponseUploadModel, UriMetadata
 from app.classes.scheduler import TimedeltaSchedulerModel
 
@@ -49,6 +49,29 @@ class DataIngestModel(BaseModel):
 
 		return self
 
+	@property
+	def db_config(self)->Tuple[bool,bool]:
+		return (self.vector_config != None,self.graph_config != None)
+	
+	@property
+	def expire_date(self):
+		if self.expires:
+			return self.expires.build('datetime').isoformat()
+		return None
+
+	@property
+	def defer_date(self):
+		if self.defer_by:
+			return self.defer_by.build('datetime').isoformat()
+		return None
+
+class BaseIngestModelResponse(BaseModel):
+	vector:bool
+	graph:bool
+	expire:str
+	defer:str
+	task:str
+
 
 ###################################################################################################
 ###########################		    File Ingest Model			     ##############################
@@ -57,11 +80,12 @@ class FileUploadDataIngestModel(DataIngestModel):
 	strategy: ParseStrategy
 	use_docling:bool = False
 
-class IngestDataUriMetadata(UriMetadata):
+class FileIngestUriMetadata(UriMetadata):
 	sha:str
 
-class FileUploadIngestEnqueueResponse(FileResponseUploadModel):
-    metadata: List[IngestDataUriMetadata] = []
+class FileUploadIngestEnqueueResponse(FileResponseUploadModel, BaseIngestModelResponse):
+	metadata: List[FileIngestUriMetadata] = Field(default_factory=list)
+	task:str = ArqDataTaskConstant.FILE_DATA_TASK,
 	
 class AbortedJobResponse(FileResponseUploadModel):
 	aborted:bool
@@ -78,6 +102,9 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 	exclude_external_links:bool = True
 	deep_crawling: Optional[DeepCrawlingStrategyModel] = None
 	name:str = Field(min_length=10,max_length=20)
+
+	_url_size: Optional[int] = PrivateAttr(default=None)
+	_description : Optional[str] = PrivateAttr(default=None)
 
 	@field_validator("uri", mode="after")
 	def parse_uri(cls,v:str)->str:
@@ -120,56 +147,37 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 
 		return self
 
-class ComparableURL:
+	@property
+	def pdf_size(self):
+		if self.pdf:
+			return self.pdf.max_links
+		return 0
+
+	def compute_size(self,):
+		if isinstance(self.urls,list):
+				url_size = len(self.urls)
+				description = "Defined urls"
+
+		elif isinstance(self.urls,SeedingURLModel):
+			url_size = self.urls.top
+			description = "Seeded urls"
+		elif isinstance(self.urls,URLGeneratorModel):
+			url_size = 1
+			description = "URL generated"
+			for param in {**self.urls.path_params, **self.urls.query_params}.values():
+				if isinstance(param, list):
+					url_size *= len(param)
+				else:
+					start,stop,step = param
+					url_size *= ((stop - start) // step) + 1
+		
+		self._url_size = url_size
+		self._description = description
+
+class CrawlingComparableURL(ComparableURL):
 
 	def __init__(self,ingestTask:WebCrawlingDataIngestModel):
 		self.ingestTask=ingestTask
-
-	def compare_url(self,ptr:list,value:list):
-		urls = list(set(ptr).difference(value))
-		if not urls:
-			return True
-
-		ptr.clear()
-		ptr.extend(urls)
-		return False
-	
-	def compare_param(self, ptr: Dict[str, URLParam], value: Dict[str, dict]):
-		keys_to_remove = []
-		
-		for key in ptr.keys():
-			if key not in value:
-				continue
-			
-			ptr_param = ptr[key]
-			ptr_values = ptr_param.values
-			value_values = value[key]
-			
-			if isinstance(ptr_values, list) and value_values['type'] == 'list':
-				diff = list(set(ptr_values) - set(value_values))
-				if not diff:
-					keys_to_remove.append(key)
-				else:
-					ptr_param.values = diff
-			
-			elif isinstance(ptr_values, tuple) and value_values['type']=='range':
-				if ptr_values == tuple(value_values['values']):
-					keys_to_remove.append(key)
-					continue
-				try:
-					v = URLParam(type='range',values=tuple(value_values['values']))
-					temp = URLParam(type='range',values=ptr_values,exclude=v)
-					ptr[key] = temp
-				except:
-					keys_to_remove.append(key)
-				
-			else:
-				keys_to_remove.append(key)
-		
-		for key in keys_to_remove:
-			del ptr[key]
-		
-		return len(ptr) == 0
 					
 	def __eq__(self, value:dict|list):
 		if isinstance(self.ingestTask.urls,list) and isinstance(value,list):
@@ -201,9 +209,15 @@ class ComparableInstruction:
 	async def search(self)->bool:
 		...
 
-class IngestDataWebCrawlingResponse(UriMetadata):
-	...
 
+class WebCrawlingUriMetadata(UriMetadata):
+	description: Optional[str] = None
+	pdf_size: Optional[int] = None
+	url_size: Optional[int] = None
+
+class WebCrawlingIngestDataResponse(BaseIngestModelResponse):
+	metadata: Optional[WebCrawlingUriMetadata] = None
+	task=ArqDataTaskConstant.CRAWL_DATA_TASK
 
 ###################################################################################################
 ###########################										     ##############################
@@ -216,10 +230,30 @@ class ResearchDataIngestModel(DataIngestModel):
 	config:DigestConfigModel
 
 
+class ResearchIngestUriMetadata(UriMetadata):
+	...
+
+class ResearchIngestDataResponse(BaseIngestModelResponse):
+	...
+
+
 ###################################################################################################
 ###########################										     ##############################
 ###################################################################################################
 
+class DeleteIngestUriMetadata(UriMetadata):
+	task:ArqDataTaskConstant._DATA_TASK_TYPE
+
+class DeleteIngestDocumentModel(BaseModel):
+	errors:Dict[str,DeleteIngestUriMetadata]
+	metadata:List[DeleteIngestUriMetadata] = Field(default_factory=list)
+	job_dequeued:List[str] = Field(default_factory=list)
+	jod_deleted:List[str] = Field(default_factory=list)
+	gateway_body:Optional[Dict] = None
+
+###################################################################################################
+###########################										     ##############################
+###################################################################################################
 
 class EnqueueResponse(FileResponseUploadModel):
 	...

@@ -38,7 +38,7 @@ class Cost:
             definition_name = bill.get('definition',None)
 
             if definition_name:
-                response.headers.append('X-Definition',definition_name)
+                response.headers.append('X-Cost-Definition',definition_name)
 
             response.headers.append('X-Credit-Name',credit)
             response.headers.append('X-Current-Balance',str(current_balance))
@@ -109,6 +109,13 @@ class Cost:
 
     def post_payment(self,result:Any):
         ...
+
+    def __add__(self, other:'Cost'):
+        self.purchase_items.extend(other.purchase_items)
+        self.refund_items.extend(self.refund_items)
+        self.purchase_cost += other.purchase_cost
+        self.refund_cost += other.refund_cost
+        return self
 
 class DataCost(Cost):
     

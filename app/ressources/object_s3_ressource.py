@@ -220,9 +220,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
         broker.wait(2)
         broker.propagate(StateProtocol(service=AssetService,to_build=True,recursive=True,bypass_async_verify=False))
-        return {
-            'meta':meta
-        }
+        return {'meta':meta}
             
 
     @PingService([ObjectS3Service,VaultService])
@@ -263,9 +261,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             objects = [o for o in objects 
                     if self.assetService._raw_verify_asset_permission(authPermission,o.object_name,_raise=False)
                     ]
-        return {
-            'meta':objects
-        }
+        return {'meta':objects}
 
                 
     @Throttle(normal=(300,200))
@@ -351,11 +347,7 @@ class S3ObjectRessource(BaseHTTPRessource):
                move
            )
         
-        return {
-            'meta':meta
-        }
-
-
+        return {'meta':meta}
     
     ##################################################################################################################
 

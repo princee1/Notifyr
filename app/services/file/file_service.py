@@ -12,6 +12,14 @@ import hashlib
 from app.utils.tools import RunInThreadPool
 
 
+BytesSize= Literal['kb','mb','b']
+
+BYTES_UNITS = {
+    'b': 1,
+    'kb': 1024,
+    'mb': 1024 * 1024,
+}
+
 @Service()
 class FileService(BaseService,):
     # TODO add security layer on some file: encription,decryption
@@ -83,15 +91,26 @@ class FileService(BaseService,):
 
         return filename,content,dirName
 
-    def file_size_converter(self, size: int, mode: Literal['kb', 'mb']):
-        if size == None:
+    def bytes_conversion(self, size: int | float, _from: BytesSize, to: BytesSize):
+        if size is None:
             return 0
-        if mode == 'kb':
-            return math.ceil(size / 1024)
-        elif mode == 'mb':
-            return math.ceil(size / (1024 * 1024))
-        else:
-            raise ValueError("Mode must be 'kb' or 'mb'")
+        
+        _from = _from.lower()
+        to = to.lower()
+        
+        if _from not in BYTES_UNITS or to not in BYTES_UNITS:
+            raise ValueError("'_from' and 'mode' must be one of 'b', 'kb', 'mb'")
+        
+        if _from == to:
+            return math.ceil(size)
+
+        size_bytes = float(size) * BYTES_UNITS[_from]
+        target_value = size_bytes / BYTES_UNITS[to]
+
+        if to == 'b':
+            return int(target_value)
+        return math.ceil(target_value)
+        
 
     def build(self,build_state=-1):
         ...

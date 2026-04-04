@@ -1,11 +1,8 @@
-from pydantic import BaseModel
-from app.models.file_model import FileResponseUploadModel
+from pydantic import BaseModel, Field
+from app.models.ingest_model import DeleteIngestDocumentModel
 
-class DeleteDomainModel(FileResponseUploadModel):
+class DeleteDomainModel(DeleteIngestDocumentModel):
     domain:str
-    gateway_body:dict
-    job_dequeued:list[str]
-    jod_deleted:list[str]
-
+    
 class GraphitiSearchModel(BaseModel):
     ...

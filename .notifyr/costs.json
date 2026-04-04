@@ -178,6 +178,12 @@
         },
         "ai": {
             "models_access": []
+        },
+        "web":{
+            "crawl":{
+                "max_html_mb":5,
+                "max_pdf_mb":12
+            }
         }
     },
     "credits": {
@@ -197,7 +203,7 @@
         "profile": 10,
         "blog":20,
         
-        "document":300000,
+        "document":1000000,
         "object":100000,
         "token":1000000000000000
     }

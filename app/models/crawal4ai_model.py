@@ -138,7 +138,7 @@ class SeedingURLModel(BaseModel):
 	queries:Optional[List[str]] = []
 	pattern: Optional[str] =  None
 	#speed: Literal['normal','fast','ultra-fast'] = 'fast'
-	top: Optional[int] = None 
+	top: Optional[int] = Field(default=None, ge=1, description="Max urls to crawl, if None it will crawl all the urls found respecting the max_urls for each domain")
 	jsonld:Optional[JSONLDFilterGroup] = None
 
 
@@ -180,15 +180,12 @@ class SeedingURLModel(BaseModel):
 	@model_validator(mode='after')
 	def validate_top(self:Self)->Self:
 		
-		if self.top != None and self.top <1:
-			raise ValueError('Top urls cannot be less than 1')
+		max_top = self.max_urls * len(self.domain)
 
-		if self.max_urls != -1:
-			
-			all_url = len(self.queries) * self.max_urls
-
-			if  self.top != None and self.top > all_url:
-				self.top = all_url
+		if self.top is not None and self.top < max_top:
+			raise ValueError(f"If 'top' is defined it should be inferior to max_urls * number of domains, got top: {self.top} > {max_top}")	
+		else:
+			self.top = max_top
 
 		return self
 
@@ -260,7 +257,7 @@ class KnowledgeGraphExtractionConfig(BaseExtractionConfig):
 ###################################################################################################
 
 class PDFLinkPreviewModel(BaseModel):
-	max_links: int = Field(default=5, ge=1, le=1000, description="Maximum number of PDF links to preview")
+	max_links: int = Field(default=5, ge=1, le=20, description="Maximum number of PDF links to preview")
 	score_threshold: Optional[float] = Field(default=0.6, ge=0, le=1, description="Score threshold for including PDF links in the preview")
 	query: Optional[str] = Field(default=None, description="Optional query to evaluate relevance of PDF links",max_length=250,min_length=2)
 

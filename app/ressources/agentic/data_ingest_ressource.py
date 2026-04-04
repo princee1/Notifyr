@@ -30,10 +30,11 @@ from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExis
 from app.models.ingest_model import (
     AbortedJobResponse,
     ComparableInstruction,
-    ComparableURL,
-    IngestDataWebCrawlingResponse,
+    CrawlingComparableURL,
+    WebCrawlingIngestDataResponse,
+    WebCrawlingUriMetadata,
     WebCrawlingDataIngestModel,
-    IngestDataUriMetadata,
+    FileIngestUriMetadata,
     EnqueueResponse,
     FileUploadIngestEnqueueResponse,
     FileUploadDataIngestModel,
@@ -112,7 +113,7 @@ class JobArqRessource(BaseHTTPRessource):
                     file_path = self.arqService.compute_data_file_upload_path(uri)
                     await RunInThreadPool(self.fileService.delete_file)(file_path)
 
-                return AbortedJobResponse(aborted= True, metadata=[IngestDataUriMetadata(uri=uri,size=size,sha=sha)],status=status)
+                return AbortedJobResponse(aborted= True, metadata=[FileIngestUriMetadata(uri=uri,size=size,sha=sha)],status=status)
                 
             case JobStatus.complete:
                 return AbortedJobResponse(metadata=[],aborted=False,status=status)
@@ -172,8 +173,11 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=FileUploadIngestEnqueueResponse)
     async def ingest_files(self,ingestTask:Annotated[FileUploadDataIngestModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileIngestCost,Depends(FileIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
-        _response = FileUploadIngestEnqueueResponse()
+        
+        db_config = ingestTask.db_config
+        _response = FileUploadIngestEnqueueResponse(db_config[0],db_config[1],ingestTask.expire_date,ingestTask.defer_date)
         ingest_sha = set()
+
         for file in files:
             try:
                 uri= file.filename.lower()
@@ -181,7 +185,7 @@ class DataIngestRessource(BaseHTTPRessource):
                 sha = await self.fileService.compute_sha256(file.file)
 
                 if sha in ingest_sha:
-                    raise JobAlreadyExistsError(uri,'File already added')
+                    raise JobAlreadyExistsError(uri,'File already added in the uploaded files')
                 
                 ingest_sha.add(sha)
 
@@ -189,12 +193,12 @@ class DataIngestRessource(BaseHTTPRessource):
                 await self.arqService.search(ArqDataTaskConstant.FILE_DATA_TASK,{'sha':sha},True)
                 await self.fileService.download_file(file_path, await file.read())
 
-                meta = IngestDataUriMetadata(uri=uri, size=file.size,sha=sha)
+                meta = FileIngestUriMetadata(uri=uri, size=file.size,sha=sha)
                 _response.metadata.append(meta)
 
                 merchant.safe_payment(
                     None,
-                    FileResponseUploadModel(metadata=[meta]),
+                    (FileResponseUploadModel(metadata=[meta]),db_config),
                     self.arqService.enqueue_task,ArqDataTaskConstant.FILE_DATA_TASK,
                     job_id=uri,
                     expires=ingestTask.expires,
@@ -224,11 +228,14 @@ class DataIngestRessource(BaseHTTPRessource):
     @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(crawl=True)}])
     @UseServiceLock(RedisService,ArqIngestTaskService,CustomService,LLMProviderService,lockType='reader')
     @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler)
-    @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=IngestDataWebCrawlingResponse,mount=False)
+    @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=WebCrawlingUriMetadata,mount=False)
     async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],mode:DeleteMode = Depends(delete_mode_query),request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Web crawl the web and extract meaningful information
         """
+        db_config = ingestTask.db_config
+        _response = WebCrawlingIngestDataResponse(db_config[0],db_config[1],ingestTask.expire_date,ingestTask.defer_date)
+
         if  isinstance(ingestTask.extraction, SchemaExtractionConfig):
             schema = self.customService.to_schemas([ingestTask.extraction.schema])
             if not schema:
@@ -238,23 +245,28 @@ class DataIngestRessource(BaseHTTPRessource):
         await self.arqService.exists(uri, True,True)
 
         if mode == 'soft':
-            comparable_urls = ComparableURL(ingestTask=ingestTask)
+            comparable_urls = CrawlingComparableURL(ingestTask=ingestTask)
             comparable_instruction = ComparableInstruction(ingestTask=ingestTask)
-            await self.arqService.search(ArqDataTaskConstant.FILE_DATA_TASK,{'urls': comparable_urls},True)
             await comparable_instruction.search()
+            await self.arqService.search(ArqDataTaskConstant.FILE_DATA_TASK,{'urls': comparable_urls},True)
         
-        size = await cost.fetch_estimate_size(ingestTask)
-        _response = IngestDataWebCrawlingResponse(uri=uri,size=size)
+        ingestTask.compute_size()
+        metadata = WebCrawlingUriMetadata(uri=uri,
+                                          size=cost.total_size(ingestTask._url_size or 0,ingestTask.pdf_size),
+                                          description=ingestTask._description,
+                                          url_size=ingestTask._url_size,
+                                          pdf_size=ingestTask.pdf_size)
+        _response.metadata = metadata
 
         merchant.safe_payment(
             None,
-            _response,
+            (metadata,db_config),
             self.arqService.enqueue_task,ArqDataTaskConstant.CRAWL_DATA_TASK,
             job_id=uri,
             expires=ingestTask.expires,
             defer_by=ingestTask.defer_by,
             kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by','name')),
-                    **_response.model_dump(),
+                    **metadata.model_dump(include=('uri','size')),
                     'request_id':request_id,
                     '_nickname':ArqDataTaskConstant.CRAWL_DATA_TASK,
                     'state':dict(),

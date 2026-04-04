@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UriMetadata(BaseModel):
@@ -12,6 +12,6 @@ class UploadError(BaseModel):
     reason: str
 
 class FileResponseUploadModel(BaseModel):
-    metadata: List[UriMetadata] = []
-    errors: Dict[str,UploadError] = {}
+    metadata: List[UriMetadata] = Field(default_factory=list)
+    errors: Dict[str,UploadError] = Field(default_factory=dict)
 

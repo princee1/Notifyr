@@ -537,6 +537,8 @@ class ArqDataTaskConstant:
     API_DATA_TASK='api'
     RESEARCH_DATA_TASK='research'
 
+    _DATA_TASK_TYPE = Literal['file','crawl','api','research']
+
 class ParseStrategy(str, Enum):
     SEMANTIC = "semantic"
     STRUCTURED = "structured" 

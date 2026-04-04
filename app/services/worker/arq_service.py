@@ -175,17 +175,22 @@ class ArqIngestTaskService(BaseService):
 
             return await job_id.status()
     
-        async def search(self,task:str,params:dict,_raise:bool|None)->Job|BaseError|None:
+        async def search(self,task:str,params:dict,_raise:bool|None,filter:set[str]|None=None)->Job|BaseError|None:
             for job in [*await self.get_queued_jobs(), *await self.get_jobs_results()]:
                 nickname = job.kwargs.get('_nickname',None)
                 if nickname != task:
                     continue
+                    
+                if filter != None and job.job_id in filter:
+                    continue
+                   
                 for k,v in params.items():
                     if k in job.kwargs and v == job.kwargs[k]:
                         if _raise != None and _raise:
                             raise JobAlreadyExistsError(job.job_id,f'job exist found with the search params: {params}')
                         else:
                             return job
+            
             if _raise != None and not _raise:
                 raise JobDoesNotExistsError('not specified',f'job does not exist found with the search params: {params}')
             return None

@@ -1,9 +1,10 @@
 import functools
 import json
-from typing import Any, Callable
-from app.classes.crawl import CrawlState, CrawlTokenUsageReport, DigestState
+from typing import Any, Callable, List
+from app.classes.crawl import CrawlState, CrawlTokenUsageReport, DigestState, MarkdownDocumentSize
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.classes.step import SkipStep, Step, StepRunner
+from app.cost.ingest_cost import MarkdownResultIngestCost
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.models.crawal4ai_model import KnowledgeGraphExtractionConfig, SchemaExtractionConfig, TextsExtractionConfig
 from app.models.file_model import FileResponseUploadModel, UriMetadata
@@ -35,10 +36,24 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                     bill = cost.generate_bill()
                     await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,cost.refund_cost,bill)
                 
-                if step['current_step'] < FileIngestionStepIndex.CLEANUP and nickname == ArqDataTaskConstant.FILE_DATA_TASK:
+                if step['current_step'] < FileIngestionStepIndex.CLEANUP:
                     _step = Step(current_step=FileIngestionStepIndex.CLEANUP-1,steps={},current_params=None)
                     await func(ctx,*args,**kwargs,step=_step,uri=uri,request_id=request_id,size=size,state=state)
         
+        case ArqDataTaskConstant.API_DATA_TASK:
+            async def refund():
+                ...
+            
+        case ArqDataTaskConstant.CRAWL_DATA_TASK:
+            async def refund():
+                ...
+        
+        case ArqDataTaskConstant.RESEARCH_DATA_TASK:
+            async def refund():
+                ...
+        
+        case _:
+            ...
 
     def decorator(func:Callable):
         """
@@ -240,7 +255,7 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
         
 
 @RegisterTask(ArqDataTaskConstant.CRAWL_DATA_TASK,False)
-async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,sha:str=None,step:Step = None,request_id:str=None,uri:str=None,state:CrawlState=None,**kwargs):
+async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,step:Step = None,request_id:str=None,uri:str=None,state:CrawlState=None,**kwargs):
     qdrantService:QdrantService = Get(QdrantService)
     configService:ConfigService = Get(ConfigService)
     llMProviderService:LLMProviderService = Get(LLMProviderService)
@@ -358,31 +373,35 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                     entities=graph_config.entities,
                     edges=graph_config.edges
                 )
-
-        token:CrawlTokenUsageReport = crawler.token_usage()   
-        step['current_params']={
-            'token':token,
-            'document':crawler.documents
-        }
+        step['current_params']={'token':crawler.token_usage(),'document':crawler.documents}
         await crawler.close()
       
     async with StepRunner(step,CrawlIngestionStepIndex.TOTAL_COST) as skip:
         skip()
-        tokens = step['current_params']['token']
-        document = step['current_params']['document']
-        tokenCost = TokenCost(request_id,f"arq-job@{uri}")
-        docCost = ...
+        ingestTask.compute_size()
+        issuer = f"arq-job@{uri}"
+
+        url_size = ingestTask._url_size or 0
+        pdf_size = ingestTask.pdf_size or 0
+
+        token:CrawlTokenUsageReport = step['current_params']['token']
+        document:List[MarkdownDocumentSize] = step['current_params']['document']
+
+        tokenCost = TokenCost(request_id,issuer)
+        markdownCost = MarkdownResultIngestCost(request_id,issuer)
+        markdownCost.init(1,'document','Crawl Credit Refund','full','Crawl')
 
         for usage in token.tokens:
-            tokenCost.purchase()
-            tokenCost.purchase()
+            tokenCost.purchase(token.model,token.provider,token.provider_id,'input',f"Crawl token usage for {usage['step']} tokens",usage['input_tokens'])
+            tokenCost.purchase(token.model,token.provider,token.provider_id,'output',f"Crawl token usage for {usage['step']} tokens",usage['output_tokens'])
 
-            bill = tokenCost.generate_bill()
-            await costService.deduct_credits(CostConstant.TOKEN_CREDIT,bill)
+        token_bill = tokenCost.generate_bill()
+        await costService.deduct_credits(CostConstant.TOKEN_CREDIT,token_bill)
         
-        for document in crawler.documents:
-            ...
-
+        markdownCost.post_refund(document,ingestTask.db_config,url_size,pdf_size)
+        document_bill = markdownCost.generate_bill()
+        await costService.refund_credits(CostConstant.DOCUMENT_CREDIT,document_bill)
+        
     async with StepRunner(step,CrawlIngestionStepIndex.CLEANUP) as skip:
         skip()
     

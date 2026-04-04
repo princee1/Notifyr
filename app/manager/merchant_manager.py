@@ -1,6 +1,6 @@
 import asyncio
 import functools
-from typing import Any, Callable, Literal
+from typing import Any, Awaitable, Callable, Literal
 from fastapi import BackgroundTasks, Depends, Request, Response
 from app.classes.auth_permission import AuthPermission
 from app.container import Get
@@ -34,16 +34,18 @@ class Merchant:
         self.to_post_payment=True
 
     def payment(self,function:Callable,*args,**kwargs):
-        async def wrapper():
+
+        @functools.wraps(function)
+        async def wrapper(*a,**k):
             try:
-                await function(*args,**kwargs)
+                await function(*a,**k)
             except:
                 ...
             
         self.backgroundTasks.add_task(wrapper,*args,**kwargs)
         self._set_indexes()
         
-    def safe_payment(self,rollbackFunc:Callable[[],None],items:Any|tuple[Any,...],function:Callable,*args,**kwargs):
+    def safe_payment(self,rollbackFunc:Callable[[],Awaitable[None]]|None,items:Any|tuple[Any,...],function:Callable,*args,**kwargs):
         if self.cost == None:
             raise AttributeError('Cost not found in the request')
 
@@ -70,7 +72,10 @@ class Merchant:
 
                 self.cost.reset_bill()
                 if isinstance(self.cost,DataCost):
-                    self.cost.post_refund(items)
+                    if isinstance(items,tuple):
+                        self.cost.post_refund(*items)
+                    else:
+                        self.cost.post_refund(items)
                 else:
                     self.cost.refund(*items)
                     

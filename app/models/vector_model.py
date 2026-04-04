@@ -1,13 +1,9 @@
-from typing import Any
-from pydantic import BaseModel
-from app.models.file_model import FileResponseUploadModel
+from typing import Any, Dict, List
+from pydantic import BaseModel, Field
+from app.models.ingest_model import DeleteIngestDocumentModel
 
-class DeleteCollectionModel(FileResponseUploadModel):
-    gateway_body:dict
+class DeleteCollectionModel(DeleteIngestDocumentModel):
     collection_name:str
-    job_dequeued:list[str]
-    jod_deleted:list[str]
-
 
 class QdrantCollectionModel(BaseModel):
     collection_name:str

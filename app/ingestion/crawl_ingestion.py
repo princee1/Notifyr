@@ -130,6 +130,7 @@ class WebCrawlerIngestion:
 		dc_state_callback: Optional[Callable[[CrawlState], None]] = None,
 		base_dir: Optional[str] = None,
 		schema:Optional[BaseModel] = None,
+		max_markdown_size=9000,
 	):
 		self.session_id: str | Callable[[], str] = ...
 		self.extra_headers = extra_headers
@@ -139,7 +140,8 @@ class WebCrawlerIngestion:
 		self.dc_state_callback = dc_state_callback
 		self.crawlState = crawl_state
 		self.schema = schema
-		
+
+		self.max_markdown_size = max_markdown_size
 		self.base_dir = Path(base_dir) if base_dir else Path.cwd() / ".crawl_cache"
 		
 		self.errors: list[CrawlError]  = []
@@ -148,7 +150,7 @@ class WebCrawlerIngestion:
 		self.deep_crawl_strategy: Optional[DeepCrawlStrategy] = None
 		
 		self.urls: List[str] = []
-		self.documents:List[CrawlDocumentSize] = []
+		self.documents:List[MarkdownDocumentSize] = []
 	
 	def initialize_folders(self):
 	    # Create cache and schema directories
@@ -411,8 +413,9 @@ class WebCrawlerIngestion:
 		)
 
 		pdf_links = []
+
 		async for result in results:
-			metadata = await self.process_result(pdf_links,result)
+			metadata = await self.process_result(pdf_links,result,'html')
 			if metadata:
 				yield metadata
 		
@@ -432,7 +435,7 @@ class WebCrawlerIngestion:
 		)
 
 		async for result in results:
-			metadata = await self.process_result(None,result)
+			metadata = await self.process_result(None,result,'pdf')
 			if metadata:
 				yield metadata
 	
@@ -478,9 +481,9 @@ class WebCrawlerIngestion:
 			provider_id=self.crawlLlmConfig.provider_id
 		)
 
-	async def process_result(self,pdf_links:list[str] | None,result:CrawlResult) -> CrawlResultMetadata:
+	async def process_result(self,pdf_links:list[str] | None,result:CrawlResult,doctype:DocType) -> CrawlResultMetadata:
 		url = result.url
-		metadata = CrawlResultMetadata(url=url, success=result.success)
+		metadata = CrawlResultMetadata(url=url, success=result.success, doc_type=doctype)
 
 		if not result.success:
 			metadata.error = result.error_message or "Unknown error"
@@ -491,7 +494,7 @@ class WebCrawlerIngestion:
 			metadata.description = result.metadata.get('description', "")
 			metadata.source = f"{url_data.scheme}://{url_data.netloc}"
 
-			await self.process_content(result, metadata)
+			await self.process_content(result, metadata,doctype)
 
 			if pdf_links is not None and self.ingestTask.pdf and result.links:
 				internal_links = result.links.get("internal", [])
@@ -506,7 +509,7 @@ class WebCrawlerIngestion:
 			metadata.success = False
 			return metadata
 
-	async def process_content(self, result: CrawlResult, metadata: CrawlResultMetadata):
+	async def process_content(self, result: CrawlResult, metadata: CrawlResultMetadata,doctype:DocType):
 		"""Process extracted content based on extraction mode."""
 		extraction_config = self.ingestTask.extraction
 
@@ -516,6 +519,7 @@ class WebCrawlerIngestion:
 			return 
 
 		markdown = result.markdown.fit_markdown
+		markdown = self.slice_markdown(markdown, max_bytes=9000)  # Example slicing to fit token limits
 		
 		if isinstance(extraction_config, TextsExtractionConfig): 
 			semanticsTexts = result.extracted_content
@@ -565,10 +569,10 @@ class WebCrawlerIngestion:
 			metadata.markdown_content = markdown
 
 		self.documents.append(
-			CrawlDocumentSize(
+			MarkdownDocumentSize(
 				size=sys.getsizeof(markdown),
-				url=metadata.url,
-				description=f"Markdown size of {metadata.url} with title {metadata.title}"
+				description=f"Markdown size of {metadata.url} with title {metadata.title} from a {doctype} source",
+				doc_type=doctype,
 				)
 			)
 
@@ -641,6 +645,8 @@ class WebCrawlerIngestion:
 					
 		return all_urls
 
+	def slice_markdown(self, markdown: str, max_bytes: int) -> str:
+		...
 
 def _build_scorers(self, model: DeepCrawlingStrategyModel) -> List:
 	"""Build list of scorers from model."""

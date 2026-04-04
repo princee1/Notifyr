@@ -110,10 +110,7 @@ class TimedeltaSchedulerModel(Scheduler):
         return self
 
     def build(self,mode:Literal['datetime','timedelta']='datetime') -> datetime | timedelta:
-        if mode == 'datetime':
-            return datetime.now() + timedelta()
-        
-        return timedelta(
+        time = timedelta(
             days=self.days,
             seconds=self.seconds,
             microseconds=self.microseconds,
@@ -121,7 +118,11 @@ class TimedeltaSchedulerModel(Scheduler):
             minutes=self.minutes,
             hours=self.hours,
             weeks=self.weeks,
-        )     
+        )   
+        if mode == 'datetime':
+            return datetime.now() + time
+        
+        return time
 
 class IntervalSchedulerModel(Scheduler):
     interval:TimedeltaSchedulerModel

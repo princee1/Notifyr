@@ -9,6 +9,7 @@ from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
 from app.classes.template import Extension, HTMLTemplate, Template, TemplateAssetError, TemplateNotFoundError
 from app.container import Get, InjectInMethod
+from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.definition._cost import Cost
 from app.definition._service import BaseMiniService, BaseMiniServiceManager
 from app.depends.class_dep import ObjectsSearch,ToPydanticModelInterface
@@ -768,3 +769,24 @@ class MerchantPipe(Pipe):
 
 async def domain_pipe(domain:str): 
     return {'domain':f'{GraphitiConstant.DOMAIN_PREFIX}{domain}'}
+
+
+class DeleteDocumentIngestUpdate(Pipe):
+
+    def __init__(self,db:Literal['vector','graph'] ):
+        super().__init__(True)
+        self.db = db
+
+    
+    def pipe(self,cost:DeleteDocumentIngestCost):
+        if self.db == 'vector':
+            name = 'Vector Document Deletion'
+            db_config = (True,False)
+        else:
+            name = 'Graph Document Deletion'
+            db_config = (False,True)
+
+        cost.change_definition_name(name)
+        cost.change_db_config(db_config)
+
+        return {}

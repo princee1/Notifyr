@@ -9,7 +9,7 @@ from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
-from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError
+from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError, TaskIngestNameNotValidError
 from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStreamDoneError, AgenticBadResponseError, AgenticGrpcIdleError, AgenticGrpcShutdownError
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
@@ -1201,6 +1201,16 @@ class DataIngestHandler(Handler):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "message": f"'{e.config_name}' Ingest configuration is not present for this operation.",
+                    "database": e.database
+                }
+            )
+
+        except TaskIngestNameNotValidError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "message": f"Task name '{e.task}' is not valid for database '{e.database}'.",
+                    "task": e.task,
                     "database": e.database
                 }
             )

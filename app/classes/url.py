@@ -398,7 +398,50 @@ def generate_urls(config: URLConfigModel) -> Iterator[str]:
 # for url in generate_urls(config):
 #     print(url)
 
-###################################################################################################
-###########################		  Token Usage Tracking Model		     ##############################
-###################################################################################################
+class ComparableURL:
 
+    def compare_url(self,ptr:list,value:list):
+        urls = list(set(ptr).difference(value))
+        if not urls:
+            return True
+        
+        ptr.clear()
+        ptr.extend(urls)
+        return False
+	
+    def compare_param(self, ptr: Dict[str, URLParam], value: Dict[str, dict]):
+        keys_to_remove = []
+
+        for key in ptr.keys():
+            if key not in value:
+                continue
+            
+            ptr_param = ptr[key]
+            ptr_values = ptr_param.values
+            value_values = value[key]
+            
+            if isinstance(ptr_values, list) and value_values['type'] == 'list':
+                diff = list(set(ptr_values) - set(value_values))
+                if not diff:
+                    keys_to_remove.append(key)
+                else:
+                    ptr_param.values = diff
+            
+            elif isinstance(ptr_values, tuple) and value_values['type']=='range':
+                if ptr_values == tuple(value_values['values']):
+                    keys_to_remove.append(key)
+                    continue
+                try:
+                    v = URLParam(type='range',values=tuple(value_values['values']))
+                    temp = URLParam(type='range',values=ptr_values,exclude=v)
+                    ptr[key] = temp
+                except:
+                    keys_to_remove.append(key)
+                
+            else:
+                keys_to_remove.append(key)
+
+        for key in keys_to_remove:
+            del ptr[key]
+
+        return len(ptr) == 0

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 from pydantic import BaseModel
 from app.classes.chunk import Chunk
 from app.definition._error import BaseError
@@ -119,6 +119,7 @@ class CrawlText(BaseModel):
 class CrawlTextModel(BaseModel):
 	texts:List[CrawlText]
 
+DocType = Literal['html','pdf']
 
 @dataclass
 class CrawlResultMetadata:
@@ -132,16 +133,17 @@ class CrawlResultMetadata:
     extracted_content: list[Any] = None
     markdown_content: Optional[str] = None
     chunks: List[Chunk] = field(default_factory=list)
+    doc_type:DocType = 'html'
 
-class CrawlDocumentSize(TypedDict):
+class MarkdownDocumentSize(TypedDict):
     size:int
-    url:str
     description:str
+    doc_type:DocType
+
 
 class CrawlState(TypedDict):
     deep_crawl:Dict
     cancelled:bool
-
 
 
 class DigestURLState(TypedDict):

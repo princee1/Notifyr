@@ -56,6 +56,11 @@ class FileCostDefinition(TypedDict):
     max_file_size:int
     max_file_size_extra_per_mb:int
 
+class MarkdownCostDefinition(TypedDict):
+    max_html_mb:int
+    max_pdf_mb:int
+
+
 class SimpleTaskCostDefinition(TypedDict):
     __api_usage_cost__:int
     __rate_limit__:str
