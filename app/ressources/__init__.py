@@ -25,7 +25,7 @@ from .worker.celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
 
 
-BASE_RESSOURCES:list[Type[BaseHTTPRessource]] = [
+RESSOURCES:list[Type[BaseHTTPRessource]] = [
                                                  AdminRessource,
                                                  ResultBackendRessource,
                                                  ContactsRessource,
@@ -44,8 +44,8 @@ if CAPABILITIES['object']:
     from .object_s3_ressource import S3ObjectRessource
     from .blog_ressource import BlogsRessource
     if configService.ASSET_MODE == AssetMode.s3:
-        BASE_RESSOURCES.append(S3ObjectRessource)
-    BASE_RESSOURCES.append(BlogsRessource)
+        RESSOURCES.append(S3ObjectRessource)
+    RESSOURCES.append(BlogsRessource)
     
 
 if CAPABILITIES['webhook']:
@@ -56,29 +56,29 @@ if CAPABILITIES['workflow']:
 
 if CAPABILITIES['twilio']:
     from .ntfr.twilio_ressource import TwilioRessource
-    BASE_RESSOURCES.append(TwilioRessource)
+    RESSOURCES.append(TwilioRessource)
 
 if CAPABILITIES['email']:
     from .ntfr.email_ressource import EmailRessource
-    BASE_RESSOURCES.append(EmailRessource)
+    RESSOURCES.append(EmailRessource)
 
 if CAPABILITIES['agentic']:
     from app.ressources.agentic.gateway_ressource import GatewayAgenticRessource
     from app.ressources.agentic.agent_ressource import AgentsRessource
     from app.ressources.agentic.data_ingest_ressource import DataIngestRessource
-    BASE_RESSOURCES.append(DataIngestRessource)
-    BASE_RESSOURCES.append(GatewayAgenticRessource)
-    BASE_RESSOURCES.append(AgentsRessource)
+    RESSOURCES.append(DataIngestRessource)
+    RESSOURCES.append(GatewayAgenticRessource)
+    RESSOURCES.append(AgentsRessource)
 
 
 if CAPABILITIES['notification']:
     from .ntfr.notification_ressource import NotificationRessource
-    BASE_RESSOURCES.append(NotificationRessource)
+    RESSOURCES.append(NotificationRessource)
 
 if CAPABILITIES['message']:
     ...
 
-if CAPABILITIES['chat']:
+if CAPABILITIES['live'] and CAPABILITIES['chat']:
     from .ntfr.live_chat_ressource import LiveChatRessource
-    BASE_RESSOURCES.append(LiveChatRessource)
+    RESSOURCES.append(LiveChatRessource)
 

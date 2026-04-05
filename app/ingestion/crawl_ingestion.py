@@ -7,13 +7,12 @@ from enum import Enum
 import json
 from pathlib import Path
 import sys
-from typing import Any, AsyncGenerator, Callable, Dict, List, Literal, Optional, Type, TypedDict
-from dataclasses import dataclass, field as dataclass_field
+from typing import AsyncGenerator, Callable, Dict, List, Literal, Optional, Type
 
 import aiohttp
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncUrlSeeder, AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, AdaptiveCrawler, LinkPreviewConfig, PruningContentFilter, SeedingConfig
-from crawl4ai import LLMConfig, LLMExtractionStrategy, JsonCssExtractionStrategy, LLMContentFilter,RegexExtractionStrategy,ExtractionStrategy
+from crawl4ai import AsyncUrlSeeder, AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, LinkPreviewConfig, PruningContentFilter, SeedingConfig
+from crawl4ai import LLMConfig, LLMExtractionStrategy, JsonCssExtractionStrategy, RegexExtractionStrategy,ExtractionStrategy
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy, DFSDeepCrawlStrategy, BestFirstCrawlingStrategy, DeepCrawlStrategy
 from crawl4ai.processors.pdf import PDFCrawlerStrategy, PDFContentScrapingStrategy
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
@@ -29,9 +28,10 @@ from crawl4ai.models import TokenUsage
 
 from pydantic import BaseModel
 from app.classes.chunk import ChunkPayload, Chunk, TextDetector
+from app.classes.cost_definition import MarkdownCostDefinition
 from app.classes.crawl import *
 from app.classes.url import fetch_jsonld, generate_urls
-from app.definition._error import BaseError
+import re
 from app.models.crawal4ai_model import (
 	DeepCrawlingAlgorithm, DeepCrawlingStrategyModel,
 	TextsExtractionConfig, SchemaExtractionConfig, SchemaExtractionConfig,
@@ -110,7 +110,6 @@ class CrawlIngestionStepIndex(int, Enum):
 	TOTAL_COST = 6
 	CLEANUP = 7
 
-
 class WebCrawlerIngestion:
 	"""
 	Comprehensive web crawler ingestion system with support for:
@@ -125,12 +124,12 @@ class WebCrawlerIngestion:
 		self,
 		ingestTask: WebCrawlingDataIngestModel,
 		crawl_llm_config: CrawlLLMConfig,
+		markdownCostDefinition:MarkdownCostDefinition,
 		crawl_state: Optional[CrawlState] = None,
 		extra_headers: Optional[Dict] = None,
 		dc_state_callback: Optional[Callable[[CrawlState], None]] = None,
 		base_dir: Optional[str] = None,
 		schema:Optional[BaseModel] = None,
-		max_markdown_size=9000,
 	):
 		self.session_id: str | Callable[[], str] = ...
 		self.extra_headers = extra_headers
@@ -141,7 +140,7 @@ class WebCrawlerIngestion:
 		self.crawlState = crawl_state
 		self.schema = schema
 
-		self.max_markdown_size = max_markdown_size
+		self.max_markdown_def = markdownCostDefinition
 		self.base_dir = Path(base_dir) if base_dir else Path.cwd() / ".crawl_cache"
 		
 		self.errors: list[CrawlError]  = []
@@ -519,7 +518,7 @@ class WebCrawlerIngestion:
 			return 
 
 		markdown = result.markdown.fit_markdown
-		markdown = self.slice_markdown(markdown, max_bytes=9000)  # Example slicing to fit token limits
+		markdown = self.slice_markdown(markdown,doctype)  # Example slicing to fit token limits
 		
 		if isinstance(extraction_config, TextsExtractionConfig): 
 			semanticsTexts = result.extracted_content
@@ -645,8 +644,75 @@ class WebCrawlerIngestion:
 					
 		return all_urls
 
-	def slice_markdown(self, markdown: str, max_bytes: int) -> str:
-		...
+	def slice_markdown(self, markdown: str, doctype: DocType) -> str:
+		"""
+		Slice markdown to a maximum size based on doctype.
+		Intelligently truncates at paragraph and sentence boundaries to avoid cutting mid-content.
+		
+		Args:
+			markdown: The markdown string to process
+			doctype: Either 'html' or 'pdf' to determine max size limit
+			
+		Returns:
+			Markdown string truncated to byte limit, or original if within limit
+		"""
+		# Get max size in MB based on doctype and convert to bytes
+		max_bytes = self.max_markdown_def.get('max_html_mb' if doctype == 'html' else 'max_pdf_mb', 10)
+		
+		# Check if already within size
+		markdown_bytes = markdown.encode('utf-8')
+		if len(markdown_bytes) <= max_bytes:
+			return markdown
+		
+		# Split into paragraphs (separated by blank lines)
+		paragraphs = markdown.split('\n\n')
+		result_parts = []
+		current_size = 0
+		
+		for para_idx, para in enumerate(paragraphs):
+			para_bytes = para.encode('utf-8')
+			# Account for paragraph separator (\n\n) except for first paragraph
+			separator_bytes = len('\n\n'.encode('utf-8')) if para_idx > 0 else 0
+			total_para_bytes = len(para_bytes) + separator_bytes
+			
+			# If adding complete paragraph would exceed limit, try sentence-by-sentence
+			if current_size + total_para_bytes > max_bytes:
+				# Split paragraph into sentences (periods, question marks, exclamation marks)
+				sentences = re.split(r'(?<=[.!?])\s+', para)
+				
+				for sent_idx, sentence in enumerate(sentences):
+					sent_bytes = sentence.encode('utf-8')
+					# Add space after sentence if not the last one
+					space_bytes = len(' '.encode('utf-8')) if sent_idx < len(sentences) - 1 else 0
+					total_sent_bytes = len(sent_bytes) + space_bytes
+					
+					if current_size + total_sent_bytes <= max_bytes:
+						result_parts.append(sentence)
+						current_size += total_sent_bytes
+					else:
+						# Reached size limit, stop processing
+						break
+				
+				# Stop processing more paragraphs
+				break
+			else:
+				# Paragraph fits, add it completely
+				result_parts.append(para)
+				current_size += total_para_bytes
+		
+		# Join results
+		if not result_parts:
+			# Fallback: return truncated string at byte boundary
+			return markdown_bytes[:max_bytes].decode('utf-8', errors='ignore')
+		
+		# Join paragraphs with double newline, sentences with space
+		result = '\n\n'.join(result_parts)
+		# Ensure we're not exceeding the limit (due to encoding edge cases)
+		while len(result.encode('utf-8')) > max_bytes and result:
+			# Remove last sentence/character if still over
+			result = result.rsplit(' ', 1)[0] if ' ' in result else result[:-1]
+		
+		return result
 
 def _build_scorers(self, model: DeepCrawlingStrategyModel) -> List:
 	"""Build list of scorers from model."""

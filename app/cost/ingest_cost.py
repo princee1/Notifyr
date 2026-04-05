@@ -110,9 +110,6 @@ class MarkdownResultIngestCost(DataCost):
             if db_config[1]:
                 self.refund(f'{self.crawl_type} [Graph] Credit Refund',total_cost,1)
 
-
-
-
         diff_url = url_size - url_cptr
         diff_pdf = pdf_size - pdf_cptr
 

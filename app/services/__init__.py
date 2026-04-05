@@ -16,6 +16,8 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     from app.services.database.rabbitmq_service import RabbitMQService
     from app.services.workflow_service import WorkflowService
     from app.services.ntfr.webhook_service import WebhookService
+    from app.services.system_service import SystemService
+
 
     if CAPABILITIES['agentic']:
         from app.services.agent.llm_provider_service import LLMProviderService
@@ -74,6 +76,7 @@ if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
     from app.services.worker.arq_service import ArqIngestTaskService
     from app.services.reactive_service import ReactiveService
     from app.services.custom_service import CustomService
+    from app.services.system_service import SystemService
 
 
 
@@ -87,7 +90,7 @@ if APP_MODE == ApplicationMode.arq and CAPABILITIES['agentic']:
     from app.services.file.file_service import FileService
     from app.services.worker.arq_service import ArqIngestTaskService
     from app.services.custom_service import CustomService
-
+    from app.services.system_service import SystemService
 
 
 if APP_MODE == ApplicationMode.gunicorn and CAPABILITIES['object']:
@@ -96,5 +99,6 @@ if APP_MODE == ApplicationMode.gunicorn and CAPABILITIES['object']:
     from app.services.vault_service import VaultService
     from app.services.database.object_service import ObjectS3Service
     from app.services.assets_service import AssetService
+    
 
     

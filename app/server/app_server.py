@@ -146,7 +146,7 @@ class AppServer(EventInterface):
     def add_ressources(self):
         self.pretty_printer.show(
             pause_before=1, clear_stack=True, space_line=True)
-        for ressource_type in BASE_RESSOURCES:
+        for ressource_type in RESSOURCES:
             try:
                 now = dt.datetime.now()
                 res = ressource_type()

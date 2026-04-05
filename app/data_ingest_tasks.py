@@ -1,10 +1,10 @@
 import functools
 import json
 from typing import Any, Callable, List
+from app.classes.cost_definition import MarkdownCostDefinition
 from app.classes.crawl import CrawlState, CrawlTokenUsageReport, DigestState, MarkdownDocumentSize
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.classes.step import SkipStep, Step, StepRunner
-from app.cost.ingest_cost import MarkdownResultIngestCost
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.models.crawal4ai_model import KnowledgeGraphExtractionConfig, SchemaExtractionConfig, TextsExtractionConfig
 from app.models.file_model import FileResponseUploadModel, UriMetadata
@@ -259,6 +259,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     qdrantService:QdrantService = Get(QdrantService)
     configService:ConfigService = Get(ConfigService)
     llMProviderService:LLMProviderService = Get(LLMProviderService)
+    fileService:FileService = Get(FileService)
     profileService:ProfileService = Get(ProfileService)
     graphitiService:GraphitiService = Get(GraphitiService)
     costService:CostService = Get(CostService)
@@ -283,13 +284,18 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
         schema = ingestTask.extraction.schema
         schema = customService.to_schemas([schema])[schema]
 
+    markdownMaxDef:MarkdownCostDefinition = costService.costs_definition.get('crawl',MarkdownCostDefinition(max_html_mb=2,max_pdf_mb=10))
+    markdownMaxDef['max_html_mb'] = fileService.bytes_conversion(markdownMaxDef['max_html_mb'],'mb','b')
+    markdownMaxDef['max_pdf_mb'] = fileService.bytes_conversion(markdownMaxDef['max_pdf_mb'],'mb','b')
+
     crawler = WebCrawlerIngestion(
         ingestTask=ingestTask,
         crawl_state=state,
         crawl_llm_config=llmProvider.crawl_llm,
         dc_state_callback=deep_crawl_callback,
         base_dir=f"{configService.DATA_INGESTION_DIR}crawl4ai/",
-        schema=schema
+        schema=schema,
+        markdownCostDefinition=markdownMaxDef,
     )
 
     async with StepRunner(step,CrawlIngestionStepIndex.CHECK) as skip:
@@ -373,6 +379,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                     entities=graph_config.entities,
                     edges=graph_config.edges
                 )
+        
         step['current_params']={'token':crawler.token_usage(),'document':crawler.documents}
         await crawler.close()
       
@@ -424,6 +431,8 @@ if APP_MODE == ApplicationMode.arq:
     from app.services import RedisService
     from app.services import VaultService
     from app.services import CostService
+    from app.services import LoggerService
+    from app.services
     from app.services.worker.arq_service import ArqIngestTaskService,QUEUE_NAME
 
     from app.container import Get,build_container
@@ -437,6 +446,8 @@ if APP_MODE == ApplicationMode.arq:
 
     from app.cost.file_cost import FileCost
     from app.cost.token_cost import TokenCost
+    from app.cost.ingest_cost import MarkdownResultIngestCost
+
 
     class WorkerSettings:
         functions = task_registry
@@ -462,7 +473,10 @@ if APP_MODE == ApplicationMode.arq:
     @staticmethod
     async def after_job_end(ctx:dict[str,Any]):
         """coroutine function to run after job has ended and results have been recorded"""
-        ...
+        job_id = ctx['job_id']
+        arqService.update_job_kwargs(job_id,{'step':{}})
+        arqService.update_job_kwargs(job_id,{'state':{}})
+
 
     @staticmethod
     async def startup(ctx:dict[str,Any]):
