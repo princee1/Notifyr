@@ -4,7 +4,7 @@ from app.decorators.guards import CreditPlanGuard
 from app.decorators.handlers import AsyncIOHandler, CostHandler, RedisHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import JSONLoadsPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._utils_decorator import Pipe
 from app.depends.dependencies import get_auth_permission
 from app.services.cost_service import CostService,REDIS_CREDIT_KEY_BUILDER
@@ -53,7 +53,7 @@ class CostRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @UseHandler(RedisHandler,CostHandler)
     @PingService([RedisService])
-    @UseServiceLock(RedisService)
+    @LockService(RedisService)
     @BaseHTTPRessource.HTTPRoute('/credits/', methods=[HTTPMethod.GET])
     async def show_current_credits(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
         """Return current credits for all plan keys. May be restricted in production via permissions in future.

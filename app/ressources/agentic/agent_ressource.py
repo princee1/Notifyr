@@ -10,7 +10,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.funcs_dep import get_profile
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
@@ -35,7 +35,7 @@ class PromptPlaygroundRessource(BaseHTTPRessource):
 
 
 @PingService([MongooseService])
-@UseServiceLock(MongooseService,lockType='reader',check_status=False)
+@LockService(MongooseService,lockType='reader',check_status=False)
 @UseRoles([Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MotorErrorHandler)
 @UsePermission(JWTRouteHTTPPermission)
@@ -139,7 +139,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler)
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
-    @UseServiceLock(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
+    @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_profile)], response:Response,profile:str=Depends(get_agent), authPermission:AuthPermission= Depends(get_auth_permission)):
         stream = False

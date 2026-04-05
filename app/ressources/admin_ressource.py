@@ -24,7 +24,7 @@ from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant, CostConstant
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
-from app.definition._ressource import PingService, UseInterceptor, UseServiceLock, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
+from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AuthType, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, ORMCacheHandler, PydanticHandler, RedisHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler
@@ -43,7 +43,7 @@ policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','merg
 
 
 @PingService([TortoiseConnectionService],infinite_wait=True)
-@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
+@LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
 @UseRoles(roles=[Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler,TortoiseHandler,AsyncIOHandler)
@@ -57,7 +57,7 @@ class PolicyRessource(BaseHTTPRessource):
         self.adminService = adminService
 
     @PingService([ProfileService])
-    @UseServiceLock(ProfileService,lockType='reader',check_status=False)
+    @LockService(ProfileService,lockType='reader',check_status=False)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UseGuard(PolicyGuard)
     @HTTPStatusCode(status.HTTP_201_CREATED)
@@ -83,7 +83,7 @@ class PolicyRessource(BaseHTTPRessource):
         return policy
 
     @PingService([ProfileService])
-    @UseServiceLock(ProfileService,lockType='reader',check_status=False)
+    @LockService(ProfileService,lockType='reader',check_status=False)
     @UseHandler(PydanticHandler)
     @UseGuard(PolicyGuard)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
@@ -131,7 +131,7 @@ class PolicyRessource(BaseHTTPRessource):
 
         
 @PingService([TortoiseConnectionService])
-@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
+@LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,TortoiseHandler,AsyncIOHandler)
@@ -154,7 +154,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseHandler(CostHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT))
-    @UseServiceLock(SettingService,lockType='reader')
+    @LockService(SettingService,lockType='reader')
     @UsePermission(AdminPermission)
     @BaseHTTPRessource.Post('/')
     async def create_client(self,  merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, client: ClientModel,gid: str = Depends(get_query_params('gid', 'id')), authPermission=Depends(get_auth_permission)):
@@ -375,7 +375,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
                 ])
 
 @PingService([TortoiseConnectionService])
-@UseServiceLock(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
+@LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
 @UseHandler(TortoiseHandler,AsyncIOHandler)
 @UseRoles([Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
@@ -440,9 +440,9 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @UseServiceLock(SettingService,lockType='reader')
-    @UseServiceLock(VaultService,lockType='reader',check_status=False)
-    @UseServiceLock(JWTAuthService,lockType='writer')
+    @LockService(SettingService,lockType='reader')
+    @LockService(VaultService,lockType='reader',check_status=False)
+    @LockService(JWTAuthService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):
         await self.jwtAuthService.revoke_all_tokens()
@@ -464,9 +464,9 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     
     @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
-    @UseServiceLock(SettingService,lockType='reader')
-    @UseServiceLock(VaultService,lockType='reader',check_status=False)
-    @UseServiceLock(JWTAuthService,lockType='writer')
+    @LockService(SettingService,lockType='reader')
+    @LockService(VaultService,lockType='reader',check_status=False)
+    @LockService(JWTAuthService,lockType='writer')
     @UseHandler(SecurityClientHandler)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
     async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission)):   
@@ -487,7 +487,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
                                                                      "details": "Even if you're the admin old token wont be valid anymore",
                                                                      "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},})
 
-    @UseServiceLock(JWTAuthService,lockType='reader')
+    @LockService(JWTAuthService,lockType='reader')
     @UseLimiter(limit_value='1/day')
     @BaseHTTPRessource.HTTPRoute('/revoke-version/', methods=[HTTPMethod.GET],deprecated=True,mount=False)
     def check_version(self,request:Request):
@@ -516,7 +516,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseLimiter(limit_value='4/day')
     @UsePipe(ForceClientPipe)
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @UseServiceLock(SettingService,lockType='reader')
+    @LockService(SettingService,lockType='reader')
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
     async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):

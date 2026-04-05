@@ -2,7 +2,7 @@ from fastapi import Depends, Query,status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.container import Get, InjectInMethod
-from  app.definition._ressource import BaseHTTPRessource, HTTPMethod,HTTPRessource, IncludeWebsocket, PingService, UseServiceLock, UseHandler, UsePermission, UseRoles
+from  app.definition._ressource import BaseHTTPRessource, HTTPMethod,HTTPRessource, IncludeWebsocket, PingService, LockService, UseHandler, UsePermission, UseRoles
 from app.services.database.redis_service import RedisService
 from app.services.ntfr.chat_service import ChatService
 from app.services.reactive_service import ReactiveService
@@ -40,7 +40,7 @@ class LiveChatRessource(BaseHTTPRessource):
         self.settingService = settingService
         self.reactiveService = reactiveService
     
-    @UseServiceLock(SettingService,lockType='reader')
+    @LockService(SettingService,lockType='reader')
     @UseHandler(WebSocketHandler)
     @BaseHTTPRessource.Get('/live-chat-permission/{ws_path}',)
     def issue_chat_permission(self, ws_path:str):

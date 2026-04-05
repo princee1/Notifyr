@@ -6,7 +6,7 @@ from app.container import GetDependsFunc, InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler, TwilioHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import MiniServiceInjectorPipe, parse_phone_number
-from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import get_profile
 from app.ressources.twilio.sms_ressource import SMSRessource
@@ -44,7 +44,7 @@ class TwilioRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @UseHandler(AsyncIOHandler,ProfileHandler)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'))
-    @UseServiceLock(TwilioService,as_manager=True)
+    @LockService(TwilioService,as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/balance/{profile}/',methods=[HTTPMethod.GET])
     async def check_balance(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],request:Request,authPermission=Depends(get_auth_permission)):
         return await twilio.fetch_balance()

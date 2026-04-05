@@ -8,7 +8,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.depends.funcs_dep import GetLink
 from app.depends.class_dep import  LinkQuery
@@ -51,7 +51,7 @@ async def get_link_cache(link_id:str,)->LinkORM:
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(TortoiseHandler)
 @PingService([TortoiseConnectionService])
-@UseServiceLock(TortoiseConnectionService)
+@LockService(TortoiseConnectionService)
 @HTTPRessource(LINK_MANAGER_PREFIX)
 class CRUDLinkRessource(BaseHTTPRessource):
 

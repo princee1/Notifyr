@@ -7,7 +7,7 @@ from app.decorators.guards import MongooseHardLimitGuard
 from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler, TemplateHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, GlobalPointerIteratorPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseServiceLock, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, LockService, UseRoles
 from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
@@ -52,7 +52,7 @@ class SettingsRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])
     @UseLimiter(limit_value='1000/minutes')
-    @UseServiceLock(SettingService,lockType='reader')
+    @LockService(SettingService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET],)
     async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
         return self.settingService.data
@@ -60,7 +60,7 @@ class SettingsRessource(BaseHTTPRessource):
     @PingService([VaultService],infinite_wait=True)
     @UseRoles([Role.ADMIN])
     @UseLimiter(limit_value='1/minutes')
-    @UseServiceLock(VaultService,SettingService,lockType='writer')
+    @LockService(VaultService,SettingService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
     async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission),default = Query(False)):
         if default:
@@ -107,7 +107,7 @@ if CAPABILITIES['object']:
             self.configService = configService
 
         @UseLimiter(limit_value='500/minutes')
-        @UseServiceLock(AssetService,lockType= 'reader')
+        @LockService(AssetService,lockType= 'reader')
         @HTTPStatusCode(status.HTTP_200_OK)
         @UseRoles([Role.PUBLIC])
         @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
@@ -131,7 +131,7 @@ if CAPABILITIES['object']:
             return {"value": val}
 
         @UseLimiter(limit_value='10/hours')
-        @UseServiceLock(AssetService, lockType='writer')
+        @LockService(AssetService, lockType='writer')
         @HTTPStatusCode(status.HTTP_200_OK)
         @UseRoles([Role.ADMIN])
         @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
@@ -156,7 +156,7 @@ if CAPABILITIES['object']:
             return {"value": val}
 
         @UseLimiter(limit_value='10/hours')
-        @UseServiceLock(AssetService,lockType= 'writer')
+        @LockService(AssetService,lockType= 'writer')
         @HTTPStatusCode(status.HTTP_201_CREATED)
         @UseRoles([Role.ADMIN])
         @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
@@ -212,7 +212,7 @@ if CAPABILITIES['agentic']:
         @UsePipe(DocumentFriendlyPipe,before=False)
         @UseGuard(MongooseHardLimitGuard(200,CustomModel))
         @UseHandler(TemplateHandler,PydanticHandler)
-        @UseServiceLock(CustomService,lockType='reader')
+        @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
         async def add_custom_model(self,custom:CustomModel,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
             
@@ -235,7 +235,7 @@ if CAPABILITIES['agentic']:
         @UseLimiter('5/minutes')
         @UsePipe(DocumentFriendlyPipe,before=False)
         @UseHandler(TemplateHandler,PydanticHandler)
-        @UseServiceLock(CustomService,lockType='reader')
+        @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/{model}/',methods=[HTTPMethod.PUT])
         async def update_custom_model(self,model:str,custom:UpdateCustomModel, response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
 
@@ -260,7 +260,7 @@ if CAPABILITIES['agentic']:
         
         @Throttle(uniform=(50,200))
         @UsePipe(DocumentFriendlyPipe,before=False)
-        @UseServiceLock(CustomService,lockType='reader')
+        @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/s/{model}',methods=[HTTPMethod.GET])
         async def fetch_custom_model(self,model:str,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
             model:CustomModel = await self.mongooseService.get(CustomModel,model,True)
@@ -268,7 +268,7 @@ if CAPABILITIES['agentic']:
 
         @Throttle(uniform=(50,200))
         @UsePipe(DocumentFriendlyPipe,before=False)
-        @UseServiceLock(CustomService,lockType='reader')
+        @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
         async def fetch_all(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
             models = await self.mongooseService.find_all(CustomModel)
@@ -276,7 +276,7 @@ if CAPABILITIES['agentic']:
 
         @UseLimiter('5/minutes')
         @UseRoles([Role.ADMIN])
-        @UseServiceLock(CustomService,lockType='reader')
+        @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/{model}',methods=[HTTPMethod.DELETE])
         async def delete_custom_model(self,model:str,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
             model:CustomModel = await self.mongooseService.get(CustomModel,model,True)

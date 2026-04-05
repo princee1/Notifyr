@@ -17,7 +17,7 @@ from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, Fi
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import StateProtocol
 from app.depends.class_dep import ObjectsSearch
 from app.depends.dependencies import get_auth_permission
@@ -113,7 +113,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
     @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler,FileHandler,CostHandler,RedisHandler)
-    @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],response_model=ObjectResponseUploadModel ,mount=False)
     async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -158,7 +158,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler)
     @PingService([ObjectS3Service,VaultService])
     @UsePipe(ValidFreeInputTemplatePipe)
-    @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/download/{template:path}',methods=[HTTPMethod.GET],mount=False)
     async def download_stream(self,request:Request,template:str,objectSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission)): # type: ignore
 
@@ -188,7 +188,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'refund'))
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UsePipe(ValidFreeInputTemplatePipe(False,True),MerchantPipe(-1))
-    @UseServiceLock(ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @LockService(ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/delete/{template:path}',methods=[HTTPMethod.DELETE],response_model=ObjectS3ResponseModel)
     async def delete_object(self,template:str,response:Response,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],force:bool=Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -229,7 +229,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UsePermission(JWTAssetObjectPermission)
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
-    @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @UsePipe(ValidFreeInputTemplatePipe(False,False))
     @UseInterceptor(ResponseCacheInterceptor('cache',MinioResponseCache,raise_default_exception=False),mount=False)
     @BaseHTTPRessource.HTTPRoute('/single/{template:path}',methods=[HTTPMethod.GET],response_model=ObjectS3ResponseModel)
@@ -252,7 +252,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @PingService([ObjectS3Service])
     @UseRoles(roles=[Role.PUBLIC])
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UseServiceLock(ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @LockService(ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
     def list_objects_stat(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         objects = self.assetService.objects.copy()
@@ -268,7 +268,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @PingService([ObjectS3Service,VaultService])
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
-    @UseServiceLock(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard(1,allowed_extensions=['.xml','.html','.css','.scss']))
     @UseHandler(S3Handler,VaultHandler,TemplateHandler,FileNamingHandler,CostHandler,UploadFileHandler,RedisHandler)
     @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}),MerchantPipe())
@@ -308,7 +308,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseHandler(S3Handler,FileNamingHandler,CostHandler,RedisHandler)
     @UsePipe(ValidFreeInputTemplatePipe(False,False),pipe_restore,MerchantPipe())
-    @UseServiceLock(ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @LockService(ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/copy/{template:path}/to/{destination_template:path}',methods=[HTTPMethod.PATCH],response_model=ObjectS3ResponseModel,mount=False)
     async def copy_object(self,template:str,request:Request,response:Response,destination_template:str,cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],move:bool = Query(False),restore:bool = Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
 
@@ -355,7 +355,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
     @UsePermission(AdminPermission)
     @PingService([VaultService])
-    @UseServiceLock(VaultService,lockType='reader',check_status=False)
+    @LockService(VaultService,lockType='reader',check_status=False)
     @UseGuard(is_minio_external_guard)
     @BaseHTTPRessource.HTTPRoute('/generate-url/',methods=[HTTPMethod.GET,HTTPMethod.PUT],mount=False)
     async def generate_url(self,request:Request,expiry:int=Query(3600,ge=6*60,le=HOUR*2),version:str=Query(None)): # type: ignore

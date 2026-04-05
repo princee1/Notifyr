@@ -1002,7 +1002,7 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
     
     return decorator
 
-def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,**add_kwargs):
+def LockService(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,**add_kwargs):
     if lockType not in ['reader', 'writer']:
         raise TypeError
     
@@ -1010,7 +1010,7 @@ def UseServiceLock(*services: Type[S], lockType: Literal['reader', 'writer'] = '
         miniLockType = lockType
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseServiceLock, services,lockType=lockType,infinite_wait=infinite_wait,as_manager=as_manager,miniLockType=miniLockType,**add_kwargs)
+        cls = common_class_decorator(func, LockService, services,lockType=lockType,infinite_wait=infinite_wait,as_manager=as_manager,miniLockType=miniLockType,**add_kwargs)
         if cls != None:
             return cls
 

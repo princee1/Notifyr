@@ -1,4 +1,4 @@
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseServiceLock
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, LockService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.vault_service import VaultService
@@ -42,7 +42,7 @@ class SecretMessageRessource(BaseHTTPRessource):
         self.jwtService = Get(JWTAuthService)
     
 
-    @UseServiceLock(VaultService,lockType='reader')
+    @LockService(VaultService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],deprecated=True)
     async def print_creds(self,):
         ...

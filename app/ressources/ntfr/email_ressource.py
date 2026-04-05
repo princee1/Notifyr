@@ -22,7 +22,7 @@ from app.manager import TaskManager
 from app.services.link_service import LinkService
 from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
-from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseInterceptor, UseServiceLock, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
+from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseInterceptor, LockService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.ntfr.email_service import EmailReaderService, EmailSenderService
 from fastapi import Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission, get_query_params
@@ -100,7 +100,7 @@ class EmailRessource(BaseHTTPRessource):
         @UseRoles([Role.PUBLIC])
         @UsePermission(permissions.JWTAssetObjectPermission('email','html',accept_none_template=True))
         @UsePipe(pipes.FilterAllowedSchemaPipe,before=False)
-        @UseServiceLock(AssetService,lockType='reader')
+        @LockService(AssetService,lockType='reader')
         @UsePipe(pipes.TemplateParamsPipe('email','html',True))
         @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler)
         @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS])
@@ -116,7 +116,7 @@ class EmailRessource(BaseHTTPRessource):
         @UseRoles([Role.MFA_OTP])
         @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor(),inject_meta=True)
         @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
-        @UseServiceLock(ProfileService,EmailSenderService,CeleryService,AssetService,lockType='reader',check_status=False,as_manager =True)
+        @LockService(ProfileService,EmailSenderService,CeleryService,AssetService,lockType='reader',check_status=False,as_manager =True)
         @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetObjectPermission('email'),permissions.JWTSignatureAssetPermission())
         @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.CostHandler,handlers.ContactsHandler(),handlers.ProfileHandler,handlers.RedisHandler)
         @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
@@ -157,7 +157,7 @@ class EmailRessource(BaseHTTPRessource):
         @UseLimiter(limit_value='10/minutes')
         @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler,handlers.RedisHandler())
         @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
-        @UseServiceLock(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
+        @LockService(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
         @UsePermission(permissions.TaskCostPermission(),permissions.JWTSignatureAssetPermission())
         @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'))
         @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
