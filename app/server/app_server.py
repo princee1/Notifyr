@@ -146,7 +146,7 @@ class AppServer(EventInterface):
     def add_ressources(self):
         self.pretty_printer.show(
             pause_before=1, clear_stack=True, space_line=True)
-        for ressource_type in RESSOURCES:
+        for ressource_type in SERVER_RESSOURCES:
             try:
                 now = dt.datetime.now()
                 res = ressource_type()
@@ -194,7 +194,7 @@ class AppServer(EventInterface):
         # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
         # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
         remoteAgentService = Get(RemoteAgentService)
-        await RunInThreadPool(remoteAgentService.connect_channel)()
+        await remoteAgentService.connect_channel()
         
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):

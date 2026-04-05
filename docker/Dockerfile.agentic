@@ -16,5 +16,5 @@ RUN ./agentic_installation.sh ${INSTALL_DOCLING} ${INSTALL_CRAWL4AI}
 
 COPY ./agentic_main.py ./agentic_main.py
 
-COPY ./app/data_tasks.py ./data_tasks.py
+COPY ./app/data_ingest_tasks.py ./data_ingest_tasks.py
 

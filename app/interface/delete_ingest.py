@@ -8,7 +8,7 @@ from app.utils.constant import ArqDataTaskConstant
 
 Section = Literal['collection_name','domain']
 
-@IsInterface()
+@IsInterface
 class DeleteIngestDocumentInterface(Interface):
 
     def __init__(self,arqService:ArqIngestTaskService):

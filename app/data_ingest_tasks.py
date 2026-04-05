@@ -281,7 +281,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     ingestTask = WebCrawlingDataIngestModel(vector_config=vector_config,graph_config=graph_config,**kwargs)
     
     if isinstance(ingestTask.extraction,SchemaExtractionConfig):
-        schema = ingestTask.extraction.schema
+        schema = ingestTask.extraction.custom_schema
         schema = customService.to_schemas([schema])[schema]
 
     markdownMaxDef:MarkdownCostDefinition = costService.costs_definition.get('crawl',MarkdownCostDefinition(max_html_mb=2,max_pdf_mb=10))
@@ -432,7 +432,7 @@ if APP_MODE == ApplicationMode.arq:
     from app.services import VaultService
     from app.services import CostService
     from app.services import LoggerService
-    from app.services
+    from app.services import SystemService
     from app.services.worker.arq_service import ArqIngestTaskService,QUEUE_NAME
 
     from app.container import Get,build_container

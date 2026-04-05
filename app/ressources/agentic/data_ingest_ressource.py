@@ -237,9 +237,9 @@ class DataIngestRessource(BaseHTTPRessource):
         _response = WebCrawlingIngestDataResponse(db_config[0],db_config[1],ingestTask.expire_date,ingestTask.defer_date)
 
         if  isinstance(ingestTask.extraction, SchemaExtractionConfig):
-            schema = self.customService.to_schemas([ingestTask.extraction.schema])
+            schema = self.customService.to_schemas([ingestTask.extraction.custom_schema])
             if not schema:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f"Schema {ingestTask.extraction.schema} not found")
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f"Schema {ingestTask.extraction.custom_schema} not found")
         
         uri = ingestTask.name
         await self.arqService.exists(uri, True,True)

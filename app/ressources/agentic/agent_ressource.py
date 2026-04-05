@@ -55,12 +55,12 @@ class AgentsRessource(BaseHTTPRessource):
         super().__init__()
         self.remoteAgentService = remoteAgentService
         self.mongooseService = mongooseService
-        self.provider_guard = LLMProviderGuard(False,False)
+        self.provider_guard = LLMProviderGuard()
     
     @UsePermission(AdminPermission) 
     @Throttle(normal=(200,80))
     @UsePipe(MerchantPipe())
-    @UseGuard(LLMProviderGuard(False,False))
+    @UseGuard(LLMProviderGuard())
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
     @UseHandler(LLMHandler,RedisHandler,CostHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)

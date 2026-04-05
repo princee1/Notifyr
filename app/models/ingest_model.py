@@ -70,7 +70,7 @@ class BaseIngestModelResponse(BaseModel):
 	graph:bool
 	expire:str
 	defer:str
-	task:str
+	task:ArqDataTaskConstant._DATA_TASK_TYPE
 
 
 ###################################################################################################
@@ -106,7 +106,7 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 	_url_size: Optional[int] = PrivateAttr(default=None)
 	_description : Optional[str] = PrivateAttr(default=None)
 
-	@field_validator("uri", mode="after")
+	@field_validator("name", mode="after")
 	def parse_uri(cls,v:str)->str:
 		v = v.strip().lower().replace(' ','_')
 		if not v.endswith('.crawl'):
@@ -114,7 +114,7 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 		return v
 
 	@field_validator("urls", mode="before")
-	def parse_urls(cls, v):
+	def coerce_urls(cls, v):
 		if isinstance(v,str):
 			return [v]
 		return v
@@ -217,7 +217,7 @@ class WebCrawlingUriMetadata(UriMetadata):
 
 class WebCrawlingIngestDataResponse(BaseIngestModelResponse):
 	metadata: Optional[WebCrawlingUriMetadata] = None
-	task=ArqDataTaskConstant.CRAWL_DATA_TASK
+	task:ArqDataTaskConstant._DATA_TASK_TYPE = ArqDataTaskConstant.CRAWL_DATA_TASK
 
 ###################################################################################################
 ###########################										     ##############################

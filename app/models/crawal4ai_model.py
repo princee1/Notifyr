@@ -245,7 +245,7 @@ class TextsExtractionConfig(BaseSchemaExtractionConfig):
 
 class SchemaExtractionConfig(BaseSchemaExtractionConfig):
     """Configuration for extracting list of dictionary objects."""
-    schema: Optional[str] = Field(default=None, description="Name of the predefined schema to use (e.g., 'product', 'article')")
+    custom_schema: Optional[str] = Field(default=None, description="Name of the predefined schema to use (e.g., 'product', 'article')")
 
 class KnowledgeGraphExtractionConfig(BaseExtractionConfig):
     """Configuration for extracting knowledge graph (entities and relationships)."""

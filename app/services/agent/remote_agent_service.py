@@ -135,24 +135,44 @@ class RemoteAgentService(BaseMiniServiceManager):
 
         return super().build(counter, build_state,True)
 
-    def connect_channel(self):
-        
-        if APP_MODE == ApplicationMode.worker:
+
+    if APP_MODE == ApplicationMode.worker:
+
+        def grpc_state_callback(self,state:grpc.ChannelConnectivity):
+            print('State:',state)
+            self.grpc_state = state
+    
+        def connect_channel(self):
             self.channel = grpc.insecure_channel(self.agentic_grpc_host,options=_GRPC_RECONNECT_OPTIONS)
             clientInterceptor = AgentClientInterceptor(self.auth_header)
             self.channel = grpc.intercept_channel(self.channel,clientInterceptor)
-        else:
+            self.stub = agent_pb2_grpc.AgentStub(self.channel)
+            try:
+                grpc.channel_ready_future(self.channel).result(timeout=5)
+                self.channel.subscribe(self.grpc_state_callback,True)
+
+            except grpc.FutureTimeoutError as e:
+                self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
+    
+    else:
+
+        async def grpc_state_callback(self,state:grpc.ChannelConnectivity):
+            print('State:',state)
+            async with self.statusLock.writer:
+                self.grpc_state = state
+
+        async def connect_channel(self):
+
             clientInterceptor = AgentClientAsyncInterceptor(self.auth_header)
             self.channel = grpc.aio.insecure_channel(self.agentic_grpc_host,interceptors=[clientInterceptor],options=_GRPC_RECONNECT_OPTIONS)
+            self.stub = agent_pb2_grpc.AgentStub(self.channel)
+            # try:
+            #     grpc.channel_ready_future(self.channel).result(timeout=5)
+            #     self.channel.subscribe(self.grpc_state_callback,True)
 
-        self.stub = agent_pb2_grpc.AgentStub(self.channel)
-        try:
-            grpc.channel_ready_future(self.channel).result(timeout=5)
-            self.channel.subscribe(self.grpc_state_callback,True)
+            # except grpc.FutureTimeoutError as e:
+            #     self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
 
-        except grpc.FutureTimeoutError as e:
-            self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
-                 
     async def disconnect_channel(self):
         if self.channel:
             await self.channel.close()
