@@ -284,7 +284,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
         schema = ingestTask.extraction.custom_schema
         schema = customService.to_schemas([schema])[schema]
 
-    markdownMaxDef:MarkdownCostDefinition = costService.costs_definition.get('crawl',MarkdownCostDefinition(max_html_mb=2,max_pdf_mb=10))
+    markdownMaxDef:MarkdownCostDefinition = costService.fetch_definition('crawl',MarkdownCostDefinition(max_html_mb=2,max_pdf_mb=10))
     markdownMaxDef['max_html_mb'] = fileService.bytes_conversion(markdownMaxDef['max_html_mb'],'mb','b')
     markdownMaxDef['max_pdf_mb'] = fileService.bytes_conversion(markdownMaxDef['max_pdf_mb'],'mb','b')
 

@@ -6,7 +6,7 @@ from typing import Any, Callable, Self
 
 from fastapi import Response
 from redis import WatchError
-from app.classes.cost_definition import CostCredits, CostRules, CreditDeductionFailedError, EmailCostDefinition, FileCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, SMSCostDefinition, SimpleTaskCostDefinition,Bill
+from app.classes.cost_definition import CostCredits, CostDefinitionNotFoundError, CostRules, CreditDeductionFailedError, EmailCostDefinition, FileCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, CostPlanNotFoundError, SMSCostDefinition, SimpleTaskCostDefinition,Bill
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
@@ -102,6 +102,7 @@ class CostService(BaseService):
         if self.configService.MODE == MODE.PROD_MODE:
             try:
                 self.costs_file= JSONFile(self.COST_PATH)
+                self.current_cost_schema = ''
                 self.load_file_into_objects()
                 self.verify_cost_file()
                 self.init_plan_credits()
@@ -219,6 +220,26 @@ class CostService(BaseService):
     def receipts_key(self,credit:str):
         return f'{credit}@receipts'
     
+    ###################################################                        #######################################
+    
+    ###################################################                        #######################################
+
+    def fetch_definition(self,definition:str,default:Any|None=None,plan:str=None,version:str=None,_raise:bool = False):
+        if plan and version:
+            cost_schema = f"{plan}@{version}"
+            if cost_schema not in ...:
+                if _raise :
+                    raise CostPlanNotFoundError()
+                else:
+                    cost_schema = self.current_cost_schema
+        else:
+            cost_schema = self.current_cost_schema
+        
+        if definition not in self.costs_definition and not default:
+            raise CostDefinitionNotFoundError(plan,version,definition)
+        
+        return self.costs_definition.get(definition,default)
+        
     ###################################################                        #######################################
     
     ###################################################                        #######################################

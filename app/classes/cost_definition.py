@@ -143,8 +143,17 @@ class CreditDeductionFailedError(CostException):
 class CurrencyNotSupportedError(CostException):
     """Currency code is unsupported."""
 
-class PlanNotFoundError(CostException):
+class CostPlanNotFoundError(CostException):
     """Requested plan does not exist."""
+
+class CostDefinitionNotFoundError(CostException):
+    """Cost definition (defines the amount of each unit) does not exists"""
+
+    def __init__(self, plan:str,version:str,definition:str):
+        super().__init__(plan,version,definition)
+        self.plan = plan
+        self.version = version
+        self.definition = definition
 
 class CreditNotInPlanError(CostException):
     """Credit does not exists in the current plan"""

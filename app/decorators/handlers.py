@@ -861,6 +861,7 @@ class MemCachedHandler(Handler):
             ...
     
 from app.classes.cost_definition import (
+    CostDefinitionNotFoundError,
     CostException,
     CostLessThanZeroError,
     CostMoreThanZeroError,
@@ -870,7 +871,7 @@ from app.classes.cost_definition import (
     InvalidPurchaseRequestError,
     CreditDeductionFailedError,
     CurrencyNotSupportedError,
-    PlanNotFoundError,
+    CostPlanNotFoundError,
 )
 class CostHandler(Handler):
 
@@ -912,8 +913,19 @@ class CostHandler(Handler):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={'message': 'Currency not supported', 'error': str(e)}
             )
+        
+        except CostDefinitionNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    'message':'Cost definition not found could not compute the request cost',
+                    'plan':e.plan,
+                    'version':e.version,
+                    'definition':e.version
+                }
+            )
 
-        except PlanNotFoundError as e:
+        except CostPlanNotFoundError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={'message': 'Product not found', 'error': str(e)}

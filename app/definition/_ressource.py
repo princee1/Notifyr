@@ -288,7 +288,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             func.meta['shared'] = None
             func.meta['default_role'] = True
             func.meta['cost_definition_name'] = cost_definition
-            func.meta['cost_definition'] = {} if cost_definition == None else costService.costs_definition[cost_definition]  
+            func.meta['cost_definition'] = {} if cost_definition == None else costService.fetch_definition(cost_definition)
 
             is_mount = func.meta['cost_definition'].get('__mount__',mount)
 

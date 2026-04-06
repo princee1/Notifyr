@@ -22,7 +22,7 @@ class FileCost(DataCost):
     def init(self, default_price, credit_key):
         super().init(default_price, credit_key)
         self.fileService = Get(FileService)
-        self.definition:FileCostDefinition = self.costService.costs_definition.get(credit_key,FileCost.DEFAULT_DEF)
+        self.definition:FileCostDefinition = self.costService.fetch_definition(credit_key,FileCost.DEFAULT_DEF)
         self.max_file_size = self.fileService.bytes_conversion(self.definition.get('max_file_size'),'mb','kb')
         self.cost_per_extra_mb = self.definition.get('max_file_size_extra_per_mb')
         self.definition_name = "Object File" if self.credit_key == 'object' else 'Document Ingestion'

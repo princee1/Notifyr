@@ -75,7 +75,7 @@ class MarkdownResultIngestCost(DataCost):
         self.crawl_type = crawl_type
         self.refund_detail = refund_detail
         self.fileService = Get(FileService)
-        self.definition:MarkdownCostDefinition = self.costService.costs_definition.get(self.crawl_type.lower(),self.DEFAULT_DEF)
+        self.definition:MarkdownCostDefinition = self.costService.fetch_definition(self.crawl_type.lower(),self.DEFAULT_DEF)
         self.max_html_kb = self.fileService.bytes_conversion(self.definition['max_html_mb'],'mb','kb')
         self.max_pdf_kb = self.fileService.bytes_conversion(self.definition['max_pdf_mb'],'mb','kb')
         return self
