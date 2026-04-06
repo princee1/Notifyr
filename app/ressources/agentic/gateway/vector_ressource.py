@@ -6,7 +6,7 @@ from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.decorators.pipes import DeleteDocumentIngestUpdate, update_status_upon_no_metadata_pipe
+from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe,LockService
 from app.depends.dependencies import get_auth_permission
 from app.depends.variables import DeleteMode,delete_mode_query
@@ -78,7 +78,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @UseLimiter('1/minutes')
     @Throttle(uniform=(800,1500))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UsePipe(DeleteDocumentIngestUpdate('vector'))
+    @UsePipe(DeleteDocumentIngestUpdatePipe('vector'))
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
@@ -117,7 +117,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @UseLimiter('1/minutes')
     @Throttle(uniform=(800,1500))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UsePipe(DeleteDocumentIngestUpdate('vector'))
+    @UsePipe(DeleteDocumentIngestUpdatePipe('vector'))
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))

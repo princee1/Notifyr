@@ -248,19 +248,7 @@ class QdrantService(BaseService):
         return await self.embedding_search.aget_query_embedding(
             query
         )
-
-    async def search_query(self,query:str,top_k:int,filter:Filter):
-        resp:QueryResponse = await self.client.query(
-            query_text=query,
-            limit=top_k,
-            query_filter=filter
-        )
-        for r in resp:
-            ...
-
-    async def cache_lookup(self,):
-        ...
-
+    
     @property
     def qdrant_url(self) -> str:
         return f"http://{self.configService.QDRANT_HOST}:6333"

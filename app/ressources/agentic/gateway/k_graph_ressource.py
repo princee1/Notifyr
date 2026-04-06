@@ -7,7 +7,7 @@ from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GraphitiHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.decorators.pipes import DeleteDocumentIngestUpdate, MerchantPipe, domain_pipe, update_status_upon_no_metadata_pipe
+from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, MerchantPipe, domain_pipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, LockService
 from app.depends.dependencies import get_auth_permission
 from app.interface.delete_ingest import DeleteIngestDocumentInterface
@@ -77,7 +77,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @UsePipe(MerchantPipe(-1))
     @Throttle(uniform=(1000,1800))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UsePipe(DeleteDocumentIngestUpdate('graph'))
+    @UsePipe(DeleteDocumentIngestUpdatePipe('graph'))
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
@@ -104,7 +104,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @Throttle(uniform=(1500,2500))
     @UsePipe(domain_pipe,MerchantPipe(-1))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UsePipe(DeleteDocumentIngestUpdate('graph'))
+    @UsePipe(DeleteDocumentIngestUpdatePipe('graph'))
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))

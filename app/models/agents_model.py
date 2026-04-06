@@ -23,6 +23,9 @@ class ToolModel(BaseDocument):
 class VectorPipelineModel(ToolModel):
     enabled_cache:Optional[bool] = True
 
+class CacheToolModel(ToolModel):
+    ...
+
 class KGraphPipelineModel(ToolModel):
     ...
 

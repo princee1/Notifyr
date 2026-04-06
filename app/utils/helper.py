@@ -6,7 +6,7 @@ from random import choice, seed
 import random
 from string import hexdigits, digits, ascii_letters,punctuation
 import time
-from typing import Any, Callable, Literal, Optional, Union,Tuple, Type, TypeVar, get_args, get_origin
+from typing import Any, Callable, Iterable, Literal, Optional, Union,Tuple, Type, TypeVar, get_args, get_origin
 import urllib.parse
 from cachetools import Cache
 from fastapi import Response
@@ -411,7 +411,20 @@ def unflattened_dict(flattened_dict: dict[str, Any], separator: str = DICT_SEP) 
             current[keys[-1]] = value
     return unflattened
 
+SliceMode = Literal['include','exclude']
 
+def slice_dict(data:dict,keys:Iterable[str],mode:SliceMode):
+    if not isinstance(keys,set):
+        keys = set(keys)
+    
+    temp = {}
+    for k in data:
+        if k not in keys:
+            continue
+        if (k in keys) == (mode == 'include'):
+            temp[k] = data[k]
+    data.clear()
+    data.update(temp)
 
 ################################   ** Class Helper **      #################################
 
@@ -495,11 +508,15 @@ def generateRndNumber(len):
 
 
 ################################## ** Base64 Helper ** #############################################
-def b64_encode(value: str)->str:
-    return base64.b64encode(value.encode()).decode()
+def b64_encode(value: str,url_safe=False,encoding:str='utf-8')->str:
+    if url_safe:
+        return base64.urlsafe_b64encode(value.encode(encoding)).decode(encoding)
+    return base64.b64encode(value.encode(encoding)).decode(encoding)
 
-def b64_decode(value: str)->str:
-    return base64.b64decode(value.encode()).decode()
+def b64_decode(value: str,url_safe=False,encoding:str='utf-8')->str:
+    if url_safe:
+        return base64.urlsafe_b64decode(value.encode(encoding)).decode(encoding)
+    return base64.b64decode(value.encode(encoding)).decode(encoding)
 
 ###################################### ** URL Helper **  ###########################################
 

@@ -1,6 +1,6 @@
 import asyncio
 from datetime import timedelta
-from typing import Any, Callable, Literal, Union
+from typing import Any, Callable, Iterable, Literal, Union
 from arq.connections import RedisSettings,create_pool,ArqRedis
 from arq.jobs import Job,JobStatus,ResultNotFound,JobResult,JobDef
 from arq.constants import result_key_prefix,job_key_prefix
@@ -13,6 +13,7 @@ from app.services.file.file_service import FileService
 from app.utils.constant import RedisConstant
 from app.services.database.redis_service import RedisService
 from app.utils.globals import APP_MODE,ApplicationMode
+from app.utils.helper import SliceMode, slice_dict
 
 Time = Union[int | float | timedelta | None]
 Config = Literal['vector_config','graph_config']
@@ -97,8 +98,18 @@ class ArqIngestTaskService(BaseService):
         async def get_queued_jobs(self)->list[JobDef]:
             return await self._worker.queued_jobs(queue_name=QUEUE_NAME) or []
             
-        async def get_jobs_results(self)->list[JobDef]:
-            return await self._worker.all_job_results() or []
+        async def get_jobs_results(self,success:bool|None=None)->list[JobDef]:
+            results = await self._worker.all_job_results()
+            if not results:
+                return []
+            if success == None:
+                return results
+            temp = []
+            for r in results:
+                if r.success == success:
+                    temp.append(r)
+            
+            return temp
         
         async def fetch(self,job_id:str):
             return Job(job_id,self._worker,QUEUE_NAME)
@@ -135,7 +146,7 @@ class ArqIngestTaskService(BaseService):
             r_del = await self.redisService.delete(RedisConstant.EVENT_DB,result_key)
             return j_del,r_del
             
-        async def update_job_kwargs(self,job_id:str|Job,data:dict[str,Any],max_retries=3):
+        async def update_job_kwargs(self,job_id:str|Job,data:dict[str,Any]|Iterable[str],max_retries=3,mode:Literal['update','set']|SliceMode='update'):
             retry = 0
             async with self.redisService.db[RedisConstant.EVENT_DB].pipeline(transaction=True) as pipe:
                 while retry<max_retries:
@@ -144,8 +155,28 @@ class ArqIngestTaskService(BaseService):
                         await pipe.watch(job_key)
                         info_fetched:dict = await self.redisService.retrieve(RedisConstant.EVENT_DB,job_key,redis=pipe)
                         print(info_fetched)
-                        kwargs:dict = info_fetched.get('kwargs',{})
-                        kwargs.update(data)
+                        kwargs:dict = info_fetched.get('kwargs',None)
+                        if kwargs == None:
+                            return None
+                        
+                        match mode:
+                            case 'update':
+                                if not isinstance(data,dict):
+                                    return None
+                                kwargs.update(data)
+
+                            case 'set':
+                                if not isinstance(data,dict):
+                                    return None
+                                info_fetched['kwargs'] = data
+                                
+                            case 'exclude' | 'include':
+                                if not isinstance(data,(set,tuple,list)):
+                                    return None
+                                slice_dict(kwargs,data,mode=mode)
+                            case _:
+                                return None
+                            
                         pipe.multi()
                         await self.redisService.store(RedisConstant.EVENT_DB,job_key,info_fetched,redis=pipe)
                         await pipe.execute()
@@ -166,7 +197,7 @@ class ArqIngestTaskService(BaseService):
             
             info = await job_id.result_info()
             if info == None and _raise:
-                raise ResultNotFound
+                raise ResultNotFound(job_id)
             return info
         
         async def status(self,job_id:str|Job):
@@ -176,7 +207,7 @@ class ArqIngestTaskService(BaseService):
             return await job_id.status()
     
         async def search(self,task:str,params:dict,_raise:bool|None,filter:set[str]|None=None)->Job|BaseError|None:
-            for job in [*await self.get_queued_jobs(), *await self.get_jobs_results()]:
+            for job in [*await self.get_queued_jobs(), *await self.get_jobs_results(True)]:
                 nickname = job.kwargs.get('_nickname',None)
                 if nickname != task:
                     continue

@@ -49,7 +49,7 @@ class DeleteIngestDocumentInterface(Interface):
         meta = []
         error= {}
 
-        for info in [*await self.arqService.get_queued_jobs(),*await self.arqService.get_jobs_results()]:
+        for info in [*await self.arqService.get_queued_jobs(),*await self.arqService.get_jobs_results(True)]:
             if info.kwargs.get(config,None) != None and info.kwargs.get(config,{}).get(section,None) == section_val:
 
                 uri = info.kwargs.get('uri',None)

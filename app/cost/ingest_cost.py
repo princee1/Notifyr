@@ -200,27 +200,28 @@ class DeleteDocumentIngestCost(DataCost):
     def change_db_config(self,db_config:Tuple[bool,bool]):
         self.db_config = db_config
 
-    def post_refund(self, result:DeleteIngestUriMetadata):
-        match result.task:
-            case 'api':
-                ...
-            
-            case 'crawl':
-                cost = CrawlMarkdownIngestCost(self.request_id,self.issuer)
-                cost.init(1,'document','full')
+    def post_refund(self, results:List[DeleteIngestUriMetadata]):
+        for result in results:
+            match result.task:
+                case 'api':
+                    ...
                 
-            case 'file':
-                cost = FileIngestCost(self.request_id,self.issuer)
-                cost.init(1,'document')
-                result = FileResponseUploadModel(metadata=[result])
-            
-            case 'research':
-                cost = ResearchMarkdownIngestCost(self.request_id,self.issuer)
-                cost.init(1,'document','full')
-            
-            case _:
-                ...
+                case 'crawl':
+                    cost = CrawlMarkdownIngestCost(self.request_id,self.issuer)
+                    cost.init(1,self.credit_key,'full')
+                    
+                case 'file':
+                    cost = FileIngestCost(self.request_id,self.issuer)
+                    cost.init(1,self.credit_key)
+                    result = FileResponseUploadModel(metadata=[result])
+                
+                case 'research':
+                    cost = ResearchMarkdownIngestCost(self.request_id,self.issuer)
+                    cost.init(1,self.credit_key,'full')
+                
+                case _:
+                    ...
 
-        cost.post_refund(result,self.db_config)
-        self += cost
-        
+            cost.post_refund(result,self.db_config)
+            self += cost
+            

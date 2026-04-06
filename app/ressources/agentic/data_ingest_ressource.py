@@ -4,7 +4,7 @@ from validators.uri import uri
 from app.classes.auth_permission import AuthPermission, Role
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
-from app.cost.ingest_cost import FileIngestCost, CrawlMarkdownIngestCost
+from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
 from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
 from app.decorators.handlers import LLMHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
@@ -31,11 +31,12 @@ from app.models.ingest_model import (
     AbortedJobResponse,
     ComparableInstruction,
     CrawlingComparableURL,
+    DeleteIngestUriMetadata,
+    ResearchIngestDataResponse,
     WebCrawlingIngestDataResponse,
     WebCrawlingUriMetadata,
     WebCrawlingDataIngestModel,
     FileIngestUriMetadata,
-    EnqueueResponse,
     FileUploadIngestEnqueueResponse,
     FileUploadDataIngestModel,
 )
@@ -78,6 +79,7 @@ class JobArqRessource(BaseHTTPRessource):
     @UseHandler(AsyncIOHandler)    
     @PingService([ArqIngestTaskService])
     @LockService(ArqIngestTaskService,lockType='reader')
+    @UsePipe(DataClassToDictPipe(),before=False)
     @BaseHTTPRessource.HTTPRoute('/info/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_info(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
@@ -86,6 +88,7 @@ class JobArqRessource(BaseHTTPRessource):
 
     @UseHandler(AsyncIOHandler)
     @PingService([ArqIngestTaskService])
+    @UsePipe(DataClassToDictPipe(),before=False)
     @LockService(ArqIngestTaskService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/result/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_result(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
@@ -100,29 +103,34 @@ class JobArqRessource(BaseHTTPRessource):
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{job_id}/', methods=[HTTPMethod.DELETE],response_model=AbortedJobResponse)
-    async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[FileCost,Depends(FileCost)],broker:Annotated[Broker,Depends(Broker)],force:bool = Depends(force_update_query),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],force:bool = Depends(force_update_query),autPermission:AuthPermission=Depends(get_auth_permission)):
         job,status = await self.arqService.exists(job_id, raise_on_exist=False,return_status=True)
 
         match status:
             case JobStatus.queued | JobStatus.deferred:
                 info = await self.arqService.info(job)
+                size,uri,task = info.kwargs.get('size',0),info.kwargs.get('uri',None),info.kwargs.get('_nickname',None)
                 await self.arqService.dequeue_task(job_id)
 
-                if info.kwargs.get('_nickname',None) == ArqDataTaskConstant.FILE_DATA_TASK:
-                    size,uri,sha = info.kwargs.get('size',0), info.kwargs.get('uri',None),info.kwargs.get('sha','unknown')
+                if  task == ArqDataTaskConstant.FILE_DATA_TASK:
                     file_path = self.arqService.compute_data_file_upload_path(uri)
                     await RunInThreadPool(self.fileService.delete_file)(file_path)
 
-                return AbortedJobResponse(aborted= True, metadata=[FileIngestUriMetadata(uri=uri,size=size,sha=sha)],status=status)
+                return AbortedJobResponse(aborted= True, metadata=[DeleteIngestUriMetadata(uri=uri,size=size,task=task)],status=status)
                 
             case JobStatus.complete:
-                return AbortedJobResponse(metadata=[],aborted=False,status=status)
+                result = await self.arqService.get_result(job)
+                deleted=False
+                if not result.success:
+                    await self.arqService.delete(job_id)
+                    deleted = True
+                return AbortedJobResponse(metadata=[],deleted=deleted,status=status)
             
             case JobStatus.in_progress:
                 if not force:   
                     raise JobInProgressError(job_id)    
                     
-                result = await self.arqService.abort(job)
+                result = await self.arqService.abort(job,timeout=5)
                 return AbortedJobResponse(metadata=[],aborted=bool(result),status=status)
             
             case _:
@@ -182,7 +190,7 @@ class DataIngestRessource(BaseHTTPRessource):
             try:
                 uri= file.filename.lower()
                 file_path = self.arqService.compute_data_file_upload_path(uri)
-                sha = await self.fileService.compute_sha256(file.file)
+                sha = await self.fileService.compute_sha256(file.file,True)
 
                 if sha in ingest_sha:
                     raise JobAlreadyExistsError(uri,'File already added in the uploaded files')
@@ -248,7 +256,7 @@ class DataIngestRessource(BaseHTTPRessource):
             comparable_urls = CrawlingComparableURL(ingestTask=ingestTask)
             comparable_instruction = ComparableInstruction(ingestTask=ingestTask)
             await comparable_instruction.search()
-            await self.arqService.search(ArqDataTaskConstant.FILE_DATA_TASK,{'urls': comparable_urls},True)
+            await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'urls': comparable_urls},True)
         
         ingestTask.compute_size()
         metadata = WebCrawlingUriMetadata(uri=uri,
@@ -276,24 +284,7 @@ class DataIngestRessource(BaseHTTPRessource):
     
         return _response
     
-    @UseLimiter('5/hour')
-    @UsePipe(MerchantPipe())
-    @Throttle(normal=(300,150))
-    @UsePermission(ProfilePermission)
-    @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UsePipe(MiniServiceInjectorPipe(ProfileService))
-    @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
-    @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,LLMHandler,RedisHandler)
-    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(vector=False)}])
-    @LockService(RedisService,ArqIngestTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
-    @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
-    @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
-        """
-        Accepts a JSON body describing an `APIFetchTask` and enqueues it.
-        """
-
+    
     @Throttle(normal=(300,150))
     @UsePipe(MerchantPipe())
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
@@ -302,8 +293,8 @@ class DataIngestRessource(BaseHTTPRessource):
     @LockService(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard,DataIngestDatabaseGuard(False))
     @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(research=True)}])
-    @BaseHTTPRessource.HTTPRoute('/research/{profile}/',methods=[HTTPMethod.POST],response_model=EnqueueResponse,mount=False)
-    async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/research/{profile}/',methods=[HTTPMethod.POST],response_model=ResearchIngestDataResponse,mount=False)
+    async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)], request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Engage a broad research by fetching url concept and crawling those pages
         """
@@ -316,3 +307,22 @@ class DataIngestRessource(BaseHTTPRessource):
     async def on_shutdown(self):
         await self.arqService.close()
 
+    if False:
+
+        @UseLimiter('5/hour')
+        @UsePipe(MerchantPipe())
+        @Throttle(normal=(300,150))
+        @UsePermission(ProfilePermission)
+        @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+        @UsePipe(MiniServiceInjectorPipe(ProfileService))
+        @UsePipe(update_status_upon_no_metadata_pipe,before=False)
+        @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
+        @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,LLMHandler,RedisHandler)
+        @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(vector=False)}])
+        @LockService(RedisService,ArqIngestTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
+        @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
+        @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=APIIngestDataResponse,mount=False)
+        async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+            """
+            Accepts a JSON body describing an `APIFetchTask` and enqueues it.
+            """

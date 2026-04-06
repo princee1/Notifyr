@@ -1,6 +1,6 @@
 from dataclasses import asdict
 import json
-from typing import Any, Callable, Coroutine, Literal, Optional, Type, get_args
+from typing import Any, Callable, Coroutine, Iterable, Literal, Optional, Type, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
 from app.classes.auth_permission import AuthPermission, TokensModel
@@ -33,7 +33,7 @@ from app.definition._utils_decorator import Pipe
 from app.ntfr_tasks import TASK_REGISTRY, task_name
 from app.services.worker.arq_service import ArqIngestTaskService
 from app.utils.constant import GraphitiConstant, SpecialKeyAttributesConstant
-from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, copy_response, issubclass_of, parseToBool
+from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, SliceMode, copy_response, issubclass_of, parseToBool, slice_dict
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.contacts_model import ContactSummary
@@ -711,15 +711,33 @@ class MiniServiceInjectorPipe(Pipe):
 
 class DataClassToDictPipe(Pipe):
 
-    def __init__(self,silent:bool=True):
+    def __init__(self,silent:bool=True,keys:Iterable[str]=None,mode:SliceMode='include'):
         super().__init__(False)
         self.silent = silent
+        self.mode = mode
+        
+        if keys == None:
+            self.keys = None
+
+        if not isinstance(keys,set):
+            self.keys = set(keys)
     
     def pipe(self,result:Any):
         if isinstance(result,list):
-            return [asdict(r) for r in result]
+            as_list = True
+            result =  [asdict(r) for r in result]
         else:
-            return asdict(result)
+            as_list = False
+            result = [asdict(result)]
+        
+        if self.keys != None:
+            for r in result:
+                slice_dict(r,self.keys,self.mode)
+        
+        if not as_list:
+            return result[0]
+        
+        return result
 
 class JSONLoadsPipe(Pipe):
     def __init__(self,silent:bool=True):
@@ -771,7 +789,7 @@ async def domain_pipe(domain:str):
     return {'domain':f'{GraphitiConstant.DOMAIN_PREFIX}{domain}'}
 
 
-class DeleteDocumentIngestUpdate(Pipe):
+class DeleteDocumentIngestUpdatePipe(Pipe):
 
     def __init__(self,db:Literal['vector','graph'] ):
         super().__init__(True)

@@ -72,7 +72,6 @@ class BaseIngestModelResponse(BaseModel):
 	defer:str
 	task:ArqDataTaskConstant._DATA_TASK_TYPE
 
-
 ###################################################################################################
 ###########################		    File Ingest Model			     ##############################
 ###################################################################################################
@@ -86,13 +85,9 @@ class FileIngestUriMetadata(UriMetadata):
 class FileUploadIngestEnqueueResponse(FileResponseUploadModel, BaseIngestModelResponse):
 	metadata: List[FileIngestUriMetadata] = Field(default_factory=list)
 	task:str = ArqDataTaskConstant.FILE_DATA_TASK,
-	
-class AbortedJobResponse(FileResponseUploadModel):
-	aborted:bool
-	status:str
-	
+
 ###################################################################################################
-###########################		           Web Crawling			     ##############################
+###########################		   Web Crawling	Ingest Model         ##############################
 ###################################################################################################
 
 class WebCrawlingDataIngestModel(DataIngestModel):
@@ -220,7 +215,7 @@ class WebCrawlingIngestDataResponse(BaseIngestModelResponse):
 	task:ArqDataTaskConstant._DATA_TASK_TYPE = ArqDataTaskConstant.CRAWL_DATA_TASK
 
 ###################################################################################################
-###########################										     ##############################
+###########################		      Research Ingest Model	         ##############################
 ###################################################################################################
 
 class ResearchDataIngestModel(DataIngestModel):
@@ -238,7 +233,15 @@ class ResearchIngestDataResponse(BaseIngestModelResponse):
 
 
 ###################################################################################################
-###########################										     ##############################
+###########################				API Data Ingest Model	     ##############################
+###################################################################################################
+
+
+class APIIngestDataResponse(BaseIngestModelResponse):
+	...
+
+###################################################################################################
+###########################			Delete Ingest Model				 ##############################
 ###################################################################################################
 
 class DeleteIngestUriMetadata(UriMetadata):
@@ -251,9 +254,15 @@ class DeleteIngestDocumentModel(BaseModel):
 	jod_deleted:List[str] = Field(default_factory=list)
 	gateway_body:Optional[Dict] = None
 
+
+class AbortedJobResponse(BaseModel):
+	metadata:List[DeleteIngestUriMetadata] = Field(default_factory=list)
+	deleted:bool = False
+	aborted:bool = False
+	dequeued:bool = False
+	status:str
+
 ###################################################################################################
 ###########################										     ##############################
 ###################################################################################################
 
-class EnqueueResponse(FileResponseUploadModel):
-	...
