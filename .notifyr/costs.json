@@ -2,7 +2,7 @@
     "version": "1.0.0",
     "currency": "NOTIFYR-CREDITS",
     "system": "Notifyr Credit System",
-    "product": "demo",
+    "plan": "demo",
     "promotions": {},
     "rules": {
         "default_credit_reset": true,

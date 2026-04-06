@@ -41,7 +41,7 @@ class CostRessource(BaseHTTPRessource):
         """
         return {
             "version": self.costService.version,
-            "product": self.costService.product,
+            "plan": self.costService.plan,
             "definitions":self.costService.costs_definition,
             "currency":self.costService.currency,
             "system":self.costService.system,

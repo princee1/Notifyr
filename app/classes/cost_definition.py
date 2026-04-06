@@ -18,6 +18,8 @@ class BillItem:
         self.subtotal = self.amount * self.quantity
 
 class Bill(TypedDict):
+    plan:str
+    version:str
     request_id: str
     definition: Optional[str]
     created_at: str
@@ -141,8 +143,8 @@ class CreditDeductionFailedError(CostException):
 class CurrencyNotSupportedError(CostException):
     """Currency code is unsupported."""
 
-class ProductNotFoundError(CostException):
-    """Requested product does not exist."""
+class PlanNotFoundError(CostException):
+    """Requested plan does not exist."""
 
 class CreditNotInPlanError(CostException):
     """Credit does not exists in the current plan"""

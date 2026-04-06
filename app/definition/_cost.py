@@ -43,6 +43,7 @@ class Cost:
             response.headers.append('X-Credit-Name',credit)
             response.headers.append('X-Current-Balance',str(current_balance))
             response.headers.append('X-Total-Cost',str(total+_total))
+            response.headers.append('X-Cost-Plan',bill["plan"])
             
     else:
         def  __init__(self,request_id:str,issuer:str):
@@ -105,6 +106,8 @@ class Cost:
             "total":self.purchase_cost - self.refund_cost,
             "balance_before": 0,
             "balance_after": 0,
+            "plan":self.costService.plan,
+            "version":self.costService.version
         }
 
     def post_payment(self,result:Any):

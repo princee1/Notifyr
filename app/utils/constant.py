@@ -366,7 +366,7 @@ class CostConstant:
     VERSION_KEY='version'
     SYSTEM_KEY='system'
     CURRENCY_KEY='currency'
-    PRODUCT_KEY='product'
+    PLAN_KEY='plan'
 
     email_template='email_template'
     email_custom='email_custom'

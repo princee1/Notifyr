@@ -870,7 +870,7 @@ from app.classes.cost_definition import (
     InvalidPurchaseRequestError,
     CreditDeductionFailedError,
     CurrencyNotSupportedError,
-    ProductNotFoundError,
+    PlanNotFoundError,
 )
 class CostHandler(Handler):
 
@@ -913,7 +913,7 @@ class CostHandler(Handler):
                 detail={'message': 'Currency not supported', 'error': str(e)}
             )
 
-        except ProductNotFoundError as e:
+        except PlanNotFoundError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={'message': 'Product not found', 'error': str(e)}

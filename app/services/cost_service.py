@@ -312,8 +312,8 @@ class CostService(BaseService):
         return self.costs_file.data.get(CostConstant.CURRENCY_KEY,None)
     
     @property
-    def product(self)->str:
-        return self.costs_file.data.get(CostConstant.PRODUCT_KEY,None)
+    def plan(self)->str:
+        return self.costs_file.data.get(CostConstant.PLAN_KEY,None)
 
     @property
     def promotions(self):
