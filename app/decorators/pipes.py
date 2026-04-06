@@ -715,12 +715,12 @@ class DataClassToDictPipe(Pipe):
         super().__init__(False)
         self.silent = silent
         self.mode = mode
-        
         if keys == None:
             self.keys = None
-
-        if not isinstance(keys,set):
+        elif not isinstance(keys,set):
             self.keys = set(keys)
+        else:
+            self.keys = keys
     
     def pipe(self,result:Any):
         if isinstance(result,list):

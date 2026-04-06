@@ -16,12 +16,11 @@ class MiddlewarePriority(Enum):
     METADATA = 1
     LOAD_BALANCER= 2
     ANALYTICS = 3
-    SECURITY = 4
     AUTH = 5
-    USER_APP = 5.5
-    CHALLENGE = 6
-    BACKGROUND_TASK_SERVICE = 7
-
+    LIMITER = 6
+    USER_APP = 7
+    CHALLENGE = 8
+    
 
 class MiddleWare(BaseHTTPMiddleware):
 

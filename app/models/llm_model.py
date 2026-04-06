@@ -52,7 +52,7 @@ class VectorEmbeddingConfig(BaseModel):
     model:str
     max_retries: int = 10
     timeout: float = 60
-    base_url: str | None = None
+    api_base: str | None = None
     api_version: str | None = None
     batch_size: int = Field(default=100, ge=10, le=500)
 

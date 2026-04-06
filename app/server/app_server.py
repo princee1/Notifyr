@@ -20,7 +20,6 @@ from app.services.worker.task_service import TaskService
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Request, Response, FastAPI
-from slowapi.middleware import SlowAPIMiddleware
 from typing import Callable,Literal
 import uvicorn
 from slowapi.errors import RateLimitExceeded
@@ -172,8 +171,6 @@ class AppServer(EventInterface):
             pause_before=1, clear_stack=True, space_line=False)
 
     def add_middlewares(self):
-        self.app.add_middleware(SlowAPIMiddleware)
-        
         for middleware in sorted(MIDDLEWARE.values(), key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
             

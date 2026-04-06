@@ -15,8 +15,9 @@ from app.classes.qdrant import QdrantCollectionDoesNotExistError, SearchParamsMo
 from app.utils.tools import RunAsync
 from app.utils.globals import APP_MODE,ApplicationMode
 
-
 QDRANT_BUILD_STATE = 543
+
+LLAMA_EMBEDDING_KEYS = ('model','timeout','max_retries','api_base','api_version')
 
 @Service(
     links=[LinkDep(service=LLMProviderService,to_build=True,build_state=QDRANT_BUILD_STATE)]
@@ -48,10 +49,52 @@ class QdrantService(BaseService):
             if APP_MODE == ApplicationMode.arq:
                 self._create_embedding_object()
             
+            if APP_MODE == ApplicationMode.agentic:
+                ...
+            
     def _create_embedding_object(self):
         from llama_index.embeddings.openai import OpenAIEmbedding,OpenAIEmbeddingMode
         if False:
             from llama_index.embeddings.gemini import GeminiEmbedding
+     
+        embedding_provider_id = self.llmProviderService.vector_config.get('embedding',None)
+        if not embedding_provider_id:
+            raise BuildFailureError("No embedding provider configured in vector_embedding_config")
+        
+        embedding_provider = self.llmProviderService.MiniServiceStore.get(embedding_provider_id)
+        vector_config = embedding_provider.model.vector_embedding_config
+        api_key = embedding_provider.depService.credentials.to_plain()
+
+        self.embed_provider = embedding_provider.model.provider
+
+        match self.embed_provider:
+            case 'gemini':
+                raise BuildFailureError('Gemini not supported')
+                embedding = GeminiEmbedding(
+                    api_key=api_key,
+                    model_name=vector_config.model,
+                    **vector_config.model_dump(include=('timeout','max_retries','api_base'))
+                )
+                self.embedding_parse = embedding
+                self.embedding_search = embedding
+            
+            case 'openai':
+                self.embedding_parse = OpenAIEmbedding(
+                    api_key=api_key,
+                    mode=OpenAIEmbeddingMode.TEXT_SEARCH_MODE,
+                    **vector_config.model_dump(include=LLAMA_EMBEDDING_KEYS),
+                )
+                self.embedding_search = OpenAIEmbedding(
+                    api_key=api_key,
+                    mode=OpenAIEmbeddingMode.SIMILARITY_MODE,
+                    **vector_config.model_dump(include=LLAMA_EMBEDDING_KEYS ),
+                )
+            case _:
+                raise BuildFailureError(f"Unsupported embedding provider: {embedding_provider.model.provider}")
+
+    def _create_llm_client(self):
+        from openai import AsyncOpenAI
+        from openai.types import CreateEmbeddingResponse
         
         embedding_provider_id = self.llmProviderService.vector_config.get('embedding',None)
         if not embedding_provider_id:
@@ -60,42 +103,17 @@ class QdrantService(BaseService):
         embedding_provider = self.llmProviderService.MiniServiceStore.get(embedding_provider_id)
         
         vector_config = embedding_provider.model.vector_embedding_config
-        api_key = embedding_provider.depService.credentials.to_plain()
-
-        match embedding_provider.model.provider:
+        
+        self.embed_provider = embedding_provider.model.provider
+        match self.embed_provider:
             case 'gemini':
                 raise BuildFailureError('Gemini not supported')
-                embedding = GeminiEmbedding(
-                    api_key=api_key,
-                    model_name=vector_config.model,
-                    timeout=vector_config.timeout,
-                    max_retries=vector_config.max_retries,
-                    api_base=vector_config.base_url,
-                )
-
-                self.embedding_parse = embedding
-                self.embedding_search = embedding
-            
+                
             case 'openai':
-                self.embedding_parse = OpenAIEmbedding(
-                    api_key=api_key,
-                    mode=OpenAIEmbeddingMode.TEXT_SEARCH_MODE,
-                    model=vector_config.model,
-                    timeout=vector_config.timeout,
-                    max_retries=vector_config.max_retries,
-                    api_base=vector_config.base_url,
-                    api_version=vector_config.api_version,
-                )
-    
-                self.embedding_search = OpenAIEmbedding(
-                    api_key=api_key,
-                    mode=OpenAIEmbeddingMode.SIMILARITY_MODE,
-                    model=vector_config.model,
-                    timeout=vector_config.timeout,
-                    max_retries=vector_config.max_retries,
-                    api_base=vector_config.base_url,
-                    api_version=vector_config.api_version,
-                )
+                self.embedding_search = AsyncOpenAI(api_key=embedding_provider.depService.credentials.to_plain,
+                                                    base_url=vector_config.api_base,
+                                                    timeout=vector_config.timeout,
+                                                    max_retries=vector_config.max_retries).embeddings
             case _:
                 raise BuildFailureError(f"Unsupported embedding provider: {embedding_provider.model.provider}")
 
@@ -245,9 +263,19 @@ class QdrantService(BaseService):
         )
     
     async def embed_query(self,query:str)->List[float]:
-        return await self.embedding_search.aget_query_embedding(
-            query
-        )
+        if APP_MODE == ApplicationMode.arq:
+            return await self.embedding_search.aget_query_embedding(
+                query
+            )
+        if APP_MODE == ApplicationMode.agentic:
+            match self.embed_provider:
+                case 'openai':
+                    resp = await self.embedding_search.create(query,model='text-embedding-3-small',dimensions=512)
+                    usage = resp.usage
+                    return resp.data[0], (usage.prompt_tokens,usage.total_tokens)
+                    
+                case 'gemini':
+                    ...
     
     @property
     def qdrant_url(self) -> str:

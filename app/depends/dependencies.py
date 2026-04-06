@@ -84,16 +84,16 @@ def get_admin_token(request: Request = None):
         return request.headers.get(HTTPHeaderConstant.ADMIN_KEY)
     return APIKeyHeader(name=HTTPHeaderConstant.ADMIN_KEY)
 
-async def get_auth_permission(request: Request):
+def get_auth_permission(request: Request):
     if not configService.SECURITY_FLAG:
         return None
     if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.authPermission
 
-async def wrapper_auth_permission(request:Request):
+def wrapper_auth_permission(request:Request):
     try:
-        return await get_auth_permission(request)
+        return get_auth_permission(request)
     except:
         return None
 

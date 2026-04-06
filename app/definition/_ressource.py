@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
+from app.depends.dependencies import get_auth_permission
 from app.services.config_service import MODE, ConfigService
 from app.utils.helper import _make_delay_fn, copy_response
 from app.utils.constant import SpecialKeyParameterConstant
@@ -21,7 +22,7 @@ import functools
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
-from app.classes.auth_permission import FuncMetaData, Role, WSPathNotFoundError
+from app.classes.auth_permission import AuthPermission, ClientTypeLiteral, FuncMetaData, Role, WSPathNotFoundError
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
@@ -831,7 +832,6 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
 
 ################################################################                           #########################################################
 
-
 def HTTPStatusCode(code: int | str):
     """
     The `HTTPStatusCode` function is a decorator that sets the HTTP status code for a response based on
@@ -874,6 +874,7 @@ def HTTPStatusCode(code: int | str):
     return decorator
 
 ################################################################                           #########################################################
+
 def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,uniform: tuple[float, float] | None = None,normal: tuple[float, float] | None = None,exponential: float | None = None,):
     """
     Throttle decorator supporting deterministic and probabilistic delays in mMS
@@ -907,8 +908,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]=lambda req:1):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral|int]=None,key_func:Callable[[Request],str]|Literal['private','public']='public'):
     """
     *Description copied from the slowapi library*
 
@@ -927,7 +927,44 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         raise ValueError
     
     shared = scope != None
+    try:
+        max_limit = int(limit_value.split('/')[0])
+    except:
+        raise ValueError('Could not parse limit_value')
 
+    def cost_decorator():
+        if cost == None:
+           return lambda req:1
+        elif callable(cost):
+            return cost
+        elif isinstance(cost,dict):
+            if key_func != 'private':
+                raise ValueError('To add cost based on the client type we must have the client_id as key. HINT: use key_func="private"')
+            
+            def cost_func(request:Request):
+                authPermission:AuthPermission =  get_auth_permission(request)
+                clientType = authPermission['client_type']
+                unit_cost = cost.get(clientType,1)
+                unit_cost =min(1,unit_cost)
+                return max(unit_cost,max_limit)      
+            return cost_func
+        else:
+            raise ValueError('Could not parse the cost as a function')
+        
+    cost_callback = cost_decorator()
+
+    def private_key_func(request:Request):
+        authPermission:AuthPermission =  get_auth_permission(request)
+        return authPermission['client_id']
+
+    if key_func == 'public':
+        key_func = None # use the global key_func
+    elif key_func == 'private':
+        key_func = private_key_func
+    elif callable(key_func):
+        ...
+    else:
+        raise ValueError('Could not parse the key_func')
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func, UseLimiter, None, limit_value=limit_value,override_defaults=override_defaults,exempt_when=exempt_when,error_message=error_message)
@@ -938,7 +975,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
             operation_id = meta['operation_id']
             meta['limit_exempt'] = exempt
             _limit_value = meta['cost_definition'].get('__rate_limit__',limit_value)
-            meta['limit_obj'] = {'limit_value':_limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,'cost':cost}
+            meta['limit_obj'] = {'limit_value':_limit_value,'override_defaults':override_defaults,'exempt_when':exempt_when,'error_message':error_message,'cost':cost_callback,'key_func':key_func}
             if shared:
                 meta['limit_obj']['scope'] = scope
             meta['shared'] = shared
@@ -963,7 +1000,6 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         return func
 
     return decorator
-
 
 ################################################################                           #########################################################
 

@@ -10,12 +10,12 @@ from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod
 from fastapi import HTTPException, Request, Response,status
+from slowapi.middleware import SlowAPIMiddleware
 from typing import Callable
 import time
 from app.utils.constant import HTTPHeaderConstant, MonitorConstant
 from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
     
-
 configService = Get(ConfigService)
 
 class MetaDataMiddleWare(MiddleWare):
@@ -31,7 +31,7 @@ class MetaDataMiddleWare(MiddleWare):
         start_time = time.time()
         self.monitoringService.gauge_inc(MonitorConstant.CONNECTION_COUNT)
         self.monitoringService.counter_inc(MonitorConstant.CONNECTION_TOTAL)
-        request_id=  str(uuid4())
+        request_id = str(uuid4())
         request.state.request_id =request_id
 
         try:
@@ -51,7 +51,6 @@ class MetaDataMiddleWare(MiddleWare):
         finally:
             self.monitoringService.gauge_dec(MonitorConstant.CONNECTION_COUNT)
 
-
 class LoadBalancerMiddleWare(MiddleWare):
     priority = MiddlewarePriority.LOAD_BALANCER
 
@@ -65,7 +64,7 @@ class LoadBalancerMiddleWare(MiddleWare):
         response = await call_next(request)
         # TODO add headers like application id, notifyr-service id, Signature-Service, myb generation id 
         return response
-                 
+
 class JWTAuthMiddleware(MiddleWare):
     priority = MiddlewarePriority.AUTH
     def __init__(self, app, dispatch=None) -> None:
@@ -74,15 +73,12 @@ class JWTAuthMiddleware(MiddleWare):
         self.configService: ConfigService = Get(ConfigService)
         self.adminService: AdminService = Get(AdminService)
 
-
     def _copy_client_into_auth(self,client:ClientORM,permission:AuthPermission):
         permission['client_type'] = client.client_type
         permission['scope'] = client.client_scope
         permission['issued_for'] = client.issued_for
         permission['auth_type'] = client.auth_type
         permission['client_username'] = client.client_username
-
-        
 
     @BypassOn(not configService.SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
@@ -112,7 +108,7 @@ class JWTAuthMiddleware(MiddleWare):
             if client.client_type != ClientType.Admin: 
 
                 if await BlacklistORMCache.Cache([group_id,client_id],client):
-                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Client is blacklisted")
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
 
             request.state.client = client
 
@@ -129,6 +125,9 @@ class JWTAuthMiddleware(MiddleWare):
 
         return await call_next(request)
          
+class CustomSlowApiMiddleware(SlowAPIMiddleware):
+    priority = MiddlewarePriority.LIMITER
+
 class ChallengeMatchMiddleware(MiddleWare):
     priority = MiddlewarePriority.CHALLENGE
 
@@ -148,3 +147,6 @@ class ChallengeMatchMiddleware(MiddleWare):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Challenge does not match") 
         
         return await call_next(request)
+
+
+MIDDLEWARE[CustomSlowApiMiddleware.__name__] = CustomSlowApiMiddleware

@@ -13,7 +13,7 @@ PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
 PermissionStatus= Literal['active','inactive','expired']
-ClientTypeLiteral = Literal['User','Admin']
+ClientTypeLiteral = Literal['User','Admin','Twilio','App']
 
 PolicyUpdateMode = Literal['set','merge','delete']
 
@@ -48,6 +48,7 @@ class ClientType(Enum):
     User = 'User'
     Admin = 'Admin'
     Twilio = 'Twilio'
+    App = 'App'
 
 
 class AuthType(Enum):
@@ -152,7 +153,7 @@ class PolicyModel(BaseModel):
         #return roles
         return [r.value for r in roles]
 
-def parse_authPermission_enum(authPermission):
+def parse_authPermission_enum(authPermission:AuthPermission):
         authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
         
 def filter_asset_permission(authPermission:AuthPermission):
