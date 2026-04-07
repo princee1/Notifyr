@@ -13,7 +13,7 @@ PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
 PermissionStatus= Literal['active','inactive','expired']
-ClientTypeLiteral = Literal['User','Admin','Twilio','App']
+ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service']
 
 PolicyUpdateMode = Literal['set','merge','delete']
 
@@ -49,6 +49,7 @@ class ClientType(Enum):
     Admin = 'Admin'
     Twilio = 'Twilio'
     App = 'App'
+    Service = 'Service'
 
 
 class AuthType(Enum):

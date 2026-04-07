@@ -27,7 +27,7 @@ CREATE DOMAIN Scope AS VARCHAR(15) CHECK (
 );
 
 CREATE DOMAIN ClientType AS VARCHAR(10) CHECK (
-    VALUE IN ('User','Admin','Twilio','App')
+    VALUE IN ('User','Admin','Twilio','App','Service')
 );
 
 CREATE TABLE IF NOT EXISTS GroupClient (
